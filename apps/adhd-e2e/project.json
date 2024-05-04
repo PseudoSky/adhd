@@ -1,0 +1,9 @@
+{
+  "name": "adhd-e2e",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/adhd-e2e/src",
+  "tags": [],
+  "implicitDependencies": ["adhd"],
+  "// targets": "to see all targets run: nx show project adhd-e2e --web",
+  "targets": {}
+}
