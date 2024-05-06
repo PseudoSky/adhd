@@ -78,15 +78,15 @@ export function makeSetter(path: string, obj: any) {
   }
 }
 
-export function get(obj, path, defaultValue, useSetters=false) {
+export function get(obj: any, path: string, defaultValue: any=undefined, useSetters=false) {
   return makeGetter(path, obj, useSetters)(defaultValue)
 }
 
-export function set(data, path, value){
+export function set(data: any, path: string, value: any){
   return makeSetter(path, data)(value);
-};
+}
 
-export function getAll(obj, paths, into={}, useSetters=false){
+export function getAll(obj: any, paths: string[], into={}, useSetters=false){
   return paths.reduce((res, path) => {
     const value = get(obj, path, undefined, useSetters)
     return set(res, path, value)

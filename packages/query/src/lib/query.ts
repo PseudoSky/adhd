@@ -1,5 +1,6 @@
 import _ from '@adhd/transform';
-
+import { OrderByExpression, QueryExpression } from './expressions';
+import { OrderByOperation } from './operators';
 function negate(func) {
   return (...args) => !func(args);
 }
@@ -59,9 +60,12 @@ const isNull = (a, b) => {
   return _.isDefined(a) !== b;
 };
 
+type Filter = (...args: any) => boolean
+type FilterPartial = (...args: any) => Filter
+
 /* SECTION: query filters */
 //https://github.com/hasura/graphql-engine/blob/b84db36ebb51acd5b51e1254c103f3097a7c2358/server/src-lib/Hasura/GraphQL/Resolve/BoolExp.hs
-const operators = {
+const operators: Record<string, FilterPartial> = {
   // _cast: partialApply(isCast),
   _eq: partialApply(isEq),
   _ne: partialApply(isNe),
@@ -112,7 +116,7 @@ function makeExpression(exp, rhs, path) {
   // console.log("makeExpression", {path, rhs, exp});
   const getter = getPath(path);
   const expression = operators[exp];
-  return function (obj) {
+  return function (obj: any) {
     const lhs = getter(obj, false)();
     const result = expression(lhs, rhs);
     // if(result){
@@ -130,7 +134,7 @@ function makeExpression(exp, rhs, path) {
 function walk(query = {}, path = []) {
   if (_.isEmpty(query)) return () => true;
   const keys = Object.entries({ ...query });
-  const matchers = [];
+  const matchers: (FilterPartial | Filter | boolean)[] = [];
 
   keys.forEach(([k, value]) => {
     if (k === '_and' || k === '_or' || k === '_not') {
@@ -143,18 +147,17 @@ function walk(query = {}, path = []) {
   });
   // console.log({matchers});
   // return operators._and(matchers, path, walk)
-  return (obj) => {
+  return (obj: any) => {
     return applyAll(matchers, obj).every(_.isTrue);
   };
 }
 
-function parseOrderBy(query, paths = []) {
-  let res = [];
+function parseOrderBy(query: string | OrderByExpression[], paths: string[] = []): OrderByOperation[] {
   // console.log(query, paths);
   if (_.isString(query)) {
-    return [{ key: query, dir: 'desc', nulls: 'last' }];
+    return [{ key: (query as string), dir: 'desc', nulls: 'last' }];
   } else if (_.isArray(query)) {
-    return query.flatMap((e) => parseOrderBy(e, paths));
+    return (query as OrderByExpression[]).flatMap((e) => parseOrderBy(e, paths));
   } else if (_.isObject(query)) {
     // Sort object keys to be deterministic
     const entries = Object.entries(query).sort(([k1], [k2]) =>
@@ -164,26 +167,29 @@ function parseOrderBy(query, paths = []) {
       const key = paths.concat([k]);
       if (_.isString(v)) {
         const [dir, ___, nulls = 'last'] = v.split('_');
-        const op = { key: key.join('.'), dir, nulls };
+        const op: OrderByOperation[] = [{ key: key.join('.'), dir, nulls }];
         // console.log("Object -> val", { op });
         return op;
       } else {
-        const op = parseOrderBy(v, key);
+        const op: OrderByOperation[] = parseOrderBy(v, key);
         // console.log("Object -> arr/obj", { op });
         return op;
       }
     });
   }
-  return res;
+  return [] as  OrderByOperation[];
 }
 
-export const orderBy = (props = []) => (a, b) => {
+export const orderBy = (props: OrderByExpression[] = []) => (a, b) => {
   const orderOps = parseOrderBy(props);
-  for (let p in orderOps) {
+  console.log({orderOps})
+  for (const p in orderOps) {
     const { key, dir, nulls } = orderOps[p];
     const cmp = dir === 'asc' ? _.defaultSort : _.reverseSort;
     const x = _.get(a, key);
     const y = _.get(b, key);
+
+    // TODO: doesnt look like multiple sort works
     if (x !== y) {
       if (nulls && !_.isDefined(x)) {
         return nulls === 'last' ? 1 : -1;
@@ -196,21 +202,21 @@ export const orderBy = (props = []) => (a, b) => {
   return 0;
 };
 type QueryType = {
-  raw?: {};
+  raw?: OrderByExpression;
   where?: (() => boolean) | ((obj: any) => any);
-  order_by?: ((a: any, b: any) => any) | string[];
-  distinct_on?: any;
+  order_by?: ((a: any, b: any) => number)// | string[];
+  distinct_on?: string[];
   offset?: number;
-  limit?: any;
+  limit?: number;
 };
 
 const EmptyQuery: QueryType = {
   raw: {},
   where: () => true,
   order_by: () => 0,
-  distinct_on: null,
-  offset: null,
-  limit: null,
+  distinct_on: undefined,
+  offset: undefined,
+  limit: undefined,
 };
 
 function RawQuery(query: QueryType = {}){
@@ -220,16 +226,18 @@ function RawQuery(query: QueryType = {}){
   };
 }
 
+// TODO: Need to separate Query interface from QueryType
+//   Currently the functional interface and the raw type are mixed
 export class Query implements QueryType {
-  raw: QueryType;
+  raw: QueryExpression;
   where: (() => boolean) | ((obj: any) => any);
-  order_by: (((a: any, b: any) => any) | string[]);
+  order_by: (((a: any, b: any) => any));// | string[]);
   distinct_on: any;
   offset: number;
   limit: any;
   constructor(_query: QueryType = EmptyQuery) {
     const query = RawQuery(_query);
-    this.raw = EmptyQuery;
+    this.raw = {};
     this.setQuery(query);
   }
 
@@ -245,7 +253,7 @@ export class Query implements QueryType {
     return ops.some(_.isTrue);
   };
 
-  setWhere = (whereQuery = EmptyQuery.where) => {
+  setWhere = (whereQuery: QueryExpression['where'] = {}) => {
     if (_.isEqual(whereQuery, this.raw.where)) return false;
     /* @ts-ignore */
     this.raw.where = whereQuery;
@@ -253,28 +261,28 @@ export class Query implements QueryType {
     return true;
   };
 
-  setOrderBy = (orderByQuery = []) => {
+  setOrderBy = (orderByQuery: QueryExpression['order_by'] = []) => {
     if (_.isEqual(orderByQuery, this.raw.order_by)) return false;
     this.raw.order_by = orderByQuery;
     this.order_by = orderBy(orderByQuery);
     return true;
   };
 
-  setDistinctOn = (distinctOnQuery = null) => {
+  setDistinctOn = (distinctOnQuery: QueryExpression['distinct_on']) => {
     if (_.isEqual(distinctOnQuery, this.raw.distinct_on)) return false;
     this.raw.distinct_on = distinctOnQuery;
     this.distinct_on = distinctOnQuery;
     return true;
   };
 
-  setOffset = (offsetQuery = 0) => {
+  setOffset = (offsetQuery: QueryExpression['offset'] = 0) => {
     if (_.isEqual(offsetQuery, this.raw.offset)) return false;
     this.raw.offset = offsetQuery;
     this.offset = offsetQuery;
     return true;
   };
 
-  setLimit = (limitQuery = null) => {
+  setLimit = (limitQuery: QueryExpression['limit']) => {
     if (_.isEqual(limitQuery, this.raw.limit)) return false;
     this.raw.limit = limitQuery;
     this.limit = limitQuery;
@@ -287,55 +295,55 @@ export class Query implements QueryType {
 }
 
 export class DataView {
-  data: any;
+  data: any[];
   dataview: any;
   query: Query;
   dirty: any;
   has_more: boolean;
   static Query: typeof Query;
-  constructor(data, query = {}) {
+  constructor(data: any[], query: QueryExpression = {}) {
     this.setData(data);
     this.setQuery(query);
   }
 
-  setData = (data) => {
+  setData = (data: any[]) => {
     this.data = data;
     this.dataview = null;
     this.query = new Query();
   };
 
-  setQuery = (query) => {
+  setQuery = (query: QueryExpression) => {
     this.dirty = this.query.setQuery(query);
     this.commit();
     return this;
   };
 
-  where = (whereQuery) => {
+  where = (whereQuery: QueryExpression['where']) => {
     const didUpdate = this.query.setWhere(whereQuery);
     this.dirty = this.dirty || didUpdate;
     return this;
   };
 
-  orderBy = (orderByQuery) => {
+  orderBy = (orderByQuery: QueryExpression['order_by']) => {
     const didUpdate = this.query.setOrderBy(orderByQuery);
     this.dirty = this.dirty || didUpdate;
     return this;
   };
 
   /* TODO: currently doesnt do deep distinct */
-  distinctOn = (distinctOnQuery) => {
+  distinctOn = (distinctOnQuery: QueryExpression['distinct_on']) => {
     const didUpdate = this.query.setDistinctOn(distinctOnQuery);
     this.dirty = this.dirty || didUpdate;
     return this;
   };
 
-  offset = (offset) => {
+  offset = (offset: QueryExpression['offset']) => {
     const didUpdate = this.query.setOffset(offset);
     this.dirty = this.dirty || didUpdate;
     return this;
   };
 
-  limit = (limit) => {
+  limit = (limit: QueryExpression['limit']) => {
     const didUpdate = this.query.setLimit(limit);
     this.dirty = this.dirty || didUpdate;
     return this;
