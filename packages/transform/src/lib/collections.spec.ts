@@ -49,10 +49,10 @@ const CollectionEx = ArrEx.map(i => ({...ObjSample, "sort": i, nested: ObjSample
 
 describe('transforms', () => {
   it('should work', () => {
-    const cmp = (a,b): 0|-1|1 => (a<b)? 1 : -1;
-    const compare = (a,b) => (a>b)? 1 : -1;
-    const check = (a,b) => (a===b)? 1 : -1;
-    const boolCheck = (a) => (!!a ? true : false);
+    const cmp = (a: number,b: number): 0|-1|1 => (a<b)? 1 : -1;
+    const compare = (a: number,b: number) => (a>b)? 1 : -1;
+    const check = (a: any,b: any) => (a===b)? 1 : -1;
+    const boolCheck = (a: any) => (!a ? false : true);
     // const checkIsArray = () =>
     const checks = [cmp, compare, check];
     const a = 10;
@@ -138,3 +138,17 @@ describe('transforms', () => {
     expect(range(start, stop, step)).toEqual({});
   });
 });
+
+// honey/src/components/Search/QuickFilters.js
+// import { Collections } from "@adhd/utils";
+
+// function extractLabel({ name, event_labels_aggregate: agg }) {
+//   return { name, count: agg.aggregate.count };
+// }
+
+// export function QuickFilters({ filters = {}, onFilterPress, labels = [] }) {
+//   const chips = useMemo(() => {
+//     return Collections.sortBy(
+//       labels.map(extractLabel),
+//       "count"
+//     )

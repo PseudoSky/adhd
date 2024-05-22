@@ -17,7 +17,7 @@ export function randomRange(a = 1, b = 0) {
   const lower = Math.min(a, b);
   const upper = Math.max(a, b);
   return lower + Math.random() * (upper - lower);
-};
+}
 
 /*
 randomInt();
@@ -36,7 +36,7 @@ export function randomRangeInt(a = 1, b = 0) {
   const lower = Math.ceil(Math.min(a, b));
   const upper = Math.floor(Math.max(a, b));
   return Math.floor(lower + Math.random() * (upper - lower + 1))
-};
+}
 export function getMin(a: number, b: number){ return a <= b ? a : b; }
 export function getMax(a: number, b: number){ return a >= b ? a : b; }
 export function range(list: number[]) {
@@ -52,7 +52,7 @@ export function range(list: number[]) {
 
 // NOT SURE WHY THIS IS CALLED ROUND TO, SEEMS LIKE WEIRD BINNING
 export function roundToIncrement(x: number, increment: number) {
-  var y = +x + (increment === undefined ? 0.5 : increment / 2);
+  const y = +x + (increment === undefined ? 0.5 : increment / 2);
   return y - (y % (increment === undefined ? 1 : +increment));
 }
 
@@ -106,7 +106,7 @@ export function histogram(iterable: any[]){
     }
 
     return result;
-};
+}
 
 export class Counter extends Map {
   normalizer: (val: any) => any;
@@ -153,11 +153,11 @@ export class NormalizedHistogram {
     this.lookup[_value] = bin;
     return bin
   };
-
-  bins = (newMin=null, newMax=null) => {
+  // TODO: the bounds adjustment doesn't work
+  bins = (newMin?:number, newMax?:number) => {
     const res = [];
     const { bins, start, step } = this.config;
-    for (let [k, v] of this.counter) {
+    for (const [k, v] of this.counter) {
       const val = v;
       if (val < this.range.min) this.range.min = val;
       if (val > this.range.max) this.range.max = val;
@@ -215,7 +215,7 @@ export function mostCommon(iterable: any[]) {
     }
 
     return maxKey;
-};
+}
 
 export default {
   getMin,

@@ -1,6 +1,6 @@
 import objectUtils from './object';
 
-describe('transforms', () => {
+describe('object', () => {
   it('should work', () => {
     expect(objectUtils.deepCopy({ a: 1, b: 2 })).toEqual({ a: 1, b: 2 });
     expect(
