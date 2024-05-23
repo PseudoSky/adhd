@@ -17,8 +17,8 @@ export const compose = (...funcs: CallbackFunctionVariadic[]) =>
 
 export function noop(){return null}
 
-export function extractThen(key: string, callback: CallbackFunctionVariadic) {
-  return (...args: Parameters<typeof callback>) => callback(...args.map(({[key]: value}) => value))
+export function extractThen(key: string, callback: CallbackFunctionTyped<any>): (...args: Parameters<typeof callback>) => ReturnType<typeof callback> {
+  return (...args) => callback(...(args as {[k: string]: any}[]).map(({[key]: value}) => value))
 }
 
 /*

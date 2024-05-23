@@ -1,23 +1,23 @@
 import { extractThen } from './function'
 import Stats from './stats'
 
-export const difference = (arrays:any[]) => arrays.reduce((a, b) => a.filter(c => !b.includes(c)))
-export const intersection = (arrays:any[]) => arrays.reduce((a, b) => a.filter(c => b.includes(c)))
+export const difference = (arrays:any[]) => arrays.reduce((a, b) => a.filter((c: any) => !b.includes(c)))
+export const intersection = (arrays:any[]) => arrays.reduce((a, b) => a.filter((c: any) => b.includes(c)))
 export const flattenDeep = (arr:any[]): any[] => arr.flatMap((subArray, index) => Array.isArray(subArray) ? flattenDeep(subArray) : subArray)
 export const keyByArray = (array:any[], key: string) => (array || []).reduce((r, x) => ({ ...r, [key ? x[key] : x]: x }), {});
 // keyBy for array and object
-export const keyBy = (collection, key) => {
+export const keyBy = (collection: Record<string,any>|[], key: string) => {
   const c = collection || {};
   return Array.isArray(c)
     ? keyByArray(c, key)
-    : Object.values(keyByArray(c, key));
+    : Object.values(keyByArray(c as [], key));
 }
 
 export function isMatchType(obj: any, target: any){
   return typeof obj === typeof target
 }
 
-export function isMatch(obj, target){
+export function isMatch(obj: any, target: any){
   return true
   // if(!isMatchType(obj, target) ) return false;
   // switch(typeof target){
@@ -73,6 +73,7 @@ export function pluck(arr: any[], key: string){
 
 type Selector<T> = (data: T, index: number, orig: T[]) => any
 
+// TODO: make a default minby compare so the types work
 export function minBy<T>(collection: T[], selector: Selector<T>, compare: (a: any, b: any) => number=extractThen('value', Stats.getMin)){
   // slower because need to create a lambda function for each call...
 
@@ -88,7 +89,7 @@ export function minBy<T>(collection: T[], selector: Selector<T>, compare: (a: an
   ).reduce(compare, {}).data
 }
 
-export function maxBy<T>(collection: T[], selector: Selector<T>, compare=extractThen('value', Stats.getMax)){
+export function maxBy<T>(collection: T[], selector: Selector<T>, compare: ComparisonFunction<T>=extractThen('value', Stats.getMax)){
   // slower because need to create a lambda function for each call...
   return minBy(collection, selector, compare)
 }
@@ -97,11 +98,11 @@ export function maxBy<T>(collection: T[], selector: Selector<T>, compare=extract
 
 
   // (a, b) => (a[key] > b[key]) ? 1 : ((b[key] > a[key]) ? -1 : 0);
-export function defaultSort(a, b) {
+export function defaultSort(a: any, b: any) {
   return a==b ? 0 : a > b ?  1 : -1;
 }
 
-export function reverseSort(a, b) {
+export function reverseSort(a: number, b: number) {
   return a==b ? 0 : b > a ? 1 : -1;
 }
 
@@ -109,16 +110,18 @@ export function reverseSort(a, b) {
 //   return cmp(a, b) * -1;
 // }
 export function first(arr: any[]){ return arr[0] }
-export function last(arr){ return arr[arr.length-1] }
-export function sortByProp<T, P extends string, V extends T[], >(arr: V, prop: P, cmp=defaultSort) {
+export function last(arr: string | any[]){ return arr[arr.length-1] }
+type ComparisonFunction<T> = ((a: T, b: T) => 0 | 1 | -1) 
+export function sortByProp<T, P extends string, V extends T[], >(arr: V, prop: P, cmp: ComparisonFunction<T>=defaultSort) {
   // REF: Performance
   // https://stackoverflow.com/questions/4020796/finding-the-max-value-of-an-attribute-in-an-array-of-objects
   return (arr && arr.sort) ? arr.sort(({[prop]: a},{[prop]: b}) => cmp(a,b)) : arr
 }
 
+
 export const sortByKey = (key: string) => { return extractThen(key, defaultSort) };
 
-export const sortBy = (arr: any[], prop?: string, cmp=defaultSort) => !prop && !!cmp? arr.sort(cmp) : sortByProp(arr, prop, cmp);
+export const sortBy = (arr: any[], prop?: string, cmp: ComparisonFunction<any>=defaultSort) => !prop && !!cmp? arr.sort(cmp) : sortByProp(arr, prop as string, cmp);
 
 export function maxByProp(arr: any[], prop: string){
   // REF: Performance
@@ -126,7 +129,7 @@ export function maxByProp(arr: any[], prop: string){
   return sortByProp(arr, prop)[arr.length-1]
 }
 
-export function minByProp(arr: any[], prop){
+export function minByProp(arr: any[], prop: any){
   return sortByProp(arr, prop)[0]
 }
 
@@ -171,19 +174,18 @@ export function uniqueBy(arr: any[], props: string[]){
 export function indexBy(arr: any[], prop: string){
   if (!prop || !arr || !arr.length) return {};
   return arr.reduce((res, e) => {
-    if(prop in e) res[e[prop]] = e
+    if(prop in e) res[e[prop]] = (res[e[prop]] || []).concat(e)
     return res
   }, {})
 }
 
 export function rangeByProp(arr: any[], prop: string){
-  if(!arr || !prop) return arr
   if(arr.length===1){
-    return [prop, arr[0][prop], arr[0][prop]]
+    return {"key": prop, "min": arr[0][prop], "max": arr[0][prop]}
   }
   const sorted = sortByProp(arr, prop)
 
-  return [prop, sorted[0][prop], sorted[sorted.length-1][prop]];
+  return {"key": prop, "min": sorted[0][prop], "max": sorted[sorted.length-1][prop]};
 }
 
 export function rangeByProps(arr: any[], props: string[]){

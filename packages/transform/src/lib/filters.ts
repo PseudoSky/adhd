@@ -1,5 +1,5 @@
 /* SECTION: typechecks */
-type PrimitiveTypes = string|number|Date|null|undefined|any[]|Object|Function|RegExp
+type PrimitiveTypes = string|number|Date|null|undefined|any[]|object|((...args: any[]) => void)|RegExp
 
 const TypeMap: {[type: string]: string} = {
   String: "[object String]",
@@ -25,7 +25,8 @@ export function isFunction(x: any)  { return isType(x, 'Function');  }
 export function isRegExp(x: any)    { return isType(x, 'RegExp');    }
 export function isDefined(x: any)   { return (isUndefined(x) || isNull(x))===false        }
 export function isInt(x: any)       { return (isNumber(x) && Number.isInteger(x))===true  }
-export function isFloat(x: any)     { return (isDefined(x) && isNumber(x) && Number.isInteger(x)) === false; }
+export function isFloat(x: any)     { return (isDefined(x) && (isNumber(x) && Number.isInteger(x) === false)); }
+// Currently undefined and nulls are considered values
 export function isValue(x: any)     { return (isObject(x) || isArray(x) || isFunction(x) || isRegExp(x))===false;         }
 
 
@@ -69,13 +70,13 @@ export function isNotShallowEqual(a: any, b: any) {
 }
 export function isNotIn(a: any, b: any[]): boolean
 export function isNotIn(a: string, b: string | any[]): boolean {
-  return isDefined(b) && !b.includes(a);
+  return !isIn(a, b)
 }
 export function isNotLike(a: string, b: string) {
-  return isDefined(a) && isDefined(b) && a.includes(b)
+  return !isLike(a, b)
 }
 export function isNotILike(a: string, b: string) {
-  return isDefined(a) && isDefined(b) && isIn(a.toLowerCase(), b.toLowerCase())
+  return !isILike(a,b)
 }
 
 

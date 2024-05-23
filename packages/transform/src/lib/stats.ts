@@ -88,7 +88,7 @@ export const normalizeBetween = (x: number, minVal: number, maxVal: number, newM
 // TODO: Don't extract the original range from the list, and make it accept an original/new {min, max}
 export function makeListNormalizer(list: number[], newMin: number, newMax: number) {
   const { max, min } = range(list);
-  if(newMin===min && newMax==max) return (value: number) => value
+  // if(newMin===min && newMax==max) return (value: number) => value
   return (value: number) => normalizeBetween(value, min, max, newMin, newMax);
 }
 
@@ -117,24 +117,37 @@ export class Counter extends Map {
       this.add(x)
     }
   }
+  setData = (values: (string|number)[]) => {
+    this.clear()
+    for(const v in values) {
+      this.add(v)
+    }
+  }
 
   add = (value: any) => {
     const x = this.normalizer(value)
     this.set(x, (this.get(x) || 0) + 1);
   }
 }
-
-
+type Range = {min?: number, max?: number}
+type Bin = {
+  bin: number,
+  x: number,
+  y: number,
+}
 // TODO: I dont think this actually normalizes
 export class NormalizedHistogram {
   config: { bins: number; start: number; step: number; standard: boolean; };
-  lookup: any;
-  normalize(_value: any) {
+  lookup: {[k: string|number]: number};
+  normalize(_value: any): number {
     throw new Error("Method not implemented.");
   }
-  counter: any;
-  range: any;
+  counter: Counter;
+  range: Range;
   constructor(data: any[], bins = 10, start = 1, step = 1, standard=false) {
+    this.counter = new Counter()
+    this.range = {}
+    this.lookup = {}
     this.config = {
       bins,
       start,
@@ -149,24 +162,30 @@ export class NormalizedHistogram {
     const { step } = this.config;
     if (_value in this.lookup) return this.lookup[_value];
     const value = this.normalize(_value);
-    const bin = roundToIncrement(_value, step);
+    const bin = roundToIncrement(value, step);
     this.lookup[_value] = bin;
+    console.warn(`BIN: val=${_value} normal=${value} bin=${bin}`)
     return bin
   };
   // TODO: the bounds adjustment doesn't work
   bins = (newMin?:number, newMax?:number) => {
-    const res = [];
+    // const res = [];
     const { bins, start, step } = this.config;
-    for (const [k, v] of this.counter) {
-      const val = v;
-      if (val < this.range.min) this.range.min = val;
-      if (val > this.range.max) this.range.max = val;
+    const res: number[] = new Array(bins).fill(0)
+    // for(let i = 0; i < bins; i += step){
+    //   res[i] = 0
+    // }
+    for (const [k, val] of this.counter) {
+      if (!this.range?.min || val < this.range.min) this.range.min = val;
+      if (!this.range?.max || val > this.range.max) this.range.max = val;
       if (val) {
-        res.push({ x: k, y: val || 0 });
+        res[this.getBin(k)] = res[this.getBin(k)] + val;
       }
     }
+    console.warn({lookup: this.lookup})
     // UPDATED: changed from bool
-    return res.sort(({x}, {x:x2}) => (x<x2) ? 1 : 0)
+    // normalize(res, {min: newMin, max: newMax})
+    return Object.entries(res).map(([x,y]) => ({x,y})).sort(({x}, {x:x2}) => (x<x2) ? 1 : 0)
     // return this.counter.reduce((res,[k,v])=>{
     // }, [])
 
@@ -198,7 +217,7 @@ export class NormalizedHistogram {
     this.lookup = {};
     const { bins, start, step } = this.config
     this.normalize = makeListNormalizer(data, start, bins * step);
-    this.counter = new Counter(data, (v) => roundToIncrement(v, step));
+    this.counter = new Counter(data, (v) => this.normalize(v));
     this.bins();
   }
 }
