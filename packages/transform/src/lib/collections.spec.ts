@@ -39,6 +39,101 @@ import {
 
 
 
+describe('collections', () => {
+  describe('difference', () => {
+    it('should return the difference between two arrays', () => {
+      expect(difference([[1, 2, 3], [2, 3, 4]])).toEqual([1]);
+      expect(difference([[1, 2, 3], [1, 2, 3]])).toEqual([]);
+    });
+  });
+
+  describe('intersection', () => {
+    it('should return the intersection of two arrays', () => {
+      expect(intersection([[1, 2, 3], [2, 3, 4]])).toEqual([2, 3]);
+      expect(intersection([[1, 2, 3], [1, 2, 3]])).toEqual([1, 2, 3]);
+    });
+  });
+
+  describe('flattenDeep', () => {
+    it('should flatten a nested array', () => {
+      expect(flattenDeep([[1, [4, [1], [null]]]])).toEqual([1, 4, 1, null]);
+    });
+  });
+
+  describe('keyByArray', () => {
+    it('should create an object with keys from an array', () => {
+      const data = [
+        { id: 1, name: 'John' },
+        { id: 2, name: 'Jane' },
+        { id: 3, name: 'Bob' },
+      ];
+      expect(keyByArray(data, 'id')).toEqual({
+        '1': { id: 1, name: 'John' },
+        '2': { id: 2, name: 'Jane' },
+        '3': { id: 3, name: 'Bob' },
+      });
+    });
+  });
+
+  describe('keyBy', () => {
+    it('should create an object with keys from a property', () => {
+      const data = [
+        { id: 1, name: 'John' },
+        { id: 2, name: 'Jane' },
+        { id: 3, name: 'Bob' },
+      ];
+      expect(keyBy(data, 'id')).toEqual({
+        '1': { id: 1, name: 'John' },
+        '2': { id: 2, name: 'Jane' },
+        '3': { id: 3, name: 'Bob' },
+      });
+    });
+  });
+
+  describe('sortByKey', () => {
+    it('should sort an array of objects by a key', () => {
+      const data = [
+        { id: 2, name: 'Jane' },
+        { id: 1, name: 'John' },
+        { id: 3, name: 'Bob' },
+      ];
+      expect(data.sort(sortByKey('id')).map(item => item.id)).toEqual([1, 2, 3]);
+    });
+  });
+
+  describe('sortBy', () => {
+    it('should sort an array of objects by a key using a custom comparator', () => {
+      const data = [
+        { id: 2, name: 'Jane' },
+        { id: 1, name: 'John' },
+        { id: 3, name: 'Bob' },
+      ];
+      expect(sortBy(data, 'name', (a, b) => a.localeCompare(b))).toEqual([
+        { id: 3, name: 'Bob' },
+        { id: 2, name: 'Jane' },
+        { id: 1, name: 'John' },
+      ]);
+    });
+  });
+
+  describe('isMatchType', () => {
+    it('should check if an object matches a target object by type', () => {
+      const obj = { a: 1, b: '2' };
+      const target = { a: 0, b: '' };
+      expect(isMatchType(obj, target)).toBe(true);
+    });
+  });
+
+  describe('isMatch', () => {
+    it('should check if an object matches a target object', () => {
+      const obj = { a: 1, b: '2' };
+      const target = { a: 1, b: '2' };
+      expect(isMatch(obj, target)).toBe(true);
+    });
+  });
+
+  // Add more test cases for the remaining functions...
+});
 
 
 
@@ -47,7 +142,7 @@ const ArrEx = [0,2,1,4,5,3];
 const ArrShift = ArrEx.map(e => e+3);
 const CollectionEx = ArrEx.map((i, index) => ({...ObjSample, "sort": i, value: i*index, nested: ObjSample}))
 
-describe('transforms', () => {
+describe('collections.ts', () => {
   it('should work', () => {
     const cmp = (a: number,b: number): 0|-1|1 => (a<b)? 1 : -1;
     const compare = (a: number,b: number) => (a>b)? 1 : -1;

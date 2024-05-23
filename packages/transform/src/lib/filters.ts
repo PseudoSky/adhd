@@ -44,11 +44,9 @@ export function isGreaterThan(a: number, b: number) {
   return a > b
 }
 export function isLessThanOrEqual(a: number, b: number) {
-  console.log('isLessThanOrEqual', [a, '<=', b])
   return (a <= b)
 }
 export function isGreaterThanOrEqual(a: number, b: number) {
-  console.log('isGreaterThanOrEqual', [a, '>=', b]);
   return a >= b;
 }
 export function isShallowEqual(a: any, b: any) {

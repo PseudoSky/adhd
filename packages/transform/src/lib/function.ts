@@ -2,21 +2,48 @@ import { isEqual } from './object'
 import { sortBy } from "./collections";
 import { isFunction, isValue, isArray, isDate } from './filters';
 
+/**
+ * Represents the minimum safe integer value.
+ */
 export const intMin = Number.MIN_SAFE_INTEGER;
+/**
+ * Represents the maximum safe integer value.
+ */
 export const intMax = Number.MAX_SAFE_INTEGER;
+/**
+ * Represents a variadic callback function that takes any number of arguments.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type CallbackFunctionVariadic = (...args: any[]) => void;
+/**
+ * Represents a typed callback function that takes a specific set of parameters.
+ * @typeParam Params - The type of the parameters for the callback function.
+ */
 export type CallbackFunctionTyped<Params extends []> = (...args: Params) => void;
 
+/**
+ * Composes a sequence of functions, where each function consumes the return value of the function that follows.
+ * @param funcs - An array of callback functions to be composed.
+ * @returns A new function that represents the composition of the input functions.
+ */
 export const compose = (...funcs: CallbackFunctionVariadic[]) =>
   funcs.reduce(
     (a, b) => (...args) => a(b(...args)),
     arg => arg
   );
 
-
+/**
+ * A no-operation function that returns null.
+ * @returns null
+ */
 export function noop(){return null}
 
+/**
+ * Extracts a value from an object and passes it as an argument to a callback function.
+ * @param key - The key to extract the value from.
+ * @param callback - The callback function to call with the extracted value.
+ * @returns A new function that, when called, will extract the value from the object and pass it to the callback.
+ */
 export function extractThen(key: string, callback: CallbackFunctionTyped<any>): (...args: Parameters<typeof callback>) => ReturnType<typeof callback> {
   return (...args) => callback(...(args as {[k: string]: any}[]).map(({[key]: value}) => value))
 }
@@ -26,7 +53,13 @@ export function extractThen(key: string, callback: CallbackFunctionTyped<any>): 
  * Set and get based on string paths
  */
 
+
 const STR_PATH_REGEX = /[,[\].]+?/ // ALT from site /[,[\]]+?/
+/**
+ * Converts a string or an array of strings into an array of individual path segments.
+ * @param path - The string or array of strings to be converted.
+ * @returns An array of path segments.
+ */
 export function toPath(path: string | string[]): string[]{
   return typeof path==='string' ? path.split(STR_PATH_REGEX)
                                 .filter(Boolean) : path
@@ -34,13 +67,30 @@ export function toPath(path: string | string[]): string[]{
 }
 
 // TODO falsey is unclear - seems like it's actually doing the opposite
+/**
+ * Checks if a value is falsey (not null and not undefined).
+ * @param obj - The value to check.
+ * @returns True if the value is falsey, false otherwise.
+ */
 export function isFalsey (obj: any){
   return obj !== null && obj !== undefined
 }
+
+/**
+ * Checks if an object exists (is not null and not undefined).
+ * @param obj - The object to check.
+ * @returns True if the object exists, false otherwise.
+ */
 export function doesObjectExists (obj: any){
   return !!obj && obj !== null && obj !== undefined;
 }
 
+/**
+ * Creates a getter function for accessing values in an object using a string path.
+ * @param _path - The string path to the value.
+ * @param obj - The object to get the value from.
+ * @returns A function that, when called, will retrieve the value at the specified path.
+ */
 export function makeGetter(_path?: string, obj?: any): (value?: any) => any  {
   if(!obj){
     return (_obj: any) => makeGetter(_path, _obj)()
@@ -49,95 +99,36 @@ export function makeGetter(_path?: string, obj?: any): (value?: any) => any  {
     return (path: string) => makeGetter(path, obj)()
   }
   const path=toPath(_path)
-  console.warn({path})
   if(!path.length) return (value: any) => obj||value
   return (value: any) => path.reduce(
     (previous, key: string, index: number) => {
-
-      // parent needs to be defined at next key
-      // const [parent, lastKey] = previous;
       const res = previous;
-      // const parentTemplate = previous[3]
       const field = key.replace(/(^")|("$)/g,'') as keyof typeof res
-      // If field is not in 
       const isEnd = index === path.length-1
       if(!isEnd){
         const nextType = !Number.isNaN(parseInt(path[index+1])) ? []: {};
         if(!(field in res)){
           res[field] = nextType
         }
+        return res[field]
       }
-
-      const isInt = !Number.isNaN(parseInt(String(field)))
-      // const isLastInt = lastKey!==null ? !Number.isNaN(parseInt(lastKey)) : false
-      
-      // const isParentDefined = doesObjectExists(parent);
-      // const isLastKeyDefined = doesObjectExists(lastKey);
-      // const isResultDefined = doesObjectExists(res);
-      const fieldTemplate = isInt ? [] : {}
-      console.warn({field, isInt, isEnd, fieldTemplate, value: res[field] || value})
-      if(isEnd){
-        // res[field] = value
-        return res[field] || value
-      }
-      return res[field];
-      // if(!isParentDefined){
-      //   return [res, field, res[field]]
-      // }
-      // if(! isLastKeyDefined){
-      //   return [res, field, res[field], fieldTemplate]
-      // }
-      // if(!isResultDefined){
-      //   parent[lastKey] = parentTemplate
-      //   res = parent[lastKey]
-      //   return [res, field, undefined, fieldTemplate]
-      // }
-      // if(!(field in res)){
-      //   // parent[field] = fieldTemplate;
-      //   res = parent[field];
-      //   return [parent, field, res]
-      // } else {
-      //   parent[field]
-      //   return [parent, field, res[field]]
-      // }
-
-      // Field does not exist
-      // if(!(field in res)) {
-      //   if(isEnd){
-      //     res[field] = value
-      //     console.warn("isEnd",{obj, field, value})
-      //     return obj
-      //   } else{
-      //     res[field] = fieldTemplate
-      //     console.warn("Iterate",{obj: JSON.stringify(obj), field, value})
-      //     return [res, field, res[field]]
-      //   }
-      // } else {
-      //   return [res, field, res[field]]
-      // }
-  }, obj
-  )
+      return res[field] || value;
+  }, obj )
 }
 
+/**
+ * Creates a setter function for setting values in an object using a string path.
+ * @param _path - The string path to the value.
+ * @param obj - The object to set the value in.
+ * @returns A function that, when called with a value, will set the value at the specified path.
+ */
 export function makeSetter(_path: string, obj?: any)  {
-  // if(!obj){
-  //   return (_obj: any) => makeGetter(_path, _obj, useSetters)()
-  // }
-  // if(!_path) {
-  //   return (path: string) => makeGetter(path, obj, useSetters)()
-  // }
   const path=toPath(_path)
-  console.warn({path})
   if(!path.length) return (defaultValue: any) => obj||defaultValue
   return (value: any) => path.reduce(
     (previous, key: string, index: number) => {
-
-      // parent needs to be defined at next key
-      // const [parent, lastKey] = previous;
       const res = previous;
-      // const parentTemplate = previous[3]
       const field = key.replace(/(^")|("$)/g,'') as keyof typeof res
-      // If field is not in 
       const isEnd = index === path.length-1
       if(!isEnd){
         const nextType = !Number.isNaN(parseInt(path[index+1])) ? []: {};
@@ -145,136 +136,49 @@ export function makeSetter(_path: string, obj?: any)  {
           res[field] = nextType
         }
       }
-
-      const isInt = !Number.isNaN(parseInt(String(field)))
-      // const isLastInt = lastKey!==null ? !Number.isNaN(parseInt(lastKey)) : false
-      
-      // const isParentDefined = doesObjectExists(parent);
-      // const isLastKeyDefined = doesObjectExists(lastKey);
-      // const isResultDefined = doesObjectExists(res);
-      const fieldTemplate = isInt ? [] : {}
-      console.warn({field, isInt, isEnd, fieldTemplate})
       if(isEnd){
         res[field] = value
         return obj
       }
       return res[field];
-      // if(!isParentDefined){
-      //   return [res, field, res[field]]
-      // }
-      // if(! isLastKeyDefined){
-      //   return [res, field, res[field], fieldTemplate]
-      // }
-      // if(!isResultDefined){
-      //   parent[lastKey] = parentTemplate
-      //   res = parent[lastKey]
-      //   return [res, field, undefined, fieldTemplate]
-      // }
-      // if(!(field in res)){
-      //   // parent[field] = fieldTemplate;
-      //   res = parent[field];
-      //   return [parent, field, res]
-      // } else {
-      //   parent[field]
-      //   return [parent, field, res[field]]
-      // }
-
-      // Field does not exist
-      // if(!(field in res)) {
-      //   if(isEnd){
-      //     res[field] = value
-      //     console.warn("isEnd",{obj, field, value})
-      //     return obj
-      //   } else{
-      //     res[field] = fieldTemplate
-      //     console.warn("Iterate",{obj: JSON.stringify(obj), field, value})
-      //     return [res, field, res[field]]
-      //   }
-      // } else {
-      //   return [res, field, res[field]]
-      // }
-  }, obj
-  )
-}
-// export function makeGetter(_path: string, obj?: any, useSetters=true) {
-//   if(!obj){
-//     return (_obj: any) => makeGetter(_path, _obj, useSetters)()
-//   }
-//   if(!_path) {
-//     return (path: string) => makeGetter(path, obj, useSetters)()
-//   }
-//   const path=toPath(_path)
-//   console.warn({path})
-//   if(!path || !path.length) return (defaultValue: any) => obj||defaultValue
-//   return (defaultValue: any) => path.reduce(
-//     ([parent, lastKey, res]:any[], key: string, index: number) => {
-//       console.warn([lastKey], {key, index})
-//       if(isFalsey(res) && isFalsey(parent)) return defaultValue
-//       const field = key.replace(/(^")|("$)/g,'')
-//       const isInt = !Number.isNaN(parseInt(field))
-//       const isEnd = index === path.length-1
-//       console.warn("checking falsey setter !isFalsey(res)", {notIsFalsey: !isFalsey(res), lastKey})
-//       if(!isFalsey(res)){
-//         console.warn("checking falsey setter isFalsey(parent)", {isFalsey: isFalsey(res), lastKey})
-//         if(isFalsey(parent)){
-//           res = isInt && key === field ? [] : {}
-//           if(useSetters){
-//             parent[lastKey]=res
-//             console.warn("applying setter", {lastKey, defaultValue})
-//             if(isEnd){
-//               res[field] = defaultValue
-//             }
-//           }
-//         }
-//         if(isEnd){
-//           return defaultValue
-//         }
-//       } 
-//       // else if(isEnd){
-//       //   if(useSetters && !!defaultValue){
-//       //     res = isInt && key === field ? [] : {}
-//       //     res[field] = defaultValue
-//       //     parent[lastKey] = res
-//       //   }
-//       // }
-//       return isEnd ? res[field] : [res, field, res[field]]
-//     }, [null, null, obj]
-//   ) || defaultValue
-// }
-
-// TODO: doesn't look like it works
-// export function makeSetter(path: string, obj: any) {
-//   const getAttr = makeGetter(path, obj)
-//   return (value: any) => {
-//     const res = getAttr(value);
-//     return obj
-//   }
-// }
-
-export function get(obj: any, path: string, defaultValue: any=undefined) {
-  return makeGetter(path, obj)(defaultValue)
+  }, obj)
 }
 
-export function set(data: any, path: string, value: any){
+/**
+ * Retrieves a value from an object using a string path.
+ * @param obj - The object to get the value from.
+ * @param path - The string path to the value.
+ * @param defaultValue - The default value to return if the path does not exist.
+ * @returns The value at the specified path, or the default value if the path does not exist.
+ */
+export function get(obj: any, path: string, defaultValue: any = undefined) {
+  return makeGetter(path, obj)(defaultValue);
+}
+
+/**
+ * Sets a value in an object using a string path.
+ * @param data - The object to set the value in.
+ * @param path - The string path to the value.
+ * @param value - The value to set.
+ * @returns The updated object.
+ */
+export function set(data: any, path: string, value: any) {
   return makeSetter(path, data)(value);
 }
 
-export function getAll(obj: any, paths: string[], into: any[]=[]){
+/**
+ * Retrieves the values at multiple paths in an object.
+ * @param obj - The object to get the values from.
+ * @param paths - An array of string paths to the values.
+ * @param into - An optional array to store the retrieved values in.
+ * @returns An array of the retrieved values.
+ */
+export function getAll(obj: any, paths: string[], into: any[] = []) {
   return paths.reduce((res, path) => {
-    const value = get(obj, path, undefined)
-    return res.concat([value])
-    // return set(res, path, value)
+    const value = get(obj, path, undefined);
+    return res.concat([value]);
   }, into);
 }
-
-// export getAll;
-// export toPath;
-// export makeGetter;
-// export makeSetter;
-// export get;
-// export set;
-
-
 
 /*
 EXAMPLE
@@ -284,17 +188,6 @@ var result = get(object, 'a[0].b.c', 1);
 // output: 3
 
 */
-
-// export function get(obj, path, defaultValue){
-//   const travel = regexp =>
-//     String.prototype.split
-//       .call(path, regexp)
-//       .filter(Boolean)
-//       .reduce((res, key) => (res !== null && res !== undefined ? res[key] : res), obj);
-//   const result = travel(/[,[\]]+?/) || travel(/[,[\].]+?/);
-//   return result === undefined || result === obj ? defaultValue : result;
-// };
-
 /* end traversal utils */
 
 
@@ -304,9 +197,6 @@ var result = get(object, 'a[0].b.c', 1);
 
 export function runAfter(f: CallbackFunctionVariadic, t: number) {
   return function (...args: any[]) {
-    // Original 
-    // const args = arguments;
-    // const self = this;
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     return setTimeout(() => f.apply(self, args), t);
@@ -416,7 +306,6 @@ export class Differ {
     if (arr1 === undefined || arr2 === undefined) {
        return arr1 === undefined ? arr1 : arr2;
     }
-    console.log({arr1,arr2})
     const set1 = new Set(arr1);
     const set2 = new Set(arr2);
 

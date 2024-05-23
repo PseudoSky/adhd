@@ -1,9 +1,9 @@
 import { extractThen } from './function'
 import Stats from './stats'
 
-export const difference = (arrays:any[]) => arrays.reduce((a, b) => a.filter((c: any) => !b.includes(c)))
-export const intersection = (arrays:any[]) => arrays.reduce((a, b) => a.filter((c: any) => b.includes(c)))
-export const flattenDeep = (arr:any[]): any[] => arr.flatMap((subArray, index) => Array.isArray(subArray) ? flattenDeep(subArray) : subArray)
+export const difference = (arrays:any[][]) => arrays.reduce((a, b) => a.filter((c: any) => !b.includes(c)))
+export const intersection = (arrays:any[][]) => arrays.reduce((a, b) => a.filter((c: any) => b.includes(c)))
+export const flattenDeep = (arr:any[][]): any[] => arr.flatMap((subArray, index) => Array.isArray(subArray) ? flattenDeep(subArray) : subArray)
 export const keyByArray = (array:any[], key: string) => (array || []).reduce((r, x) => ({ ...r, [key ? x[key] : x]: x }), {});
 // keyBy for array and object
 export const keyBy = (collection: Record<string,any>|[], key: string) => {
@@ -47,9 +47,9 @@ export function overEach(arr: any[]){
   return (...args: any[]) => arr.map(func => func(...args))
 }
 
-export function omitBy(orig: object, check: BooleanFilter) {
-  const obj = { ...orig }
-  return Object.entries(obj).reduce((res, [key, value]) => {
+export function omitBy<T=object|[]>(orig: T, check: BooleanFilter) {
+  const obj: T = { ...orig }
+  return Object.entries(orig).reduce((res, [key, value]) => {
     if(!check(value)) res[key]=obj[key];
     return res
   }, orig.constructor())
