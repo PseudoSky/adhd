@@ -1,37 +1,39 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 import _ from '@adhd/transform';
-import { OrderByExpression, QueryExpression } from './expressions';
+import { OrderByExpression, QueryExpression, QueryExpressionValues } from './expressions';
 import { OrderByOperation } from './operators';
-function negate(func) {
-  return (...args) => !func(args);
+import { CallbackFunctionTyped } from 'packages/transform/src/lib/function';
+function negate(func: (...args:any[])=> boolean) {
+  return (...args: any) => !func(args);
 }
-const pipe = (...fns) => (x) => fns.reduce((y, f) => f(y), x);
-const mapArgs = (fn) => (...args) => args.map(fn);
-const map = (fn: CallableFunction) => (mappable: any[]) => mappable.map(fn);
-const partialApply = (fn, ...cache) => (...args) => {
+const pipe = (...fns: any[]) => (x: any) => fns.reduce((y, f) => f(y), x);
+const mapArgs = (fn: (value: any, index: number, array: any[]) => unknown) => (...args: any[]) => args.map(fn);
+const map = (fn: CallbackFunctionTyped<any, any>) => (mappable: any[]) => mappable.map(fn);
+const partialApply = (fn: ((...args: any[]) => any), ...cache: undefined[]) => (...args: any[]) => {
   const all = cache.concat(args);
   return all.length >= fn.length ? fn(...all) : partialApply(fn, ...all);
 };
-const applyAll = (fns, obj) => fns.flatMap((f) => f(obj));
+const applyAll = (fns: any[], obj: any) => fns.flatMap((f: (arg0: any) => any) => f(obj));
 
 // function hasValues(target){
 //   return (values) => target.every(v => values.includes(v))
 // }
-const hasValues = (values, target) => target.every((v) => values.includes(v));
+const hasValues = (values: string | any[], target: any[]) => target.every((v: any) => values.includes(v));
 
-const checkHasKey = (key, obj) => _.isObject(obj) && obj.hasOwnProperty(key);
-const checkHasValue = (value, arr) => arr.includes(value);
-const partialHasKey = (obj, key?: string) => checkHasKey(key, obj);
-const partialHasValue = (obj, value) => checkHasValue(value, obj);
-const checkSome = (check = _.isTrue, arr) => arr.some(check);
-const checkEvery = (check = _.isTrue, arr) => arr.every(check);
+const checkHasKey = (key: string, obj: { hasOwnProperty: (arg0: any) => any; }) => _.isObject(obj) && key in obj;
+const checkHasValue = (value: any, arr: string | any[]) => arr.includes(value);
+const partialHasKey = (key: string) => (obj: any) => checkHasKey(key, obj);
+const partialHasValue = (obj: any, value: any) => checkHasValue(value, obj);
+const checkSome = (check = _.isTrue, arr: any[]) => arr.some(check);
+const checkEvery = (check = _.isTrue, arr: any[]) => arr.every(check);
 
 const some = partialApply(checkSome);
 const every = partialApply(checkEvery);
 
-const hasKeysSome = partialApply((targets, value) =>
+const hasKeysSome = partialApply((targets: any, value: any) =>
   checkSome(partialHasKey(value), targets)
 );
-const hasKeysEvery = partialApply((targets, value) =>
+const hasKeysEvery = partialApply((targets: any, value: any) =>
   checkEvery(partialHasKey(value), targets)
 );
 
@@ -55,7 +57,7 @@ const isContainedIn = _.isIn;
 const hasKey = checkHasKey;
 const hasKeysAny = hasKeysSome;
 const hasKeysAll = hasKeysEvery;
-const isNull = (a, b) => {
+const isNull = (a: any, b: boolean) => {
   console.log({ a, b });
   return _.isDefined(a) !== b;
 };
@@ -88,9 +90,9 @@ const operators: Record<string, FilterPartial> = {
   _has_keys_any: partialApply(hasKeysAny),
   _is_null: partialApply(isNull),
   _has_keys_all: partialApply(hasKeysAll),
-  _and: (ops, path = [], iter = (v, _pth) => _.isTrue(v)) => {
+  _and: (ops, path = [], iter = (v: any, _pth: any) => _.isTrue(v)) => {
     // console.log('_and', {ops, path})
-    const opList = ops.map((q, i) => iter(q, [...path]));
+    const opList = ops.map((q: any, i: any) => iter(q, [...path]));
     return (obj: any) => {
       const res = applyAll(opList, obj);
       const bool = res.every(_.isTrue);
@@ -98,12 +100,12 @@ const operators: Record<string, FilterPartial> = {
       return bool;
     };
   },
-  _or: (ops, path = [], iter = (v, _pth) => _.isTrue(v)) => {
+  _or: (ops, path = [], iter = (v: any, _pth: any) => _.isTrue(v)) => {
     // console.log("_or", { ops, path });
-    const opList = ops.map((q) => iter(q, [...path]));
+    const opList = ops.map((q: any) => iter(q, [...path]));
     return (obj) => applyAll(opList, obj).some(_.isTrue);
   },
-  _not: (op, path = [], iter = (v, _pth) => _.isTrue(v)) => {
+  _not: (op, path = [], iter = (v: any, _pth: any) => _.isTrue(v)) => {
     // console.log("_not", { op, path });
     const child = iter(op, [...path]);
     return (obj) => _.isFalse(child(obj));
@@ -112,7 +114,7 @@ const operators: Record<string, FilterPartial> = {
 
 const getPath = partialApply(_.makeGetter);
 
-function makeExpression(exp, rhs, path) {
+function makeExpression(exp: string, rhs: unknown, path: string[]) {
   // console.log("makeExpression", {path, rhs, exp});
   const getter = getPath(path);
   const expression = operators[exp];
@@ -131,7 +133,7 @@ function makeExpression(exp, rhs, path) {
   };
 }
 
-function walk(query = {}, path = []) {
+function walk(query: QueryExpressionValues = {}, path: string[] = []) {
   if (_.isEmpty(query)) return () => true;
   const keys = Object.entries({ ...query });
   const matchers: (FilterPartial | Filter | boolean)[] = [];
@@ -152,7 +154,7 @@ function walk(query = {}, path = []) {
   };
 }
 
-function parseOrderBy(query: string | OrderByExpression[], paths: string[] = []): OrderByOperation[] {
+function parseOrderBy(query: string | OrderByExpression | OrderByExpression[], paths: string[] = []): OrderByOperation[] {
   // console.log(query, paths);
   if (_.isString(query)) {
     return [{ key: (query as string), dir: 'desc', nulls: 'last' }];
@@ -180,7 +182,7 @@ function parseOrderBy(query: string | OrderByExpression[], paths: string[] = [])
   return [] as  OrderByOperation[];
 }
 
-export const orderBy = (props: OrderByExpression[] = []) => (a, b) => {
+export const orderBy = (props: OrderByExpression[] = []) => (a: any, b: any) => {
   const orderOps = parseOrderBy(props);
   console.log({orderOps})
   for (const p in orderOps) {
@@ -202,7 +204,7 @@ export const orderBy = (props: OrderByExpression[] = []) => (a, b) => {
   return 0;
 };
 type QueryType = {
-  raw?: OrderByExpression;
+  raw?: QueryExpression;
   where?: (() => boolean) | ((obj: any) => any);
   order_by?: ((a: any, b: any) => number)// | string[];
   distinct_on?: string[];
@@ -219,7 +221,7 @@ const EmptyQuery: QueryType = {
   limit: undefined,
 };
 
-function RawQuery(query: QueryType = {}){
+function RawQuery(query: QueryExpression = {}){
   return {
     ...EmptyQuery,
     ...query,
@@ -230,22 +232,21 @@ function RawQuery(query: QueryType = {}){
 //   Currently the functional interface and the raw type are mixed
 export class Query implements QueryType {
   raw: QueryExpression;
-  where: (() => boolean) | ((obj: any) => any);
-  order_by: (((a: any, b: any) => any));// | string[]);
+  where?: (() => boolean) | ((obj: any) => any);
+  order_by?: (((a: any, b: any) => any));// | string[]);
   distinct_on: any;
-  offset: number;
+  offset = 0;
   limit: any;
-  constructor(_query: QueryType = EmptyQuery) {
-    const query = RawQuery(_query);
+  constructor(_query: QueryExpression = {}) {
+    // const query = RawQuery(_query);
     this.raw = {};
-    this.setQuery(query);
+    this.setQuery(_query);
   }
 
-  setQuery = (query = EmptyQuery) => {
+  setQuery = (query: QueryExpression = {}) => {
     const ops = [
-      /* @ts-ignore */
-      this.setWhere(query.where) /* @ts-ignore */,
-      this.setOrderBy(query.order_by) /* @ts-ignore */,
+      this.setWhere(query.where), 
+      this.setOrderBy(query.order_by),
       this.setDistinctOn(query.distinct_on),
       this.setOffset(query.offset),
       this.setLimit(query.limit),
@@ -295,13 +296,14 @@ export class Query implements QueryType {
 }
 
 export class DataView {
-  data: any[];
+  data?: any[];
   dataview: any;
   query: Query;
   dirty: any;
-  has_more: boolean;
+  has_more=false;
   static Query: typeof Query;
   constructor(data: any[], query: QueryExpression = {}) {
+    this.query = new Query();
     this.setData(data);
     this.setQuery(query);
   }
@@ -350,7 +352,7 @@ export class DataView {
   };
 
   commit = () => {
-    if (!this.dirty) return false;
+    if (!this.dirty || !this.data) return false;
     let res = this.data;
     if (this.query.where) res = res.filter(this.query.where);
     if (this.query.order_by) res = res.sort(this.query.order_by);
@@ -362,6 +364,7 @@ export class DataView {
     }
     this.dataview = res;
     this.dirty = false;
+    return true;
   };
 
   view = () => {

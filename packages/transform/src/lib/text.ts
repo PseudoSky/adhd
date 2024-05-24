@@ -1,4 +1,4 @@
-import shortid from 'shortid';
+// import shortid from 'shortid';
 import { noCase } from "no-case";
 
 export function trim(str='', c = '\\s'){
@@ -41,12 +41,13 @@ export function toUpper(str = '') {
   return str.toUpperCase();
 }
 
-export function shortUUID() {
-  return shortid.generate()
-}
+// export function shortUUID() {
+//   return shortid.generate()
+// }
 
 export function percent(n: number, precision=2) {
-  return `${n > 0 ? "+" : n < 0 ? "-" : ""}${Math.abs(n).toFixed(precision)}%`;
+  const sign = n>0 ? "+" : "";
+  return `${n < 0 ? "-" : sign}${Math.abs(n).toFixed(precision)}%`;
 }
 
 export default {
@@ -58,7 +59,7 @@ export default {
   capitalize,
   toLower,
   toUpper,
-  shortUUID,
+  // shortUUID,
   percent,
   words,
   hyphenCase,

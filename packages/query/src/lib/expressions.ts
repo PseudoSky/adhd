@@ -79,3 +79,5 @@ export interface QueryExpression {
     order_by?: OrderByExpression[]
     where?: BooleanExpression
 }
+
+export type QueryExpressionValues = QueryExpression | OrderByExpression[] | BooleanExpression

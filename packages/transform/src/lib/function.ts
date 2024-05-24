@@ -2,6 +2,16 @@ import { isEqual } from './object'
 import { sortBy } from "./collections";
 import { isFunction, isValue, isArray, isDate } from './filters';
 
+export type entryOf<o> = {
+  [k in keyof o]-?: [k, Exclude<o[k], undefined>]
+}[o extends readonly unknown[] ? keyof o & number : keyof o] &
+  unknown
+
+export type entriesOf<o extends object> = entryOf<o>[] & unknown
+
+export const entriesOf = <o extends object>(o: o) =>
+  Object.entries(o) as entriesOf<o>
+
 /**
  * Represents the minimum safe integer value.
  */
@@ -14,12 +24,12 @@ export const intMax = Number.MAX_SAFE_INTEGER;
  * Represents a variadic callback function that takes any number of arguments.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type CallbackFunctionVariadic = (...args: any[]) => void;
+export type CallbackFunctionVariadic = (...args: any[]) => any;
 /**
  * Represents a typed callback function that takes a specific set of parameters.
  * @typeParam Params - The type of the parameters for the callback function.
  */
-export type CallbackFunctionTyped<Params extends []> = (...args: Params) => void;
+export type CallbackFunctionTyped<RT, Params extends []> = (...args: Params) => RT;
 
 /**
  * Composes a sequence of functions, where each function consumes the return value of the function that follows.
@@ -44,8 +54,8 @@ export function noop(){return null}
  * @param callback - The callback function to call with the extracted value.
  * @returns A new function that, when called, will extract the value from the object and pass it to the callback.
  */
-export function extractThen(key: string, callback: CallbackFunctionTyped<any>): (...args: Parameters<typeof callback>) => ReturnType<typeof callback> {
-  return (...args) => callback(...(args as {[k: string]: any}[]).map(({[key]: value}) => value))
+export function extractThen(key: string, callback: CallbackFunctionVariadic): (...args: Parameters<typeof callback>) => ReturnType<typeof callback> {
+  return (...args) => callback(...(args.map(({[key]: value}) => value)))
 }
 
 /*
@@ -180,14 +190,6 @@ export function getAll(obj: any, paths: string[], into: any[] = []) {
   }, into);
 }
 
-/*
-EXAMPLE
-
-var object = { a: [{ b: { c: 3 } }] };
-var result = get(object, 'a[0].b.c', 1);
-// output: 3
-
-*/
 /* end traversal utils */
 
 
@@ -227,7 +229,6 @@ export function splitPipe(...funcs: CallbackFunctionVariadic[]) {
       return f(args)
     })
 }
-
 
 export function flow(funcs: CallbackFunctionVariadic[]){
   return (...args: Parameters<typeof funcs[0]>) => {

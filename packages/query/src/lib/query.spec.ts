@@ -12,7 +12,7 @@ describe('query', () => {
   it('filter using provided raw query', () => {
     const dv = new DataView(data, {
       where: { value: { _gt: 100 } },
-      order_by: { value: "asc" },
+      order_by: [{ value: "asc" }],
     });
     expect(dv.view()).toEqual([{'name': "D", "value": 128}, { name: 'E', value: 18000 }]);
   });

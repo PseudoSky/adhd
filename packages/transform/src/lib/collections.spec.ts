@@ -136,18 +136,21 @@ describe('collections', () => {
 });
 
 
-
-const ObjSample = {"key": "value"}
-const ArrEx = [0,2,1,4,5,3];
-const ArrShift = ArrEx.map(e => e+3);
-const CollectionEx = ArrEx.map((i, index) => ({...ObjSample, "sort": i, value: i*index, nested: ObjSample}))
-
 describe('collections.ts', () => {
   it('should work', () => {
+    const ObjSample = {"key": "value"}
+    const ArrEx = [0,2,1,4,5,3];
+    const ArrShift = ArrEx.map(e => e+3);
+    const CollectionEx = ArrEx.map((i, index) => ({...ObjSample, "sort": i, value: i*index, nested: ObjSample}))
+    
     const cmp = (a: number,b: number): 0|-1|1 => (a<b)? 1 : -1;
     const compare = (a: number,b: number) => (a>b)? 1 : -1;
     const check = (a: any,b: any) => (a===b)? 1 : -1;
-    const boolCheck = (a: any) => (!a ? false : true);
+    const boolCheckTrue = (a: any) => true;
+    const boolCheckFalse = (a: any) => false;
+    const boolCheckExists = (a: any) => (!!a);
+    const boolCheckNotExists = (a: any) => (!a);
+    const boolCheckNotEqOne = (a: any) => (a!=1);
     // const checkIsArray = () =>
     const checks = [cmp, compare, check];
     const a = 10;
@@ -207,10 +210,14 @@ describe('collections.ts', () => {
     expect(isMatchType(obj, target)).toEqual(true);
     expect(isMatch(obj, target)).toEqual(true);
     expect(overSome([(e:any) => e==0])(0)).toEqual(true);
-    expect(overEvery(checks)([])).toEqual(true);
-    expect(overEach(checks)(arr)).toEqual([-1,-1,-1]);
-    expect(omitBy(orig, check)).toEqual({});
-    expect(pickBy(orig, boolCheck)).toEqual({ key: 'value' });
+    expect(overEvery([boolCheckExists, boolCheckNotEqOne])([])).toEqual(true);
+    expect(overEvery([boolCheckExists, boolCheckNotExists])([])).toEqual(false);
+    expect(overEach([boolCheckExists, boolCheckNotExists, boolCheckNotEqOne])(arr)).toEqual([true, false, true]);
+    expect(omitBy(orig, boolCheckTrue)).toEqual({});
+    expect(omitBy([orig, orig], (e) => e.value==1)).toEqual([orig, orig]);
+    expect(omitBy([orig, orig], (e) => e.key=="value")).toEqual([]);
+    expect(pickBy(orig, boolCheckExists)).toEqual({ key: 'value' });
+    expect(pickBy([orig, orig], boolCheckExists)).toEqual([{ key: 'value' },{ key: 'value' }]);
     expect(keySelect(key)({key:9})).toEqual(9);
     expect(pluck(CollectionEx, key)).toEqual(['value','value','value','value','value','value']);
     expect(defaultSort(a, b)).toEqual(1);
@@ -235,8 +242,8 @@ describe('collections.ts', () => {
     ]);
     expect(range(-10, 10, 1)).toEqual([-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7,8,9,10]);
     expect(range(0, 5, 0.5)).toEqual([0,.5,1,1.5,2,2.5,3,3.5,4,4.5,5]);
-    expect(maxBy(collection, (o) => o.value, (a, b) => defaultSort(a.value, b.value))).toEqual({key: "value",nested: {key: "value"},sort: 5, value: 20});
-    expect(minBy(collection, (o) => o.value, (a, b) => defaultSort(a.value, b.value))).toEqual({key: "value",nested: {key: "value"},sort: 0, value: 0});
+    expect(maxBy(collection, (o) => o.value)).toEqual({key: "value",nested: {key: "value"},sort: 5, value: 20});
+    expect(minBy(collection, (o) => o.value)).toEqual({key: "value",nested: {key: "value"},sort: 0, value: 0});
   });
 });
 

@@ -193,7 +193,7 @@ export function deepCopy(object1: any) {
  * @param _base - The base object to compare against.
  * @returns A new object representing the difference between the two objects.
  */
-export function difference<T = Record<string, any>>(_object: T, _base: any) {
+export function difference<T extends Record<string|number, any>>(_object: T, _base: any) {
   function changes(object: T, base: { [x: string]: any }, _res: Record<string, any> = {}) {
     return Object.entries(object).reduce(
       function (result, [key, value]) {
