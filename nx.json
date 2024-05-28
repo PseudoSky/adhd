@@ -60,14 +60,29 @@
     }
   ],
   "generators": {
-    "@nx/next": {
+    "@nrwl/react": {
+      "application": {
+        "style": "none",
+        "linter": "eslint",
+        "standaloneConfig": true,
+        "babel": true
+      },
+      "component": {
+        "style": "none"
+      },
+      "library": {
+        "buildable": true,
+        "publishable": true,
+        "standaloneConfig": true,
+        "linter": "eslint",
+        "style": "none"
+      }
+    },
+    "@nrwl/next": {
       "application": {
         "style": "css",
         "linter": "eslint"
       }
-    },
-    "@nx/react": {
-      "library": {}
     }
   },
   "nxCloudAccessToken": "ZDEzMmJjNzItYjNmNS00Y2VhLTgxZWUtNWQ1MzE4M2UwNjBkfHJlYWQtd3JpdGU=",
@@ -76,11 +91,65 @@
       "cache": true,
       "dependsOn": ["^build"],
       "inputs": ["production", "^production"]
+    },
+    "version": {
+      "executor": "@nrwl/workspace:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": ["./scripts/version.sh"]
+      }
+    },
+    "version-prerelease": {
+      "executor": "@nrwl/workspace:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": ["./scripts/version-packages.sh -prerelease"]
+      }
+    },
+    "publish": {
+      "executor": "@nrwl/workspace:run-commands",
+      "outputs": ["dist/packages"],
+      "dependsOn": ["^version"],
+      "options": {
+        "parallel": false,
+        "commands": [
+          "echo 'Running npm publish dry run'",
+          "npm publish --dry-run dist/libs/core"
+        ]
+      },
+      "configurations": {
+        "production": {
+          "parallel": false,
+          "commands": ["npm publish dist/libs/core"]
+        }
+      }
+    },
+    "@nx/rollup:rollup": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
+    },
+    "@nx/js:tsc": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
     }
+  },
+  "targetDependencies": {
+    "build": [
+      {
+        "target": "build",
+        "projects": "dependencies"
+      }
+    ]
   },
   "release": {
     "version": {
       "preVersionCommand": "npx nx run-many -t build"
-    }
+    },
+    "projects": ["*", "!source"]
+  },
+  "cli": {
+    "defaultCollection": "@nrwl/react"
   }
 }

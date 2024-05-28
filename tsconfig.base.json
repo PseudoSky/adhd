@@ -18,7 +18,7 @@
     "paths": {
       "@adhd/data": ["packages/data/src/index.ts"],
       "@adhd/query": ["packages/query/src/index.ts"],
-      "@adhd/react-hooks": ["packages/react/hooks/src/index.ts"],
+      "@adhd/react-hooks": ["packages/react-hooks/src/index.ts"],
       "@adhd/transform": ["packages/transform/src/index.ts"]
     }
   },

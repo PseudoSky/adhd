@@ -3,6 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/query/src",
   "projectType": "library",
+  
   "release": {
     "version": {
       "generatorOptions": {
@@ -20,6 +21,7 @@
         "outputPath": "dist/packages/query",
         "main": "packages/query/src/index.ts",
         "tsConfig": "packages/query/tsconfig.lib.json",
+        "generatePackageJson": true,
         "assets": ["packages/query/*.md"]
       }
     },
