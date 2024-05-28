@@ -1,7 +1,13 @@
 {
   "name": "@adhd/query",
   "version": "0.0.1",
-  "dependencies": {},
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@adhd/transforms": "0.0.1"
+  },
   "main": "./index.js",
   "module": "./index.mjs",
   "typings": "./index.d.ts"

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
 import _ from '@adhd/transform';
 import { OrderByExpression, QueryExpression, QueryExpressionValues } from './expressions';
 import { OrderByOperation } from './operators';
@@ -256,6 +255,7 @@ export class Query implements QueryType {
 
   setWhere = (whereQuery: QueryExpression['where'] = {}) => {
     if (_.isEqual(whereQuery, this.raw.where)) return false;
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     /* @ts-ignore */
     this.raw.where = whereQuery;
     this.where = walk(whereQuery);

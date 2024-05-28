@@ -3,6 +3,10 @@
   "version": "0.2.0",
   "main": "./index.js",
   "types": "./index.d.ts",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "import": "./index.mjs",

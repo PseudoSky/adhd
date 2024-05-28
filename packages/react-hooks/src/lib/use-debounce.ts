@@ -47,17 +47,20 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 export function useDebounce(value: any, delay: number | undefined) {
   // State and setters for debounced value
   const tmp = useRef(value);
-  const [targetValue, setTargetValue] = useState(value)
-  const setTmpValue = useCallback((value: any) => {
-    tmp.current = value;
-  },[tmp]); // NOTE: modified add [tmp]
+  const [targetValue, setTargetValue] = useState(value);
+  const setTmpValue = useCallback(
+    (value: any) => {
+      tmp.current = value;
+    },
+    [tmp]
+  ); // NOTE: modified add [tmp]
   useEffect(
     () => {
       // Set debouncedValue to value (passed in) after the specified delay
-      console.log("tmp changed", tmp);
+      console.log('tmp changed', tmp);
       const handler = setTimeout(() => {
         if (tmp.current !== targetValue) {
-          console.log("setDebouncedValue", tmp.current);
+          console.log('setDebouncedValue', tmp.current);
           setTargetValue(tmp.current);
           // setDebouncedValue(tmp.current);
         }
@@ -72,7 +75,7 @@ export function useDebounce(value: any, delay: number | undefined) {
       // ... search box, we don't want the debouncedValue to update until ...
       // ... they've stopped typing for more than 500ms.
       return () => {
-        console.log("timeout cleared");
+        console.log('timeout cleared');
         clearTimeout(handler);
       };
     },
@@ -85,6 +88,5 @@ export function useDebounce(value: any, delay: number | undefined) {
 
   return [targetValue, setTmpValue];
 }
-
 
 export default useDebounce;

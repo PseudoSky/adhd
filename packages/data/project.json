@@ -19,6 +19,7 @@
       "options": {
         "outputPath": "dist/packages/data",
         "main": "packages/data/src/index.ts",
+        "generatePackageJson": true,
         "tsConfig": "packages/data/tsconfig.lib.json",
         "assets": ["packages/data/*.md"]
       }

@@ -43,7 +43,6 @@ export default defineConfig({
       external: [],
     },
   },
-
   test: {
     globals: true,
     cache: {
