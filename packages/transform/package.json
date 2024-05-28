@@ -1,6 +1,10 @@
 {
   "name": "@adhd/transform",
   "version": "0.0.1",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {},
   "main": "./index.js",
   "module": "./index.mjs",

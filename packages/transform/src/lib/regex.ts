@@ -31,7 +31,7 @@ interface Pattern {
  */
 
 const zip = (a: any[] | string, b: any[] | string) => {
-  let arr = [];
+  const arr = [];
   for (let i = 0; i < a.length; i++) {
     arr.push([a[i], b[i]]);
   }
@@ -39,7 +39,8 @@ const zip = (a: any[] | string, b: any[] | string) => {
 };
 
 const compare = (a: number, b: number) => {
-  return a > b ? 1 : b > a ? -1 : 0;
+  if(a > b) return 1;
+  return b > a ? -1 : 0;
 };
 
 const push = (arr: any[], ele: any) => {
@@ -67,8 +68,8 @@ const countZeros = (integer: number, zeros: number) => {
 };
 
 const toQuantifier = (digits: number[]) => {
-  let start = digits[0];
-  let stop = digits[1] ? `,${digits[1]}` : '';
+  const start = digits[0];
+  const stop = digits[1] ? `,${digits[1]}` : '';
   if (!stop && (!start || start === 1)) {
     return '';
   }
@@ -85,7 +86,7 @@ const padding = (str: string) => {
 
 const padZeros = (val: number | string, token: CacheEntry) => {
   if (token.isPadded && token.maxLen) {
-    let diff = Math.abs(token.maxLen - String(val).length);
+    const diff = Math.abs(token.maxLen - String(val).length);
     switch (diff) {
       case 0:
         return '';
@@ -106,10 +107,10 @@ const filterPatterns = (
   intersection: boolean,
   options: Options
 ) => {
-  let res = [];
+  const res = [];
 
   for (let i = 0; i < arr.length; i++) {
-    let token = arr[i];
+    const token = arr[i];
     let ele = token.string;
 
     if (options.relaxZeros !== false) {
@@ -179,17 +180,17 @@ const rangeToPattern = (
     };
   }
 
-  let zipped = zip(String(start), String(stop));
-  let len = zipped.length,
-    i = -1;
+  const zipped = zip(String(start), String(stop));
+  const len = zipped.length;
+  let i = -1;
 
   let pattern = '';
   let digits = 0;
 
   while (++i < len) {
-    let numbers = zipped[i];
-    let startDigit = numbers[0];
-    let stopDigit = numbers[1];
+    const numbers = zipped[i];
+    const startDigit = numbers[0];
+    const stopDigit = numbers[1];
 
     if (startDigit === stopDigit) {
       pattern += startDigit;
@@ -213,17 +214,17 @@ const splitToPatterns = (
   token: CacheEntry,
   options: Options
 ): Pattern[] => {
-  let ranges = splitToRanges(min, max);
-  let len = ranges.length;
+  const ranges = splitToRanges(min, max);
+  const len = ranges.length;
   let idx = -1;
 
-  let tokens = [];
+  const tokens = [];
   let start = min;
   let prev;
 
   while (++idx < len) {
-    let range = ranges[idx];
-    let obj = rangeToPattern(start, range, options);
+    const range = ranges[idx];
+    const obj = rangeToPattern(start, range, options);
     let zeros = '';
 
     if (!token.isPadded && prev && prev.pattern === obj.pattern) {
@@ -250,10 +251,10 @@ const splitToPatterns = (
 };
 
 const siftPatterns = (neg: Pattern[], pos: Pattern[], options: Options) => {
-  let onlyNegative = filterPatterns(neg, pos, '-', false, options) || [];
-  let onlyPositive = filterPatterns(pos, neg, '', false, options) || [];
-  let intersected = filterPatterns(neg, pos, '-?', true, options) || [];
-  let subpatterns = onlyNegative.concat(intersected).concat(onlyPositive);
+  const onlyNegative = filterPatterns(neg, pos, '-', false, options) || [];
+  const onlyPositive = filterPatterns(pos, neg, '', false, options) || [];
+  const intersected = filterPatterns(neg, pos, '-?', true, options) || [];
+  const subpatterns = onlyNegative.concat(intersected).concat(onlyPositive);
   return subpatterns.join('|');
 };
 
@@ -262,8 +263,8 @@ const toRegexRange = (
   boundB?: number,
   options?: Options
 ): string => {
-  let min = parseInt(`${boundA}`, 10);
-  let max = parseInt(`${boundB}`, 10);
+  const min = parseInt(`${boundA}`, 10);
+  const max = parseInt(`${boundB}`, 10);
   // UNBOUNDED STRICTLY NUMBER
   if (isNaN(min) && isNaN(max)) {
     return '(-?[0-9]+)';
@@ -307,39 +308,39 @@ const toRegexRange = (
   }
 
   options = options || {};
-  let relax = String(options.relaxZeros);
-  let shorthand = String(options.shorthand);
-  let capture = String(options.capture);
-  let key = `${min}:${max}=${relax}${shorthand}${capture}`;
-  if (RegexRange.cache.hasOwnProperty(key)) {
+  const relax = String(options.relaxZeros);
+  const shorthand = String(options.shorthand);
+  const capture = String(options.capture);
+  const key = `${min}:${max}=${relax}${shorthand}${capture}`;
+  if (key in RegexRange.cache) {
     return RegexRange.cache[key].result || '';
   }
 
   let a = Math.min(min, max);
-  let b = Math.max(min, max);
+  const b = Math.max(min, max);
 
   // DISTANCE OF 1 '(a|b)'
   if (Math.abs(a - b) === 1) {
-    let result = `${min}|${max}`;
+    const result = `${min}|${max}`;
     if (options.capture) {
       return `(${result})`;
     }
     return result;
   }
 
-  let isPadded = padding(String(min)) || padding(String(max));
+  const isPadded = padding(String(min)) || padding(String(max));
   let positives: Pattern[] = [];
   let negatives: Pattern[] = [];
 
-  let token: CacheEntry = { min, max, a, b };
+  const token: CacheEntry = { min, max, a, b };
   if (isPadded) {
     token.isPadded = isPadded;
     token.maxLen = String(token.max).length;
   }
 
   if (a < 0) {
-    let newMin = b < 0 ? Math.abs(b) : 1;
-    let newMax = Math.abs(a);
+    const newMin = b < 0 ? Math.abs(b) : 1;
+    const newMax = Math.abs(a);
     negatives = splitToPatterns(newMin, newMax, token, options);
     a = token.a = 0;
   }
@@ -371,6 +372,8 @@ const toRegexRange = (
  * -> "\(\(\[a\-z\]\+\)\)\+\(aaaaaaaaaa\)\+hacks"
  */
 export const escapePattern = (s: string) => {
+  // TODO "check this"
+  // eslint-disable-next-line no-useless-escape
   return s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
 };
 

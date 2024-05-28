@@ -6,6 +6,19 @@
     {
       "files": ["*.ts", "*.tsx", "*.js", "*.jsx"],
       "rules": {
+        "@nx/dependency-checks": [
+          "error",
+          {
+            "buildTargets": ["build", "custom-build"],
+            "checkMissingDependencies": true,
+            "checkObsoleteDependencies": true,
+            "checkVersionMismatches": true,
+            "ignoredDependencies": ["lodash"],
+            "ignoredFiles": ["webpack.config.js", "eslint.config.js"],
+            "includeTransitiveDependencies": true,
+            "useLocalPathsForWorkspaceDependencies": true
+          }
+        ],
         "@typescript-eslint/no-unused-vars": "error",
         "@typescript-eslint/no-explicit-any": [
           "error",

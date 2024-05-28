@@ -1,5 +1,4 @@
 import { extractThen } from './function'
-import Stats from './stats'
 
 export type BooleanFilter = (e: any) => boolean
 export type ArrayOrObject = Record<string|number,any>;
