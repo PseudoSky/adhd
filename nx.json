@@ -147,7 +147,7 @@
     "version": {
       "preVersionCommand": "npx nx run-many -t build"
     },
-    "projects": ["*", "!source"]
+    "projects": ["*", "!@adhd/source", "!adhd-e2e", "!adhd"]
   },
   "cli": {
     "defaultCollection": "@nrwl/react"
