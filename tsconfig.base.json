@@ -1,5 +1,17 @@
 {
   "compileOnSave": false,
+  "ts-node": {
+    "esm": true,
+    "compilerOptions": {
+      "module": "CommonJS",
+      "paths": {
+        "@adhd/data": ["packages/data/src/index.ts"],
+        "@adhd/query": ["packages/query/src/index.ts"],
+        "@adhd/react-hooks": ["packages/react-hooks/src/index.ts"],
+        "@adhd/transform": ["packages/transform/src/index.ts"]
+      }
+    }
+  },
   "compilerOptions": {
     "rootDir": ".",
     "sourceMap": true,
@@ -9,7 +21,7 @@
     "experimentalDecorators": true,
     "noImplicitThis": false,
     "importHelpers": true,
-    "target": "es2015",
+    "target": "es2018",
     "module": "esnext",
     "lib": ["es2020", "dom"],
     "skipLibCheck": true,

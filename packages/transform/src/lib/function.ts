@@ -1,6 +1,6 @@
 import { isEqual } from './object'
 import { sortBy } from "./collections";
-import { isFunction, isValue, isArray, isDate } from './filters';
+import { isFunction, isValue, isArray, isDate, isUndefined, isDefined } from './filters';
 
 export type entryOf<o> = {
   [k in keyof o]-?: [k, Exclude<o[k], undefined>]
@@ -102,6 +102,8 @@ export function doesObjectExists (obj: any){
  * @returns A function that, when called, will retrieve the value at the specified path.
  */
 export function makeGetter(_path?: string, obj?: any): (value?: any) => any  {
+  // TODO: see https://github.com/g-makarov/dot-path-value/blob/main/src/index.ts
+  //       for future typing
   if(!obj){
     return (_obj: any) => makeGetter(_path, _obj)()
   }
@@ -122,7 +124,8 @@ export function makeGetter(_path?: string, obj?: any): (value?: any) => any  {
         }
         return res[field]
       }
-      return res[field] || value;
+      // TODO: this had a bug for number values of 0 needs more testing
+      return isUndefined(res[field]) ? value : res[field];
   }, obj )
 }
 
