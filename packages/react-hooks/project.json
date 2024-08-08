@@ -24,6 +24,42 @@
         "assets": ["packages/react-hooks/*.md"]
       }
     },
+    "version": {
+      "executor": "nx:run-commands",
+      "options": {
+          "parallel": false,
+          "commands": [
+              "scripts/version-packages.sh react-hooks packages/react-hooks"
+          ]
+      }
+  },
+  "version-prerelease": {
+      "executor": "nx:run-commands",
+      "options": {
+          "parallel": false,
+          "commands": [
+              "scripts/version-packages.sh react-hooks packages/react-hooks @adhd -prerelease"
+          ]
+      }
+  },
+  "publish": {
+      "executor": "nx:run-commands",
+      "options": {
+          "parallel": false,
+          "commands": [
+              "echo 'Running npm publish dry run'",
+              "npm publish --dry-run dist/packages/react-hooks"
+          ]
+      },
+      "configurations": {
+          "production": {
+              "parallel": false,
+              "commands": [
+                  "npm publish dist/packages/react-hooks"
+              ]
+          }
+      }
+  },
     "nx-release-publish": {
       "options": {
         "packageRoot": "dist/{projectRoot}"
