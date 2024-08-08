@@ -128,7 +128,7 @@ function makeExpression(exp: string, rhs: unknown, path: string[]) {
     return result;
   };
 }
-
+// TODO: this shouldn't be recursive - it blows the stack in react
 function walk(query: QueryExpressionValues = {}, path: string[] = []) {
   if (_.isEmpty(query)) return () => true;
   const query_entries = Object.entries({ ...query });
@@ -311,6 +311,9 @@ export class DataView {
     this.commit();
     return this;
   };
+
+  // TODO: add select support
+  // select = (selectQuery: QueryExpression['select']) => {...}
 
   where = (whereQuery: QueryExpression['where']) => {
     const didUpdate = this.query.setWhere(whereQuery);
