@@ -3,7 +3,7 @@ import { OrderByExpression, QueryExpression, QueryExpressionValues } from './exp
 import { OrderByOperation } from './operators';
 import { CallbackFunctionTyped } from 'packages/transform/src/lib/function';
 function negate(func: (...args:any[])=> boolean) {
-  return (...args: any) => !func(args);
+  return (...args: any) => func(...args)===false;
 }
 const pipe = (...fns: any[]) => (x: any) => fns.reduce((y, f) => f(y), x);
 const mapArgs = (fn: (value: any, index: number, array: any[]) => unknown) => (...args: any[]) => args.map(fn);
@@ -37,8 +37,8 @@ const hasKeysEvery = partialApply((targets: any, value: any) =>
 );
 
 const isEq = _.isEqual;
-const isNe = negate(_.isEqual);
-const isNeq = negate(_.isEqual);
+const isNe = _.isNotEqual;
+const isNeq = _.isNotEqual;
 const isIn = _.isIn;
 const isNin = _.isNotIn;
 const isGt = _.isGreaterThan;
@@ -57,7 +57,7 @@ const hasKey = checkHasKey;
 const hasKeysAny = hasKeysSome;
 const hasKeysAll = hasKeysEvery;
 const isNull = (a: any, b: boolean) => {
-  console.log({ a, b });
+  // console.log({ a, b });
   return _.isDefined(a) !== b;
 };
 
@@ -90,22 +90,18 @@ const operators: Record<string, FilterPartial> = {
   _is_null: partialApply(isNull),
   _has_keys_all: partialApply(hasKeysAll),
   _and: (ops, path = [], iter = (v: any, _pth: any) => _.isTrue(v)) => {
-    // console.log('_and', {ops, path})
     const opList = ops.map((q: any, i: any) => iter(q, [...path]));
     return (obj: any) => {
       const res = applyAll(opList, obj);
       const bool = res.every(_.isTrue);
-      if (bool) console.log('_and', bool, res);
       return bool;
     };
   },
   _or: (ops, path = [], iter = (v: any, _pth: any) => _.isTrue(v)) => {
-    // console.log("_or", { ops, path });
     const opList = ops.map((q: any) => iter(q, [...path]));
     return (obj) => applyAll(opList, obj).some(_.isTrue);
   },
   _not: (op, path = [], iter = (v: any, _pth: any) => _.isTrue(v)) => {
-    // console.log("_not", { op, path });
     const child = iter(op, [...path]);
     return (obj) => _.isFalse(child(obj));
   },
@@ -120,6 +116,7 @@ function makeExpression(exp: string, rhs: unknown, path: string[]) {
   return function (obj: any) {
     const lhs = getter(obj, false)();
     const result = expression(lhs, rhs);
+    // NOTE: useful for debugging the operators
     // if(result){
     //   console.log('execute', [
     //     lhs,
@@ -134,10 +131,10 @@ function makeExpression(exp: string, rhs: unknown, path: string[]) {
 
 function walk(query: QueryExpressionValues = {}, path: string[] = []) {
   if (_.isEmpty(query)) return () => true;
-  const keys = Object.entries({ ...query });
+  const query_entries = Object.entries({ ...query });
   const matchers: (FilterPartial | Filter | boolean)[] = [];
 
-  keys.forEach(([k, value]) => {
+  query_entries.forEach(([k, value]) => {
     if (k === '_and' || k === '_or' || k === '_not') {
       matchers.push(operators[k](value, path, walk));
     } else if (k in operators) {
@@ -146,15 +143,12 @@ function walk(query: QueryExpressionValues = {}, path: string[] = []) {
       matchers.push(walk(value, [...path, k]));
     }
   });
-  // console.log({matchers});
-  // return operators._and(matchers, path, walk)
   return (obj: any) => {
     return applyAll(matchers, obj).every(_.isTrue);
   };
 }
 
 function parseOrderBy(query: string | OrderByExpression | OrderByExpression[], paths: string[] = []): OrderByOperation[] {
-  // console.log(query, paths);
   if (_.isString(query)) {
     return [{ key: (query as string), dir: 'desc', nulls: 'last' }];
   } else if (_.isArray(query)) {
@@ -169,11 +163,9 @@ function parseOrderBy(query: string | OrderByExpression | OrderByExpression[], p
       if (_.isString(v)) {
         const [dir, ___, nulls = 'last'] = v.split('_');
         const op: OrderByOperation[] = [{ key: key.join('.'), dir, nulls }];
-        // console.log("Object -> val", { op });
         return op;
       } else {
         const op: OrderByOperation[] = parseOrderBy(v, key);
-        // console.log("Object -> arr/obj", { op });
         return op;
       }
     });
@@ -189,7 +181,7 @@ export const orderBy = (props: OrderByExpression[] = []) => (a: any, b: any) => 
     const cmp = dir === 'asc' ? _.defaultSort : _.reverseSort;
     const x = _.get(a, key);
     const y = _.get(b, key);
-
+    // console.log("order by", {x, y, key, dir, nulls })
     // TODO: doesnt look like multiple sort works
     if (x !== y) {
       if (nulls && !_.isDefined(x)) {
@@ -283,7 +275,7 @@ export class Query implements QueryType {
     return true;
   };
 
-  setLimit = (limitQuery: QueryExpression['limit']) => {
+  setLimit = (limitQuery?: QueryExpression['limit']) => {
     if (_.isEqual(limitQuery, this.raw.limit)) return false;
     this.raw.limit = limitQuery;
     this.limit = limitQuery;
@@ -345,7 +337,7 @@ export class DataView {
     return this;
   };
 
-  limit = (limit: QueryExpression['limit']) => {
+  limit = (limit?: QueryExpression['limit']) => {
     const didUpdate = this.query.setLimit(limit);
     this.dirty = this.dirty || didUpdate;
     return this;
