@@ -81,6 +81,9 @@ export function isNotILike(a: string, b: string) {
 export function isEqual(a: any, b: any){
   return JSON.stringify(a)===JSON.stringify(b)
 }
+export function isNotEqual(a: any, b: any){
+  return JSON.stringify(a)!==JSON.stringify(b)
+}
 
 export function isEmpty(obj: any){
   return [Object, Array].includes((obj || {}).constructor) && !Object.entries((obj || {})).length;
@@ -92,6 +95,7 @@ export default {
   isDefined,
   isEmpty,
   isEqual,
+  isNotEqual,
   isFalse,
   isFloat,
   isFunction,
