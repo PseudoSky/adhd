@@ -18,6 +18,27 @@ Run `npx nx dev adhd` to start the development server. Happy coding!
 
 Run `npx nx build adhd` to build the application. The build artifacts are stored in the output directory (e.g. `dist/` or `build/`), ready to be deployed.
 
+## @adhd/data
+## @adhd/query
+## @adhd/react-hooks
+## @adhd/transforms
+
+Testing in a shell
+
+```
+nx build query
+
+```
+need to manually change the package.json in the dist removing the `type: "module"` line
+```
+ts-node --esm -P ./packages/query/tsconfig.json
+
+> const Query = require('./dist/packages/query/index.js');
+> const data = require('./packages/query/src/lib/test-data.json');
+> const dv = new Query.DataView(data);
+> dv.limit(10).orderBy([{reviews_aws_value: "desc"}]).where({}).view()
+```
+
 ## Running tasks
 
 To execute tasks with Nx use the following syntax:

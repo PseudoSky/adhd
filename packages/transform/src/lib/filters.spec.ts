@@ -30,6 +30,7 @@ import {
   isNumber,
   isString,
   isType,
+  isNotEqual,
 } from './filters';
 
 describe('ts', () => {
@@ -40,6 +41,29 @@ describe('ts', () => {
       expect(isEqual(new Date(), new Date())).toBe(true);
       expect(isEqual({}, {})).toBe(true);
       expect(isEqual([], [])).toBe(true);
+      expect(isEqual(2, 42)).toBe(false);
+      expect(isEqual('ello', 'hello')).toBe(false);
+      expect(isEqual('', new Date())).toBe(false);
+      expect(isEqual({a:1}, {})).toBe(false);
+      expect(isEqual([1], [])).toBe(false);
+      expect(isEqual([], {})).toBe(false);
+      expect(isEqual({}, [])).toBe(false);
+    });
+  });
+  describe('isNotEqual', () => {
+    it('should correctly identify not equal values', () => {
+      expect(isNotEqual(42, 42)).toBe(false);
+      expect(isNotEqual('hello', 'hello')).toBe(false);
+      expect(isNotEqual(new Date(), new Date())).toBe(false);
+      expect(isNotEqual({}, {})).toBe(false);
+      expect(isNotEqual([], [])).toBe(false);
+      expect(isNotEqual(2, 42)).toBe(true);
+      expect(isNotEqual('ello', 'hello')).toBe(true);
+      expect(isNotEqual('', new Date())).toBe(true);
+      expect(isNotEqual({a:1}, {})).toBe(true);
+      expect(isNotEqual([1], [])).toBe(true);
+      expect(isNotEqual([], {})).toBe(true);
+      expect(isNotEqual({}, [])).toBe(true);
     });
   });
 

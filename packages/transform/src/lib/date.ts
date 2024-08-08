@@ -33,6 +33,13 @@ type HumanDuration = {
     text: string;
 }
 
+/**
+ * Calculates the human-readable duration between two dates.
+ * @param {Date} [d0=new Date()] - The start date.
+ * @param {Date} [d1=new Date()] - The end date.
+ * @param {DurationUnit} [unit] - The optional unit of duration to use.
+ * @returns {Partial<HumanDuration>} An object containing the duration details.
+ */
 export function humanDuration(d0=(new Date()),d1=(new Date()), unit?: DurationUnit) {
   const res: Partial<HumanDuration> = {};
   res.start = new Date(d0)
@@ -62,10 +69,21 @@ export function humanDuration(d0=(new Date()),d1=(new Date()), unit?: DurationUn
   return res
 }
 
+/**
+ * Calculates the time from the current date to a given date.
+ * @param {Date} date - The date to calculate the time from.
+ * @returns {Partial<HumanDuration>} An object containing the duration details.
+ */
 export function timeFromNow(date: Date) {
   return humanDuration((new Date()), date)
 }
 
+/**
+ * Calculates a date in the future from the current date.
+ * @param {number} count - The number of units to add.
+ * @param {DurationUnit} [unit='day'] - The unit of duration to use.
+ * @returns {Date} The calculated future date.
+ */
 export function fromNow(count: number, unit: DurationUnit='day'){
   // console.log(new Date(Date.now()+timeInMS[unit.toLowerCase().replace(/s$/, '')]*count))
   return (new Date(Date.now()+timeInMS[unit]*count))
@@ -82,10 +100,13 @@ const dayOfWeekNames = [
   "Wednesday", "Thursday", "Friday", "Saturday"
 ];
 
+/**
+ * Formats a date according to the specified format string.
+ * @param {Date} date - The date to format.
+ * @param {string} [formatStr='dd/mm/yyyy'] - The format string to use.
+ * @returns {string} The formatted date string.
+ */
 export function formatDate(date: Date, formatStr='dd/mm/yyyy'){
-    // if (!formatStr) {
-    //   formatStr = 'dd/mm/yyyy';
-    // }
     const day = date.getDate(),
         month = date.getMonth(),
         year = date.getFullYear(),
