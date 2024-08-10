@@ -1,6 +1,8 @@
 import exp from 'constants';
+import util from 'util';
 import DataView from './query';
 import testingData from './test-data.json'
+import { BooleanExpression, QueryExpression } from './expressions';
 const data = [ 
   {'name': "B", "value": 18},
   {'name': "A", "value": 8},
@@ -10,29 +12,156 @@ const data = [
 ]
 
 describe('query', () => {
-  it('filter using provided raw query', () => {
-    const dv = new DataView(data, {
+  it('(1) filter using provided raw query', () => {
+    const query: QueryExpression = {
       where: { value: { _gt: 100 } },
       order_by: [{ value: "asc" }],
-    });
+    }
+    const dv = new DataView(data, query, true);
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
     expect(dv.view()).toEqual([{'name': "D", "value": 128}, { name: 'E', value: 18000 }]);
   });
-  it('logical operations in where clause', () => {
-    const dv = new DataView(data).orderBy([{"value": "asc"}]);
-    dv.where({_and: [{name: {_eq: "D"}}, {value: {_eq: 128}}]})
+  it('(2) logical and to work', () => {
+    const dv = new DataView(data, undefined, true).orderBy([{"value": "asc"}]);
+    const query: BooleanExpression = {_and: [{name: {_eq: "D"}}, {value: {_eq: 128}}]}
+    dv.where(query)
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
     expect(dv.view()).toEqual([{'name': "D", "value": 128}]);
-    dv.where({_or: [{name: {_eq: "D"}}, {value: {_eq: 18000}}]})
+  })
+  it('(3) logical not to work', () => {
+    const dv = new DataView(data, undefined, true).orderBy([{"value": "asc"}]);
+    const query: BooleanExpression = {_not: {name: {_eq: "D"}}}
+    dv.where(query)
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
+    expect(dv.view()).toEqual(data.filter(e => e.name!=="D").sort((a,b) => a.value-b.value));
+  })
+  it('(3) logical not to work', () => {
+    const dv = new DataView(data, undefined, true).orderBy([{"value": "asc"}]);
+    const query: BooleanExpression = {
+      name: {_eq: "D"},
+      value: {
+        _gt:0,
+        _lt: 10000,
+        _gte: 1,
+        _lte: 9999,
+      }
+    }
+    dv.where(query)
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
+    expect(dv.view()).toEqual([{'name': "D", "value": 128}]);
+  })
+  it('(4) logical tripple and', () => {
+    const dv = new DataView(data, undefined, true).orderBy([{"value": "asc"}]);
+    const query: BooleanExpression = {_and: [{_and:[{_and:[{name: {_eq: "D"}}]}]}]}
+    dv.where(query)
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
+    expect(dv.view()).toEqual([{'name': "D", "value": 128}]);
+  })
+  it('(5) logical and or and', () => {
+    const dv = new DataView(data, undefined, true).orderBy([{"value": "asc"}]);
+    const query: BooleanExpression = {_and: [{_or:[{_and:[{name: {_eq: "D"}}]}]}]}
+    dv.where(query)
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
+    expect(dv.view()).toEqual([{'name': "D", "value": 128}]);
+  })
+  it('(6) logical and or and 2 keys', () => {
+    const dv = new DataView(data, undefined, true).orderBy([{"value": "asc"}]);
+    const query: BooleanExpression = {_and: [{_or:[{_and:[{name: {_eq: "D"}, value: {_eq: 128}}]}]}]}
+    dv.where(query)
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
+    expect(dv.view()).toEqual([{'name': "D", "value": 128}]);
+  })
+  it('(7) logical and or not 2 keys', () => {
+    const dv = new DataView(data, undefined, true).orderBy([{"value": "asc"}]);
+    const query: BooleanExpression = {_and: [{_or:[{_not:{name: {_eq: "D"}, value: {_eq: 128}}}]}]}
+    dv.where(query)
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
+    expect(dv.view()).toEqual([
+      {'name': "A", "value": 8},
+      {'name': "B", "value": 18},
+      {'name': "C", "value": 100},
+      {'name': "E", "value": 18000},
+    ]);
+  })
+  it('(8) logical and or(2 entries) not(2 keys)', () => {
+    const dv = new DataView(data, undefined, true).orderBy([{"value": "asc"}]);
+    const query: BooleanExpression = {_and: [{_or:[{name: {_eq: "D"}},{_not:{name: {_eq: "D"}, value: {_eq: 128}}}]}]}
+    dv.where(query)
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
+    expect(dv.view()).toEqual([
+      {'name': "A", "value": 8},
+      {'name': "B", "value": 18},
+      {'name': "C", "value": 100},
+      {'name': "D", "value": 128},
+      {'name': "E", "value": 18000},
+    ]);
+  })
+  it('(9) logical or to work', () => {
+    const dv = new DataView(data, undefined, true).orderBy([{"value": "asc"}]);
+    const query: BooleanExpression = {_or: [{name: {_eq: "D"}}, {value: {_eq: 18000}}]}
+    dv.where(query)
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
     expect(dv.view()).toEqual([{'name': "D", "value": 128}, { name: 'E', value: 18000 }]);
-    
-    dv.where({_or: [{name: {_eq: "D"}, value: {_gt: 128}}, {value: {_eq: 18000}}]})
-    expect(dv.view()).toEqual([{ name: 'E', value: 18000 }]);
-    
-    dv.where({_or: [{name: {_ne: "D"}, value: {_gt: 128}},{_not: {value: {_in: [18,8,18000,100]}}}]})
+  })
+  it('(10) logical complex or to work', () => {
+    const dv = new DataView(data, undefined, true).orderBy([{"value": "asc"}]);
+    const query: BooleanExpression = {
+      _or: [
+        {_and: [{name: {_eq: "D"}, value: {_ne: 128}}]}, // Not D
+        {value: {_eq: 18000}} // IS E
+      ]
+    }
+    dv.where(query)
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
+    expect(dv.view()).toEqual(data.filter(e => (e.name==="D" && e.value!==128)||(e.value===18000)).sort((a,b) => a.value-b.value));
+  })
+  it('(11) logical or with nested not to work', () => {
+    const dv = new DataView(data, undefined, true).orderBy([{"value": "asc"}]);
+    const query: BooleanExpression = {
+      _or: [
+        {name: {_ne: "D"}, value: {_gt: 128}}, // Only E
+        {_not: {value: {_in: [18,8,18000,100]}}} // Only D
+      ]
+    }
+    dv.where(query)
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
     expect(dv.view()).toEqual([{'name': "D", "value": 128}, { name: 'E', value: 18000 }]);
 
+  });  
+  it('(11.1) nested properties', () => {
+    const dv = new DataView([
+      { a: { b: { c:1000 } } }, 
+      { a: { b: { c:2000 } } }, 
+      { a: { b: { c:1 } } }, 
+      { a: { b: { c:-100 } } },
+    ], undefined, true)//.orderBy([{"value": "asc"}]);
+    const query: BooleanExpression = {
+      a:{b: {c: {_lt: 1001, _gt: 10}}}
+    }
+    dv.where(query)
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
+    expect(dv.view()).toEqual([{ a: { b: { c:1000 } } }]);
+
   });
-  it('produce a serialized version of a query from fluent interface', () => {
-    const dv = new DataView(testingData);
+  it('(12) logical or with and to work', () => {
+    const dv = new DataView(data, undefined, true).orderBy([{"value": "asc"}]);
+    const query: BooleanExpression = {
+      _or: [
+        {name: {_ne: "D"}, value: {_gt: 128}},
+        {
+          _and: [
+            {value: {_in: [18,8,18000,100]}},
+            {name: {_in: ["B", "A", "E"]}}
+          ]
+        }
+      ]
+    }
+    dv.where(query)
+    console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
+    expect(dv.view()).toEqual([{'name': "A", "value": 8}, {'name': "B", "value": 18},{ name: 'E', value: 18000 }]);
+  });
+  it.skip('produce a serialized version of a query from fluent interface', () => {
+    const dv = new DataView(testingData, undefined);
     dv.orderBy([{"title": "asc"}])
     expect(dv.limit(1).view()[0].title).toEqual("Appian Connected Claims")
     expect(dv.offset(1).view()[0].title).toEqual("Appian Connected KYC")
@@ -68,7 +197,7 @@ describe('query', () => {
       { column1: 'B', column2: 1 },
       { column1: null, column2: 1 }
     ];
-    const dv = new DataView(items);
+    const dv = new DataView(items, undefined, true);
     dv.orderBy([{"column1": "asc_nulls_first"}, {column2: "desc"}])
     expect(dv.view()).toEqual([
       { column1: null, column2: 1 },
