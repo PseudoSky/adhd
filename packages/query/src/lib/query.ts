@@ -1,7 +1,150 @@
 import _ from '@adhd/transform';
-import { OrderByExpression, QueryExpression, QueryExpressionValues } from './expressions';
+import { BooleanExpression, OrderByExpression, QueryExpression, QueryExpressionValues } from './expressions';
 import { OrderByOperation } from './operators';
 import { CallbackFunctionTyped } from 'packages/transform/src/lib/function';
+
+interface ASTNode {
+  type: string;
+}
+
+class ConditionNode implements ASTNode {
+  type = "Condition";
+  path: string[];
+  operator: string;
+  value: any;
+  public getter: (obj: any, create?: boolean | undefined) => any; 
+  
+  public run = (obj: any): boolean => {
+    // console.log({obj, operator: this.operator, value: this.value})
+    const func = operators[this.operator];
+    const input = this.getter(obj)
+    const res = func(input)(this.value)
+    // console.log(`\tConditionNode(result=${res}, ${this.path.join(".")}, ${input} ${this.operator} ${this.value})`)
+    return res;
+  }
+
+  constructor(field: string | string[], operator: string, value: any) {
+    this.path = typeof field =="string" ? [field] : field;
+    this.getter = _.makeGetter(this.path.join('.'));
+    this.operator = operator;
+    this.value = value;
+  }
+  toJson = (): any => {
+    return {[this.path.join('.')]: {[this.operator]: this.value}};
+  }
+  toString = (): string => {
+    // const wrappers = {'_in': ["[","]"],'_nin': ["[","]"], '_contained_in': ["{","}"]};
+    // const wrap = this.operator in wrappers ? wrappers[this.operator as keyof typeof wrappers] :["",""]
+    return JSON.stringify({[this.path.join('.')]: {[this.operator]: this.value}})
+    // return `{ "${this.path.join('.')}":  "{${this.operator}": ${wrap[0]}${this.value}${wrap[1]}}}`;
+  }
+}
+type LogicalOperatorKey = "_and" | "_or" | "_not"
+class LogicalOperatorNode implements ASTNode {
+  type = "LogicalOperator";
+  operator: "_and" | "_or" | "_not";
+  conditions: (LogicalOperatorNode|ConditionNode)[] = [];
+  public getter: (obj: any, create?: boolean | undefined) => any = (obj) => obj;
+  constructor(operator: LogicalOperatorKey, conditions: BooleanExpression[], path: string[]=[]) {
+      this.operator = operator;
+      this.getter = (obj: any) => obj
+      this.conditions = conditions.flatMap((exp) => {
+        const query_entries = Object.entries(exp);
+        console.log({operator, query_entries})
+        const conditions = query_entries.flatMap(
+            ([q, children])=> {
+              if(q in operators && q !== "_and" && q !== "_or" && q !== "_not"){
+                return new ConditionNode([...path], q, children)
+              } else if(q==='_and' || q==="_or"){
+                return new LogicalOperatorNode(q as "_and" | "_or" | "_not", children as BooleanExpression[], path)
+              } else if (q=='_not'){
+                return new LogicalOperatorNode(q, [children as BooleanExpression], path)
+              } else {
+                // const keys = Object.keys(children)
+                // return keys.map(k => new ConditionNode([...path, q], k, children[k]))
+                // return lo;
+                return new LogicalOperatorNode("_and", [children as BooleanExpression], [...path, q])
+              }
+            }
+        )
+        if(operator=='_or'){
+          const lo = new LogicalOperatorNode("_and", [], path)
+          lo.conditions = conditions;
+          return lo
+        }
+        return conditions;
+      });
+      
+    
+  }
+  // constructor(operator: "_and" | "_or" | "_not") {
+  //   this.operator = operator;
+  // }
+  // buildTree = (conditions: BooleanExpression[], path: string[] = []) => {
+  //   const queue: [BooleanExpression, string[]][] = [];
+
+  //   for (const exp of conditions) {
+  //     queue.push([exp, path]);
+  //   }
+
+  //   while (queue.length > 0) {
+  //     const [exp, currentPath] = queue.shift()!;
+  //     const query_entries = Object.entries(exp);
+
+  //     for (const [q, children] of query_entries) {
+  //       if (q in operators && q !== "_and" && q !== "_or" && q !== "_not") {
+  //         this.conditions.push(new ConditionNode([...currentPath], q, children));
+  //       } else if (q === '_and' || q === "_or" || q === '_not') {
+  //         const node = new LogicalOperatorNode(q as "_and" | "_or" | "_not");
+  //         this.conditions.push(node);
+  //         for (const child of children as BooleanExpression[]) {
+  //           queue.push([child, currentPath]);
+  //         }
+  //       } else {
+  //         const childExp = children as BooleanExpression;
+  //         queue.push([childExp, [...currentPath, q]]);
+  //       }
+  //     }
+  //   }
+
+  //   if (this.operator === '_or') {
+  //     const andNode = new LogicalOperatorNode("_and");
+  //     andNode.conditions = this.conditions;
+  //     this.conditions = [andNode];
+  //   }
+  // }
+  private logAndRun = (obj: any) => {
+    return (condition: (LogicalOperatorNode|ConditionNode))=>{
+      const res = condition.run(obj);
+      console.log(`\t${condition.toString()} ${condition.getter(obj)} -> ${res}`)
+      return res
+    }
+  }
+  public run = (obj: any):boolean  => {
+    // console.log({logicalEval: this})
+    switch (this.operator) {
+      case "_and":
+          return this.conditions.every(this.logAndRun(obj));
+      case "_or":
+          return this.conditions.some(this.logAndRun(obj));
+      case "_not":
+          return !this.conditions.every(this.logAndRun(obj));
+      default:
+          throw new Error(`Unknown logical operator: ${this.operator}`);
+    }
+  }
+  public toJson = (): any => {
+    return {
+      [this.operator]: this.conditions.map(c => c.toJson())
+    }
+  }
+  toString(): string {
+      // const wrap = {'_and': ["[","]"],'_or': ["[","]"], '_not': ["{","}"]}[this.operator]
+      return JSON.stringify(this.toJson())
+      // return `{${this.operator}: ${wrap[0]}${this.conditions.map(c => ''+c.toString()).join(',  ')}${wrap[1]}}`;
+  }
+}
+
 function negate(func: (...args:any[])=> boolean) {
   return (...args: any) => func(...args)===false;
 }
@@ -89,6 +232,8 @@ const operators: Record<string, FilterPartial> = {
   _has_keys_any: partialApply(hasKeysAny),
   _is_null: partialApply(isNull),
   _has_keys_all: partialApply(hasKeysAll),
+};
+const logicalOperators: Record<string, FilterPartial> = {
   _and: (ops, path = [], iter = (v: any, _pth: any) => _.isTrue(v)) => {
     const opList = ops.map((q: any, i: any) => iter(q, [...path]));
     return (obj: any) => {
@@ -105,7 +250,22 @@ const operators: Record<string, FilterPartial> = {
     const child = iter(op, [...path]);
     return (obj) => _.isFalse(child(obj));
   },
-};
+}
+const andOperator = (ops: Filter[]) => {
+  return (obj: any) => {
+    const res = applyAll(ops, obj);
+    const bool = res.every(_.isTrue);
+    return bool;
+  };
+}
+const orOperator = (ops: Filter[]) => {
+  // const opList = ops.map((q: any) => iter(q, [...path]));
+  return (obj: any) => applyAll(ops, obj).some(_.isTrue);
+}
+const notOperator = (op: Filter) => {
+  // const child = iter(op, [...path]);
+  return (obj:any) => _.isFalse(op(obj));
+}
 
 const getPath = partialApply(_.makeGetter);
 
@@ -128,25 +288,137 @@ function makeExpression(exp: string, rhs: unknown, path: string[]) {
     return result;
   };
 }
+class CallStack<T=[QueryExpressionValues,string[]]|[QueryExpressionValues,string[], string]> {
+  private stack: T[] = [];
+  private name = 'stack'
+  // override push(item: T) {
+  //   console.log('stack', JSON.stringify(this.stack, null, 2));
+  //   this.stack.push(item)
+  //   return this.stack.length;
+  // }
+  // override pop() {
+  //   return this.stack.pop();
+  // }
+  // get() {
+  //   return this.stack;
+  // }
+  private items: T[] = [];
+
+  constructor(name: string, initialItems?: T[]) {
+    // super()
+    this.name=name;
+    if (initialItems) {
+      this.stack = initialItems;
+    }
+  }
+
+  push(...items: T[]): number {
+    items.forEach(item => this.stack.push(item));
+    // console.log(this.name, JSON.stringify(this.stack, null, 2));
+    return this.stack.length;
+  }
+
+  pop(): T | undefined {
+    return this.stack.pop();
+  }
+
+  get(index: number): T | undefined {
+    if (index < 0 || index >= this.stack.length) {
+      return undefined;
+    }
+    return this.stack[index];
+  }
+
+  set(index: number, item: T): void {
+    if (index < 0 || index >= this.stack.length) {
+      throw new Error("Index out of bounds");
+    }
+    this.stack[index] = item;
+  }
+  clear(): void {
+    this.stack = [];
+  }
+  
+  length(): number {
+    return this.stack.length;
+  }
+}
+
+// function CallStack<T=[QueryExpressionValues,string[]]>() {
+//   const stack: T[] = [];
+//   return {
+//     push: (item: T) => {
+//       console.log('stack', JSON.stringify(stack,null,2));
+//       stack.push(item)
+//     },
+//     pop: () => stack.pop(),
+//     get: () => stack,
+//   };
+// }
+
+
+const argStack: CallStack = new CallStack('ARGS')
+const resStack: CallStack = new CallStack('RES')
 // TODO: this shouldn't be recursive - it blows the stack in react
+function processStack(query_entries: [string, any][], matchers: (FilterPartial | Filter | boolean)[], path: string[] = []){
+  return ([k, value]: [k:string, value: QueryExpressionValues]) => {
+    if (k in logicalOperators) {
+      matchers.push(logicalOperators[k](value, path, walk));
+    } else if (k in operators) {
+      matchers.push(makeExpression(k, value, [...path]));
+    } else {
+      // argStack.push([value, [...path, k]])
+      matchers.push((() => {
+        const res = walk(value, [...path, k]);
+        // resStack.push([value, [...path, k], typeof res])
+        return res;
+      })());
+    }
+  }
+}
+
+
 function walk(query: QueryExpressionValues = {}, path: string[] = []) {
   if (_.isEmpty(query)) return () => true;
   const query_entries = Object.entries({ ...query });
   const matchers: (FilterPartial | Filter | boolean)[] = [];
+  // const stack: [string, ] = []
+  // const rootNode = new LogicalOperatorNode('_and', [query], path);
+  // console.log(rootNode.toString())
 
-  query_entries.forEach(([k, value]) => {
-    if (k === '_and' || k === '_or' || k === '_not') {
-      matchers.push(operators[k](value, path, walk));
-    } else if (k in operators) {
-      matchers.push(makeExpression(k, value, [...path]));
-    } else {
-      matchers.push(walk(value, [...path, k]));
-    }
-  });
+  query_entries.forEach(processStack(query_entries, matchers, path));
   return (obj: any) => {
     return applyAll(matchers, obj).every(_.isTrue);
   };
 }
+// function walk(q: QueryExpressionValues = {}, p: string[] = []) {
+//   if (_.isEmpty(q)) return () => true;
+//   argStack.push([q, p])
+//   while (argStack.length()>0){
+//     const [query, path] = argStack.pop()!;
+  
+//     const query_entries = Object.entries({ ...query });
+//     const matchers: (FilterPartial | Filter | boolean)[] = [];
+
+//     query_entries.forEach(([k, value]) => {
+//       if (k === '_and' || k === '_or' || k === '_not') {
+//         matchers.push(operators[k](value, path, walk));
+//       } else if (k in operators) {
+//         matchers.push(makeExpression(k, value, [...path]));
+//       } else {
+//         argStack.push([value, [...path, k]])
+//         matchers.push((() => {
+//           const res = walk(value, [...path, k]);
+//           resStack.push([value, [...path, k], typeof res])
+//           return res;
+//         })());
+//       }
+//     });
+//   }
+//   return (obj: any) => {
+//     return applyAll(matchers, obj).every(_.isTrue);
+//   };
+// }
 
 function parseOrderBy(query: string | OrderByExpression | OrderByExpression[], paths: string[] = []): OrderByOperation[] {
   if (_.isString(query)) {
@@ -175,7 +447,7 @@ function parseOrderBy(query: string | OrderByExpression | OrderByExpression[], p
 
 export const orderBy = (props: OrderByExpression[] = []) => (a: any, b: any) => {
   const orderOps = parseOrderBy(props);
-  console.log({orderOps})
+  // console.log({orderOps})
   for (const p in orderOps) {
     const { key, dir, nulls } = orderOps[p];
     const cmp = dir === 'asc' ? _.defaultSort : _.reverseSort;
@@ -250,6 +522,8 @@ export class Query implements QueryType {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     /* @ts-ignore */
     this.raw.where = whereQuery;
+    argStack.clear()
+    resStack.clear()
     this.where = walk(whereQuery);
     return true;
   };
@@ -292,10 +566,12 @@ export class DataView {
   dataview: any;
   query: Query;
   dirty: any;
+  logging: boolean;
   has_more=false;
   static Query: typeof Query;
-  constructor(data: any[], query: QueryExpression = {}) {
+  constructor(data: any[], query: QueryExpression = {}, logging=false) {
     this.query = new Query();
+    this.logging = logging;
     this.setData(data);
     this.setQuery(query);
   }
@@ -349,7 +625,19 @@ export class DataView {
   commit = () => {
     if (!this.dirty || !this.data) return false;
     let res = this.data;
-    if (this.query.where) res = res.filter(this.query.where);
+    if (this.query.where) {
+      if(this.query.raw.where){
+        const rootNode = new LogicalOperatorNode('_and', [this.query.raw.where], []);
+        // const rootNode = new LogicalOperatorNode('_and');
+        // rootNode.buildTree([this.query.raw.where])
+        res = res.filter(rootNode.run)
+        
+        console.log('ROOT', rootNode.toString())
+        if(this.logging){
+          console.log({results: res, expected: res.filter(this.query.where)});
+        }
+      }
+    }
     if (this.query.order_by) res = res.sort(this.query.order_by);
     if (this.query.distinct_on) res = _.uniqueBy(res, this.query.distinct_on);
     if (this.query.offset) res = res.slice(this.query.offset);
