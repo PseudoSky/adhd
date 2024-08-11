@@ -19,6 +19,25 @@ describe('object', () => {
     ]);
     expect(objectUtils.has({"a": 1, "b": 2},"a")).toEqual(true)
     expect(objectUtils.hasAll({"a": 1, "b": 2}, ['a','b'])).toEqual(true)
+    expect(objectUtils.allPaths(
+      { 
+        x: { 
+          y: { z: 1 }, 
+          g: {
+            a: 1,
+            b: [
+              {c: 1}, 
+              {d: {e:[1,2,3]}}
+            ] 
+          } 
+        } 
+      }
+    )).toEqual([
+      ["x","g","b","1","d","e"],
+      ["x","g","b","0","c"],
+      ["x","g","a"],
+      ["x","y","z"]
+    ])
     expect(objectUtils.isEmpty({"a": 1, "b": 2})).toEqual(false)
     expect(objectUtils.isEqual({ a: 1, b: 2 }, { a: 1, b: 2 })).toEqual(true);
     expect(objectUtils.keys({"a": 1, "b": 2})).toEqual(['a','b'])

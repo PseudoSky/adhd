@@ -40,6 +40,39 @@ export function isEqual(a: unknown, b: any) {
 }
 
 /**
+ * Enumerates all paths of an opject
+ * @param o - The first value to compare.
+ * @returns Array of all primitive holding paths
+ */
+export function allPaths(o: any) {
+  if (!o || typeof o !== 'object') return [];
+
+  const paths: {[pathString: string]: string[]} = {};
+  const stack: { obj: any, path: string[] }[] = [{ obj: o, path: [] }];
+
+  while (stack.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const { obj, path } = stack.pop()!;
+
+    if (typeof obj === 'object' && obj !== null) {
+      for (const key in obj) {
+        
+        const nextObj = obj[key]
+        // Ignore primitive arrays
+        if(Array.isArray(obj) && typeof nextObj !== 'object'){
+            paths[path.join('.')] = path;
+        } else {
+            stack.push({ obj: nextObj, path: [...path, key] });
+        }
+      }
+    } else {
+      paths[path.join('.')] = path;
+    }
+  }
+  return Object.values(paths);
+}
+
+/**
  * Creates an object from an array of key-value pairs.
  * @param array - An iterable of key-value pairs.
  * @param loose - If true, omits entries where the value is falsy.
@@ -220,6 +253,7 @@ export default {
   hasAll,
   isEmpty,
   isEqual,
+  allPaths,
   keys,
   maskObject,
   omit,

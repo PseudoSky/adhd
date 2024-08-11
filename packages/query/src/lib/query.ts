@@ -40,6 +40,12 @@ class ConditionNode implements ASTNode {
   }
 }
 type LogicalOperatorKey = "_and" | "_or" | "_not"
+
+// FieldExpression(path, filters, inclusive=true) > { key: {_gt:0, _lt: 10} }
+// LogicExpression(operation, children: LogicNoge[]) > { _or: [{ key: {_eq: 1} }, { key: {_eq: 2} }] }
+// { _and: [{ key: {_eq: 1} }, { name: {_eq: "A"} }] }
+// LogicExpression(operation="_not", children=[FieldExpression([key], {_eq: 1}]) { _not: { key: {_eq: 1} }}
+
 class LogicalOperatorNode implements ASTNode {
   type = "LogicalOperator";
   operator: "_and" | "_or" | "_not";
