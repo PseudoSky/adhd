@@ -36,6 +36,7 @@
             }
         },
         "version": {
+            "dependsOn": ["^build"],
             "executor": "nx:run-commands",
             "options": {
                 "parallel": false,
@@ -54,6 +55,7 @@
             }
         },
         "publish": {
+            "dependsOn": ["^version"],
             "executor": "nx:run-commands",
             "options": {
                 "parallel": false,
