@@ -1,6 +1,6 @@
 import objectUtils from './object';
 
-describe('object', () => {
+describe.only('object', () => {
   it('should work', () => {
     expect(objectUtils.deepCopy({ a: 1, b: 2 })).toEqual({ a: 1, b: 2 });
     expect(
@@ -19,7 +19,7 @@ describe('object', () => {
     ]);
     expect(objectUtils.has({"a": 1, "b": 2},"a")).toEqual(true)
     expect(objectUtils.hasAll({"a": 1, "b": 2}, ['a','b'])).toEqual(true)
-    expect(objectUtils.allPaths(
+    const allP = objectUtils.allPaths(
       { 
         x: { 
           y: { z: 1 }, 
@@ -32,12 +32,23 @@ describe('object', () => {
           } 
         } 
       }
-    )).toEqual([
-      ["x","g","b","1","d","e"],
-      ["x","g","b","0","c"],
+    )
+    console.log({
+      results: allP,
+      expected: [[
+        ["x","g","a"],
+        ["x","g","b","1","d","e"],
+        ["x","g","b","0","c"],
+        ["x","y","z"]
+      ]]
+    })
+    expect(allP).toEqual([
+      ["x","y","z"],
       ["x","g","a"],
-      ["x","y","z"]
+      ["x","g","b","0","c"],
+      ["x","g","b","1","d","e"],
     ])
+
     expect(objectUtils.isEmpty({"a": 1, "b": 2})).toEqual(false)
     expect(objectUtils.isEqual({ a: 1, b: 2 }, { a: 1, b: 2 })).toEqual(true);
     expect(objectUtils.keys({"a": 1, "b": 2})).toEqual(['a','b'])

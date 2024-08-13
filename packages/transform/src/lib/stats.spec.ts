@@ -5,7 +5,8 @@ describe('transforms', () => {
 
     expect(stats.getMin(1,5)).toEqual(1);
     expect(stats.getMax(1,5)).toEqual(5);
-    expect(`${stats.randomRange(0,1)}`).toMatch(/0\.\d{15}/);
+    // Bug here - could be 1000000000000000 -> "0.1"
+    expect(`${stats.randomRange(0,1)}`).toMatch(/0\.\d{1,15}/);
     expect(`${stats.randomRangeInt(1,10)}`).toMatch(/[1-9]/);
     // expect(stats.normalizeValue(5, 0, 4)).toEqual([0,1,2,3,4]);
     expect(stats.roundToIncrement(1.2, 1)).toEqual(1);

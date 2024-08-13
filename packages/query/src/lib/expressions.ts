@@ -68,7 +68,7 @@ type OrderByValue = "asc" | // in ascending order, nulls last
                      "desc_nulls_last" // in descending order, nulls last
 
 export interface OrderByExpression {
-    [key: string]: OrderByValue
+    [key: string]: OrderByValue | OrderByExpression
 }
 
 

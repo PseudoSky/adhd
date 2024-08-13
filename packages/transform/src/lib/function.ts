@@ -101,13 +101,13 @@ export function doesObjectExists (obj: any){
  * @param obj - The object to get the value from.
  * @returns A function that, when called, will retrieve the value at the specified path.
  */
-export function makeGetter(_path?: string, obj?: any): (value?: any) => any  {
+export function makeGetter(_path?: string | string[], obj?: any): (value?: any) => any  {
   // TODO: see https://github.com/g-makarov/dot-path-value/blob/main/src/index.ts
   //       for future typing
-  if(!obj){
+  if(!obj){ /* THIS IS A PARTIAL: NOT RECURSIVE */
     return (_obj: any) => makeGetter(_path, _obj)()
   }
-  if(!_path) {
+  if(!_path) { /* THIS IS A PARTIAL: NOT RECURSIVE */
     return (path: string) => makeGetter(path, obj)()
   }
   const path=toPath(_path)
@@ -164,7 +164,7 @@ export function makeSetter(_path: string, obj?: any)  {
  * @param defaultValue - The default value to return if the path does not exist.
  * @returns The value at the specified path, or the default value if the path does not exist.
  */
-export function get(obj: any, path: string, defaultValue: any = undefined) {
+export function get(obj: any, path: string|string[], defaultValue: any = undefined) {
   return makeGetter(path, obj)(defaultValue);
 }
 
