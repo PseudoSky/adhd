@@ -29,7 +29,6 @@ export function isFloat(x: any)     { return (isDefined(x) && (isNumber(x) && Nu
 // Currently undefined and nulls are considered values
 export function isValue(x: any)     { return (isObject(x) || isArray(x) || isFunction(x) || isRegExp(x))===false;         }
 
-
 /* SECTION: comparisons */
 export function isTrue(a: any){
   return a===true
