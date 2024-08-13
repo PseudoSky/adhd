@@ -147,7 +147,23 @@
     "version": {
       "preVersionCommand": "npx nx run-many -t build"
     },
-    "projects": ["*", "!@adhd/source", "!adhd-e2e", "!adhd"]
+    "projects": ["*", "!@adhd/source", "!adhd-e2e", "!adhd"],
+    "changelog": {
+      "projectChangelogs": {
+        "renderOptions": {
+          "authors": true,
+          "commitReferences": true,
+          "versionTitleDate": true
+        }
+      },
+      "workspaceChangelog": {
+        "renderOptions": {
+          "authors": true,
+          "commitReferences": true,
+          "versionTitleDate": true
+        }
+      }
+    }
   },
   "cli": {
     "defaultCollection": "@nrwl/react"
