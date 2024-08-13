@@ -1,181 +1,10 @@
 import _ from '@adhd/transform';
 import { OrderByExpression, QueryExpression, QueryExpressionValues } from './expressions';
-import { OrderByOperation } from './operators';
-import { CallbackFunctionTyped } from 'packages/transform/src/lib/function';
-function negate(func: (...args:any[])=> boolean) {
-  return (...args: any) => func(...args)===false;
-}
-const pipe = (...fns: any[]) => (x: any) => fns.reduce((y, f) => f(y), x);
-const mapArgs = (fn: (value: any, index: number, array: any[]) => unknown) => (...args: any[]) => args.map(fn);
-const map = (fn: CallbackFunctionTyped<any, any>) => (mappable: any[]) => mappable.map(fn);
-const partialApply = (fn: ((...args: any[]) => any), ...cache: undefined[]) => (...args: any[]) => {
-  const all = cache.concat(args);
-  return all.length >= fn.length ? fn(...all) : partialApply(fn, ...all);
-};
-const applyAll = (fns: any[], obj: any) => fns.flatMap((f: (arg0: any) => any) => f(obj));
-
-// function hasValues(target){
-//   return (values) => target.every(v => values.includes(v))
-// }
-const hasValues = (values: string | any[], target: any[]) => target.every((v: any) => values.includes(v));
-
-const checkHasKey = (key: string, obj: { hasOwnProperty: (arg0: any) => any; }) => _.isObject(obj) && key in obj;
-const checkHasValue = (value: any, arr: string | any[]) => arr.includes(value);
-const partialHasKey = (key: string) => (obj: any) => checkHasKey(key, obj);
-const partialHasValue = (obj: any, value: any) => checkHasValue(value, obj);
-const checkSome = (check = _.isTrue, arr: any[]) => arr.some(check);
-const checkEvery = (check = _.isTrue, arr: any[]) => arr.every(check);
-
-const some = partialApply(checkSome);
-const every = partialApply(checkEvery);
-
-const hasKeysSome = partialApply((targets: any, value: any) =>
-  checkSome(partialHasKey(value), targets)
-);
-const hasKeysEvery = partialApply((targets: any, value: any) =>
-  checkEvery(partialHasKey(value), targets)
-);
-
-const isEq = _.isEqual;
-const isNe = _.isNotEqual;
-const isNeq = _.isNotEqual;
-const isIn = _.isIn;
-const isNin = _.isNotIn;
-const isGt = _.isGreaterThan;
-const isLt = _.isLessThan;
-const isGte = _.isGreaterThanOrEqual;
-const isLte = _.isLessThanOrEqual;
-const isLike = _.isLike;
-const isNlike = _.isNotLike;
-const isIlike = _.isILike;
-const isNilike = _.isNotILike;
-const isSimilar = _.isILike;
-const isNsimilar = _.isNotILike;
-const contains = hasValues;
-const isContainedIn = _.isIn;
-const hasKey = checkHasKey;
-const hasKeysAny = hasKeysSome;
-const hasKeysAll = hasKeysEvery;
-const isNull = (a: any, b: boolean) => {
-  // console.log({ a, b });
-  return _.isDefined(a) !== b;
-};
-
-type Filter = (...args: any) => boolean
-type FilterPartial = (...args: any) => Filter
-
-/* SECTION: query filters */
-//https://github.com/hasura/graphql-engine/blob/b84db36ebb51acd5b51e1254c103f3097a7c2358/server/src-lib/Hasura/GraphQL/Resolve/BoolExp.hs
-const operators: Record<string, FilterPartial> = {
-  // _cast: partialApply(isCast),
-  _eq: partialApply(isEq),
-  _ne: partialApply(isNe),
-  _neq: partialApply(isNeq),
-  _in: partialApply(isIn),
-  _nin: partialApply(isNin),
-  _gt: partialApply(isGt),
-  _lt: partialApply(isLt),
-  _gte: partialApply(isGte),
-  _lte: partialApply(isLte),
-  _like: partialApply(isLike),
-  _nlike: partialApply(isNlike),
-  _ilike: partialApply(isIlike),
-  _nilike: partialApply(isNilike),
-  _similar: partialApply(isSimilar),
-  _nsimilar: partialApply(isNsimilar),
-  _contains: partialApply(contains),
-  _contained_in: partialApply(isContainedIn),
-  _has_key: partialApply(hasKey),
-  _has_keys_any: partialApply(hasKeysAny),
-  _is_null: partialApply(isNull),
-  _has_keys_all: partialApply(hasKeysAll),
-  _and: (ops, path = [], iter = (v: any, _pth: any) => _.isTrue(v)) => {
-    const opList = ops.map((q: any, i: any) => iter(q, [...path]));
-    return (obj: any) => {
-      const res = applyAll(opList, obj);
-      const bool = res.every(_.isTrue);
-      return bool;
-    };
-  },
-  _or: (ops, path = [], iter = (v: any, _pth: any) => _.isTrue(v)) => {
-    const opList = ops.map((q: any) => iter(q, [...path]));
-    return (obj) => applyAll(opList, obj).some(_.isTrue);
-  },
-  _not: (op, path = [], iter = (v: any, _pth: any) => _.isTrue(v)) => {
-    const child = iter(op, [...path]);
-    return (obj) => _.isFalse(child(obj));
-  },
-};
-
-const getPath = partialApply(_.makeGetter);
-
-function makeExpression(exp: string, rhs: unknown, path: string[]) {
-  // console.log("makeExpression", {path, rhs, exp});
-  const getter = getPath(path);
-  const expression = operators[exp];
-  return function (obj: any) {
-    const lhs = getter(obj, false)();
-    const result = expression(lhs, rhs);
-    // NOTE: useful for debugging the operators
-    // if(result){
-    //   console.log('execute', [
-    //     lhs,
-    //     exp,
-    //     rhs,
-    //     result,
-    //   ]);
-    // }
-    return result;
-  };
-}
-// TODO: this shouldn't be recursive - it blows the stack in react
-function walk(query: QueryExpressionValues = {}, path: string[] = []) {
-  if (_.isEmpty(query)) return () => true;
-  const query_entries = Object.entries({ ...query });
-  const matchers: (FilterPartial | Filter | boolean)[] = [];
-
-  query_entries.forEach(([k, value]) => {
-    if (k === '_and' || k === '_or' || k === '_not') {
-      matchers.push(operators[k](value, path, walk));
-    } else if (k in operators) {
-      matchers.push(makeExpression(k, value, [...path]));
-    } else {
-      matchers.push(walk(value, [...path, k]));
-    }
-  });
-  return (obj: any) => {
-    return applyAll(matchers, obj).every(_.isTrue);
-  };
-}
-
-function parseOrderBy(query: string | OrderByExpression | OrderByExpression[], paths: string[] = []): OrderByOperation[] {
-  if (_.isString(query)) {
-    return [{ key: (query as string), dir: 'desc', nulls: 'last' }];
-  } else if (_.isArray(query)) {
-    return (query as OrderByExpression[]).flatMap((e) => parseOrderBy(e, paths));
-  } else if (_.isObject(query)) {
-    // Sort object keys to be deterministic
-    const entries = Object.entries(query).sort(([k1], [k2]) =>
-      _.defaultSort(k1, k2)
-    );
-    return entries.flatMap(([k, v]) => {
-      const key = paths.concat([k]);
-      if (_.isString(v)) {
-        const [dir, ___, nulls = 'last'] = v.split('_');
-        const op: OrderByOperation[] = [{ key: key.join('.'), dir, nulls }];
-        return op;
-      } else {
-        const op: OrderByOperation[] = parseOrderBy(v, key);
-        return op;
-      }
-    });
-  }
-  return [] as  OrderByOperation[];
-}
+import { parseOrderBy, parseWhere } from './parser';
 
 export const orderBy = (props: OrderByExpression[] = []) => (a: any, b: any) => {
   const orderOps = parseOrderBy(props);
-  console.log({orderOps})
+  // console.log({orderOps})
   for (const p in orderOps) {
     const { key, dir, nulls } = orderOps[p];
     const cmp = dir === 'asc' ? _.defaultSort : _.reverseSort;
@@ -194,6 +23,7 @@ export const orderBy = (props: OrderByExpression[] = []) => (a: any, b: any) => 
   }
   return 0;
 };
+
 type QueryType = {
   raw?: QueryExpression;
   where?: (() => boolean) | ((obj: any) => any);
@@ -203,21 +33,21 @@ type QueryType = {
   limit?: number;
 };
 
-const EmptyQuery: QueryType = {
-  raw: {},
-  where: () => true,
-  order_by: () => 0,
-  distinct_on: undefined,
-  offset: undefined,
-  limit: undefined,
-};
+// const EmptyQuery: QueryType = {
+//   raw: {},
+//   where: () => true,
+//   order_by: () => 0,
+//   distinct_on: undefined,
+//   offset: undefined,
+//   limit: undefined,
+// };
 
-function RawQuery(query: QueryExpression = {}){
-  return {
-    ...EmptyQuery,
-    ...query,
-  };
-}
+// function RawQuery(query: QueryExpression = {}){
+//   return {
+//     ...EmptyQuery,
+//     ...query,
+//   };
+// }
 
 // TODO: Need to separate Query interface from QueryType
 //   Currently the functional interface and the raw type are mixed
@@ -250,7 +80,7 @@ export class Query implements QueryType {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     /* @ts-ignore */
     this.raw.where = whereQuery;
-    this.where = walk(whereQuery);
+    this.where = d => parseWhere(whereQuery, d)
     return true;
   };
 
@@ -292,10 +122,12 @@ export class DataView {
   dataview: any;
   query: Query;
   dirty: any;
+  logging: boolean;
   has_more=false;
   static Query: typeof Query;
-  constructor(data: any[], query: QueryExpression = {}) {
+  constructor(data: any[], query: QueryExpression = {}, logging=false) {
     this.query = new Query();
+    this.logging = logging;
     this.setData(data);
     this.setQuery(query);
   }

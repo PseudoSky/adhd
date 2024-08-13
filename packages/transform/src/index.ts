@@ -10,7 +10,7 @@ export const Stats = _Stats;
 export const Collections = _Collections;
 export const Filters = _Filters;
 export const Texts = _Texts;
- 
+
 export default {
   ..._Functions,
   ..._Objects,
