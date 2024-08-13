@@ -1,5 +1,6 @@
 import { makeGetter } from './function'
-import { isObject } from './filters'
+import { isArray, isObject, isValue } from './filters'
+import { Queue } from './structures';
 
 /**
  * Returns an array of a given object's own enumerable string-keyed property [key, value] pairs.
@@ -42,31 +43,51 @@ export function isEqual(a: unknown, b: any) {
 /**
  * Enumerates all paths of an opject
  * @param o - The first value to compare.
+ * @param matcher - A function that returns true if the current key should be included in the result.
  * @returns Array of all primitive holding paths
  */
-export function allPaths(o: any) {
+type PathMatcher = <T extends object>(
+  key: (string) & keyof T,
+  path: string[],
+  objectAtPath: T
+) => boolean;
+const isPrimitiveArray: PathMatcher = (key, path, o) => {
+  if(isArray(o[key])){
+    return (o[key] as any[]).length == 0 || (o[key] as any[]).every(e => isValue(e))
+  }
+  return isValue(o[key])
+}
+type QueueItem = { obj: any, path: string[] }
+export function allPaths(
+  o: any, 
+  matcher=isPrimitiveArray,
+  traversePrimitiveArrays=false
+) {
   if (!o || typeof o !== 'object') return [];
 
   const paths: {[pathString: string]: string[]} = {};
-  const stack: { obj: any, path: string[] }[] = [{ obj: o, path: [] }];
+  const stack = new Queue<QueueItem>([{ obj: o, path: [] }]);
 
   while (stack.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const { obj, path } = stack.pop()!;
+    const { obj, path } = stack.dequeue()!;
 
     if (typeof obj === 'object' && obj !== null) {
       for (const key in obj) {
         
-        const nextObj = obj[key]
         // Ignore primitive arrays
-        if(Array.isArray(obj) && typeof nextObj !== 'object'){
-            paths[path.join('.')] = path;
-        } else {
-            stack.push({ obj: nextObj, path: [...path, key] });
+        if(matcher(key, path, obj)){
+          // console.log(`ADDED ${path.join('.')}.${key}`)
+          paths[path.join('.')+key] = [...path, key];
+        }
+        if(traversePrimitiveArrays || !isPrimitiveArray(key, path, obj)){
+          const nextObj = obj[key]
+          stack.enqueue({ obj: nextObj, path: [...path, key] });
         }
       }
-    } else {
+    } else if(path.length && obj && matcher(path[path.length-1], path.slice(0,path.length-1), obj)){
       paths[path.join('.')] = path;
+      console.log(`ADDED ${path.join('.')}`)
     }
   }
   return Object.values(paths);

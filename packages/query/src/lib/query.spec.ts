@@ -1,4 +1,3 @@
-import exp from 'constants';
 import util from 'util';
 import DataView from './query';
 import testingData from './test-data.json'
@@ -160,7 +159,7 @@ describe('query', () => {
     console.log(util.inspect(query, {showHidden: false, depth: null, colors: true}))
     expect(dv.view()).toEqual([{'name': "A", "value": 8}, {'name': "B", "value": 18},{ name: 'E', value: 18000 }]);
   });
-  it.skip('produce a serialized version of a query from fluent interface', () => {
+  it('produce a serialized version of a query from fluent interface', () => {
     const dv = new DataView(testingData, undefined);
     dv.orderBy([{"title": "asc"}])
     expect(dv.limit(1).view()[0].title).toEqual("Appian Connected Claims")
@@ -188,51 +187,70 @@ describe('query', () => {
       ]
     }).view().length).toEqual(1)
   })
-  it('test ordering', () => {
-    const items = [
-      { column1: 'B', column2: 2 },
-      { column1: 'A', column2: 3 },
-      { column1: "C", column2: null },
-      { column1: 'A', column2: 1 },
-      { column1: 'B', column2: 1 },
-      { column1: null, column2: 1 }
-    ];
-    const dv = new DataView(items, undefined, true);
+})
+describe('query ordering', () => {
+  const items = [
+    { column1: 'B', column2: 2, data: {nested: 2} },
+    { column1: 'A', column2: 3, data: {nested: 3} },
+    { column1: "C", column2: null, data: {nested: null} },
+    { column1: 'A', column2: 1, data: {nested: 1} },
+    { column1: 'B', column2: 1, data: {nested: 1} },
+    { column1: null, column2: 1, data: {nested: 1} }
+  ];
+  const dv = new DataView(items, undefined, true);
+  it('asc_nulls_first and desc', () => {
     dv.orderBy([{"column1": "asc_nulls_first"}, {column2: "desc"}])
     expect(dv.view()).toEqual([
-      { column1: null, column2: 1 },
-      { column1: 'A', column2: 3 },
-      { column1: 'A', column2: 1 },
-      { column1: 'B', column2: 2 },
-      { column1: 'B', column2: 1 },
-      { column1: 'C', column2: null }
+      { column1: null, column2: 1, data: { nested: 1} },
+      { column1: 'A', column2: 3, data: { nested: 3} },
+      { column1: 'A', column2: 1, data: { nested: 1} },
+      { column1: 'B', column2: 2, data: { nested: 2} },
+      { column1: 'B', column2: 1, data: { nested: 1} },
+      { column1: 'C', column2: null, data: { nested: null} }
     ]);
+  })
+  it('array of sorts nulls first', () => {
     dv.orderBy([{"column1": "asc_nulls_first"}])
     expect(dv.view()).toEqual([
-      { column1: null, column2: 1 },
-      { column1: 'A', column2: 3 },
-      { column1: 'A', column2: 1 },
-      { column1: 'B', column2: 2 },
-      { column1: 'B', column2: 1 },
-      { column1: 'C', column2: null }
+      { column1: null, column2: 1, data: {nested: 1} },
+      { column1: 'A', column2: 3, data: {nested: 3} },
+      { column1: 'A', column2: 1, data: {nested: 1} },
+      { column1: 'B', column2: 2, data: {nested: 2} },
+      { column1: 'B', column2: 1, data: {nested: 1} },
+      { column1: 'C', column2: null, data: {nested: null} }
     ]);
+  })
+  it('array with single sort', () => {
     dv.orderBy([{"column1": "asc_nulls_last"}])
     expect(dv.view()).toEqual([
-      { column1: 'A', column2: 3 },
-      { column1: 'A', column2: 1 },
-      { column1: 'B', column2: 2 },
-      { column1: 'B', column2: 1 },
-      { column1: 'C', column2: null },
-      { column1: null, column2: 1 }
+      { column1: 'A', column2: 3, data: { nested: 3 } },
+      { column1: 'A', column2: 1, data: { nested: 1 } },
+      { column1: 'B', column2: 2, data: { nested: 2 } },
+      { column1: 'B', column2: 1, data: { nested: 1 } },
+      { column1: 'C', column2: null, data: { nested: null } },
+      { column1: null, column2: 1, data: { nested: 1 } }
     ]);
+  })
+  it('array of sorts', () => {
     dv.orderBy([{"column1": "asc_nulls_last"},{"column2": "asc_nulls_last"}])
     expect(dv.view()).toEqual([
-      { column1: 'A', column2: 1 },
-      { column1: 'A', column2: 3 },
-      { column1: 'B', column2: 1 },
-      { column1: 'B', column2: 2 },
-      { column1: 'C', column2: null },
-      { column1: null, column2: 1 }
+      { column1: 'A', column2: 1, data: {nested: 1} },
+      { column1: 'A', column2: 3, data: {nested: 3} },
+      { column1: 'B', column2: 1, data: {nested: 1} },
+      { column1: 'B', column2: 2, data: {nested: 2} },
+      { column1: 'C', column2: null, data: {nested: null} },
+      { column1: null, column2: 1, data: {nested: 1} }
+    ]);
+  })
+  it('nested data', () => {
+    dv.orderBy([{"column1": "asc_nulls_last"}, {"data": {"nested": "asc_nulls_last"}}])
+    expect(dv.view()).toEqual([
+      { column1: 'A', column2: 1, data: {nested: 1} },
+      { column1: 'A', column2: 3, data: {nested: 3} },
+      { column1: 'B', column2: 1, data: {nested: 1} },
+      { column1: 'B', column2: 2, data: {nested: 2} },
+      { column1: 'C', column2: null, data: {nested: null} },
+      { column1: null, column2: 1, data: {nested: 1} }
     ]);
   })
 });
