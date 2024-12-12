@@ -22,7 +22,6 @@ export const timeInMS: Record<DurationUnit | DurationUnitPlural, number> = {
     years: YEAR_MS
 }
 
-
 type HumanDuration = {
     start: Date;
     end: Date;
@@ -88,7 +87,6 @@ export function fromNow(count: number, unit: DurationUnit='day'){
   // console.log(new Date(Date.now()+timeInMS[unit.toLowerCase().replace(/s$/, '')]*count))
   return (new Date(Date.now()+timeInMS[unit]*count))
 }
-
 
 const monthNames = [
   "January", "February", "March", "April", "May", "June", "July",

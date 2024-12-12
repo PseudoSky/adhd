@@ -1,5 +1,5 @@
 /* SECTION: typechecks */
-type PrimitiveTypes = string|number|Date|null|undefined|any[]|object|((...args: any[]) => void)|RegExp
+// type PrimitiveTypes = string|number|Date|null|undefined|any[]|object|((...args: any[]) => void)|RegExp
 
 const TypeMap: {[type: string]: string} = {
   String: "[object String]",
@@ -13,21 +13,21 @@ const TypeMap: {[type: string]: string} = {
   RegExp: "[object RegExp]",
 }
 
-export function isType(x: any,type: keyof (typeof TypeMap)) { return Object.prototype.toString.call(x)===TypeMap[type] }
-export function isString(x: any)    { return isType(x, 'String');    }
-export function isNumber(x: any)    { return isType(x, 'Number');    }
-export function isDate(x: any)      { return isType(x, 'Date');      }
-export function isNull(x: any)      { return isType(x, 'Null');      }
-export function isUndefined(x: any) { return isType(x, 'Undefined'); }
-export function isArray(x: any)     { return isType(x, 'Array');     }
-export function isObject(x: any)    { return isType(x, 'Object');    }
-export function isFunction(x: any)  { return isType(x, 'Function');  }
-export function isRegExp(x: any)    { return isType(x, 'RegExp');    }
-export function isDefined(x: any)   { return (isUndefined(x) || isNull(x))===false        }
-export function isInt(x: any)       { return (isNumber(x) && Number.isInteger(x))===true  }
-export function isFloat(x: any)     { return (isDefined(x) && (isNumber(x) && Number.isInteger(x) === false)); }
+export function isType(x: unknown,type: keyof (typeof TypeMap)) { return Object.prototype.toString.call(x)===TypeMap[type] }
+export function isString(x: unknown)    { return isType(x, 'String');    }
+export function isNumber(x: unknown)    { return isType(x, 'Number');    }
+export function isDate(x: unknown)      { return isType(x, 'Date');      }
+export function isNull(x: unknown)      { return isType(x, 'Null');      }
+export function isUndefined(x: unknown) { return isType(x, 'Undefined'); }
+export function isArray(x: unknown)     { return isType(x, 'Array');     }
+export function isObject(x: unknown)    { return isType(x, 'Object');    }
+export function isFunction(x: unknown)  { return isType(x, 'Function');  }
+export function isRegExp(x: unknown)    { return isType(x, 'RegExp');    }
+export function isDefined(x: unknown)   { return (isUndefined(x) || isNull(x))===false        }
+export function isInt(x: unknown)       { return (isNumber(x) && Number.isInteger(x))===true  }
+export function isFloat(x: unknown)     { return (isDefined(x) && (isNumber(x) && Number.isInteger(x) === false)); }
 // Currently undefined and nulls are considered values
-export function isValue(x: any)     { return (isObject(x) || isArray(x) || isFunction(x) || isRegExp(x))===false;         }
+export function isValue(x: unknown)     { return (isObject(x) || isArray(x) || isFunction(x) || isRegExp(x))===false;         }
 
 /* SECTION: comparisons */
 export function isTrue(a: any){
@@ -66,7 +66,7 @@ export function isNotShallowEqual(a: any, b: any) {
   return a!==b
 }
 export function isNotIn(a: any, b: any[]): boolean
-export function isNotIn(a: string, b: string | any[]): boolean {
+export function isNotIn(a: string, b: string | unknown[]): boolean {
   return !isIn(a, b)
 }
 export function isNotLike(a: string, b: string) {
