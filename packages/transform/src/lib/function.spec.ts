@@ -2,11 +2,11 @@ import functional from './function';
 
 describe('functional', () => {
   it('setters', () => {
-    expect(functional.set({},"a", 1)).toMatchObject({a:1})
-    expect(functional.set({},"a.b.c", 1)).toMatchObject({a:{b:{c:1}}})
-    expect(functional.set({},"a[0].c", 1)).toMatchObject({a:[{c:1}]})
-    expect(functional.set({},"a.b.c", [])).toMatchObject({a:{b:{c:[]}}})
-    expect(functional.set({},"a.b[0]", [])).toMatchObject({a:{b:[[]]}})
+    expect(functional.set({}, "a", 1)).toMatchObject({ a: 1 })
+    expect(functional.set({}, "a.b.c", 1)).toMatchObject({ a: { b: { c: 1 } } })
+    expect(functional.set({}, "a[0].c", 1)).toMatchObject({ a: [{ c: 1 }] })
+    expect(functional.set({}, "a.b.c", [])).toMatchObject({ a: { b: { c: [] } } })
+    expect(functional.set({}, "a.b[0]", [])).toMatchObject({ a: { b: [[]] } })
   })
 
 
@@ -16,7 +16,7 @@ describe('functional', () => {
     expect(functional.intMax).toBeGreaterThan(100000000);
     expect(functional.compose(() => false)()).toEqual(false);
     expect(functional.noop()).toEqual(null);
-    expect(functional.extractThen("a", (a) => a*10)({a: 1})).toEqual(10);
+    expect(functional.extractThen("a", (a) => a * 10)({ a: 1 })).toEqual(10);
     expect(functional.toPath('a[0].b.c')).toEqual(['a', '0', 'b', 'c']);
     // TODO broken somehow
     // expect(functional.isFalsey(() => false)).toEqual(false);
@@ -42,7 +42,7 @@ describe('functional', () => {
   it('getAll', () => {
     const testObject = { a: [{ b: { c: 3 } }] };
     expect(functional.getAll(testObject, ['a[0].b.c'])).toMatchObject([3]);
-    
+
     // expect(functional.runAfter(() => false, 9)()).toEqual(false);
     // expect(functional.throttle(() => false, 9)()).toEqual(false);
     expect(functional.flowPipe(() => false)()).toEqual(false);

@@ -39,7 +39,7 @@ const zip = (a: any[] | string, b: any[] | string) => {
 };
 
 const compare = (a: number, b: number) => {
-  if(a > b) return 1;
+  if (a > b) return 1;
   return b > a ? -1 : 0;
 };
 
@@ -432,11 +432,11 @@ export const mergePatterns = (values: (string | number)[]) => {
 export const rangeToRegex = (n1?: number, n2?: number) =>
   new RegExp(
     '^' +
-      toRegexRange(n1, n2, {
-        relaxZeros: false,
-        capture: true,
-      }) +
-      '$'
+    toRegexRange(n1, n2, {
+      relaxZeros: false,
+      capture: true,
+    }) +
+    '$'
   );
 
 export default {

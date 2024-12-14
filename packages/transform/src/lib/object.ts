@@ -1,5 +1,5 @@
-import { makeGetter } from './function'
-import { isArray, isObject, isValue } from './filters'
+import { isArray, isObject, isValue } from './filters';
+import { makeGetter } from './function';
 import { Queue } from './structures';
 
 /**
@@ -52,20 +52,20 @@ type PathMatcher = <T extends object>(
   objectAtPath: T
 ) => boolean;
 const isPrimitiveArray: PathMatcher = (key, path, o) => {
-  if(isArray(o[key])){
+  if (isArray(o[key])) {
     return (o[key] as any[]).length == 0 || (o[key] as any[]).every(e => isValue(e))
   }
   return isValue(o[key])
 }
 type QueueItem = { obj: any, path: string[] }
 export function allPaths(
-  o: any, 
-  matcher=isPrimitiveArray,
-  traversePrimitiveArrays=false
+  o: any,
+  matcher = isPrimitiveArray,
+  traversePrimitiveArrays = false
 ) {
   if (!o || typeof o !== 'object') return [];
 
-  const paths: {[pathString: string]: string[]} = {};
+  const paths: { [pathString: string]: string[] } = {};
   const stack = new Queue<QueueItem>([{ obj: o, path: [] }]);
 
   while (stack.length > 0) {
@@ -74,18 +74,18 @@ export function allPaths(
 
     if (typeof obj === 'object' && obj !== null) {
       for (const key in obj) {
-        
+
         // Ignore primitive arrays
-        if(matcher(key, path, obj)){
+        if (matcher(key, path, obj)) {
           // console.log(`ADDED ${path.join('.')}.${key}`)
-          paths[path.join('.')+key] = [...path, key];
+          paths[path.join('.') + key] = [...path, key];
         }
-        if(traversePrimitiveArrays || !isPrimitiveArray(key, path, obj)){
+        if (traversePrimitiveArrays || !isPrimitiveArray(key, path, obj)) {
           const nextObj = obj[key]
           stack.enqueue({ obj: nextObj, path: [...path, key] });
         }
       }
-    } else if(path.length && obj && matcher(path[path.length-1], path.slice(0,path.length-1), obj)){
+    } else if (path.length && obj && matcher(path[path.length - 1], path.slice(0, path.length - 1), obj)) {
       paths[path.join('.')] = path;
       console.log(`ADDED ${path.join('.')}`)
     }
@@ -247,7 +247,7 @@ export function deepCopy(object1: any) {
  * @param _base - The base object to compare against.
  * @returns A new object representing the difference between the two objects.
  */
-export function difference<T extends Record<string|number, any>>(_object: T, _base: any) {
+export function difference<T extends Record<string | number, any>>(_object: T, _base: any) {
   function changes(object: T, base: { [x: string]: any }, _res: Record<string, any> = {}) {
     return Object.entries(object).reduce(
       function (result, [key, value]) {

@@ -13,8 +13,8 @@ describe('transforms', () => {
     // expect(text.shortUUID()).toMatch(/[a-zA-Z0-9_-]{9}/);
     expect(text.percent(90)).toEqual('+90.00%');
     expect(text.words("asdf")).toEqual(["asdf"]);
-    expect(text.words("AsDf")).toEqual(["As","Df"]);
-    expect(text.words("As Df")).toEqual(["As","Df"]);
+    expect(text.words("AsDf")).toEqual(["As", "Df"]);
+    expect(text.words("As Df")).toEqual(["As", "Df"]);
     expect(text.hyphenCase("asdf asdf")).toEqual("asdf-asdf");
   });
 });

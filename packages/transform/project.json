@@ -1,75 +1,64 @@
 {
-    "name": "transform",
-    "$schema": "../../node_modules/nx/schemas/project-schema.json",
-    "sourceRoot": "packages/transform/src",
-    "projectType": "library",
-    "release": {
-        "version": {
-            "generatorOptions": {
-                "packageRoot": "dist/{projectRoot}",
-                "currentVersionResolver": "git-tag"
-            }
-        }
-    },
-    "tags": [
-        "base"
-    ],
-    "targets": {
-        "build": {
-            "executor": "@nx/vite:build",
-            "outputs": [
-                "{options.outputPath}"
-            ],
-            "options": {
-                "outputPath": "dist/packages/transform",
-                "main": "packages/transform/src/index.ts",
-                "generatePackageJson": true,
-                "tsConfig": "packages/transform/tsconfig.lib.json",
-                "assets": [
-                    "packages/transform/*.md"
-                ]
-            }
-        },
-        "version": {
-            "executor": "nx:run-commands",
-            "options": {
-                "parallel": false,
-                "commands": [
-                    "scripts/version-packages.sh transform packages/transform"
-                ]
-            }
-        },
-        "version-prerelease": {
-            "executor": "nx:run-commands",
-            "options": {
-                "parallel": false,
-                "commands": [
-                    "scripts/version-packages.sh transform packages/transform @adhd -prerelease"
-                ]
-            }
-        },
-        "publish": {
-            "executor": "nx:run-commands",
-            "options": {
-                "parallel": false,
-                "commands": [
-                    "echo 'Running npm publish dry run'",
-                    "npm publish --dry-run dist/packages/transform"
-                ]
-            },
-            "configurations": {
-                "production": {
-                    "parallel": false,
-                    "commands": [
-                        "npm publish dist/packages/transform"
-                    ]
-                }
-            }
-        },
-        "nx-release-publish": {
-            "options": {
-                "packageRoot": "dist/{projectRoot}"
-            }
-        }
+  "name": "transform",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/transform/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
     }
+  },
+  "tags": ["base"],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/transform",
+        "main": "packages/transform/src/index.ts",
+        "tsConfig": "packages/transform/tsconfig.lib.json",
+        "assets": ["packages/transform/*.md"]
+      }
+    },
+    "version": {
+      "executor": "nx:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": ["scripts/version-packages.sh transform packages/transform"]
+      }
+    },
+    "version-prerelease": {
+      "executor": "nx:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": [
+          "scripts/version-packages.sh transform packages/transform @adhd -prerelease"
+        ]
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": [
+          "echo 'Running npm publish dry run'",
+          "npm publish --dry-run dist/packages/transform"
+        ]
+      },
+      "configurations": {
+        "production": {
+          "parallel": false,
+          "commands": ["npm publish dist/packages/transform"]
+        }
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  }
 }

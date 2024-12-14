@@ -4,9 +4,12 @@
   "license": "MIT",
   "scripts": {
     "watch:test": "`yarn bin`/vitest watch --changed",
-    "build": "nx run-many --targets=build --configuration=production",
-    "version": "nx run-many --targets=version --configuration=production",
-    "publish": "nx run-many --targets=publish --configuration=production",
+    "watch": "nx run-many --targets=build --configuration=development --all --watch",
+    "build": "nx run-many --targets=build --configuration=production --all",
+    "release": "yarn build && yarn release",
+    "version:old": "nx run-many --targets=version --configuration=production",
+    "publish:old": "nx run-many --targets=publish --configuration=production",
+    "list": "nx show projects --affected",
     "lint": "nx run-many --targets=lint --configuration=production",
     "test": "nx run-many --targets=test --configuration=production"
   },
@@ -72,9 +75,9 @@
     "tsconfig-paths": "^4.2.0",
     "typescript": "~5.4.2",
     "verdaccio": "^5.0.4",
-    "vite": "~5.0.0",
-    "vite-plugin-dts": "~3.8.1",
-    "vitest": "^1.3.1"
+    "vite": "~5.0.13",
+    "vite-plugin-dts": "~3.8.3",
+    "vitest": "^1.6.0"
   },
   "nx": {
     "includedScripts": []

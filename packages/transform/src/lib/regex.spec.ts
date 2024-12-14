@@ -1,4 +1,4 @@
-import { escapePattern, mergePatterns, rangeToRegex } from './regex';
+import { rangeToRegex } from './regex';
 
 describe('regex', () => {
   it('should produce range validation regexes', () => {

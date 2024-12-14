@@ -37,13 +37,13 @@ export function randomRangeInt(a = 1, b = 0) {
   const upper = Math.floor(Math.max(a, b));
   return Math.floor(lower + Math.random() * (upper - lower + 1))
 }
-export function getMin(a: number, b: number){ return a <= b ? a : b; }
-export function getMax(a: number, b: number){ return a >= b ? a : b; }
+export function getMin(a: number, b: number) { return a <= b ? a : b; }
+export function getMax(a: number, b: number) { return a >= b ? a : b; }
 export function range(list: number[]) {
   return list.reduce((acc, value) => ({
-      min: getMin(value, acc.min),
-      max: getMax(value, acc.max),
-    }
+    min: getMin(value, acc.min),
+    max: getMax(value, acc.max),
+  }
   ), {
     min: Number.POSITIVE_INFINITY,
     max: Number.NEGATIVE_INFINITY,
@@ -80,8 +80,8 @@ export function roundToIncrement(x: number, increment: number) {
  */
 
 // https://stats.stackexchange.com/questions/178626/how-to-normalize-data-between-1-and-1
-export const normalizeBetween = (x: number, minVal: number, maxVal: number, newMin=0, newMax=1) => {
-  return newMin + (newMax-newMin)*((x-minVal)/(maxVal-minVal))
+export const normalizeBetween = (x: number, minVal: number, maxVal: number, newMin = 0, newMax = 1) => {
+  return newMin + (newMax - newMin) * ((x - minVal) / (maxVal - minVal))
   // return newMin + (val - minVal) * normalizeValue(value, minVal, maxVal);
 };
 
@@ -98,28 +98,28 @@ export function normalize(list: number[], bounds = { min: 0, max: 1 }) {
   return list.map(value => normalizeBetween(value, min, max, bounds.min, bounds.max))
 }
 
-export function histogram(iterable: any[]){
-    const result = new Map();
+export function histogram(iterable: any[]) {
+  const result = new Map();
 
-    for (const x of iterable) {
-        result.set(x, (result.get(x) || 0) + 1);
-    }
+  for (const x of iterable) {
+    result.set(x, (result.get(x) || 0) + 1);
+  }
 
-    return result;
+  return result;
 }
 
 export class Counter extends Map {
   normalizer: (val: any) => any;
-  constructor(iterable: any[]=[], normalizer=(val: any) => val) {
+  constructor(iterable: any[] = [], normalizer = (val: any) => val) {
     super()
     this.normalizer = normalizer;
     for (const x of iterable) {
       this.add(x)
     }
   }
-  setData = (values: (string|number)[]) => {
+  setData = (values: (string | number)[]) => {
     this.clear()
-    for(const v in values) {
+    for (const v in values) {
       this.add(v)
     }
   }
@@ -129,7 +129,7 @@ export class Counter extends Map {
     this.set(x, (this.get(x) || 0) + 1);
   }
 }
-type Range = {min?: number, max?: number}
+type Range = { min?: number, max?: number }
 type Bin = {
   bin: number,
   x: number,
@@ -138,13 +138,13 @@ type Bin = {
 // TODO: I dont think this actually normalizes
 export class NormalizedHistogram {
   config: { bins: number; start: number; step: number; standard: boolean; };
-  lookup: {[k: string|number]: number};
+  lookup: { [k: string | number]: number };
   normalize(_value: any): number {
     throw new Error("Method not implemented.");
   }
   counter: Counter;
   range: Range;
-  constructor(data: any[], bins = 10, start = 1, step = 1, standard=false) {
+  constructor(data: any[], bins = 10, start = 1, step = 1, standard = false) {
     this.counter = new Counter()
     this.range = {}
     this.lookup = {}
@@ -168,7 +168,7 @@ export class NormalizedHistogram {
     return bin
   };
   // TODO: the bounds adjustment doesn't work
-  bins = (newMin?:number, newMax?:number) => {
+  bins = (newMin?: number, newMax?: number) => {
     // const res = [];
     const { bins, start, step } = this.config;
     const res: number[] = new Array(bins).fill(0)
@@ -182,10 +182,10 @@ export class NormalizedHistogram {
         res[this.getBin(k)] = res[this.getBin(k)] + val;
       }
     }
-    console.warn({lookup: this.lookup})
+    console.warn({ lookup: this.lookup })
     // UPDATED: changed from bool
     // normalize(res, {min: newMin, max: newMax})
-    return Object.entries(res).map(([x,y]) => ({x,y})).sort(({x}, {x:x2}) => (x<x2) ? 1 : 0)
+    return Object.entries(res).map(([x, y]) => ({ x, y })).sort(({ x }, { x: x2 }) => (x < x2) ? 1 : 0)
     // return this.counter.reduce((res,[k,v])=>{
     // }, [])
 
@@ -223,17 +223,17 @@ export class NormalizedHistogram {
 }
 
 export function mostCommon(iterable: any[]) {
-    let maxCount = 0;
-    let maxKey;
+  let maxCount = 0;
+  let maxKey;
 
-    for (const [key, count] of histogram(iterable)) {
-        if (count > maxCount) {
-            maxCount = count;
-            maxKey = key;
-        }
+  for (const [key, count] of histogram(iterable)) {
+    if (count > maxCount) {
+      maxCount = count;
+      maxKey = key;
     }
+  }
 
-    return maxKey;
+  return maxKey;
 }
 
 export default {

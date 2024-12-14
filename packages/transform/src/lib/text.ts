@@ -5,7 +5,7 @@
  * @param {string} [c='\\s'] - The characters to trim from the string.
  * @returns {string} The trimmed string.
  */
-export function trim(str='', c = '\\s'){
+export function trim(str = '', c = '\\s') {
   return str.replace(new RegExp(`^([${c}]*)(.*?)([${c}]*)$`), '$2')
 }
 
@@ -15,7 +15,7 @@ export function trim(str='', c = '\\s'){
  * @param {string} [c='\\s'] - The characters to trim from the string.
  * @returns {string} The trimmed string.
  */
-export function trimStart(str='', c = '\\s'){
+export function trimStart(str = '', c = '\\s') {
   return str.replace(new RegExp(`^([${c}]*)(.*)$`), '$2')
 }
 
@@ -25,7 +25,7 @@ export function trimStart(str='', c = '\\s'){
  * @param {string} [c='\\s'] - The characters to trim from the string.
  * @returns {string} The trimmed string.
  */
-export function trimEnd(str='', c = '\\s'){
+export function trimEnd(str = '', c = '\\s') {
   return str.replace(new RegExp(`^(.*?)([${c}]*)$`), '$1')
 }
 
@@ -34,7 +34,7 @@ export function trimEnd(str='', c = '\\s'){
  * @param {string} [str=''] - The input string.
  * @returns {string} The string with the first character capitalized.
  */
-export function upperFirst(str=''){
+export function upperFirst(str = '') {
   return `${str.charAt(0).toUpperCase()}${str.slice(1)}`
 }
 
@@ -43,7 +43,7 @@ export function upperFirst(str=''){
  * @param {string} [str=''] - The input string.
  * @returns {string} The string with the first character in lowercase.
  */
-export function lowerFirst(str=''){
+export function lowerFirst(str = '') {
   return `${str.charAt(0).toLowerCase()}${str.slice(1)}`
 }
 
@@ -52,7 +52,7 @@ export function lowerFirst(str=''){
  * @param {string} [str=''] - The input string.
  * @returns {string} The capitalized string.
  */
-export function capitalize(str=''){
+export function capitalize(str = '') {
   return `${str.charAt(0).toUpperCase()}${str.slice(1).toLowerCase()}`
 }
 
@@ -93,7 +93,7 @@ export function words(value: string) {
  * @param {string} [str=''] - The input string.
  * @returns {string} The hyphen-case string.
  */
-export function hyphenCase(str='') {
+export function hyphenCase(str = '') {
   return words(str).join('-')
 }
 
@@ -102,7 +102,7 @@ export function hyphenCase(str='') {
  * @param {string} [str=''] - The input string.
  * @returns {string} The lowercase string.
  */
-export function toLower(str=''){
+export function toLower(str = '') {
   return str.toLowerCase()
 }
 
@@ -125,8 +125,8 @@ export function toUpper(str = '') {
  * @param {number} [precision=2] - The number of decimal places to include.
  * @returns {string} The formatted percentage string.
  */
-export function percent(n: number, precision=2) {
-  const sign = n>0 ? "+" : "";
+export function percent(n: number, precision = 2) {
+  const sign = n > 0 ? "+" : "";
   return `${n < 0 ? "-" : sign}${Math.abs(n).toFixed(precision)}%`;
 }
 
