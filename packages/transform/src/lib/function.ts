@@ -1,6 +1,6 @@
-import { isEqual } from './object'
 import { sortBy } from "./collections";
-import { isFunction, isValue, isArray, isDate, isUndefined, isDefined } from './filters';
+import { isArray, isDate, isFunction, isUndefined, isValue } from './filters';
+import { isEqual } from './object';
 
 export type entryOf<o> = {
   [k in keyof o]-?: [k, Exclude<o[k], undefined>]
@@ -46,7 +46,7 @@ export const compose = (...funcs: CallbackFunctionVariadic[]) =>
  * A no-operation function that returns null.
  * @returns null
  */
-export function noop(){return null}
+export function noop() { return null }
 
 /**
  * Extracts a value from an object and passes it as an argument to a callback function.
@@ -55,7 +55,7 @@ export function noop(){return null}
  * @returns A new function that, when called, will extract the value from the object and pass it to the callback.
  */
 export function extractThen(key: string, callback: CallbackFunctionVariadic): (...args: Parameters<typeof callback>) => ReturnType<typeof callback> {
-  return (...args) => callback(...(args.map(({[key]: value}) => value)))
+  return (...args) => callback(...(args.map(({ [key]: value }) => value)))
 }
 
 /*
@@ -70,9 +70,9 @@ const STR_PATH_REGEX = /[,[\].]+?/ // ALT from site /[,[\]]+?/
  * @param path - The string or array of strings to be converted.
  * @returns An array of path segments.
  */
-export function toPath(path: string | string[]): string[]{
-  return typeof path==='string' ? path.split(STR_PATH_REGEX)
-                                .filter(Boolean) : path
+export function toPath(path: string | string[]): string[] {
+  return typeof path === 'string' ? path.split(STR_PATH_REGEX)
+    .filter(Boolean) : path
 
 }
 
@@ -82,7 +82,7 @@ export function toPath(path: string | string[]): string[]{
  * @param obj - The value to check.
  * @returns True if the value is falsey, false otherwise.
  */
-export function isFalsey (obj: any){
+export function isFalsey(obj: any) {
   return obj !== null && obj !== undefined
 }
 
@@ -91,7 +91,7 @@ export function isFalsey (obj: any){
  * @param obj - The object to check.
  * @returns True if the object exists, false otherwise.
  */
-export function doesObjectExists (obj: any){
+export function doesObjectExists(obj: any) {
   return !!obj && obj !== null && obj !== undefined;
 }
 
@@ -101,32 +101,32 @@ export function doesObjectExists (obj: any){
  * @param obj - The object to get the value from.
  * @returns A function that, when called, will retrieve the value at the specified path.
  */
-export function makeGetter(_path?: string | string[], obj?: any): (value?: any) => any  {
+export function makeGetter(_path?: string | string[], obj?: any): (value?: any) => any {
   // TODO: see https://github.com/g-makarov/dot-path-value/blob/main/src/index.ts
   //       for future typing
-  if(!obj){ /* THIS IS A PARTIAL: NOT RECURSIVE */
+  if (!obj) { /* THIS IS A PARTIAL: NOT RECURSIVE */
     return (_obj: any) => makeGetter(_path, _obj)()
   }
-  if(!_path) { /* THIS IS A PARTIAL: NOT RECURSIVE */
+  if (!_path) { /* THIS IS A PARTIAL: NOT RECURSIVE */
     return (path: string) => makeGetter(path, obj)()
   }
-  const path=toPath(_path)
-  if(!path.length) return (value: any) => obj||value
+  const path = toPath(_path)
+  if (!path.length) return (value: any) => obj || value
   return (value: any) => path.reduce(
     (previous, key: string, index: number) => {
       const res = previous;
-      const field = key.replace(/(^")|("$)/g,'') as keyof typeof res
-      const isEnd = index === path.length-1
-      if(!isEnd){
-        const nextType = !Number.isNaN(parseInt(path[index+1])) ? []: {};
-        if(!(field in res)){
+      const field = key.replace(/(^")|("$)/g, '') as keyof typeof res
+      const isEnd = index === path.length - 1
+      if (!isEnd) {
+        const nextType = !Number.isNaN(parseInt(path[index + 1])) ? [] : {};
+        if (!(field in res)) {
           res[field] = nextType
         }
         return res[field]
       }
       // TODO: this had a bug for number values of 0 needs more testing
       return isUndefined(res[field]) ? value : res[field];
-  }, obj )
+    }, obj)
 }
 
 /**
@@ -135,26 +135,26 @@ export function makeGetter(_path?: string | string[], obj?: any): (value?: any) 
  * @param obj - The object to set the value in.
  * @returns A function that, when called with a value, will set the value at the specified path.
  */
-export function makeSetter(_path: string, obj?: any)  {
-  const path=toPath(_path)
-  if(!path.length) return (defaultValue: any) => obj||defaultValue
+export function makeSetter(_path: string, obj?: any) {
+  const path = toPath(_path)
+  if (!path.length) return (defaultValue: any) => obj || defaultValue
   return (value: any) => path.reduce(
     (previous, key: string, index: number) => {
       const res = previous;
-      const field = key.replace(/(^")|("$)/g,'') as keyof typeof res
-      const isEnd = index === path.length-1
-      if(!isEnd){
-        const nextType = !Number.isNaN(parseInt(path[index+1])) ? []: {};
-        if(!(field in res)){
+      const field = key.replace(/(^")|("$)/g, '') as keyof typeof res
+      const isEnd = index === path.length - 1
+      if (!isEnd) {
+        const nextType = !Number.isNaN(parseInt(path[index + 1])) ? [] : {};
+        if (!(field in res)) {
           res[field] = nextType
         }
       }
-      if(isEnd){
+      if (isEnd) {
         res[field] = value
         return obj
       }
       return res[field];
-  }, obj)
+    }, obj)
 }
 
 /**
@@ -164,7 +164,7 @@ export function makeSetter(_path: string, obj?: any)  {
  * @param defaultValue - The default value to return if the path does not exist.
  * @returns The value at the specified path, or the default value if the path does not exist.
  */
-export function get(obj: any, path: string|string[], defaultValue: any = undefined) {
+export function get(obj: any, path: string | string[], defaultValue: any = undefined) {
   return makeGetter(path, obj)(defaultValue);
 }
 
@@ -211,11 +211,11 @@ export function runAfter(f: CallbackFunctionVariadic, t: number) {
 export function throttle<T extends CallbackFunctionVariadic>(func: T, timeFrame: number) {
   let lastTime = 0;
   return function (...args: Parameters<T>) {
-      const now = Number(new Date());
-      if (now - lastTime >= timeFrame) {
-          func.apply(this, args);
-          lastTime = now;
-      }
+    const now = Number(new Date());
+    if (now - lastTime >= timeFrame) {
+      func.apply(this, args);
+      lastTime = now;
+    }
   };
 }
 
@@ -228,18 +228,18 @@ export function flowPipe(...funcs: CallbackFunctionVariadic[]) {
 }
 
 export function splitPipe(...funcs: CallbackFunctionVariadic[]) {
-  return (...args: Parameters<typeof funcs[0]>) => funcs.map(function(f){
-      return f(args)
-    })
+  return (...args: Parameters<typeof funcs[0]>) => funcs.map(function (f) {
+    return f(args)
+  })
 }
 
-export function flow(funcs: CallbackFunctionVariadic[]){
+export function flow(funcs: CallbackFunctionVariadic[]) {
   return (...args: Parameters<typeof funcs[0]>) => {
     return funcs.reduce((prev, fnc) => [fnc(...prev)], args)[0]
   }
 }
 
-export function partial<F extends CallbackFunctionVariadic>(func: CallbackFunctionVariadic, ...boundArgs: Parameters<F>){
+export function partial<F extends CallbackFunctionVariadic>(func: CallbackFunctionVariadic, ...boundArgs: Parameters<F>) {
   return (...remainingArgs: Parameters<F>) => func(...boundArgs, ...remainingArgs)
 }
 
@@ -249,15 +249,15 @@ export class Differ {
   static VALUE_DELETED = "deleted"
   static VALUE_UNCHANGED = "unchanged"
 
-  static map = <O1=Record<string,any> | any[],O2=Record<string,any> | any[]>(obj1?: O1, obj2?: O2) => {
+  static map = <O1 = Record<string, any> | any[], O2 = Record<string, any> | any[]>(obj1?: O1, obj2?: O2) => {
     if (isFunction(obj1) || isFunction(obj2)) {
       throw "Invalid argument. Function given, object expected.";
     }
-    
+
     // TODO: looks like this will short circuit the rest of the func (array is value)
     if (isValue(obj1) || isValue(obj2)) {
       const change = Differ.compareArrays(obj1 as any[], obj2 as any[])
-      if(change===Differ.VALUE_UNCHANGED){
+      if (change === Differ.VALUE_UNCHANGED) {
         return null
       }
       return obj2 === undefined ? obj1 : obj2
@@ -269,13 +269,13 @@ export class Differ {
 
     if (isArray(obj1) || isArray(obj2)) {
       const change = Differ.compareArrays((obj1 as any[]), obj2 as any[])
-      if(change===Differ.VALUE_UNCHANGED){
+      if (change === Differ.VALUE_UNCHANGED) {
         return null
       }
       return Differ.getArrayDiffData(obj1 as any[], obj2 as any[]);
     }
 
-    const diff: Record<string,any> = {};
+    const diff: Record<string, any> = {};
     for (const key in obj1) {
 
       if (isFunction(obj1[key as keyof typeof obj1])) {
@@ -288,7 +288,7 @@ export class Differ {
       }
 
       const d = Differ.map(obj1[key], value2);
-      if(d) {
+      if (d) {
         diff[key] = d
       }
     }
@@ -297,7 +297,7 @@ export class Differ {
         continue;
       }
       const d = Differ.map(undefined, obj2[key])
-      if(d){
+      if (d) {
         diff[key] = d;
       }
     }
@@ -308,7 +308,7 @@ export class Differ {
 
   static getArrayDiffData = (arr1: any[], arr2: any[]) => {
     if (arr1 === undefined || arr2 === undefined) {
-       return arr1 === undefined ? arr1 : arr2;
+      return arr1 === undefined ? arr1 : arr2;
     }
     const set1 = new Set(arr1);
     const set2 = new Set(arr2);

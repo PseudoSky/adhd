@@ -5,7 +5,7 @@ ROOT_DIR="."
 echo "Removing Dist"
 rm -rf "${ROOT_DIR:?}/dist"
 DRY_RUN=${DRY_RUN:-"False"}
-AFFECTED=$(node node_modules/.bin/nx show projects --affected --base=origin/master~1)
+AFFECTED=$(node node_modules/.bin/nx show projects --affected --base=origin/main~1)
 if [ "$AFFECTED" != "" ]; then
   cd "$PARENT_DIR"
   while IFS= read -r -d $' ' lib; do

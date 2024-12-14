@@ -1,5 +1,5 @@
 import _ from '@adhd/transform';
-import { OrderByExpression, QueryExpression, QueryExpressionValues } from './expressions';
+import { OrderByExpression, QueryExpression } from './expressions';
 import { parseOrderBy, parseWhere } from './parser';
 
 export const orderBy = (props: OrderByExpression[] = []) => (a: any, b: any) => {
@@ -66,7 +66,7 @@ export class Query implements QueryType {
 
   setQuery = (query: QueryExpression = {}) => {
     const ops = [
-      this.setWhere(query.where), 
+      this.setWhere(query.where),
       this.setOrderBy(query.order_by),
       this.setDistinctOn(query.distinct_on),
       this.setOffset(query.offset),
@@ -123,9 +123,14 @@ export class DataView {
   query: Query;
   dirty: any;
   logging: boolean;
-  has_more=false;
+  has_more = false;
+  metrics = {
+    total: 0,
+    total_matched: 0,
+    total_distinct: 0,
+  };
   static Query: typeof Query;
-  constructor(data: any[], query: QueryExpression = {}, logging=false) {
+  constructor(data: any[], query: QueryExpression = {}, logging = false) {
     this.query = new Query();
     this.logging = logging;
     this.setData(data);
@@ -134,8 +139,10 @@ export class DataView {
 
   setData = (data: any[]) => {
     this.data = data;
-    this.dataview = null;
-    this.query = new Query();
+    this.dirty = true;
+    // this.dataview = null;
+    // this.query = new Query();
+    return this;
   };
 
   setQuery = (query: QueryExpression) => {
@@ -179,11 +186,15 @@ export class DataView {
   };
 
   commit = () => {
+    // console.warn('DataView.commit', { dirty: this.dirty, metrics: this.metrics, query: this.query.toJson() })
     if (!this.dirty || !this.data) return false;
     let res = this.data;
+    this.metrics.total = res.length;
     if (this.query.where) res = res.filter(this.query.where);
+    this.metrics.total_matched = res.length;
     if (this.query.order_by) res = res.sort(this.query.order_by);
     if (this.query.distinct_on) res = _.uniqueBy(res, this.query.distinct_on);
+    this.metrics.total_distinct = res.length;
     if (this.query.offset) res = res.slice(this.query.offset);
     if (this.query.limit) {
       res = res.slice(0, this.query.limit);
@@ -191,10 +202,12 @@ export class DataView {
     }
     this.dataview = res;
     this.dirty = false;
+    // console.debug('DataView.commit', { dirty: this.dirty, metrics: this.metrics, query: this.query.toJson() })
     return true;
   };
 
   view = () => {
+    // console.warn('DataView.view', { dirty: this.dirty, metrics: this.metrics, query: this.query.toJson() })
     this.commit();
     return this.dataview ? this.dataview : this.data;
   };

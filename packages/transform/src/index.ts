@@ -1,8 +1,8 @@
+import _Collections from './lib/collections';
+import _Filters from './lib/filters';
 import _Functions from './lib/function';
 import _Objects from './lib/object';
 import _Stats from './lib/stats';
-import _Collections from './lib/collections';
-import _Filters from './lib/filters';
 import _Texts from './lib/text';
 export const Functions = _Functions;
 export const Objects = _Objects;

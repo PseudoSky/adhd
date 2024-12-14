@@ -1,77 +1,66 @@
 {
-    "name": "query",
-    "$schema": "../../node_modules/nx/schemas/project-schema.json",
-    "sourceRoot": "packages/query/src",
-    "projectType": "library",
-    "release": {
-        "version": {
-            "generatorOptions": {
-                "packageRoot": "dist/{projectRoot}",
-                "currentVersionResolver": "git-tag"
-            }
-        }
-    },
-    "tags": [
-        "base"
-    ],
-    "targets": {
-        "build": {
-            "executor": "@nx/vite:build",
-            "outputs": [
-                "{options.outputPath}"
-            ],
-            "options": {
-                "outputPath": "dist/packages/query",
-                "main": "packages/query/src/index.ts",
-                "tsConfig": "packages/query/tsconfig.lib.json",
-                "generatePackageJson": true,
-                "assets": [
-                    "packages/query/*.md"
-                ]
-            }
-        },
-        "nx-release-publish": {
-            "options": {
-                "packageRoot": "dist/{projectRoot}"
-            }
-        },
-        "version": {
-            "dependsOn": ["^build"],
-            "executor": "nx:run-commands",
-            "options": {
-                "parallel": false,
-                "commands": [
-                    "scripts/version-packages.sh query packages/query"
-                ]
-            }
-        },
-        "version-prerelease": {
-            "executor": "nx:run-commands",
-            "options": {
-                "parallel": false,
-                "commands": [
-                    "scripts/version-packages.sh query packages/query @adhd -prerelease"
-                ]
-            }
-        },
-        "publish": {
-            "dependsOn": ["^version"],
-            "executor": "nx:run-commands",
-            "options": {
-                "parallel": false,
-                "commands": [
-                    "echo 'Running npm publish dry run'",
-                    "npm publish --dry-run dist/packages/query"
-                ]
-            },
-            "configurations": {
-                "production": {
-                    "parallel": false,
-                    "commands": [
-                        "npm publish dist/packages/query"
-                    ]
-                }
-            }
-        }
+  "name": "query",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/query/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
     }
+  },
+  "tags": ["base"],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "dependsOn": ["^build"],
+      "options": {
+        "outputPath": "dist/packages/query",
+        "main": "packages/query/src/index.ts",
+        "tsConfig": "packages/query/tsconfig.lib.json",
+        "assets": ["packages/query/*.md"]
+      }
+    },
+    "version": {
+      "executor": "nx:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": ["scripts/version-packages.sh query packages/query"]
+      }
+    },
+    "version-prerelease": {
+      "executor": "nx:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": [
+          "scripts/version-packages.sh query packages/query @adhd -prerelease"
+        ]
+      }
+    },
+    "publish": {
+      "dependsOn": ["^version"],
+      "executor": "nx:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": [
+          "echo 'Running npm publish dry run'",
+          "npm publish --dry-run dist/packages/query"
+        ]
+      },
+      "configurations": {
+        "production": {
+          "parallel": false,
+          "commands": ["npm publish dist/packages/query"]
+        }
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  }
 }

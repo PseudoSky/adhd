@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-empty-function */
 import {
+  isArray,
+  isDate,
+  isDefined,
+  isEmpty,
   isEqual,
   isFalse,
   isFloat,
@@ -12,25 +16,21 @@ import {
   isLessThan,
   isLessThanOrEqual,
   isLike,
+  isNotEqual,
   isNotILike,
   isNotIn,
   isNotLike,
   isNotShallowEqual,
   isNull,
+  isNumber,
   isObject,
   isRegExp,
   isShallowEqual,
+  isString,
   isTrue,
+  isType,
   isUndefined,
   isValue,
-  isArray,
-  isDate,
-  isDefined,
-  isEmpty,
-  isNumber,
-  isString,
-  isType,
-  isNotEqual,
 } from './filters';
 
 describe('ts', () => {
@@ -44,7 +44,7 @@ describe('ts', () => {
       expect(isEqual(2, 42)).toBe(false);
       expect(isEqual('ello', 'hello')).toBe(false);
       expect(isEqual('', new Date())).toBe(false);
-      expect(isEqual({a:1}, {})).toBe(false);
+      expect(isEqual({ a: 1 }, {})).toBe(false);
       expect(isEqual([1], [])).toBe(false);
       expect(isEqual([], {})).toBe(false);
       expect(isEqual({}, [])).toBe(false);
@@ -60,7 +60,7 @@ describe('ts', () => {
       expect(isNotEqual(2, 42)).toBe(true);
       expect(isNotEqual('ello', 'hello')).toBe(true);
       expect(isNotEqual('', new Date())).toBe(true);
-      expect(isNotEqual({a:1}, {})).toBe(true);
+      expect(isNotEqual({ a: 1 }, {})).toBe(true);
       expect(isNotEqual([1], [])).toBe(true);
       expect(isNotEqual([], {})).toBe(true);
       expect(isNotEqual({}, [])).toBe(true);
@@ -89,7 +89,7 @@ describe('ts', () => {
 
   describe('isFunction', () => {
     it('should correctly identify function values', () => {
-      expect(isFunction(() => {})).toBe(true);
+      expect(isFunction(() => { })).toBe(true);
       expect(isFunction(42)).toBe(false);
       expect(isFunction('hello')).toBe(false);
       expect(isFunction(new Date())).toBe(false);
@@ -278,7 +278,7 @@ describe('ts', () => {
       expect(isValue(new Date())).toBe(true);
       expect(isValue({})).toBe(false);
       expect(isValue([])).toBe(false);
-      expect(isValue(() => {})).toBe(false);
+      expect(isValue(() => { })).toBe(false);
       expect(isValue(/pattern/)).toBe(false);
       expect(isValue(null)).toBe(true);
       expect(isValue(undefined)).toBe(true);
@@ -293,7 +293,7 @@ describe('ts', () => {
       expect(isArray(new Date())).toBe(false);
       expect(isArray(null)).toBe(false);
       expect(isArray(undefined)).toBe(false);
-      expect(isArray(() => {})).toBe(false);
+      expect(isArray(() => { })).toBe(false);
       expect(isArray(/pattern/)).toBe(false);
     });
   });
@@ -307,7 +307,7 @@ describe('ts', () => {
       expect(isDate(null)).toBe(false);
       expect(isDate(undefined)).toBe(false);
       expect(isDate([])).toBe(false);
-      expect(isDate(() => {})).toBe(false);
+      expect(isDate(() => { })).toBe(false);
       expect(isDate(/pattern/)).toBe(false);
     });
   });
@@ -319,7 +319,7 @@ describe('ts', () => {
       expect(isDefined(new Date())).toBe(true);
       expect(isDefined({})).toBe(true);
       expect(isDefined([])).toBe(true);
-      expect(isDefined(() => {})).toBe(true);
+      expect(isDefined(() => { })).toBe(true);
       expect(isDefined(/pattern/)).toBe(true);
       expect(isDefined(null)).toBe(false);
       expect(isDefined(undefined)).toBe(false);
@@ -335,7 +335,7 @@ describe('ts', () => {
       expect(isEmpty(new Date())).toBe(false);
       expect(isEmpty(null)).toBe(true);
       expect(isEmpty(undefined)).toBe(true);
-      expect(isEmpty(() => {})).toBe(false);
+      expect(isEmpty(() => { })).toBe(false);
       expect(isEmpty(/pattern/)).toBe(false);
     });
   });
@@ -348,7 +348,7 @@ describe('ts', () => {
       expect(isType(undefined, 'Undefined')).toBe(true);
       expect(isType([], 'Array')).toBe(true);
       expect(isType({}, 'Object')).toBe(true);
-      expect(isType(() => {}, 'Function')).toBe(true);
+      expect(isType(() => { }, 'Function')).toBe(true);
       expect(isType(/pattern/, 'RegExp')).toBe(true);
     });
 
@@ -360,7 +360,7 @@ describe('ts', () => {
       expect(isType({}, 'Array')).toBe(false);
       expect(isType([], 'Object')).toBe(false);
       expect(isType(42, 'Function')).toBe(false);
-      expect(isType(() => {}, 'RegExp')).toBe(false);
+      expect(isType(() => { }, 'RegExp')).toBe(false);
     });
   });
 
@@ -373,7 +373,7 @@ describe('ts', () => {
       expect(isString(undefined)).toBe(false);
       expect(isString([])).toBe(false);
       expect(isString({})).toBe(false);
-      expect(isString(() => {})).toBe(false);
+      expect(isString(() => { })).toBe(false);
       expect(isString(/pattern/)).toBe(false);
     });
   });
@@ -387,46 +387,46 @@ describe('ts', () => {
       expect(isNumber(undefined)).toBe(false);
       expect(isNumber([])).toBe(false);
       expect(isNumber({})).toBe(false);
-      expect(isNumber(() => {})).toBe(false);
+      expect(isNumber(() => { })).toBe(false);
       expect(isNumber(/pattern/)).toBe(false);
     });
   });
   // describe('filters', () => {
-    // expect(isArray(undefined)).toEqual(false)
-    // expect(isDate(undefined)).toEqual(false)
-    // expect(isDefined(undefined)).toEqual(false)
-    // expect(isEmpty(9)).toEqual(false)
-    // expect(isEmpty(undefined)).toEqual(true);
-    // expect(isEqual(undefined, 1)).toEqual(false)
-    // expect(isFalse(undefined)).toEqual(false)
-    // expect(isFunction(undefined)).toEqual(false)
-    // expect(isGreaterThan(0,0)).toEqual(false)
-    // expect(isGreaterThanOrEqual(-1,1)).toEqual(false)
-    // expect(isILike('a', 'A')).toEqual(true)
-    // expect(isNotILike('a', 'A')).toEqual(false);
-    // expect(isLike('a', 'A')).toEqual(false);
-    // expect(isNotLike('a', 'a')).toEqual(false);
-    // expect(isIn("a", "aaa")).toEqual(true)
-    // expect(isNotIn("a", ["A"])).toEqual(true)
-    // expect(isInt(undefined)).toEqual(false)
-    // expect(isLessThan(1,0)).toEqual(false)
-    // expect(isLessThanOrEqual(1,0)).toEqual(false)
-    // expect(isNotShallowEqual(undefined, undefined)).toEqual(false)
-    // expect(isNull(undefined)).toEqual(false)
-    // expect(isNumber(undefined)).toEqual(false)
-    // expect(isObject(undefined)).toEqual(false)
-    // expect(isRegExp(undefined)).toEqual(false)
-    // expect(isShallowEqual(undefined, 1)).toEqual(false)
-    // expect(isString(undefined)).toEqual(false)
-    // expect(isTrue(undefined)).toEqual(false)
-    // expect(isType("a", "string")).toEqual(false)
-    // expect(isUndefined(9)).toEqual(false)
-    // expect(isValue(undefined)).toEqual(true)
-    // expect(isValue({})).toEqual(false)
-    // expect(isValue(() => null)).toEqual(false)
-    // expect(isFloat(undefined)).toEqual(false)
-    // expect(isFloat(9.1)).toEqual(true)
-    // expect(isFloat(9)).toEqual(false)
-    // expect(isFloat(9.0)).toEqual(false)
+  // expect(isArray(undefined)).toEqual(false)
+  // expect(isDate(undefined)).toEqual(false)
+  // expect(isDefined(undefined)).toEqual(false)
+  // expect(isEmpty(9)).toEqual(false)
+  // expect(isEmpty(undefined)).toEqual(true);
+  // expect(isEqual(undefined, 1)).toEqual(false)
+  // expect(isFalse(undefined)).toEqual(false)
+  // expect(isFunction(undefined)).toEqual(false)
+  // expect(isGreaterThan(0,0)).toEqual(false)
+  // expect(isGreaterThanOrEqual(-1,1)).toEqual(false)
+  // expect(isILike('a', 'A')).toEqual(true)
+  // expect(isNotILike('a', 'A')).toEqual(false);
+  // expect(isLike('a', 'A')).toEqual(false);
+  // expect(isNotLike('a', 'a')).toEqual(false);
+  // expect(isIn("a", "aaa")).toEqual(true)
+  // expect(isNotIn("a", ["A"])).toEqual(true)
+  // expect(isInt(undefined)).toEqual(false)
+  // expect(isLessThan(1,0)).toEqual(false)
+  // expect(isLessThanOrEqual(1,0)).toEqual(false)
+  // expect(isNotShallowEqual(undefined, undefined)).toEqual(false)
+  // expect(isNull(undefined)).toEqual(false)
+  // expect(isNumber(undefined)).toEqual(false)
+  // expect(isObject(undefined)).toEqual(false)
+  // expect(isRegExp(undefined)).toEqual(false)
+  // expect(isShallowEqual(undefined, 1)).toEqual(false)
+  // expect(isString(undefined)).toEqual(false)
+  // expect(isTrue(undefined)).toEqual(false)
+  // expect(isType("a", "string")).toEqual(false)
+  // expect(isUndefined(9)).toEqual(false)
+  // expect(isValue(undefined)).toEqual(true)
+  // expect(isValue({})).toEqual(false)
+  // expect(isValue(() => null)).toEqual(false)
+  // expect(isFloat(undefined)).toEqual(false)
+  // expect(isFloat(9.1)).toEqual(true)
+  // expect(isFloat(9)).toEqual(false)
+  // expect(isFloat(9.0)).toEqual(false)
   // });
 });

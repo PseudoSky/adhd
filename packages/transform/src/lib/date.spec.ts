@@ -6,20 +6,20 @@ import {
     timeInMS,
 } from './date';
 
-const stubDate= new Date(2000, 1, 1, 1,0,0,0)
+const stubDate = new Date(2000, 1, 1, 1, 0, 0, 0)
 const realDateNow = Date.now.bind(global.Date);
 describe('dates', () => {
     beforeEach(() => {
         // tell vitest we use mocked time
         vi.useFakeTimers()
         vi.setSystemTime(stubDate)
-      })
-    
-      afterEach(() => {
+    })
+
+    afterEach(() => {
         // restoring date after each test run
         vi.useRealTimers()
 
-      })
+    })
     it('format date', () => {
         expect(formatDate(new Date(), 'EEEE, MMMM d, yyyy hh:mm:ss:S')).toBe("Tuesday, February 1, 2000 01:00:00:0")
         expect(formatDate(new Date(), 'EEE, MMM d, yyyy hh:mm')).toBe("Tue, Feb 1, 2000 01:00")
@@ -28,7 +28,7 @@ describe('dates', () => {
     });
     it('fromNow', () => {
         vi.setSystemTime(stubDate)
-        expect(fromNow(20, "day")).toMatchObject(new Date(2000, 1, 21, 1,0,0,0))
+        expect(fromNow(20, "day")).toMatchObject(new Date(2000, 1, 21, 1, 0, 0, 0))
     });
     it('humanDuration', () => {
         expect(humanDuration(new Date(), fromNow(20, "day"))).toMatchObject({

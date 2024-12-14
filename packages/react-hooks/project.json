@@ -14,12 +14,12 @@
   "tags": ["base"],
   "targets": {
     "build": {
+      "cache": false,
       "executor": "@nx/vite:build",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/packages/react-hooks",
         "main": "packages/react-hooks/src/index.ts",
-        "generatePackageJson": true,
         "tsConfig": "packages/react-hooks/tsconfig.lib.json",
         "assets": ["packages/react-hooks/*.md"]
       }
@@ -27,39 +27,37 @@
     "version": {
       "executor": "nx:run-commands",
       "options": {
-          "parallel": false,
-          "commands": [
-              "scripts/version-packages.sh react-hooks packages/react-hooks"
-          ]
+        "parallel": false,
+        "commands": [
+          "scripts/version-packages.sh react-hooks packages/react-hooks"
+        ]
       }
-  },
-  "version-prerelease": {
+    },
+    "version-prerelease": {
       "executor": "nx:run-commands",
       "options": {
-          "parallel": false,
-          "commands": [
-              "scripts/version-packages.sh react-hooks packages/react-hooks @adhd -prerelease"
-          ]
+        "parallel": false,
+        "commands": [
+          "scripts/version-packages.sh react-hooks packages/react-hooks @adhd -prerelease"
+        ]
       }
-  },
-  "publish": {
+    },
+    "publish": {
       "executor": "nx:run-commands",
       "options": {
-          "parallel": false,
-          "commands": [
-              "echo 'Running npm publish dry run'",
-              "npm publish --dry-run dist/packages/react-hooks"
-          ]
+        "parallel": false,
+        "commands": [
+          "echo 'Running npm publish dry run'",
+          "npm publish --dry-run dist/packages/react-hooks"
+        ]
       },
       "configurations": {
-          "production": {
-              "parallel": false,
-              "commands": [
-                  "npm publish dist/packages/react-hooks"
-              ]
-          }
+        "production": {
+          "parallel": false,
+          "commands": ["npm publish dist/packages/react-hooks"]
+        }
       }
-  },
+    },
     "nx-release-publish": {
       "options": {
         "packageRoot": "dist/{projectRoot}"
