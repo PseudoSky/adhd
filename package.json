@@ -6,7 +6,7 @@
     "watch:test": "`yarn bin`/vitest watch --changed",
     "watch": "nx run-many --targets=build --configuration=development --all --watch",
     "build": "nx run-many --targets=build --configuration=production --all",
-    "release": "yarn build && yarn release",
+    "release": "yarn build && yarn nx release",
     "version:old": "nx run-many --targets=version --configuration=production",
     "publish:old": "nx run-many --targets=publish --configuration=production",
     "list": "nx show projects --affected",
