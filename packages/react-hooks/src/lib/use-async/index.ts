@@ -13,33 +13,21 @@ export interface UseAsyncOptions<Variables, T> {
     onError?: (error: Error) => void;
     variables?: Variables;
 }
+
 type AsyncNoProps<Data> = () => Data;
 type AsyncWithProps<Props extends unknown[], Data> = (...args: Props) => Data
 type AsyncFunc<Props extends unknown[], Data> = AsyncWithProps<Props, Data> | AsyncNoProps<Data>
-// const wrap = <CallbackArgs extends unknown[], CallbackResults>(
-//     wrappedFunction: ((...args: CallbackArgs) => CallbackResults) //| ((...args: CallbackArgs) => Promise<CallbackResults>)
-// ): (...args: CallbackArgs) => CallbackResults | undefined => {
-//     return (...args: CallbackArgs) => {
-//         try { return wrappedFunction(...args); }
-//         catch { return undefined; }
-//     }
-// };
 
-type AsyncFunction<T extends any[], U> = <T extends any[], U>(fn: (...args: T) => Promise<U>) => (...args: T) => Promise<U>;
-
-// type Callback = <Fn extends AsyncFunction <infer T, infer U>>(fn: FN) => U
 export function useAsync<T extends AsyncFunc<any[], any>, Props extends Parameters<T>, Data extends ReturnType<T>>(
     asyncFunction: AsyncWithProps<Props, Data> | AsyncNoProps<Data>,
     options: UseAsyncOptions<Props, Data> = {}
 ) {
-    // const callback = useCallback(wrap(asyncFunction), [asyncFunction]);
+
     const [state, setState] = useState<AsyncState<Data>>({
         status: 'idle',
         data: undefined,
         error: undefined
     });
-
-
 
     const execute = useCallback(async (...args: Props) => {
         setState({ status: 'pending', data: undefined, error: undefined });

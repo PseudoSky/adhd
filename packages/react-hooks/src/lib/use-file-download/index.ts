@@ -136,22 +136,6 @@ export const useFileDownload = ({
         }
     }, [options]);
 
-    // const processLargeData = useCallback(async (data: any[], fileType: FileType): Promise<Blob> => {
-    //     const chunks: any[][] = [];
-    //     for (let i = 0; i < data.length; i += CHUNK_SIZE) {
-    //         chunks.push(data.slice(i, i + CHUNK_SIZE));
-    //         const progress = Math.round((i / data.length) * 100);
-    //         setDownloadState(prev => ({ ...prev, progress }));
-    //         options.onProgress?.(progress);
-    //     }
-
-    //     const processedChunks = await Promise.all(
-    //         chunks.map(chunk => processChunk(chunk, fileType))
-    //     );
-
-    //     return new Blob(processedChunks, { type: processedChunks[0].type });
-    // }, [processChunk, options]);
-
     const convertToCSV = useCallback((data: any[], csvOptions?: FileDownloadOptions['csv']): string => {
         if (!Array.isArray(data) || !data.length) return '';
 
