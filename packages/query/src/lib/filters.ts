@@ -1,5 +1,4 @@
-import _ from "@adhd/transform";
-
+import { Transform as _ } from "@adhd/transform";
 export const partialApply = (fn: ((...args: any[]) => any), ...cache: undefined[]) => (...args: any[]) => {
   const all = cache.concat(args);
   return all.length >= fn.length ? fn(...all) : partialApply(fn, ...all);
@@ -58,8 +57,8 @@ export const operators: Record<string, FilterPartial> = {
   _contained_in: partialApply(isContainedIn),
   _has_key: partialApply(hasKey),
   _has_keys_any: partialApply(hasKeysAny),
-  _is_null: partialApply(isNull),
   _has_keys_all: partialApply(hasKeysAll),
+  _is_null: partialApply(isNull),
 };
 
 export const logicalOperators: Record<string, FilterPartial> = {
