@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { compressBlob } from './compression';
 import { encryptBlob } from './encryption';
-
 export type FileType = 'json' | 'csv' | 'excel';
 
 export interface ValidationOptions {
@@ -110,7 +109,8 @@ export const useFileDownload = ({
             const workerInstance = new Worker(new URL('./worker.ts', import.meta.url));
 
             // Set up message handler
-            workerInstance.onmessage = (event) => {
+            // WorkerMessage from worker is typed different
+            workerInstance.onmessage = (event: MessageEvent<any>) => {
                 const { status, progress, result, error } = event.data;
 
                 if (status === 'progress') {

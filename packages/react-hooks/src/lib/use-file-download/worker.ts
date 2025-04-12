@@ -1,6 +1,6 @@
 // download.worker.ts
 
-interface WorkerMessage {
+export type WorkerMessage = {
     data: any[];
     fileType: 'json' | 'csv' | 'excel';
     options: any;
@@ -131,5 +131,5 @@ function combineChunks(chunks: any[], fileType: 'json' | 'csv' | 'excel') {
 }
 
 // Required for TypeScript to recognize this as a module
-export { };
+// export { };
 
