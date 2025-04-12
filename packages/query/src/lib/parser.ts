@@ -1,4 +1,4 @@
-import _ from '@adhd/transform';
+import { Transform as _ } from '@adhd/transform';
 import { BooleanExpression, OrderByExpression } from "./expressions";
 import { operators } from './filters';
 import { OrderByOperation } from "./operators";

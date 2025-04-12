@@ -10,8 +10,7 @@ export const Stats = _Stats;
 export const Collections = _Collections;
 export const Filters = _Filters;
 export const Texts = _Texts;
-
-export default {
+export const Transform = {
   ..._Functions,
   ..._Objects,
   ..._Stats,
@@ -19,3 +18,11 @@ export default {
   ..._Filters,
   ..._Texts,
 };
+// export default {
+//   ..._Functions,
+//   ..._Objects,
+//   ..._Stats,
+//   ..._Collections,
+//   ..._Filters,
+//   ..._Texts,
+// };

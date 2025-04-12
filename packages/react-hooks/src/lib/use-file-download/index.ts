@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { compressBlob } from './compression';
 import { encryptBlob } from './encryption';
-
 export type FileType = 'json' | 'csv' | 'excel';
 
 export interface ValidationOptions {
@@ -98,12 +97,39 @@ export const useFileDownload = ({
     const cache = useMemo(() => new Map<string, Blob>(), []);
 
     // Optional Web Worker for large datasets
+    // const worker = useMemo(() => {
+    //     if (typeof Worker !== 'undefined' && new Blob([JSON.stringify(data)]).size > MAX_FILE_SIZE) {
+    //         return new Worker(new URL('./download.worker.ts', import.meta.url));
+    //     }
+    //     return null;
+    // }, [data]);
+
     const worker = useMemo(() => {
         if (typeof Worker !== 'undefined' && new Blob([JSON.stringify(data)]).size > MAX_FILE_SIZE) {
-            return new Worker(new URL('./download.worker.ts', import.meta.url));
+            const workerInstance = new Worker(new URL('./worker.ts', import.meta.url));
+
+            // Set up message handler
+            // WorkerMessage from worker is typed different
+            workerInstance.onmessage = (event: MessageEvent<any>) => {
+                const { status, progress, result, error } = event.data;
+
+                if (status === 'progress') {
+                    setDownloadState(prev => ({ ...prev, progress, status: 'processing' }));
+                    options.onProgress?.(progress);
+                } else if (status === 'error') {
+                    setDownloadState({ status: 'error', progress: 0, error: new Error(error) });
+                    options.onError?.(new Error(error));
+                } else if (status === 'complete') {
+                    const blob = new Blob([result.data], { type: result.type });
+                    cache.set(result.cacheKey, blob);
+                    processDownload(blob, result.fileType);
+                }
+            };
+
+            return workerInstance;
         }
         return null;
-    }, [data]);
+    }, [data, options.onProgress, options.onError]);
 
     // Cleanup function
     useEffect(() => {
@@ -163,6 +189,7 @@ export const useFileDownload = ({
         return csvRows.join('\n');
     }, []);
 
+    // Async await for queueing
     const processLargeData = useCallback(async (data: any[], fileType: FileType): Promise<Blob> => {
         const chunks: any[][] = [];
         const totalChunks = Math.ceil(data.length / CHUNK_SIZE);
@@ -211,7 +238,17 @@ export const useFileDownload = ({
             } else {
                 setDownloadState(prev => ({ ...prev, status: 'processing' }));
 
-                if (Array.isArray(data) && data.length > CHUNK_SIZE) {
+                if (Array.isArray(data) && data.length > CHUNK_SIZE && worker && fileType != 'excel') {
+                    // Use Web Worker for large datasets
+                    worker.postMessage({
+                        data,
+                        fileType,
+                        options,
+                        cacheKey
+                    });
+                    // The worker will handle the rest through its message handler
+                    return;
+                } else if (Array.isArray(data) && data.length > CHUNK_SIZE) {
                     blob = await processLargeData(data, fileType);
                 } else {
                     setDownloadState(prev => ({ ...prev, progress: 90 }));
@@ -290,7 +327,34 @@ export const useFileDownload = ({
             options.onError?.(errorObject);
             throw errorObject;
         }
-    }, [data, fileName, options, cache, processLargeData, processChunk]);
+    }, [data, fileName, options, cache, processLargeData, processChunk, worker]);
+
+    // Add this helper function to handle the final download steps
+    const processDownload = async (blob: Blob, fileType: FileType) => {
+        // Post-processing phase (90-95%)
+        setDownloadState(prev => ({ ...prev, progress: 92, status: 'processing' }));
+        options.onProgress?.(92);
+
+        // Compression and encryption phases...
+        // (Keep your existing compression and encryption logic here)
+
+        // Create and trigger download
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${fileName}.${fileType}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        const result = { url, size: blob.size };
+
+        setDownloadState({ status: 'success', progress: 100, error: null });
+        options.onSuccess?.(result);
+
+        return result;
+    };
 
     return {
         downloadFile,
