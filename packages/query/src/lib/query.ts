@@ -1,4 +1,4 @@
-import _ from '@adhd/transform';
+import { Transform as _ } from '@adhd/transform';
 import { OrderByExpression, QueryExpression } from './expressions';
 import { parseOrderBy, parseWhere } from './parser';
 
@@ -118,8 +118,8 @@ export class Query implements QueryType {
 }
 
 export class DataView {
-  data?: any[];
-  dataview: any;
+  data: any[] = [];
+  dataview: any[] = [];
   query: Query;
   dirty: any;
   logging: boolean;
