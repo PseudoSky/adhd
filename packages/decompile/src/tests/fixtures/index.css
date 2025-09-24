@@ -1,0 +1,34 @@
+cloudflare-app[app="tibrr-cookie-consent"] {
+  position: fixed;
+  font-size: 1.2em;
+  width: 100%;
+  left: 0;
+}
+cloudflare-app[app="tibrr-cookie-consent"] > .tibrr-cookie-consent-container {
+  display: -webkit-flex;
+    display: flex;
+  padding: 0.5em;
+  -webkit-justify-content: space-between;
+    justify-content: space-between;
+    -webkit-align-items: center;
+    align-items: center;
+    -webkit-flex-wrap: nowrap;
+    flex-wrap: nowrap;
+}
+cloudflare-app[app="tibrr-cookie-consent"] > .tibrr-cookie-consent-container > div {
+  margin: 0.5em;
+}
+cloudflare-app[app="tibrr-cookie-consent"] > .tibrr-cookie-consent-container > .tibrr-cookie-consent-text {
+  text-align: center;
+}
+cloudflare-app[app="tibrr-cookie-consent"] > .tibrr-cookie-consent-container > .tibrr-cookie-consent-button {
+  text-align: right;
+}
+cloudflare-app[app="tibrr-cookie-consent"] > .tibrr-cookie-consent-container > .tibrr-cookie-consent-button > button {
+  border-radius: 0.5em;
+  border: 0.05em solid;
+  padding: 0.4em 1em;
+}
+cloudflare-app[app="tibrr-cookie-consent"] > .tibrr-cookie-consent-container > .tibrr-cookie-consent-button > button:hover {
+  cursor: pointer;
+}
