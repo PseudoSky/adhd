@@ -111,7 +111,7 @@ export function reverseSort(a: number, b: number) {
 }
 
 export function first(arr: any[]) { return arr[0] }
-export function last(arr: string | any[]) { return arr[arr.length - 1] }
+export function last(arr: any[]) { return arr[arr.length - 1] }
 
 export function sortByProp<T, P extends keyof T>(arr: T[], prop: P, cmp: ComparisonFunction<T[P]> = defaultSort) {
   // REF: Performance
