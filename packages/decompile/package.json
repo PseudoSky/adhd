@@ -1,0 +1,11 @@
+{
+  "name": "@adhd/decompile",
+  "version": "0.0.1",
+  "bin": "./src/decompile.js",
+  "type": "module",
+  "scripts": {
+    "build": "nx run decompile:build",
+    "watch": "nx run decompile:build --watch",
+    "cli": "node dist/packages/decompile"
+  }
+}

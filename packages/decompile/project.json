@@ -1,0 +1,35 @@
+{
+  "name": "decompile",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/decompile/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["cli"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "updateBuildableProjectDepsInPackageJson": true,
+      "buildableProjectDepsInPackageJsonType": "dependencies",
+      "options": {
+        "outputPath": "dist/packages/decompile",
+        "tsConfig": "packages/decompile/tsconfig.lib.json",
+        "packageJson": "packages/decompile/package.json",
+        "main": "packages/decompile/src/index.ts",
+        "assets": ["packages/decompile/*.md"]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  }
+}

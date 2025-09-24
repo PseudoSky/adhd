@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charSet="utf-8"/>
+        <meta http-equiv="x-ua-compatible" content="ie=edge"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"/>
+        <script src="/cdn-cgi/apps/head/lANqeCq2qzIi3jFmmZcjSS1WPqo.js"></script>
+        <style data-href="/app.931db9d8e20231e7d284.css">
+            code[class*=language-],pre[class*=language-] {
+                color: #000;
+                background: none;
+                text-shadow: 0 1px #fff;
+                font-family: Consolas,Monaco,Andale Mono,Ubuntu Mono,monospace;
+                text-align: left;
+                white-space: pre;
+                word-spacing: normal;
+                word-break: normal;
+                word-wrap: normal;
+                line-height: 1.5;
+                -moz-tab-size: 4;
+                -o-tab-size: 4;
+                tab-size: 4;
+                -webkit-hyphens: none;
+                -ms-hyphens: none;
+                hyphens: none
+            }
+
+            code[class*=language-]::-moz-selection,code[class*=language-] ::-moz-selection,pre[class*=language-]::-moz-selection,pre[class*=language-] ::-moz-selection {
+                text-shadow: none;
+                background: #b3d4fc
+            }
+
+            code[class*=language-]::selection,code[class*=language-] ::selection,pre[class*=language-]::selection,pre[class*=language-] ::selection {
+                text-shadow: none;
+                background: #b3d4fc
+            }
+
+            @media print {
+                code[class*=language-],pre[class*=language-] {
+                    text-shadow: none
+                }
+            }
+
+            pre[class*=language-] {
+                padding: 1em;
+                margin: .5em 0;
+                overflow: auto
+            }
+
+            :not(pre)>code[class*=language-],pre[class*=language-] {
+                background: #f5f2f0
+            }
+
+            :not(pre)>code[class*=language-] {
+                padding: .1em;
+                border-radius: .3em;
+                white-space: normal
+            }
+
+            .token.cdata,.token.comment,.token.doctype,.token.prolog {
+                color: #708090
+            }
+
+            .token.punctuation {
+                color: #999
+            }
+
+            .namespace {
+                opacity: .7
+            }
+
+            .token.boolean,.token.constant,.token.deleted,.token.number,.token.property,.token.symbol,.token.tag {
+                color: #905
+            }
+
+            .token.attr-name,.token.builtin,.token.char,.token.inserted,.token.selector,.token.string {
+                color: #690
+            }
+
+            .language-css .token.string,.style .token.string,.token.entity,.token.operator,.token.url {
+                color: #9a6e3a;
+                background: hsla(0,0%,100%,.5)
+            }
+
+            .token.atrule,.token.attr-value,.token.keyword {
+                color: #07a
+            }
+
+            .token.class-name,.token.function {
+                color: #dd4a68
+            }
+
+            .token.important,.token.regex,.token.variable {
+                color: #e90
+            }
+
+            .token.bold,.token.important {
+                font-weight: 700
+            }
+
+            .token.italic {
+                font-style: italic
+            }
+
+            .token.entity {
+                cursor: help
+            }
+
+            html {
+                font-size: 100
+            }
+
+            body {
+                color: #222;
+                line-height: 1.625;
+                font-size: 1rem;
+                -ms-text-size-adjust: 100%;
+                -webkit-text-size-adjust: 100%;
+                text-rendering: optimizeLegibility;
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale
+            }
+
+            body,h1,h2,h3,h4,h5,h6 {
+                font-family: -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,sans-serif
+            }
+
+            h1,h2,h3,h4,h5,h6 {
+                font-weight: 600
+            }
+
+            h1 {
+                font-size: 2.5rem;
+                line-height: 3.25rem;
+                margin-top: 6.5rem;
+                margin-bottom: 1.625rem
+            }
+
+            h2 {
+                font-size: 1.6875rem;
+                line-height: 2.4375rem
+            }
+
+            h2,h3 {
+                margin-top: 3.25rem;
+                margin-bottom: .8125rem
+            }
+
+            h3 {
+                font-size: 1.375rem;
+                line-height: 1.625rem
+            }
+
+            h4 {
+                font-size: 1.2rem;
+                margin-top: 2.4375rem
+            }
+
+            h4,h5 {
+                line-height: 1.625rem;
+                margin-bottom: .8125rem
+            }
+
+            h5,h6 {
+                font-size: 1rem;
+                margin-top: 4.0625rem
+            }
+
+            h6 {
+                line-height: 1.625rem;
+                margin-bottom: .8125rem
+            }
+
+            img {
+                max-width: 100%;
+                margin: inherit auto
+            }
+
+            hr,img {
+                border: 0;
+                display: block
+            }
+
+            hr {
+                color: #222;
+                height: 26px;
+                margin: 3.25rem auto;
+                background-size: 100% 26px;
+                background-image: linear-gradient(180deg,transparent 1px,transparent 11px,#222 0,#222 15px,transparent 0,transparent 26px);
+                width: 6.25rem
+            }
+
+            a {
+                color: #5d93ff;
+                text-decoration: none
+            }
+
+            a:active,a:focus,a:hover {
+                color: #f7a046
+            }
+
+            b,strong {
+                font-weight: 600
+            }
+
+            ul {
+                list-style: square;
+                margin-bottom: 1.625rem
+            }
+
+            ul li {
+                padding: 0 .3125rem;
+                margin-bottom: .625rem
+            }
+
+            p {
+                line-height: 1.625rem;
+                margin-bottom: 1.625rem
+            }
+
+            blockquote {
+                padding: 0;
+                font-style: italic;
+                text-align: center
+            }
+
+            figure {
+                display: block;
+                width: 100%;
+                height: auto
+            }
+
+            figcaption {
+                line-height: 1.21875rem;
+                margin-top: .40625rem;
+                color: #222;
+                font-size: .875rem;
+                font-style: italic;
+                margin-bottom: 0;
+                text-align: center
+            }
+
+            @media screen and (min-width: 685px) {
+                figure.float-left,figure.float-right {
+                    max-width:19.375rem;
+                    padding: 0 1.625rem
+                }
+
+                .float-right {
+                    float: right
+                }
+
+                .float-left {
+                    float: left
+                }
+            }
+        </style>
+        <style data-href="/component---src-templates-post-template-js.d3e6fa11b59aff36822c.css">
+            .Layout-module--layout--3Pyz6 {
+                max-width: 66.875rem;
+                margin-left: auto;
+                margin-right: auto
+            }
+
+            .Layout-module--layout--3Pyz6:before {
+                content: "";
+                display: table
+            }
+
+            .Layout-module--layout--3Pyz6:after {
+                content: "";
+                display: table;
+                clear: both
+            }
+
+            .Content-module--content--3p512 {
+                max-width: 59.0625rem;
+                padding: 0 .9375rem;
+                margin: 0 auto
+            }
+
+            .Content-module--content--3p512 iframe {
+                margin: auto;
+                display: block
+            }
+
+            .Content-module--content__title--2BDW9 {
+                font-size: 1.5rem;
+                max-width: 55.625rem;
+                font-weight: 600;
+                text-align: center;
+                line-height: 2.1125rem;
+                margin: 1.625rem auto 0
+            }
+
+            .Content-module--content__body--2TrQ- figure {
+                margin-bottom: 1.625rem
+            }
+
+            .Content-module--content__body--2TrQ- figure blockquote {
+                font-style: italic;
+                text-align: center;
+                margin-top: 0;
+                padding: 1.625rem 0
+            }
+
+            .Content-module--content__body--2TrQ- figure blockquote p {
+                max-width: 55.625rem;
+                font-size: 1.6817rem;
+                margin-top: 0;
+                margin-bottom: 1.625rem;
+                line-height: 2.4375rem
+            }
+
+            .Content-module--content__body--2TrQ- a {
+                text-decoration: underline
+            }
+
+            .Content-module--content__body--2TrQ- .Content-module--gatsby-highlight--2GXS_ {
+                max-width: 55.625rem;
+                margin-left: .9375rem;
+                margin-right: .9375rem;
+                margin-bottom: 1.625rem
+            }
+
+            .Content-module--content__body--2TrQ- :not(div):not(iframe):not(img):not(th):not(td) {
+                width: 100%;
+                max-width: 55.625rem;
+                margin-left: auto;
+                margin-right: auto
+            }
+
+            .Content-module--content__body--2TrQ- table,.Content-module--content__body--2TrQ- td,.Content-module--content__body--2TrQ- th {
+                border: 1px solid #e6e6e6
+            }
+
+            .Content-module--content__body--2TrQ- table {
+                border-spacing: 0;
+                border-right-width: 0;
+                border-bottom-width: 0
+            }
+
+            .Content-module--content__body--2TrQ- td,.Content-module--content__body--2TrQ- th {
+                padding: .40625rem;
+                border-left-width: 0;
+                border-top-width: 0
+            }
+
+            .Content-module--content__body--2TrQ- th {
+                background: #e6e6e6
+            }
+
+            .Content-module--content__body--2TrQ- img {
+                margin: 0 auto;
+                max-width: 100%
+            }
+
+            @media screen and (min-width: 685px) {
+                .Content-module--content__body--2TrQ- .Content-module--gatsby-highlight--2GXS_ {
+                    margin-left:auto;
+                    margin-right: auto
+                }
+            }
+
+            @media screen and (min-width: 960px) {
+                .Content-module--content--3p512 {
+                    padding:0
+                }
+
+                .Content-module--content__title--2BDW9 {
+                    font-size: 2rem;
+                    line-height: 3.65625rem;
+                    margin-top: 3.65625rem;
+                    margin-bottom: 2.4375rem
+                }
+
+                .Content-module--content__body--2TrQ-,.Content-module--content__body--2TrQ- p {
+                    font-size: 1.125rem;
+                    line-height: 1.82813rem;
+                    margin-bottom: 1.82813rem
+                }
+            }
+
+            .gatsby-highlight {
+                font-size: 1rem;
+                margin-left: auto;
+                margin-right: auto;
+                margin-bottom: 1.625rem
+            }
+
+            .RelatedPosts-module--related--1s5ZI {
+                max-width: 59.0625rem;
+                font-size: 1rem;
+                padding: 0 .9375rem;
+                margin: 0 auto 2.4375rem
+            }
+
+            @media screen and (min-width: 960px) {
+                .RelatedPosts-module--related--1s5ZI {
+                    font-size:1.125rem;
+                    line-height: 1.82813rem
+                }
+
+                .RelatedPosts-module--related--1s5ZI :not(div) {
+                    width: 100%;
+                    max-width: 55.625rem;
+                    margin-left: auto;
+                    margin-right: auto
+                }
+            }
+
+            .Meta-module--meta__date--29eD7 {
+                font-style: italic
+            }
+
+            .Tags-module--tags--1L_ct {
+                margin-bottom: .8125rem
+            }
+
+            .Tags-module--tags__list--91FqN {
+                list-style: none;
+                margin: 0 -.625rem;
+                padding: 0
+            }
+
+            .Tags-module--tags__list-item--1M30P {
+                display: inline-block;
+                margin: .625rem .3125rem
+            }
+
+            .Tags-module--tags__list-item-link--3SL_8 {
+                display: inline-block;
+                height: 35px;
+                padding: 0 1.5rem;
+                line-height: 2.1875rem;
+                border: 1px solid #e6e6e6;
+                text-decoration: none;
+                border-radius: 1.25rem;
+                color: #222
+            }
+
+            .Tags-module--tags__list-item-link--3SL_8:focus,.Tags-module--tags__list-item-link--3SL_8:hover {
+                color: #5d93ff
+            }
+
+            .Post-module--post__comments--25y6I,.Post-module--post__footer--3WzWU {
+                max-width: 55.625rem;
+                margin: 0 auto;
+                padding: 0 .9375rem
+            }
+
+            .Post-module--post__home-button--16Kl0 {
+                display: block;
+                max-width: 5.625rem;
+                height: 35px;
+                padding: 0 1.5rem;
+                line-height: 2.1875rem;
+                text-align: center;
+                color: #222;
+                border: 1px solid #e6e6e6;
+                border-radius: 1.25rem;
+                font-size: 1rem;
+                font-weight: 400;
+                margin-left: auto;
+                margin-right: auto;
+                margin-top: 1.625rem
+            }
+
+            .Post-module--post__home-button--16Kl0:focus,.Post-module--post__home-button--16Kl0:hover {
+                color: #5d93ff
+            }
+
+            @media screen and (min-width: 960px) {
+                .Post-module--post__comments--25y6I,.Post-module--post__footer--3WzWU {
+                    padding:0
+                }
+
+                .Post-module--post__home-button--16Kl0 {
+                    position: fixed;
+                    max-width: auto;
+                    margin: 0;
+                    top: 30px;
+                    left: 30px
+                }
+            }
+        </style>
+        <meta name="generator" content="Gatsby 2.0.111"/>
+        <link rel="alternate" type="application/rss+xml" href="/rss.xml"/>
+        <link rel="sitemap" type="application/xml" href="/sitemap.xml"/>
+        <link rel="shortcut icon" href="/icons/icon-48x48.png"/>
+        <link rel="manifest" href="/manifest.webmanifest"/>
+        <meta name="theme-color" content="#F7A046"/>
+        <link rel="apple-touch-icon" sizes="48x48" href="/icons/icon-48x48.png"/>
+        <link rel="apple-touch-icon" sizes="72x72" href="/icons/icon-72x72.png"/>
+        <link rel="apple-touch-icon" sizes="96x96" href="/icons/icon-96x96.png"/>
+        <link rel="apple-touch-icon" sizes="144x144" href="/icons/icon-144x144.png"/>
+        <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192x192.png"/>
+        <link rel="apple-touch-icon" sizes="256x256" href="/icons/icon-256x256.png"/>
+        <link rel="apple-touch-icon" sizes="384x384" href="/icons/icon-384x384.png"/>
+        <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512x512.png"/>
+        <link rel="canonical" href="https://blog.abelotech.com/posts/measure-execution-time-nodejs-javascript/" data-baseprotocol="https:" data-basehost="blog.abelotech.com"/>
+        <title data-react-helmet="true">Measurement of Node.js execution time - Tom &#x27;s Blog</title>
+        <meta data-react-helmet="true" name="description" content="The most accurate way of measuring functions execution time in Node.js"/>
+        <script data-react-helmet="true" async="" src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+        <script data-react-helmet="true">
+            (adsbygoogle = window.adsbygoogle || []).push({
+                google_ad_client: "ca-pub-2187341695280977",
+                enable_page_level_ads: true
+            });
+        </script>
+        <script data-react-helmet="true" type="application/ld+json">
+            {"@context":"https://schema.org","@type":"BlogPosting","datePublished":"2014-02-02T23:00+00:00","dateModified":"2018-08-01T10:00+00:00","headline":"In this post, I am sharing how to accurately measure code execution time in  Node.js . Measurement with Date…","wordCount":264,"mainEntityOfPage":"https://blog.abelotech.com/posts/measure-execution-time-nodejs-javascript/","image":["https://blog.abelotech.com/logo.png"],"author":{"@type":"Person","name":"Tom Pawlak"},"publisher":{"@type":"Organization","name":"Tom Pawlak","logo":{"@type":"ImageObject","url":"https://blog.abelotech.com/logo.png"}}}
+        </script>
+        <link as="script" rel="preload" href="/1-e67a55afbf198a0dfccc.js"/>
+        <link as="script" rel="preload" href="/component---src-templates-post-template-js-5149cb64367a1170c4a1.js"/>
+        <link as="script" rel="preload" href="/0-a3596e0f51f618c587a7.js"/>
+        <link as="script" rel="preload" href="/app-8554ad56bfbf50dbf327.js"/>
+        <link as="script" rel="preload" href="/webpack-runtime-fbf821f48516a8792b47.js"/>
+        <link as="fetch" rel="preload" href="/static/d/452/path---posts-measure-execution-time-nodejs-javascript-39-d-427-U9RdArrk1CsxNC7HFa39K17kQfc.json" crossOrigin="use-credentials"/>
+    </head>
+    <body>
+        <noscript id="gatsby-noscript">This app works best with JavaScript enabled.</noscript>
+        <div id="___gatsby">
+            <div style="outline:none" tabindex="-1" role="group">
+                <div class="Layout-module--layout--3Pyz6">
+                    <div>
+                        <a class="Post-module--post__home-button--16Kl0" href="/">All Articles</a>
+                        <div class="Content-module--content--3p512">
+                            <h1 class="Content-module--content__title--2BDW9">Measurement of Node.js execution time</h1>
+                            <div class="Content-module--content__body--2TrQ- content__body">
+                                <p>
+                                    In this post, I am sharing how to accurately measure code execution time in <a href="https://nodejs.org/">Node.js</a>
+                                    .
+                                </p>
+                                <h2>Measurement with Date</h2>
+                                <p>
+                                    Many developers use JavaScript <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date">Date</a>
+                                    class in order to measure execution time. The following example illustrates this approach. I use <a href="https://nodejs.org/api/timers.html#timers_settimeout_callback_delay_arg">setTimeout</a>
+                                    JavaScript function to simulate code running for about 1 second and use <code class="language-text">Date</code>
+                                    to measure its execution time. Variable <code class="language-text">start</code>
+                                    is assigned the test function start time and variable <code class="language-text">end</code>
+                                    is assigned the test function execution end time. The difference between these two variables is the test function execution time in milliseconds.
+                                </p>
+                                <div class="gatsby-highlight" data-language="javascript">
+                                    <pre class="language-javascript">
+                                        <code class="language-javascript">
+                                            <span class="token keyword">var</span>
+                                            start <span class="token operator">=</span>
+                                            <span class="token keyword">new</span>
+                                            <span class="token class-name">Date</span>
+                                            <span class="token punctuation">(</span>
+                                            <span class="token punctuation">)</span>
+                                            <span class="token keyword">var</span>
+                                            simulateTime <span class="token operator">=</span>
+                                            <span class="token number">1000</span>
+                                            <span class="token function">setTimeout</span>
+                                            <span class="token punctuation">(</span>
+                                            <span class="token keyword">function</span>
+                                            <span class="token punctuation">(</span>
+                                            argument<span class="token punctuation">)</span>
+                                            <span class="token punctuation">{</span>
+                                            <span class="token comment">// execution time simulated with setTimeout function</span>
+                                            <span class="token keyword">var</span>
+                                            end <span class="token operator">=</span>
+                                            <span class="token keyword">new</span>
+                                            <span class="token class-name">Date</span>
+                                            <span class="token punctuation">(</span>
+                                            <span class="token punctuation">)</span>
+                                            <span class="token operator">-</span>
+                                            start
+  console<span class="token punctuation">.</span>
+                                            <span class="token function">info</span>
+                                            <span class="token punctuation">(</span>
+                                            <span class="token string">'Execution time: %dms'</span>
+                                            <span class="token punctuation">,</span>
+                                            end<span class="token punctuation">)</span>
+                                            <span class="token punctuation">}</span>
+                                            <span class="token punctuation">,</span>
+                                            simulateTime<span class="token punctuation">)</span>
+                                        </code>
+                                    </pre>
+                                </div>
+                                <p>And the output is like:</p>
+                                <div class="gatsby-highlight" data-language="text">
+                                    <pre class="language-text">
+                                        <code class="language-text">Execution time: 1002ms</code>
+                                    </pre>
+                                </div>
+                                <p>
+                                    The approach with JavaScript Date class is very popular, especially it can be used in any JavaScript program (including browsers). However, it has several disadvantages such as limitation to milliseconds (hard to measure functions executing a fraction of a millisecond) or vulnerability to <a href="https://en.wikipedia.org/wiki/Clock_drift">clock drifts</a>
+                                    .
+                                </p>
+                                <h2>
+                                    Measurement with <code class="language-text">process.hrtime()</code>
+                                </h2>
+                                <p>
+                                    Node.js has a more powerful mechanism to measure code execution time. It is <a href="https://nodejs.org/api/process.html#process_process_hrtime">process.hrtime()</a>
+                                    function, which returns high-resolution real time in <code class="language-text">[seconds, nanoseconds]</code>
+                                    array. The time is relative to an arbitrary time in the past (not related to the time of day) and therefore not subject to <a href="https://en.wikipedia.org/wiki/Clock_drift">clock drifts</a>
+                                    . Another advantage of <code class="language-text">process.hrtime()</code>
+                                    over <a href="#measurement-with-date">the measurement with Date</a>
+                                    is better accurateness of measures. It is very important, especially when measuring executions, which last less than a millisecond.
+                                </p>
+                                <p>
+                                    In order to measure code execution time you have to provide time returned by the first <code class="language-text">process.hrtime()</code>
+                                    call, as a parameter to the second <code class="language-text">process.hrtime()</code>
+                                    call.
+                                </p>
+                                <p>
+                                    Let’s check the following example. As in the previous example, I use <code class="language-text">setTimeout</code>
+                                    function to simulate code running for 5 millisecond.
+                                </p>
+                                <div class="gatsby-highlight" data-language="javascript">
+                                    <pre class="language-javascript">
+                                        <code class="language-javascript">
+                                            <span class="token keyword">var</span>
+                                            start <span class="token operator">=</span>
+                                            <span class="token keyword">new</span>
+                                            <span class="token class-name">Date</span>
+                                            <span class="token punctuation">(</span>
+                                            <span class="token punctuation">)</span>
+                                            <span class="token keyword">var</span>
+                                            hrstart <span class="token operator">=</span>
+                                            process<span class="token punctuation">.</span>
+                                            <span class="token function">hrtime</span>
+                                            <span class="token punctuation">(</span>
+                                            <span class="token punctuation">)</span>
+                                            <span class="token keyword">var</span>
+                                            simulateTime <span class="token operator">=</span>
+                                            <span class="token number">5</span>
+                                            <span class="token function">setTimeout</span>
+                                            <span class="token punctuation">(</span>
+                                            <span class="token keyword">function</span>
+                                            <span class="token punctuation">(</span>
+                                            argument<span class="token punctuation">)</span>
+                                            <span class="token punctuation">{</span>
+                                            <span class="token comment">// execution time simulated with setTimeout function</span>
+                                            <span class="token keyword">var</span>
+                                            end <span class="token operator">=</span>
+                                            <span class="token keyword">new</span>
+                                            <span class="token class-name">Date</span>
+                                            <span class="token punctuation">(</span>
+                                            <span class="token punctuation">)</span>
+                                            <span class="token operator">-</span>
+                                            start<span class="token punctuation">,</span>
+                                            hrend <span class="token operator">=</span>
+                                            process<span class="token punctuation">.</span>
+                                            <span class="token function">hrtime</span>
+                                            <span class="token punctuation">(</span>
+                                            hrstart<span class="token punctuation">)</span>
+                                            console<span class="token punctuation">.</span>
+                                            <span class="token function">info</span>
+                                            <span class="token punctuation">(</span>
+                                            <span class="token string">'Execution time: %dms'</span>
+                                            <span class="token punctuation">,</span>
+                                            end<span class="token punctuation">)</span>
+                                            console<span class="token punctuation">.</span>
+                                            <span class="token function">info</span>
+                                            <span class="token punctuation">(</span>
+                                            <span class="token string">'Execution time (hr): %ds %dms'</span>
+                                            <span class="token punctuation">,</span>
+                                            hrend<span class="token punctuation">[</span>
+                                            <span class="token number">0</span>
+                                            <span class="token punctuation">]</span>
+                                            <span class="token punctuation">,</span>
+                                            hrend<span class="token punctuation">[</span>
+                                            <span class="token number">1</span>
+                                            <span class="token punctuation">]</span>
+                                            <span class="token operator">/</span>
+                                            <span class="token number">1000000</span>
+                                            <span class="token punctuation">)</span>
+                                            <span class="token punctuation">}</span>
+                                            <span class="token punctuation">,</span>
+                                            simulateTime<span class="token punctuation">)</span>
+                                        </code>
+                                    </pre>
+                                </div>
+                                <p>A few execution outputs:</p>
+                                <div class="gatsby-highlight" data-language="text">
+                                    <pre class="language-text">
+                                        <code class="language-text">Execution time: 7ms
+Execution time (hr): 0s 6.858948ms
+
+Execution time: 6ms
+Execution time (hr): 0s 6.285195ms</code>
+                                    </pre>
+                                </div>
+                                <p>Happy coding!</p>
+                            </div>
+                        </div>
+                        <div class="Post-module--post__footer--3WzWU">
+                            <div>
+                                <p class="Meta-module--meta__date--29eD7">Published 1 Aug 2018</p>
+                            </div>
+                            <div class="Tags-module--tags--1L_ct">
+                                <ul class="Tags-module--tags__list--91FqN">
+                                    <li class="Tags-module--tags__list-item--1M30P">
+                                        <a class="Tags-module--tags__list-item-link--3SL_8" href="/tags/node-js/">Node.js</a>
+                                    </li>
+                                    <li class="Tags-module--tags__list-item--1M30P">
+                                        <a class="Tags-module--tags__list-item-link--3SL_8" href="/tags/performance/">Performance</a>
+                                    </li>
+                                    <li class="Tags-module--tags__list-item--1M30P">
+                                        <a class="Tags-module--tags__list-item-link--3SL_8" href="/tags/time/">Time</a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="Post-module--post__comments--25y6I"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+
+            function gaOptout() {
+                document.cookie = disableStr + '=true; expires=Thu, 31 Dec 2099 23:59:59 UTC;path=/',
+                window[disableStr] = !0
+            }
+            var gaProperty = 'UA-46396394-1'
+              , disableStr = 'ga-disable-' + gaProperty;
+            document.cookie.indexOf(disableStr + '=true') > -1 && (window[disableStr] = !0);
+            if (true) {
+                (function(i, s, o, g, r, a, m) {
+                    i['GoogleAnalyticsObject'] = r;
+                    i[r] = i[r] || function() {
+                        (i[r].q = i[r].q || []).push(arguments)
+                    }
+                    ,
+                    i[r].l = 1 * new Date();
+                    a = s.createElement(o),
+                    m = s.getElementsByTagName(o)[0];
+                    a.async = 1;
+                    a.src = g;
+                    m.parentNode.insertBefore(a, m)
+                }
+                )(window, document, 'script', 'https://www.google-analytics.com/analytics.js', 'ga');
+            }
+            if (typeof ga === "function") {
+                ga('create', 'UA-46396394-1', 'auto', {});
+                ga('set', 'anonymizeIp', true);
+
+            }
+        </script>
+        <script id="gatsby-script-loader">
+            /*<![CDATA[*/
+            window.page = {
+                "componentChunkName": "component---src-templates-post-template-js",
+                "jsonName": "posts-measure-execution-time-nodejs-javascript-39d",
+                "path": "/posts/measure-execution-time-nodejs-javascript/"
+            };
+            window.dataPath = "452/path---posts-measure-execution-time-nodejs-javascript-39-d-427-U9RdArrk1CsxNC7HFa39K17kQfc";
+            /*]]>*/
+        </script>
+        <script id="gatsby-chunk-mapping">
+            /*<![CDATA[*/
+            window.___chunkMapping = {
+                "app": ["/app.931db9d8e20231e7d284.css", "/app-8554ad56bfbf50dbf327.js"],
+                "component---src-templates-not-found-template-js": ["/component---src-templates-not-found-template-js.93982d4eb7724ccba292.css", "/component---src-templates-not-found-template-js-913fbafd01d9c3d68c18.js"],
+                "component---src-templates-tags-list-template-js": ["/component---src-templates-tags-list-template-js-5c3cff9cfcba69603799.js"],
+                "component---src-templates-categories-list-template-js": ["/component---src-templates-categories-list-template-js-3122c2ad85773449c62e.js"],
+                "component---src-templates-page-template-js": ["/component---src-templates-page-template-js.0d1e2830d1dd6bb5ed4e.css", "/component---src-templates-page-template-js-5181d5638e33b4ae7ea1.js"],
+                "component---src-templates-post-template-js": ["/component---src-templates-post-template-js.d3e6fa11b59aff36822c.css", "/component---src-templates-post-template-js-5149cb64367a1170c4a1.js"],
+                "component---src-templates-tag-template-js": ["/component---src-templates-tag-template-js-555ac392b26c3c1db89b.js"],
+                "component---src-templates-category-template-js": ["/component---src-templates-category-template-js-6caee9062507ddca17e4.js"],
+                "component---src-templates-index-template-js": ["/component---src-templates-index-template-js-c3243b7e6ccde2219794.js"],
+                "pages-manifest": ["/pages-manifest-27e38ae47763f9e102b9.js"]
+            };
+            /*]]>*/
+        </script>
+        <script src="/webpack-runtime-fbf821f48516a8792b47.js" async=""></script>
+        <script src="/app-8554ad56bfbf50dbf327.js" async=""></script>
+        <script src="/0-a3596e0f51f618c587a7.js" async=""></script>
+        <script src="/component---src-templates-post-template-js-5149cb64367a1170c4a1.js" async=""></script>
+        <script src="/1-e67a55afbf198a0dfccc.js" async=""></script>
+    </body>
+</html>
