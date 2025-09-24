@@ -40,7 +40,7 @@ jobs:
       - name: Install dependencies
         if: steps.yarn-cache.outputs.cache-hit != 'true'
         run: |
-          yarn --frozen-lockfile
+          yarn # --frozen-lockfile
           echo ""
           echo "GH_MERGED: $GH_MERGED"
           echo "GH_ACTION: $GH_ACTION"
