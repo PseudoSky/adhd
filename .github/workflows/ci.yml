@@ -22,22 +22,32 @@ jobs:
       # The "--stop-agents-after" is optional, but allows idle agents to shut down once the "e2e-ci" targets have been requested
       # - run: npx nx-cloud start-ci-run --distribute-on="5 linux-medium-js" --stop-agents-after="e2e-ci"
 
-      # Cache node_modules
-      - uses: pnpm/action-setup@v4
-        name: Install pnpm
-        with:
-          version: 10
-          run_install: false
-
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: 'yarn'
 
+      - uses: actions/cache@v3
+        id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
+        with:
+          path: |
+            ${{ github.workspace }}/node_modules
+            !${{ github.workspace }}/node_modules/.cache
+          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
       - name: Install dependencies
-        run: pnpm install
-      # - run: npm ci
+        if: steps.yarn-cache.outputs.cache-hit != 'true'
+        run: |
+          yarn --frozen-lockfile
+          echo ""
+          echo "GH_MERGED: $GH_MERGED"
+          echo "GH_ACTION: $GH_ACTION"
+          echo "GH_BASE_REF: $GH_BASE_REF"
+          echo "GH_HEAD_REF: $GH_HEAD_REF"
+          echo "GH_BASE_SHA: $GH_BASE_SHA"
+          echo "GH_HEAD_SHA: $GH_HEAD_SHA"
       - uses: nrwl/nx-set-shas@v4
       - run: git branch --track main origin/main
         if: ${{ github.event_name == 'pull_request' }}
