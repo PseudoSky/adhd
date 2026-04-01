@@ -2,9 +2,9 @@ import * as acorn from 'acorn';
 import jsx from 'acorn-jsx';
 
 const Parser = acorn.Parser.extend(jsx());
-const acornOptions = {
+const acornOptions: acorn.Options = {
   'sourceType': 'module',
-  'ecmaVersion': 10,
+  'ecmaVersion': 'latest',
   'allowReserved': true,
   'allowReturnOutsideFunction': true,
   'allowImportExportEverywhere': true,
@@ -12,7 +12,7 @@ const acornOptions = {
   'locations': true,
   'ranges': true,
   'preserveParens': true,
-  'plugins.jsx': true,
+  // 'plugins.jsx': true,'
 };
 
 const funcRE = /(public|private|protected)\s+(static\s+)?(abstract(?!override)\s+|final\s+)?(\D\w+)\s+(\D\w+)\s*\((\s*\D\w+\s*\D\w+\s*,?)*\)\s*/gm;

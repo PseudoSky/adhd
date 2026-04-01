@@ -11,7 +11,7 @@
       }
     }
   },
-  "tags": ["cli"],
+  "tags": ["platform:node", "layer:entrypoints"],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",

@@ -1,9 +1,4 @@
 export {
-  getSiteAction,
-  getLocalAction,
-  getRawAction,
-  getLinkAction,
-  getSourceAction,
-  getMapAction,
-  getWriteAction,
-} from './actions';
+  getLinkAction, getLocalAction, getMapAction, getRawAction, getSiteAction, getSourceAction, getWriteAction
+} from './actions.js';
+

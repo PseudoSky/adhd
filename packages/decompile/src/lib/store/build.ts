@@ -1,11 +1,11 @@
 import fs from 'fs';
 import _ from 'lodash';
 import path from 'path';
-import Store from '.';
-import extractSources from '../extractors/map';
-import { buildPackage } from './package';
-import { BABELRC, BLANK_PACKAGE } from './templates';
-import { read_map } from './utils';
+import extractSources from '../extractors/map.js';
+import Store from './index.js';
+import { buildPackage } from './package.js';
+import { BABELRC, BLANK_PACKAGE } from './templates.js';
+import { read_map } from './utils.js';
 
 const DEPSTORE = {};
 const addDepsFor = (filePath, dependencies) => {

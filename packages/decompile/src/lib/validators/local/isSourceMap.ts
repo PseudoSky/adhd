@@ -16,16 +16,16 @@
  *  file: Optional. The generated filename this source map is associated with.
  */
 
-import isBase64 from './isBase64';
+import isBase64 from './isBase64.js';
 
 const MapShape = {
-  version: ({version}) => Number.isInteger(version),
-  sources: ({sources}) => Array.isArray(sources),
-  names: ({names}) => Array.isArray(names),
-  mappings: ({mappings}) => isBase64(mappings),
-  file: ({file}) => !file || typeof(file)==='string',
-  sourceRoot: ({sourceRoot}) => !sourceRoot || Array.isArray(sourceRoot),
-  sourcesContent: ({sourcesContent}) => !sourcesContent || Array.isArray(sourcesContent),
+  version: ({ version }) => Number.isInteger(version),
+  sources: ({ sources }) => Array.isArray(sources),
+  names: ({ names }) => Array.isArray(names),
+  mappings: ({ mappings }) => isBase64(mappings),
+  file: ({ file }) => !file || typeof (file) === 'string',
+  sourceRoot: ({ sourceRoot }) => !sourceRoot || Array.isArray(sourceRoot),
+  sourcesContent: ({ sourcesContent }) => !sourcesContent || Array.isArray(sourcesContent),
 };
 
 const tryReadJson = (s) => {
@@ -39,14 +39,14 @@ const tryReadJson = (s) => {
 const isSourceMap = (_data) => {
   console.log('Parser(SourceMap:validate)');
   let data = _data;
-  if (typeof(data)==='string') {
-    if (data.length<30) return false;
+  if (typeof (data) === 'string') {
+    if (data.length < 30) return false;
     data = tryReadJson(data);
     if (!data) return false;
   }
   return Object.keys(MapShape).reduce((r, k) => {
     const check = MapShape[k](data);
-    r = r===true && check;
+    r = r === true && check;
     return r;
   }, true);
 };

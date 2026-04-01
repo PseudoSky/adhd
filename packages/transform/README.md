@@ -41,7 +41,7 @@ pnpm add @adhd/transform
 | [intersection(arrays: any[][])](#collections) | Elements common to all arrays |
 | [flattenDeep(arr: any[][])](#collections) | Deeply flattens nested arrays |
 | [keyByArray(array: any[], key: string)](#collections) | Indexes array by a key |
-| [keyBy(collection: Record<string, any> | [], key: string)](#collections) | Indexes array or object by a key |
+| [keyBy(collection: any[], key: string)](#collections) | Indexes array or object by a key |
 | [omitBy(orig: ArrayOrObject, check: BooleanFilter)](#collections) | Omits entries where check returns true |
 | [pickBy(orig: ArrayOrObject, check: BooleanFilter)](#collections) | Picks entries where check returns true |
 | [pluck(arr: any[], key: string)](#collections) | Extracts values for a key from array |

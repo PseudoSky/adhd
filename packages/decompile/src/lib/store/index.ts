@@ -2,12 +2,12 @@ import AdmZip from 'adm-zip';
 import fse from 'fs-extra';
 import _ from 'lodash';
 import path from 'path';
-import formatDates from '../formatters/dates';
-import { buildPackage, cruiseDeps, getDeps } from './package';
-import { BABELRC, BLANK_PACKAGE } from './templates';
-import { cleanFilePath, isExternalRef } from './utils';
+import formatDates from '../formatters/dates.js';
+import { buildPackage, cruiseDeps, getDeps } from './package.js';
+import { BABELRC, BLANK_PACKAGE } from './templates.js';
+import { cleanFilePath, isExternalRef } from './utils.js';
 
-interface WriteOperations {
+export interface WriteOperations {
   pending: Promise<any>[];
   completed: string[];
 }
@@ -23,6 +23,11 @@ class FileStore implements IStore {
   static buildPackage = buildPackage;
   static getDeps = getDeps;
   static cruiseDeps = cruiseDeps;
+  public index: Record<string, Record<string, number>> = {
+    pending: {},
+    completed: {},
+    main: {},
+  };
   public writes: WriteOperations = {
     pending: [],
     completed: [],
@@ -32,6 +37,7 @@ class FileStore implements IStore {
   public main_file: string;
 
   constructor(initialPrefix: string = './build/reverse') {
+    console.log({ initialPrefix })
     this.zip = new AdmZip();
     this.prefix = initialPrefix;
     this.main_file = '';
@@ -42,6 +48,7 @@ class FileStore implements IStore {
   }
 
   public pathFor(file: string): string {
+    console.log({ prefix: this.prefix, cleanPath: cleanFilePath(file), joined: path.join(this.prefix, cleanFilePath(file)) })
     return path.join(this.prefix, cleanFilePath(file));
   }
 
@@ -64,18 +71,26 @@ class FileStore implements IStore {
 
   public addFile(file: string, content: string | Buffer, type: 'dir' | 'zip' = 'dir'): Promise<void> | null {
     const outfile = this.pathFor(file);
+    console.log(file, outfile)
 
     if (isExternalRef(outfile)) {
       return null;
     }
 
     if (type === 'zip') {
-      const buffer = Buffer.from(content);
+      if (this.index.pending[outfile]) {
+        this.index.pending[outfile] = ((this.index.pending[outfile] || 0) + 1)
+        return Promise.resolve();
+      }
+      const buffer = Buffer.from(content as string, 'utf-8');
       const p = this.zip.addFile(outfile, buffer);
       this.log('pending', p, outfile);
       return Promise.resolve();
     }
-
+    if (this.index.completed[outfile]) {
+      this.index.completed[outfile] = ((this.index.completed[outfile] || 0) + 1)
+      return Promise.resolve();
+    }
     const p = fse.outputFile(outfile, content)
       .then(() => this.log('completed', outfile, outfile))
       .catch((err) => {
@@ -91,10 +106,11 @@ class FileStore implements IStore {
     parts.pop();
     const base = parts.join('.');
 
-    if (base.endsWith('index') &&
+    if (!this.index.main[filePath] && (base.endsWith('index') &&
       !base.includes('node_modules') &&
-      !base.includes('webpack')) {
+      !base.includes('webpack'))) {
       this.main_file += `import ${_.camelCase(path.dirname(filePath))} from "./${filePath}"\n`;
+      this.index.main[filePath] = 1;
     }
   }
 
@@ -108,7 +124,8 @@ class FileStore implements IStore {
     return results;
   }
 
-  public async finalize(): Promise<void> {
+  public async finalize(): Promise<WriteOperations> {
+    console.log("Finalize", this.index)
     try {
       await this.addFile('package.json', JSON.stringify(BLANK_PACKAGE, null, 4));
       await this.addFile('.babelrc', JSON.stringify(BABELRC, null, 4));
@@ -125,6 +142,8 @@ class FileStore implements IStore {
     } catch (error) {
       console.error(error);
     }
+    console.log("Finalize", this.index)
+    return this.writes
   }
 }
 

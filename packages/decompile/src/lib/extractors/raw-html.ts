@@ -1,4 +1,4 @@
-const cheerio = require('cheerio');
+import { load } from 'cheerio';
 
 const selectors = {
   stylesheets: {
@@ -31,12 +31,12 @@ const selectors = {
   },
 };
 
-const loadExtract = (src, types=[]) =>{
-  if (types.length==0) {
+const loadExtract = (src, types = []) => {
+  if (types.length == 0) {
     return [];
   }
-  const $ = cheerio.load(src.data);
-  console.log({types});
+  const $ = load(src.data);
+  console.log({ types });
   const results = types.map((t) => {
     const chosenType = selectors[t];
     const resSel = $(chosenType.selector);
@@ -44,8 +44,8 @@ const loadExtract = (src, types=[]) =>{
       return Array.prototype.map.call(resSel, (el) => {
         const $el = $(el);
         const r = new URL(
-            $el.attr(chosenType.attribute),
-            src.path,
+          $el.attr(chosenType.attribute),
+          src.path,
         ).toString();
         console.log('lnk', r);
         return r.replace(/[?].*/, '');
@@ -56,11 +56,11 @@ const loadExtract = (src, types=[]) =>{
         //     };
         // }
       })
-          .reduce(
-              (r, l) =>
+        .reduce(
+          (r, l) =>
             (r.includes(l) || l.endsWith('undefined')) ? r : [...r, l],
-              [],
-          );
+          [],
+        );
     } else {
       return [];
     }
@@ -69,26 +69,26 @@ const loadExtract = (src, types=[]) =>{
 };
 
 export const extractSourceLinks = (raw) => {
-  const re=/(http[s]?:\/\/)?[^\s(["<,>]*\.[^\s[",><]*/igm;
-  return raw.match(re).filter( (m) => ( /http.*\.(js|css)$/.test(m) ));
+  const re = /(http[s]?:\/\/)?[^\s(["<,>]*\.[^\s[",><]*/igm;
+  return raw.match(re).filter((m) => (/http.*\.(js|css)$/.test(m)));
 };
 
-export const oust = (src, type) => {
-  if (!src || !type) {
-    throw new Error('`src` and `type` required');
-  }
+// export const oust = (src, type) => {
+//   if (!src || !type) {
+//     throw new Error('`src` and `type` required');
+//   }
 
-  const validTypes = Object.keys(types);
+//   const validTypes = Object.keys(types);
 
-  if (!validTypes.includes(type)) {
-    throw new Error(
-        `Invalid \`type\` value "${type}". `+
-        `Choose one of: ${validTypes.join(', ')}`,
-    );
-  }
+//   if (!validTypes.includes(type)) {
+//     throw new Error(
+//         `Invalid \`type\` value "${type}". `+
+//         `Choose one of: ${validTypes.join(', ')}`,
+//     );
+//   }
 
-  return loadExtract(src, [type]);
-};
+//   return loadExtract(src, [type]);
+// };
 
 export const extractRawHtml = (src) => {
   return loadExtract(src, [
