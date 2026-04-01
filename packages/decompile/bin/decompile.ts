@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-
-// import "regenerator-runtime/runtime";
 import { Extractors, FileStore } from "../src/index.js";
 
 function collect(value: string, previous: string[]) {
@@ -41,7 +39,7 @@ program
   .command("deps")
   .version("0.0.1")
   .description("get deps from path")
-  // .arguments("<source> [sources...]")
+
   .option(
     "-a, --allowModule <module>",
     "allow only specific node_modules",
@@ -66,7 +64,7 @@ program
   )
   .argument("<source...>", "entry point + optional src dirs")
   .action(async (sources: string[], opts) => {
-    let options: any = {
+    const options: { exclude?: { path: string }; includeOnly?: string } = {
       exclude: {
         path: ".*(node_modules).*",
       },
@@ -111,42 +109,3 @@ program
     }
   });
 await program.parseAsync(process.argv);
-
-// program.command('map <source> [sources...]').option('-o <output>', 'Output path')
-// .storeOptionsAsProperties(false)
-// .command('map <source> [sources...]', {isDefault: true})
-
-// .action((options) => {
-//   console.log(options.action);
-// })
-// .action((argz) => {
-//   console.log(argz);
-//   Extractor.testpipeline(argz);
-// })
-// program.exitOverride();
-//
-
-// const commands = program.commands.map(c => c.name());
-// const cmdSet = new Set(commands);
-// const args = program.commands[0].args.filter(e => !commands.has(e))
-// console.log(), program.commands[0].args.filter(e => e!='map'))
-
-// const programOptions = program._args;
-// console.log(process.argv);
-// const program = new commander.Command();
-
-// console.log(program);
-// async function main() {
-// await program.parseAsync(process.argv);
-// }
-// if (!program.args.length || !process.argv.slice(2).length) {
-//   program.outputHelp();
-// } else {
-//   Extractors.testpipeline(program.args, program.options)
-//     .then((res) => {
-//       console.log('finished', res);
-//     })
-//     .catch((e) => {
-//       console.error('failed', { error: e });
-//     });
-// }
