@@ -9,7 +9,7 @@ describe.only('object', () => {
         { a: 1, b: [1, 2], c: { d: 3 } }
       )
     ).toEqual(true);
-    expect(objectUtils.difference({ a: 1, b: 2 }, {})).toEqual({ a: 1, b: 2 });
+    expect(objectUtils.objectDifference({ a: 1, b: 2 }, {})).toEqual({ a: 1, b: 2 });
     expect(objectUtils.entries({ "a": 1, "b": 2 })).toEqual([["a", 1], ["b", 2]])
     expect(
       objectUtils.groupBy([{ a: 1, b: 2 }, { a: 1, b: 4 }, { a: 2, b: 2 }], ['a'])

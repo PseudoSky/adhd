@@ -1,3 +1,4 @@
+import { isArray, isObject, isValue } from './filters';
 import { extractThen } from './function';
 
 export type BooleanFilter = (e: any) => boolean
@@ -21,23 +22,39 @@ export function isMatchType(obj: any, target: any) {
   return typeof obj === typeof target
 }
 
-export function isMatch(obj: any, target: any) {
-  // TODO: This needs to be fixed
-  return true
-  // if(!isMatchType(obj, target) ) return false;
-  // switch(typeof target){
-  //   case 'array':
-  //     return obj.length>=target.length &&
-  //       target.reduce((r, e, i) => r && isMatch(e, obj[i]), true)
-  //   case 'object':
-  //     return Object.entries(target).reduce(
-  //       (res, [key, val]) => {
-  //         return res && (key in obj && isMatch(obj[key], val));
-  //       }, true
-  //     )
-  //   default:
-  //     return obj===target
-  // }
+export function isMatch(obj: any, target: any): boolean {
+  const stack: Array<[any, any]> = [[obj, target]];
+
+  while (stack.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const [current, pattern] = stack.pop()!;
+
+    if (isValue(pattern)) {
+      if (current !== pattern) return false;
+      continue;
+    }
+
+    if (isArray(pattern)) {
+      if (!isArray(current) || current.length < pattern.length) return false;
+      for (let i = 0; i < pattern.length; i++) {
+        stack.push([current[i], pattern[i]]);
+      }
+      continue;
+    }
+
+    if (isObject(pattern)) {
+      if (!isObject(current)) return false;
+      for (const [key, val] of Object.entries(pattern)) {
+        if (!(key in current)) return false;
+        stack.push([current[key], val]);
+      }
+      continue;
+    }
+
+    if (current !== pattern) return false;
+  }
+
+  return true;
 }
 
 export function overSome(checks: BooleanFilter[]) {

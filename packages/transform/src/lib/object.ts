@@ -1,4 +1,4 @@
-import { isArray, isObject, isValue } from './filters';
+import { isArray, isEmpty, isEqual, isObject, isValue } from './filters';
 import { makeGetter } from './function';
 import { Queue } from './structures';
 
@@ -29,16 +29,6 @@ export const keys = Object.keys;
  * @returns A JSON string representing the value.
  */
 export const stringify = JSON.stringify;
-
-/**
- * Checks if two values are equal by converting them to JSON strings and comparing.
- * @param a - The first value to compare.
- * @param b - The second value to compare.
- * @returns True if the two values are equal, false otherwise.
- */
-export function isEqual(a: unknown, b: any) {
-  return stringify(a) === stringify(b);
-}
 
 /**
  * Enumerates all paths of an opject
@@ -149,15 +139,6 @@ export function pick(object: { [x: string]: any; hasOwnProperty: (arg0: any) => 
 export const maskObject = pick;
 
 /**
- * Checks if an object is empty.
- * @param obj - The object to check.
- * @returns True if the object is empty, false otherwise.
- */
-export function isEmpty(obj: any) {
-  return [Object, Array].includes((obj || {}).constructor) && !Object.entries((obj || {})).length;
-}
-
-/**
  * Creates an object with boolean values from an array of keys.
  * @param arr - The array of keys.
  * @param default_value - The default value for the object properties (default is true).
@@ -247,7 +228,7 @@ export function deepCopy(object1: any) {
  * @param _base - The base object to compare against.
  * @returns A new object representing the difference between the two objects.
  */
-export function difference<T extends Record<string | number, any>>(_object: T, _base: any) {
+export function objectDifference<T extends Record<string | number, any>>(_object: T, _base: any) {
   function changes(object: T, base: { [x: string]: any }, _res: Record<string, any> = {}) {
     return Object.entries(object).reduce(
       function (result, [key, value]) {
@@ -267,7 +248,7 @@ export function difference<T extends Record<string | number, any>>(_object: T, _
 export default {
   deepCopy,
   deepEquals,
-  difference,
+  objectDifference,
   entries,
   groupBy,
   has,

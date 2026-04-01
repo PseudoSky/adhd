@@ -31,6 +31,10 @@ const isContainedIn = _.isIn;
 const hasKey = checkHasKey;
 const hasKeysAny = hasKeysSome;
 const hasKeysAll = hasKeysEvery;
+const matchesRegex = (a: string, b: string) => _.isDefined(a) && new RegExp(b).test(a);
+const matchesIRegex = (a: string, b: string) => _.isDefined(a) && new RegExp(b, 'i').test(a);
+const matchesNRegex = (a: string, b: string) => !matchesRegex(a, b);
+const matchesNIRegex = (a: string, b: string) => !matchesIRegex(a, b);
 const isNull = (a: any, b: boolean) => _.isDefined(a) !== b;
 export type Filter = (...args: any) => boolean;
 export type FilterPartial = (...args: any) => Filter;
@@ -59,6 +63,10 @@ export const operators: Record<string, FilterPartial> = {
   _has_keys_any: partialApply(hasKeysAny),
   _has_keys_all: partialApply(hasKeysAll),
   _is_null: partialApply(isNull),
+  _regex: partialApply(matchesRegex),
+  _iregex: partialApply(matchesIRegex),
+  _nregex: partialApply(matchesNRegex),
+  _niregex: partialApply(matchesNIRegex),
 };
 
 export const logicalOperators: Record<string, FilterPartial> = {

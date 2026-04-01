@@ -269,3 +269,62 @@ describe('query ordering', () => {
     ]);
   })
 });
+
+describe('query has_more', () => {
+  const items = [
+    { v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }, { v: 5 },
+  ];
+  it('should be true when more items exist beyond limit', () => {
+    const dv = new DataView(items);
+    dv.limit(3).view();
+    expect(dv.has_more).toEqual(true);
+  });
+  it('should be false when items exactly equal limit', () => {
+    const dv = new DataView(items);
+    dv.limit(5).view();
+    expect(dv.has_more).toEqual(false);
+  });
+  it('should be false when fewer items than limit', () => {
+    const dv = new DataView([{ v: 1 }, { v: 2 }]);
+    dv.limit(5).view();
+    expect(dv.has_more).toEqual(false);
+  });
+});
+
+describe('query sort mutation', () => {
+  it('should not mutate original data when sorting without where', () => {
+    const original = [{ v: 3 }, { v: 1 }, { v: 2 }];
+    const copy = [...original];
+    const dv = new DataView(original);
+    dv.orderBy([{ v: 'asc' }]).view();
+    expect(original).toEqual(copy);
+  });
+});
+
+describe('regex operators', () => {
+  const items = [
+    { name: 'Alice', email: 'alice@example.com' },
+    { name: 'Bob', email: 'bob@test.org' },
+    { name: 'Charlie', email: 'CHARLIE@EXAMPLE.COM' },
+  ];
+  it('_regex matches case-sensitive pattern', () => {
+    const dv = new DataView(items);
+    dv.where({ email: { _regex: '@example\\.com$' } });
+    expect(dv.view()).toEqual([items[0]]);
+  });
+  it('_iregex matches case-insensitive pattern', () => {
+    const dv = new DataView(items);
+    dv.where({ email: { _iregex: '@example\\.com$' } });
+    expect(dv.view().length).toEqual(2);
+  });
+  it('_nregex excludes matching rows', () => {
+    const dv = new DataView(items);
+    dv.where({ email: { _nregex: '@example\\.com$' } });
+    expect(dv.view().length).toEqual(2);
+  });
+  it('_niregex excludes case-insensitive matches', () => {
+    const dv = new DataView(items);
+    dv.where({ email: { _niregex: '@example\\.com$' } });
+    expect(dv.view()).toEqual([items[1]]);
+  });
+});

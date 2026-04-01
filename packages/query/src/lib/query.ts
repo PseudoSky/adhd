@@ -1,6 +1,6 @@
 import { Transform as _ } from '@adhd/transform';
 import { OrderByExpression, QueryExpression } from './expressions';
-import { parseOrderBy, parseWhere } from './parser';
+import { compileWhere, parseOrderBy } from './parser';
 
 export const orderBy = (props: OrderByExpression[] = []) => (a: any, b: any) => {
   const orderOps = parseOrderBy(props);
@@ -80,7 +80,7 @@ export class Query implements QueryType {
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     /* @ts-ignore */
     this.raw.where = whereQuery;
-    this.where = d => parseWhere(whereQuery, d)
+    this.where = compileWhere(whereQuery)
     return true;
   };
 
@@ -117,9 +117,9 @@ export class Query implements QueryType {
   }
 }
 
-export class DataView {
-  data: any[] = [];
-  dataview: any[] = [];
+export class DataView<T = any> {
+  data: T[] = [];
+  dataview: T[] = [];
   query: Query;
   dirty: any;
   logging: boolean;
@@ -130,14 +130,14 @@ export class DataView {
     total_distinct: 0,
   };
   static Query: typeof Query;
-  constructor(data: any[], query: QueryExpression = {}, logging = false) {
+  constructor(data: T[], query: QueryExpression = {}, logging = false) {
     this.query = new Query();
     this.logging = logging;
     this.setData(data);
     this.setQuery(query);
   }
 
-  setData = (data: any[]) => {
+  setData = (data: T[]) => {
     this.data = data;
     this.dirty = true;
     // this.dataview = null;
@@ -188,7 +188,7 @@ export class DataView {
   commit = () => {
     // console.warn('DataView.commit', { dirty: this.dirty, metrics: this.metrics, query: this.query.toJson() })
     if (!this.dirty || !this.data) return false;
-    let res = this.data;
+    let res = [...this.data];
     this.metrics.total = res.length;
     if (this.query.where) res = res.filter(this.query.where);
     this.metrics.total_matched = res.length;
@@ -197,8 +197,9 @@ export class DataView {
     this.metrics.total_distinct = res.length;
     if (this.query.offset) res = res.slice(this.query.offset);
     if (this.query.limit) {
+      const preSliceLength = res.length;
       res = res.slice(0, this.query.limit);
-      this.has_more = res.length === this.query.limit;
+      this.has_more = preSliceLength > this.query.limit;
     }
     this.dataview = res;
     this.dirty = false;
@@ -206,7 +207,7 @@ export class DataView {
     return true;
   };
 
-  view = () => {
+  view = (): T[] => {
     // console.warn('DataView.view', { dirty: this.dirty, metrics: this.metrics, query: this.query.toJson() })
     this.commit();
     return this.dataview ? this.dataview : this.data;

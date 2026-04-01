@@ -39,7 +39,7 @@ export function randomRangeInt(a = 1, b = 0) {
 }
 export function getMin(a: number, b: number) { return a <= b ? a : b; }
 export function getMax(a: number, b: number) { return a >= b ? a : b; }
-export function range(list: number[]) {
+export function minMax(list: number[]) {
   return list.reduce((acc, value) => ({
     min: getMin(value, acc.min),
     max: getMax(value, acc.max),
@@ -87,14 +87,14 @@ export const normalizeBetween = (x: number, minVal: number, maxVal: number, newM
 
 // TODO: Don't extract the original range from the list, and make it accept an original/new {min, max}
 export function makeListNormalizer(list: number[], newMin: number, newMax: number) {
-  const { max, min } = range(list);
+  const { max, min } = minMax(list);
   // if(newMin===min && newMax==max) return (value: number) => value
   return (value: number) => normalizeBetween(value, min, max, newMin, newMax);
 }
 
 export function normalize(list: number[], bounds = { min: 0, max: 1 }) {
   if (!list || list.length === 0) return list;
-  const { max, min } = range(list);
+  const { max, min } = minMax(list);
   return list.map(value => normalizeBetween(value, min, max, bounds.min, bounds.max))
 }
 
@@ -243,7 +243,7 @@ export default {
   randomRangeInt,
   // normalizeValue,
   roundToIncrement,
-  range,
+  minMax,
   normalize,
   normalizeBetween,
   makeListNormalizer,
