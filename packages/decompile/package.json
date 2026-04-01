@@ -4,8 +4,8 @@
   "type": "module",
   "main": "src/index.js",
   "bin": {
-    "adhd-reverse": "./bin/adhd-reverse.js",
-    "adhd-deps": "./bin/adhd-deps.js"
+    "adhd-reverse": "./bin/decompile.js reverse",
+    "deps": "./bin/decompile.js deps"
   },
   "scripts": {
     "build": "nx run decompile:build",
