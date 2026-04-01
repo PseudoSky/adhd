@@ -1,10 +1,9 @@
-import test from 'ava';
-import local from '../';
+import local from '..';
 
-test('ensure', (t) => {
-  t.is(local.ensure('./src/index.js'), true);
-  t.is(local.ensure('./src/local.js'), false);
-  t.is(local.ensure('http://localhost'), false);
+test('ensure', () => {
+  expect(local.ensure('./src/index.js')).toBe(true);
+  expect(local.ensure('./src/local.js')).toBe(false);
+  expect(local.ensure('http://localhost')).toBe(false);
 });
 
 const fixtures = [
@@ -22,14 +21,14 @@ const fixtures = [
   ['./tests/fixtures/sourcemap.json', 'sourcemap'],
   ['./tests/fixtures/empty.json', 'json'],
 ];
-fixtures.forEach((f) => {
+for (const f of fixtures) {
   let name = `name: ${f[0].split('/')[3]} -> ${f[1]} from `;
   name += f[0].endsWith('fromContent') ? `content` : `file name`;
-  test(`file inference ${name}`, async (t) => {
+  test(`file inference ${name}`, async () => {
     const res = await local.getFileInfo(f[0]);
-    t.is(res.type.toLowerCase(), f[1]);
+    expect(res.type.toLowerCase()).toBe(f[1]);
   });
-});
+}
 // t.deepEqual(local.getFileInfo('./src/index.map?q=1234'), {
 // root: '',
 // dir: './src',

@@ -1,8 +1,12 @@
 {
   "name": "@adhd/decompile",
   "version": "0.0.1",
-  "bin": "./src/decompile.js",
   "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "adhd-reverse": "./bin/adhd-reverse.js",
+    "adhd-deps": "./bin/adhd-deps.js"
+  },
   "scripts": {
     "build": "nx run decompile:build",
     "watch": "nx run decompile:build --watch",

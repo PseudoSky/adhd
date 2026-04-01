@@ -1,5 +1,5 @@
 const camelize = (str) => {
-  return str.replace(/\W+(.)/g, function(match, chr) {
+  return str.replace(/\W+(.)/g, function (match, chr) {
     return chr.toUpperCase();
   });
 };
@@ -53,10 +53,10 @@ export const BABELRC = {
     '@babel/plugin-transform-modules-commonjs',
     '@babel/plugin-transform-async-to-generator',
     [
-      '@babel/plugin-proposal-class-properties', {'loose': true},
+      '@babel/plugin-proposal-class-properties', { 'loose': true },
     ],
     [
-      '@babel/plugin-transform-runtime', {'polyfill': false},
+      '@babel/plugin-transform-runtime', { 'polyfill': false },
     ],
   ],
 };
@@ -65,26 +65,28 @@ const importFromPath = (file) => {
   return `import ${camelize(file.split('/').slice(1).join('_'))} from "./${file}";`;
 };
 
-export const entryPointWith = (imports=[]) => {
+export const entryPointWith = (imports = []) => {
   if (!imports.length) {
     return '// Could not find an entry point for the app';
   }
   return imports.map(importFromPath).join('\n');
 };
 
-export const packageWith = (depList, overrides={}) => {
-  const dependencies = depList.reduce((res={}, p) => {
+export const packageWith = (depList, overrides = {}) => {
+  const dependencies = depList.reduce((res = {}, p) => {
     res[p] = '*';
-    console.log({p});
+    console.log({ p });
     return res;
   }, {});
-  return {...BLANK_PACKAGE, dependencies, ...overrides};
+  return { ...BLANK_PACKAGE, dependencies, ...overrides };
 };
 
-export const babelWith = (overrides={}) => {
+export const babelWith = (
+  overrides: { plugins?: any[]; presets?: any[] } = {}
+) => {
   return {
     ...overrides,
-    plugins: [...BABELRC.plugins, ...(overrides.plugins||[])],
-    presets: [...BABELRC.presets, ...(overrides.presets||[])],
+    plugins: [...BABELRC.plugins, ...(overrides.plugins || [])],
+    presets: [...BABELRC.presets, ...(overrides.presets || [])],
   };
 };

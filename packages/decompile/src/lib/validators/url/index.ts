@@ -1,8 +1,25 @@
-import { BadOptionsError, FunctionRenamedError, InvalidUrlError } from './errors';
+import { BadOptionsError, FunctionRenamedError, InvalidUrlError } from './errors.js';
 
 // TODO: Use the `URL` global when targeting Node.js 10
-const URLParser = typeof URL === 'undefined' ? require('url').URL : URL;
+import { URL as NodeURL } from 'url';
+const URLParser = typeof URL === 'undefined' ? NodeURL : URL;
 
+type NormalizeOptions = {
+  defaultProtocol?: string;
+  normalizeProtocol?: boolean;
+  forceHttp?: boolean;
+  forceHttps?: boolean;
+  stripAuthentication?: boolean;
+  stripHash?: boolean;
+  stripProtocol?: boolean;
+  stripWWW?: boolean;
+  returns?: string;
+  removeQuery?: boolean;
+  removeQueryParameters?: (string | RegExp)[];
+  removeTrailingSlash?: boolean;
+  removeDirectoryIndex?: boolean | (string | RegExp)[];
+  sortQueryParameters?: boolean;
+};
 // https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/Data_URIs
 const DATA_URL_DEFAULT_MIME_TYPE = 'text/plain';
 const DATA_URL_DEFAULT_CHARSET = 'us-ascii';
@@ -15,7 +32,7 @@ const testParameter = (name, filters) => {
       filter === name);
 };
 
-const normalizeDataURL = (urlString, { stripHash }) => {
+const normalizeDataURL = (urlString, { stripHash }: NormalizeOptions) => {
   const parts = urlString.match(/^data:(.*?),(.*?)(?:#(.*))?$/);
 
   if (!parts) {
@@ -37,6 +54,7 @@ const normalizeDataURL = (urlString, { stripHash }) => {
   const mimeType = (mediaType.shift() || '').toLowerCase();
   const attributes = mediaType
     .map((attribute) => {
+      // eslint-disable-next-line prefer-const
       let [key, value = ''] = attribute.split('=')
         .map((string) => string.trim());
 
@@ -73,8 +91,7 @@ const normalizeDataURL = (urlString, { stripHash }) => {
 
 export const isValidUrl = (s) => {
   try {
-    // eslint-disable-next-line no-unused-vars
-    const n = new URL(s);
+    new URL(s);
     const u = normalizeUrl(s);
     return !!u;
   } catch (e) {
@@ -89,22 +106,7 @@ export const getPatch = (s) => {
     return null;
   }
 };
-type NormalizeOptions = {
-  defaultProtocol?: string;
-  normalizeProtocol?: boolean;
-  forceHttp?: boolean;
-  forceHttps?: boolean;
-  stripAuthentication?: boolean;
-  stripHash?: boolean;
-  stripProtocol?: boolean;
-  stripWWW?: boolean;
-  returns?: string;
-  removeQuery?: boolean;
-  removeQueryParameters?: RegExp[];
-  removeTrailingSlash?: boolean;
-  removeDirectoryIndex?: boolean | RegExp[];
-  sortQueryParameters?: boolean;
-};
+
 export const defaultOptions: NormalizeOptions = {
   defaultProtocol: 'https:',
   normalizeProtocol: true,
@@ -130,18 +132,18 @@ export const normalizeUrl = (urlString, options: NormalizeOptions = {}) => {
   if (options.removeQuery) {
     options.removeQueryParameters = [/.*/];
   }
-  // TODO: Remove this at some point in the future
-  if (Reflect.has(options, 'normalizeHttps')) {
-    throw FunctionRenamedError('normalizeHttps');
-  }
+  // // TODO: Remove this at some point in the future
+  // if (Reflect.has(options, 'normalizeHttps')) {
+  //   throw FunctionRenamedError('normalizeHttps');
+  // }
 
-  if (Reflect.has(options, 'normalizeHttp')) {
-    throw FunctionRenamedError('normalizeHttp');
-  }
+  // if (Reflect.has(options, 'normalizeHttp')) {
+  //   throw FunctionRenamedError('normalizeHttp');
+  // }
 
-  if (Reflect.has(options, 'stripFragment')) {
-    throw FunctionRenamedError('stripFragment');
-  }
+  // if (Reflect.has(options, 'stripFragment')) {
+  //   throw FunctionRenamedError('stripFragment');
+  // }
 
   urlString = urlString.trim();
 
