@@ -29,6 +29,7 @@
     "baseUrl": ".",
     "paths": {
       "@adhd/data": ["packages/data/src/index.ts"],
+      "@adhd/decompile": ["packages/decompile/src/index.ts"],
       "@adhd/query": ["packages/query/src/index.ts"],
       "@adhd/react-hooks": ["packages/react-hooks/src/index.ts"],
       "@adhd/storybook": ["packages/storybook/src/index.ts"],
