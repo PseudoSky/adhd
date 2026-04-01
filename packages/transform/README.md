@@ -42,13 +42,16 @@ pnpm add @adhd/transform
 | [flattenDeep(arr: any[][])](#collections) | Deeply flattens nested arrays |
 | [keyByArray(array: any[], key: string)](#collections) | Indexes array by a key |
 | [keyBy(collection: any[], key: string)](#collections) | Indexes array or object by a key |
+| [isMatch(obj: any, target: any)](#collections) | Deep partial match (does obj contain all of target?) |
 | [omitBy(orig: ArrayOrObject, check: BooleanFilter)](#collections) | Omits entries where check returns true |
 | [pickBy(orig: ArrayOrObject, check: BooleanFilter)](#collections) | Picks entries where check returns true |
 | [pluck(arr: any[], key: string)](#collections) | Extracts values for a key from array |
 | [minBy(collection: T[], selector: Selector<T>, compare?: ComparisonFunction<number>)](#collections) | Finds min by selector |
 | [maxBy(collection: T[], selector: Selector<T>, compare?: ComparisonFunction<number>)](#collections) | Finds max by selector |
+| [filterInclude(arr: any[], obj)](#collections) | Filters to items matching obj |
+| [filterExclude(arr: any[], obj)](#collections) | Filters out items matching obj |
 | [first(arr: any[])](#collections) | Returns first element |
-| [last(arr: OneOfType<string, any[]>)](#collections) | Returns last element |
+| [last(arr: any[])](#collections) | Returns last element |
 | [unique(arr: any[])](#collections) | Returns unique elements |
 | [uniqueBy(arr: any[], props: string[])](#collections) | Unique by multiple properties |
 | [indexBy(arr: any[], prop: string)](#collections) | Indexes array by property |
@@ -76,21 +79,28 @@ pnpm add @adhd/transform
 | [keys(obj: object)](#objects) | Returns object keys |
 | [values(obj: object)](#objects) | Returns object values |
 | [entries(obj: object)](#objects) | Returns object entries |
-| [isEqual(a: unknown, b: any)](#objects) | Deep equality check |
 | [stringify(obj: object)](#objects) | JSON stringify |
 | [groupBy(arr: any[], props: string[])](#objects) | Groups array by properties |
+| [omit(object, keys)](#objects) | Omits specified keys |
+| [pick(object, keys)](#objects) | Picks specified keys |
+| [allPaths(obj, matcher?)](#objects) | Enumerates all paths of an object |
+| [objectDifference(object, base)](#objects) | Calculates difference between two objects |
 | [deepCopy(object1: any)](#objects) | Deep copy object |
+| [deepEquals(object1, object2)](#objects) | Deep equality check |
 
 ### Transform: Stats
 | Function (params) | Description |
 |-------------------|-------------|
-| [range(list: number[])](#stats) | Min/max of list |
+| [minMax(list: number[])](#stats) | Min/max of list |
 | [randomRange(a: number, b: number)](#stats) | Random float between a and b |
 | [randomRangeInt(a: number, b: number)](#stats) | Random int between a and b |
 | [roundToIncrement(x: number, increment: number)](#stats) | Rounds to increment |
+| [normalizeBetween(x, min, max, newMin?, newMax?)](#stats) | Normalizes value to new range |
+| [normalize(list: number[], bounds?)](#stats) | Normalizes a list to bounds |
 | [getMin(a: number, b: number)](#stats) | Minimum of two numbers |
 | [getMax(a: number, b: number)](#stats) | Maximum of two numbers |
 | [histogram(iterable: any[])](#stats) | Histogram of values |
+| [mostCommon(iterable: any[])](#stats) | Most common value |
 
 ### Transform: Texts
 | Function (params) | Description |
@@ -113,7 +123,31 @@ pnpm add @adhd/transform
 | [extractThen(key: string, callback: Function)](#functions) | Extracts value and applies callback |
 | [get(obj: object, path: string, defaultValue?: any)](#functions) | Gets value at path |
 | [set(data: object, path: string, value: any)](#functions) | Sets value at path |
+| [getAll(obj, paths: string[])](#functions) | Gets values at multiple paths |
+| [flow(funcs: Function[])](#functions) | Pipes value through functions |
+| [partial(func, ...boundArgs)](#functions) | Partially applies arguments |
 | [throttle(func: Function, timeFrame: number)](#functions) | Throttles function |
+| [Differ.map(obj1, obj2)](#functions) | Computes deep diff between objects |
+
+### Transform: Humanize
+| Function (params) | Description |
+|-------------------|-------------|
+| [humanizeBytes(bytes: number, decimals?: number)](#humanize) | Formats bytes to human-readable string |
+
+### Transform: Date
+| Function (params) | Description |
+|-------------------|-------------|
+| [formatDate(date: Date, formatStr?: string)](#date) | Formats date with format string |
+| [humanDuration(d0: Date, d1: Date, unit?)](#date) | Human-readable duration between dates |
+| [timeFromNow(date: Date)](#date) | Duration from now to date |
+| [fromNow(count: number, unit?: string)](#date) | Date in the future from now |
+
+### Transform: Regex
+| Function (params) | Description |
+|-------------------|-------------|
+| [escapePattern(s: string)](#regex) | Escapes regex special characters |
+| [mergePatterns(values: (string\|number)[])](#regex) | Merges values into alternation regex |
+| [rangeToRegex(n1?: number, n2?: number)](#regex) | Numeric range to regex pattern |
 
 
 
@@ -165,6 +199,14 @@ Collections.uniqueBy([{ a: 1, b: 2 }, { a: 1, b: 3 }], ['a']); // [{ a: 1, b: 2 
 
 // indexBy: Indexes array by property
 Collections.indexBy([{ id: 'a' }, { id: 'b' }], 'id'); // { a: { id: 'a' }, b: { id: 'b' } }
+
+// isMatch: Deep partial match
+Collections.isMatch({ a: 1, b: 2 }, { a: 1 }); // true
+Collections.isMatch({ a: 1 }, { a: 1, b: 2 }); // false
+
+// filterInclude/filterExclude: Filter by match
+Collections.filterInclude([{ a: 1 }, { a: 2 }], { a: 1 }); // [{ a: 1 }]
+Collections.filterExclude([{ a: 1 }, { a: 2 }], { a: 1 }); // [{ a: 2 }]
 
 // range: Generates a range of numbers
 Collections.range(1, 5, 1); // [1, 2, 3, 4, 5]
@@ -224,25 +266,35 @@ Objects.values({ a: 1, b: 2 }); // [1, 2]
 // entries: Returns object entries
 Objects.entries({ a: 1, b: 2 }); // [['a', 1], ['b', 2]]
 
-// isEqual: Deep equality check
-Objects.isEqual({ x: 1 }, { x: 1 }); // true
+// deepEquals: Deep equality check
+Objects.deepEquals({ x: 1 }, { x: 1 }); // true
 
-// stringify: JSON stringify
-Objects.stringify({ a: 1 }); // '{"a":1}'
+// objectDifference: Diff between two objects
+Objects.objectDifference({ a: 1, b: 2 }, { a: 1 }); // { b: 2 }
+
+// omit/pick: Select or exclude keys
+Objects.omit({ a: 1, b: 2 }, ['a']); // { b: 2 }
+Objects.pick({ a: 1, b: 2 }, ['a']); // { a: 1 }
 
 // groupBy: Groups array by properties
-Objects.groupBy([{ a: 1 }, { a: 2 }], ['a']); // { '1': [{ a: 1 }], '2': [{ a: 2 }] }
+Objects.groupBy([{ a: 1 }, { a: 2 }], ['a']);
 
 // deepCopy: Deep copy object
 Objects.deepCopy({ a: 1 }); // { a: 1 }
+
+// allPaths: Enumerate all primitive-holding paths
+Objects.allPaths({ x: { y: 1, z: [2] } }); // [['x', 'y'], ['x', 'z']]
 ```
 
 ### Stats
 ```ts
 import { Stats } from '@adhd/transform';
 
-// range: Min/max of list
-Stats.range([1, 2, 3, 4, 5]); // { min: 1, max: 5 }
+// minMax: Min/max of list
+Stats.minMax([1, 2, 3, 4, 5]); // { min: 1, max: 5 }
+
+// normalize: Normalize list to bounds
+Stats.normalize([1, 2, 3, 4, 5], { min: 0, max: 4 }); // [0, 1, 2, 3, 4]
 
 // randomRange: Random float between a and b
 Stats.randomRange(10, 20); // e.g. 13.45
@@ -253,14 +305,15 @@ Stats.randomRangeInt(1, 5); // e.g. 3
 // roundToIncrement: Rounds to increment
 Stats.roundToIncrement(7.3, 2); // 8
 
-// getMin: Minimum of two numbers
+// getMin/getMax: Minimum/maximum of two numbers
 Stats.getMin(3, 7); // 3
-
-// getMax: Maximum of two numbers
 Stats.getMax(3, 7); // 7
 
 // histogram: Histogram of values
-Stats.histogram([1, 2, 2, 3]); // { 1: 1, 2: 2, 3: 1 }
+Stats.histogram([1, 2, 2, 3]); // Map { 1 => 1, 2 => 2, 3 => 1 }
+
+// mostCommon: Most common value
+Stats.mostCommon([1, 2, 2, 3]); // 2
 ```
 
 ### Texts
@@ -327,23 +380,30 @@ throttled();
 
 ## API Reference
 
-- `Collections`: Array and object manipulation (difference, intersection, flatten, keyBy, omitBy, etc.)
-- `Filters`: Type checks and comparison helpers (`isArray`, `isString`, `isDefined`, `isInt`, `isFloat`, `isRegExp`, `isTrue`, `isFalse`, `isLessThan`, `isGreaterThan`, `isIn`, `isLike`, etc.)
-- `Objects`: Object utilities (`keys`, `values`, `entries`, `isEqual`, `stringify`, etc.)
-- `Stats`: Math and statistics helpers (`range`, `randomRange`, `randomRangeInt`, `roundToIncrement`, `getMin`, `getMax`, etc.)
-- `Texts`: String manipulation (`capitalize`, `trim`, `upperFirst`, `lowerFirst`, `trimStart`, `trimEnd`, etc.)
-- `Functions`: Function composition and helpers (`compose`, `noop`, `extractThen`, etc.)
+- `Collections`: Array manipulation (difference, intersection, flatten, keyBy, isMatch, filterInclude, filterExclude, etc.)
+- `Filters`: Type checks and comparison helpers (`isArray`, `isString`, `isDefined`, `isEqual`, `isIn`, `isLike`, etc.)
+- `Objects`: Object utilities (`keys`, `values`, `entries`, `omit`, `pick`, `groupBy`, `objectDifference`, `allPaths`, etc.)
+- `Stats`: Math and statistics helpers (`minMax`, `normalize`, `normalizeBetween`, `histogram`, `mostCommon`, etc.)
+- `Texts`: String manipulation (`capitalize`, `trim`, `upperFirst`, `words`, `hyphenCase`, etc.)
+- `Functions`: Function composition and helpers (`compose`, `get`, `set`, `flow`, `partial`, `Differ`, etc.)
+- `Humanize`: Human-readable formatting (`humanizeBytes`)
+- `Date`: Date utilities (`formatDate`, `humanDuration`, `timeFromNow`, `fromNow`)
+- `Regex`: Regex utilities (`escapePattern`, `mergePatterns`, `rangeToRegex`)
 
 ---
 
 ## File Structure
 
-- `src/lib/collections.ts` – Array and object utilities
+- `src/lib/collections.ts` – Array utilities and deep matching
 - `src/lib/filters.ts` – Type checks and comparisons
-- `src/lib/function.ts` – Function helpers
+- `src/lib/function.ts` – Function helpers, path access, diffing
 - `src/lib/object.ts` – Object utilities
 - `src/lib/stats.ts` – Math and statistics
 - `src/lib/text.ts` – String utilities
+- `src/lib/humanize.ts` – Human-readable formatting
+- `src/lib/date.ts` – Date utilities
+- `src/lib/regex.ts` – Regex utilities
+- `src/lib/structures.ts` – Stack and Queue data structures
 
 ---
 

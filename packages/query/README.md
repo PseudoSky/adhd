@@ -87,7 +87,7 @@ The query language is inspired by GraphQL/Hasura and supports expressive, compos
 
 **Execution:**
 
-- Filters are converted to predicate functions
+- Where clauses are compiled once into predicate functions (not re-parsed per row)
 - Sorting is applied using parsed order expressions
 - Distinct, offset, and limit are applied in sequence
 - The result is a filtered, sorted, and paginated view of the data
@@ -96,11 +96,16 @@ The query language is inspired by GraphQL/Hasura and supports expressive, compos
 
 ## Example Usage
 
-```js
+```ts
 import { DataView } from '@adhd/query';
 import data from './test-data.json';
 
+// DataView accepts an optional generic type parameter
 const dv = new DataView(data);
+
+// With types: DataView<MyRow> gives typed .view() returns
+interface MyRow { name: string; value: number }
+const typed = new DataView<MyRow>(data);
 
 // 1. Basic Filtering
 dv.where({ age: 30 }).view();
@@ -128,6 +133,12 @@ dv.distinctOn(['user.id']).view();
 
 // 8. Offset and Pagination
 dv.offset(10).limit(10).view();
+
+// 9. Regex Matching
+dv.where({ email: { _iregex: '@example\\.com$' } }).view();
+
+// 10. Negated Regex
+dv.where({ name: { _nregex: '^test' } }).view();
 ```
 
 ---
@@ -207,7 +218,7 @@ You can query deeply nested properties using dot notation:
 
 Queries are parsed and executed by the `DataView` class:
 
-- Filters are converted to predicate functions
+- Where clauses are compiled once into predicate functions (not re-parsed per row)
 - Sorting is applied using parsed order expressions
 - Distinct, offset, and limit are applied in sequence
 - The result is a filtered, sorted, and paginated view of the data
