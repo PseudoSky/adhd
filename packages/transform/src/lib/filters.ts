@@ -1,5 +1,5 @@
 /* SECTION: typechecks */
-// type PrimitiveTypes = string|number|Date|null|undefined|any[]|object|((...args: any[]) => void)|RegExp
+type PrimitiveTypes = string | boolean | number | Date | null | undefined | unknown[] | object | ((...args: any[]) => void) | RegExp
 
 const TypeMap: { [type: string]: string } = {
   String: "[object String]",
@@ -13,27 +13,27 @@ const TypeMap: { [type: string]: string } = {
   RegExp: "[object RegExp]",
 }
 
-export function isType(x: unknown, type: keyof (typeof TypeMap)) { return Object.prototype.toString.call(x) === TypeMap[type] }
-export function isString(x: unknown) { return isType(x, 'String'); }
-export function isNumber(x: unknown) { return isType(x, 'Number'); }
-export function isDate(x: unknown) { return isType(x, 'Date'); }
-export function isNull(x: unknown) { return isType(x, 'Null'); }
-export function isUndefined(x: unknown) { return isType(x, 'Undefined'); }
-export function isArray(x: unknown) { return isType(x, 'Array'); }
-export function isObject(x: unknown) { return isType(x, 'Object'); }
-export function isFunction(x: unknown) { return isType(x, 'Function'); }
-export function isRegExp(x: unknown) { return isType(x, 'RegExp'); }
-export function isDefined(x: unknown) { return (isUndefined(x) || isNull(x)) === false }
-export function isInt(x: unknown) { return (isNumber(x) && Number.isInteger(x)) === true }
-export function isFloat(x: unknown) { return (isDefined(x) && (isNumber(x) && Number.isInteger(x) === false)); }
+export function isType(x: PrimitiveTypes, type: keyof (typeof TypeMap)) { return Object.prototype.toString.call(x) === TypeMap[type] }
+export function isString(x: PrimitiveTypes) { return isType(x, 'String'); }
+export function isNumber(x: PrimitiveTypes) { return isType(x, 'Number'); }
+export function isDate(x: PrimitiveTypes) { return isType(x, 'Date'); }
+export function isNull(x: PrimitiveTypes) { return isType(x, 'Null'); }
+export function isUndefined(x: PrimitiveTypes) { return isType(x, 'Undefined'); }
+export function isArray(x: PrimitiveTypes) { return isType(x, 'Array'); }
+export function isObject(x: PrimitiveTypes) { return isType(x, 'Object'); }
+export function isFunction(x: PrimitiveTypes) { return isType(x, 'Function'); }
+export function isRegExp(x: PrimitiveTypes) { return isType(x, 'RegExp'); }
+export function isDefined(x: PrimitiveTypes) { return (isUndefined(x) || isNull(x)) === false }
+export function isInt(x: PrimitiveTypes) { return (isNumber(x) && Number.isInteger(x)) === true }
+export function isFloat(x: PrimitiveTypes) { return (isDefined(x) && (isNumber(x) && Number.isInteger(x) === false)); }
 // Currently undefined and nulls are considered values
-export function isValue(x: unknown) { return (isObject(x) || isArray(x) || isFunction(x) || isRegExp(x)) === false; }
+export function isValue(x: PrimitiveTypes) { return (isObject(x) || isArray(x) || isFunction(x) || isRegExp(x)) === false; }
 
 /* SECTION: comparisons */
-export function isTrue(a: any) {
+export function isTrue(a: PrimitiveTypes) {
   return a === true
 }
-export function isFalse(a: any) {
+export function isFalse(a: PrimitiveTypes) {
   return a === false;
 }
 export function isLessThan(a: number, b: number) {
@@ -48,25 +48,28 @@ export function isLessThanOrEqual(a: number, b: number) {
 export function isGreaterThanOrEqual(a: number, b: number) {
   return a >= b;
 }
-export function isShallowEqual(a: any, b: any) {
+export function isShallowEqual(a: PrimitiveTypes, b: PrimitiveTypes) {
   return a === b
 }
-export function isIn(a: any, b: string | any[]): boolean {
+export function isIn(a: PrimitiveTypes, b: string | PrimitiveTypes[]): boolean {
+  // @ts-expect-error b for some reason thinks it can only look for a string (not true)
   return isDefined(b) && b.includes(a);
 }
+// TODO: consider adding regex support for like/ilike patterns
 export function isLike(a: string, b: string) {
   return isDefined(a) && isDefined(b) && a.includes(b)
 }
+// TODO: consider adding regex support for like/ilike patterns
 export function isILike(a: string, b: string) {
   return isDefined(a) && isDefined(b) && isIn(b.toLowerCase(), a.toLowerCase())
 }
 
 /* SECTION: comparisons: not */
-export function isNotShallowEqual(a: any, b: any) {
+export function isNotShallowEqual(a: PrimitiveTypes, b: PrimitiveTypes) {
   return a !== b
 }
-export function isNotIn(a: any, b: any[]): boolean
-export function isNotIn(a: string, b: string | unknown[]): boolean {
+export function isNotIn(a: PrimitiveTypes, b: PrimitiveTypes[]): boolean
+export function isNotIn(a: PrimitiveTypes, b: string | PrimitiveTypes[]): boolean {
   return !isIn(a, b)
 }
 export function isNotLike(a: string, b: string) {
@@ -77,15 +80,16 @@ export function isNotILike(a: string, b: string) {
 }
 
 
-export function isEqual(a: any, b: any) {
+export function isEqual(a: PrimitiveTypes, b: PrimitiveTypes) {
   return JSON.stringify(a) === JSON.stringify(b)
 }
-export function isNotEqual(a: any, b: any) {
+export function isNotEqual(a: PrimitiveTypes, b: PrimitiveTypes) {
   return JSON.stringify(a) !== JSON.stringify(b)
 }
-
-export function isEmpty(obj: any) {
-  return [Object, Array].includes((obj || {}).constructor) && !Object.entries((obj || {})).length;
+// TODO: Currently only checks if the value is an empty object or array, not if it's an empty string, null, or undefined. Consider whether this is the desired behavior.
+export function isEmpty(obj: PrimitiveTypes) {
+  if (isUndefined(obj) || isNull(obj)) return true;
+  return (isObject(obj) || isArray(obj)) && !Object.entries((obj || {})).length
 }
 
 export default {
