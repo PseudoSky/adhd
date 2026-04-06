@@ -8,14 +8,14 @@ import { BABELRC, BLANK_PACKAGE } from './templates.js';
 import { read_map } from './utils.js';
 
 const DEPSTORE = {};
-const addDepsFor = (filePath, dependencies) => {
-  DEPSTORE[filePath] = _.keys(dependencies);
-  return dependencies;
-};
+// const addDepsFor = (filePath, dependencies) => {
+//   DEPSTORE[filePath] = _.keys(dependencies);
+//   return dependencies;
+// };
 
 
 export const buildConsumer = async (outname, mapPath) => {
-  const outputDir = path.resolve(`./${outname}`);
+  // const outputDir = path.resolve(`./${outname}`);
   const rawMap = read_map(mapPath);
 
   const sources = await extractSources(rawMap);

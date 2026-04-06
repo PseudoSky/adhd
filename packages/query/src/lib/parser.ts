@@ -14,7 +14,7 @@ function findLogicalParent(path: string[]): string {
     return "<root>"
 }
 
-export function compileWhere(query: BooleanExpression): (obj: any) => boolean {
+export function compileWhere(query: BooleanExpression): (obj: Record<string, unknown>) => boolean {
     // Compile phase: analyze query tree once
     const logical = _.allPaths(query, (key) => ['_and', '_or', '_not'].includes(key.toString()))
     const filters = _.allPaths(query, (key) => key.toString().startsWith('_') && !['_and', '_or', '_not'].includes(key.toString()))
@@ -22,7 +22,8 @@ export function compileWhere(query: BooleanExpression): (obj: any) => boolean {
 
     let deps = {} as Record<string, string[]>;
     const fieldDeps = {} as Record<string, string[]>;
-    const compiledFilters = filters.reduce((res, item) => {
+    type CompiledFilter = { field: string; op: typeof operators[string] | undefined; key: string; value: unknown };
+    const compiledFilters: CompiledFilter[] = filters.reduce((res: CompiledFilter[], item: string[]) => {
         const key = item.join('.')
         const depKey = item.slice(0, -1).join('.');
         const fieldKey = item.filter(e => (!e.startsWith('_') && ! /^[0-9]+$/.test(e))).join('.')
@@ -33,7 +34,7 @@ export function compileWhere(query: BooleanExpression): (obj: any) => boolean {
             console.error(`@adhd/query where operation ${opName} does not exist. Try one of ${Object.keys(operators)}`)
         }
         return [...res, { field: fieldKey, key, op, value: _.get(query, item) }]
-    }, [] as { field: string, op: ReturnType<typeof operators[string]> | undefined, key: string, value: any }[])
+    }, [] as CompiledFilter[])
 
     deps = fields.reduce((res, item) => {
         const parent = findLogicalParent(item);
@@ -63,13 +64,13 @@ export function compileWhere(query: BooleanExpression): (obj: any) => boolean {
     const fieldDepEntries = Object.entries(fieldDeps);
 
     // Execute phase: per-row evaluator
-    return (obj: any): boolean => {
+    return (obj: Record<string, unknown>): boolean => {
         const results = {} as Record<string, boolean>;
 
         for (const item of compiledFilters) {
             if (!item.op) continue;
             const input = _.get(obj, item.field);
-            results[item.key] = item.op(input)(item.value);
+            results[item.key as string] = item.op(input)(item.value);
         }
 
         for (const [fd, items] of fieldDepEntries) {
@@ -95,17 +96,17 @@ export function compileWhere(query: BooleanExpression): (obj: any) => boolean {
     };
 }
 
-export function parseWhere(query: BooleanExpression, obj: any) {
+export function parseWhere(query: BooleanExpression, obj: Record<string, unknown>) {
     return compileWhere(query)(obj);
 }
 // TODO: decide wether or not to support <field_direction_nulls> (probaby want to use regex in this case)
 const parseOrderByOperation = (path: string[], value: string) => {
-    const [dir, ___, nulls = 'last'] = value.split('_') as ['asc' | 'desc', string, 'first' | 'last'];
+    const [dir, , nulls = 'last'] = value.split('_') as ['asc' | 'desc', string, 'first' | 'last'];
     return { key: path.join('.'), dir, nulls } as OrderByOperation
 }
 
 // TODO: decide wether or not to support <field_direction_nulls> (probaby want to use regex in this case)
-export function parseOrderBy(query: string | OrderByExpression | OrderByExpression[], paths: string[] = []): OrderByOperation[] {
+export function parseOrderBy(query: string | OrderByExpression | OrderByExpression[]): OrderByOperation[] {
     // If query is "<field_name>" default to descending nulls last
     if (_.isString(query)) {
         return [{ key: (query as string), dir: 'desc', nulls: 'last' }];

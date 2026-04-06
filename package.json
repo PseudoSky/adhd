@@ -66,7 +66,7 @@
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.0.0",
     "@types/jest": "^29.4.0",
-    "@types/node": "18.16.9",
+    "@types/node": "^25.5.0",
     "@types/react": "18.2.33",
     "@types/react-dom": "18.2.14",
     "@types/shortid": "^0.0.32",

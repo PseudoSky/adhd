@@ -26,11 +26,11 @@ export const extractMapLink = (raw) => {
   }
 };
 
-
+type SourceType = { name: string; data: string | null };
 export const extractSource = async (rawMap) => {
   try {
     const consumer = await new sourceMap.SourceMapConsumer(rawMap);
-    const sources = {}
+    const sources: Record<string, SourceType> = {}
     consumer.eachMapping((m) => {
       const s = m.source
       const outFile = formatName(s);

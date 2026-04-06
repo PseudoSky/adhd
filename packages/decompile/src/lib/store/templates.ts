@@ -81,8 +81,8 @@ export const packageWith = (depList, overrides = {}) => {
   return { ...BLANK_PACKAGE, dependencies, ...overrides };
 };
 
-export const babelWith = (
-  overrides: { plugins?: any[]; presets?: any[] } = {}
+export const babelWith: (overrides?: Partial<typeof BABELRC>) => typeof BABELRC = (
+  overrides = {}
 ) => {
   return {
     ...overrides,

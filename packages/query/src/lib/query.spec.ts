@@ -15,7 +15,7 @@ describe('query', () => {
   it('(0) logical tripple and', () => {
     const dv = new DataView(largeSample as [], undefined, true).orderBy([{ "value": "asc" }]);
     const query: BooleanExpression = { _and: [{ _and: [{ _and: [{ name: { _eq: "D" } }] }] }] }
-    /* @ts-expect-error */
+
     dv.where({ "person": { "bio": { _similar: "@" } } })
     console.log(util.inspect(dv.query, { showHidden: false, depth: null, colors: true }))
     expect(dv.view().length).toEqual(22);

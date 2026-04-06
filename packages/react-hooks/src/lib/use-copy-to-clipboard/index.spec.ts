@@ -115,7 +115,7 @@ describe('useCopyToClipboard', () => {
 
         const { result } = renderHook(() => useCopyToClipboard());
 
-        let success: boolean = false;
+        let success = false;
         await act(async () => {
             success = await result.current.copyToClipboard('test text');
         });
@@ -128,7 +128,7 @@ describe('useCopyToClipboard', () => {
 
         const { result } = renderHook(() => useCopyToClipboard());
 
-        let success: boolean = false;
+        let success = false;
         await act(async () => {
             success = await result.current.copyToClipboard('test text');
         });

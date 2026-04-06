@@ -1,4 +1,4 @@
-import parse from 'json-to-ast';
+// import parse from 'json-to-ast';
 
 const rxOne = /^[\],:{}\s]*$/;
 const rxTwo = /\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4})/g;
@@ -17,21 +17,21 @@ const isJson = (s) => {
 
 /* https://github.com/vtrushin/json-to-ast */
 // eslint-disable-next-line no-unused-vars
-const astJSON = (s) => {
-  console.log('Parser(JSON:ast)');
-  try {
-    parse(s);
-    return true;
-  } catch (e) {
-    return false;
-  }
-};
+// const astJSON = (s) => {
+//   console.log('Parser(JSON:ast)');
+//   try {
+//     parse(s);
+//     return true;
+//   } catch (e) {
+//     return false;
+//   }
+// };
 
 const Bench = {
   count: 0,
   total: 0,
 };
-
+// TODO: create a utility or package where this belings.
 const benchWrapper = (func) => {
   return (s) => {
     const start = new Date();

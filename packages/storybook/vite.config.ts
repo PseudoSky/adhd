@@ -7,8 +7,7 @@ import dts from 'vite-plugin-dts';
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../node_modules/.vite/packages',
-
+  cacheDir: '../../node_modules/.vite/packages/storybook',
   plugins: [
     react(),
     nxViteTsPaths(),
@@ -39,14 +38,13 @@ export default defineConfig({
       fileName: 'index',
       // Change this to the formats you want to support.
       // Don't forget to update your package.json as well.
-      formats: ['es', 'cjs'],
+      formats: ['es', 'cjs', 'umd'],
     },
     rollupOptions: {
       // External packages that should not be bundled into your library.
       external: ['react', 'react-dom', 'react/jsx-runtime'],
     },
   },
-
   test: {
     globals: true,
     cache: {
@@ -57,7 +55,7 @@ export default defineConfig({
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../coverage/packages',
+      reportsDirectory: '../../coverage/packages/storybook',
       provider: 'v8',
     },
   },

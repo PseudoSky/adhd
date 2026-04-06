@@ -8,7 +8,7 @@ import { BABELRC, BLANK_PACKAGE } from './templates.js';
 import { cleanFilePath, isExternalRef } from './utils.js';
 
 export interface WriteOperations {
-  pending: Promise<any>[];
+  pending: (string | Promise<string | void>)[];
   completed: string[];
 }
 
@@ -36,14 +36,14 @@ class FileStore implements IStore {
   public prefix: string;
   public main_file: string;
 
-  constructor(initialPrefix: string = './build/reverse') {
+  constructor(initialPrefix = './build/reverse') {
     console.log({ initialPrefix })
     this.zip = new AdmZip();
     this.prefix = initialPrefix;
     this.main_file = '';
   }
 
-  public setPrefix(prefix_path: string, timestamp: boolean = true): void {
+  public setPrefix(prefix_path: string, timestamp = true): void {
     this.prefix = `${prefix_path}/${timestamp ? formatDates() : ''}/src`;
   }
 
@@ -52,7 +52,7 @@ class FileStore implements IStore {
     return path.join(this.prefix, cleanFilePath(file));
   }
 
-  public pending(): Promise<any>[] {
+  public pending(): (string | Promise<string | void>)[] {
     return this.writes.pending;
   }
 
@@ -64,9 +64,13 @@ class FileStore implements IStore {
     return this.writes[event].length;
   }
 
-  private log(event: keyof WriteOperations, data: any, id: string): void {
+  private log(event: keyof WriteOperations, data: string | Promise<string | void>, id: string): void {
     console.log(`Source file ${event === 'pending' ? 'extracted' : 'written'}: ${id}`);
-    this.writes[event].push(data);
+    if (event === 'completed') {
+      this.writes.completed.push(data as string);
+    } else {
+      this.writes[event].push(data);
+    }
   }
 
   public addFile(file: string, content: string | Buffer, type: 'dir' | 'zip' = 'dir'): Promise<void> | null {
@@ -92,9 +96,9 @@ class FileStore implements IStore {
       return Promise.resolve();
     }
     const p = fse.outputFile(outfile, content)
-      .then(() => this.log('completed', outfile, outfile))
-      .catch((err) => {
-        console.error(err);
+      .then(() => this.log('completed', p, outfile))
+      .catch((_err) => {
+        console.error(_err);
       });
 
     this.log('pending', p, outfile);
@@ -114,7 +118,7 @@ class FileStore implements IStore {
     }
   }
 
-  public async flush(): Promise<any[]> {
+  public async flush(): Promise<(string | void)[]> {
     const results = await Promise.all(this.pending());
     console.log(`Store: extraction complete. files written ${this.count('completed')}`);
     this.writes = {

@@ -7,7 +7,7 @@ import dts from 'vite-plugin-dts';
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../node_modules/.vite/packages/react/hooks',
+  cacheDir: '../../node_modules/.vite/packages/react-hooks',
   plugins: [
     react(),
     nxViteTsPaths(),
@@ -26,7 +26,7 @@ export default defineConfig({
   // See: https://vitejs.dev/guide/build.html#library-mode
   build: {
     sourcemap: 'inline',
-    outDir: '../../dist/packages/react/hooks',
+    outDir: '../../dist/packages/react-hooks',
     reportCompressedSize: true,
     commonjsOptions: {
       transformMixedEsModules: true,
@@ -52,10 +52,10 @@ export default defineConfig({
     },
     environment: 'jsdom',
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
-
+    setupFiles: ['./src/test-setup.ts'],
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../coverage/packages/query',
+      reportsDirectory: '../../coverage/packages/react-hooks',
       provider: 'v8',
     },
   },
