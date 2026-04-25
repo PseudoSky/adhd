@@ -199,7 +199,7 @@ export const useFileDownload = ({
             chunks.push(data.slice(i, i + CHUNK_SIZE));
         }
 
-        let processedChunks: Blob[] = [];
+        const processedChunks: Blob[] = [];
 
         // Process chunks with progress tracking (0-90%)
         for (let i = 0; i < chunks.length; i++) {

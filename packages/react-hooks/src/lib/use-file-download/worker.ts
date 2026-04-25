@@ -44,7 +44,7 @@ async function processLargeData(
         chunks.push(data.slice(i, i + CHUNK_SIZE));
     }
 
-    let processedChunks: any[] = [];
+    const processedChunks: any[] = [];
 
     // Process each chunk
     for (let i = 0; i < chunks.length; i++) {

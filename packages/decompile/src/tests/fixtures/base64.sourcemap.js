@@ -5,13 +5,13 @@
         });
         exports.default = void 0;
 
-        var _react = _interopRequireDefault(require("react"));
+        let _react = _interopRequireDefault(require("react"));
 
-        var _reactNative = require("react-native");
+        let _reactNative = require("react-native");
 
-        var _expoGraphics = _interopRequireDefault(require("expo-graphics"));
+        let _expoGraphics = _interopRequireDefault(require("expo-graphics"));
 
-        var _expoThree = _interopRequireWildcard(require("expo-three"));
+        let _expoThree = _interopRequireWildcard(require("expo-three"));
 
         require("mapbox-gl");
 
@@ -19,11 +19,11 @@
             if (obj && obj.__esModule) {
                 return obj;
             } else {
-                var newObj = {};
+                let newObj = {};
                 if (obj != null) {
-                    for (var key in obj) {
+                    for (let key in obj) {
                         if (Object.prototype.hasOwnProperty.call(obj, key)) {
-                            var desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {};
+                            let desc = Object.defineProperty && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : {};
                             if (desc.get || desc.set) {
                                 Object.defineProperty(newObj, key, desc);
                             } else {
@@ -50,8 +50,8 @@
         }
 
         function _defineProperties(target, props) {
-            for (var i = 0; i < props.length; i++) {
-                var descriptor = props[i];
+            for (let i = 0; i < props.length; i++) {
+                let descriptor = props[i];
                 descriptor.enumerable = descriptor.enumerable || false;
                 descriptor.configurable = true;
                 if ("value"in descriptor)
@@ -114,13 +114,13 @@
             return _setPrototypeOf(o, p);
         }
 
-        var App = function(_React$Component) {
+        let App = function(_React$Component) {
             _inherits(App, _React$Component);
 
             function App() {
-                var _getPrototypeOf2;
+                let _getPrototypeOf2;
 
-                var _this;
+                let _this;
 
                 _classCallCheck(this, App);
 
@@ -131,7 +131,7 @@
                 _this = _possibleConstructorReturn(this, (_getPrototypeOf2 = _getPrototypeOf(App)).call.apply(_getPrototypeOf2, [this].concat(args)));
 
                 _this.onContextCreate = function _callee(gl) {
-                    var width, height, scale;
+                    let width, height, scale;
                     return regeneratorRuntime.async(function _callee$(_context) {
                         while (1) {
                             switch (_context.prev = _context.next) {
@@ -193,24 +193,24 @@
                 ;
 
                 _this.setupLights = function() {
-                    var directionalLightA = new _expoThree.THREE.DirectionalLight(0xffffff);
+                    let directionalLightA = new _expoThree.THREE.DirectionalLight(0xffffff);
                     directionalLightA.position.set(1, 1, 1);
 
                     _this.scene.add(directionalLightA);
 
-                    var directionalLightB = new _expoThree.THREE.DirectionalLight(0xffeedd);
+                    let directionalLightB = new _expoThree.THREE.DirectionalLight(0xffeedd);
                     directionalLightB.position.set(-1, -1, -1);
 
                     _this.scene.add(directionalLightB);
 
-                    var ambientLight = new _expoThree.THREE.AmbientLight(0x222222);
+                    let ambientLight = new _expoThree.THREE.AmbientLight(0x222222);
 
                     _this.scene.add(ambientLight);
                 }
                 ;
 
                 _this.setupCubeAsync = function _callee3() {
-                    var someRemoteUrl, texture;
+                    let someRemoteUrl, texture;
                     return regeneratorRuntime.async(function _callee3$(_context3) {
                         while (1) {
                             switch (_context3.prev = _context3.next) {
@@ -237,10 +237,10 @@
                 ;
 
                 _this.onResize = function(_ref) {
-                    var width = _ref.width
+                    let width = _ref.width
                       , height = _ref.height;
 
-                    var scale = _reactNative.PixelRatio.get();
+                    let scale = _reactNative.PixelRatio.get();
 
                     _this.camera.aspect = width / height;
 

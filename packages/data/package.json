@@ -5,7 +5,9 @@
   "publishConfig": {
     "access": "public"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@adhd/transform": "*"
+  },
   "main": "./index.js",
   "module": "./index.mjs",
   "typings": "./index.d.ts"
