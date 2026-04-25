@@ -97,11 +97,13 @@ export const extract = async (callStack) => {
          * input=[{"name": str, "data": json}]
          */
 
-        input.filter((e) => !!e).forEach((f) => {
-          Store.addToImports(f.name);
-          Store.addFile(f.name, f.data);
-          // fs.writeJSONSync(f.name, f.data)
-        });
+        input
+          .filter((e) => !!e)
+          .forEach((f) => {
+            Store.addToImports(f.name);
+            Store.addFile(f.name, f.data);
+            // fs.writeJSONSync(f.name, f.data)
+          });
       }
     }
   } catch (e) {
@@ -120,13 +122,11 @@ const run = async (callStack, debug = true) => {
 };
 
 export const testpipeline = (files, prefix) => {
-  return Promise.all(
-    files.map((f) => pipeline(f, prefix)),
-  ).then((r) => r);
+  return Promise.all(files.map((f) => pipeline(f, prefix))).then((r) => r);
 };
 
-import { constants } from "fs";
-import { access } from "fs/promises";
+import { constants } from 'fs';
+import { access } from 'fs/promises';
 
 async function fileExists(path: string): Promise<boolean> {
   try {
@@ -136,7 +136,6 @@ async function fileExists(path: string): Promise<boolean> {
     return false;
   }
 }
-
 
 /* EXAMPLE:
  *
@@ -148,7 +147,7 @@ export const pipeline = async (input, prefix = './build/src', debug = true) => {
   Store.setPrefix(prefix);
   // pkg="test"
   // Store.package=pkg
-  if (typeof (input) === 'string' && input.startsWith('http')) {
+  if (typeof input === 'string' && input.startsWith('http')) {
     if (input.endsWith('js')) {
       callStack.push('link', input);
     } else {
@@ -172,4 +171,3 @@ const Extractors = {
 };
 
 export default Extractors;
-
