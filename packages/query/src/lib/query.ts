@@ -2,29 +2,31 @@ import { Transform as _ } from '@adhd/transform';
 import { OrderByExpression, QueryExpression } from './expressions';
 import { parseOrderBy, parseWhere } from './parser';
 
-export const orderBy = (props: OrderByExpression[] = []) => (a: any, b: any) => {
-  const orderOps = parseOrderBy(props);
-  for (const p in orderOps) {
-    const { key, dir, nulls } = orderOps[p];
-    const cmp = dir === 'asc' ? _.defaultSort : _.reverseSort;
-    const x = _.get(a, key);
-    const y = _.get(b, key);
-    if (x !== y) {
-      if (nulls && !_.isDefined(x)) {
-        return nulls === 'last' ? 1 : -1;
-      } else if (nulls && !_.isDefined(y)) {
-        return nulls === 'last' ? -1 : 1;
+export const orderBy =
+  (props: OrderByExpression[] = []) =>
+  (a: any, b: any) => {
+    const orderOps = parseOrderBy(props);
+    for (const p in orderOps) {
+      const { key, dir, nulls } = orderOps[p];
+      const cmp = dir === 'asc' ? _.defaultSort : _.reverseSort;
+      const x = _.get(a, key);
+      const y = _.get(b, key);
+      if (x !== y) {
+        if (nulls && !_.isDefined(x)) {
+          return nulls === 'last' ? 1 : -1;
+        } else if (nulls && !_.isDefined(y)) {
+          return nulls === 'last' ? -1 : 1;
+        }
+        return cmp(x, y);
       }
-      return cmp(x, y);
     }
-  }
-  return 0;
-};
+    return 0;
+  };
 
 type QueryType = {
   raw?: QueryExpression;
   where?: (() => boolean) | ((obj: any) => any);
-  order_by?: ((a: any, b: any) => number);
+  order_by?: (a: any, b: any) => number;
   distinct_on?: string[];
   offset?: number;
   limit?: number;
@@ -33,7 +35,7 @@ type QueryType = {
 export class Query implements QueryType {
   raw: QueryExpression;
   where?: (() => boolean) | ((obj: any) => any);
-  order_by?: (((a: any, b: any) => any));// | string[]);
+  order_by?: (a: any, b: any) => any; // | string[]);
   distinct_on: any;
   offset = 0;
   limit: any;
@@ -56,7 +58,7 @@ export class Query implements QueryType {
   setWhere = (whereQuery: QueryExpression['where']) => {
     if (_.isEqual(whereQuery, this.raw.where)) return false;
     this.raw.where = whereQuery;
-    this.where = d => parseWhere(whereQuery, d);
+    this.where = (d) => parseWhere(whereQuery, d);
     return true;
   };
 

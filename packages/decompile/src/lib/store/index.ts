@@ -66,7 +66,11 @@ class FileStore implements IStore {
     this.writes[event].push(data);
   }
 
-  public addFile(file: string, content: string | Buffer, type: 'dir' | 'zip' = 'dir'): Promise<void> | null {
+  public addFile(
+    file: string,
+    content: string | Buffer,
+    type: 'dir' | 'zip' = 'dir'
+  ): Promise<void> | null {
     const outfile = this.pathFor(file);
 
     if (isExternalRef(outfile)) {
@@ -75,7 +79,7 @@ class FileStore implements IStore {
 
     if (type === 'zip') {
       if (this.index.pending[outfile]) {
-        this.index.pending[outfile] = ((this.index.pending[outfile] || 0) + 1)
+        this.index.pending[outfile] = (this.index.pending[outfile] || 0) + 1;
         return Promise.resolve();
       }
       const buffer = Buffer.from(content as string, 'utf-8');
@@ -84,10 +88,11 @@ class FileStore implements IStore {
       return Promise.resolve();
     }
     if (this.index.completed[outfile]) {
-      this.index.completed[outfile] = ((this.index.completed[outfile] || 0) + 1)
+      this.index.completed[outfile] = (this.index.completed[outfile] || 0) + 1;
       return Promise.resolve();
     }
-    const p = fse.outputFile(outfile, content)
+    const p = fse
+      .outputFile(outfile, content)
       .then(() => this.log('completed', outfile))
       .catch((err) => {
         console.error('Failed to write file:', err);
@@ -102,10 +107,15 @@ class FileStore implements IStore {
     parts.pop();
     const base = parts.join('.');
 
-    if (!this.index.main[filePath] && (base.endsWith('index') &&
+    if (
+      !this.index.main[filePath] &&
+      base.endsWith('index') &&
       !base.includes('node_modules') &&
-      !base.includes('webpack'))) {
-      this.main_file += `import ${_.camelCase(path.dirname(filePath))} from "./${filePath}"\n`;
+      !base.includes('webpack')
+    ) {
+      this.main_file += `import ${_.camelCase(
+        path.dirname(filePath)
+      )} from "./${filePath}"\n`;
       this.index.main[filePath] = 1;
     }
   }
@@ -121,7 +131,10 @@ class FileStore implements IStore {
 
   public async finalize(): Promise<WriteOperations> {
     try {
-      await this.addFile('package.json', JSON.stringify(BLANK_PACKAGE, null, 4));
+      await this.addFile(
+        'package.json',
+        JSON.stringify(BLANK_PACKAGE, null, 4)
+      );
       await this.addFile('.babelrc', JSON.stringify(BABELRC, null, 4));
       await this.flush();
       await this.addFile('index.js', this.main_file);
