@@ -183,11 +183,11 @@ describe('useInfiniteScroll', () => {
     const { result } = renderHook(() => useInfiniteScroll());
 
     const element = document.createElement('div');
-    // @ts-ignore-next-line
+    // @ts-expect-error Testing ref assignment
     result.current.ref.current = element;
 
     // Simulate effect cleanup and re-run
-    // @ts-ignore-next-line
+    // @ts-expect-error Testing ref cleanup
     result.current.ref.current = null;
 
     expect(unobserve).toHaveBeenCalledWith(element);
