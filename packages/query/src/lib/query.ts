@@ -58,7 +58,7 @@ export class Query implements QueryType {
   setWhere = (whereQuery: QueryExpression['where']) => {
     if (_.isEqual(whereQuery, this.raw.where)) return false;
     this.raw.where = whereQuery;
-    this.where = (d) => parseWhere(whereQuery, d);
+    this.where = whereQuery ? (d) => parseWhere(whereQuery, d) : undefined;
     return true;
   };
 
