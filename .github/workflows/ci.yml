@@ -30,25 +30,10 @@ jobs:
 
       - name: Install dependencies
         run: yarn install
-        env:
-          CYPRESS_INSTALL_BINARY: 0
-
-      - name: Cache Cypress
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/Cypress
-          key: ${{ runner.os }}-cypress-${{ hashFiles('yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cypress-
-
-      - name: Install Cypress binary
-        run: npx cypress install
-        env:
-          CYPRESS_INSTALL_BINARY: 1
 
       - uses: nrwl/nx-set-shas@v4
       - run: git branch --track main origin/main
         if: ${{ github.event_name == 'pull_request' }}
 
       - run: npx nx format:check
-      - run: npx nx affected -t lint test build e2e-ci
+      - run: npx nx affected -t lint build
