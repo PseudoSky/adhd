@@ -21,23 +21,26 @@ export function isMatchType(obj: any, target: any) {
   return typeof obj === typeof target
 }
 
-export function isMatch(obj: any, target: any) {
-  // TODO: This needs to be fixed
-  return true
-  // if(!isMatchType(obj, target) ) return false;
-  // switch(typeof target){
-  //   case 'array':
-  //     return obj.length>=target.length &&
-  //       target.reduce((r, e, i) => r && isMatch(e, obj[i]), true)
-  //   case 'object':
-  //     return Object.entries(target).reduce(
-  //       (res, [key, val]) => {
-  //         return res && (key in obj && isMatch(obj[key], val));
-  //       }, true
-  //     )
-  //   default:
-  //     return obj===target
-  // }
+export function isMatch(obj: any, target: any): boolean {
+  if (!isMatchType(obj, target)) return false;
+
+  if (Array.isArray(target)) {
+    if (!Array.isArray(obj)) return false;
+    return obj.length >= target.length &&
+      target.reduce((r, e, i) => r && isMatch(e, obj[i]), true);
+  }
+
+  if (target && typeof target === 'object') {
+    if (typeof obj !== 'object' || obj === null) return false;
+    return Object.entries(target).reduce(
+      (res, [key, val]) => {
+        return res && (key in obj && isMatch(obj[key], val));
+      },
+      true
+    );
+  }
+
+  return obj === target;
 }
 
 export function overSome(checks: BooleanFilter[]) {

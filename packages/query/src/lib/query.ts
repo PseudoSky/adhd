@@ -4,14 +4,11 @@ import { parseOrderBy, parseWhere } from './parser';
 
 export const orderBy = (props: OrderByExpression[] = []) => (a: any, b: any) => {
   const orderOps = parseOrderBy(props);
-  // console.log({orderOps})
   for (const p in orderOps) {
     const { key, dir, nulls } = orderOps[p];
     const cmp = dir === 'asc' ? _.defaultSort : _.reverseSort;
     const x = _.get(a, key);
     const y = _.get(b, key);
-    // console.log("order by", {x, y, key, dir, nulls })
-    // TODO: doesnt look like multiple sort works
     if (x !== y) {
       if (nulls && !_.isDefined(x)) {
         return nulls === 'last' ? 1 : -1;
@@ -27,30 +24,12 @@ export const orderBy = (props: OrderByExpression[] = []) => (a: any, b: any) => 
 type QueryType = {
   raw?: QueryExpression;
   where?: (() => boolean) | ((obj: any) => any);
-  order_by?: ((a: any, b: any) => number)// | string[];
+  order_by?: ((a: any, b: any) => number);
   distinct_on?: string[];
   offset?: number;
   limit?: number;
 };
 
-// const EmptyQuery: QueryType = {
-//   raw: {},
-//   where: () => true,
-//   order_by: () => 0,
-//   distinct_on: undefined,
-//   offset: undefined,
-//   limit: undefined,
-// };
-
-// function RawQuery(query: QueryExpression = {}){
-//   return {
-//     ...EmptyQuery,
-//     ...query,
-//   };
-// }
-
-// TODO: Need to separate Query interface from QueryType
-//   Currently the functional interface and the raw type are mixed
 export class Query implements QueryType {
   raw: QueryExpression;
   where?: (() => boolean) | ((obj: any) => any);
@@ -59,7 +38,6 @@ export class Query implements QueryType {
   offset = 0;
   limit: any;
   constructor(_query: QueryExpression = {}) {
-    // const query = RawQuery(_query);
     this.raw = {};
     this.setQuery(_query);
   }
@@ -75,12 +53,10 @@ export class Query implements QueryType {
     return ops.some(_.isTrue);
   };
 
-  setWhere = (whereQuery: QueryExpression['where'] = {}) => {
+  setWhere = (whereQuery: QueryExpression['where']) => {
     if (_.isEqual(whereQuery, this.raw.where)) return false;
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    /* @ts-ignore */
     this.raw.where = whereQuery;
-    this.where = d => parseWhere(whereQuery, d)
+    this.where = d => parseWhere(whereQuery, d);
     return true;
   };
 

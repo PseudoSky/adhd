@@ -7,7 +7,6 @@ import extractSite from './site.js';
 export const extract = async (callStack) => {
   if (callStack.data.length === 0) return;
   const [type, input] = callStack.pop();
-  console.log(`Extract[${type}]`, { input: input.path && input.path.includes('.js') ? input : input.name });
   try {
     if (!!Stack && input) {
       let r;
@@ -18,10 +17,9 @@ export const extract = async (callStack) => {
          */
         try {
           const res = await extractSite(input);
-          console.log({ site: res })
           if (res.path.endsWith('.js')) {
             callStack.push('link', res);
-          } if (res.path.endsWith('.map')) {
+          } else if (res.path.endsWith('.map')) {
             callStack.push('map', res);
           } else {
             callStack.push('raw', res);
@@ -52,7 +50,6 @@ export const extract = async (callStack) => {
          */
 
         r = extractRawHtml(input);
-        console.log({ links: r });
         r.reduce((r, a) => r.concat(a), []).forEach((l) => {
           callStack.push('link', l);
         });
@@ -64,14 +61,13 @@ export const extract = async (callStack) => {
          */
         try {
           r = await extractSite(input);
-          // console.log({ res: r })
           if (input.endsWith('.map')) {
             callStack.push('map', r);
           } else {
             callStack.push('source', r);
           }
         } catch (e) {
-          console.error(e);
+          console.error('Failed to extract site:', e);
         }
       } else if (type === 'source') {
         /*
@@ -80,7 +76,6 @@ export const extract = async (callStack) => {
          */
         r = extractMapLink(input);
         if (r && r.length) {
-          console.log('EXTRACT[source] map link', r);
           r.forEach((l) => callStack.push('link', l));
         } else {
           callStack.push('write', [{ name: input.path, data: input.data }]);
@@ -92,10 +87,9 @@ export const extract = async (callStack) => {
          */
         try {
           r = await extractSource(input.data);
-          // console.log({ map: r })
           callStack.push('write', r);
         } catch (e) {
-          console.error(e);
+          console.error('Failed to extract source map:', e);
         }
       } else if (type === 'write') {
         /*
@@ -111,7 +105,7 @@ export const extract = async (callStack) => {
       }
     }
   } catch (e) {
-    console.error('EXTRACT[catchall]', e);
+    console.error('Extract error:', e);
   }
 };
 
@@ -126,21 +120,9 @@ const run = async (callStack, debug = true) => {
 };
 
 export const testpipeline = (files, prefix) => {
-  console.log({ files, prefix })
   return Promise.all(
-    files.map((f) => {
-      console.log(`pipeline started: ${f}`);
-      return pipeline(f, prefix);
-    }),
-  ).then((r) => {
-    console.log('complete');
-    return r
-    // console.log('finalizing package.json + index.js');
-    // return Store.finalize()
-  })
-  // .then(() => {
-  // });
-  // return argz
+    files.map((f) => pipeline(f, prefix)),
+  ).then((r) => r);
 };
 
 import { constants } from "fs";
@@ -177,7 +159,7 @@ export const pipeline = async (input, prefix = './build/src', debug = true) => {
   } else if (isHtml(input)) {
     callStack.push('raw', input);
   } else {
-    console.log('couldnt find ' + input);
+    console.error('Input not found or recognized:', input);
   }
   await run(callStack, debug);
   return Store.finalize();
