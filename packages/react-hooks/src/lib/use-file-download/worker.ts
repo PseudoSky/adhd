@@ -1,4 +1,5 @@
 // download.worker.ts
+/* eslint-disable no-restricted-globals */
 
 export type WorkerMessage = {
   data: any[];

@@ -19,7 +19,7 @@ describe('compression utilities', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        // @ts-ignore
+        // @ts-expect-error Mocking FileReader for testing
         global.FileReader = vi.fn(() => mockFileReader);
     });
 

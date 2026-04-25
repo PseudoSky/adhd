@@ -152,39 +152,6 @@ export const useFileDownload = ({
     };
   }, [worker, cache]);
 
-  const processChunk = useCallback(
-    async (chunk: any[], fileType: FileType): Promise<Blob> => {
-      switch (fileType) {
-        case 'csv':
-          const csvContent = await convertToCSV(chunk, options.csv);
-          return new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-
-        case 'excel':
-          const XLSX = await import('xlsx');
-          const worksheet = XLSX.utils.json_to_sheet(chunk);
-          const workbook = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(
-            workbook,
-            worksheet,
-            options.excel?.sheetName || 'Sheet1'
-          );
-          const content = XLSX.write(workbook, {
-            bookType: 'xlsx',
-            type: 'array',
-          });
-          return new Blob([content], {
-            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          });
-
-        default:
-          return new Blob([JSON.stringify(chunk, null, 2)], {
-            type: 'application/json;charset=utf-8;',
-          });
-      }
-    },
-    [options]
-  );
-
   const convertToCSV = useCallback(
     (data: any[], csvOptions?: FileDownloadOptions['csv']): string => {
       if (!Array.isArray(data) || !data.length) return '';
@@ -218,6 +185,41 @@ export const useFileDownload = ({
       return csvRows.join('\n');
     },
     []
+  );
+
+  const processChunk = useCallback(
+    async (chunk: any[], fileType: FileType): Promise<Blob> => {
+      switch (fileType) {
+        case 'csv': {
+          const csvContent = await convertToCSV(chunk, options.csv);
+          return new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        }
+
+        case 'excel': {
+          const XLSX = await import('xlsx');
+          const worksheet = XLSX.utils.json_to_sheet(chunk);
+          const workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(
+            workbook,
+            worksheet,
+            options.excel?.sheetName || 'Sheet1'
+          );
+          const content = XLSX.write(workbook, {
+            bookType: 'xlsx',
+            type: 'array',
+          });
+          return new Blob([content], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          });
+        }
+
+        default:
+          return new Blob([JSON.stringify(chunk, null, 2)], {
+            type: 'application/json;charset=utf-8;',
+          });
+      }
+    },
+    [options, convertToCSV]
   );
 
   // Async await for queueing
