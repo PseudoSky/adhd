@@ -28,26 +28,8 @@ jobs:
           node-version: 20
           cache: 'yarn'
 
-      - uses: actions/cache@v3
-        id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
-        with:
-          path: |
-            ${{ github.workspace }}/node_modules
-            !${{ github.workspace }}/node_modules/.cache
-          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
       - name: Install dependencies
-        if: steps.yarn-cache.outputs.cache-hit != 'true'
-        run: |
-          yarn # --frozen-lockfile
-          echo ""
-          echo "GH_MERGED: $GH_MERGED"
-          echo "GH_ACTION: $GH_ACTION"
-          echo "GH_BASE_REF: $GH_BASE_REF"
-          echo "GH_HEAD_REF: $GH_HEAD_REF"
-          echo "GH_BASE_SHA: $GH_BASE_SHA"
-          echo "GH_HEAD_SHA: $GH_HEAD_SHA"
+        run: yarn install --frozen-lockfile
       - uses: nrwl/nx-set-shas@v4
       - run: git branch --track main origin/main
         if: ${{ github.event_name == 'pull_request' }}
