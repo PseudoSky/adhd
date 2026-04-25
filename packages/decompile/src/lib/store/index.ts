@@ -37,7 +37,6 @@ class FileStore implements IStore {
   public main_file: string;
 
   constructor(initialPrefix: string = './build/reverse') {
-    console.log({ initialPrefix })
     this.zip = new AdmZip();
     this.prefix = initialPrefix;
     this.main_file = '';
@@ -48,7 +47,6 @@ class FileStore implements IStore {
   }
 
   public pathFor(file: string): string {
-    console.log({ prefix: this.prefix, cleanPath: cleanFilePath(file), joined: path.join(this.prefix, cleanFilePath(file)) })
     return path.join(this.prefix, cleanFilePath(file));
   }
 
@@ -64,14 +62,12 @@ class FileStore implements IStore {
     return this.writes[event].length;
   }
 
-  private log(event: keyof WriteOperations, data: any, id: string): void {
-    console.log(`Source file ${event === 'pending' ? 'extracted' : 'written'}: ${id}`);
+  private log(event: keyof WriteOperations, data: any): void {
     this.writes[event].push(data);
   }
 
   public addFile(file: string, content: string | Buffer, type: 'dir' | 'zip' = 'dir'): Promise<void> | null {
     const outfile = this.pathFor(file);
-    console.log(file, outfile)
 
     if (isExternalRef(outfile)) {
       return null;
@@ -84,7 +80,7 @@ class FileStore implements IStore {
       }
       const buffer = Buffer.from(content as string, 'utf-8');
       const p = this.zip.addFile(outfile, buffer);
-      this.log('pending', p, outfile);
+      this.log('pending', p);
       return Promise.resolve();
     }
     if (this.index.completed[outfile]) {
@@ -92,12 +88,12 @@ class FileStore implements IStore {
       return Promise.resolve();
     }
     const p = fse.outputFile(outfile, content)
-      .then(() => this.log('completed', outfile, outfile))
+      .then(() => this.log('completed', outfile))
       .catch((err) => {
-        console.error(err);
+        console.error('Failed to write file:', err);
       });
 
-    this.log('pending', p, outfile);
+    this.log('pending', p);
     return p;
   }
 
@@ -116,7 +112,6 @@ class FileStore implements IStore {
 
   public async flush(): Promise<any[]> {
     const results = await Promise.all(this.pending());
-    console.log(`Store: extraction complete. files written ${this.count('completed')}`);
     this.writes = {
       pending: [],
       completed: [],
@@ -125,7 +120,6 @@ class FileStore implements IStore {
   }
 
   public async finalize(): Promise<WriteOperations> {
-    console.log("Finalize", this.index)
     try {
       await this.addFile('package.json', JSON.stringify(BLANK_PACKAGE, null, 4));
       await this.addFile('.babelrc', JSON.stringify(BABELRC, null, 4));
@@ -140,10 +134,9 @@ class FileStore implements IStore {
       await this.addFile('package.json', packageJson);
       await this.flush();
     } catch (error) {
-      console.error(error);
+      console.error('Failed to finalize store:', error);
     }
-    console.log("Finalize", this.index)
-    return this.writes
+    return this.writes;
   }
 }
 

@@ -46,7 +46,7 @@ export function useAsync<T extends AsyncFunc<any[], any>, Props extends Paramete
                 throw errorObject;
             }
         }
-    }, [asyncFunction, options]);
+    }, [asyncFunction, options.onSuccess, options.onError]);
 
     useEffect(() => {
         if (options.immediate) {
