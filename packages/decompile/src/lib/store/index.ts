@@ -36,13 +36,13 @@ class FileStore implements IStore {
   public prefix: string;
   public main_file: string;
 
-  constructor(initialPrefix: string = './build/reverse') {
+  constructor(initialPrefix = './build/reverse') {
     this.zip = new AdmZip();
     this.prefix = initialPrefix;
     this.main_file = '';
   }
 
-  public setPrefix(prefix_path: string, timestamp: boolean = true): void {
+  public setPrefix(prefix_path: string, timestamp = true): void {
     this.prefix = `${prefix_path}/${timestamp ? formatDates() : ''}/src`;
   }
 
