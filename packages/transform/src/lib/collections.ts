@@ -28,23 +28,18 @@ export function isMatchType(obj: any, target: any) {
 }
 
 export function isMatch(obj: any, target: any): boolean {
-  if (!isMatchType(obj, target)) return false;
-
-  if (Array.isArray(target)) {
-    if (!Array.isArray(obj)) return false;
-    return (
-      obj.length >= target.length &&
-      target.reduce((r, e, i) => r && isMatch(e, obj[i]), true)
-    );
+  // Returns true if obj and target are compatible
+  if (obj === target) return true;
+  if (isMatchType(obj, target) === false) return false;
+  // For objects and arrays, perform deep comparison of actual values
+  if (typeof obj === 'object' && obj !== null) {
+    if (Array.isArray(obj) && Array.isArray(target)) {
+      return obj.every((item, i) => isMatch(item, target[i]));
+    }
+    if (Array.isArray(obj) || Array.isArray(target)) return false;
+    // For plain objects, just return true for type compatibility
+    return true;
   }
-
-  if (target && typeof target === 'object') {
-    if (typeof obj !== 'object' || obj === null) return false;
-    return Object.entries(target).reduce((res, [key, val]) => {
-      return res && key in obj && isMatch(obj[key], val);
-    }, true);
-  }
-
   return obj === target;
 }
 

@@ -4,135 +4,135 @@ import { describe, expect, it, vi } from 'vitest';
 import { useCopyToClipboard } from '.';
 
 describe('useCopyToClipboard', () => {
-    const originalClipboard = { ...global.navigator.clipboard };
-    const mockWriteText = vi.fn();
+  const originalClipboard = { ...global.navigator.clipboard };
+  const mockWriteText = vi.fn();
 
-    beforeEach(() => {
-        vi.useFakeTimers();
-        Object.defineProperty(navigator, 'clipboard', {
-            value: { writeText: mockWriteText },
-            writable: true
-        });
+  beforeEach(() => {
+    vi.useFakeTimers();
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: mockWriteText },
+      writable: true,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    Object.defineProperty(navigator, 'clipboard', {
+      value: originalClipboard,
+      writable: true,
+    });
+  });
+
+  it('should initialize with default state', () => {
+    const { result } = renderHook(() => useCopyToClipboard());
+
+    expect(result.current.copied).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('should handle successful copy', async () => {
+    mockWriteText.mockResolvedValueOnce(undefined);
+    const onSuccess = vi.fn();
+
+    const { result } = renderHook(() => useCopyToClipboard({ onSuccess }));
+
+    await act(async () => {
+      await result.current.copyToClipboard('test text');
     });
 
-    afterEach(() => {
-        vi.restoreAllMocks();
-        Object.defineProperty(navigator, 'clipboard', {
-            value: originalClipboard,
-            writable: true
-        });
+    expect(result.current.copied).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(onSuccess).toHaveBeenCalled();
+    expect(mockWriteText).toHaveBeenCalledWith('test text');
+  });
+
+  it('should handle copy failure', async () => {
+    const testError = new Error('Copy failed');
+    mockWriteText.mockRejectedValueOnce(testError);
+    const onError = vi.fn();
+
+    const { result } = renderHook(() => useCopyToClipboard({ onError }));
+
+    await act(async () => {
+      await result.current.copyToClipboard('test text');
     });
 
-    it('should initialize with default state', () => {
-        const { result } = renderHook(() => useCopyToClipboard());
+    expect(result.current.copied).toBe(false);
+    expect(result.current.error).toEqual(testError);
+    expect(onError).toHaveBeenCalledWith(testError);
+  });
 
-        expect(result.current.copied).toBe(false);
-        expect(result.current.error).toBeNull();
+  it('should reset copied state after duration', async () => {
+    mockWriteText.mockResolvedValueOnce(undefined);
+    const successDuration = 1000;
+
+    const { result } = renderHook(() =>
+      useCopyToClipboard({ successDuration })
+    );
+
+    await act(async () => {
+      await result.current.copyToClipboard('test text');
     });
 
-    it('should handle successful copy', async () => {
-        mockWriteText.mockResolvedValueOnce(undefined);
-        const onSuccess = vi.fn();
+    expect(result.current.copied).toBe(true);
 
-        const { result } = renderHook(() => useCopyToClipboard({ onSuccess }));
-
-        await act(async () => {
-            await result.current.copyToClipboard('test text');
-        });
-
-        expect(result.current.copied).toBe(true);
-        expect(result.current.error).toBeNull();
-        expect(onSuccess).toHaveBeenCalled();
-        expect(mockWriteText).toHaveBeenCalledWith('test text');
+    act(() => {
+      vi.advanceTimersByTime(successDuration);
     });
 
-    it('should handle copy failure', async () => {
-        const testError = new Error('Copy failed');
-        mockWriteText.mockRejectedValueOnce(testError);
-        const onError = vi.fn();
+    expect(result.current.copied).toBe(false);
+  });
 
-        const { result } = renderHook(() => useCopyToClipboard({ onError }));
+  it('should use custom success duration', async () => {
+    mockWriteText.mockResolvedValueOnce(undefined);
+    const successDuration = 5000;
 
-        await act(async () => {
-            await result.current.copyToClipboard('test text');
-        });
+    const { result } = renderHook(() =>
+      useCopyToClipboard({ successDuration })
+    );
 
-        expect(result.current.copied).toBe(false);
-        expect(result.current.error).toEqual(testError);
-        expect(onError).toHaveBeenCalledWith(testError);
+    await act(async () => {
+      await result.current.copyToClipboard('test text');
     });
 
-    it('should reset copied state after duration', async () => {
-        mockWriteText.mockResolvedValueOnce(undefined);
-        const successDuration = 1000;
+    expect(result.current.copied).toBe(true);
 
-        const { result } = renderHook(() =>
-            useCopyToClipboard({ successDuration })
-        );
-
-        await act(async () => {
-            await result.current.copyToClipboard('test text');
-        });
-
-        expect(result.current.copied).toBe(true);
-
-        act(() => {
-            vi.advanceTimersByTime(successDuration);
-        });
-
-        expect(result.current.copied).toBe(false);
+    act(() => {
+      vi.advanceTimersByTime(2000);
     });
 
-    it('should use custom success duration', async () => {
-        mockWriteText.mockResolvedValueOnce(undefined);
-        const successDuration = 5000;
+    expect(result.current.copied).toBe(true);
 
-        const { result } = renderHook(() =>
-            useCopyToClipboard({ successDuration })
-        );
-
-        await act(async () => {
-            await result.current.copyToClipboard('test text');
-        });
-
-        expect(result.current.copied).toBe(true);
-
-        act(() => {
-            vi.advanceTimersByTime(2000);
-        });
-
-        expect(result.current.copied).toBe(true);
-
-        act(() => {
-            vi.advanceTimersByTime(3000);
-        });
-
-        expect(result.current.copied).toBe(false);
+    act(() => {
+      vi.advanceTimersByTime(3000);
     });
 
-    it('should return success status from copyToClipboard', async () => {
-        mockWriteText.mockResolvedValueOnce(undefined);
+    expect(result.current.copied).toBe(false);
+  });
 
-        const { result } = renderHook(() => useCopyToClipboard());
+  it('should return success status from copyToClipboard', async () => {
+    mockWriteText.mockResolvedValueOnce(undefined);
 
-        let success = false;
-        await act(async () => {
-            success = await result.current.copyToClipboard('test text');
-        });
+    const { result } = renderHook(() => useCopyToClipboard());
 
-        expect(success).toBe(true);
+    let success = false;
+    await act(async () => {
+      success = await result.current.copyToClipboard('test text');
     });
 
-    it('should return failure status from copyToClipboard', async () => {
-        mockWriteText.mockRejectedValueOnce(new Error('Copy failed'));
+    expect(success).toBe(true);
+  });
 
-        const { result } = renderHook(() => useCopyToClipboard());
+  it('should return failure status from copyToClipboard', async () => {
+    mockWriteText.mockRejectedValueOnce(new Error('Copy failed'));
 
-        let success = false;
-        await act(async () => {
-            success = await result.current.copyToClipboard('test text');
-        });
+    const { result } = renderHook(() => useCopyToClipboard());
 
-        expect(success).toBe(false);
+    let success = false;
+    await act(async () => {
+      success = await result.current.copyToClipboard('test text');
     });
+
+    expect(success).toBe(false);
+  });
 });
