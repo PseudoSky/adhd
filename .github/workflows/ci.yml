@@ -13,6 +13,8 @@ permissions:
 jobs:
   main:
     runs-on: ubuntu-latest
+    env:
+      NX_CLOUD_DISABLE: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,5 +39,3 @@ jobs:
 
       - run: npx nx format:check
       - run: npx nx affected --base=origin/main -t lint build
-        env:
-          NX_CLOUD_DISABLE: true
