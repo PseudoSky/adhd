@@ -36,4 +36,6 @@ jobs:
         if: ${{ github.event_name == 'pull_request' }}
 
       - run: npx nx format:check
-      - run: npx nx affected -t lint build
+      - run: npx nx affected --base=origin/main -t lint build
+        env:
+          NX_CLOUD_DISABLE: true
