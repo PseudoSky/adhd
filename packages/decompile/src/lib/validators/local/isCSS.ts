@@ -6,7 +6,7 @@ import postcss from 'postcss';
 
 // const isCSS = (s) => removeCSS(s).replace(/[[\s;]+/gmi, '')==='';
 
-const astCSS = (s) => {
+const astCSS = (s: string) => {
   console.log('Parser(CSS)');
   try {
     return !!postcss.parse(s);

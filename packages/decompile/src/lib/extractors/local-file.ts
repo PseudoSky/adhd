@@ -1,24 +1,23 @@
 import fs from 'fs-extra';
-export const extractLocal = (path) => {
-  let files = path;
-  if (typeof (path) === 'string') {
-    files = [path];
+export const extractLocal = (path: string) => {
+
+  let r = null;
+  try {
+    r = fs.readFileSync(path);
   }
+  catch (e) {
+    console.error(e);
+  }
+  const data = r?.toString()
+  if (r && data) {
+
+    return { path: path, data };
+  }
+  return null;
   // files = files.filter(f => fs.pathExistsSync(f))
   // files = files.map(f => fs.statSync(f).isFile())
   // const res = [];
-  return files.map((f) => {
-    let r = null;
-    try {
-      r = fs.readFileSync(f);
-    }
-    catch (e) {
-      console.error(e);
-    }
-    if (r) {
-      return { path: f, data: r.toString() };
-    }
-    return null;
-  }).filter((o) => (!!o && !!o.data));
+  // return path.map((f) => {
+  // }).filter((o) => (!!o));
 };
 export default extractLocal;

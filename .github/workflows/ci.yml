@@ -12,6 +12,13 @@ permissions:
 
 jobs:
   main:
+    env:
+      GH_MERGED: ${{github.event.pull_request.merged}}
+      GH_ACTION: ${{github.event.action}}
+      GH_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      GH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      GH_BASE_REF: ${{ github.event.pull_request.base.ref }}
+      GH_BASE_SHA: ${{ github.event.pull_request.base.sha }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,18 +34,6 @@ jobs:
         with:
           node-version: 20
           cache: 'yarn'
-
-      - uses: actions/cache@v3
-        id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
-        with:
-          path: |
-            ${{ github.workspace }}/node_modules
-            !${{ github.workspace }}/node_modules/.cache
-          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
-      - name: Install dependencies
-        if: steps.yarn-cache.outputs.cache-hit != 'true'
         run: |
           yarn # --frozen-lockfile
           echo ""
@@ -48,6 +43,19 @@ jobs:
           echo "GH_HEAD_REF: $GH_HEAD_REF"
           echo "GH_BASE_SHA: $GH_BASE_SHA"
           echo "GH_HEAD_SHA: $GH_HEAD_SHA"
+
+      # - uses: actions/cache@v3
+      #   id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
+      #   with:
+      #     path: |
+      #       ${{ github.workspace }}/node_modules
+      #       !${{ github.workspace }}/node_modules/.cache
+      #     key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-yarn-
+      # - name: Install dependencies
+      #   if: steps.yarn-cache.outputs.cache-hit != 'true'
+
       - uses: nrwl/nx-set-shas@v4
       - run: git branch --track main origin/main
         if: ${{ github.event_name == 'pull_request' }}

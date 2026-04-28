@@ -1,7 +1,10 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "namedInputs": {
-    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "default": [
+      "{projectRoot}/**/*",
+      "sharedGlobals"
+    ],
     "production": [
       "default",
       "!{projectRoot}/cypress/**/*",
@@ -106,27 +109,40 @@
   "targetDefaults": {
     "@nx/vite:build": {
       "cache": true,
-      "dependsOn": ["^build"],
-      "inputs": ["production", "^production"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "production",
+        "^production"
+      ]
     },
     "version": {
       "executor": "@nrwl/workspace:run-commands",
       "options": {
         "parallel": false,
-        "commands": ["./scripts/version.sh"]
+        "commands": [
+          "./scripts/version.sh"
+        ]
       }
     },
     "version-prerelease": {
       "executor": "@nrwl/workspace:run-commands",
       "options": {
         "parallel": false,
-        "commands": ["./scripts/version-packages.sh -prerelease"]
+        "commands": [
+          "./scripts/version-packages.sh -prerelease"
+        ]
       }
     },
     "publish": {
       "executor": "@nrwl/workspace:run-commands",
-      "outputs": ["dist/packages"],
-      "dependsOn": ["^version"],
+      "outputs": [
+        "{workspaceRoot}/dist/packages"
+      ],
+      "dependsOn": [
+        "^version"
+      ],
       "options": {
         "parallel": false,
         "commands": [
@@ -137,19 +153,37 @@
       "configurations": {
         "production": {
           "parallel": false,
-          "commands": ["npm publish dist/libs/core"]
+          "commands": [
+            "npm publish dist/libs/core"
+          ]
         }
       }
     },
     "@nx/rollup:rollup": {
       "cache": true,
-      "dependsOn": ["^build"],
-      "inputs": ["production", "^production"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "production",
+        "^production"
+      ]
     },
     "@nx/js:tsc": {
       "cache": true,
-      "dependsOn": ["^build"],
-      "inputs": ["production", "^production"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "production",
+        "^production"
+      ]
+    },
+    "build": {
+      "inputs": [
+        "production",
+        "^production"
+      ]
     }
   },
   "targetDependencies": {
@@ -164,7 +198,12 @@
     "version": {
       "preVersionCommand": "npx nx run-many -t build"
     },
-    "projects": ["*", "!@adhd/source", "!adhd-e2e", "!adhd"],
+    "projects": [
+      "*",
+      "!@adhd/source",
+      "!adhd-e2e",
+      "!adhd"
+    ],
     "changelog": {
       "projectChangelogs": {
         "renderOptions": {
@@ -181,8 +220,5 @@
         }
       }
     }
-  },
-  "cli": {
-    "defaultCollection": "@nrwl/react"
   }
 }

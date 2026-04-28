@@ -6,11 +6,12 @@ import {
     timeInMS,
 } from './date';
 
-const stubDate = new Date(2000, 1, 1, 1, 0, 0, 0)
-const realDateNow = Date.now.bind(global.Date);
+const stubDate = new Date('2000-02-01T06:00:00.000Z')
+// const realDateNow = Date.now.bind(global.Date);
 describe('dates', () => {
     beforeEach(() => {
         // tell vitest we use mocked time
+        vi.stubEnv('TZ', 'UTC');
         vi.useFakeTimers()
         vi.setSystemTime(stubDate)
     })
@@ -18,17 +19,20 @@ describe('dates', () => {
     afterEach(() => {
         // restoring date after each test run
         vi.useRealTimers()
+        vi.unstubAllEnvs();
 
     })
     it('format date', () => {
-        expect(formatDate(new Date(), 'EEEE, MMMM d, yyyy hh:mm:ss:S')).toBe("Tuesday, February 1, 2000 01:00:00:0")
-        expect(formatDate(new Date(), 'EEE, MMM d, yyyy hh:mm')).toBe("Tue, Feb 1, 2000 01:00")
-        expect(formatDate(new Date(), 'yyyy-MM-dd hh:mm:ss:S')).toBe("2000-01-01 01:00:00:0")
-        expect(formatDate(new Date(), 'yyMMdd-hh:mm')).toBe("000101-01:00")
+        const testDate = new Date()
+        expect(formatDate(testDate, 'EEEE, MMMM d, yyyy hh:mm:ss:S')).toBe("Tuesday, February 1, 2000 01:00:00:0")
+        expect(formatDate(testDate, 'EEE, MMM d, yyyy hh:mm')).toBe("Tue, Feb 1, 2000 01:00")
+        expect(formatDate(testDate, 'yyyy-MM-dd hh:mm:ss:S')).toBe("2000-02-01 01:00:00:0")
+        expect(formatDate(testDate, 'yyMMdd-hh:mm')).toBe("000201-01:00")
+        expect(formatDate(new Date("2024-04-06T09:00:00-05:00"), 'yyyy yy, M MM MMMM MMM, dd EEEE EEE, h:m:s:S hh:mm:ss, z zz Z ZZ ZZZZ')).toBe("2024 24, 4 04 April Apr, 06 Saturday Sat, 9:0:0:0 09:00:00, GMT-5 GMT-5 -05:00 -0500 America/Lima")
     });
     it('fromNow', () => {
         vi.setSystemTime(stubDate)
-        expect(fromNow(20, "day")).toMatchObject(new Date(2000, 1, 21, 1, 0, 0, 0))
+        expect(fromNow(20, "day")).toMatchObject(new Date('2000-02-21T06:00:00.000Z'))
     });
     it('humanDuration', () => {
         expect(humanDuration(new Date(), fromNow(20, "day"))).toMatchObject({

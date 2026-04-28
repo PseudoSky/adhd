@@ -1,8 +1,8 @@
+import { Transform } from '@adhd/transform';
 import AdmZip from 'adm-zip';
 import fse from 'fs-extra';
 import _ from 'lodash';
 import path from 'path';
-import formatDates from '../formatters/dates.js';
 import { buildPackage, cruiseDeps, getDeps } from './package.js';
 import { BABELRC, BLANK_PACKAGE } from './templates.js';
 import { cleanFilePath, isExternalRef } from './utils.js';
@@ -44,7 +44,7 @@ class FileStore implements IStore {
   }
 
   public setPrefix(prefix_path: string, timestamp = true): void {
-    this.prefix = `${prefix_path}/${timestamp ? formatDates() : ''}/src`;
+    this.prefix = `${prefix_path}/${timestamp ? Transform.formatDate(new Date()) : ''}/src`;
   }
 
   public pathFor(file: string): string {
@@ -73,12 +73,12 @@ class FileStore implements IStore {
     }
   }
 
-  public addFile(file: string, content: string | Buffer, type: 'dir' | 'zip' = 'dir'): Promise<void> | null {
+  public addFile(file: string, content: string | Buffer, type: 'dir' | 'zip' = 'dir'): Promise<void> {
     const outfile = this.pathFor(file);
     console.log(file, outfile)
 
     if (isExternalRef(outfile)) {
-      return null;
+      return Promise.resolve();
     }
 
     if (type === 'zip') {
@@ -88,7 +88,7 @@ class FileStore implements IStore {
       }
       const buffer = Buffer.from(content as string, 'utf-8');
       const p = this.zip.addFile(outfile, buffer);
-      this.log('pending', p, outfile);
+      this.log('pending', p.toString(), outfile);
       return Promise.resolve();
     }
     if (this.index.completed[outfile]) {
@@ -96,7 +96,7 @@ class FileStore implements IStore {
       return Promise.resolve();
     }
     const p = fse.outputFile(outfile, content)
-      .then(() => this.log('completed', p, outfile))
+      .then((): void => this.log('completed', p, outfile))
       .catch((_err) => {
         console.error(_err);
       });
@@ -136,7 +136,7 @@ class FileStore implements IStore {
       await this.flush();
       await this.addFile('index.js', this.main_file);
 
-      const deps = await buildPackage(this.prefix, {});
+      const deps = await buildPackage(this.prefix);
       const uniqueDeps = _.uniq(deps).map((p) => ({ [p]: '*' }));
       BLANK_PACKAGE.dependencies = Object.assign({}, ...uniqueDeps);
 

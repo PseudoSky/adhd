@@ -5,7 +5,7 @@ const rxTwo = /\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4})/g;
 const rxThree = /"[^"\\\n\r]*"|true|false|null|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?/g;
 const rxFour = /(?:^|:|,)(?:\s*\[)+/g;
 
-const isJson = (s) => {
+const isJson = (s: string) => {
   console.log('Parser(JSON:regex)');
   return rxOne.test(
     s
@@ -32,8 +32,8 @@ const Bench = {
   total: 0,
 };
 // TODO: create a utility or package where this belings.
-const benchWrapper = (func) => {
-  return (s) => {
+const benchWrapper = (func: (s: string) => any) => {
+  return (s: string) => {
     const start = new Date();
     const res = func(s);
     const end = new Date().getTime() - start.getTime();

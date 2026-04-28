@@ -33,15 +33,6 @@ describe.only('object', () => {
         }
       }
     )
-    console.log({
-      results: allP,
-      expected: [[
-        ["x", "g", "a"],
-        ["x", "g", "b", "1", "d", "e"],
-        ["x", "g", "b", "0", "c"],
-        ["x", "y", "z"]
-      ]]
-    })
     expect(allP).toEqual([
       ["x", "y", "z"],
       ["x", "g", "a"],

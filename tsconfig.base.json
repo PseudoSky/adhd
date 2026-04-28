@@ -5,18 +5,17 @@
     "compilerOptions": {
       "module": "CommonJS",
       "paths": {
-        "@adhd/data": ["packages/data/src/index.ts"],
-        "@adhd/query": ["packages/query/src/index.ts"],
-        "@adhd/react-hooks": ["packages/react-hooks/src/index.ts"],
-        "@adhd/transform": ["packages/transform/src/index.ts"]
+        "@adhd/data": ["./packages/data/src/index.ts"],
+        "@adhd/query": ["./packages/query/src/index.ts"],
+        "@adhd/react-hooks": ["./packages/react-hooks/src/index.ts"],
+        "@adhd/transform": ["./packages/transform/src/index.ts"]
       }
     }
   },
   "compilerOptions": {
-    "rootDir": ".",
+    "rootDir": "./",
     "sourceMap": true,
     "declaration": false,
-    "moduleResolution": "node",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "noImplicitThis": false,
@@ -26,14 +25,13 @@
     "lib": ["es2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
-    "baseUrl": ".",
     "paths": {
-      "@adhd/data": ["packages/data/src/index.ts"],
-      "@adhd/decompile": ["packages/decompile/src/index.ts"],
-      "@adhd/query": ["packages/query/src/index.ts"],
-      "@adhd/react-hooks": ["packages/react-hooks/src/index.ts"],
-      "@adhd/storybook": ["packages/storybook/src/index.ts"],
-      "@adhd/transform": ["packages/transform/src/index.ts"]
+      "@adhd/data": ["./packages/data/src/index.ts"],
+      "@adhd/decompile": ["./packages/decompile/src/index.ts"],
+      "@adhd/query": ["./packages/query/src/index.ts"],
+      "@adhd/react-hooks": ["./packages/react-hooks/src/index.ts"],
+      "@adhd/storybook": ["./packages/storybook/src/index.ts"],
+      "@adhd/transform": ["./packages/transform/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

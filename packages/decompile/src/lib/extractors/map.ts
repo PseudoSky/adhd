@@ -1,20 +1,21 @@
 import 'babel-polyfill';
-import sourceMap from 'source-map';
-const formatName = (f) => {
+import sourceMap, { RawSourceMap } from 'source-map';
+import { StackItem } from '../pipeline/stack';
+const formatName = (f: string) => {
   return f.replace('webpack:///', '');
 };
 
 const SOURCEMAP_URL_REGEX = /sourceMappingURL=([/a-zA-Z._0-9-]+\.map)/gim;
 
-export const extractMapLink = (raw) => {
+export const extractMapLink = (raw: StackItem) => {
   const { path, data } = raw;
   console.log({ path });
   // TODO: should allow [?] ?
-  let mfiles = (data.match(SOURCEMAP_URL_REGEX) || [])
+  let mfiles = ((data as string).match(SOURCEMAP_URL_REGEX) || [])
     .filter((e) => !!e).map((s) => s.split('=')[1]);
   if (mfiles.length) {
     mfiles = [mfiles[mfiles.length - 1]];
-    return mfiles.map((mfile) => {
+    return mfiles.map((mfile: string) => {
       if (mfile.startsWith('http')) {
         return mfile;
       } else {
@@ -26,11 +27,11 @@ export const extractMapLink = (raw) => {
   }
 };
 
-type SourceType = { name: string; data: string | null };
-export const extractSource = async (rawMap) => {
+// type SourceType = { path: string; data: string | null };
+export const extractSource = async (rawMap: RawSourceMap) => {
   try {
     const consumer = await new sourceMap.SourceMapConsumer(rawMap);
-    const sources: Record<string, SourceType> = {}
+    const sources: Record<string, StackItem> = {}
     consumer.eachMapping((m) => {
       const s = m.source
       const outFile = formatName(s);
@@ -42,12 +43,12 @@ export const extractSource = async (rawMap) => {
         ) {
           // TODO: can depcheck check raw text for dependencies?
           // NOTE: this may remove chunked content, consider content hashing
-          sources[outFile] = { name: outFile, data: content };
-          console.log("extractSource", { name: outFile })
+          sources[outFile] = { path: outFile, data: content || "" };
+          console.log("extractSource", { path: outFile })
         }
       }
     })
-    return Object.values(sources);
+    return Object.values(sources).filter(e => !!e);
     // return await Promise.all(consumer.sources.map((s) => {
     //   const outFile = formatName(s);
     //   const content = consumer.sourceContentFor(s) || '';
@@ -70,7 +71,7 @@ export const extractSource = async (rawMap) => {
     // });
   } catch (e) {
     console.error('ERROR[extractSource]', e);
-    return null;
+    return [];
   }
 };
 

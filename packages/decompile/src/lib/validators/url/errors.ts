@@ -4,8 +4,8 @@ const renamedMap = {
   normalizeHttps: 'forceHttp',
 };
 
-export const InvalidUrlError = (url) => new Error(`Invalid URL: ${url}`);
-export const FunctionRenamedError = (kind) => new Error(`options.${kind} is renamed to options.${renamedMap[kind]}`);
+export const InvalidUrlError = (url: string | URL) => new Error(`Invalid URL: ${url}`);
+export const FunctionRenamedError = (kind: keyof typeof renamedMap) => new Error(`options.${kind} is renamed to options.${renamedMap[kind]}`);
 export const BadOptionsError = () => new Error('The `forceHttp` and `forceHttps` options cannot be used together');
 
 

@@ -19,6 +19,7 @@ if (typeof window !== 'undefined' && !window.IntersectionObserver) {
     readonly root: Element | null = null;
     readonly rootMargin: string = '';
     readonly thresholds: ReadonlyArray<number> = [];
+    readonly scrollMargin: string = "5px";
     observe = (): void => undefined;
     unobserve = (): void => undefined;
     disconnect = (): void => undefined;

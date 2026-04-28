@@ -8,7 +8,7 @@ import { parser } from 'posthtml-parser';
 //   return RE.test(s);
 // };
 
-const astParser = (s) => {
+const astParser = (s: string) => {
   console.log('Parser(HTML AST)');
   const parsed = parser(s);
   return parsed.filter((node) => typeof (node) != 'string').length > 0;

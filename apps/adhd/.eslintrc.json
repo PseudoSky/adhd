@@ -16,6 +16,16 @@
     },
     {
       "files": ["*.ts", "*.tsx"],
+      "parserOptions": {
+        "project": [
+          "./apps/adhd/tsconfig.json",
+          "./apps/adhd/tsconfig.spec.json"
+        ]
+      },
+      "rules": {}
+    },
+    {
+      "files": ["*.ts", "*.tsx"],
       "rules": {}
     },
     {

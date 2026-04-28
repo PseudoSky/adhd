@@ -1,4 +1,4 @@
-const isBase64 = (v) => {
+const isBase64 = (v: string) => {
   console.log('Parser(Base64)');
   try {
     return !!Buffer.from(v, 'base64');

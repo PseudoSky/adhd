@@ -1,4 +1,4 @@
-const camelize = (str) => {
+const camelize = (str: string) => {
   return str.replace(/\W+(.)/g, function (match, chr) {
     return chr.toUpperCase();
   });
@@ -61,19 +61,19 @@ export const BABELRC = {
   ],
 };
 
-const importFromPath = (file) => {
+const importFromPath = (file: string) => {
   return `import ${camelize(file.split('/').slice(1).join('_'))} from "./${file}";`;
 };
 
-export const entryPointWith = (imports = []) => {
+export const entryPointWith = (imports: string[] = []) => {
   if (!imports.length) {
     return '// Could not find an entry point for the app';
   }
   return imports.map(importFromPath).join('\n');
 };
 
-export const packageWith = (depList, overrides = {}) => {
-  const dependencies = depList.reduce((res = {}, p) => {
+export const packageWith = (depList: string[], overrides = {}) => {
+  const dependencies = depList.reduce((res: Record<string, string> = {}, p) => {
     res[p] = '*';
     console.log({ p });
     return res;
