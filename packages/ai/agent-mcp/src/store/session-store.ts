@@ -145,6 +145,25 @@ export class SessionStore {
         return this.read(id);
     }
 
+    clearMessages(sessionId: string): number {
+        const session = this.read(sessionId); // throws SESSION_NOT_FOUND if missing
+
+        if (session.status === "closed") {
+            throw new ToolError(
+                "SESSION_CLOSED",
+                `Session '${sessionId}' is closed; cannot clear context`
+            );
+        }
+
+        const result = this.db
+            .delete(messagesTable)
+            .where(eq(messagesTable.sessionId, sessionId))
+            .run();
+
+        logger.info({ sessionId, cleared: result.changes }, "Session context cleared");
+        return result.changes;
+    }
+
     appendMessage(sessionId: string, message: Message): void {
         this.db.insert(messagesTable).values({
             id: message.id,

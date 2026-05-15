@@ -34,7 +34,18 @@ export const sessionCloseInputSchema = z.object({
   session_id: z.string().uuid(),
 });
 
+export const sessionClearInputSchema = z.object({
+  session_id: z.string().uuid(),
+});
+
+export const sessionClearOutputSchema = z.object({
+  session_id: z.string().uuid(),
+  cleared: z.number().int().nonnegative(),
+});
+
 export type AgentToolInput = z.infer<typeof agentToolInputSchema>;
 export type AgentToolOutput = z.infer<typeof agentToolOutputSchema>;
 export type SessionListInput = z.infer<typeof sessionListInputSchema>;
 export type SessionCloseInput = z.infer<typeof sessionCloseInputSchema>;
+export type SessionClearInput = z.infer<typeof sessionClearInputSchema>;
+export type SessionClearOutput = z.infer<typeof sessionClearOutputSchema>;

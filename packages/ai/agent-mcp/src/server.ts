@@ -24,7 +24,7 @@ import {
     agentDelete,
     agentList,
 } from "./tools/agent-crud.js";
-import { agentTool, sessionList, sessionClose } from "./tools/session.js";
+import { agentTool, sessionList, sessionClose, sessionClear } from "./tools/session.js";
 import { taskTool, taskList, taskCancel, resultTool } from "./tools/task.js";
 import { ToolError } from "./validation/errors.js";
 import {
@@ -35,6 +35,7 @@ import {
     agentToolInputSchema,
     sessionListInputSchema,
     sessionCloseInputSchema,
+    sessionClearInputSchema,
     taskToolInputSchema,
     taskListInputSchema,
     taskCancelInputSchema,
@@ -316,6 +317,11 @@ export function createServer(deps: ServerDeps): Server {
             description: "Close a session",
             inputSchema: z.toJSONSchema(sessionCloseInputSchema) as Record<string, unknown>,
         },
+        {
+            name: "session_clear",
+            description: "Clear all messages from a session's context without closing it",
+            inputSchema: z.toJSONSchema(sessionClearInputSchema) as Record<string, unknown>,
+        },
     ];
 
     // In-process handler that routes tool calls to the local handlers
@@ -356,6 +362,12 @@ export function createServer(deps: ServerDeps): Server {
                 });
             case "session_close":
                 return sessionClose(sessionCloseInputSchema.parse(args), {
+                    agentStore: deps.agentStore,
+                    sessionStore: deps.sessionStore,
+                    policy: deps.policy,
+                });
+            case "session_clear":
+                return sessionClear(sessionClearInputSchema.parse(args), {
                     agentStore: deps.agentStore,
                     sessionStore: deps.sessionStore,
                     policy: deps.policy,
@@ -407,6 +419,11 @@ export function createServer(deps: ServerDeps): Server {
                 name: "session_close",
                 description: "Close an active session",
                 inputSchema: z.toJSONSchema(sessionCloseInputSchema),
+            },
+            {
+                name: "session_clear",
+                description: "Clear all messages from a session's context without closing it",
+                inputSchema: z.toJSONSchema(sessionClearInputSchema),
             },
             {
                 name: "task",
@@ -479,6 +496,15 @@ export function createServer(deps: ServerDeps): Server {
                 case "session_close":
                     return toMcpContent(
                         sessionClose(sessionCloseInputSchema.parse(args), {
+                            agentStore: deps.agentStore,
+                            sessionStore: deps.sessionStore,
+                            policy: deps.policy,
+                        })
+                    );
+
+                case "session_clear":
+                    return toMcpContent(
+                        sessionClear(sessionClearInputSchema.parse(args), {
                             agentStore: deps.agentStore,
                             sessionStore: deps.sessionStore,
                             policy: deps.policy,

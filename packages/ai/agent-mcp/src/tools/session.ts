@@ -8,6 +8,8 @@ import type {
     ExecutionContext,
     Session,
     SessionCloseInput,
+    SessionClearInput,
+    SessionClearOutput,
     SessionListInput,
 } from "../validation/index.js";
 
@@ -64,4 +66,9 @@ export function sessionList(input: SessionListInput, deps: SessionDeps): Session
 export function sessionClose(input: SessionCloseInput, deps: SessionDeps): Session {
     // SessionStore.close() throws SESSION_NOT_FOUND or SESSION_CLOSED as appropriate
     return deps.sessionStore.close(input.session_id);
+}
+
+export function sessionClear(input: SessionClearInput, deps: SessionDeps): SessionClearOutput {
+    const cleared = deps.sessionStore.clearMessages(input.session_id);
+    return { session_id: input.session_id, cleared };
 }

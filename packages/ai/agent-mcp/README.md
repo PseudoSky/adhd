@@ -18,6 +18,7 @@ Give any LLM the ability to spawn, delegate to, and coordinate other AI agents �
 | `agent` | Open a new session for an agent |
 | `session_list` | List sessions, optionally filtered by agent or status |
 | `session_close` | Close an active session |
+| `session_clear` | Clear all messages from a session's context without closing it |
 | `task` | Submit a prompt to a session (sync or background) |
 | `result` | Get the current state and result of a task |
 | `task_list` | List tasks, optionally filtered by session or status |
@@ -295,6 +296,14 @@ session_close → { session_id: "..." }
 ```
 
 Running tasks are not affected. Once closed, no new tasks can be submitted.
+
+### Clear context
+
+```
+session_clear → { session_id: "..." }
+```
+
+Deletes all messages in the session's history without closing it. Returns `{ session_id, cleared }` where `cleared` is the number of messages removed. The session stays active and the next task starts with a blank slate.
 
 ---
 
