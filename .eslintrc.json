@@ -78,6 +78,10 @@
                 "onlyDependOnLibsWithTags": ["layer:components", "layer:ui-composites", "layer:logic", "layer:test-ui"]
               },
               {
+                "sourceTag": "layer:ai",
+                "onlyDependOnLibsWithTags": ["layer:data", "layer:shared"]
+              },
+              {
                 "sourceTag": "layer:entrypoints",
                 "onlyDependOnLibsWithTags": ["layer:workflows", "layer:logic", "layer:data", "layer:shared"]
               },
