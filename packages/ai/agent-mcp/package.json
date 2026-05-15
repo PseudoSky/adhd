@@ -3,11 +3,13 @@
   "version": "0.0.1",
   "description": "Stateful MCP-native agent runtime with provider abstraction and recursive delegation",
   "type": "module",
-  "private": true,
+  "bin": {
+    "agent-mcp": "./src/index.js"
+  },
   "exports": {
     ".": {
-      "types": "./dist/packages/ai/agent-mcp/index.d.ts",
-      "default": "./dist/packages/ai/agent-mcp/index.js"
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
     }
   },
   "scripts": {

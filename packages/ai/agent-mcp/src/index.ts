@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import "dotenv/config";
 
 import { db } from "./db/client.js";
