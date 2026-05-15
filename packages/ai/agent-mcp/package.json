@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "description": "Stateful MCP-native agent runtime with provider abstraction and recursive delegation",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "agent-mcp": "./src/index.js"
   },
