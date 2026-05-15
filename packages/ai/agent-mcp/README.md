@@ -6,6 +6,26 @@ Give any LLM the ability to spawn, delegate to, and coordinate other AI agents â
 
 ---
 
+## Tool reference
+
+| Tool | Description |
+|---|---|
+| `agent_create` | Create a new agent definition |
+| `agent_read` | Read an agent definition by name |
+| `agent_update` | Partially update an agent definition |
+| `agent_list` | List all agent definitions |
+| `agent_delete` | Delete an agent (requires no active sessions) |
+| `agent` | Open a new session for an agent |
+| `session_list` | List sessions, optionally filtered by agent or status |
+| `session_close` | Close an active session |
+| `task` | Submit a prompt to a session (sync or background) |
+| `result` | Get the current state and result of a task |
+| `task_list` | List tasks, optionally filtered by session or status |
+| `task_cancel` | Cancel a pending or running task |
+| `usage` | Show server configuration and runtime info |
+
+---
+
 ## How it works
 
 ```mermaid
@@ -24,26 +44,6 @@ Four concepts:
 | **Session** | A stateful conversation thread for one agent. Stores the message history. |
 | **Task** | A prompt submitted to a session. Runs the agent's tool-use loop until the model produces a final answer. Can be synchronous or background. |
 | **Orchestration** | An agent whose system prompt instructs it to delegate â€” it calls `agent` + `task` tools to spawn sub-agents, just like you do. |
-
----
-
-## Tool reference
-
-| Tool | Description |
-|---|---|
-| `agent_create` | Create a new agent definition |
-| `agent_read` | Read an agent definition by name |
-| `agent_update` | Partially update an agent definition |
-| `agent_list` | List all agent definitions |
-| `agent_delete` | Delete an agent (requires no active sessions) |
-| `agent` | Open a new session for an agent |
-| `session_list` | List sessions, optionally filtered by agent or status |
-| `session_close` | Close an active session |
-| `task` | Submit a prompt to a session (sync or background) |
-| `result` | Get the current state and result of a task |
-| `task_list` | List tasks, optionally filtered by session or status |
-| `task_cancel` | Cancel a pending or running task |
-| `usage` | Show server configuration and runtime info |
 
 ---
 
