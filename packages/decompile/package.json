@@ -4,8 +4,7 @@
   "type": "module",
   "main": "src/index.js",
   "bin": {
-    "reverse": "./bin/decompile.js reverse",
-    "deps": "./bin/decompile.js deps"
+    "decompile": "./bin/decompile.js"
   },
   "scripts": {
     "build": "nx run decompile:build",
@@ -27,11 +26,10 @@
     "lodash": "4.17.21",
     "postcss": "^8.5.3",
     "posthtml-parser": "^0.12.1",
-    "react": "18.2.0",
     "source-map": "0.6.1",
     "tough-cookie": "4.1.4",
     "tslib": "^2.3.0",
     "util": "0.12.5",
-    "@adhd/transform": "*"
+    "@adhd/transform": "^2.2.1"
   }
 }
