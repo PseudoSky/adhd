@@ -245,6 +245,19 @@ Only works when status is \`"pending"\` or \`"running"\`.
 
 ---
 
+## Clearing a session's context
+
+\`session_clear\` deletes all messages from a session without closing it. The session
+stays active and the next task starts with a blank slate. The system prompt is
+part of the agent definition — it is never affected by \`session_clear\`.
+
+\`\`\`jsonc
+session_clear({ "session_id": "abc-123" })
+// → { "session_id": "abc-123", "cleared": 12 }
+\`\`\`
+
+---
+
 ## Provider types
 
 | type        | required fields            | notes                        |
