@@ -37,7 +37,6 @@ class FileStore implements IStore {
   public main_file: string;
 
   constructor(initialPrefix = './build/reverse') {
-    console.log({ initialPrefix })
     this.zip = new AdmZip();
     this.prefix = initialPrefix;
     this.main_file = '';
@@ -48,7 +47,6 @@ class FileStore implements IStore {
   }
 
   public pathFor(file: string): string {
-    console.log({ prefix: this.prefix, cleanPath: cleanFilePath(file), joined: path.join(this.prefix, cleanFilePath(file)) })
     return path.join(this.prefix, cleanFilePath(file));
   }
 
@@ -75,7 +73,6 @@ class FileStore implements IStore {
 
   public addFile(file: string, content: string | Buffer, type: 'dir' | 'zip' = 'dir'): Promise<void> {
     const outfile = this.pathFor(file);
-    console.log(file, outfile)
 
     if (isExternalRef(outfile)) {
       return Promise.resolve();
@@ -129,7 +126,6 @@ class FileStore implements IStore {
   }
 
   public async finalize(): Promise<WriteOperations> {
-    console.log("Finalize", this.index)
     try {
       await this.addFile('package.json', JSON.stringify(BLANK_PACKAGE, null, 4));
       await this.addFile('.babelrc', JSON.stringify(BABELRC, null, 4));
@@ -146,7 +142,6 @@ class FileStore implements IStore {
     } catch (error) {
       console.error(error);
     }
-    console.log("Finalize", this.index)
     return this.writes
   }
 }
