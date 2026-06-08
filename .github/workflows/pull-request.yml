@@ -15,16 +15,13 @@ jobs:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
       JFROG_TOKEN: ${{ secrets.ARTIFACTORY_NPM_TOKEN }}
       FONT_AWESOME_TOKEN: ${{ secrets.FONT_AWESOME_TOKEN }}
-      NX_CLOUD_AUTH_TOKEN: ${{ secrets.NX_CLOUD_AUTH_TOKEN }}
+      NX_NO_CLOUD: true
       GH_MERGED: ${{github.event.pull_request.merged}}
       GH_ACTION: ${{github.event.action}}
       GH_HEAD_REF: ${{ github.event.pull_request.head.ref }}
       GH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       GH_BASE_REF: ${{ github.event.pull_request.base.ref }}
       GH_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-    strategy:
-      matrix:
-        node-version: [16.x]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,29 +31,22 @@ jobs:
       - uses: n1hility/cancel-previous-runs@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          
-      - uses: actions/setup-node@v3
+
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
-          
+          node-version: 20
+
+      - name: Enable Corepack (Yarn 4)
+        run: corepack enable
+
       - name: Derive appropriate SHAs for base and head for `nx affected` commands
-        uses: nrwl/nx-set-shas@v2
+        uses: nrwl/nx-set-shas@v4
         with:
           main-branch-name: main
-      - uses: actions/cache@v3
-        id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
-        with:
-          path: |
-            ${{ github.workspace }}/node_modules
-            !${{ github.workspace }}/node_modules/.cache
-          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
+
       - name: Install dependencies
-        if: steps.yarn-cache.outputs.cache-hit != 'true'
         run: |
-          ./.github/scripts/setup-npmrc.sh
-          yarn --frozen-lockfile
+          yarn
           echo ""
           echo "GH_MERGED: $GH_MERGED"
           echo "GH_ACTION: $GH_ACTION"
