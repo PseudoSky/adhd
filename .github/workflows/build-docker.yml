@@ -12,7 +12,7 @@ jobs:
       BUILD_TYPE: docker
       INPUT_PUSH: true
       INPUT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      INPUT_SECRETS: "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }},JFROG_TOKEN=${{ secrets.ARTIFACTORY_NPM_TOKEN }}"
+      INPUT_SECRETS: 'GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }},JFROG_TOKEN=${{ secrets.ARTIFACTORY_NPM_TOKEN }}'
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
       JFROG_TOKEN: ${{ secrets.ARTIFACTORY_NPM_TOKEN }}
       FONT_AWESOME_TOKEN: ${{ secrets.FONT_AWESOME_TOKEN }}
@@ -24,7 +24,6 @@ jobs:
       GH_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       GH_BASE_REF: ${{ github.event.pull_request.base.ref }}
       GH_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-
 
     strategy:
       matrix:
