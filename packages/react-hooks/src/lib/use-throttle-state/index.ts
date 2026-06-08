@@ -21,6 +21,7 @@ export function useThrottleState<T>(
     const [value, setValue] = useState<T>(initialValue);
 
     const lastRan = useRef<number>(0);
+    const isFirstRender = useRef(true);
     const timeout = useRef<NodeJS.Timeout>();
     const mounted = useRef(true);
     const trailingValue = useRef<T>(initialValue);
@@ -35,6 +36,12 @@ export function useThrottleState<T>(
     }, []);
 
     useEffect(() => {
+        // Skip the initial mount — only throttle user-initiated updates
+        if (isFirstRender.current) {
+            isFirstRender.current = false;
+            return;
+        }
+
         const now = Date.now();
         const remaining = lastRan.current + delay - now;
 
@@ -46,10 +53,20 @@ export function useThrottleState<T>(
         // Store the latest value for trailing edge
         trailingValue.current = value;
 
-        if (lastRan.current === 0 && leading) {
-            // First call with leading edge
-            lastRan.current = now;
-            setThrottledValue(value);
+        if (lastRan.current === 0) {
+            // First user-initiated call
+            if (leading) {
+                lastRan.current = now;
+                setThrottledValue(value);
+            } else if (trailing) {
+                lastRan.current = now;
+                timeout.current = setTimeout(() => {
+                    if (mounted.current) {
+                        lastRan.current = Date.now();
+                        setThrottledValue(trailingValue.current);
+                    }
+                }, delay);
+            }
         } else if (remaining <= 0) {
             // Enough time has elapsed since last execution
             lastRan.current = now;

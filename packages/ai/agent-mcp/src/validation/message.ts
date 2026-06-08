@@ -1,0 +1,28 @@
+import { z } from "zod";
+
+export const messageRoleSchema = z.enum(["system", "user", "assistant", "tool"]);
+
+export const toolCallSchema = z.object({
+  id: z.string(),
+  server: z.string(),
+  tool: z.string(),
+  arguments: z.unknown(),
+});
+
+export const toolResultSchema = z.object({
+  toolCallId: z.string(),
+  result: z.unknown(),
+  isError: z.boolean().default(false),
+});
+
+export const messageSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  role: messageRoleSchema,
+  content: z.string().optional(),
+  toolCalls: z.array(toolCallSchema).optional(),
+  toolResults: z.array(toolResultSchema).optional(),
+  createdAt: z.string().datetime(),
+});
+
+export type { MessageRole, ToolCall, ToolResult, Message } from "@adhd/agent-mcp-types";

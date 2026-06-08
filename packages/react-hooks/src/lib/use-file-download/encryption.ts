@@ -1,13 +1,20 @@
-// src/hooks/useFileDownload/encryption.ts
 export interface EncryptionKey {
     key: CryptoKey;
     iv: Uint8Array;
+    salt: Uint8Array;
 }
 
-export async function generateEncryptionKey(password: string): Promise<EncryptionKey> {
-    // Convert password to key material
+const SALT_LENGTH = 16;
+const IV_LENGTH = 12;
+const HEADER_LENGTH = SALT_LENGTH + IV_LENGTH;
+
+async function deriveKey(
+    password: string,
+    salt: Uint8Array,
+    usages: KeyUsage[] = ['encrypt', 'decrypt']
+): Promise<CryptoKey> {
     const enc = new TextEncoder();
-    const keyMaterial = await window.crypto.subtle.importKey(
+    const keyMaterial = await crypto.subtle.importKey(
         'raw',
         enc.encode(password),
         { name: 'PBKDF2' },
@@ -15,27 +22,25 @@ export async function generateEncryptionKey(password: string): Promise<Encryptio
         ['deriveBits', 'deriveKey']
     );
 
-    // Generate a random salt
-    const salt = window.crypto.getRandomValues(new Uint8Array(16));
-
-    // Derive the key using PBKDF2
-    const key = await window.crypto.subtle.deriveKey(
+    return crypto.subtle.deriveKey(
         {
             name: 'PBKDF2',
-            salt,
+            salt: new Uint8Array(salt) as Uint8Array<ArrayBuffer>,
             iterations: 100000,
             hash: 'SHA-256'
         },
         keyMaterial,
         { name: 'AES-GCM', length: 256 },
         false,
-        ['encrypt', 'decrypt']
+        usages
     );
+}
 
-    // Generate random IV
-    const iv = window.crypto.getRandomValues(new Uint8Array(12));
-
-    return { key, iv };
+export async function generateEncryptionKey(password: string): Promise<EncryptionKey> {
+    const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+    const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+    const key = await deriveKey(password, salt);
+    return { key, iv, salt };
 }
 
 export async function encryptBlob(
@@ -43,31 +48,22 @@ export async function encryptBlob(
     password: string
 ): Promise<Blob> {
     try {
-        // Generate encryption key and IV from password
-        const { key, iv } = await generateEncryptionKey(password);
-
-        // Convert Blob to ArrayBuffer
+        const { key, iv, salt } = await generateEncryptionKey(password);
         const arrayBuffer = await blob.arrayBuffer();
 
-        // Encrypt the data
-        const encryptedData = await window.crypto.subtle.encrypt(
-            {
-                name: 'AES-GCM',
-                iv
-            },
+        const encryptedData = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv: new Uint8Array(iv) as Uint8Array<ArrayBuffer> },
             key,
             arrayBuffer
         );
 
-        // Combine IV and encrypted data
-        const combinedData = new Uint8Array(iv.length + encryptedData.byteLength);
-        combinedData.set(iv, 0);
-        combinedData.set(new Uint8Array(encryptedData), iv.length);
+        // Layout: [salt (16)] [iv (12)] [ciphertext (...)]
+        const combined = new Uint8Array(HEADER_LENGTH + encryptedData.byteLength);
+        combined.set(salt, 0);
+        combined.set(iv, SALT_LENGTH);
+        combined.set(new Uint8Array(encryptedData), HEADER_LENGTH);
 
-        // Create new Blob with encrypted data
-        return new Blob([combinedData], {
-            type: 'application/encrypted'
-        });
+        return new Blob([combined], { type: 'application/encrypted' });
     } catch (error) {
         console.error('Encryption failed:', error);
         throw new Error('Failed to encrypt data');
@@ -81,27 +77,21 @@ export async function decryptBlob(
     try {
         const arrayBuffer = await encryptedBlob.arrayBuffer();
 
-        // Extract IV from the beginning of the data
-        const iv = arrayBuffer.slice(0, 12);
-        const encryptedData = arrayBuffer.slice(12);
+        // Extract salt, iv, and ciphertext from header
+        const salt = new Uint8Array(arrayBuffer.slice(0, SALT_LENGTH));
+        const iv = new Uint8Array(arrayBuffer.slice(SALT_LENGTH, HEADER_LENGTH));
+        const encryptedData = arrayBuffer.slice(HEADER_LENGTH);
 
-        // Generate the same key from password
-        const { key } = await generateEncryptionKey(password);
+        // Re-derive the same key using the stored salt
+        const key = await deriveKey(password, salt);
 
-        // Decrypt the data
-        const decryptedData = await window.crypto.subtle.decrypt(
-            {
-                name: 'AES-GCM',
-                iv: new Uint8Array(iv)
-            },
+        const decryptedData = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv },
             key,
             encryptedData
         );
 
-        // Create new Blob with decrypted data
-        return new Blob([decryptedData], {
-            type: 'application/octet-stream'
-        });
+        return new Blob([decryptedData], { type: 'application/octet-stream' });
     } catch (error) {
         console.error('Decryption failed:', error);
         throw new Error('Failed to decrypt data');

@@ -4,11 +4,51 @@ import path from 'path';
 import { babelWith, entryPointWith, packageWith } from './templates.js';
 // const { cruise: depcruise } = require("dependency-cruiser");
 const { cruise: depcruise } = await import("dependency-cruiser");
-
+type DependencyEnum =
+  | "aliased-subpath-import"
+  | "aliased-tsconfig-base-url"
+  | "aliased-tsconfig-paths"
+  | "aliased-tsconfig"
+  | "aliased-webpack"
+  | "aliased-workspace"
+  | "aliased"
+  | "amd-define"
+  | "amd-require"
+  | "amd-exotic-require"
+  | "core"
+  | "deprecated"
+  | "dynamic-import"
+  | "exotic-require"
+  | "export"
+  | "import-equals"
+  | "import"
+  | "jsdoc"
+  | "jsdoc-bracket-import"
+  | "jsdoc-import-tag"
+  | "local"
+  | "localmodule"
+  | "npm-bundled"
+  | "npm-dev"
+  | "npm-no-pkg"
+  | "npm-optional"
+  | "npm-peer"
+  | "npm-unknown"
+  | "npm"
+  | "pre-compilation-only"
+  | "process-get-builtin-module"
+  | "require"
+  | "triple-slash-amd-dependency"
+  | "triple-slash-directive"
+  | "triple-slash-file-reference"
+  | "triple-slash-type-reference"
+  | "type-import"
+  | "type-only"
+  | "undetermined"
+  | "unknown";
 // TODO: down or upgrade depcheck;
-const hasDepType = (t = []) => {
+const hasDepType = (t: DependencyEnum[] = []) => {
   const types = new Set(t);
-  return ({ dependencyTypes }) => dependencyTypes.length && (new Set(dependencyTypes)).has(t[0]);
+  return ({ dependencyTypes }: { dependencyTypes: DependencyEnum[] }) => dependencyTypes.length && (new Set(dependencyTypes)).has(t[0]);
 };
 const defaultOptions = {
   sourceDir: '',
@@ -26,7 +66,7 @@ const defaultOptions = {
   },
   extends: 'dependency-cruiser/configs/recommended',
 } as any;
-export const getDeps = async (p_paths, _options = {}, src_path = "") => {
+export const getDeps = async (p_paths: string[], _options = {}, src_path = "") => {
   const options: any = {
     ...defaultOptions,
     ..._options,
@@ -45,17 +85,22 @@ export const getDeps = async (p_paths, _options = {}, src_path = "") => {
     throw new Error('No modules found in dependency cruise result');
   }
 
-  let importedBy = deps.modules.flatMap((m) => (m.dependencies.map((d) => ({ name: d.module.startsWith('./') ? d.resolved : d.module, origin: m.source })))).reduce((r = {}, d) => {
-    r[d.name] = r[d.name] || [];
-    r[d.name].push(d.origin);
-    return r;
-  }, {});
+  let importedBy = deps.modules.flatMap((m) => (m.dependencies.map(
+    (d) => ({ name: d.module.startsWith('./') ? d.resolved : d.module, origin: m.source }))))
+    .reduce((r: Record<string, string[]> = {}, d) => {
+      r[d.name] = r[d.name] || [];
+      r[d.name].push(d.origin);
+      return r;
+    }, {});
   deps.modules = deps.modules.map((e) => ({ ...e, fpath: path.relative(full_pkg_path, path.join(importedBy[e.source] ? path.dirname(importedBy[e.source][0]) : full_pkg_path, e.source)) })).map((o) => (path.dirname(o.source) == '.' ? { ...o, source: o.fpath } : o));
-  importedBy = deps.modules.flatMap((m) => (m.dependencies.map((d) => ({ name: d.module.startsWith('./') ? d.resolved : d.module, origin: m.source })))).reduce((r = {}, d) => {
-    r[d.name] = r[d.name] || [];
-    r[d.name].push(d.origin);
-    return r;
-  }, {});
+  importedBy = deps.modules.
+    flatMap((m) => (m.dependencies
+      .map((d) => ({ name: d.module.startsWith('./') ? d.resolved : d.module, origin: m.source }))))
+    .reduce((r: Record<string, string[]> = {}, d) => {
+      r[d.name] = r[d.name] || [];
+      r[d.name].push(d.origin);
+      return r;
+    }, {});
   const allImports = deps.modules.map((e) => e.source);
   const importedDeps = new Set(deps.modules.flatMap((m) => (m.dependencies.map((d) => ({ ...d, fpath: path.relative(m.source, d.resolved), origin: m.source })))).map((e) => e.resolved));
   const unimported = deps.modules.filter((f) => !importedDeps.has(f.source)).map((e) => e.source);
@@ -78,7 +123,7 @@ export const getDeps = async (p_paths, _options = {}, src_path = "") => {
   };
 };
 
-export const cruiseDeps = async (project_path) => {
+export const cruiseDeps = async (project_path: string) => {
   const {
     external,
     unimported,
@@ -90,7 +135,7 @@ export const cruiseDeps = async (project_path) => {
   };
 };
 
-export const buildPackage = async (project_path, options): Promise<string[]> => {
+export const buildPackage = async (project_path: string): Promise<string[]> => {
   const full_path = path.resolve(project_path);
   const result = await depcheck(full_path, defaultOptions as depcheck.Options);
   return Object.keys(result.missing);

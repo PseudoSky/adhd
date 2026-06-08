@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/src",
   "projectType": "library",
-  "tags": ["react"],
+  "tags": ["platform:browser", "layer:test-ui"],
   "// targets": "to see all targets run: nx show project storybook --web",
   "targets": {}
 }

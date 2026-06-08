@@ -1,4 +1,3 @@
-
 # @adhd/transform
 
 [![npm version](https://img.shields.io/npm/v/@adhd/transform.svg)](https://www.npmjs.com/package/@adhd/transform)
@@ -29,103 +28,156 @@ pnpm add @adhd/transform
 
 ---
 
-
-
-
 ## Function Outline
 
 ### Transform: Collections
-| Function (params) | Description |
-|-------------------|-------------|
-| [difference(arrays: any[][])](#collections) | Elements in first array not in others |
-| [intersection(arrays: any[][])](#collections) | Elements common to all arrays |
-| [flattenDeep(arr: any[][])](#collections) | Deeply flattens nested arrays |
-| [keyByArray(array: any[], key: string)](#collections) | Indexes array by a key |
-| [keyBy(collection: any[], key: string)](#collections) | Indexes array or object by a key |
-| [omitBy(orig: ArrayOrObject, check: BooleanFilter)](#collections) | Omits entries where check returns true |
-| [pickBy(orig: ArrayOrObject, check: BooleanFilter)](#collections) | Picks entries where check returns true |
-| [pluck(arr: any[], key: string)](#collections) | Extracts values for a key from array |
-| [minBy(collection: T[], selector: Selector<T>, compare?: ComparisonFunction<number>)](#collections) | Finds min by selector |
-| [maxBy(collection: T[], selector: Selector<T>, compare?: ComparisonFunction<number>)](#collections) | Finds max by selector |
-| [first(arr: any[])](#collections) | Returns first element |
-| [last(arr: OneOfType<string, any[]>)](#collections) | Returns last element |
-| [unique(arr: any[])](#collections) | Returns unique elements |
-| [uniqueBy(arr: any[], props: string[])](#collections) | Unique by multiple properties |
-| [indexBy(arr: any[], prop: string)](#collections) | Indexes array by property |
-| [range(start: number, stop: number, step: number)](#collections) | Generates a range of numbers |
+
+| Function (params)                                                                                   | Description                                          |
+| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [difference(arrays: any[][])](#collections)                                                         | Elements in first array not in others                |
+| [intersection(arrays: any[][])](#collections)                                                       | Elements common to all arrays                        |
+| [flattenDeep(arr: any[][])](#collections)                                                           | Deeply flattens nested arrays                        |
+| [keyByArray(array: any[], key: string)](#collections)                                               | Indexes array by a key                               |
+| [keyBy(collection: any[], key: string)](#collections)                                               | Indexes array or object by a key                     |
+| [isMatch(obj: any, target: any)](#collections)                                                      | Deep partial match (does obj contain all of target?) |
+| [omitBy(orig: ArrayOrObject, check: BooleanFilter)](#collections)                                   | Omits entries where check returns true               |
+| [pickBy(orig: ArrayOrObject, check: BooleanFilter)](#collections)                                   | Picks entries where check returns true               |
+| [pluck(arr: any[], key: string)](#collections)                                                      | Extracts values for a key from array                 |
+| [minBy(collection: T[], selector: Selector<T>, compare?: ComparisonFunction<number>)](#collections) | Finds min by selector                                |
+| [maxBy(collection: T[], selector: Selector<T>, compare?: ComparisonFunction<number>)](#collections) | Finds max by selector                                |
+| [filterInclude(arr: any[], obj)](#collections)                                                      | Filters to items matching obj                        |
+| [filterExclude(arr: any[], obj)](#collections)                                                      | Filters out items matching obj                       |
+| [first(arr: any[])](#collections)                                                                   | Returns first element                                |
+| [last(arr: any[])](#collections)                                                                    | Returns last element                                 |
+| [unique(arr: any[])](#collections)                                                                  | Returns unique elements                              |
+| [uniqueBy(arr: any[], props: string[])](#collections)                                               | Unique by multiple properties                        |
+| [indexBy(arr: any[], prop: string)](#collections)                                                   | Indexes array by property                            |
+| [range(start: number, stop: number, step: number)](#collections)                                    | Generates a range of numbers                         |
 
 ### Transform: Filters
-| Function (params) | Description |
-|-------------------|-------------|
-| [isArray(x: unknown)](#filters) | Checks if value is array |
-| [isString(x: unknown)](#filters) | Checks if value is string |
-| [isDefined(x: unknown)](#filters) | Checks if value is not null/undefined |
-| [isInt(x: unknown)](#filters) | Checks if value is integer |
-| [isFloat(x: unknown)](#filters) | Checks if value is float |
-| [isRegExp(x: unknown)](#filters) | Checks if value is RegExp |
-| [isTrue(a: any)](#filters) | Checks if value is true |
-| [isFalse(a: any)](#filters) | Checks if value is false |
-| [isLessThan(a: number, b: number)](#filters) | Checks if a < b |
-| [isGreaterThan(a: number, b: number)](#filters) | Checks if a > b |
-| [isIn(a: any, b: OneOfType<string,any[]>)](#filters) | Checks if a in b |
-| [isLike(a: string, b: string)](#filters) | Checks if a contains b |
+
+| Function (params)                                    | Description                           |
+| ---------------------------------------------------- | ------------------------------------- |
+| [isArray(x: unknown)](#filters)                      | Checks if value is array              |
+| [isString(x: unknown)](#filters)                     | Checks if value is string             |
+| [isDefined(x: unknown)](#filters)                    | Checks if value is not null/undefined |
+| [isInt(x: unknown)](#filters)                        | Checks if value is integer            |
+| [isFloat(x: unknown)](#filters)                      | Checks if value is float              |
+| [isRegExp(x: unknown)](#filters)                     | Checks if value is RegExp             |
+| [isTrue(a: any)](#filters)                           | Checks if value is true               |
+| [isFalse(a: any)](#filters)                          | Checks if value is false              |
+| [isLessThan(a: number, b: number)](#filters)         | Checks if a < b                       |
+| [isGreaterThan(a: number, b: number)](#filters)      | Checks if a > b                       |
+| [isIn(a: any, b: OneOfType<string,any[]>)](#filters) | Checks if a in b                      |
+| [isLike(a: string, b: string)](#filters)             | Checks if a contains b                |
 
 ### Transform: Objects
-| Function (params) | Description |
-|-------------------|-------------|
-| [keys(obj: object)](#objects) | Returns object keys |
-| [values(obj: object)](#objects) | Returns object values |
-| [entries(obj: object)](#objects) | Returns object entries |
-| [isEqual(a: unknown, b: any)](#objects) | Deep equality check |
-| [stringify(obj: object)](#objects) | JSON stringify |
-| [groupBy(arr: any[], props: string[])](#objects) | Groups array by properties |
-| [deepCopy(object1: any)](#objects) | Deep copy object |
+
+| Function (params)                                | Description                               |
+| ------------------------------------------------ | ----------------------------------------- |
+| [keys(obj: object)](#objects)                    | Returns object keys                       |
+| [values(obj: object)](#objects)                  | Returns object values                     |
+| [entries(obj: object)](#objects)                 | Returns object entries                    |
+| [stringify(obj: object)](#objects)               | JSON stringify                            |
+| [groupBy(arr: any[], props: string[])](#objects) | Groups array by properties                |
+| [omit(object, keys)](#objects)                   | Omits specified keys                      |
+| [pick(object, keys)](#objects)                   | Picks specified keys                      |
+| [allPaths(obj, matcher?)](#objects)              | Enumerates all paths of an object         |
+| [objectDifference(object, base)](#objects)       | Calculates difference between two objects |
+| [deepCopy(object1: any)](#objects)               | Deep copy object                          |
+| [deepEquals(object1, object2)](#objects)         | Deep equality check                       |
 
 ### Transform: Stats
-| Function (params) | Description |
-|-------------------|-------------|
-| [range(list: number[])](#stats) | Min/max of list |
-| [randomRange(a: number, b: number)](#stats) | Random float between a and b |
-| [randomRangeInt(a: number, b: number)](#stats) | Random int between a and b |
-| [roundToIncrement(x: number, increment: number)](#stats) | Rounds to increment |
-| [getMin(a: number, b: number)](#stats) | Minimum of two numbers |
-| [getMax(a: number, b: number)](#stats) | Maximum of two numbers |
-| [histogram(iterable: any[])](#stats) | Histogram of values |
+
+| Function (params)                                         | Description                   |
+| --------------------------------------------------------- | ----------------------------- |
+| [minMax(list: number[])](#stats)                          | Min/max of list               |
+| [randomRange(a: number, b: number)](#stats)               | Random float between a and b  |
+| [randomRangeInt(a: number, b: number)](#stats)            | Random int between a and b    |
+| [roundToIncrement(x: number, increment: number)](#stats)  | Rounds to increment           |
+| [normalizeBetween(x, min, max, newMin?, newMax?)](#stats) | Normalizes value to new range |
+| [normalize(list: number[], bounds?)](#stats)              | Normalizes a list to bounds   |
+| [getMin(a: number, b: number)](#stats)                    | Minimum of two numbers        |
+| [getMax(a: number, b: number)](#stats)                    | Maximum of two numbers        |
+| [histogram(iterable: any[])](#stats)                      | Histogram of values           |
+| [mostCommon(iterable: any[])](#stats)                     | Most common value             |
 
 ### Transform: Texts
-| Function (params) | Description |
-|-------------------|-------------|
-| [capitalize(str: string)](#texts) | Capitalizes string |
-| [trim(str: string, c?: string)](#texts) | Trims whitespace |
-| [upperFirst(str: string)](#texts) | Uppercases first character |
-| [lowerFirst(str: string)](#texts) | Lowercases first character |
-| [trimStart(str: string, c?: string)](#texts) | Trims start |
-| [trimEnd(str: string, c?: string)](#texts) | Trims end |
-| [words(value: string)](#texts) | Splits into words |
-| [hyphenCase(str: string)](#texts) | Converts to hyphen-case |
-| [percent(n: number, precision?: number)](#texts) | Formats percent |
+
+| Function (params)                                | Description                |
+| ------------------------------------------------ | -------------------------- |
+| [capitalize(str: string)](#texts)                | Capitalizes string         |
+| [trim(str: string, c?: string)](#texts)          | Trims whitespace           |
+| [upperFirst(str: string)](#texts)                | Uppercases first character |
+| [lowerFirst(str: string)](#texts)                | Lowercases first character |
+| [trimStart(str: string, c?: string)](#texts)     | Trims start                |
+| [trimEnd(str: string, c?: string)](#texts)       | Trims end                  |
+| [words(value: string)](#texts)                   | Splits into words          |
+| [hyphenCase(str: string)](#texts)                | Converts to hyphen-case    |
+| [percent(n: number, precision?: number)](#texts) | Formats percent            |
 
 ### Transform: Functions
-| Function (params) | Description |
-|-------------------|-------------|
-| [compose(...funcs: Function[])](#functions) | Composes functions |
-| [noop()](#functions) | No-op function |
-| [extractThen(key: string, callback: Function)](#functions) | Extracts value and applies callback |
-| [get(obj: object, path: string, defaultValue?: any)](#functions) | Gets value at path |
-| [set(data: object, path: string, value: any)](#functions) | Sets value at path |
-| [throttle(func: Function, timeFrame: number)](#functions) | Throttles function |
 
+| Function (params)                                                | Description                         |
+| ---------------------------------------------------------------- | ----------------------------------- |
+| [compose(...funcs: Function[])](#functions)                      | Composes functions                  |
+| [noop()](#functions)                                             | No-op function                      |
+| [extractThen(key: string, callback: Function)](#functions)       | Extracts value and applies callback |
+| [get(obj: object, path: string, defaultValue?: any)](#functions) | Gets value at path                  |
+| [set(data: object, path: string, value: any)](#functions)        | Sets value at path                  |
+| [getAll(obj, paths: string[])](#functions)                       | Gets values at multiple paths       |
+| [flow(funcs: Function[])](#functions)                            | Pipes value through functions       |
+| [partial(func, ...boundArgs)](#functions)                        | Partially applies arguments         |
+| [throttle(func: Function, timeFrame: number)](#functions)        | Throttles function                  |
+| [Differ.map(obj1, obj2)](#functions)                             | Computes deep diff between objects  |
 
+### Transform: Humanize
+
+| Function (params)                                            | Description                            |
+| ------------------------------------------------------------ | -------------------------------------- |
+| [humanizeBytes(bytes: number, decimals?: number)](#humanize) | Formats bytes to human-readable string |
+
+### Transform: Date
+
+| Function (params)                                   | Description                           |
+| --------------------------------------------------- | ------------------------------------- |
+| [formatDate(date: Date, formatStr?: string)](#date) | Formats date with format string       |
+| [humanDuration(d0: Date, d1: Date, unit?)](#date)   | Human-readable duration between dates |
+| [timeFromNow(date: Date)](#date)                    | Duration from now to date             |
+| [fromNow(count: number, unit?: string)](#date)      | Date in the future from now           |
+
+### Transform: Regex
+
+| Function (params)                                   | Description                          |
+| --------------------------------------------------- | ------------------------------------ |
+| [escapePattern(s: string)](#regex)                  | Escapes regex special characters     |
+| [mergePatterns(values: (string\|number)[])](#regex) | Merges values into alternation regex |
+| [rangeToRegex(n1?: number, n2?: number)](#regex)    | Numeric range to regex pattern       |
+
+### Transform: Structures
+
+| Class / Function            | Description                                                                    |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| [Stack\<T\>](#structures)   | LIFO stack with optional typed event callbacks (onPush, onPop, onClear)        |
+| [Queue\<T\>](#structures)   | FIFO queue with optional typed event callbacks (onEnqueue, onDequeue, onClear) |
+| [Counter\<T\>](#structures) | Tracks counts by key with optional typed key extractor function                |
 
 ### Collections
+
 ```ts
 import { Collections } from '@adhd/transform';
 
 // difference: Elements in arr1 not in arr2
-Collections.difference([[1, 2, 3], [2, 3, 4]]); // [1]
+Collections.difference([
+  [1, 2, 3],
+  [2, 3, 4],
+]); // [1]
 
 // intersection: Elements common to both arrays
-Collections.intersection([[1, 2, 3], [2, 3, 4]]); // [2, 3]
+Collections.intersection([
+  [1, 2, 3],
+  [2, 3, 4],
+]); // [2, 3]
 
 // flattenDeep: Deeply flattens nested arrays
 Collections.flattenDeep([[1, [2, [3]]], 4]); // [1, 2, 3, 4]
@@ -137,19 +189,19 @@ Collections.keyByArray([{ id: 1 }, { id: 2 }], 'id'); // { 1: { id: 1 }, 2: { id
 Collections.keyBy([{ id: 1 }, { id: 2 }], 'id'); // { 1: { id: 1 }, 2: { id: 2 } }
 
 // omitBy: Omits entries where check returns true
-Collections.omitBy({ a: 1, b: 2 }, v => v === 2); // { a: 1 }
+Collections.omitBy({ a: 1, b: 2 }, (v) => v === 2); // { a: 1 }
 
 // pickBy: Picks entries where check returns true
-Collections.pickBy({ a: 1, b: 2 }, v => v === 2); // { b: 2 }
+Collections.pickBy({ a: 1, b: 2 }, (v) => v === 2); // { b: 2 }
 
 // pluck: Extracts values for a key from array
 Collections.pluck([{ a: 1 }, { a: 2 }], 'a'); // [1, 2]
 
 // minBy: Finds min by selector
-Collections.minBy([{ x: 1 }, { x: 2 }], o => o.x); // { x: 1 }
+Collections.minBy([{ x: 1 }, { x: 2 }], (o) => o.x); // { x: 1 }
 
 // maxBy: Finds max by selector
-Collections.maxBy([{ x: 1 }, { x: 2 }], o => o.x); // { x: 2 }
+Collections.maxBy([{ x: 1 }, { x: 2 }], (o) => o.x); // { x: 2 }
 
 // first: Returns first element
 Collections.first([1, 2, 3]); // 1
@@ -161,16 +213,31 @@ Collections.last([1, 2, 3]); // 3
 Collections.unique([1, 2, 2, 3]); // [1, 2, 3]
 
 // uniqueBy: Unique by multiple properties
-Collections.uniqueBy([{ a: 1, b: 2 }, { a: 1, b: 3 }], ['a']); // [{ a: 1, b: 2 }]
+Collections.uniqueBy(
+  [
+    { a: 1, b: 2 },
+    { a: 1, b: 3 },
+  ],
+  ['a']
+); // [{ a: 1, b: 2 }]
 
 // indexBy: Indexes array by property
 Collections.indexBy([{ id: 'a' }, { id: 'b' }], 'id'); // { a: { id: 'a' }, b: { id: 'b' } }
+
+// isMatch: Deep partial match
+Collections.isMatch({ a: 1, b: 2 }, { a: 1 }); // true
+Collections.isMatch({ a: 1 }, { a: 1, b: 2 }); // false
+
+// filterInclude/filterExclude: Filter by match
+Collections.filterInclude([{ a: 1 }, { a: 2 }], { a: 1 }); // [{ a: 1 }]
+Collections.filterExclude([{ a: 1 }, { a: 2 }], { a: 1 }); // [{ a: 2 }]
 
 // range: Generates a range of numbers
 Collections.range(1, 5, 1); // [1, 2, 3, 4, 5]
 ```
 
 ### Filters
+
 ```ts
 import { Filters } from '@adhd/transform';
 
@@ -212,6 +279,7 @@ Filters.isLike('hello world', 'world'); // true
 ```
 
 ### Objects
+
 ```ts
 import { Objects } from '@adhd/transform';
 
@@ -224,25 +292,36 @@ Objects.values({ a: 1, b: 2 }); // [1, 2]
 // entries: Returns object entries
 Objects.entries({ a: 1, b: 2 }); // [['a', 1], ['b', 2]]
 
-// isEqual: Deep equality check
-Objects.isEqual({ x: 1 }, { x: 1 }); // true
+// deepEquals: Deep equality check
+Objects.deepEquals({ x: 1 }, { x: 1 }); // true
 
-// stringify: JSON stringify
-Objects.stringify({ a: 1 }); // '{"a":1}'
+// objectDifference: Diff between two objects
+Objects.objectDifference({ a: 1, b: 2 }, { a: 1 }); // { b: 2 }
+
+// omit/pick: Select or exclude keys
+Objects.omit({ a: 1, b: 2 }, ['a']); // { b: 2 }
+Objects.pick({ a: 1, b: 2 }, ['a']); // { a: 1 }
 
 // groupBy: Groups array by properties
-Objects.groupBy([{ a: 1 }, { a: 2 }], ['a']); // { '1': [{ a: 1 }], '2': [{ a: 2 }] }
+Objects.groupBy([{ a: 1 }, { a: 2 }], ['a']);
 
 // deepCopy: Deep copy object
 Objects.deepCopy({ a: 1 }); // { a: 1 }
+
+// allPaths: Enumerate all primitive-holding paths
+Objects.allPaths({ x: { y: 1, z: [2] } }); // [['x', 'y'], ['x', 'z']]
 ```
 
 ### Stats
+
 ```ts
 import { Stats } from '@adhd/transform';
 
-// range: Min/max of list
-Stats.range([1, 2, 3, 4, 5]); // { min: 1, max: 5 }
+// minMax: Min/max of list
+Stats.minMax([1, 2, 3, 4, 5]); // { min: 1, max: 5 }
+
+// normalize: Normalize list to bounds
+Stats.normalize([1, 2, 3, 4, 5], { min: 0, max: 4 }); // [0, 1, 2, 3, 4]
 
 // randomRange: Random float between a and b
 Stats.randomRange(10, 20); // e.g. 13.45
@@ -253,17 +332,19 @@ Stats.randomRangeInt(1, 5); // e.g. 3
 // roundToIncrement: Rounds to increment
 Stats.roundToIncrement(7.3, 2); // 8
 
-// getMin: Minimum of two numbers
+// getMin/getMax: Minimum/maximum of two numbers
 Stats.getMin(3, 7); // 3
-
-// getMax: Maximum of two numbers
 Stats.getMax(3, 7); // 7
 
 // histogram: Histogram of values
-Stats.histogram([1, 2, 2, 3]); // { 1: 1, 2: 2, 3: 1 }
+Stats.histogram([1, 2, 2, 3]); // Map { 1 => 1, 2 => 2, 3 => 1 }
+
+// mostCommon: Most common value
+Stats.mostCommon([1, 2, 2, 3]); // 2
 ```
 
 ### Texts
+
 ```ts
 import { Texts } from '@adhd/transform';
 
@@ -295,7 +376,83 @@ Texts.hyphenCase('Hello World'); // 'hello-world'
 Texts.percent(0.1234); // '12.34%'
 ```
 
+### Structures
+
+```ts
+import { Stack, Queue, Counter } from '@adhd/transform';
+
+// Stack: LIFO stack with event callbacks
+const stack = new Stack<number>({
+  onPush: (value) => console.log('Pushed:', value),
+  onPop: (value) => console.log('Popped:', value),
+  onClear: () => console.log('Stack cleared'),
+});
+
+stack.push(1); // Logs: Pushed: 1
+stack.push(2); // Logs: Pushed: 2
+stack.pop(); // Logs: Popped: 2
+stack.peek(); // Returns 1 (doesn't log)
+stack.size; // 1
+stack.isEmpty; // false
+stack.clear(); // Logs: Stack cleared
+
+// Queue: FIFO queue with event callbacks
+const queue = new Queue<string>([], {
+  onEnqueue: (value) => console.log('Enqueued:', value),
+  onDequeue: (value) => console.log('Dequeued:', value),
+  onClear: () => console.log('Queue cleared'),
+});
+
+queue.enqueue('a'); // Logs: Enqueued: a
+queue.enqueue('b'); // Logs: Enqueued: b
+queue.dequeue(); // Logs: Dequeued: a
+queue.length; // 1
+
+// Counter: Track numeric values by key
+const counter = new Counter<string>();
+counter.increment('requests', 5); // Increment by 5
+counter.increment('requests', 3); // Now 8
+counter.decrement('requests', 2); // Now 6
+console.log(counter.value('requests')); // 6
+console.log(counter.toJson()); // { requests: 6 }
+counter.reset('requests');
+console.log(counter.value('requests')); // 0
+
+// Counter with key extractor: Track by type
+interface Item {
+  type: string;
+  count: number;
+}
+
+const typeCounter = new Counter<Item>((item) => item.type);
+
+typeCounter.increment({ type: 'site', count: 0 }, 2);
+typeCounter.increment({ type: 'local', count: 0 }, 1);
+typeCounter.increment({ type: 'site', count: 0 });
+typeCounter.decrement({ type: 'site', count: 0 });
+
+console.log(typeCounter.toJson()); // { site: 2, local: 1 }
+
+// Real-world example: Pipeline stack with live counter tracking
+const pipeline = new Stack<[string, object]>();
+const pipelineCounter = new Counter<[string, object]>((value) => value[0]);
+
+const stackWithCounters = new Stack<[string, object]>({
+  onPush: (value) => pipelineCounter.increment(value),
+  onPop: (value) => pipelineCounter.decrement(value),
+  onClear: () => pipelineCounter.clear(),
+});
+
+stackWithCounters.push(['fetched', { url: 'https://...' }]);
+stackWithCounters.push(['parsed', { content: '...' }]);
+console.log(pipelineCounter.toJson()); // { fetched: 1, parsed: 1 }
+
+const item = stackWithCounters.pop(); // Decrements 'parsed'
+console.log(pipelineCounter.toJson()); // { fetched: 1, parsed: 0 }
+```
+
 ### Functions
+
 ```ts
 import { Functions } from '@adhd/transform';
 
@@ -327,23 +484,31 @@ throttled();
 
 ## API Reference
 
-- `Collections`: Array and object manipulation (difference, intersection, flatten, keyBy, omitBy, etc.)
-- `Filters`: Type checks and comparison helpers (`isArray`, `isString`, `isDefined`, `isInt`, `isFloat`, `isRegExp`, `isTrue`, `isFalse`, `isLessThan`, `isGreaterThan`, `isIn`, `isLike`, etc.)
-- `Objects`: Object utilities (`keys`, `values`, `entries`, `isEqual`, `stringify`, etc.)
-- `Stats`: Math and statistics helpers (`range`, `randomRange`, `randomRangeInt`, `roundToIncrement`, `getMin`, `getMax`, etc.)
-- `Texts`: String manipulation (`capitalize`, `trim`, `upperFirst`, `lowerFirst`, `trimStart`, `trimEnd`, etc.)
-- `Functions`: Function composition and helpers (`compose`, `noop`, `extractThen`, etc.)
+- `Collections`: Array manipulation (difference, intersection, flatten, keyBy, isMatch, filterInclude, filterExclude, etc.)
+- `Filters`: Type checks and comparison helpers (`isArray`, `isString`, `isDefined`, `isEqual`, `isIn`, `isLike`, etc.)
+- `Objects`: Object utilities (`keys`, `values`, `entries`, `omit`, `pick`, `groupBy`, `objectDifference`, `allPaths`, etc.)
+- `Stats`: Math and statistics helpers (`minMax`, `normalize`, `normalizeBetween`, `histogram`, `mostCommon`, etc.)
+- `Texts`: String manipulation (`capitalize`, `trim`, `upperFirst`, `words`, `hyphenCase`, etc.)
+- `Functions`: Function composition and helpers (`compose`, `get`, `set`, `flow`, `partial`, `Differ`, etc.)
+- `Humanize`: Human-readable formatting (`humanizeBytes`)
+- `Date`: Date utilities (`formatDate`, `humanDuration`, `timeFromNow`, `fromNow`)
+- `Regex`: Regex utilities (`escapePattern`, `mergePatterns`, `rangeToRegex`)
+- `Structures`: Data structures (`Stack<T>`, `Queue<T>`, `Counter`) with optional event callbacks
 
 ---
 
 ## File Structure
 
-- `src/lib/collections.ts` – Array and object utilities
+- `src/lib/collections.ts` – Array utilities and deep matching
 - `src/lib/filters.ts` – Type checks and comparisons
-- `src/lib/function.ts` – Function helpers
+- `src/lib/function.ts` – Function helpers, path access, diffing
 - `src/lib/object.ts` – Object utilities
 - `src/lib/stats.ts` – Math and statistics
 - `src/lib/text.ts` – String utilities
+- `src/lib/humanize.ts` – Human-readable formatting
+- `src/lib/date.ts` – Date utilities
+- `src/lib/regex.ts` – Regex utilities
+- `src/lib/structures.ts` – Stack, Queue, and Counter data structures
 
 ---
 

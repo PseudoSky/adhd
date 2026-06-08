@@ -9,6 +9,8 @@ export type WorkerMessage = {
 
 const CHUNK_SIZE = 1000;
 
+declare const self: Worker;
+
 self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
     const { data, fileType, options, cacheKey } = event.data;
 
@@ -44,7 +46,7 @@ async function processLargeData(
         chunks.push(data.slice(i, i + CHUNK_SIZE));
     }
 
-    let processedChunks: any[] = [];
+    const processedChunks: any[] = [];
 
     // Process each chunk
     for (let i = 0; i < chunks.length; i++) {

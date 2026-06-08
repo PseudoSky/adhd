@@ -8,15 +8,15 @@ import isJSON from './isJson.js';
 import isSourceMap from './isSourceMap.js';
 // see https://github.com/tj/node-language-classifier
 
-const removeQuery = (s) => {
+const removeQuery = (s: string) => {
   return s.split(/[?#]/)[0];
 };
 
-const checkIsDirSync = (f) => {
+const checkIsDirSync = (f: string) => {
   return fs.statSync(f).isDirectory();
 };
 
-const checkIsFileSync = (f) => {
+const checkIsFileSync = (f: string) => {
   const stat = fs.statSync(f);
   if (!stat.isFile()) {
     return stat.size > 0 ? 1 : 0;
@@ -26,23 +26,23 @@ const checkIsFileSync = (f) => {
   // return stat.isFile() ? stat.size > 0 & 1 : -1;
 };
 
-export const assertIsFile = (f) => {
+export const assertIsFile = (f: string) => {
   if (checkIsFileSync(f) === -1) throw new Error('Should be a file: ' + f);
 };
 
-export const assertIsDir = (f) => {
+export const assertIsDir = (f: string) => {
   if (!checkIsDirSync(f)) throw new Error('Should be a directory: ' + f);
 };
 
-export const ensurePathSync = (f) => {
+export const ensurePathSync = (f: string) => {
   return fs.pathExistsSync(f);
 };
 
-export const ensurePaths = async (files) => {
+export const ensurePaths = async (files: string[]) => {
   return await Promise.all(files.map(fs.pathExists));
 };
 
-export const getFileInfo = async (f) => {
+export const getFileInfo = async (f: string) => {
   const cleanName = removeQuery(f);
   try {
     const baseParsed = path.parse(cleanName);

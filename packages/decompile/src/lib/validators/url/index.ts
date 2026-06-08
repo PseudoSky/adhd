@@ -25,14 +25,17 @@ const DATA_URL_DEFAULT_MIME_TYPE = 'text/plain';
 const DATA_URL_DEFAULT_CHARSET = 'us-ascii';
 const PROTOCOL_MATCH = /^(?!(?:\w+:)?\/\/)|^\/\//;
 
-const testParameter = (name, filters) => {
+const testParameter = (name: string, filters:
+  ({
+    test: (arg0: string) => boolean;
+  } | string)[]) => {
   return filters.some(
     (filter) => (filter instanceof RegExp) ?
       filter.test(name) :
       filter === name);
 };
 
-const normalizeDataURL = (urlString, { stripHash }: NormalizeOptions) => {
+const normalizeDataURL = (urlString: string, { stripHash }: NormalizeOptions) => {
   const parts = urlString.match(/^data:(.*?),(.*?)(?:#(.*))?$/);
 
   if (!parts) {
@@ -56,7 +59,7 @@ const normalizeDataURL = (urlString, { stripHash }: NormalizeOptions) => {
     .map((attribute) => {
       // eslint-disable-next-line prefer-const
       let [key, value = ''] = attribute.split('=')
-        .map((string) => string.trim());
+        .map((string: string) => string.trim());
 
       // Lowercase `charset`
       if (key === 'charset') {
@@ -89,7 +92,7 @@ const normalizeDataURL = (urlString, { stripHash }: NormalizeOptions) => {
   return `${header},${data}`;
 };
 
-export const isValidUrl = (s) => {
+export const isValidUrl = (s: string) => {
   try {
     new URL(s);
     const u = normalizeUrl(s);
@@ -99,7 +102,7 @@ export const isValidUrl = (s) => {
   }
 };
 
-export const getPatch = (s) => {
+export const getPatch = (s: string) => {
   try {
     return normalizeUrl(s);
   } catch (e) {
@@ -124,7 +127,7 @@ export const defaultOptions: NormalizeOptions = {
   sortQueryParameters: true,
 };
 
-export const normalizeUrl = (urlString, options: NormalizeOptions = {}) => {
+export const normalizeUrl = (urlString: string, options: NormalizeOptions = {}) => {
   options = {
     ...defaultOptions,
     ...options,
@@ -156,7 +159,7 @@ export const normalizeUrl = (urlString, options: NormalizeOptions = {}) => {
   const isRelativeUrl = !hasRelativeProtocol && /^\.*\//.test(urlString);
 
   // Prepend protocol
-  if (!isRelativeUrl) {
+  if (!isRelativeUrl && options.defaultProtocol) {
     urlString = urlString.replace(PROTOCOL_MATCH, options.defaultProtocol);
   }
 

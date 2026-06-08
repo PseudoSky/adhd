@@ -11,7 +11,7 @@
       }
     }
   },
-  "tags": ["base"],
+  "tags": ["platform:shared", "layer:data"],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",

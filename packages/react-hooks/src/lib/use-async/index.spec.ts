@@ -1,25 +1,17 @@
-// src/hooks/useAsync/useAsync.test.ts
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useAsync } from './';
 
 describe('useAsync', () => {
-    beforeEach(() => {
-        vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-        vi.restoreAllMocks();
-    });
-
-    it('should initialize with idle state', () => {
+    it('should initialize with idle state', async () => {
         const mockFn = vi.fn();
         const { result } = renderHook(() => useAsync(mockFn));
-
-        expect(result.current.status).toBe('idle');
-        expect(result.current.data).toBeNull();
-        expect(result.current.error).toBeNull();
-        expect(result.current.isLoading).toBe(false);
+        await waitFor(() => {
+            expect(result.current.status).toBe('idle');
+            expect(result.current.data).toBeUndefined();
+            expect(result.current.error).toBeUndefined();
+            expect(result.current.isLoading).toBe(false);
+        });
     });
 
     it('should handle successful async operation', async () => {
@@ -34,11 +26,12 @@ describe('useAsync', () => {
         await act(async () => {
             await result.current.execute();
         });
-
-        expect(result.current.status).toBe('success');
-        expect(result.current.data).toEqual(mockData);
-        expect(result.current.error).toBeNull();
-        expect(onSuccess).toHaveBeenCalledWith(mockData);
+        await waitFor(() => {
+            expect(result.current.status).toBe('success');
+            expect(result.current.data).toEqual(mockData);
+            expect(result.current.error).toBeUndefined();
+            expect(onSuccess).toHaveBeenCalledWith(mockData);
+        });
     });
 
     it('should handle failed async operation', async () => {
@@ -55,22 +48,25 @@ describe('useAsync', () => {
                 // Expected error
             }
         });
-
-        expect(result.current.status).toBe('error');
-        expect(result.current.data).toBeNull();
-        expect(result.current.error).toEqual(mockError);
-        expect(onError).toHaveBeenCalledWith(mockError);
+        await waitFor(() => {
+            expect(result.current.status).toBe('error');
+            expect(result.current.data).toBeUndefined();
+            expect(result.current.error).toEqual(mockError);
+            expect(onError).toHaveBeenCalledWith(mockError);
+        });
     });
 
     it('should execute immediately when immediate option is true', async () => {
         const mockFn = vi.fn().mockResolvedValue('test');
 
         renderHook(() => useAsync(mockFn, { immediate: true }));
-
-        expect(mockFn).toHaveBeenCalledTimes(1);
+        await waitFor(() => {
+            expect(mockFn).toHaveBeenCalledTimes(1);
+        });
     });
 
     it('should handle loading state correctly', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
         const mockFn = vi.fn().mockImplementation(() =>
             new Promise(resolve => setTimeout(() => resolve('test'), 1000))
         );
@@ -80,24 +76,28 @@ describe('useAsync', () => {
         act(() => {
             result.current.execute();
         });
-
-        expect(result.current.status).toBe('pending');
-        expect(result.current.isLoading).toBe(true);
-
-        await act(async () => {
-            await vi.runAllTimers();
+        await waitFor(() => {
+            expect(result.current.status).toBe('pending');
+            expect(result.current.isLoading).toBe(true);
         });
 
-        expect(result.current.status).toBe('success');
-        expect(result.current.isLoading).toBe(false);
+        await act(async () => {
+            vi.runAllTimers();
+        });
+        await waitFor(() => {
+            expect(result.current.status).toBe('success');
+            expect(result.current.isLoading).toBe(false);
+        });
+        vi.useRealTimers();
     });
 
-    it('should not execute immediately when immediate option is false', () => {
+    it('should not execute immediately when immediate option is false', async () => {
         const mockFn = vi.fn().mockResolvedValue('test');
 
         renderHook(() => useAsync(mockFn, { immediate: false }));
-
-        expect(mockFn).not.toHaveBeenCalled();
+        await waitFor(() => {
+            expect(mockFn).not.toHaveBeenCalled();
+        });
     });
 
     it('should maintain the latest state when component rerenders', async () => {

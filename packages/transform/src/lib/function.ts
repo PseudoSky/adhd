@@ -1,6 +1,6 @@
 import { sortBy } from "./collections";
 import { isArray, isDate, isFunction, isUndefined, isValue } from './filters';
-import { isEqual } from './object';
+import { isEqual } from './filters';
 
 export type entryOf<o> = {
   [k in keyof o]-?: [k, Exclude<o[k], undefined>]

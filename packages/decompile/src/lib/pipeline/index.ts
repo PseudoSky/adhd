@@ -1,2 +1,2 @@
-export { Stack } from './stack.js';
+export { PipelineStack as Stack } from './stack.js';
 

@@ -16,6 +16,7 @@
     "build": {
       "executor": "@nx/js:tsc",
       "outputs": ["{options.outputPath}"],
+      "generatePackageJson": true,
       "updateBuildableProjectDepsInPackageJson": true,
       "buildableProjectDepsInPackageJsonType": "dependencies",
       "options": {
@@ -23,7 +24,8 @@
         "tsConfig": "packages/decompile/tsconfig.lib.json",
         "packageJson": "packages/decompile/package.json",
         "main": "packages/decompile/src/index.ts",
-        "assets": ["packages/decompile/*.md"]
+        "assets": ["packages/decompile/*.md"],
+        "createLockFile": false
       }
     },
     "nx-release-publish": {

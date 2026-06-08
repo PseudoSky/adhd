@@ -16,36 +16,50 @@
  *  file: Optional. The generated filename this source map is associated with.
  */
 
+import { Transform } from '@adhd/transform';
 import isBase64 from './isBase64.js';
 
+type MapType = {
+  version: number;
+  sources: unknown[];
+  names: unknown[];
+  mappings: string;
+  file?: string;
+  sourceRoot?: unknown[]
+  sourcesContent?: unknown[]
+}
+
 const MapShape = {
-  version: ({ version }) => Number.isInteger(version),
-  sources: ({ sources }) => Array.isArray(sources),
-  names: ({ names }) => Array.isArray(names),
-  mappings: ({ mappings }) => isBase64(mappings),
-  file: ({ file }) => !file || typeof (file) === 'string',
-  sourceRoot: ({ sourceRoot }) => !sourceRoot || Array.isArray(sourceRoot),
-  sourcesContent: ({ sourcesContent }) => !sourcesContent || Array.isArray(sourcesContent),
+  version: ({ version }: MapType) => Transform.isInt(version),
+  sources: ({ sources }: MapType) => Transform.isArray(sources),
+  names: ({ names }: MapType) => Transform.isArray(names),
+  mappings: ({ mappings }: MapType) => isBase64(mappings),
+  file: ({ file }: MapType) => !file || Transform.isString(file),
+  sourceRoot: ({ sourceRoot }: MapType) => !sourceRoot || Transform.isArray(sourceRoot),
+  sourcesContent: ({ sourcesContent }: MapType) => !sourcesContent || Transform.isArray(sourcesContent),
 };
 
-const tryReadJson = (s) => {
+const tryReadJson = (s: unknown) => {
+  if (!Transform.isString(s)) {
+    return false
+  }
   try {
-    return JSON.parse(s);
+    return JSON.parse(s as string);
   } catch (e) {
     return false;
   }
 };
 
-const isSourceMap = (_data) => {
+const isSourceMap = (_data: string | MapType) => {
   console.log('Parser(SourceMap:validate)');
   let data = _data;
   if (typeof (data) === 'string') {
     if (data.length < 30) return false;
-    data = tryReadJson(data);
+    data = tryReadJson(data) as MapType;
     if (!data) return false;
   }
   return Object.keys(MapShape).reduce((r, k) => {
-    const check = MapShape[k](data);
+    const check = MapShape[k as keyof typeof MapShape](data as MapType);
     r = r === true && check;
     return r;
   }, true);

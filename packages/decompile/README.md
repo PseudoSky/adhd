@@ -1,4 +1,4 @@
-## @adhd/reverse
+## @adhd/decompile
 
 Reverse is a tool for reverse engineering code bundled with source maps.
 Reverse accepts
@@ -7,36 +7,34 @@ Reverse accepts
 
 ### Install
 
-`npm install -g @adhd/reverse`
-`yarn global add @adhd/reverse`
-
+`npm install -g @adhd/decompile`
+`yarn global add @adhd/decompile`
 
 ### Usage
 
 To run in reverse, you have to supply a reference to the target. It can be in the form of a `url`, `domain`, or local `files`.
 
 **currently supported types** (remote and local)
- - `html` extracts references (css, js)
- - `js*` extracts references (map, js deps)
- - `css` extracts references (map)
- - `map` uses the map to rebuild source code (src, fs, deps)
- - `json` currently checks to see if the json is a map
 
+- `html` extracts references (css, js)
+- `js*` extracts references (map, js deps)
+- `css` extracts references (map)
+- `map` uses the map to rebuild source code (src, fs, deps)
+- `json` currently checks to see if the json is a map
 
 Run with
 
-
-`npx @adhd/reverse`
+`npx @adhd/decompile deps`
 
 or
 
 ```
-> adhd-reverse -h
+> npx @adhd/decompile reverse -h
 
-Usage: adhd-reverse
-Usage:  [options] [source] <sources...>
+Usage: reverse
+Usage:  [options] <sources...>
 
-Example: > adhd-reverse -o ./<output_directory> "https://<url_to_examine>" "./source.{html,js,css,map}"
+Example: > npx @adhd/decompile reverse -o ./<output_directory> "https://<url_to_examine>" "./source.{html,js,css,map}"
 
 crawl and extract source maps
 
@@ -48,15 +46,9 @@ Options:
 
 #### CLI
 
-
-`[source] <sources...>` (required) one or more `urls` and or `file_paths`
+`<sources...>` (required) one or more `urls` and or `file_paths`
 
 `-o <output_dir>`
-
-
-
-
-
 
 #### Pipeline
 
@@ -75,17 +67,14 @@ request url
 For local files the pipeline skips to the 4th step
 For source maps it skips to the 6th line
 
-
-
-
-# @adhd/reverse
+# @adhd/decompile
 
 reverse is a tool for reverse engineering code bundled with source maps.
 reverse accepts
 
-* **(remote) urls:** html, js, css, map, json
+- **(remote) urls:** html, js, css, map, json
 
-* **(local) files:** html, js, ts, jsx..., css, etc
+- **(local) files:** html, js, ts, jsx..., css, etc
 
 ## Getting Started
 
@@ -106,19 +95,19 @@ A step by step series of examples that tell you how to get a development env run
 With `npm`
 
 ```sh
-npm install -g @adhd/reverse
+npm install -g @adhd/decompile
 ```
 
 With `npx`
 
 ```sh
-npx @adhd/reverse <...>
+npx @adhd/decompile <...>
 ```
 
 With `yarn`
 
 ```
-yarn global add @adhd/reverse
+yarn global add @adhd/decompile
 ```
 
 End with an example of getting some data out of the system or using it for a little demo
@@ -129,7 +118,7 @@ End with an example of getting some data out of the system or using it for a lit
 
 ### Break down into end to end tests
 
-In [src/validators/local/__tests__](./src/validators/local/__tests__) each of the pattern matching utilities are tested
+In [src/validators/local/**tests**](./src/validators/local/__tests__) each of the pattern matching utilities are tested
 
 The data mocks are in [tests/fixtures](./tests/fixtures)
 
@@ -157,9 +146,9 @@ Add additional notes about how to deploy this on a live system
 
 ## Built With
 
-* [Dropwizard](http://www.dropwizard.io/1.0.2/docs/) - The web framework used
-* [Maven](https://maven.apache.org/) - Dependency Management
-* [ROME](https://rometools.github.io/rome/) - Used to generate RSS Feeds
+- [Dropwizard](http://www.dropwizard.io/1.0.2/docs/) - The web framework used
+- [Maven](https://maven.apache.org/) - Dependency Management
+- [ROME](https://rometools.github.io/rome/) - Used to generate RSS Feeds
 
 ## Contributing
 
@@ -171,7 +160,7 @@ We use [SemVer](http://semver.org/) for versioning. For the versions available, 
 
 ## Authors
 
-* **Billie Thompson** - *Initial work* - [PurpleBooth](https://github.com/PurpleBooth)
+- **Billie Thompson** - _Initial work_ - [PurpleBooth](https://github.com/PurpleBooth)
 
 See also the list of [contributors](https://github.com/your/project/contributors) who participated in this project.
 
@@ -181,6 +170,6 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 ## Acknowledgments
 
-* Hat tip to anyone whose code was used
-* Inspiration
-* etc
+- Hat tip to anyone whose code was used
+- Inspiration
+- etc

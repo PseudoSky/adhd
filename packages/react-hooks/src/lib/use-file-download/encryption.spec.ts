@@ -14,7 +14,8 @@ describe('Encryption utilities', () => {
 
         // Decrypt
         const decryptedBlob = await decryptBlob(encryptedBlob, password);
-        const decryptedText = await decryptedBlob.text();
+        const decryptedBuffer = await decryptedBlob.arrayBuffer();
+        const decryptedText = new TextDecoder().decode(decryptedBuffer);
         expect(decryptedText).toBe(originalData);
     });
 
@@ -22,7 +23,6 @@ describe('Encryption utilities', () => {
         const originalData = 'Secret data';
         const originalBlob = new Blob([originalData], { type: 'text/plain' });
         const encryptedBlob = await encryptBlob(originalBlob, 'correct-password');
-
         await expect(decryptBlob(encryptedBlob, 'wrong-password'))
             .rejects.toThrow('Failed to decrypt data');
     });

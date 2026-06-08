@@ -1,10 +1,12 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "./../../tsconfig.base.json",
   "compilerOptions": {
     "module": "esnext",
+    "moduleResolution": "bundler",
+    "baseUrl": "../../",
+    "ignoreDeprecations": "6.0",
     "esModuleInterop": true,
     "target": "es6",
-    "moduleResolution": "node",
     "sourceMap": true,
     "allowSyntheticDefaultImports": true
   },

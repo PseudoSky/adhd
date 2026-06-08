@@ -1,15 +1,38 @@
 {
   "name": "@adhd/decompile",
-  "version": "0.0.1",
+  "version": "0.1.7",
   "type": "module",
   "main": "src/index.js",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
-    "adhd-reverse": "./bin/decompile.js reverse",
-    "deps": "./bin/decompile.js deps"
+    "decompile": "./bin/decompile.js"
   },
   "scripts": {
     "build": "nx run decompile:build",
     "watch": "nx run decompile:build --watch",
     "cli": "node dist/packages/decompile"
+  },
+  "dependencies": {
+    "acorn": "^8.14.1",
+    "acorn-jsx": "^5.3.2",
+    "adm-zip": "^0.5.16",
+    "async-request": "^1.2.0",
+    "babel-polyfill": "^6.26.0",
+    "cheerio": "^1.2.0",
+    "commander": "14.0.3",
+    "depcheck": "^1.4.7",
+    "dependency-cruiser": "^17.3.9",
+    "fs-extra": "11.2.0",
+    "language-detect": "^1.1.0",
+    "lodash": "4.17.21",
+    "postcss": "^8.5.3",
+    "posthtml-parser": "^0.12.1",
+    "source-map": "0.6.1",
+    "tough-cookie": "4.1.4",
+    "tslib": "^2.3.0",
+    "util": "0.12.5",
+    "@adhd/transform": "^2.2.1"
   }
 }

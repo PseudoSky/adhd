@@ -1,0 +1,147 @@
+import { logger } from "../logger.js";
+import type { ToolDefinition } from "../providers/types.js";
+import type { ExecutionContext, McpServerConfig } from "../validation/index.js";
+import type { InProcessToolDescriptor, InProcessToolHandler } from "./in-process.js";
+import { InProcessMcpClient } from "./in-process.js";
+import { HttpMcpClient, SseMcpClient } from "./http-client.js";
+import { StdioMcpClient } from "./stdio-client.js";
+import type { IMcpClient } from "./types.js";
+
+/**
+ * McpClientRegistry — per-task lifetime.
+ *
+ * Created fresh for each task() call and torn down in the Orchestrator's
+ * finally block via closeAll(). Never reused across tasks.
+ *
+ * Self-referential detection (routes to InProcessMcpClient):
+ *   1. Key === "agent-mcp" (always applies)
+ *   2. URL matches selfUrl (only when selfUrl is defined — http/sse transport)
+ *      When TRANSPORT=stdio, selfUrl is undefined and only condition 1 applies.
+ */
+export class McpClientRegistry {
+    private readonly clients = new Map<string, IMcpClient>();
+    private readonly connectPromises = new Map<string, Promise<void>>();
+
+    constructor(
+        private readonly mcpServers: Record<string, McpServerConfig>,
+        private readonly selfUrl: string | undefined,
+        private readonly inProcessDescriptors: InProcessToolDescriptor[],
+        private readonly inProcessHandler: InProcessToolHandler,
+        private readonly context: ExecutionContext
+    ) {}
+
+    private isSelfReferential(name: string, config: McpServerConfig): boolean {
+        if (name === "agent-mcp") return true;
+
+        if (
+            this.selfUrl &&
+            (config.transport === "http" || config.transport === "sse") &&
+            config.url === this.selfUrl
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private async getOrCreateClient(name: string): Promise<IMcpClient> {
+        const existing = this.clients.get(name);
+        if (existing) return existing;
+
+        const config = this.mcpServers[name];
+        if (!config) {
+            throw new Error(`No MCP server config found for server: '${name}'`);
+        }
+
+        if (this.isSelfReferential(name, config)) {
+            const client = new InProcessMcpClient(
+                this.inProcessDescriptors,
+                this.inProcessHandler,
+                this.context
+            );
+            this.clients.set(name, client);
+            return client;
+        }
+
+        // Create and connect the appropriate transport client
+        let connectPromise = this.connectPromises.get(name);
+        if (connectPromise) {
+            await connectPromise;
+            return this.clients.get(name)!;
+        }
+
+        let client: StdioMcpClient | HttpMcpClient | SseMcpClient;
+
+        if (config.transport === "stdio") {
+            client = new StdioMcpClient(name, config);
+        } else if (config.transport === "http") {
+            client = new HttpMcpClient(name, config);
+        } else if (config.transport === "sse") {
+            client = new SseMcpClient(name, config);
+        } else {
+            const exhaustive: never = config;
+            throw new Error(`Unknown MCP transport: ${(exhaustive as { transport: string }).transport}`);
+        }
+
+        connectPromise = client.connect().then(() => {
+            this.clients.set(name, client);
+            logger.debug({ server: name }, "MCP client connected");
+        });
+
+        this.connectPromises.set(name, connectPromise);
+        await connectPromise;
+        return this.clients.get(name)!;
+    }
+
+    /** Get a client for a specific server, connecting lazily if needed */
+    async getClient(name: string): Promise<IMcpClient> {
+        return this.getOrCreateClient(name);
+    }
+
+    /**
+     * List all tools across all configured servers.
+     * Prefixes each tool name with "<server>__<tool>" for disambiguation.
+     */
+    async listAllTools(): Promise<ToolDefinition[]> {
+        const allTools: ToolDefinition[] = [];
+
+        for (const serverName of Object.keys(this.mcpServers)) {
+            try {
+                const client = await this.getOrCreateClient(serverName);
+                const tools = await client.listTools();
+
+                for (const tool of tools) {
+                    allTools.push({
+                        ...tool,
+                        name: `${serverName}__${tool.name}`,
+                    });
+                }
+            } catch (error) {
+                logger.warn(
+                    { server: serverName, error },
+                    "Failed to list tools from MCP server"
+                );
+            }
+        }
+
+        return allTools;
+    }
+
+    /** Tear down all clients — called from Orchestrator's finally block */
+    async closeAll(): Promise<void> {
+        const closePromises = Array.from(this.clients.entries()).map(
+            async ([name, client]) => {
+                try {
+                    await client.close();
+                    logger.debug({ server: name }, "MCP client closed");
+                } catch (error) {
+                    logger.warn({ server: name, error }, "Error closing MCP client");
+                }
+            }
+        );
+
+        await Promise.allSettled(closePromises);
+        this.clients.clear();
+        this.connectPromises.clear();
+    }
+}

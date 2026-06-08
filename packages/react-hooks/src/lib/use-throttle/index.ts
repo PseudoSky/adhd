@@ -19,6 +19,7 @@ export function useThrottle<T extends (...args: any[]) => any>(
 
     const timeoutRef = useRef<NodeJS.Timeout>();
     const lastRanRef = useRef<number>(0);
+    const hasRanRef = useRef(false);
     const lastArgsRef = useRef<Parameters<T>>();
     const mountedRef = useRef(true);
 
@@ -42,18 +43,32 @@ export function useThrottle<T extends (...args: any[]) => any>(
             callback(...(lastArgsRef.current as Parameters<T>));
         };
 
-        if (lastRanRef.current === 0 && leading) {
-            execute();
-        }
-
-        const remaining = delay - (now - lastRanRef.current);
-
         if (timeoutRef.current) {
             clearTimeout(timeoutRef.current);
         }
 
-        if (remaining <= 0) {
+        if (!hasRanRef.current) {
+            // First invocation
+            hasRanRef.current = true;
+            if (leading) {
+                execute();
+                return;
+            }
+            // No leading edge — schedule trailing if enabled
             lastRanRef.current = now;
+            if (trailing) {
+                timeoutRef.current = setTimeout(() => {
+                    if (mountedRef.current) {
+                        execute();
+                    }
+                }, delay);
+            }
+            return;
+        }
+
+        const remaining = delay - (now - lastRanRef.current);
+
+        if (remaining <= 0) {
             execute();
         } else if (trailing) {
             timeoutRef.current = setTimeout(() => {

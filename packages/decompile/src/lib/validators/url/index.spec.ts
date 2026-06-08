@@ -5,7 +5,7 @@ import { defaultOptions, isValidUrl, normalizeUrl } from '.';
 //   const e = expectEqual(expect, f);
 //   expectEqual(expect, e.message, error);
 // }
-function expectEqual(test: jest.Expect, actual: any, expected?: any) {
+function expectEqual(test: jest.Expect, actual: Parameters<jest.Expect>[0], expected?: Parameters<jest.Expect>[0]) {
   test(actual).toEqual(expected);
 }
 const scheme = defaultOptions.defaultProtocol;
