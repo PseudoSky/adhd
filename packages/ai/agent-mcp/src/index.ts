@@ -7,6 +7,7 @@ import { logger } from "./logger.js";
 import { AgentStore, SessionStore, TaskStore } from "./store/index.js";
 import { BackgroundQueue } from "./engine/queue.js";
 import { Orchestrator } from "./engine/orchestrator.js";
+import { HookRegistry } from "./engine/hooks.js";
 import { PolicyEngine } from "./engine/policy.js";
 import { startServer } from "./server.js";
 
@@ -14,11 +15,14 @@ async function main() {
     // Run DB migrations synchronously before advertising tools
     runMigrations();
 
+    // Instantiate hooks registry
+    const hooks = new HookRegistry();
+
     // Instantiate stores
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dbAny = db as any;
-    const agentStore = new AgentStore(dbAny);
-    const sessionStore = new SessionStore(dbAny);
+    const agentStore = new AgentStore(dbAny, hooks);
+    const sessionStore = new SessionStore(dbAny, hooks);
     const taskStore = new TaskStore(dbAny);
 
     // Instantiate engine components
@@ -40,6 +44,7 @@ async function main() {
         queue,
         orchestrator,
         policy,
+        hooks,
     });
 
     const shutdown = async (signal: string) => {

@@ -31,10 +31,10 @@ Give any LLM the ability to spawn, delegate to, and coordinate other AI agents �
 
 ```mermaid
 graph LR
-    C(Claude) -->|@adhd/agent-mcp| O(LM Studio\norchestrator)
-    O -->|@adhd/agent-mcp| A(LM Studio\nresearcher)
-    O -->|@adhd/agent-mcp| B(LM Studio\ncoder)
-    O -->|@adhd/agent-mcp| D(LM Studio\nsummariser)
+    C(Claude Code\nor any MCP host) -->|MCP| S(@adhd/agent-mcp)
+    S -->|orchestrates| O(Claude\norchestrator)
+    O -->|agent-mcp task| A(LM Studio\nworker)
+    O -->|agent-mcp task| B(OpenAI\nworker)
 ```
 
 Four concepts:
@@ -214,15 +214,66 @@ Set `LMSTUDIO_API_KEY` to any non-empty string if your local server does not req
 
 ### Anthropic
 
+Three auth modes, tried in order:
+
+**API key** (standard, all platforms)
 ```json
 {
   "type": "anthropic",
-  "model": "claude-sonnet-4-5",
+  "model": "claude-haiku-4-5",
   "apiKeyEnv": "ANTHROPIC_API_KEY"
 }
 ```
 
-All providers accept: `timeoutMs`, `maxTokens`, `temperature`, and `retryConfig`.
+**Bearer token via env var** (all platforms — works with `claude setup-token` or any manually-set token)
+```json
+{
+  "type": "anthropic",
+  "model": "claude-haiku-4-5",
+  "authTokenEnv": "ANTHROPIC_AUTH_TOKEN"
+}
+```
+Set `ANTHROPIC_AUTH_TOKEN` in your MCP server env to the token value.
+
+**Claude Max keychain** (macOS only — no API key or billing required)
+```json
+{
+  "type": "anthropic",
+  "model": "claude-haiku-4-5",
+  "useClaudeOauth": true
+}
+```
+Reads the OAuth token that Claude Code stores in the macOS keychain under `Claude Code-credentials`. Automatically refreshes when the token is within 5 minutes of expiry. Requires Claude Code to be installed and authenticated (`claude auth login --claude-ai`). No additional env vars needed.
+
+> **Platform note:** `useClaudeOauth` only works on macOS. Use `authTokenEnv` on Linux or Windows.
+
+### Claude CLI
+
+```json
+{
+  "type": "claudecli",
+  "model": "claude-haiku-4-5",
+  "claudePath": "claude",
+  "allowedBuiltinTools": []
+}
+```
+
+Drives the local `claude` CLI as a subprocess using bidirectional `stream-json` I/O. Uses whatever credentials Claude Code already has (`claude auth status`). No API key or env var needed.
+
+The agent's `mcpServers` are written to a temp file and passed via `--mcp-config --strict-mcp-config` — so MCP tools (including in-process agent-mcp delegation) work exactly as with other providers. The subprocess runs its own internal tool loop and returns a final answer; the orchestrator sees `stopReason: "completed"` directly.
+
+**Tool access:** All Claude Code built-in tools (`Bash`, `Edit`, `Read`, `Write`, etc.) are blocked by default via `--disallowedTools`. To selectively re-enable specific built-ins, list them in `allowedBuiltinTools`:
+
+```json
+{ "type": "claudecli", "allowedBuiltinTools": ["WebFetch"] }
+```
+
+> **Limitations:**
+> - No `temperature`, `maxTokens`, or `retryConfig` — those are not exposed by the CLI
+> - Per-tool-call hooks, policy enforcement (max tool loops, delegation checks), and task event logging do not fire for tool calls that happen inside the subprocess — only the final result is surfaced to the orchestrator
+> - Conversation history across tasks is text-encoded in the prompt, not structured messages
+
+`anthropic`, `openai`, and `lmstudio` providers accept: `timeoutMs`, `maxTokens`, `temperature`, and `retryConfig`.
 
 #### retryConfig
 
@@ -377,6 +428,94 @@ orchestrator
 ```
 
 Each agent has its own system prompt, provider, and optional `allowedAgents` restriction. The orchestrator calls whichever is appropriate for each sub-task.
+
+### Cross-provider orchestration (Claude + local LM Studio)
+
+Agents are provider-agnostic — the orchestrator and workers can run on completely different backends. A practical pattern is a Claude orchestrator (using your existing subscription, no extra billing) delegating to free local models for bulk work.
+
+**1. Create a local worker**
+```json
+{
+  "name": "lmstudio-worker",
+  "provider": {
+    "type": "lmstudio",
+    "model": "your-local-model",
+    "baseURL": "http://localhost:1234/v1"
+  },
+  "systemPrompt": "You are a local assistant. Complete the task you are given.",
+  "mcpServers": {},
+  "permissions": {}
+}
+```
+
+**2. Create a Claude orchestrator**
+
+The `mcpServers` key must be `"agent-mcp"` exactly — the registry detects this name and routes calls in-process rather than spawning a new subprocess.
+
+```json
+{
+  "name": "claude-orchestrator",
+  "provider": {
+    "type": "anthropic",
+    "model": "claude-haiku-4-5",
+    "useClaudeOauth": true
+  },
+  "systemPrompt": "You coordinate work. Use the agent-mcp__task tool to delegate tasks to other agents. Always report back what the sub-agent returned.",
+  "mcpServers": {
+    "agent-mcp": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@adhd/agent-mcp"],
+      "env": {
+        "DATABASE_PATH": "/absolute/path/to/agents.db",
+        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+      }
+    }
+  },
+  "permissions": {
+    "allowedAgents": ["lmstudio-worker"]
+  }
+}
+```
+
+**3. Dispatch to the orchestrator**
+
+```
+task → { agent_name: "claude-orchestrator", prompt: "Ask lmstudio-worker to summarise this paragraph: ..." }
+```
+
+Claude runs the tool-use loop, calls `agent-mcp__task` targeting `lmstudio-worker`, gets the local model's response, and returns a synthesised result. Both calls are logged as separate tasks in the database.
+
+**Alternative: `claudecli` orchestrator**
+
+If you have Claude Code installed and authenticated, you can use the `claudecli` provider instead of `anthropic` — no API key config required, and it uses Claude Code's built-in auth (subscription or API key, whichever is configured):
+
+```json
+{
+  "name": "claudecli-orchestrator",
+  "provider": {
+    "type": "claudecli",
+    "model": "claude-haiku-4-5"
+  },
+  "systemPrompt": "You coordinate work. Use the mcp__agent-mcp__task tool to delegate tasks to other agents. Always report back exactly what the sub-agent said.",
+  "mcpServers": {
+    "agent-mcp": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@adhd/agent-mcp"],
+      "env": {
+        "DATABASE_PATH": "/absolute/path/to/agents.db",
+        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+      }
+    }
+  },
+  "permissions": {
+    "allowedAgents": ["lmstudio-worker"]
+  }
+}
+```
+
+> **Note:** Inside the `claudecli` subprocess, MCP tools are prefixed `mcp__` — the tool is `mcp__agent-mcp__task`, not `agent-mcp__task`. Update the system prompt accordingly. The `claudecli` provider handles the prefix stripping when routing the actual call.
 
 ---
 

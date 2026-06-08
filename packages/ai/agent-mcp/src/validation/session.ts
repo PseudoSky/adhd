@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const sessionStatusSchema = z.enum(["active", "closed"]);
-export type SessionStatus = z.infer<typeof sessionStatusSchema>;
+export type { SessionStatus } from "@adhd/agent-mcp-types";
 
 // Public session shape — agentData is intentionally absent (storage-only)
 export const sessionSchema = z.object({
@@ -14,7 +14,7 @@ export const sessionSchema = z.object({
   closedAt: z.string().datetime().optional(),
 });
 
-export type Session = z.infer<typeof sessionSchema>;
+export type { Session } from "@adhd/agent-mcp-types";
 
 // Tool input schemas
 export const agentToolInputSchema = z.object({

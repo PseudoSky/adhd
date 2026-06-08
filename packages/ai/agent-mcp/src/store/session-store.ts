@@ -9,10 +9,12 @@ import { agentDefinitionSchema, sessionSchema } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
+import type { IHookRegistry } from "@adhd/agent-mcp-types";
 
 export class SessionStore {
     constructor(
-        private readonly db: BetterSQLite3Database<Record<string, never>>
+        private readonly db: BetterSQLite3Database<Record<string, never>>,
+        private readonly hooks?: IHookRegistry
     ) {}
 
     create(input: {
@@ -37,7 +39,9 @@ export class SessionStore {
             "Session created"
         );
 
-        return this.read(id);
+        const session = this.read(id);
+        void this.hooks?.emit("session:created", { session });
+        return session;
     }
 
     read(id: string): Session {

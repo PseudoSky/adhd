@@ -34,4 +34,4 @@ export const mcpServerConfigSchema = z.discriminatedUnion("transport", [
 export type McpStdioConfig = z.infer<typeof mcpStdioConfigSchema>;
 export type McpHttpConfig = z.infer<typeof mcpHttpConfigSchema>;
 export type McpSseConfig = z.infer<typeof mcpSseConfigSchema>;
-export type McpServerConfig = z.infer<typeof mcpServerConfigSchema>;
+export type { McpServerConfig } from "@adhd/agent-mcp-types";

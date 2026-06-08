@@ -8,10 +8,12 @@ import type { AgentCreateInput, AgentDefinition, AgentUpdateInput } from "../val
 import { agentDefinitionSchema } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import { nowIso } from "../utils/timestamps.js";
+import type { IHookRegistry } from "@adhd/agent-mcp-types";
 
 export class AgentStore {
     constructor(
-        private readonly db: BetterSQLite3Database<Record<string, never>>
+        private readonly db: BetterSQLite3Database<Record<string, never>>,
+        private readonly hooks?: IHookRegistry
     ) {}
 
     create(input: AgentCreateInput): AgentDefinition {
@@ -96,10 +98,14 @@ export class AgentStore {
             { agentName: input.name, version: updated.version },
             "Agent updated"
         );
+        void this.hooks?.emit("agent:mutated", { agent: updated, operation: "update" });
         return updated;
     }
 
     delete(name: string): void {
+        // Read definition BEFORE the DELETE so we have it for the hook
+        const definition = this.read(name); // throws AGENT_NOT_FOUND if missing
+
         const activeSessionCheck = this.db
             .select()
             .from(sessionsTable)
@@ -114,19 +120,13 @@ export class AgentStore {
             );
         }
 
-        const result = this.db
+        this.db
             .delete(agentsTable)
             .where(eq(agentsTable.name, name))
             .run();
 
-        if (result.changes === 0) {
-            throw new ToolError(
-                "AGENT_NOT_FOUND",
-                `Agent '${name}' not found`
-            );
-        }
-
         logger.info({ agentName: name }, "Agent deleted");
+        void this.hooks?.emit("agent:mutated", { agent: definition, operation: "delete" });
     }
 
     list(): AgentDefinition[] {

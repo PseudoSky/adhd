@@ -27,4 +27,4 @@ export const executionContextSchema = z.object({
   toolCallCount: z.number().int().nonnegative(),
 });
 
-export type ExecutionContext = z.infer<typeof executionContextSchema>;
+export type { ExecutionContext } from "@adhd/agent-mcp-types";

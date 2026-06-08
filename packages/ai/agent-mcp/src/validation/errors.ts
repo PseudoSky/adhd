@@ -27,13 +27,15 @@ export const errorCodeSchema = z.enum([
   "VALIDATION_ERROR",
 ]);
 
-export type ErrorCode = z.infer<typeof errorCodeSchema>;
+import type { AgentMcpErrorCode } from "@adhd/agent-mcp-types";
+export type { AgentMcpErrorCode };
+export type ErrorCode = AgentMcpErrorCode; // alias kept for existing internal usages
 
 export class ToolError extends Error {
-  readonly code: ErrorCode;
+  readonly code: AgentMcpErrorCode;
   readonly data?: unknown;
 
-  constructor(code: ErrorCode, message: string, data?: unknown) {
+  constructor(code: AgentMcpErrorCode, message: string, data?: unknown) {
     super(message);
     this.name = "ToolError";
     this.code = code;

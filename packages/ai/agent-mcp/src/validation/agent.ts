@@ -14,6 +14,9 @@ const anthropicProviderSchema = z.object({
   type: z.literal("anthropic"),
   model: z.string(),
   apiKeyEnv: z.string().optional(),
+  authTokenEnv: z.string().optional(),
+  /** Read OAuth token from the macOS keychain (Claude Code credentials). Auto-refreshes. */
+  useClaudeOauth: z.boolean().optional(),
   temperature: z.number().min(0).max(1).optional(),
   maxTokens: z.number().int().positive().optional(),
   timeoutMs: z.number().int().positive().optional(),
@@ -42,13 +45,30 @@ const lmstudioProviderSchema = z.object({
   retryConfig: retryConfigSchema.optional(),
 });
 
+const claudecliProviderSchema = z.object({
+  type: z.literal("claudecli"),
+  /** Model alias or full model string (e.g. "claude-haiku-4-5", "haiku"). Defaults to Claude Code's default. */
+  model: z.string().optional(),
+  /** Path to the claude binary. Defaults to "claude" (resolved via PATH). */
+  claudePath: z.string().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  /**
+   * Claude Code built-in tool names that are permitted in the subprocess.
+   * All built-ins not listed here are passed to --disallowedTools.
+   * MCP tools (from mcpServers) are always available regardless of this list.
+   * Omit the field (or pass []) to block all built-ins.
+   */
+  allowedBuiltinTools: z.array(z.string()).optional(),
+});
+
 export const providerConfigSchema = z.discriminatedUnion("type", [
   anthropicProviderSchema,
   openaiProviderSchema,
   lmstudioProviderSchema,
+  claudecliProviderSchema,
 ]);
 
-export type ProviderConfig = z.infer<typeof providerConfigSchema>;
+export type { ProviderConfig } from "@adhd/agent-mcp-types";
 
 // Agent permissions
 export const agentPermissionsSchema = z.object({
@@ -58,7 +78,7 @@ export const agentPermissionsSchema = z.object({
   allowedAgents: z.array(z.string()).optional(),
 });
 
-export type AgentPermissions = z.infer<typeof agentPermissionsSchema>;
+export type { AgentPermissions } from "@adhd/agent-mcp-types";
 
 // Full agent definition (stored)
 export const agentDefinitionSchema = z.object({
@@ -76,7 +96,7 @@ export const agentDefinitionSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 
-export type AgentDefinition = z.infer<typeof agentDefinitionSchema>;
+export type { AgentDefinition } from "@adhd/agent-mcp-types";
 
 // --- Tool input/output schemas ---
 

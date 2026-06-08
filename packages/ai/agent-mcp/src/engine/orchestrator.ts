@@ -1,6 +1,7 @@
 import { logger } from "../logger.js";
 import type { LLMProvider } from "../providers/types.js";
 import type { ExecutionContext, Message } from "../validation/index.js";
+import type { IHookRegistry } from "@adhd/agent-mcp-types";
 import { ToolError } from "../validation/errors.js";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
@@ -20,7 +21,14 @@ export interface OrchestratorRunInput {
     sessionStore: SessionStore;
     signal: AbortSignal;
     taskId: string;
+    hooks?: IHookRegistry;
 }
+
+/** No-op IHookRegistry used as a fallback when none is provided. */
+const noopHooks: IHookRegistry = {
+    register: () => undefined,
+    emit: async () => undefined,
+};
 
 export interface OrchestratorRunResult {
     result: string;
@@ -37,6 +45,7 @@ export class Orchestrator {
             sessionStore,
             signal,
             taskId,
+            hooks = noopHooks,
         } = input;
 
         // Working copy of messages — we append to this as the loop progresses
@@ -45,6 +54,7 @@ export class Orchestrator {
         try {
             // Mark task as running
             taskStore.updateStatus(taskId, "running");
+            await hooks.emit("task:start", { executionContext, messages: currentMessages });
 
             let finalContent = "";
 
@@ -84,6 +94,9 @@ export class Orchestrator {
                     "MODEL_REQUEST"
                 );
 
+                // Emit pre:model_request hook
+                await hooks.emit("pre:model_request", { executionContext, messages: currentMessages, tools });
+
                 // Call the LLM provider
                 let providerResponse;
                 try {
@@ -91,6 +104,21 @@ export class Orchestrator {
                         messages: currentMessages,
                         tools: tools.length > 0 ? tools : undefined,
                         signal: composedSignal,
+                        // executeTool is used by providers (e.g. claudecli) that manage
+                        // their own internal tool loop. Standard providers (anthropic,
+                        // openai, lmstudio) return stopReason "tool_calls" and ignore this.
+                        executeTool: async (server, tool, args) => {
+                            const client = await registry.getClient(server);
+                            try {
+                                const result = await client.callTool(tool, args);
+                                return { result, isError: false };
+                            } catch (error) {
+                                return {
+                                    result: error instanceof Error ? error.message : String(error),
+                                    isError: true,
+                                };
+                            }
+                        },
                     });
                 } catch (error) {
                     if (signal.aborted) {
@@ -120,6 +148,12 @@ export class Orchestrator {
                 // Persist and append the assistant message
                 await sessionStore.appendMessage(executionContext.sessionId, assistantMessage);
                 currentMessages.push(assistantMessage);
+                await hooks.emit("post:model_response", {
+                    executionContext,
+                    stopReason: providerResponse.stopReason,
+                    toolCallCount: assistantMessage.toolCalls?.length ?? 0,
+                });
+                await hooks.emit("message:appended", { executionContext, message: assistantMessage });
 
                 // Emit MODEL_RESPONSE event
                 taskStore.appendEvent({
@@ -157,6 +191,14 @@ export class Orchestrator {
                     }
 
                     const qualifiedToolName = `${toolCall.server}__${toolCall.tool}`;
+
+                    // Emit pre:tool_call hook (observational in Phase 1)
+                    await hooks.emit("pre:tool_call", {
+                        executionContext,
+                        toolName: qualifiedToolName,
+                        callId: toolCall.id,
+                        toolInput: toolCall.arguments,
+                    });
 
                     // Policy check before executing the tool
                     policy.check({
@@ -240,6 +282,15 @@ export class Orchestrator {
                         "TOOL_RESULT"
                     );
 
+                    await hooks.emit("post:tool_call", {
+                        executionContext,
+                        toolName: qualifiedToolName,
+                        callId: toolCall.id,
+                        toolInput: toolCall.arguments,
+                        result: toolResult,
+                        isError,
+                    });
+
                     // Append tool result message
                     const toolResultMessage: Message = {
                         id: generateId(),
@@ -257,6 +308,7 @@ export class Orchestrator {
 
                     await sessionStore.appendMessage(executionContext.sessionId, toolResultMessage);
                     currentMessages.push(toolResultMessage);
+                    await hooks.emit("message:appended", { executionContext, message: toolResultMessage });
 
                     // Increment toolCallCount AFTER the result is appended
                     // so the next policy check sees the updated value
@@ -281,6 +333,8 @@ export class Orchestrator {
                 "TASK_COMPLETED"
             );
 
+            await hooks.emit("task:completed", { executionContext, result: finalContent });
+
             return { result: finalContent };
         } catch (error) {
             // Determine if this is a cancellation or a real failure
@@ -300,6 +354,7 @@ export class Orchestrator {
                 }
 
                 taskStore.appendEvent({ taskId, type: "TASK_CANCELLED" });
+                void hooks.emit("task:cancelled", { executionContext });
             } else {
                 const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -317,6 +372,7 @@ export class Orchestrator {
                     { taskId, agentName: executionContext.agentName, error },
                     "TASK_FAILED"
                 );
+                void hooks.emit("task:failed", { executionContext, error: errorMessage });
             }
 
             throw error;

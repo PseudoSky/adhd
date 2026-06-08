@@ -16,6 +16,7 @@ import { BackgroundQueue } from "./engine/queue.js";
 import { Orchestrator } from "./engine/orchestrator.js";
 import type { PolicyEngine } from "./engine/policy.js";
 import type { InProcessToolDescriptor, InProcessToolHandler } from "./clients/in-process.js";
+import type { IHookRegistry } from "@adhd/agent-mcp-types";
 
 import {
     agentCreate,
@@ -49,6 +50,7 @@ export interface ServerDeps {
     queue: BackgroundQueue;
     policy: PolicyEngine;
     orchestrator: Orchestrator;
+    hooks: IHookRegistry;
     selfUrl?: string;
 }
 
@@ -79,6 +81,50 @@ function toMcpContent(value: unknown): { content: Array<{ type: "text"; text: st
     };
 }
 
+/**
+ * Converts a Zod schema to an MCP-compliant inputSchema object.
+ *
+ * The MCP spec requires every tool's inputSchema to have `type: "object"` at
+ * the top level. Zod's union schemas (z.union / z.discriminatedUnion) produce
+ * `anyOf: [...]` without a root `type`, which fails MCP SDK validation and
+ * causes clients like LM Studio to reject the tool list with an
+ * `invalid_literal` error on `inputSchema.type`.
+ *
+ * This helper normalises the output: for union schemas it merges all object
+ * variant properties into a single flat object schema so every MCP client
+ * (including LM Studio) accepts the tool list.
+ */
+function toMcpInputSchema(schema: z.ZodTypeAny): Record<string, unknown> {
+    const jsonSchema = z.toJSONSchema(schema) as Record<string, unknown>;
+
+    // Plain object schema — strip the JSON Schema $schema declaration that some
+    // clients reject and return the rest as-is.
+    if (jsonSchema["type"] === "object") {
+        const { $schema: _drop, ...rest } = jsonSchema;
+        return rest;
+    }
+
+    // Union schema (z.union / z.discriminatedUnion) — merge every object
+    // variant's properties into one flat object schema so MCP is happy.
+    const variants =
+        (jsonSchema["anyOf"] as Record<string, unknown>[] | undefined) ??
+        (jsonSchema["oneOf"] as Record<string, unknown>[] | undefined);
+
+    if (variants) {
+        const mergedProperties: Record<string, unknown> = {};
+        for (const variant of variants) {
+            const props = variant["properties"];
+            if (props && typeof props === "object" && !Array.isArray(props)) {
+                Object.assign(mergedProperties, props as Record<string, unknown>);
+            }
+        }
+        return { type: "object", properties: mergedProperties };
+    }
+
+    // Fallback: return an empty object schema.
+    return { type: "object", properties: {} };
+}
+
 const USAGE_GUIDE = `
 # agent-mcp Usage Guide
 
@@ -96,6 +142,30 @@ run tasks — including having agents delegate work to other agents recursively.
   does not affect open sessions.
 - **Task** — a single prompt sent to a session. Can run synchronously (wait for
   the result) or in the background (poll with \`result\`).
+
+---
+
+## Workflow 0 — One-shot (ephemeral): no session needed
+
+Use \`agent_name\` instead of \`session_id\` when you want a single answer with no
+persistent context. The agent definition is loaded from the DB, the orchestrator
+runs with a fresh in-memory message list, and nothing is written to the DB beyond
+the agent read. Always synchronous.
+
+\`\`\`
+1. agent_create  { name, provider, systemPrompt, ... }
+2. task          { agent_name, prompt }      → { task_id, status, result }
+\`\`\`
+
+Example:
+
+\`\`\`jsonc
+task({ "agent_name": "assistant", "prompt": "What is 2 + 2?" })
+// → { "task_id": "t-ephemeral-uuid", "status": "completed", "result": "4" }
+\`\`\`
+
+The \`task_id\` in the response is a generated UUID that is **not** stored in the DB —
+it cannot be passed to \`result\` or \`task_cancel\`.
 
 ---
 
@@ -260,13 +330,15 @@ session_clear({ "session_id": "abc-123" })
 
 ## Provider types
 
-| type        | required fields            | notes                        |
-|-------------|----------------------------|------------------------------|
-| \`openai\`    | model                      | apiKeyEnv defaults to OPENAI_API_KEY |
-| \`anthropic\` | model                      | apiKeyEnv defaults to ANTHROPIC_API_KEY |
-| \`lmstudio\`  | model, baseURL             | OpenAI-compatible local server |
+| type          | required fields | notes                                                                 |
+|---------------|-----------------|-----------------------------------------------------------------------|
+| \`openai\`      | model           | apiKeyEnv defaults to OPENAI_API_KEY                                  |
+| \`anthropic\`   | model           | apiKeyEnv defaults to ANTHROPIC_API_KEY; \`useClaudeOauth: true\` reads OAuth token from macOS keychain (Claude Max / no API key needed) |
+| \`lmstudio\`    | model, baseURL  | OpenAI-compatible local server                                        |
+| \`claudecli\`   | —               | Drives local \`claude\` CLI via stream-json; uses Claude Code's auth; MCP tools work via --mcp-config; built-ins blocked by default (\`allowedBuiltinTools\` to opt in) |
 
-All providers accept: \`temperature\`, \`maxTokens\`, \`timeoutMs\`, \`retryConfig\`.
+\`openai\`, \`anthropic\`, and \`lmstudio\` accept: \`temperature\`, \`maxTokens\`, \`timeoutMs\`, \`retryConfig\`.
+\`claudecli\` accepts: \`model\`, \`claudePath\`, \`timeoutMs\`, \`allowedBuiltinTools\`.
 
 ---
 
@@ -298,42 +370,42 @@ export function createServer(deps: ServerDeps): Server {
         {
             name: "agent",
             description: "Instantiate a session for a named agent",
-            inputSchema: z.toJSONSchema(agentToolInputSchema) as Record<string, unknown>,
+            inputSchema: toMcpInputSchema(agentToolInputSchema),
         },
         {
             name: "task",
             description: "Run a prompt against a session",
-            inputSchema: z.toJSONSchema(taskToolInputSchema) as Record<string, unknown>,
+            inputSchema: toMcpInputSchema(taskToolInputSchema),
         },
         {
             name: "result",
             description: "Get the result of a task",
-            inputSchema: z.toJSONSchema(resultInputSchema) as Record<string, unknown>,
+            inputSchema: toMcpInputSchema(resultInputSchema),
         },
         {
             name: "task_list",
             description: "List tasks",
-            inputSchema: z.toJSONSchema(taskListInputSchema) as Record<string, unknown>,
+            inputSchema: toMcpInputSchema(taskListInputSchema),
         },
         {
             name: "task_cancel",
             description: "Cancel a running task",
-            inputSchema: z.toJSONSchema(taskCancelInputSchema) as Record<string, unknown>,
+            inputSchema: toMcpInputSchema(taskCancelInputSchema),
         },
         {
             name: "session_list",
             description: "List sessions",
-            inputSchema: z.toJSONSchema(sessionListInputSchema) as Record<string, unknown>,
+            inputSchema: toMcpInputSchema(sessionListInputSchema),
         },
         {
             name: "session_close",
             description: "Close a session",
-            inputSchema: z.toJSONSchema(sessionCloseInputSchema) as Record<string, unknown>,
+            inputSchema: toMcpInputSchema(sessionCloseInputSchema),
         },
         {
             name: "session_clear",
             description: "Clear all messages from a session's context without closing it",
-            inputSchema: z.toJSONSchema(sessionClearInputSchema) as Record<string, unknown>,
+            inputSchema: toMcpInputSchema(sessionClearInputSchema),
         },
     ];
 
@@ -350,11 +422,13 @@ export function createServer(deps: ServerDeps): Server {
                 return taskTool(
                     taskToolInputSchema.parse(args),
                     {
+                        agentStore: deps.agentStore,
                         sessionStore: deps.sessionStore,
                         taskStore: deps.taskStore,
                         orchestrator: deps.orchestrator,
                         queue: deps.queue,
                         policy: deps.policy,
+                        hooks: deps.hooks,
                         selfUrl: deps.selfUrl,
                         inProcessDescriptors,
                         inProcessHandler,
@@ -396,22 +470,22 @@ export function createServer(deps: ServerDeps): Server {
             {
                 name: "agent_create",
                 description: "Create a new stored agent definition",
-                inputSchema: z.toJSONSchema(agentCreateInputSchema),
+                inputSchema: toMcpInputSchema(agentCreateInputSchema),
             },
             {
                 name: "agent_read",
                 description: "Read a stored agent definition by name",
-                inputSchema: z.toJSONSchema(agentReadInputSchema),
+                inputSchema: toMcpInputSchema(agentReadInputSchema),
             },
             {
                 name: "agent_update",
                 description: "Update a stored agent definition",
-                inputSchema: z.toJSONSchema(agentUpdateInputSchema),
+                inputSchema: toMcpInputSchema(agentUpdateInputSchema),
             },
             {
                 name: "agent_delete",
                 description: "Delete a stored agent definition",
-                inputSchema: z.toJSONSchema(agentDeleteInputSchema),
+                inputSchema: toMcpInputSchema(agentDeleteInputSchema),
             },
             {
                 name: "agent_list",
@@ -421,42 +495,42 @@ export function createServer(deps: ServerDeps): Server {
             {
                 name: "agent",
                 description: "Instantiate a stateful session for a named agent",
-                inputSchema: z.toJSONSchema(agentToolInputSchema),
+                inputSchema: toMcpInputSchema(agentToolInputSchema),
             },
             {
                 name: "session_list",
                 description: "List sessions",
-                inputSchema: z.toJSONSchema(sessionListInputSchema),
+                inputSchema: toMcpInputSchema(sessionListInputSchema),
             },
             {
                 name: "session_close",
                 description: "Close an active session",
-                inputSchema: z.toJSONSchema(sessionCloseInputSchema),
+                inputSchema: toMcpInputSchema(sessionCloseInputSchema),
             },
             {
                 name: "session_clear",
                 description: "Clear all messages from a session's context without closing it",
-                inputSchema: z.toJSONSchema(sessionClearInputSchema),
+                inputSchema: toMcpInputSchema(sessionClearInputSchema),
             },
             {
                 name: "task",
-                description: "Run a prompt against a session's agent (sync or background)",
-                inputSchema: z.toJSONSchema(taskToolInputSchema),
+                description: "Run a prompt against a session's agent (session_id mode, sync or background) or run a one-shot ephemeral task with no persisted context (agent_name mode, always sync)",
+                inputSchema: toMcpInputSchema(taskToolInputSchema),
             },
             {
                 name: "task_list",
                 description: "List tasks",
-                inputSchema: z.toJSONSchema(taskListInputSchema),
+                inputSchema: toMcpInputSchema(taskListInputSchema),
             },
             {
                 name: "task_cancel",
                 description: "Cancel a running or pending task",
-                inputSchema: z.toJSONSchema(taskCancelInputSchema),
+                inputSchema: toMcpInputSchema(taskCancelInputSchema),
             },
             {
                 name: "result",
                 description: "Get the current state and result of a task",
-                inputSchema: z.toJSONSchema(resultInputSchema),
+                inputSchema: toMcpInputSchema(resultInputSchema),
             },
             {
                 name: "usage",
@@ -527,11 +601,13 @@ export function createServer(deps: ServerDeps): Server {
                 case "task":
                     return toMcpContent(
                         await taskTool(taskToolInputSchema.parse(args), {
+                            agentStore: deps.agentStore,
                             sessionStore: deps.sessionStore,
                             taskStore: deps.taskStore,
                             orchestrator: deps.orchestrator,
                             queue: deps.queue,
                             policy: deps.policy,
+                            hooks: deps.hooks,
                             selfUrl: deps.selfUrl,
                             inProcessDescriptors,
                             inProcessHandler,

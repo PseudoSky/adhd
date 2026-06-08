@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 export const messageRoleSchema = z.enum(["system", "user", "assistant", "tool"]);
-export type MessageRole = z.infer<typeof messageRoleSchema>;
 
 export const toolCallSchema = z.object({
   id: z.string(),
@@ -26,6 +25,4 @@ export const messageSchema = z.object({
   createdAt: z.string().datetime(),
 });
 
-export type ToolCall = z.infer<typeof toolCallSchema>;
-export type ToolResult = z.infer<typeof toolResultSchema>;
-export type Message = z.infer<typeof messageSchema>;
+export type { MessageRole, ToolCall, ToolResult, Message } from "@adhd/agent-mcp-types";

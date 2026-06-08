@@ -3,6 +3,8 @@
   "compilerOptions": {
     "outDir": "../../../dist/packages/ai/agent-mcp",
     "rootDir": "./src",
+    "baseUrl": "../../..",
+    "ignoreDeprecations": "6.0",
 
     "module": "ESNext",
     "target": "ES2022",

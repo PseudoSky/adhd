@@ -8,7 +8,7 @@ export const taskStatusSchema = z.enum([
   "cancelled",
 ]);
 
-export type TaskStatus = z.infer<typeof taskStatusSchema>;
+export type { TaskStatus } from "@adhd/agent-mcp-types";
 
 export const taskSchema = z.object({
   id: z.string().uuid(),
@@ -25,7 +25,7 @@ export const taskSchema = z.object({
   cancelledAt: z.string().datetime().optional(),
 });
 
-export type Task = z.infer<typeof taskSchema>;
+export type { Task } from "@adhd/agent-mcp-types";
 
 export const taskEventTypeSchema = z.enum([
   "MODEL_REQUEST",
@@ -37,7 +37,7 @@ export const taskEventTypeSchema = z.enum([
   "TASK_CANCELLED",
 ]);
 
-export type TaskEventType = z.infer<typeof taskEventTypeSchema>;
+export type { TaskEventType } from "@adhd/agent-mcp-types";
 
 export const taskEventSchema = z.object({
   id: z.string().uuid(),
@@ -47,14 +47,24 @@ export const taskEventSchema = z.object({
   createdAt: z.string().datetime(),
 });
 
-export type TaskEvent = z.infer<typeof taskEventSchema>;
+export type { TaskEvent } from "@adhd/agent-mcp-types";
 
 // Tool input/output schemas
-export const taskToolInputSchema = z.object({
+
+// Session mode: persistent conversation thread
+const sessionModeSchema = z.object({
   session_id: z.string().uuid(),
   prompt: z.string().min(1),
   background: z.boolean().default(false),
 });
+
+// Ephemeral mode: one-shot execution, no session created, no messages persisted
+const ephemeralModeSchema = z.object({
+  agent_name: z.string().min(1),
+  prompt: z.string().min(1),
+});
+
+export const taskToolInputSchema = z.union([sessionModeSchema, ephemeralModeSchema]);
 
 export const taskToolOutputSchema = z.object({
   task_id: z.string().uuid(),
