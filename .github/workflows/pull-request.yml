@@ -1,4 +1,4 @@
-# File for Pull Request on master branch
+# File for Pull Request on main branch
 name: PR
 
 # When a PR created or changed
@@ -42,7 +42,7 @@ jobs:
       - name: Derive appropriate SHAs for base and head for `nx affected` commands
         uses: nrwl/nx-set-shas@v2
         with:
-          main-branch-name: master
+          main-branch-name: main
       - uses: actions/cache@v3
         id: yarn-cache # use this to check for `cache-hit` (`steps.yarn-cache.outputs.cache-hit != 'true'`)
         with:

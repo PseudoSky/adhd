@@ -58,7 +58,7 @@ jobs:
       - name: SETUP - Derive nx env
         uses: nrwl/nx-set-shas@v2
         with:
-          main-branch-name: master
+          main-branch-name: main
       - name: SETUP - NX Base on merge
         if: github.event.action == 'closed' && github.event.pull_request.merged == true
         run: echo "NX_BASE=HEAD~1" >> $GITHUB_ENV
