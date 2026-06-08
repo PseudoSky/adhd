@@ -10,9 +10,10 @@ if [ "$AFFECTED" != "" ]; then
   cd "$PARENT_DIR"
   while IFS= read -r -d $' ' lib; do
     cd "$PARENT_DIR"
+    # NOTE: this assumes that the publish task of each lib is configured to handle versioning, building, and publishing. Adjust as necessary.
     echo "versioning, building, and publishing $lib"
     {
-      yarn nx run "$lib":publish && {
+      npx nx run "$lib":publish && {
         echo "Successfully published $lib"
         git push --force --follow-tags
       }

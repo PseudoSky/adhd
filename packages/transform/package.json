@@ -1,6 +1,6 @@
 {
   "name": "@adhd/transform",
-  "version": "*",
+  "version": "2.2.1",
   "private": false,
   "publishConfig": {
     "access": "public"

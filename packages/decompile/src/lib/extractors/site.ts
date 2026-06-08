@@ -6,7 +6,7 @@ import { url } from '../validators/index.js';
 type RequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
   headers?: Record<string, string>;
-  body?: any;
+  body?: unknown;
   json?: boolean;
   referer?: string;
 };
@@ -19,7 +19,7 @@ export class BrowserClient {
     keepAlive: true,
   });
 
-  private defaultHeaders(url: string): Record<string, string> {
+  private defaultHeaders(_url: string): Record<string, string> {
     return {
       'User-Agent':
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -66,7 +66,7 @@ export class BrowserClient {
     return this.fetch(url);
   }
 
-  async post(url: string, body: any) {
+  async post(url: string, body: unknown) {
     return this.fetch(url, {
       method: 'POST',
       body,
@@ -88,12 +88,12 @@ export class BrowserClient {
 
 const client = new BrowserClient();
 
-export const extractSite = async (_url) => {
+export const extractSite = async (_url: string) => {
   // console.log({_url})
   // if (_url.startsWith('//')){
   //   url=`https:${_url}`
   // }
-  const assetUrl = url.ensure(_url);
+  const assetUrl = url.ensure(_url).toString();
   console.log('extractSite', assetUrl);
   let res = null;
   try {

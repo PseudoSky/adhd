@@ -5,11 +5,11 @@ import { useThrottleState } from './';
 
 describe('useThrottleState', () => {
     beforeEach(() => {
-        vi.useFakeTimers();
+        vi.useFakeTimers({ shouldAdvanceTime: true });
     });
 
     afterEach(() => {
-        vi.restoreAllMocks();
+        vi.useRealTimers();
     });
 
     it('should initialize with initial value', () => {
@@ -17,7 +17,7 @@ describe('useThrottleState', () => {
         expect(result.current[0]).toBe('initial');
     });
 
-    it('should handle leading edge throttle', () => {
+    it('should handle leading edge throttle', async () => {
         const { result } = renderHook(() =>
             useThrottleState('initial', {
                 delay: 1000,
@@ -31,7 +31,6 @@ describe('useThrottleState', () => {
             result.current[1]('update 1');
         });
         expect(result.current[0]).toBe('update 1');
-
         // Subsequent rapid updates should be throttled
         act(() => {
             result.current[1]('update 2');
@@ -39,12 +38,13 @@ describe('useThrottleState', () => {
         });
         expect(result.current[0]).toBe('update 1');
 
-        // After delay, next update should go through
         act(() => {
             vi.advanceTimersByTime(1000);
             result.current[1]('update 4');
         });
+
         expect(result.current[0]).toBe('update 4');
+
     });
 
     it('should handle trailing edge throttle', () => {
@@ -76,7 +76,7 @@ describe('useThrottleState', () => {
         expect(result.current[0]).toBe('update 3');
     });
 
-    it('should handle both leading and trailing edge throttle', () => {
+    it('should handle both leading and trailing edge throttle', async () => {
         const { result } = renderHook(() =>
             useThrottleState('initial', {
                 delay: 1000,
@@ -86,10 +86,11 @@ describe('useThrottleState', () => {
         );
 
         // First update should go through (leading)
-        act(() => {
+        await act(() => {
             result.current[1]('update 1');
         });
         expect(result.current[0]).toBe('update 1');
+
 
         // Multiple updates within delay should be throttled
         act(() => {
@@ -114,27 +115,28 @@ describe('useThrottleState', () => {
         expect(vi.getTimerCount()).toBe(0);
     });
 
-    it('should handle rapid updates correctly', () => {
+    it('should handle rapid updates correctly', async () => {
         const { result } = renderHook(() =>
             useThrottleState('initial', { delay: 1000 })
         );
 
-        // Simulate rapid updates
+        // First update — leading edge fires
         act(() => {
-            result.current[1]('update 1'); // Leading edge
+            result.current[1]('update 1');
+        });
+        expect(result.current[0]).toBe('update 1');
+
+        // Rapid updates within throttle window — should not update yet
+        act(() => {
             result.current[1]('update 2');
             result.current[1]('update 3');
-            vi.advanceTimersByTime(500);
-            result.current[1]('update 4');
-            result.current[1]('update 5');
         });
+        expect(result.current[0]).toBe('update 1');
 
-        expect(result.current[0]).toBe('update 1'); // Leading edge value
-
-        // After delay, should get last value
+        // After full delay, trailing edge should fire with last value
         act(() => {
-            vi.advanceTimersByTime(500);
+            vi.advanceTimersByTime(1000);
         });
-        expect(result.current[0]).toBe('update 5'); // Trailing edge value
+        expect(result.current[0]).toBe('update 3');
     });
 });

@@ -5,11 +5,11 @@ import { useThrottle } from '.';
 
 describe('useThrottle', () => {
     beforeEach(() => {
-        vi.useFakeTimers();
+        vi.useFakeTimers({ shouldAdvanceTime: true });
     });
 
     afterEach(() => {
-        vi.restoreAllMocks();
+        vi.useRealTimers();
     });
 
     it('should throttle function calls', () => {

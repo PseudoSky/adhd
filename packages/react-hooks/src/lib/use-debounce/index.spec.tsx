@@ -1,10 +1,10 @@
-import { renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDebounce } from '.';
 
 describe('useDebounce', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
   afterEach(() => {
@@ -31,7 +31,7 @@ describe('useDebounce', () => {
     expect(value).toBe(initialValue);
   });
 
-  it('should update value after delay', () => {
+  it('should update value after delay', async () => {
     const initialValue = 'initial';
     const { result } = renderHook(() => useDebounce(initialValue, 500));
     const [, setValue] = result.current;
@@ -39,13 +39,19 @@ describe('useDebounce', () => {
     setValue('updated');
 
     // Fast-forward time by 500ms
-    vi.advanceTimersByTime(500);
+    await vi.advanceTimersByTimeAsync(500);
 
     const [value] = result.current;
-    expect(value).toBe('updated');
+
+    await waitFor(
+      () => {
+        expect(value).toBe('updated');
+      },
+      { timeout: 1000 }
+    );
   });
 
-  it('should cancel previous timeout when value changes rapidly', () => {
+  it('should cancel previous timeout when value changes rapidly', async () => {
     const { result } = renderHook(() => useDebounce('initial', 500));
     const [, setValue] = result.current;
 
@@ -66,20 +72,27 @@ describe('useDebounce', () => {
     vi.advanceTimersByTime(1);
 
     // Should show the second update
-    expect(result.current[0]).toBe('second update');
+    await waitFor(
+      () => {
+        expect(result.current[0]).toBe('second update');
+      },
+      { timeout: 1000 }
+    );
   });
 
-  it('should handle undefined delay', () => {
+  it('should handle undefined delay', async () => {
     const initialValue = 'initial';
     const { result } = renderHook(() => useDebounce(initialValue, undefined));
-    const [, setValue] = result.current;
 
-    setValue('updated');
+    act(() => {
+      result.current[1]('updated');
+    });
 
     vi.advanceTimersByTime(0);
 
-    const [value] = result.current;
-    expect(value).toBe('updated');
+    await waitFor(() => {
+      expect(result.current[0]).toBe('updated');
+    });
   });
 
   it('should handle null value', () => {

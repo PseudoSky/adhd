@@ -141,11 +141,12 @@ export const useFileDownload = ({
 
     const processChunk = useCallback(async (chunk: any[], fileType: FileType): Promise<Blob> => {
         switch (fileType) {
-            case 'csv':
+            case 'csv': {
                 const csvContent = await convertToCSV(chunk, options.csv);
                 return new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            }
 
-            case 'excel':
+            case 'excel': {
                 const XLSX = await import('xlsx');
                 const worksheet = XLSX.utils.json_to_sheet(chunk);
                 const workbook = XLSX.utils.book_new();
@@ -154,6 +155,7 @@ export const useFileDownload = ({
                 return new Blob([content], {
                     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                 });
+            }
 
             default:
                 return new Blob([JSON.stringify(chunk, null, 2)], {
@@ -199,7 +201,7 @@ export const useFileDownload = ({
             chunks.push(data.slice(i, i + CHUNK_SIZE));
         }
 
-        let processedChunks: Blob[] = [];
+        const processedChunks: Blob[] = [];
 
         // Process chunks with progress tracking (0-90%)
         for (let i = 0; i < chunks.length; i++) {

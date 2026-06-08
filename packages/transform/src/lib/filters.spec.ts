@@ -328,6 +328,8 @@ describe('ts', () => {
 
   describe('isEmpty', () => {
     it('should correctly identify empty values', () => {
+      expect(isEmpty('')).toBe(false);
+      expect(isEmpty(0)).toBe(false);
       expect(isEmpty({})).toBe(true);
       expect(isEmpty([])).toBe(true);
       expect(isEmpty(42)).toBe(false);
@@ -337,6 +339,7 @@ describe('ts', () => {
       expect(isEmpty(undefined)).toBe(true);
       expect(isEmpty(() => { })).toBe(false);
       expect(isEmpty(/pattern/)).toBe(false);
+      expect(isEmpty(new RegExp(''))).toBe(false);
     });
   });
   describe('isType', () => {

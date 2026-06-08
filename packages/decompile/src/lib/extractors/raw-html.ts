@@ -1,6 +1,12 @@
 import { load } from 'cheerio';
-
-const selectors = {
+import { StackItem } from '../pipeline/stack';
+type SelectorTypes = 'stylesheets' | 'scripts' | 'imports' | 'preloadScripts' | 'preload' | 'links' | 'images'
+type SelectorAccessor = {
+  selector: string;
+  attribute: 'href' | 'src';
+}
+type SelectorMap = Record<SelectorTypes, SelectorAccessor>
+const selectors: SelectorMap = {
   stylesheets: {
     selector: 'link[rel="stylesheet"]',
     attribute: 'href',
@@ -31,7 +37,7 @@ const selectors = {
   },
 };
 
-const loadExtract = (src, types = []) => {
+const loadExtract = (src: StackItem, types: SelectorTypes[] = []) => {
   if (types.length == 0) {
     return [];
   }
@@ -44,11 +50,11 @@ const loadExtract = (src, types = []) => {
       return Array.prototype.map.call(resSel, (el) => {
         const $el = $(el);
         const r = new URL(
-          $el.attr(chosenType.attribute),
+          $el.attr(chosenType.attribute) as string,
           src.path,
         ).toString();
         console.log('lnk', r);
-        return r.replace(/[?].*/, '');
+        return r.replace(/[?].*/, '') as string;
         // if (raw) {
         //     return {
         //         $el,
@@ -56,21 +62,22 @@ const loadExtract = (src, types = []) => {
         //     };
         // }
       })
+        // TODO: no idea how this works
         .reduce(
-          (r, l) =>
+          (r: any, l: any) =>
             (r.includes(l) || l.endsWith('undefined')) ? r : [...r, l],
           [],
-        );
+        ) as string[];
     } else {
-      return [];
+      return [] as string[];
     }
   });
-  return results;
+  return results.reduce((r, a) => r.concat(a), []) as string[];
 };
 
-export const extractSourceLinks = (raw) => {
+export const extractSourceLinks = (raw: string) => {
   const re = /(http[s]?:\/\/)?[^\s(["<,>]*\.[^\s[",><]*/igm;
-  return raw.match(re).filter((m) => (/http.*\.(js|css)$/.test(m)));
+  return raw.match(re)?.filter((m) => (/http.*\.(js|css)$/.test(m)));
 };
 
 // export const oust = (src, type) => {
@@ -90,7 +97,7 @@ export const extractSourceLinks = (raw) => {
 //   return loadExtract(src, [type]);
 // };
 
-export const extractRawHtml = (src) => {
+export const extractRawHtml = (src: { data: string, path: string }) => {
   return loadExtract(src, [
     'stylesheets',
     'scripts',
@@ -100,7 +107,7 @@ export const extractRawHtml = (src) => {
   ]);
 };
 
-export const isHtml = (s) => {
+export const isHtml = (s: string) => {
   // eslint-disable-next-line max-len
   return /<(br|basefont|hr|input|source|frame|param|area|meta|!--|col|link|option|base|img|wbr|!DOCTYPE).*?>|<(a|abbr|acronym|address|applet|article|aside|audio|b|bdi|bdo|big|blockquote|body|button|canvas|caption|center|cite|code|colgroup|command|datalist|dd|del|details|dfn|dialog|dir|div|dl|dt|em|embed|fieldset|figcaption|figure|font|footer|form|frameset|head|header|hgroup|h1|h2|h3|h4|h5|h6|html|i|iframe|ins|kbd|keygen|label|legend|li|map|mark|menu|meter|nav|noframes|noscript|object|ol|optgroup|output|p|pre|progress|q|rp|rt|ruby|s|samp|script|section|select|small|span|strike|strong|style|sub|summary|sup|table|tbody|td|textarea|tfoot|th|thead|time|title|tr|track|tt|u|ul|var|video).*?<\/\2>/i.test(s);
 };

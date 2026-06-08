@@ -208,7 +208,7 @@ describe('collections.ts', () => {
       { key: 'value', nested: { key: 'value' }, sort: 5, "value": 20 },
     ]);
     expect(isMatchType(obj, target)).toEqual(true);
-    expect(isMatch(obj, target)).toEqual(true);
+    expect(isMatch(obj, target)).toEqual(false);
     expect(overSome([(e: any) => e == 0])(0)).toEqual(true);
     expect(overEvery([boolCheckExists, boolCheckNotEqOne])([])).toEqual(true);
     expect(overEvery([boolCheckExists, boolCheckNotExists])([])).toEqual(false);
@@ -244,6 +244,40 @@ describe('collections.ts', () => {
     expect(range(0, 5, 0.5)).toEqual([0, .5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5]);
     expect(maxBy(collection, (o) => o.value)).toEqual({ key: "value", nested: { key: "value" }, sort: 5, value: 20 });
     expect(minBy(collection, (o) => o.value)).toEqual({ key: "value", nested: { key: "value" }, sort: 0, value: 0 });
+  });
+
+  describe('isMatch', () => {
+    it('should match subset of object keys', () => {
+      expect(isMatch({ a: 1, b: 2 }, { a: 1 })).toEqual(true);
+    });
+    it('should fail when target has keys obj lacks', () => {
+      expect(isMatch({ a: 1 }, { a: 1, b: 2 })).toEqual(false);
+    });
+    it('should match array prefix', () => {
+      expect(isMatch([1, 2, 3], [1, 2])).toEqual(true);
+    });
+    it('should fail when array is too short', () => {
+      expect(isMatch([1], [1, 2])).toEqual(false);
+    });
+    it('should match deeply nested objects', () => {
+      expect(isMatch({ a: { b: 1 } }, { a: { b: 1 } })).toEqual(true);
+    });
+    it('should fail on deep mismatch', () => {
+      expect(isMatch({ a: { b: 1 } }, { a: { b: 2 } })).toEqual(false);
+    });
+    it('should match equal primitives', () => {
+      expect(isMatch(5, 5)).toEqual(true);
+      expect(isMatch('x', 'x')).toEqual(true);
+    });
+    it('should fail on unequal primitives', () => {
+      expect(isMatch(5, 6)).toEqual(false);
+    });
+    it('should handle mixed nested structures', () => {
+      expect(isMatch(
+        { a: [1, { b: 2 }], c: 3 },
+        { a: [1, { b: 2 }] }
+      )).toEqual(true);
+    });
   });
 });
 

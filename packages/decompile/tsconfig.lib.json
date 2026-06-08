@@ -2,9 +2,8 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "module": "esnext",
-    "esModuleInterop": false,
+    "esModuleInterop": true,
     "target": "es2020",
-    "moduleResolution": "node",
     "sourceMap": true,
     "inlineSources": true,
     "outDir": "../../dist/out-tsc",

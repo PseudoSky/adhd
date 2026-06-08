@@ -1,110 +1,55 @@
-export class Stack {
-  data: any[];
-  counters: {
-    pushed: { [key: string]: number };
-    popped: { [key: string]: number };
-  };
+import { Transform } from '@adhd/transform';
+import { RawSourceMap } from 'source-map';
+/**
+ * Pipeline stack for tracking decompiled objects by type.
+ * Tracks items through site, local, raw, link, map, source, and write stages.
+ * Counter tracks active items in the stack by type.
+ */
+const { Stack, Counter } = Transform;
+export type StackItem = { path: string; data: string; mapping?: RawSourceMap }
+
+export class PipelineStack {
+  private _stack: InstanceType<typeof Stack<[string, StackItem]>>;
+  private _counter: InstanceType<typeof Counter<[string, StackItem]>>;
 
   constructor() {
-    this.data = [];
-    this.counters = {
-      'pushed': {
-        'total': 0,
-        'site': 0,
-        'local': 0,
-        'raw': 0,
-        'link': 0,
-        'map': 0,
-        'source': 0,
-        'write': 0,
-      },
-      'popped': {
-        'total': 0,
-        'site': 0,
-        'local': 0,
-        'raw': 0,
-        'link': 0,
-        'map': 0,
-        'source': 0,
-        'write': 0,
-      }
-    };
+    this._counter = new Counter<[string, StackItem]>((value) => {
+      // Extract type from [type, value] tuple
+      return Array.isArray(value) ? (value[0] as string) : 'unknown';
+    });
+
+    this._stack = new Stack<[string, StackItem]>({
+      onPush: (value): void => this._counter.increment(value),
+      onPop: (value): void => { value !== undefined && this._counter.decrement(value); },
+      onClear: (): void => this._counter.clear(),
+    });
   }
 
-  push = (type, value) => {
-    this.data.push([type, value]);
-    this.counters.pushed[type] += 1;
-    this.counters.pushed['total'] += 1;
+  /**
+   * Get current counter state showing active items by type.
+   */
+  public get counters(): Record<string, number> {
+    return this._counter.toJson();
   }
 
-  pop = () => {
-    if (this.data.length) {
-      const r = this.data.pop();
-      this.counters.popped[r[0]] += 1
-      this.counters.popped['total'] += 1
-      // console.log(`ObjStack.pop[${r[0]}]`)
-      return r
-    } else {
-      return null
-    }
+  public push(type: string, value: StackItem): void {
+    this._stack.push([type, value]);
   }
-  hasMore = () => this.data.length > 0;
-  isComplete = () => this.counters.popped.total === this.counters.pushed.total;
-}
 
-type ObjStackType = {
-  data: any[];
-  counters: {
-    pushed: { [key: string]: number };
-    popped: { [key: string]: number };
-  };
-  push?: (type: string, value: any) => void;
-  pop?: () => [string, any] | null;
-};
+  public pop(): [string, StackItem] | null {
+    return this._stack.pop() ?? null;
+  }
 
-const ObjStack: ObjStackType = {
-  data: [],
-  counters: {
-    'pushed': {
-      'total': 0,
-      'site': 0,
-      'local': 0,
-      'raw': 0,
-      'link': 0,
-      'map': 0,
-      'source': 0,
-      'write': 0,
-    },
-    'popped': {
-      'total': 0,
-      'site': 0,
-      'local': 0,
-      'raw': 0,
-      'link': 0,
-      'map': 0,
-      'source': 0,
-      'write': 0,
-    }
+  public hasMore(): boolean {
+    return !this._stack.isEmpty;
+  }
+
+  /**
+   * Check if stack is empty (no active items).
+   */
+  public isEmpty(): boolean {
+    return this._stack.isEmpty;
   }
 }
 
-ObjStack.push = (type, value) => {
-  // console.log(`ObjStack.push[${type}]`)
-  ObjStack.data.push([type, value]);
-  ObjStack.counters.pushed[type] += 1
-  ObjStack.counters.pushed['total'] += 1
-}
-// https://d301sr5gafysq2.cloudfront.net/frontbucket/navigation-next-repository.96cf4d7993173fe30d4c.js
-ObjStack.pop = () => {
-  if (ObjStack.data.length) {
-    const r = ObjStack.data.pop();
-    ObjStack.counters.popped[r[0]] += 1
-    ObjStack.counters.popped['total'] += 1
-    // console.log(`ObjStack.pop[${r[0]}]`)
-    return r
-  } else {
-    return null
-  }
-}
-
-export default Stack;
+export default PipelineStack;

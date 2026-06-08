@@ -22,10 +22,77 @@
           {
             "enforceBuildableLibDependency": true,
             "allow": [],
-            "depConstraints": [
+            "depConstraints":[
+              /* --- PLATFORM BOUNDARIES (The "Environment" Safeguard) --- */
               {
-                "sourceTag": "*",
-                "onlyDependOnLibsWithTags": ["*"]
+                "sourceTag": "platform:node",
+                "bannedExternalImports": ["react"],
+                "notDependOnLibsWithTags": ["platform:browser"]
+                // "message": "🚫 SERVER ERROR: You cannot import Browser-specific code (DOM/window) into a Node.js library."
+              },
+              {
+                "sourceTag": "platform:browser",
+                "notDependOnLibsWithTags": ["platform:node"]
+                // "message": "🚫 BUNDLE ERROR: You cannot import Node-specific code (fs/path/resolvers) into a Browser bundle."
+              },
+              {
+                "sourceTag": "platform:shared",
+                "bannedExternalImports": ["react"],
+                "notDependOnLibsWithTags": ["platform:browser", "platform:node"]
+                // "message": "🚫 PURITY ERROR: Shared libraries must remain environment-agnostic (No DOM, no Node internals)."
+              },
+
+              /* --- LAYER BOUNDARIES (The "Architectural" Safeguard) --- */
+              {
+                "sourceTag": "layer:shared",
+                "onlyDependOnLibsWithTags": ["layer:shared", "layer:test-logic"]
+              },
+              {
+                "sourceTag": "layer:logic",
+                "bannedExternalImports": ["react"],
+                "onlyDependOnLibsWithTags": ["layer:shared", "layer:test-logic"]
+              },
+              {
+                "sourceTag": "layer:tokens",
+                "onlyDependOnLibsWithTags": ["layer:shared"]
+              },
+              {
+                "sourceTag": "layer:data",
+                "bannedExternalImports": ["react"],
+                "onlyDependOnLibsWithTags": ["layer:logic", "layer:shared", "layer:test-logic"]
+              },
+              {
+                "sourceTag": "layer:ui-primitives",
+                "onlyDependOnLibsWithTags": ["layer:tokens", "layer:shared", "layer:test-ui"]
+              },
+              {
+                "sourceTag": "layer:ui-composites",
+                "onlyDependOnLibsWithTags": ["layer:ui-primitives", "layer:tokens", "layer:test-ui"]
+              },
+              {
+                "sourceTag": "layer:components",
+                "onlyDependOnLibsWithTags": ["layer:ui-composites", "layer:data", "layer:logic", "layer:test-ui"]
+              },
+              {
+                "sourceTag": "layer:workflows",
+                "onlyDependOnLibsWithTags": ["layer:components", "layer:ui-composites", "layer:logic", "layer:test-ui"]
+              },
+              {
+                "sourceTag": "layer:ai",
+                "onlyDependOnLibsWithTags": ["layer:data", "layer:shared"]
+              },
+              {
+                "sourceTag": "layer:entrypoints",
+                "onlyDependOnLibsWithTags": ["layer:workflows", "layer:logic", "layer:data", "layer:shared"]
+              },
+              {
+                "sourceTag": "layer:test-logic",
+                "bannedExternalImports": ["react"],
+                "onlyDependOnLibsWithTags": ["layer:shared"]
+              },
+              {
+                "sourceTag": "layer:test-ui",
+                "onlyDependOnLibsWithTags": ["layer:test-logic", "layer:shared", "layer:ui-primitives"]
               }
             ]
           }
@@ -34,7 +101,11 @@
     },
     {
       "files": ["*.ts", "*.tsx"],
-      "rules": {}
+      "rules": {
+        "@typescript-eslint/prefer-optional-chain": ["error", {
+          "allowPotentiallyUnsafeFixesThatModifyTheReturnTypeIKnowWhatImDoing": true
+        }]
+      }
     },
     {
       "files": ["*.js", "*.jsx"],

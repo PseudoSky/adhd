@@ -11,7 +11,7 @@
       }
     }
   },
-  "tags": ["base"],
+  "tags": ["platform:browser", "layer:ui-primitives"],
   "targets": {
     "build": {
       "cache": false,

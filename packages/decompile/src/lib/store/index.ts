@@ -1,14 +1,14 @@
+import { Transform } from '@adhd/transform';
 import AdmZip from 'adm-zip';
 import fse from 'fs-extra';
 import _ from 'lodash';
 import path from 'path';
-import formatDates from '../formatters/dates.js';
 import { buildPackage, cruiseDeps, getDeps } from './package.js';
 import { BABELRC, BLANK_PACKAGE } from './templates.js';
 import { cleanFilePath, isExternalRef } from './utils.js';
 
 export interface WriteOperations {
-  pending: Promise<any>[];
+  pending: (string | Promise<string | void>)[];
   completed: string[];
 }
 
@@ -36,23 +36,21 @@ class FileStore implements IStore {
   public prefix: string;
   public main_file: string;
 
-  constructor(initialPrefix: string = './build/reverse') {
-    console.log({ initialPrefix })
+  constructor(initialPrefix = './build/reverse') {
     this.zip = new AdmZip();
     this.prefix = initialPrefix;
     this.main_file = '';
   }
 
-  public setPrefix(prefix_path: string, timestamp: boolean = true): void {
-    this.prefix = `${prefix_path}/${timestamp ? formatDates() : ''}/src`;
+  public setPrefix(prefix_path: string, timestamp = true): void {
+    this.prefix = `${prefix_path}/${timestamp ? Transform.formatDate(new Date()) : ''}/src`;
   }
 
   public pathFor(file: string): string {
-    console.log({ prefix: this.prefix, cleanPath: cleanFilePath(file), joined: path.join(this.prefix, cleanFilePath(file)) })
     return path.join(this.prefix, cleanFilePath(file));
   }
 
-  public pending(): Promise<any>[] {
+  public pending(): (string | Promise<string | void>)[] {
     return this.writes.pending;
   }
 
@@ -64,17 +62,20 @@ class FileStore implements IStore {
     return this.writes[event].length;
   }
 
-  private log(event: keyof WriteOperations, data: any, id: string): void {
+  private log(event: keyof WriteOperations, data: string | Promise<string | void>, id: string): void {
     console.log(`Source file ${event === 'pending' ? 'extracted' : 'written'}: ${id}`);
-    this.writes[event].push(data);
+    if (event === 'completed') {
+      this.writes.completed.push(data as string);
+    } else {
+      this.writes[event].push(data);
+    }
   }
 
-  public addFile(file: string, content: string | Buffer, type: 'dir' | 'zip' = 'dir'): Promise<void> | null {
+  public addFile(file: string, content: string | Buffer, type: 'dir' | 'zip' = 'dir'): Promise<void> {
     const outfile = this.pathFor(file);
-    console.log(file, outfile)
 
     if (isExternalRef(outfile)) {
-      return null;
+      return Promise.resolve();
     }
 
     if (type === 'zip') {
@@ -84,7 +85,7 @@ class FileStore implements IStore {
       }
       const buffer = Buffer.from(content as string, 'utf-8');
       const p = this.zip.addFile(outfile, buffer);
-      this.log('pending', p, outfile);
+      this.log('pending', p.toString(), outfile);
       return Promise.resolve();
     }
     if (this.index.completed[outfile]) {
@@ -92,9 +93,9 @@ class FileStore implements IStore {
       return Promise.resolve();
     }
     const p = fse.outputFile(outfile, content)
-      .then(() => this.log('completed', outfile, outfile))
-      .catch((err) => {
-        console.error(err);
+      .then((): void => this.log('completed', p, outfile))
+      .catch((_err) => {
+        console.error(_err);
       });
 
     this.log('pending', p, outfile);
@@ -114,7 +115,7 @@ class FileStore implements IStore {
     }
   }
 
-  public async flush(): Promise<any[]> {
+  public async flush(): Promise<(string | void)[]> {
     const results = await Promise.all(this.pending());
     console.log(`Store: extraction complete. files written ${this.count('completed')}`);
     this.writes = {
@@ -125,14 +126,13 @@ class FileStore implements IStore {
   }
 
   public async finalize(): Promise<WriteOperations> {
-    console.log("Finalize", this.index)
     try {
       await this.addFile('package.json', JSON.stringify(BLANK_PACKAGE, null, 4));
       await this.addFile('.babelrc', JSON.stringify(BABELRC, null, 4));
       await this.flush();
       await this.addFile('index.js', this.main_file);
 
-      const deps = await buildPackage(this.prefix, {});
+      const deps = await buildPackage(this.prefix);
       const uniqueDeps = _.uniq(deps).map((p) => ({ [p]: '*' }));
       BLANK_PACKAGE.dependencies = Object.assign({}, ...uniqueDeps);
 
@@ -142,7 +142,6 @@ class FileStore implements IStore {
     } catch (error) {
       console.error(error);
     }
-    console.log("Finalize", this.index)
     return this.writes
   }
 }
