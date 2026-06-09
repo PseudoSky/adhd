@@ -14,17 +14,11 @@ Confirmed implementation gaps in the current codebase. Each has a clear fix path
 
 ---
 
-## 2. `useClaudeOauth` — token refresh path never exercised
+## 2. `useClaudeOauth` — token refresh path tested and fixed
 
-**What happens:** `AnthropicProvider.refreshOauthToken()` fires when the stored token's `expiresAt` is within 5 minutes of now. This branch has never been hit in live testing — only the happy-path keychain read has been verified.
+**Status:** Verified and fixed. The refresh path was tested by inflating `REFRESH_BUFFER_MS` to 8h, which triggered `refreshOauthToken()`. The refresh succeeded but the original implementation did not write the rotated credentials back to the macOS keychain, leaving Claude Code with stale/revoked credentials.
 
-**Impact:** Token expiry during a long-running session could cause a failed API call rather than a transparent refresh.
-
-**How to test:** Retrieve the current keychain JSON via:
-```bash
-security find-generic-password -s "Claude Code-credentials" -w
-```
-Manually set `claudeAiOauth.expiresAt` to `Date.now() + 4 * 60 * 1000` (4 minutes from now), write it back, then trigger a `useClaudeOauth` task. The refresh branch should fire and restore a valid token.
+**Fix applied:** `writeKeychainCreds()` now persists the fresh `accessToken`, `refreshToken`, and `expiresAt` back to the keychain after every successful refresh, keeping Claude Code in sync. The full existing keychain payload is preserved — only `claudeAiOauth` is overwritten.
 
 ---
 
