@@ -89,6 +89,10 @@ You are responsible for maintaining the health of the shared ecosystem. **Follow
 - **Ignore:** Always ignore `dist/`, `.nx/`, and `tmp/` folders.
 - **Entry:** Start by reading `project.json` in the target library to confirm tags.
 
+## 📦 Publishing
+
+See [PUBLISHING.md](./PUBLISHING.md) for the full version-bump, build, and publish workflow, including the post-publish checklist and per-package smoke test references.
+
 ## 💾 Commit Convention
 
 - Use **Conventional Commits**: `feat(scope):`, `fix(scope):`, `refactor(scope):`.
