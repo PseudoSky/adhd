@@ -10,10 +10,10 @@ npx nx test agent-mcp           # run vitest unit tests
 npx nx build agent-mcp --watch  # watch mode
 ```
 
-> **IMPORTANT FOR LLM AGENTS**: After any change to files in `src/`, you **must** run
-> `npx nx build agent-mcp` before testing or using the server. The MCP client
-> (`.mcp.json`) points at the compiled `dist/` output — editing TypeScript source
-> has no effect until the build is re-run.
+> **IMPORTANT FOR LLM AGENTS**: After any change to files in `src/`, follow the full
+> update cycle in [AGENT-DEV.md](./AGENT-DEV.md) — build, ask the user to run `/mcp`
+> to reload the connection, verify, then test. The MCP client (`.mcp.json`) points at
+> compiled `dist/` output; source edits have no effect until rebuilt and reloaded.
 
 After building, the server runs as:
 ```bash
