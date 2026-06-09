@@ -42,6 +42,30 @@ async function readKeychainCreds(): Promise<ClaudeOauthCreds> {
     return parsed.claudeAiOauth;
 }
 
+async function writeKeychainCreds(creds: ClaudeOauthCreds): Promise<void> {
+    // Read the full existing keychain entry so we preserve any other fields
+    const { stdout } = await execFileAsync(
+        "security",
+        ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
+        { encoding: "utf8" }
+    );
+    const existing = JSON.parse(stdout.trim()) as Record<string, unknown>;
+    existing["claudeAiOauth"] = creds;
+
+    // -U updates the existing entry in place
+    await execFileAsync(
+        "security",
+        [
+            "add-generic-password",
+            "-U",
+            "-s", KEYCHAIN_SERVICE,
+            "-a", KEYCHAIN_SERVICE,
+            "-w", JSON.stringify(existing),
+        ],
+        { encoding: "utf8" }
+    );
+}
+
 async function refreshOauthToken(refreshToken: string): Promise<ClaudeOauthCreds> {
     // ⚠️  UNVERIFIED PATH — refresh confirmed blocked (HTTP 429) while the access token
     //     is still valid; the endpoint appears to enforce "no early refresh" as an OAuth
@@ -77,22 +101,37 @@ async function refreshOauthToken(refreshToken: string): Promise<ClaudeOauthCreds
         body: body.toString(),
     });
 
-    const json = await res.json() as {
-        access_token?: string;
-        refresh_token?: string;
-        expires_in?: number;
-        error?: unknown;
-    };
+    const rawBody = await res.text();
 
-    if (!res.ok || !json.access_token) {
-        throw new Error(`OAuth refresh failed: ${JSON.stringify(json)}`);
+    let json: { access_token?: string; refresh_token?: string; expires_in?: number; error?: unknown } = {};
+    try {
+        json = JSON.parse(rawBody) as typeof json;
+    } catch {
+        throw new Error(
+            `OAuth refresh failed: response was not JSON\n` +
+            `  status: ${res.status} ${res.statusText}\n` +
+            `  body: ${rawBody}`
+        );
     }
 
-    return {
+    if (!res.ok || !json.access_token) {
+        throw new Error(
+            `OAuth refresh failed\n` +
+            `  status: ${res.status} ${res.statusText}\n` +
+            `  body: ${rawBody}`
+        );
+    }
+
+    const fresh: ClaudeOauthCreds = {
         accessToken:  json.access_token,
         refreshToken: json.refresh_token ?? refreshToken, // some providers rotate it
         expiresAt:    Date.now() + (json.expires_in ?? 3600) * 1000,
     };
+
+    // Persist rotated credentials back to the keychain so Claude Code stays in sync
+    await writeKeychainCreds(fresh);
+
+    return fresh;
 }
 
 /**
