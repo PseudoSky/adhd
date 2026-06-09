@@ -9,6 +9,16 @@
         "LMSTUDIO_API_KEY": "sk-lm-aTPoK9Gs:qf2Ncsq8ezFfN6kIALi5",
         "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
       }
+    },
+    "agent-mcp-published": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@adhd/agent-mcp@latest"],
+      "env": {
+        "DATABASE_PATH": "/Users/nix/dev/node/adhd/packages/ai/agent-mcp/data/agents-published.db",
+        "LMSTUDIO_API_KEY": "sk-lm-aTPoK9Gs:qf2Ncsq8ezFfN6kIALi5",
+        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+      }
     }
   }
 }

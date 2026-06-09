@@ -22,9 +22,9 @@
         "tsConfig": "packages/ai/agent-mcp/tsconfig.lib.json",
         "assets": [
           {
-            "input": "packages/ai/agent-mcp/drizzle",
-            "glob": "**/*",
-            "output": "drizzle"
+            "input": "packages/ai/agent-mcp",
+            "glob": "drizzle/**/*",
+            "output": "."
           }
         ]
       }
