@@ -40,18 +40,56 @@ If the tool schema or behaviour you changed is not yet visible, the old process 
 
 ### 5. Test
 
-Run the minimal sequence that exercises the changed code:
+Run the minimal sequence that exercises the changed code.
+
+**Example — LM Studio worker (simplest, no delegation):**
 
 ```
-# Create or reuse an agent
-mcp__agent-mcp__agent_create: { name, provider, systemPrompt, mcpServers, permissions }
+mcp__agent-mcp__agent_create:
+  name: "dev-worker"
+  provider: { type: "lmstudio", model: "qwen2.5-coder-7b-instruct-mlx" }
+  systemPrompt: "You are a helpful assistant. Answer concisely."
+  mcpServers: {}
+  permissions: { allowedAgents: [] }
 
-# Open a session
-session_id = mcp__agent-mcp__agent: { name }
+session_id = mcp__agent-mcp__agent: { name: "dev-worker" }
 
-# Submit a task
-mcp__agent-mcp__task: { session_id, prompt }
+mcp__agent-mcp__task:
+  session_id: "<session_id from above>"
+  prompt: "What is 2 + 2? Reply in one sentence."
 ```
+
+Expected: `{ status: "completed", result: "2 + 2 equals 4." }`
+
+**Example — claudecli orchestrator delegating to LM Studio worker (full chain):**
+
+```
+mcp__agent-mcp__agent_create:
+  name: "dev-orchestrator"
+  provider: { type: "claudecli" }
+  systemPrompt: >
+    You are an orchestrator. Delegate the task to the 'dev-worker' agent using
+    the agent and task tools. Open a session with agent({name: 'dev-worker'}),
+    submit the task with task({session_id, prompt}), and return the result.
+  mcpServers:
+    agent-mcp:
+      transport: stdio
+      command: node
+      args: ["/Users/nix/dev/node/adhd/dist/packages/ai/agent-mcp/src/index.js"]
+      env:
+        DATABASE_PATH: /Users/nix/dev/node/adhd/packages/ai/agent-mcp/data/agents.db
+        LMSTUDIO_API_KEY: <key>
+        LMSTUDIO_BASE_URL: http://localhost:1234/v1
+  permissions: { allowedAgents: ["dev-worker"] }
+
+session_id = mcp__agent-mcp__agent: { name: "dev-orchestrator" }
+
+mcp__agent-mcp__task:
+  session_id: "<session_id from above>"
+  prompt: "Ask the dev-worker what 2 + 2 is and return its answer."
+```
+
+Expected: `{ status: "completed", result: "The dev-worker's answer: 2 + 2 equals 4." }`
 
 Check `status: "completed"` and inspect `result`. If the task fails, call `result` with the `task_id` to get the full error.
 
