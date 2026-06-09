@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-mcp-types",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "dependencies": {},
   "main": "./index.js",
   "module": "./index.mjs",
