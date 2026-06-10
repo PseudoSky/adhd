@@ -49,6 +49,39 @@ All read-only queries over `task_usage` + `tasks`. No new hooks required — plu
 
 ---
 
+## 6. `max_tokens` and `stop_reason` not tracked in `task_usage`
+
+**What's missing:** The `task_usage` table stores token counts but not the model's configured output ceiling (`max_tokens` from the agent's provider config) nor the stop reason returned by the provider (`stop_reason: "max_tokens"` / `finish_reason: "length"`). Without these, a truncated response is indistinguishable from a normal completion in the usage data.
+
+**Impact:** Silent truncation — tasks that hit their output token ceiling succeed with `status: completed` but return a clipped result. No alert, no flag in `task_usage`, no way to detect from `usage_query` output alone.
+
+**Fix path:** Two additions:
+1. `max_tokens` column in `task_usage` — written once at task-start from `provider.maxTokens` (or the provider's default if unset). Lets callers compute utilisation ratio (`output_tokens / max_tokens`).
+2. `stop_reason` column — written on each `post:model_response` event. OpenAI returns `finish_reason` (`"stop"` / `"length"` / `"tool_calls"`); Anthropic returns `stop_reason` (`"end_turn"` / `"max_tokens"` / `"tool_use"`). Map to a normalised enum. `"length"` / `"max_tokens"` → truncation signal.
+
+These are two new columns on `task_usage` + two new fields on `TokenUsage`. No schema migration complexity beyond adding nullable columns.
+
+---
+
+## 7. Context window full — no handling strategy
+
+**What happens:** When a session's message history grows to fill the model's context window, the provider throws a context-length error. The orchestrator catches it as `PROVIDER_ERROR` and fails the task. No warning is issued before the limit is hit; no recovery path exists.
+
+**Impact:** Long-running tasks with many tool-call rounds (common for orchestrator agents with large system prompts and tool schemas) fail unrecoverably at an unpredictable point. The session is left in a broken state and the caller receives a generic `PROVIDER_ERROR`.
+
+**Fix path — two layers:**
+
+1. **Detection (CORE):** Normalise context-length errors from all providers into a dedicated error code `CONTEXT_WINDOW_EXCEEDED` so callers can distinguish it from other `PROVIDER_ERROR` failures. Anthropic throws `BadRequestError` with body `{"type":"invalid_request_error","message":"prompt is too long"}`. OpenAI/LM Studio throws with `code: "context_length_exceeded"`. Map both to the same code.
+
+2. **Recovery strategies (pick one or layer them):**
+   - **Sliding-window truncation (CORE, simplest):** Drop the oldest non-system messages from the session history when the estimated token count approaches the limit. Preserves the system prompt and recent context. Lossy but keeps the task alive.
+   - **Summarisation (PLUGIN):** `@adhd/summary-plugin` fires on `message:appended`; when estimated tokens exceed a threshold it compresses older turns into a summary message and replaces them. Less lossy than truncation. Already in roadmap as item #26.
+   - **Session split + hand-off (CORE):** On `CONTEXT_WINDOW_EXCEEDED`, create a new session, seed it with a compressed summary of the completed turns, and continue the task. Stateful but maximally recoverable.
+
+**Recommended path for 0.0.6:** Implement detection (#1) and sliding-window truncation first. Document the threshold as a configurable env var (`AGENT_MCP_CONTEXT_LIMIT`). Defer summarisation to `@adhd/summary-plugin`.
+
+---
+
 ## 4. Phase 1 roadmap items not started
 
 The following CORE features from Phase 1 of the build order are unimplemented or in progress:
