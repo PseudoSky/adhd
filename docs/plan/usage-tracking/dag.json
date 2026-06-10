@@ -116,7 +116,7 @@
       "kind": "work",
       "phase": "release",
       "depends_on": ["audit-final"],
-      "guard": "cd /Users/nix/dev/node/adhd && npx nx build agent-mcp && npx nx test agent-mcp 2>&1 | tail -5 | grep -q 'pass\\|PASS' && test -f docs/plan/usage-tracking/code-review-evidence.md && grep -q 'REVIEW_COMPLETE' docs/plan/usage-tracking/code-review-evidence.md",
+      "guard": "cd /Users/nix/dev/node/adhd && npx nx build agent-mcp && npx nx test agent-mcp 2>&1 | grep -q 'pass\\|PASS' && test -f docs/plan/usage-tracking/code-review-evidence.md && grep -q 'REVIEW_COMPLETE' docs/plan/usage-tracking/code-review-evidence.md",
       "artifacts": [
         "docs/plan/usage-tracking/code-review-evidence.md"
       ],
