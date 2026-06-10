@@ -59,7 +59,7 @@
       "kind": "work",
       "phase": "plugin",
       "depends_on": ["audit-foundation"],
-      "guard": "cd /Users/nix/dev/node/adhd && grep -n 'task_usage' packages/ai/agent-mcp/src/db/schema.ts | grep -q 'sqliteTable' && ls packages/ai/agent-mcp/drizzle/ | grep -q 'task.usage'",
+      "guard": "cd /Users/nix/dev/node/adhd && grep -q 'taskUsageTable' packages/ai/agent-mcp/src/db/schema.ts && grep -q 'sqliteTable' packages/ai/agent-mcp/src/db/schema.ts && grep -rl 'task_usage' packages/ai/agent-mcp/drizzle/*.sql | grep -q '.'",
       "artifacts": [
         "packages/ai/agent-mcp/src/db/schema.ts",
         "packages/ai/agent-mcp/drizzle/"
