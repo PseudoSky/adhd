@@ -34,10 +34,10 @@
       "executor": "typescript-pro"
     },
     "usage-query-tool": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-09T03:00:00Z",
       "completed_at": null,
-      "executor": null
+      "executor": "typescript-pro"
     },
     "audit-final": {
       "status": "pending",
