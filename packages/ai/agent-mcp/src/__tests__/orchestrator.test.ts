@@ -118,7 +118,7 @@ describe("Orchestrator", () => {
     });
 
     describe("provider timeout", () => {
-        it("throws PROVIDER_ERROR with timeout message when timeoutMs elapses", async () => {
+        it("throws PROVIDER_TIMEOUT with timeout message when timeoutMs elapses", async () => {
             const timeoutMs = 50;
             const ctx = makeCtx({ timeoutMs });
             const orch = new Orchestrator();
@@ -136,7 +136,7 @@ describe("Orchestrator", () => {
                     taskId: generateId(),
                 })
             ).rejects.toMatchObject({
-                code: "PROVIDER_ERROR",
+                code: "PROVIDER_TIMEOUT",
                 message: expect.stringContaining(`timed out after ${timeoutMs}ms`),
             });
         });
@@ -191,7 +191,7 @@ describe("Orchestrator", () => {
                     taskId: generateId(),
                 })
             ).rejects.toMatchObject({
-                code: "PROVIDER_ERROR",
+                code: "PROVIDER_TIMEOUT",
                 message: expect.stringContaining(`timed out after ${timeoutMs}ms`),
             });
         });
@@ -218,7 +218,7 @@ describe("Orchestrator", () => {
                         taskId: generateId(),
                     })
                 ).rejects.toMatchObject({
-                    code: "PROVIDER_ERROR",
+                    code: "PROVIDER_TIMEOUT",
                     message: expect.stringContaining("60000ms"),
                 });
             } finally {

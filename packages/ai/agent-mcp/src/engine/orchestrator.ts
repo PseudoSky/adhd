@@ -127,9 +127,12 @@ export class Orchestrator {
                     });
                 } catch (error) {
                     // Order matters — see [inv:provider-error-dispatch]:
-                    // timeout first, then auth, then rate-limit, then generic.
+                    // cancellation first, then timeout, then auth, then rate-limit, then generic.
+                    // signal.aborted = user-initiated task cancel; composedSignal.aborted-only = timeout.
+                    if (signal.aborted) {
+                        throw new ToolError("PROVIDER_ERROR", "Task was cancelled");
+                    }
                     if (
-                        signal.aborted ||
                         composedSignal.aborted ||
                         (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError"))
                     ) {
