@@ -71,7 +71,7 @@
       "kind": "work",
       "phase": "plugin",
       "depends_on": ["usage-schema", "audit-foundation"],
-      "guard": "cd /Users/nix/dev/node/adhd && npx nx build agent-mcp && grep -rn 'UsagePlugin' dist/packages/ai/agent-mcp/src/ | grep -q 'install'",
+      "guard": "cd /Users/nix/dev/node/adhd && npx nx build agent-mcp && grep -q 'UsagePlugin' dist/packages/ai/agent-mcp/src/index.js && grep -q '\\.install(' dist/packages/ai/agent-mcp/src/index.js",
       "artifacts": [
         "packages/ai/agent-mcp/src/plugins/usage-plugin.ts",
         "packages/ai/agent-mcp/src/plugins/index.ts",
