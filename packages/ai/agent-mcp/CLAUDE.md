@@ -96,6 +96,8 @@ src/
 | `ALLOWED_AGENTS` | unrestricted | Comma-separated server-level agent allowlist |
 | `AGENT_MCP_MAX_DEPTH` | `5` | Max recursion depth |
 | `AGENT_MCP_MAX_TOOL_LOOPS` | `50` | Max tool calls per task |
+| `AGENT_MCP_CONTEXT_LIMIT` | `0` (disabled) | Estimated token limit for the message window passed to each provider call. When > 0, oldest non-system messages are dropped to fit. Set 10% below the model's actual context window. |
+| `AGENT_MCP_DEFAULT_MAX_TOKENS` | `8192` | Default `max_tokens` for Anthropic providers that don't set `maxTokens` in their config. |
 | `QUEUE_CONCURRENCY` | `5` | Max concurrent background tasks |
 | `LOG_LEVEL` | `info` | Pino log level |
 

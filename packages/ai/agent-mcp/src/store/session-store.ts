@@ -204,3 +204,51 @@ export class SessionStore {
         }));
     }
 }
+
+/**
+ * Estimates the token count for a set of messages using a 4-chars-per-token heuristic.
+ */
+export function estimateTokens(messages: Message[]): number {
+    return Math.ceil(
+        messages.reduce((sum, m) => {
+            return (
+                sum +
+                (m.content?.length ?? 0) +
+                (m.toolCalls ? JSON.stringify(m.toolCalls).length : 0) +
+                (m.toolResults ? JSON.stringify(m.toolResults).length : 0)
+            );
+        }, 0) / 4
+    );
+}
+
+/**
+ * Returns a windowed view of messages that fits within tokenLimit estimated tokens.
+ * System messages are always preserved. Oldest non-system messages are dropped first.
+ * Returns the original array unchanged if tokenLimit <= 0 or the array already fits.
+ *
+ * See [inv:window-messages] in docs/plan/0.0.6/contexts/_shared.md.
+ */
+export function windowMessages(messages: Message[], tokenLimit: number): Message[] {
+    if (tokenLimit <= 0) return messages;
+    if (estimateTokens(messages) <= tokenLimit) return messages;
+
+    const systemMessages = messages.filter(m => m.role === "system");
+    const nonSystemMessages = messages.filter(m => m.role !== "system");
+
+    const systemBudget = estimateTokens(systemMessages);
+    const remaining = Math.max(0, tokenLimit - systemBudget);
+
+    const selected: Message[] = [];
+    let used = 0;
+
+    // Walk newest-to-oldest; include at least one message even if it exceeds budget
+    for (let i = nonSystemMessages.length - 1; i >= 0; i--) {
+        const msg = nonSystemMessages[i];
+        const cost = estimateTokens([msg]);
+        if (used + cost > remaining && selected.length > 0) break;
+        selected.unshift(msg);
+        used += cost;
+    }
+
+    return [...systemMessages, ...selected];
+}
