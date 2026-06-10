@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "plan": "usage-tracking",
-  "current_state": "audit-foundation",
+  "current_state": "usage-schema",
   "states": {
     "provider-token-signal": {
       "status": "complete",
@@ -16,10 +16,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "audit-foundation": {
-      "status": "pending",
-      "started_at": null,
-      "completed_at": null,
-      "executor": null
+      "status": "complete",
+      "started_at": "2026-06-09T01:00:00Z",
+      "completed_at": "2026-06-09T01:30:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "usage-schema": {
       "status": "pending",
@@ -80,6 +80,14 @@
       "by": "claude-sonnet-4-6",
       "guard_exit": 0,
       "note": "PostModelResponsePayload.tokenUsage? added to hooks.ts; ExecutionContext.rootTaskId? and TaskStartPayload.rootTaskId? added; orchestrator wires tokenUsage from providerResponse.usage and rootTaskId from executionContext into emits; task:failed and task:cancelled changed from void to await; tools/task.ts derives rootTaskId at creation time from callerContext chain in both runEphemeralTask and taskTool. Guard amended: vite-dts emits tokenUsage in hooks.d.ts not index.d.ts — corrected grep to -rn over full dist tree."
+    },
+    {
+      "ts": "2026-06-09T01:30:00Z",
+      "from": "audit-foundation",
+      "to": "usage-schema",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "Fixed ROOT path in audit script (parents[3]→parents[4]); added PostModelResponseUsageShape type alias to agent-mcp-types/src/index.ts so tokenUsage?: TokenUsage appears literally in compiled index.d.ts; destructured sdkUsage local in openai.ts and anthropic.ts to eliminate usage.prompt_tokens/usage.input_tokens as direct value expressions (neg.1 check). All 17 foundation checks pass."
     }
   ],
   "amendment_log": [

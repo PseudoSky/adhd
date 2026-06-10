@@ -311,12 +311,13 @@ export class AnthropicProvider implements LLMProvider {
                 createdAt: nowIso(),
             };
 
+            const sdkUsage = response.usage;
             return {
                 message,
                 stopReason: toolCalls.length > 0 ? "tool_calls" : "completed",
                 usage: {
-                    inputTokens: response.usage.input_tokens,
-                    outputTokens: response.usage.output_tokens,
+                    inputTokens: sdkUsage.input_tokens,
+                    outputTokens: sdkUsage.output_tokens,
                 },
             };
         };
