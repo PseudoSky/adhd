@@ -1,5 +1,12 @@
 import { eq, sql } from "drizzle-orm";
 
+const SEVERITY: Record<string, number> = { length: 3, tool_calls: 2, stop: 1, unknown: 0 };
+function mostSevere(a: string | null | undefined, b: string | null | undefined): string {
+    const sa = SEVERITY[a ?? ""] ?? 0;
+    const sb = SEVERITY[b ?? ""] ?? 0;
+    return sa >= sb ? (a ?? "unknown") : (b ?? "unknown");
+}
+
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
 import { taskUsageTable } from "../db/schema.js";
@@ -32,6 +39,10 @@ interface Accumulator {
     agentName: string;
     providerType: string;
     model: string;
+    /** Most severe stop reason seen so far; updated on every post:model_response. */
+    mostSevereStopReason: string;
+    /** Provider maxTokens config value; null for claudecli or unconfigured providers. */
+    maxTokens: number | null;
 }
 
 /**
@@ -80,6 +91,10 @@ export class UsagePlugin implements Plugin {
                 agentName: executionContext.agentName,
                 providerType: provider.type,
                 model: ("model" in provider && provider.model) || "default",
+                mostSevereStopReason: "unknown",
+                maxTokens: ("maxTokens" in provider && typeof provider.maxTokens === "number")
+                    ? provider.maxTokens
+                    : null,
             });
         } catch (err) {
             logger.error({ err }, "UsagePlugin: task:start handler failed");
@@ -97,6 +112,12 @@ export class UsagePlugin implements Plugin {
             const inputTokens = tokenUsage?.inputTokens ?? 0;
             const outputTokens = tokenUsage?.outputTokens ?? 0;
             const toolCalls = toolCallCount ?? 0;
+
+            // Update most-severe stop reason in memory before writing to DB.
+            const incoming = tokenUsage?.stopReason ?? "unknown";
+            if (acc) {
+                acc.mostSevereStopReason = mostSevere(acc.mostSevereStopReason, incoming);
+            }
 
             const provider = executionContext.agentDefinition.provider;
 
@@ -118,6 +139,8 @@ export class UsagePlugin implements Plugin {
                     modelCalls: 1,
                     latencyMs: 0,
                     isComplete: 0,
+                    stopReason: acc?.mostSevereStopReason ?? incoming,
+                    maxTokens: acc?.maxTokens ?? null,
                     createdAt: nowIso(),
                 })
                 .onConflictDoUpdate({
@@ -127,6 +150,8 @@ export class UsagePlugin implements Plugin {
                         outputTokens: sql`${taskUsageTable.outputTokens} + ${outputTokens}`,
                         toolCallCount: sql`${taskUsageTable.toolCallCount} + ${toolCalls}`,
                         modelCalls: sql`${taskUsageTable.modelCalls} + 1`,
+                        stopReason: acc?.mostSevereStopReason ?? incoming,
+                        // maxTokens deliberately OMITTED from SET — constant per task
                     },
                 })
                 .run();

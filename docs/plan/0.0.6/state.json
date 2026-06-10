@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "usage-plugin-stop",
+  "current_state": "usage-report-stop",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -23,9 +23,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "usage-plugin-stop": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T00:28:00Z",
+      "done_ts": "2026-06-10T00:38:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "usage-report-stop": {
       "status": "pending",
@@ -89,6 +90,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T00:38:00Z",
+      "from": "usage-plugin-stop",
+      "to": "usage-report-stop",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "Added SEVERITY/mostSevere module-level helpers. Accumulator gains mostSevereStopReason/maxTokens. onTaskStart populates both from provider config. onModelResponse updates mostSevereStopReason in-memory then includes stopReason/maxTokens in UPSERT (maxTokens omitted from onConflictDoUpdate SET). All 3 criteria pass. 49/49 tests green."
+    },
     {
       "ts": "2026-06-10T00:28:00Z",
       "from": "schema-migration",
