@@ -356,6 +356,16 @@ export class Orchestrator {
                     // so the next policy check sees the updated value
                     executionContext.toolCallCount++;
                 }
+
+                // Guard: provider signalled tool_calls but sent no tool call blocks —
+                // prevents infinite spin on a malformed response.
+                if (
+                    providerResponse.stopReason === "tool_calls" &&
+                    (assistantMessage.toolCalls ?? []).length === 0
+                ) {
+                    finalContent = assistantMessage.content ?? "";
+                    looping = false;
+                }
             }
 
             // Task completed successfully
@@ -380,9 +390,7 @@ export class Orchestrator {
             return { result: finalContent };
         } catch (error) {
             // Determine if this is a cancellation or a real failure
-            const isCancelled =
-                signal.aborted ||
-                (error instanceof ToolError && error.code === "PROVIDER_ERROR" && error.message.includes("cancelled"));
+            const isCancelled = signal.aborted;
 
             if (isCancelled) {
                 // Status update handled by TaskStore.cancel() in most cases;
