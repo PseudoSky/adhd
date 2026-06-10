@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "plan": "usage-tracking",
-  "current_state": "usage-schema",
+  "current_state": "usage-query-tool",
   "states": {
     "provider-token-signal": {
       "status": "complete",
@@ -28,10 +28,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "usage-plugin": {
-      "status": "pending",
-      "started_at": null,
-      "completed_at": null,
-      "executor": null
+      "status": "complete",
+      "started_at": "2026-06-09T02:10:00Z",
+      "completed_at": "2026-06-09T02:40:00Z",
+      "executor": "typescript-pro"
     },
     "usage-query-tool": {
       "status": "pending",
@@ -66,6 +66,14 @@
   },
   "transition_log": [
     {
+      "ts": "2026-06-09T02:40:00Z",
+      "from": "usage-plugin",
+      "to": "usage-query-tool",
+      "by": "typescript-pro",
+      "guard_exit": 0,
+      "note": "UsagePlugin class added in src/plugins/usage-plugin.ts implementing Plugin. In-memory Map<taskId, Accumulator> holds only startedAt + identity fields (agentName/providerType/model) + rootTaskId from task:start payload — no DB walk. post:model_response does a drizzle UPSERT (insert is_complete=0 on first call; onConflictDoUpdate with sql`col + n` accumulators on subsequent). task:completed/failed/cancelled share onTerminal() which UPDATEs latency_ms + root_task_id + is_complete=1 and drops the map entry. All handlers wrapped in try/catch logging via pino (logger.error) — never throws [inv:plugin-no-throw]. claudecli token undefined → zeros [inv:claudecli-undefined]. Barrel src/plugins/index.ts re-exports UsagePlugin; index.ts imports it, constructs new UsagePlugin(dbAny) after stores and awaits usagePlugin.install(hooks). Build + 49/49 tests pass. Guard amended (see amendment_log): tsc keeps `new UsagePlugin(dbAny)` and `await usagePlugin.install(hooks)` on separate lines and the install call uses the lowercase variable, so the single-line `UsagePlugin | grep install` pipe can never match — replaced with two independent grep -q checks over compiled index.js."
+    },
+    {
       "ts": "2026-06-09T02:10:00Z",
       "from": "usage-schema",
       "to": "usage-plugin",
@@ -99,6 +107,16 @@
     }
   ],
   "amendment_log": [
+    {
+      "ts": "2026-06-09T02:38:00Z",
+      "state": "usage-plugin",
+      "class": "executor",
+      "type": "guard-fix",
+      "reason": "Guard `grep -rn 'UsagePlugin' dist/.../src/ | grep -q 'install'` can never pass: tsc compiles the wiring as two lines (`const usagePlugin = new UsagePlugin(dbAny)` then `await usagePlugin.install(hooks)`) and the install call references the lowercase variable, so no single line contains both 'UsagePlugin' and 'install'. The class definition line `export class UsagePlugin` also lacks 'install'. Same compilation-splits-symbols class as the usage-schema and foundation-phase guard amendments. Replaced with two independent grep -q checks over compiled index.js asserting the real invariant: UsagePlugin is referenced AND .install( is called at startup. New guard verified exit 0.",
+      "files_synced": ["dag.json", "state.json"],
+      "prior_ref": null,
+      "by": "typescript-pro"
+    },
     {
       "ts": "2026-06-09T02:05:00Z",
       "state": "usage-schema",
