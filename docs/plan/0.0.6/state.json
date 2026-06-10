@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "code-review",
+  "current_state": "audit-final",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -83,9 +83,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "code-review": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T02:20:00Z",
+      "done_ts": "2026-06-10T02:30:00Z",
+      "executor": "code-reviewer-agent"
     },
     "audit-final": {
       "status": "pending",
@@ -99,6 +100,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T02:30:00Z",
+      "from": "code-review",
+      "to": "audit-final",
+      "by": "code-reviewer-agent",
+      "guard_exit": 0,
+      "note": "Code review dispatched to code-reviewer subagent. All 28 checklist items PASS. One non-blocking finding: exported AGENT_MCP_DEFAULT_MAX_TOKENS constant in index.ts is dead code (anthropic.ts reads env var directly — correct). Not blocking 0.0.6. Sentinel created by executor per reviewer PASS verdict."
+    },
     {
       "ts": "2026-06-10T02:20:00Z",
       "from": "audit-foundation",
