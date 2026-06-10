@@ -121,17 +121,41 @@ export class Orchestrator {
                         },
                     });
                 } catch (error) {
-                    if (signal.aborted) {
-                        throw new ToolError("PROVIDER_ERROR", "Task was cancelled during provider call");
-                    }
+                    // Order matters — see [inv:provider-error-dispatch]:
+                    // timeout first, then auth, then rate-limit, then generic.
                     if (
+                        signal.aborted ||
                         composedSignal.aborted ||
                         (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError"))
                     ) {
                         const ms = executionContext.agentDefinition.provider.timeoutMs ?? 60_000;
                         throw new ToolError(
-                            "PROVIDER_ERROR",
+                            "PROVIDER_TIMEOUT",
                             `Provider call timed out after ${ms}ms. Increase timeoutMs on the agent's provider config.`
+                        );
+                    }
+                    if (
+                        error instanceof Error && (
+                            error.constructor.name === "AuthenticationError" ||
+                            ("status" in error && (error as { status?: number }).status === 401)
+                        )
+                    ) {
+                        throw new ToolError(
+                            "PROVIDER_AUTH_ERROR",
+                            `Provider authentication failed: ${error.message}. ` +
+                            `Set ANTHROPIC_AUTH_TOKEN (run \`claude setup-token\` to obtain an OAuth access token) or use authTokenEnv in the provider config`
+                        );
+                    }
+                    if (
+                        error instanceof Error && (
+                            ("status" in error && (error as { status?: number }).status === 429) ||
+                            error.message?.includes("rate limit") ||
+                            error.message?.includes("429")
+                        )
+                    ) {
+                        throw new ToolError(
+                            "PROVIDER_RATE_LIMITED",
+                            `Provider rate limit exceeded: ${error.message}`
                         );
                     }
                     throw new ToolError(

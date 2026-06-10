@@ -10,6 +10,7 @@ import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
 
 import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
+import { ToolError } from "../validation/errors.js";
 
 import type {
     LLMProvider,
@@ -388,6 +389,14 @@ export class AnthropicProvider implements LLMProvider {
                 onFailedAttempt: error => {
                     if (request.signal?.aborted) {
                         throw error; // don't retry on cancellation
+                    }
+                    // Don't retry auth failures — credentials won't change between attempts
+                    if ("status" in error && (error as { status?: number }).status === 401) {
+                        throw new ToolError(
+                            "PROVIDER_AUTH_ERROR",
+                            `Anthropic authentication failed. ` +
+                            `Set ANTHROPIC_AUTH_TOKEN (run \`claude setup-token\` to obtain an OAuth access token) or use authTokenEnv in the provider config`
+                        );
                     }
                 },
             });
