@@ -146,6 +146,23 @@ The E2E suite (`E2E_PROMPT.md` + `run-e2e.mjs`) runs 14 scenarios against a live
 | `CONTEXT_WINDOW_EXCEEDED` | Orchestrator (context_length_exceeded from provider) |
 | `MCP_CLIENT_ERROR` | clients/* |
 
+## OAuth / claudecli keychain trust
+
+**`useClaudeOauth: true`** (Anthropic provider) reads the OAuth access token from the macOS keychain service `Claude Code-credentials` on every `chat()` call. The MCP host process must share the same keychain trust context as Claude Code.
+
+**Fallback chain** — if the keychain read fails, the Anthropic provider degrades in order:
+1. `ANTHROPIC_API_KEY` env var (standard API key)
+2. `ANTHROPIC_AUTH_TOKEN` env var (OAuth token or bearer token)
+3. If both are absent → throws `PROVIDER_AUTH_ERROR`
+
+**Manual token injection** — run `claude setup-token` to print an OAuth access token, then:
+```bash
+export ANTHROPIC_AUTH_TOKEN=<token>
+```
+Or set `authTokenEnv: "MY_TOKEN_VAR"` in the provider config to read from a named env var.
+
+**claudecli provider** — uses whatever credentials `claude auth status` shows. On token-injection failure, throws `PROVIDER_AUTH_ERROR` with the keychain error and the same recovery hint.
+
 ## Known Gaps
 
 See [GAPS.md](./GAPS.md).
