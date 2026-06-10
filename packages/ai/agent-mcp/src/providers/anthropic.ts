@@ -11,6 +11,7 @@ import { nowIso } from "../utils/timestamps.js";
 
 import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
+import { logger } from "../logger.js";
 
 import type {
     LLMProvider,
@@ -303,12 +304,32 @@ export class AnthropicProvider implements LLMProvider {
         // For useClaudeOauth mode, fetch a fresh token on every chat() call so
         // long-running servers never hold a stale client across token expiry.
         if (this.config.useClaudeOauth) {
-            const authToken = await getAccessToken();
-            // Subscription OAuth tokens always require the beta header
-            this.client = new Anthropic({
-                authToken,
-                defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
-            });
+            try {
+                const authToken = await getAccessToken();
+                // Subscription OAuth tokens always require the beta header
+                this.client = new Anthropic({
+                    authToken,
+                    defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
+                });
+            } catch (keychainErr) {
+                const keychainMsg = keychainErr instanceof Error ? keychainErr.message : String(keychainErr);
+                logger.warn({ keychainMsg }, "AnthropicProvider: keychain read failed, trying env var fallbacks");
+
+                const apiKey = process.env["ANTHROPIC_API_KEY"] || undefined;
+                const authToken = process.env["ANTHROPIC_AUTH_TOKEN"] || undefined;
+
+                if (apiKey) {
+                    this.client = new Anthropic({ apiKey });
+                } else if (authToken) {
+                    this.client = new Anthropic({ authToken });
+                } else {
+                    throw new ToolError(
+                        "PROVIDER_AUTH_ERROR",
+                        `Anthropic keychain read failed: ${keychainMsg}. ` +
+                        `Set ANTHROPIC_AUTH_TOKEN (run \`claude setup-token\` to obtain an OAuth access token) or use authTokenEnv in the provider config`
+                    );
+                }
+            }
         }
 
         const retryConfig = this.config.retryConfig;
