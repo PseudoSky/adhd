@@ -17,11 +17,13 @@ import type {
     TaskStatus,
     TaskToolInput,
     TaskToolOutput,
+    TaskUsageReport,
 } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
 import type { IHookRegistry } from "@adhd/agent-mcp-types";
+import { buildTaskUsageReport, type Database } from "./usage.js";
 
 export interface TaskDeps {
     agentStore: AgentStore;
@@ -34,6 +36,11 @@ export interface TaskDeps {
     selfUrl: string | undefined;
     inProcessDescriptors: InProcessToolDescriptor[];
     inProcessHandler: InProcessToolHandler;
+    /**
+     * Drizzle DB handle — used to enrich `task` / `result` responses with the
+     * task's token-usage rollup (direct + subtree). See [dod.2].
+     */
+    db: Database;
 }
 
 /**
@@ -136,10 +143,13 @@ async function runEphemeralTask(
         // Orchestrator already captured status via captureTaskStore
     }
 
+    const usage = buildTaskUsageReport(deps.db, taskId);
+
     return {
         task_id: taskId,
         status: capturedStatus,
         result: capturedResult,
+        usage,
     };
 }
 
@@ -287,10 +297,12 @@ export async function taskTool(
         }
 
         const finalTask = deps.taskStore.read(task.id);
+        const usage = buildTaskUsageReport(deps.db, finalTask.id);
         return {
             task_id: finalTask.id,
             status: finalTask.status,
             result: finalTask.result,
+            usage,
         };
     }
 }
@@ -314,6 +326,11 @@ export function taskCancel(input: TaskCancelInput, deps: Pick<TaskDeps, "taskSto
     return { success: true };
 }
 
-export function resultTool(input: ResultInput, deps: Pick<TaskDeps, "taskStore">): Task {
-    return deps.taskStore.read(input.task_id); // throws TASK_NOT_FOUND
+export function resultTool(
+    input: ResultInput,
+    deps: Pick<TaskDeps, "taskStore" | "db">
+): Task & { usage?: TaskUsageReport } {
+    const task = deps.taskStore.read(input.task_id); // throws TASK_NOT_FOUND
+    const usage = buildTaskUsageReport(deps.db, task.id);
+    return { ...task, usage };
 }

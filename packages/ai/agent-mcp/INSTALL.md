@@ -270,6 +270,46 @@ project-root/
   .mcp.json        ← goes here
 ```
 
+#### Required: allowlist in `.claude/settings.json`
+
+If your project has a `.claude/settings.json` with an `allowedMcpServers` field, you must add `agent-mcp` to it or the server will be blocked entirely — Claude Code treats that field as an explicit trust list and rejects any server not on it. This is a supply-chain protection: it prevents a malicious `.mcp.json` committed to a cloned repo from loading an untrusted server automatically.
+
+```json
+{
+  "allowedMcpServers": [
+    { "serverName": "agent-mcp" }
+  ]
+}
+```
+
+If your project also runs Claude agents unattended (no human to approve prompts), add each tool to `permissions.allow` so they aren't blocked at call time:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "mcp__agent-mcp__guide",
+      "mcp__agent-mcp__agent_create",
+      "mcp__agent-mcp__agent_read",
+      "mcp__agent-mcp__agent_update",
+      "mcp__agent-mcp__agent_delete",
+      "mcp__agent-mcp__agent_list",
+      "mcp__agent-mcp__agent",
+      "mcp__agent-mcp__session_list",
+      "mcp__agent-mcp__session_close",
+      "mcp__agent-mcp__session_clear",
+      "mcp__agent-mcp__task",
+      "mcp__agent-mcp__task_list",
+      "mcp__agent-mcp__task_cancel",
+      "mcp__agent-mcp__result",
+      "mcp__agent-mcp__usage_query"
+    ]
+  }
+}
+```
+
+Projects that only use Claude Code interactively (a human is present) don't need `permissions.allow` — Claude Code will prompt for approval on first use and remember the answer.
+
 ### Claude Code (global `~/.claude/mcp.json`)
 
 To make agent-mcp available in all projects:
@@ -290,11 +330,22 @@ These hosts use the same `{ command, args, env }` shape. Paste the `mcpServers` 
 
 ## Verify the connection
 
-Once connected, call the `usage` tool — it returns the server's runtime config and confirms all env vars were picked up:
+Once connected, call the `guide` tool — it returns the full server usage guide and confirms the server is reachable:
 
 ```
-mcp__agent-mcp__usage: {}
+mcp__agent-mcp__guide: {}
 ```
+
+To inspect recorded token usage after running tasks, call `usage_query` (all
+filters optional — a bare `{}` returns the most recent rows):
+
+```
+mcp__agent-mcp__usage_query: { "task_id": "<root-task-id>" }
+```
+
+Passing a `task_id` returns that task's row plus its entire delegation subtree
+(every sub-task whose `root_task_id` matches), with an aggregate `summary` of
+input/output tokens, model calls, and tool calls across the tree.
 
 If the tool is not visible, the server failed to start. Check that `DATABASE_PATH` is an absolute path to a writable directory.
 
