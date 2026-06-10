@@ -18,6 +18,45 @@ import type {
     ToolDefinition,
 } from "./types.js";
 
+// ─── Model max-output token table ────────────────────────────────────────────
+// Maps model-name prefix → documented max output tokens (standard sync API,
+// no beta headers). Checked longest-prefix-first so "claude-opus-4-5" (64k)
+// wins over "claude-opus-4" (128k). Source: docs.anthropic.com/models/overview.
+// AGENT_MCP_DEFAULT_MAX_TOKENS env var overrides for unlisted / future models.
+const MODEL_MAX_TOKENS: [prefix: string, maxTokens: number][] = [
+    // Claude 5 (GA 2026-06)
+    ["claude-fable-5",          128_000],
+    ["claude-mythos-5",         128_000],
+    // Claude 4 — Opus (8/7/6 = 128k; 5 = 64k; 1/0 = 32k)
+    ["claude-opus-4-8",         128_000],
+    ["claude-opus-4-7",         128_000],
+    ["claude-opus-4-6",         128_000],
+    ["claude-opus-4-5",          64_000],
+    ["claude-opus-4-1",          32_000],
+    ["claude-opus-4-0",          32_000],
+    ["claude-opus-4",           128_000], // catch future claude-opus-4-N ≥ 4-6 tier
+    // Claude 4 — Sonnet (all known variants: 64k)
+    ["claude-sonnet-4",          64_000],
+    // Claude 4 — Haiku (all known variants: 64k)
+    ["claude-haiku-4",           64_000],
+    // Claude 3.5 family
+    ["claude-3-5-sonnet",         8_192],
+    ["claude-3-5-haiku",          8_192],
+    // Claude 3 family
+    ["claude-3-opus",             4_096],
+    ["claude-3-sonnet",           4_096],
+    ["claude-3-haiku",            4_096],
+];
+
+function defaultMaxTokens(model: string): number {
+    const envOverride = process.env["AGENT_MCP_DEFAULT_MAX_TOKENS"];
+    if (envOverride) return parseInt(envOverride, 10);
+    for (const [prefix, maxTokens] of MODEL_MAX_TOKENS) {
+        if (model.startsWith(prefix)) return maxTokens;
+    }
+    return 32_000; // unknown/future model — conservative but not restrictive
+}
+
 // ─── OAuth keychain helpers ───────────────────────────────────────────────────
 
 const KEYCHAIN_SERVICE = "Claude Code-credentials";
@@ -246,7 +285,13 @@ export class AnthropicProvider implements LLMProvider {
         if (apiKey) {
             this.client = new Anthropic({ apiKey });
         } else if (authToken) {
-            this.client = new Anthropic({ authToken });
+            // OAuth tokens (sk-ant-oat…) require the oauth-2025-04-20 beta header;
+            // without it the Messages API returns 429. API keys (sk-ant-api…) do not.
+            const isOauth = authToken.startsWith("sk-ant-oat");
+            this.client = new Anthropic({
+                authToken,
+                ...(isOauth ? { defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" } } : {}),
+            });
         } else {
             // No credentials found via env — SDK will throw a clear AuthenticationError
             this.client = new Anthropic();
@@ -258,7 +303,11 @@ export class AnthropicProvider implements LLMProvider {
         // long-running servers never hold a stale client across token expiry.
         if (this.config.useClaudeOauth) {
             const authToken = await getAccessToken();
-            this.client = new Anthropic({ authToken });
+            // Subscription OAuth tokens always require the beta header
+            this.client = new Anthropic({
+                authToken,
+                defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
+            });
         }
 
         const retryConfig = this.config.retryConfig;
@@ -272,7 +321,7 @@ export class AnthropicProvider implements LLMProvider {
                     model: this.config.model,
                     system: systemPrompt,
                     temperature: this.config.temperature,
-                    max_tokens: this.config.maxTokens ?? 4096,
+                    max_tokens: this.config.maxTokens ?? defaultMaxTokens(this.config.model),
                     messages: toAnthropicMessages(request.messages),
                     tools: toAnthropicTools(request.tools),
                 },
