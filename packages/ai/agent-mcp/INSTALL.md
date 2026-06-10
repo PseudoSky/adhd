@@ -336,8 +336,9 @@ Once connected, call the `guide` tool — it returns the full server usage guide
 mcp__agent-mcp__guide: {}
 ```
 
-To inspect recorded token usage after running tasks, call `usage_query` (all
-filters optional — a bare `{}` returns the most recent rows):
+To inspect recorded token usage after running tasks, call `usage_query` — it
+queries the `task_usage` table (all filters optional; a bare `{}` returns the
+most recent rows):
 
 ```
 mcp__agent-mcp__usage_query: { "task_id": "<root-task-id>" }
