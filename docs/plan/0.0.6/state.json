@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "claudecli-auth-fix",
+  "current_state": "robustness-fixes",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -65,9 +65,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "claudecli-auth-fix": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T01:38:00Z",
+      "done_ts": "2026-06-10T01:50:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "robustness-fixes": {
       "status": "pending",
@@ -96,6 +97,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T01:50:00Z",
+      "from": "claudecli-auth-fix",
+      "to": "robustness-fixes",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "claudecli.ts: buildSubprocessEnv returns {env, keychainError?}; catch logs warn+captures error; empty finalResult throws PROVIDER_AUTH_ERROR with keychain reason + recovery instruction. anthropic.ts: useClaudeOauth path wrapped in try/catch; keychain failure falls back to ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN env vars; throws PROVIDER_AUTH_ERROR with recovery instruction only if both absent. logger imported in both providers. All 5 criteria pass, build + tests clean."
+    },
     {
       "ts": "2026-06-10T01:38:00Z",
       "from": "sliding-window",

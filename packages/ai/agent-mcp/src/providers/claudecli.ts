@@ -47,6 +47,8 @@ import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
 import type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from "./types.js";
 import type { McpServerConfig, ProviderConfig, Message } from "../validation/index.js";
+import { ToolError } from "../validation/errors.js";
+import { logger } from "../logger.js";
 
 type ClaudeCliConfig = Extract<ProviderConfig, { type: "claudecli" }>;
 
@@ -171,13 +173,15 @@ export class ClaudeCliProvider implements LLMProvider {
      * This is required when --bare is set, because --bare skips the settings
      * discovery that normally loads Claude Code's auth configuration.
      */
-    private async buildSubprocessEnv(): Promise<NodeJS.ProcessEnv> {
+    private async buildSubprocessEnv(): Promise<{ env: NodeJS.ProcessEnv; keychainError?: string }> {
         const env: NodeJS.ProcessEnv = { ...process.env };
 
         // If an explicit auth token env var is already present, nothing to do
         if (env["ANTHROPIC_AUTH_TOKEN"] || env["ANTHROPIC_API_KEY"]) {
-            return env;
+            return { env };
         }
+
+        let keychainError: string | undefined;
 
         // Try macOS keychain — same store as useClaudeOauth in AnthropicProvider
         try {
@@ -191,12 +195,12 @@ export class ClaudeCliProvider implements LLMProvider {
             };
             const token = parsed.claudeAiOauth?.accessToken;
             if (token) env["ANTHROPIC_AUTH_TOKEN"] = token;
-        } catch {
-            // Keychain unavailable or not macOS — inherit env as-is and let
-            // Claude Code surface its own auth error if credentials are missing
+        } catch (err) {
+            keychainError = err instanceof Error ? err.message : String(err);
+            logger.warn({ keychainError }, "claudecli: keychain read failed; subprocess will use inherited env");
         }
 
-        return env;
+        return { env, keychainError };
     }
 
     /**
@@ -281,7 +285,7 @@ export class ClaudeCliProvider implements LLMProvider {
             args.push("--mcp-config", mcpConfigPath, "--strict-mcp-config");
         }
 
-        const subEnv = await this.buildSubprocessEnv();
+        const { env: subEnv, keychainError } = await this.buildSubprocessEnv();
 
         const proc = spawn(claudePath, args, {
             stdio: ["pipe", "pipe", "pipe"],
@@ -400,6 +404,14 @@ export class ClaudeCliProvider implements LLMProvider {
             }
 
             proc.stdin!.end();
+
+            if (!finalResult) {
+                throw new ToolError(
+                    "PROVIDER_AUTH_ERROR",
+                    `Claude CLI returned empty result${keychainError ? `. Keychain error: ${keychainError}` : ""}. ` +
+                    `Set ANTHROPIC_AUTH_TOKEN (run \`claude setup-token\` to obtain an OAuth access token) or use authTokenEnv in the provider config`
+                );
+            }
 
             const message: Message = {
                 id: generateId(),
