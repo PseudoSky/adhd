@@ -20,6 +20,7 @@
         "outputPath": "dist/packages/ai/agent-mcp",
         "main": "packages/ai/agent-mcp/src/index.ts",
         "tsConfig": "packages/ai/agent-mcp/tsconfig.lib.json",
+        "clean": true,
         "assets": [
           {
             "input": "packages/ai/agent-mcp",

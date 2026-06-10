@@ -1,8 +1,49 @@
 # agent-mcp Publishing Guide
 
-Package-specific smoke test for `@adhd/agent-mcp`. Run this after every publish to confirm the released package works end-to-end.
+Package-specific smoke test for `@adhd/agent-mcp`.
 
 See the [root PUBLISHING.md](../../../../PUBLISHING.md) for the general version-bump and publish steps.
+
+---
+
+## 0. Pre-publish: verify the local build BEFORE publishing
+
+**This step is mandatory. Do not run `npm publish` until it passes.**
+
+### 0a. Build
+
+```bash
+npx nx build agent-mcp --skip-nx-cache
+```
+
+The build is configured with `clean: true` — it wipes the output directory first, then
+compiles TypeScript, copies `drizzle/` (migrations), and auto-copies `package.json`
+(with the correct version) to `dist/packages/ai/agent-mcp/`. No manual copy needed.
+
+### 0b. Reload the MCP connection
+
+In Claude Code, run `/mcp` and confirm `agent-mcp` (the local dist server) reconnects
+successfully. A `-32000` error means the server crashed at startup — do not proceed.
+
+### 0c. Verify server version
+
+After reconnecting, call the `guide` tool on `agent-mcp`. The response includes the
+server version in the MCP server info. Confirm it matches the version in
+`packages/ai/agent-mcp/package.json`.
+
+### 0d. Run a functional smoke test
+
+Create a minimal agent, run a task, and clean up — all against the **local** server
+(`mcp__agent-mcp__*`, not `mcp__agent-mcp-published__*`):
+
+```
+agent_create: { name: "pre-pub-check", provider: { type: anthropic, model: "claude-haiku-4-5-20251001", useClaudeOauth: true, maxTokens: 1024 }, systemPrompt: "You are a test assistant.", mcpServers: {}, permissions: {} }
+task: { agent_name: "pre-pub-check", prompt: "Reply with exactly: ok" }
+→ expect status: completed, result: "ok"
+agent_delete: { name: "pre-pub-check" }
+```
+
+Only proceed to publish once the task completes successfully.
 
 ---
 
