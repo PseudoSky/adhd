@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "env-var-fixes",
+  "current_state": "cache-tokens",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -35,9 +35,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "env-var-fixes": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T00:46:00Z",
+      "done_ts": "2026-06-10T00:52:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "cache-tokens": {
       "status": "pending",
@@ -91,6 +92,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T00:52:00Z",
+      "from": "env-var-fixes",
+      "to": "cache-tokens",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "index.ts: MAX_DEPTH→AGENT_MCP_MAX_DEPTH, MAX_TOOL_LOOPS→AGENT_MCP_MAX_TOOL_LOOPS (default 10→50), exported AGENT_MCP_DEFAULT_MAX_TOKENS constant (default 8192). All 4 criteria pass. Build clean."
+    },
     {
       "ts": "2026-06-10T00:46:00Z",
       "from": "usage-report-stop",
