@@ -10,6 +10,7 @@ import type { McpClientRegistry } from "../clients/registry.js";
 import type { PolicyEngine } from "./policy.js";
 import type { TaskStore } from "../store/task-store.js";
 import type { SessionStore } from "../store/session-store.js";
+import { windowMessages } from "../store/session-store.js";
 
 export interface OrchestratorRunInput {
     executionContext: ExecutionContext;
@@ -50,6 +51,7 @@ export class Orchestrator {
 
         // Working copy of messages — we append to this as the loop progresses
         const currentMessages: Message[] = [...input.messages];
+        const contextLimit = parseInt(process.env["AGENT_MCP_CONTEXT_LIMIT"] ?? "0", 10);
 
         try {
             // Mark task as running
@@ -100,8 +102,11 @@ export class Orchestrator {
                 // Call the LLM provider
                 let providerResponse;
                 try {
+                    const messagesToSend = contextLimit > 0
+                        ? windowMessages(currentMessages, contextLimit)
+                        : currentMessages;
                     providerResponse = await provider.chat({
-                        messages: currentMessages,
+                        messages: messagesToSend,
                         tools: tools.length > 0 ? tools : undefined,
                         signal: composedSignal,
                         // executeTool is used by providers (e.g. claudecli) that manage

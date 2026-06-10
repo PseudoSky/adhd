@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "sliding-window",
+  "current_state": "claudecli-auth-fix",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -59,9 +59,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "sliding-window": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T01:26:00Z",
+      "done_ts": "2026-06-10T01:38:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "claudecli-auth-fix": {
       "status": "pending",
@@ -95,6 +96,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T01:38:00Z",
+      "from": "sliding-window",
+      "to": "claudecli-auth-fix",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "session-store.ts: exported estimateTokens() and windowMessages() pure functions (system messages always preserved, newest-to-oldest non-system drop). orchestrator.ts: contextLimit from AGENT_MCP_CONTEXT_LIMIT env; messagesToSend = contextLimit>0 ? window : currentMessages passed to provider.chat. CLAUDE.md: AGENT_MCP_CONTEXT_LIMIT and AGENT_MCP_DEFAULT_MAX_TOKENS rows added to env table. All 4 criteria pass, build + tests clean."
+    },
     {
       "ts": "2026-06-10T01:26:00Z",
       "from": "context-error-code",
