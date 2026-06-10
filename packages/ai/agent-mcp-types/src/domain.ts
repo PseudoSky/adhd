@@ -127,6 +127,8 @@ export interface ExecutionContext {
   agentDefinition: AgentDefinition;
   callingAgentName?: string;
   parentTaskId?: string;
+  /** Root task ID in the delegation chain. Null/undefined means this task IS the root. */
+  rootTaskId?: string;
   recursionDepth: number;
   toolCallCount: number;
 }

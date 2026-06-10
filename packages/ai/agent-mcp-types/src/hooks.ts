@@ -1,8 +1,8 @@
-import type { ExecutionContext, Message, ToolDefinition, Session, AgentDefinition } from "./domain.js";
+import type { ExecutionContext, Message, ToolDefinition, Session, AgentDefinition, TokenUsage } from "./domain.js";
 
-export interface TaskStartPayload         { executionContext: ExecutionContext; messages: Message[] }
+export interface TaskStartPayload         { executionContext: ExecutionContext; messages: Message[]; rootTaskId?: string }
 export interface PreModelRequestPayload   { executionContext: ExecutionContext; messages: Message[]; tools: ToolDefinition[] }
-export interface PostModelResponsePayload { executionContext: ExecutionContext; stopReason: string; toolCallCount: number }
+export interface PostModelResponsePayload { executionContext: ExecutionContext; stopReason: string; toolCallCount: number; tokenUsage?: TokenUsage }
 export interface PreToolCallPayload       { executionContext: ExecutionContext; toolName: string; callId: string; toolInput: unknown }
 export interface PostToolCallPayload      { executionContext: ExecutionContext; toolName: string; callId: string; toolInput: unknown; result: unknown; isError: boolean }
 export interface MessageAppendedPayload   { executionContext: ExecutionContext; message: Message }
