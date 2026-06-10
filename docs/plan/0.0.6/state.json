@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "docs-and-publish",
+  "current_state": "done",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -95,12 +95,21 @@
       "executor": "claude-sonnet-4-6"
     },
     "docs-and-publish": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T02:45:00Z",
+      "done_ts": "2026-06-10T03:10:00Z",
+      "executor": "claude-sonnet-4-6"
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T03:10:00Z",
+      "from": "docs-and-publish",
+      "to": "done",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "agent-mcp-types@0.0.6 and agent-mcp@0.0.6 published to npm. audit_006.py --phase final exits 0. Plan complete."
+    },
     {
       "ts": "2026-06-10T02:45:00Z",
       "from": "audit-final",
