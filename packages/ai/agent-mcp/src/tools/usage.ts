@@ -1,5 +1,14 @@
 import { and, desc, eq, gte, or, type SQL } from "drizzle-orm";
 
+const SEVERITY: Record<string, number> = { length: 3, tool_calls: 2, stop: 1, unknown: 0 };
+
+function mostSevereStr(a: string | undefined, b: string | undefined): string | undefined {
+    if (!a && !b) return undefined;
+    const sa = SEVERITY[a ?? ""] ?? 0;
+    const sb = SEVERITY[b ?? ""] ?? 0;
+    return sa >= sb ? a : b;
+}
+
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
 import { taskUsageTable } from "../db/schema.js";
@@ -45,6 +54,7 @@ function summarise(rows: TaskUsageRow[]): UsageSummary {
       modelCalls: acc.modelCalls + (row.modelCalls ?? 0),
       toolCallCount: acc.toolCallCount + (row.toolCallCount ?? 0),
       latencyMs: acc.latencyMs + (row.latencyMs ?? 0),
+      stopReason: mostSevereStr(acc.stopReason, row.stopReason ?? undefined),
     }),
     {
       inputTokens: 0,

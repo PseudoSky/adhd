@@ -38,6 +38,7 @@ export const usageSummarySchema = z.object({
   modelCalls: z.number().int().nonnegative(),
   toolCallCount: z.number().int().nonnegative(),
   latencyMs: z.number().int().nonnegative(),
+  stopReason: z.string().optional(),
 });
 
 export type UsageSummary = z.infer<typeof usageSummarySchema>;
