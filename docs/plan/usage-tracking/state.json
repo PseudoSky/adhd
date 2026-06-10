@@ -1,0 +1,131 @@
+{
+  "schema_version": 2,
+  "plan": "usage-tracking",
+  "current_state": "provider-token-signal",
+  "states": {
+    "provider-token-signal": {
+      "status": "in-progress",
+      "started_at": "2026-06-09T00:00:00Z",
+      "completed_at": null,
+      "executor": "claude-sonnet-4-6"
+    },
+    "hook-token-payload": {
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "executor": null
+    },
+    "audit-foundation": {
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "executor": null
+    },
+    "usage-schema": {
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "executor": null
+    },
+    "usage-plugin": {
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "executor": null
+    },
+    "usage-query-tool": {
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "executor": null
+    },
+    "audit-final": {
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "executor": null
+    },
+    "code-review": {
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "executor": null
+    },
+    "docs-and-publish": {
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "executor": null
+    },
+    "acceptance-test": {
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "executor": null
+    }
+  },
+  "transition_log": [],
+  "amendment_log": [
+    {
+      "ts": "2026-06-09T00:00:00Z",
+      "state": "usage-schema",
+      "class": "executor",
+      "type": "expand-artifacts",
+      "reason": "User required recursive token aggregation (root_task_id) and failed job durability (incremental UPSERT + is_complete). Added root_task_id and is_complete columns to task_usage table; updated plugin to UPSERT on post:model_response instead of flushing only at terminal; updated query tool to support subtree lookup via root_task_id and include_incomplete filter.",
+      "files_synced": ["dag.json", "state.json", "contexts/_shared.md", "contexts/usage-schema.md", "contexts/usage-plugin.md", "contexts/usage-query-tool.md", "contexts/audit-final.md", "scripts/audit_usage_tracking.py"],
+      "prior_ref": null,
+      "by": "claude-sonnet-4-6"
+    },
+    {
+      "ts": "2026-06-09T00:00:00Z",
+      "state": "plan",
+      "class": "planner",
+      "type": "expand-artifacts",
+      "reason": "Upgrade plan to plan-state-machine skill v1.1.0: added ## Definition of Done to README with [dod.1]-[dod.5] clauses; added audit_check fields to all references.json entries; renamed conformance check IDs in audit script from [ref:slug] to [audit-final.ref-slug] format; added dod.1-dod.5 checks to check_final(); added changes blocks to provider-token-signal and hook-token-payload dag nodes; replaced gap-check.js with v1.1.0 (Checks 6-10 + --discover); created final-review.md; updated audit-final.md conformance check IDs.",
+      "files_synced": ["README.md", "references.json", "dag.json", "state.json", "scripts/gap-check.js", "scripts/audit_usage_tracking.py", "contexts/audit-final.md", "final-review.md"],
+      "prior_ref": null,
+      "by": "claude-sonnet-4-6"
+    },
+    {
+      "ts": "2026-06-09T00:00:00Z",
+      "state": "plan",
+      "class": "planner",
+      "type": "replan",
+      "reason": "DoD was fabricated without requester input. Conducted proper elicitation per skill Step 1a. Two changes from elicited requirements: (1) DoD rewritten to 6 clauses + Non-goals section; [dod.2] is new — token usage must appear in MCP response body (result + task tools) as usage.direct and usage.subtree. (2) usage-query-tool state expanded: added tools/task.ts and validation/task.ts to artifacts/mutates, added [usage-query-tool.11-14] acceptance criteria, added buildTaskUsageReport() helper contract, added [dod.2] proof checks to audit script and audit-final.md, added UsageSummary/TaskUsageReport shapes to _shared.md.",
+      "files_synced": [
+        "README.md",
+        "dag.json",
+        "state.json",
+        "state-machine.md",
+        "contexts/_shared.md",
+        "contexts/usage-query-tool.md",
+        "contexts/audit-final.md",
+        "scripts/audit_usage_tracking.py",
+        "final-review.md"
+      ],
+      "prior_ref": null,
+      "by": "claude-sonnet-4-6"
+    },
+    {
+      "ts": "2026-06-09T00:00:00Z",
+      "state": "plan",
+      "class": "planner",
+      "type": "replan",
+      "reason": "Completed DoD elicitation — missing old-system disposition, reviewer chain, and rollback. Added [dod.6] (full package docs: GAPS.md, ROADMAP.md, INSTALL.md, README.md), [dod.7] (code reviewer agent), [dod.8] (npm publish), [dod.9] (zero-knowledge acceptance test: subagent discovers usage without prompting, planner verifies DB). Added 3 new states in release phase: code-review, docs-and-publish, acceptance-test. Added context files for all 3. Updated dag.json phases, state.json states, state-machine.md topology, audit script dod.6-9 checks, audit-final.md.",
+      "files_synced": [
+        "README.md",
+        "dag.json",
+        "state.json",
+        "state-machine.md",
+        "contexts/code-review.md",
+        "contexts/docs-and-publish.md",
+        "contexts/acceptance-test.md",
+        "contexts/audit-final.md",
+        "scripts/audit_usage_tracking.py",
+        "final-review.md"
+      ],
+      "prior_ref": null,
+      "by": "claude-sonnet-4-6"
+    }
+  ]
+}
