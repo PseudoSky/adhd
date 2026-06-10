@@ -361,12 +361,18 @@ export class AnthropicProvider implements LLMProvider {
             };
 
             const sdkUsage = response.usage;
+            const STOP_REASON: Record<string, string> = {
+                end_turn: "stop", max_tokens: "length", tool_use: "tool_calls",
+            };
+            const normalisedStopReason: string = STOP_REASON[response.stop_reason ?? ""] ?? "unknown";
             return {
                 message,
                 stopReason: toolCalls.length > 0 ? "tool_calls" : "completed",
                 usage: {
                     inputTokens: sdkUsage.input_tokens,
                     outputTokens: sdkUsage.output_tokens,
+                    stopReason: normalisedStopReason,
+                    maxTokens: this.config.maxTokens,
                 },
             };
         };
