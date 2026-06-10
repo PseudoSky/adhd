@@ -1,0 +1,156 @@
+{
+  "schema_version": 2,
+  "title": "usage-tracking",
+  "spec_sources": [
+    "packages/ai/agent-mcp/ROADMAP.md",
+    "packages/ai/agent-mcp/GAPS.md",
+    "packages/ai/agent-mcp-types/src/hooks.ts"
+  ],
+  "executor": "sox-active:typescript-pro",
+  "phases": ["foundation", "plugin", "convergence", "release"],
+  "terminal": "done",
+  "nodes": {
+    "provider-token-signal": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": [],
+      "guard": "cd /Users/nix/dev/node/adhd && npx nx build agent-mcp && npx nx build agent-mcp-types && grep -rq 'TokenUsage' dist/packages/ai/agent-mcp-types/",
+      "artifacts": [
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp/src/providers/types.ts",
+        "packages/ai/agent-mcp/src/providers/openai.ts",
+        "packages/ai/agent-mcp/src/providers/anthropic.ts"
+      ],
+      "changes": {
+        "resigns": ["ProviderChatResponse"]
+      },
+      "context": "contexts/provider-token-signal.md",
+      "notes": "TokenUsage is defined in packages/ai/agent-mcp-types/src/domain.ts and imported from @adhd/agent-mcp-types into providers/types.ts — not defined locally in providers/types.ts. hooks.ts already imports from ./domain.js so this avoids a cross-package import. OpenAI SDK response.usage has prompt_tokens/completion_tokens; Anthropic has input_tokens/output_tokens. claudecli returns undefined — correct and expected. Do not try to extract tokens from the CLI subprocess."
+    },
+    "hook-token-payload": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": ["provider-token-signal"],
+      "guard": "cd /Users/nix/dev/node/adhd && npx nx build agent-mcp && npx nx build agent-mcp-types && grep -n 'tokenUsage' dist/packages/ai/agent-mcp-types/index.d.ts | grep -q 'TokenUsage'",
+      "artifacts": [
+        "packages/ai/agent-mcp-types/src/hooks.ts",
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "packages/ai/agent-mcp/src/tools/task.ts"
+      ],
+      "changes": {
+        "resigns": ["PostModelResponsePayload", "ExecutionContext", "TaskStartPayload"]
+      },
+      "context": "contexts/hook-token-payload.md",
+      "notes": "PostModelResponsePayload is defined in agent-mcp-types. Orchestrator reads providerResponse.usage and passes it as tokenUsage in the hook emit. The field is optional — downstream consumers must handle undefined (claudecli, failed calls). Also: ExecutionContext gains rootTaskId; TaskStartPayload gains rootTaskId; task:start emit wires it through; task:failed/task:cancelled change from void to await; tools/task.ts derives rootTaskId at task-creation time from callerContext."
+    },
+    "audit-foundation": {
+      "kind": "audit",
+      "phase": "foundation",
+      "depends_on": ["provider-token-signal", "hook-token-payload"],
+      "guard": "cd /Users/nix/dev/node/adhd && python3 docs/plan/usage-tracking/scripts/audit_usage_tracking.py --phase foundation",
+      "artifacts": [
+        "docs/plan/usage-tracking/scripts/audit_usage_tracking.py"
+      ],
+      "context": "contexts/audit-foundation.md",
+      "notes": "Audit is read-only. Most likely failures: (1) TokenUsage type not exported from agent-mcp-types index, (2) orchestrator passes undefined where tokenUsage is expected to be an object."
+    },
+    "usage-schema": {
+      "kind": "work",
+      "phase": "plugin",
+      "depends_on": ["audit-foundation"],
+      "guard": "cd /Users/nix/dev/node/adhd && grep -n 'task_usage' packages/ai/agent-mcp/src/db/schema.ts | grep -q 'sqliteTable' && ls packages/ai/agent-mcp/drizzle/ | grep -q 'task.usage'",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/drizzle/"
+      ],
+      "context": "contexts/usage-schema.md",
+      "notes": "Run 'npm run db:generate' from packages/ai/agent-mcp/ to produce the migration file after editing schema.ts. The migration filename will contain the date — that is fine. Do NOT manually write the SQL file."
+    },
+    "usage-plugin": {
+      "kind": "work",
+      "phase": "plugin",
+      "depends_on": ["usage-schema", "audit-foundation"],
+      "guard": "cd /Users/nix/dev/node/adhd && npx nx build agent-mcp && grep -rn 'UsagePlugin' dist/packages/ai/agent-mcp/src/ | grep -q 'install'",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/plugins/usage-plugin.ts",
+        "packages/ai/agent-mcp/src/plugins/index.ts",
+        "packages/ai/agent-mcp/src/index.ts"
+      ],
+      "context": "contexts/usage-plugin.md",
+      "notes": "UsagePlugin must not throw — it is observational. Flush happens on task:completed/failed/cancelled. The in-memory accumulation map is keyed by taskId. Ephemeral tasks (agent_name mode) DO get flushed — the orchestrator always fires task:completed regardless of session mode. The resulting task_usage row will have no corresponding tasks row, which is expected and correct."
+    },
+    "usage-query-tool": {
+      "kind": "work",
+      "phase": "plugin",
+      "depends_on": ["usage-plugin"],
+      "guard": "cd /Users/nix/dev/node/adhd && npx nx build agent-mcp && grep -n 'usage_query' dist/packages/ai/agent-mcp/src/server.js | grep -q 'usage_query'",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/tools/usage.ts",
+        "packages/ai/agent-mcp/src/tools/task.ts",
+        "packages/ai/agent-mcp/src/validation/usage.ts",
+        "packages/ai/agent-mcp/src/validation/task.ts",
+        "packages/ai/agent-mcp/src/validation/index.ts",
+        "packages/ai/agent-mcp/src/server.ts",
+        "packages/ai/agent-mcp/INSTALL.md",
+        "packages/ai/agent-mcp/README.md"
+      ],
+      "changes": {
+        "resigns": ["TaskToolOutput", "resultTool", "TaskDeps"]
+      },
+      "context": "contexts/usage-query-tool.md",
+      "notes": "New MCP tool is named 'usage_query'. Also rename the existing 'usage' guide tool to 'guide' in server.ts (same state, already mutates server.ts). Follows the existing pattern in server.ts: add to inProcessDescriptors, add case to inProcessHandler switch, add ListTools entry, add CallTool case. The query layer belongs in tools/usage.ts; validation schemas in validation/usage.ts. Also enriches resultTool() and sync taskTool() with usage (direct + subtree) via buildTaskUsageReport() — see [dod.2] and context notes."
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "convergence",
+      "depends_on": ["usage-query-tool"],
+      "guard": "cd /Users/nix/dev/node/adhd && python3 docs/plan/usage-tracking/scripts/audit_usage_tracking.py --phase final",
+      "artifacts": [
+        "docs/plan/usage-tracking/scripts/audit_usage_tracking.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": "The live data check requires LM Studio running with LMSTUDIO_API_KEY and LMSTUDIO_BASE_URL set. If not available, skip only the live check and note it — all static checks must pass."
+    },
+    "code-review": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": ["audit-final"],
+      "guard": "cd /Users/nix/dev/node/adhd && npx nx build agent-mcp && npx nx test agent-mcp 2>&1 | tail -5 | grep -q 'pass\\|PASS' && test -f docs/plan/usage-tracking/code-review-evidence.md && grep -q 'REVIEW_COMPLETE' docs/plan/usage-tracking/code-review-evidence.md",
+      "artifacts": [
+        "docs/plan/usage-tracking/code-review-evidence.md"
+      ],
+      "changes": {},
+      "context": "contexts/code-review.md",
+      "notes": "Dispatch the code-reviewer subagent against all files mutated by this plan. Apply any cleanup. Write code-review-evidence.md with findings table and REVIEW_COMPLETE marker."
+    },
+    "docs-and-publish": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": ["code-review"],
+      "guard": "cd /Users/nix/dev/node/adhd && grep -q '\"version\": \"0.0.5\"' packages/ai/agent-mcp/package.json && node -e \"const local=require('./packages/ai/agent-mcp/package.json').version; const {execSync}=require('child_process'); const pub=execSync('npm view @adhd/agent-mcp version 2>/dev/null').toString().trim(); if(local!==pub){process.exit(1);}\"",
+      "artifacts": [
+        "packages/ai/agent-mcp/GAPS.md",
+        "packages/ai/agent-mcp/ROADMAP.md",
+        "packages/ai/agent-mcp/INSTALL.md",
+        "packages/ai/agent-mcp/README.md",
+        "packages/ai/agent-mcp/package.json"
+      ],
+      "changes": {},
+      "context": "contexts/docs-and-publish.md",
+      "notes": "Update GAPS.md (item #4 implemented), ROADMAP.md (Phase 1 item #2 complete), INSTALL.md + README.md (task_usage tool documented). Bump version 0.0.4→0.0.5. Rebuild. Publish: npm publish dist/packages/ai/agent-mcp --access public"
+    },
+    "acceptance-test": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": ["docs-and-publish"],
+      "guard": "test -f docs/plan/usage-tracking/acceptance-evidence.md && grep -q 'VERIFIED_MATCH' docs/plan/usage-tracking/acceptance-evidence.md",
+      "artifacts": [
+        "docs/plan/usage-tracking/acceptance-evidence.md"
+      ],
+      "changes": {},
+      "context": "contexts/acceptance-test.md",
+      "notes": "Dispatch a zero-context subagent against the production @adhd/agent-mcp npm package. The prompt must not mention 'usage', 'token', 'task_usage', or any hint about where usage data lives. The subagent must independently discover and report sub-task token counts from a ≥2-hop recursive task. Verify numbers against raw SQLite DB. Write acceptance-evidence.md with VERIFIED_MATCH."
+    }
+  }
+}
