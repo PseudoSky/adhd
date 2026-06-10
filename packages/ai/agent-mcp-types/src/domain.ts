@@ -1,3 +1,8 @@
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 export type TaskEventType =
   | "MODEL_REQUEST" | "MODEL_RESPONSE"

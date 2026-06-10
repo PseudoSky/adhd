@@ -133,6 +133,9 @@ export class OpenAIProvider implements LLMProvider {
             return {
                 message,
                 stopReason: toolCalls.length > 0 ? "tool_calls" : "completed",
+                usage: response.usage
+                    ? { inputTokens: response.usage.prompt_tokens, outputTokens: response.usage.completion_tokens }
+                    : undefined,
             };
         };
 
