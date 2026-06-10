@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "usage-report-stop",
+  "current_state": "env-var-fixes",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -29,9 +29,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "usage-report-stop": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T00:38:00Z",
+      "done_ts": "2026-06-10T00:46:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "env-var-fixes": {
       "status": "pending",
@@ -90,6 +91,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T00:46:00Z",
+      "from": "usage-report-stop",
+      "to": "env-var-fixes",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "usageSummarySchema gains stopReason?: z.string().optional(). tools/usage.ts: SEVERITY + mostSevereStr() at module level; summarise() fold includes stopReason via mostSevereStr. Both criteria pass. Build clean, 49/49 tests pass."
+    },
     {
       "ts": "2026-06-10T00:38:00Z",
       "from": "usage-plugin-stop",
