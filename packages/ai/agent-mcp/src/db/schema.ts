@@ -134,6 +134,12 @@ export const taskUsageTable = sqliteTable(
         latencyMs: integer("latency_ms").notNull().default(0),
         // 0 = in-progress or crashed before terminal; 1 = terminal event fired.
         isComplete: integer("is_complete").notNull().default(0),
+        // null until first post:model_response — most-severe stop reason across all
+        // model calls for this task. See [ref:normalised-stop-reason].
+        stopReason: text("stop_reason"),
+        // null for claudecli (no maxTokens in config) and for tasks started before
+        // this migration. Written once at task-start from provider.maxTokens.
+        maxTokens: integer("max_tokens"),
         createdAt: text("created_at").notNull(),
     },
     (table) => [
