@@ -262,9 +262,13 @@ function toAnthropicMessages(messages: Message[]): MessageParam[] {
     });
 }
 
+const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.";
+
 export class AnthropicProvider implements LLMProvider {
     private client: Anthropic;
     private readonly config: Extract<ProviderConfig, { type: "anthropic" }>;
+    /** True when the active client was built with a sk-ant-oat OAuth token. */
+    private _useOauthIdentity = false;
 
     constructor(config: Extract<ProviderConfig, { type: "anthropic" }>) {
         this.config = config;
@@ -290,6 +294,7 @@ export class AnthropicProvider implements LLMProvider {
             // OAuth tokens (sk-ant-oat…) require the oauth-2025-04-20 beta header;
             // without it the Messages API returns 429. API keys (sk-ant-api…) do not.
             const isOauth = authToken.startsWith("sk-ant-oat");
+            this._useOauthIdentity = isOauth;
             this.client = new Anthropic({
                 authToken,
                 ...(isOauth ? { defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" } } : {}),
@@ -306,7 +311,8 @@ export class AnthropicProvider implements LLMProvider {
         if (this.config.useClaudeOauth) {
             try {
                 const authToken = await getAccessToken();
-                // Subscription OAuth tokens always require the beta header
+                // Subscription OAuth tokens always require the beta header + Claude Code identity in system prompt
+                this._useOauthIdentity = true;
                 this.client = new Anthropic({
                     authToken,
                     defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
@@ -319,9 +325,15 @@ export class AnthropicProvider implements LLMProvider {
                 const authToken = process.env["ANTHROPIC_AUTH_TOKEN"] || undefined;
 
                 if (apiKey) {
+                    this._useOauthIdentity = false;
                     this.client = new Anthropic({ apiKey });
                 } else if (authToken) {
-                    this.client = new Anthropic({ authToken });
+                    const isOauth = authToken.startsWith("sk-ant-oat");
+                    this._useOauthIdentity = isOauth;
+                    this.client = new Anthropic({
+                        authToken,
+                        ...(isOauth ? { defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" } } : {}),
+                    });
                 } else {
                     throw new ToolError(
                         "PROVIDER_AUTH_ERROR",
@@ -338,10 +350,19 @@ export class AnthropicProvider implements LLMProvider {
         const systemPrompt = systemMessages.map(m => m.content || "").join("\n") || undefined;
 
         const run = async (): Promise<ProviderChatResponse> => {
-            const response = await this.client.messages.create(
+            // sk-ant-oat OAuth tokens require the Claude Code identity in the system
+            // prompt (proven: WITH identity → 200, WITHOUT → 429). API keys do not.
+            const effectiveSystem = this._useOauthIdentity
+                ? [CLAUDE_CODE_IDENTITY, systemPrompt].filter(Boolean).join("\n\n")
+                : systemPrompt;
+
+            // Use streaming to avoid the SDK's synchronous "Streaming is required
+            // for operations that may take longer than 10 minutes" throw that fires
+            // when max_tokens is large (e.g. 64k on haiku-4-5) with messages.create().
+            const stream = this.client.messages.stream(
                 {
                     model: this.config.model,
-                    system: systemPrompt,
+                    system: effectiveSystem,
                     temperature: this.config.temperature,
                     max_tokens: this.config.maxTokens ?? defaultMaxTokens(this.config.model),
                     messages: toAnthropicMessages(request.messages),
@@ -349,6 +370,7 @@ export class AnthropicProvider implements LLMProvider {
                 },
                 { signal: request.signal }
             );
+            const response = await stream.finalMessage();
 
             const toolCalls: ToolCall[] = [];
             const contentParts: string[] = [];
