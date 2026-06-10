@@ -1,4 +1,5 @@
 import {
+    index,
     integer,
     sqliteTable,
     text
@@ -106,3 +107,38 @@ export const taskEventsTable = sqliteTable("task_events", {
     payload: text("payload"), // JSON
     createdAt: text("created_at").notNull(),
 });
+
+// ──────────────────────────────────────────────
+// task_usage
+// ──────────────────────────────────────────────
+// No FK on task_id → tasks.id: ephemeral tasks never write a tasks row,
+// and cleanup scenarios make the constraint unreliable.
+export const taskUsageTable = sqliteTable(
+    "task_usage",
+    {
+        taskId: text("task_id").primaryKey(),
+        // null = this task IS the root of its delegation tree.
+        // non-null = task_id of the topmost ancestor.
+        rootTaskId: text("root_task_id"),
+        agentName: text("agent_name").notNull(),
+        // "openai" | "anthropic" | "lmstudio" | "claudecli" — kept as plain
+        // text rather than an enum so new providers don't require a migration.
+        providerType: text("provider_type").notNull(),
+        model: text("model").notNull(),
+        // Accumulated across all post:model_response events for this task.
+        inputTokens: integer("input_tokens").notNull().default(0),
+        outputTokens: integer("output_tokens").notNull().default(0),
+        toolCallCount: integer("tool_call_count").notNull().default(0),
+        modelCalls: integer("model_calls").notNull().default(0),
+        // Wall-clock ms from task start to terminal event; 0 until terminal.
+        latencyMs: integer("latency_ms").notNull().default(0),
+        // 0 = in-progress or crashed before terminal; 1 = terminal event fired.
+        isComplete: integer("is_complete").notNull().default(0),
+        createdAt: text("created_at").notNull(),
+    },
+    (table) => [
+        // Critical for O(1) subtree aggregation:
+        //   WHERE task_id = ? OR root_task_id = ?
+        index("idx_task_usage_root_task_id").on(table.rootTaskId),
+    ]
+);
