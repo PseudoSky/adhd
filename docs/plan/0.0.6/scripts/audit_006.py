@@ -611,10 +611,22 @@ assert sentinel.exists(), (
     )
 
     # ── reference conformance ─────────────────────────────────────────────────
-    check(
+    check_py(
         "audit-final.ref-tool-error-throw",
-        "CONTEXT_WINDOW_EXCEEDED must be thrown via new ToolError() pattern",
-        "grep -qE 'new ToolError.*CONTEXT_WINDOW_EXCEEDED|CONTEXT_WINDOW_EXCEEDED.*ToolError' packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "CONTEXT_WINDOW_EXCEEDED must be thrown via new ToolError() pattern in orchestrator.ts",
+        """
+txt = (ROOT / 'packages/ai/agent-mcp/src/engine/orchestrator.ts').read_text()
+# ToolError throw and CONTEXT_WINDOW_EXCEEDED can span lines — check both present and in proximity
+idx_te = txt.find('new ToolError(')
+idx_cwe = txt.find('CONTEXT_WINDOW_EXCEEDED')
+assert idx_te != -1, 'new ToolError( not found in orchestrator.ts'
+assert idx_cwe != -1, 'CONTEXT_WINDOW_EXCEEDED not found in orchestrator.ts'
+# Find the ToolError occurrence nearest to CONTEXT_WINDOW_EXCEEDED
+last_te = txt.rfind('new ToolError(', 0, idx_cwe)
+assert last_te != -1 and (idx_cwe - last_te) < 300, (
+    'CONTEXT_WINDOW_EXCEEDED does not appear within 300 chars after a new ToolError( call'
+)
+""",
     )
 
     # ── positive: full build succeeds ────────────────────────────────────────

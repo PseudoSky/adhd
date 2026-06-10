@@ -140,6 +140,10 @@ The E2E suite (`E2E_PROMPT.md` + `run-e2e.mjs`) runs 14 scenarios against a live
 | `MAX_DEPTH_EXCEEDED` | PolicyEngine |
 | `MAX_TOOL_LOOPS_EXCEEDED` | PolicyEngine |
 | `PROVIDER_ERROR` | Orchestrator |
+| `PROVIDER_TIMEOUT` | Orchestrator (provider call timed out) |
+| `PROVIDER_AUTH_ERROR` | Orchestrator, providers/anthropic, providers/claudecli |
+| `PROVIDER_RATE_LIMITED` | Orchestrator (HTTP 429 / rate-limit message) |
+| `CONTEXT_WINDOW_EXCEEDED` | Orchestrator (context_length_exceeded from provider) |
 | `MCP_CLIENT_ERROR` | clients/* |
 
 ## Known Gaps

@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "audit-final",
+  "current_state": "docs-and-publish",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -89,9 +89,10 @@
       "executor": "code-reviewer-agent"
     },
     "audit-final": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T02:30:00Z",
+      "done_ts": "2026-06-10T02:45:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "docs-and-publish": {
       "status": "pending",
@@ -100,6 +101,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T02:45:00Z",
+      "from": "audit-final",
+      "to": "docs-and-publish",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 3,
+      "note": "4 source fixes applied: (1) orchestrator.ts catch block: signal.aborted (task cancel) → PROVIDER_ERROR 'cancelled'; composedSignal.aborted-only (timeout) → PROVIDER_TIMEOUT. Previously grouped together → PROVIDER_TIMEOUT for both. (2) 3 timeout test expectations updated PROVIDER_ERROR→PROVIDER_TIMEOUT. (3) CLAUDE.md error codes table: added PROVIDER_TIMEOUT, PROVIDER_AUTH_ERROR, PROVIDER_RATE_LIMITED, CONTEXT_WINDOW_EXCEEDED. (4) audit_006.py ref-tool-error-throw: replaced single-line grep with proximity check_py (ToolError throw and CONTEXT_WINDOW_EXCEEDED can span lines). All 49 tests pass. 3 remaining audit failures are version/publish-only (dod.18, docs-and-publish.1, docs-and-publish.2) — expected per context, resolved in docs-and-publish."
+    },
     {
       "ts": "2026-06-10T02:30:00Z",
       "from": "code-review",
