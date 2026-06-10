@@ -1,6 +1,10 @@
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  stopReason?: string;        // normalised stop reason (see [ref:normalised-stop-reason])
+  maxTokens?: number;         // configured max_tokens from agent provider config
+  cacheReadTokens?: number;   // Anthropic cache_read_input_tokens (undefined for other providers)
+  cacheCreationTokens?: number; // Anthropic cache_creation_input_tokens (undefined for other providers)
 }
 
 export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";

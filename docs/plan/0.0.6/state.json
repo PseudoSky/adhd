@@ -1,0 +1,100 @@
+{
+  "schema_version": 2,
+  "title": "agent-mcp 0.0.6",
+  "dag": "dag.json",
+  "current_state": "provider-stop-reason",
+  "states": {
+    "stop-reason-types": {
+      "status": "complete",
+      "started_ts": "2026-06-10T00:00:00Z",
+      "done_ts": "2026-06-10T00:10:00Z",
+      "executor": "claude-sonnet-4-6"
+    },
+    "provider-stop-reason": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "schema-migration": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "usage-plugin-stop": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "usage-report-stop": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "env-var-fixes": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "cache-tokens": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "provider-error-codes": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "context-error-code": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "sliding-window": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "claudecli-auth-fix": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "robustness-fixes": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "audit-foundation": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "code-review": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "audit-final": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    },
+    "docs-and-publish": {
+      "status": "pending",
+      "started_ts": null,
+      "done_ts": null
+    }
+  },
+  "transition_log": [
+    {
+      "ts": "2026-06-10T00:10:00Z",
+      "from": "stop-reason-types",
+      "to": "provider-stop-reason",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "Added cacheReadTokens?/cacheCreationTokens? to TokenUsage in domain.ts; added PROVIDER_TIMEOUT/PROVIDER_AUTH_ERROR/PROVIDER_RATE_LIMITED to AgentMcpErrorCode in errors.ts; updated barrel TokenUsageExtShape in index.ts. All 8 criteria pass. agent-mcp-types and agent-mcp build clean. Note: unstaged changes to anthropic.ts (OAuth beta header + defaultMaxTokens) and validation/agent.ts (versionedBaseUrlSchema) are included in this commit as they were pre-authored changes on disk."
+    }
+  ],
+  "amendment_log": []
+}

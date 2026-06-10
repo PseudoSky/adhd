@@ -23,11 +23,21 @@ const anthropicProviderSchema = z.object({
   retryConfig: retryConfigSchema.optional(),
 });
 
+// OpenAI-compatible servers require /vN in the base URL — the SDK appends
+// /chat/completions directly, so http://host:1234 → 404 every time.
+const versionedBaseUrlSchema = z
+  .string()
+  .url()
+  .refine((url) => /\/v\d+\/?$/.test(url), {
+    message: 'baseURL must include the API version path (e.g. "http://localhost:1234/v1")',
+  })
+  .optional();
+
 const openaiProviderSchema = z.object({
   type: z.literal("openai"),
   model: z.string(),
   apiKeyEnv: z.string().optional(),
-  baseURL: z.string().url().optional(),
+  baseURL: versionedBaseUrlSchema,
   temperature: z.number().min(0).max(1).optional(),
   maxTokens: z.number().int().positive().optional(),
   timeoutMs: z.number().int().positive().optional(),
@@ -38,7 +48,7 @@ const lmstudioProviderSchema = z.object({
   type: z.literal("lmstudio"),
   model: z.string(),
   apiKeyEnv: z.string().optional(),
-  baseURL: z.string().url().optional(),
+  baseURL: versionedBaseUrlSchema,
   temperature: z.number().min(0).max(1).optional(),
   maxTokens: z.number().int().positive().optional(),
   timeoutMs: z.number().int().positive().optional(),
