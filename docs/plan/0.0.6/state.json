@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "schema-migration",
+  "current_state": "usage-plugin-stop",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -17,9 +17,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "schema-migration": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T00:20:00Z",
+      "done_ts": "2026-06-10T00:28:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "usage-plugin-stop": {
       "status": "pending",
@@ -88,6 +89,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T00:28:00Z",
+      "from": "schema-migration",
+      "to": "usage-plugin-stop",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "Added stopReason/maxTokens nullable columns to taskUsageTable in schema.ts. drizzle-kit generated 0002_lumpy_silver_centurion.sql with ALTER TABLE ADD stop_reason/max_tokens. All 4 criteria pass."
+    },
     {
       "ts": "2026-06-10T00:20:00Z",
       "from": "provider-stop-reason",
