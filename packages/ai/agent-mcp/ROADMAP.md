@@ -82,6 +82,7 @@ Features that become hook consumers:
 
 | Package | Hooks consumed | Replaces |
 |---------|---------------|----------|
+| `@adhd/metrics-plugin` | `task:completed`, `task:failed`, `task:cancelled` | Agent and task metrics (read-only; queries task_usage + tasks tables) |
 | `@adhd/budget-plugin` | `pre:model_request`, `post:model_response` | Cost budget enforcement (CORE → PLUGIN) |
 | `@adhd/guardrails-plugin` | `pre:tool_call`, `post:model_response` | Inline guardrails (CORE → PLUGIN) |
 | `@adhd/tracing-plugin` | all | OTLP trace export (SERVICE → PLUGIN) |
@@ -95,10 +96,11 @@ Features that become hook consumers:
 
 ## Full Feature Evaluation
 
-28 features scored. Sorted by Strategic Score descending.
+29 features scored. Sorted by Strategic Score descending.
 
 | # | Feature | Ext | BI (w/mw) | Coverage | Diff | Strategic | Signal | Verdict |
 |---|---------|-----|-----------|----------|------|-----------|--------|---------|
+| 0 | Agent and task metrics | 7.5 | 6.0 | 2 | 9 | 8.10 | MOAT | **PLUGIN** |
 | 1 | Per-task priority queue | 6.3 | 7.2 | 1 | 10 | 7.78 | NICHE | **CORE** |
 | 2 | Session message pinning | 6.5 | 6.4 | 2 | 9 | 7.50 | NICHE | **PLUGIN** |
 | 3 | Agent capability profiles | 6.7 | 6.8 | 3 | 8 | 7.22 | MOAT | **PLUGIN** |
@@ -140,6 +142,7 @@ These features have high necessity in production AND low framework coverage. The
 
 | Feature | Strategic | Why frameworks don't have it |
 |---------|-----------|------------------------------|
+| **Agent and task metrics** | **8.10** | Frameworks are ephemeral — no persistent store to aggregate across sessions, agents, or time windows |
 | Agent capability profiles | 7.22 | Frameworks are single-process; no multi-tenant agent isolation |
 | Cost budget enforcement | 6.98 | Python frameworks run user-owned scripts; no multi-tenant billing layer |
 | Per-agent concurrency limit | 6.92 | No persistent server to enforce limits against |
@@ -190,7 +193,7 @@ Both low necessity and low differentiation. Wire in existing best-in-class solut
 Prerequisite for everything else. No new user-facing features, but unblocks the plugin ecosystem.
 
 1. **Lifecycle event middleware** — 11 hooks in orchestrator
-2. **Token usage tracking** — CORE, straightforward, high necessity
+2. **Token usage tracking** — CORE, straightforward, high necessity ✓ (implemented)
 3. **Per-task priority queue** — CORE, highest strategic score among infrastructure features
 4. **Per-agent concurrency limit** — CORE, needed before multi-agent production use
 
@@ -198,10 +201,11 @@ Prerequisite for everything else. No new user-facing features, but unblocks the 
 
 Ship as separate `@adhd/*-plugin` packages consuming Phase 1 hooks.
 
-5. **Cost budget enforcement** (`@adhd/budget-plugin`) — Strategic 6.98
-6. **Agent capability profiles** — Plugin, extends agent definition schema
-7. **Webhook notifications** (`@adhd/webhook-plugin`) — Strategic 6.18
-8. **Scheduled tasks** — SERVICE or PLUGIN depending on persistence model chosen
+5. **Agent and task metrics** (`@adhd/metrics-plugin`) — Strategic 8.10; blocked on Phase 1 token usage tracking (task_usage table)
+6. **Cost budget enforcement** (`@adhd/budget-plugin`) — Strategic 6.98
+7. **Agent capability profiles** — Plugin, extends agent definition schema
+8. **Webhook notifications** (`@adhd/webhook-plugin`) — Strategic 6.18
+9. **Scheduled tasks** — SERVICE or PLUGIN depending on persistence model chosen
 
 ### Phase 3 — Table Stakes (Plugins)
 
