@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "context-error-code",
+  "current_state": "sliding-window",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -53,9 +53,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "context-error-code": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T01:18:00Z",
+      "done_ts": "2026-06-10T01:26:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "sliding-window": {
       "status": "pending",
@@ -94,6 +95,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T01:26:00Z",
+      "from": "context-error-code",
+      "to": "sliding-window",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "CONTEXT_WINDOW_EXCEEDED was pre-declared in errorCodeSchema by provider-error-codes state. orchestrator.ts: context detection block added after rate-limit check — catches code=context_length_exceeded and message includes 'context_length_exceeded'/'prompt is too long'. All 3 criteria pass, build + tests clean."
+    },
     {
       "ts": "2026-06-10T01:18:00Z",
       "from": "provider-error-codes",
