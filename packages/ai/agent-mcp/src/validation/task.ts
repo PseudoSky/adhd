@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { taskUsageReportSchema } from "./usage.js";
+
 export const taskStatusSchema = z.enum([
   "pending",
   "running",
@@ -70,6 +72,10 @@ export const taskToolOutputSchema = z.object({
   task_id: z.string().uuid(),
   status: taskStatusSchema,
   result: z.string().optional(),
+  // Token usage rollup for this task and its delegation subtree. Absent when
+  // the task recorded zero model calls (still running, or cancelled before its
+  // first model call). See [shape:TaskUsageReport].
+  usage: taskUsageReportSchema.optional(),
 });
 
 export const taskListInputSchema = z.object({

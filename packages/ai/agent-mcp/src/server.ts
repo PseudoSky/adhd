@@ -27,6 +27,7 @@ import {
 } from "./tools/agent-crud.js";
 import { agentTool, sessionList, sessionClose, sessionClear } from "./tools/session.js";
 import { taskTool, taskList, taskCancel, resultTool } from "./tools/task.js";
+import { usageQuery, type Database } from "./tools/usage.js";
 import { ToolError } from "./validation/errors.js";
 import {
     agentCreateInputSchema,
@@ -41,6 +42,7 @@ import {
     taskListInputSchema,
     taskCancelInputSchema,
     resultInputSchema,
+    taskUsageInputSchema,
 } from "./validation/index.js";
 
 export interface ServerDeps {
@@ -51,6 +53,8 @@ export interface ServerDeps {
     policy: PolicyEngine;
     orchestrator: Orchestrator;
     hooks: IHookRegistry;
+    /** Drizzle DB handle — used by usage_query and to enrich task/result responses. */
+    db: Database;
     selfUrl?: string;
 }
 
@@ -407,6 +411,18 @@ export function createServer(deps: ServerDeps): Server {
             description: "Clear all messages from a session's context without closing it",
             inputSchema: toMcpInputSchema(sessionClearInputSchema),
         },
+        {
+            name: "usage_query",
+            description:
+                "Query recorded token usage from task_usage by task_id (returns the full delegation subtree), root_task_id, agent_name, or time window",
+            inputSchema: toMcpInputSchema(taskUsageInputSchema),
+        },
+        {
+            name: "guide",
+            description:
+                "Returns a complete guide explaining how to use this server — call this first if you are unsure what to do",
+            inputSchema: { type: "object", properties: {} },
+        },
     ];
 
     // In-process handler that routes tool calls to the local handlers
@@ -432,11 +448,19 @@ export function createServer(deps: ServerDeps): Server {
                         selfUrl: deps.selfUrl,
                         inProcessDescriptors,
                         inProcessHandler,
+                        db: deps.db,
                     },
                     ctx
                 );
             case "result":
-                return resultTool(resultInputSchema.parse(args), { taskStore: deps.taskStore });
+                return resultTool(resultInputSchema.parse(args), {
+                    taskStore: deps.taskStore,
+                    db: deps.db,
+                });
+            case "usage_query":
+                return usageQuery(deps.db, taskUsageInputSchema.parse(args ?? {}));
+            case "guide":
+                return USAGE_GUIDE;
             case "task_list":
                 return taskList(taskListInputSchema.parse(args), { taskStore: deps.taskStore });
             case "task_cancel":
@@ -533,7 +557,13 @@ export function createServer(deps: ServerDeps): Server {
                 inputSchema: toMcpInputSchema(resultInputSchema),
             },
             {
-                name: "usage",
+                name: "usage_query",
+                description:
+                    "Query recorded token usage from task_usage by task_id (returns the full delegation subtree), root_task_id, agent_name, or time window. Bare {} returns the most recent rows.",
+                inputSchema: toMcpInputSchema(taskUsageInputSchema),
+            },
+            {
+                name: "guide",
                 description: "Returns a complete guide explaining how to use this server — call this first if you are unsure what to do",
                 inputSchema: { type: "object", properties: {} },
             },
@@ -611,6 +641,7 @@ export function createServer(deps: ServerDeps): Server {
                             selfUrl: deps.selfUrl,
                             inProcessDescriptors,
                             inProcessHandler,
+                            db: deps.db,
                         })
                         // No callerContext — top-level call
                     );
@@ -622,9 +653,17 @@ export function createServer(deps: ServerDeps): Server {
                     return toMcpContent(taskCancel(taskCancelInputSchema.parse(args), { taskStore: deps.taskStore }));
 
                 case "result":
-                    return toMcpContent(resultTool(resultInputSchema.parse(args), { taskStore: deps.taskStore }));
+                    return toMcpContent(
+                        resultTool(resultInputSchema.parse(args), {
+                            taskStore: deps.taskStore,
+                            db: deps.db,
+                        })
+                    );
 
-                case "usage":
+                case "usage_query":
+                    return toMcpContent(usageQuery(deps.db, taskUsageInputSchema.parse(args ?? {})));
+
+                case "guide":
                     return toMcpContent(USAGE_GUIDE);
 
                 default:

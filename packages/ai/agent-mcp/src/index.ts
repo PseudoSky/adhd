@@ -52,6 +52,7 @@ async function main() {
         orchestrator,
         policy,
         hooks,
+        db: dbAny,
     });
 
     const shutdown = async (signal: string) => {
