@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "plan": "usage-tracking",
-  "current_state": "provider-token-signal",
+  "current_state": "audit-foundation",
   "states": {
     "provider-token-signal": {
       "status": "complete",
@@ -10,10 +10,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "hook-token-payload": {
-      "status": "pending",
-      "started_at": null,
-      "completed_at": null,
-      "executor": null
+      "status": "complete",
+      "started_at": "2026-06-09T00:10:00Z",
+      "completed_at": "2026-06-09T00:20:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "audit-foundation": {
       "status": "pending",
@@ -72,6 +72,14 @@
       "by": "claude-sonnet-4-6",
       "guard_exit": 0,
       "note": "TokenUsage added to domain.ts; ProviderChatResponse.usage? added to providers/types.ts; OpenAI and Anthropic providers populate usage from SDK response. Guard amended: vite-dts emits TokenUsage in domain.d.ts (barrel re-export), corrected grep to target full dist tree."
+    },
+    {
+      "ts": "2026-06-09T00:20:00Z",
+      "from": "hook-token-payload",
+      "to": "audit-foundation",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "PostModelResponsePayload.tokenUsage? added to hooks.ts; ExecutionContext.rootTaskId? and TaskStartPayload.rootTaskId? added; orchestrator wires tokenUsage from providerResponse.usage and rootTaskId from executionContext into emits; task:failed and task:cancelled changed from void to await; tools/task.ts derives rootTaskId at creation time from callerContext chain in both runEphemeralTask and taskTool. Guard amended: vite-dts emits tokenUsage in hooks.d.ts not index.d.ts — corrected grep to -rn over full dist tree."
     }
   ],
   "amendment_log": [

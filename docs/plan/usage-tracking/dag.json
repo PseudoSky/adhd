@@ -31,7 +31,7 @@
       "kind": "work",
       "phase": "foundation",
       "depends_on": ["provider-token-signal"],
-      "guard": "cd /Users/nix/dev/node/adhd && npx nx build agent-mcp && npx nx build agent-mcp-types && grep -n 'tokenUsage' dist/packages/ai/agent-mcp-types/index.d.ts | grep -q 'TokenUsage'",
+      "guard": "cd /Users/nix/dev/node/adhd && npx nx build agent-mcp && npx nx build agent-mcp-types && grep -rn 'tokenUsage' dist/packages/ai/agent-mcp-types/ | grep -q 'TokenUsage'",
       "artifacts": [
         "packages/ai/agent-mcp-types/src/hooks.ts",
         "packages/ai/agent-mcp-types/src/domain.ts",
