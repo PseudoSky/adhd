@@ -158,6 +158,18 @@ export class Orchestrator {
                             `Provider rate limit exceeded: ${error.message}`
                         );
                     }
+                    if (
+                        error instanceof Error && (
+                            ("code" in error && (error as { code?: string }).code === "context_length_exceeded") ||
+                            error.message?.includes("context_length_exceeded") ||
+                            error.message?.includes("prompt is too long")
+                        )
+                    ) {
+                        throw new ToolError(
+                            "CONTEXT_WINDOW_EXCEEDED",
+                            `Context window exceeded. Set AGENT_MCP_CONTEXT_LIMIT to enable automatic truncation.`
+                        );
+                    }
                     throw new ToolError(
                         "PROVIDER_ERROR",
                         `Provider call failed: ${error instanceof Error ? error.message : String(error)}`
