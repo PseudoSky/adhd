@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "provider-stop-reason",
+  "current_state": "schema-migration",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -11,9 +11,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "provider-stop-reason": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T00:10:00Z",
+      "done_ts": "2026-06-10T00:20:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "schema-migration": {
       "status": "pending",
@@ -87,6 +88,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T00:20:00Z",
+      "from": "provider-stop-reason",
+      "to": "schema-migration",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "openai.ts: STOP_REASON lookup + normalisedStopReason; added stopReason/maxTokens to usage return. anthropic.ts: STOP_REASON lookup mapping end_turn/max_tokens/tool_use; added stopReason/maxTokens to usage return. All 4 criteria pass. Build clean."
+    },
     {
       "ts": "2026-06-10T00:10:00Z",
       "from": "stop-reason-types",
