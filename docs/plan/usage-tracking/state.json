@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "plan": "usage-tracking",
-  "current_state": "usage-query-tool",
+  "current_state": "audit-final",
   "states": {
     "provider-token-signal": {
       "status": "complete",
@@ -34,9 +34,9 @@
       "executor": "typescript-pro"
     },
     "usage-query-tool": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-09T03:00:00Z",
-      "completed_at": null,
+      "completed_at": "2026-06-09T03:30:00Z",
       "executor": "typescript-pro"
     },
     "audit-final": {
@@ -65,6 +65,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-09T03:30:00Z",
+      "from": "usage-query-tool",
+      "to": "audit-final",
+      "by": "typescript-pro",
+      "guard_exit": 0,
+      "note": "Added usage_query MCP tool and TaskUsageReport enrichment. New validation/usage.ts: taskUsageInputSchema (all filters optional; bare {} → recent rows; root_task_id + include_incomplete present), usageSummarySchema, taskUsageReportSchema. New tools/usage.ts: usageQuery(db, input) builds drizzle WHERE from optional filters — task_id/root_task_id both expand to (task_id = ? OR root_task_id = ?) subtree match, default excludes is_complete=0 rows, ordered created_at desc, limited; buildTaskUsageReport(db, taskId) returns undefined when no row, else { direct: WHERE task_id=?, subtree: WHERE task_id=? OR root_task_id=?, taskCount } — token folds use `row.inputTokens ?? 0` so claudecli zeros pass through. validation/task.ts: taskToolOutputSchema gains optional usage field via taskUsageReportSchema; validation/index.ts re-exports usage. tools/task.ts: TaskDeps gains db: Database; runEphemeralTask, sync taskTool, and resultTool all enrich return with buildTaskUsageReport (resultTool now returns Task & { usage? }). server.ts: ServerDeps gains db; usage_query registered in all 4 points (ListTools, CallTool, inProcessDescriptors, inProcessHandler) and existing 'usage' guide tool renamed to 'guide' in the same 4 points; task/result deps pass db. index.ts passes db: dbAny to startServer. INSTALL.md permissions.allow updated (usage→guide, +usage_query) and verify section documents guide + usage_query; README tool table lists usage_query + guide and notes the usage rollup on task/result. Build + full test suite pass. Binding guard (build + grep usage_query in dist/server.js) exits 0. Acceptance check [usage-query-tool.16] is a false-positive on macOS — see amendment_log: BSD `grep -qv` returns 0 on empty input, so `! grep ... | grep -qv` mis-reports; the underlying invariant (zero standalone \"usage\" tool refs in server.ts) was independently confirmed true."
+    },
     {
       "ts": "2026-06-09T02:40:00Z",
       "from": "usage-plugin",
@@ -107,6 +115,16 @@
     }
   ],
   "amendment_log": [
+    {
+      "ts": "2026-06-09T03:28:00Z",
+      "state": "usage-query-tool",
+      "class": "executor",
+      "type": "guard-fix",
+      "reason": "Acceptance criterion [usage-query-tool.16] (`! grep -n 'name.*\"usage\"\\b\\|case.*\"usage\"\\b' server.ts | grep -qv 'usage_query'`) is a false-positive on macOS/BSD grep. BSD `grep -qv PATTERN` exits 0 on EMPTY input (verified: `printf '' | grep -qv x` → 0), whereas GNU grep exits 1. Since the first grep correctly finds zero offending lines (the standalone 'usage' tool was renamed to 'guide'), it pipes empty input to `grep -qv`, which returns 0 on BSD, making the outer `!` report FAIL even though the invariant holds. NOTE: this is an acceptance-criterion check in the context file, NOT the binding state guard (dag.json guard = build + grep 'usage_query' in dist/server.js, which exits 0). The underlying invariant was independently confirmed: `grep '\"usage\"' server.ts` returns no matches and the offending-line count is 0. No code change required; flagged for the audit-final phase to use a portable form (e.g. count offending lines == 0) instead of relying on empty-input `grep -qv` semantics.",
+      "files_synced": ["state.json"],
+      "prior_ref": null,
+      "by": "typescript-pro"
+    },
     {
       "ts": "2026-06-09T02:38:00Z",
       "state": "usage-plugin",
