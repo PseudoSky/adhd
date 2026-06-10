@@ -119,6 +119,8 @@ For **Claude Code** save this as `.mcp.json` in your project root. For **LM Stud
 | `ALLOWED_AGENTS` | unrestricted | Comma-separated list of agents any agent may delegate to (server-wide fallback) |
 | `AGENT_MCP_MAX_DEPTH` | `5` | Maximum recursion depth |
 | `AGENT_MCP_MAX_TOOL_LOOPS` | `50` | Maximum tool calls per task |
+| `AGENT_MCP_CONTEXT_LIMIT` | `0` (disabled) | Estimated token limit for the message window. When > 0, oldest non-system messages are dropped before each provider call. Set ~10% below the model's actual context window. |
+| `AGENT_MCP_DEFAULT_MAX_TOKENS` | `8192` | Default `max_tokens` for Anthropic providers that do not set `maxTokens` in their agent config. |
 
 ### 2. Create a sub-agent
 
@@ -572,5 +574,9 @@ If you have Claude Code installed and authenticated, you can use the `claudecli`
 | `DELEGATION_NOT_ALLOWED` | Target agent is not in `allowedAgents` |
 | `MAX_DEPTH_EXCEEDED` | Recursion depth limit reached |
 | `MAX_TOOL_LOOPS_EXCEEDED` | Tool call limit per task reached |
-| `PROVIDER_ERROR` | The LLM provider call failed (includes timeout messages) |
+| `PROVIDER_ERROR` | Generic LLM provider failure |
+| `PROVIDER_TIMEOUT` | Provider call timed out (`timeoutMs` exceeded) |
+| `PROVIDER_AUTH_ERROR` | Provider authentication failed (HTTP 401, keychain denial, or OAuth fallback exhausted). Run `claude setup-token` and set `ANTHROPIC_AUTH_TOKEN`, or use `authTokenEnv` in the provider config. |
+| `PROVIDER_RATE_LIMITED` | Provider rate limit exceeded (HTTP 429 after retries) |
+| `CONTEXT_WINDOW_EXCEEDED` | Session history exceeded the model's context window. Set `AGENT_MCP_CONTEXT_LIMIT` to enable automatic sliding-window truncation. |
 | `MCP_CLIENT_ERROR` | An MCP tool call within a task failed |

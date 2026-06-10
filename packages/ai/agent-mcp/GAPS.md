@@ -51,7 +51,9 @@ All read-only queries over `task_usage` + `tasks`. No new hooks required — plu
 
 ## 6. `max_tokens` and `stop_reason` not tracked in `task_usage`
 
-**What's missing:** The `task_usage` table stores token counts but not the model's configured output ceiling (`max_tokens` from the agent's provider config) nor the stop reason returned by the provider (`stop_reason: "max_tokens"` / `finish_reason: "length"`). Without these, a truncated response is indistinguishable from a normal completion in the usage data.
+**Status: implemented (0.0.6)**
+
+**What was missing:** The `task_usage` table stored token counts but not the model's configured output ceiling (`max_tokens` from the agent's provider config) nor the stop reason returned by the provider (`stop_reason: "max_tokens"` / `finish_reason: "length"`). Without these, a truncated response was indistinguishable from a normal completion in the usage data.
 
 **Impact:** Silent truncation — tasks that hit their output token ceiling succeed with `status: completed` but return a clipped result. No alert, no flag in `task_usage`, no way to detect from `usage_query` output alone.
 
@@ -65,7 +67,9 @@ These are two new columns on `task_usage` + two new fields on `TokenUsage`. No s
 
 ## 7. Context window full — no handling strategy
 
-**What happens:** When a session's message history grows to fill the model's context window, the provider throws a context-length error. The orchestrator catches it as `PROVIDER_ERROR` and fails the task. No warning is issued before the limit is hit; no recovery path exists.
+**Status: implemented (0.0.6)**
+
+**What happened:** When a session's message history grew to fill the model's context window, the provider threw a context-length error. The orchestrator caught it as `PROVIDER_ERROR` and failed the task. No warning was issued before the limit was hit; no recovery path existed.
 
 **Impact:** Long-running tasks with many tool-call rounds (common for orchestrator agents with large system prompts and tool schemas) fail unrecoverably at an unpredictable point. The session is left in a broken state and the caller receives a generic `PROVIDER_ERROR`.
 
