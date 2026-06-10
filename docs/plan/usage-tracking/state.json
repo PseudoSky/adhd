@@ -52,10 +52,11 @@
       "executor": "typescript-pro"
     },
     "docs-and-publish": {
-      "status": "pending",
-      "started_at": null,
+      "status": "blocked",
+      "started_at": "2026-06-10T03:20:00Z",
       "completed_at": null,
-      "executor": null
+      "executor": "typescript-pro",
+      "notes": "Docs updated (R2 committed: 1653089), version bumped to 0.0.5 (R3 committed: 61fcb76), rebuild succeeded. npm publish failed: npm error 404 Not Found — shell has no npm credentials (npm whoami → 401 Unauthorized). Not a 2FA/OTP issue; session is unauthenticated. Human must run: npm login && npm publish dist/packages/ai/agent-mcp --access public  OR  npm publish dist/packages/ai/agent-mcp --access public --otp=<code> after logging in. Once publish succeeds, verify: npm view @adhd/agent-mcp dist-tags.latest (should return '0.0.5'). Guard will pass once npm registry reflects 0.0.5."
     },
     "acceptance-test": {
       "status": "pending",
