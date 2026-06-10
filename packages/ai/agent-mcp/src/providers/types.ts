@@ -1,6 +1,6 @@
 import type { Message } from "../validation/index.js";
-import type { ToolDefinition } from "@adhd/agent-mcp-types";
-export type { ToolDefinition };
+import type { ToolDefinition, TokenUsage } from "@adhd/agent-mcp-types";
+export type { ToolDefinition, TokenUsage };
 
 export interface ProviderChatRequest {
     messages: Message[];
@@ -31,6 +31,7 @@ export interface ProviderChatRequest {
 export interface ProviderChatResponse {
     message: Message;
     stopReason: "completed" | "tool_calls";
+    usage?: TokenUsage;
 }
 
 export interface LLMProvider {
