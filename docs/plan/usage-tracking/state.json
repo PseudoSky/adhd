@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "plan": "usage-tracking",
-  "current_state": "docs-and-publish",
+  "current_state": "acceptance-test",
   "states": {
     "provider-token-signal": {
       "status": "complete",
@@ -52,11 +52,10 @@
       "executor": "typescript-pro"
     },
     "docs-and-publish": {
-      "status": "blocked",
+      "status": "complete",
       "started_at": "2026-06-10T03:20:00Z",
-      "completed_at": null,
-      "executor": "typescript-pro",
-      "notes": "Docs updated (R2 committed: 1653089), version bumped to 0.0.5 (R3 committed: 61fcb76), rebuild succeeded. npm publish failed: npm error 404 Not Found — shell has no npm credentials (npm whoami → 401 Unauthorized). Not a 2FA/OTP issue; session is unauthenticated. Human must run: npm login && npm publish dist/packages/ai/agent-mcp --access public  OR  npm publish dist/packages/ai/agent-mcp --access public --otp=<code> after logging in. Once publish succeeds, verify: npm view @adhd/agent-mcp dist-tags.latest (should return '0.0.5'). Guard will pass once npm registry reflects 0.0.5."
+      "completed_at": "2026-06-10T03:35:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "acceptance-test": {
       "status": "pending",
@@ -66,6 +65,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T03:35:00Z",
+      "from": "docs-and-publish",
+      "to": "acceptance-test",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "npm publish succeeded after wiring ~/.npmrc to use NPM_TOKEN env var. @adhd/agent-mcp@0.0.5 published; npm view confirmed dist-tags.latest=0.0.5. Guard passes."
+    },
     {
       "ts": "2026-06-09T22:20:00Z",
       "from": "code-review",
