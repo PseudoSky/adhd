@@ -9,6 +9,7 @@ import { BackgroundQueue } from "./engine/queue.js";
 import { Orchestrator } from "./engine/orchestrator.js";
 import { HookRegistry } from "./engine/hooks.js";
 import { PolicyEngine } from "./engine/policy.js";
+import { UsagePlugin } from "./plugins/index.js";
 import { startServer } from "./server.js";
 
 async function main() {
@@ -24,6 +25,12 @@ async function main() {
     const agentStore = new AgentStore(dbAny, hooks);
     const sessionStore = new SessionStore(dbAny, hooks);
     const taskStore = new TaskStore(dbAny);
+
+    // Observational usage tracking: accumulates per-task token usage into
+    // task_usage on every post:model_response and finalises on terminal events.
+    // Must never throw — handlers are internally guarded.
+    const usagePlugin = new UsagePlugin(dbAny);
+    await usagePlugin.install(hooks);
 
     // Instantiate engine components
     const queue = new BackgroundQueue();
