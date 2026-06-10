@@ -54,7 +54,7 @@ export class Orchestrator {
         try {
             // Mark task as running
             taskStore.updateStatus(taskId, "running");
-            await hooks.emit("task:start", { executionContext, messages: currentMessages });
+            await hooks.emit("task:start", { executionContext, messages: currentMessages, rootTaskId: executionContext.rootTaskId });
 
             let finalContent = "";
 
@@ -152,6 +152,7 @@ export class Orchestrator {
                     executionContext,
                     stopReason: providerResponse.stopReason,
                     toolCallCount: assistantMessage.toolCalls?.length ?? 0,
+                    tokenUsage: providerResponse.usage,
                 });
                 await hooks.emit("message:appended", { executionContext, message: assistantMessage });
 
@@ -354,7 +355,7 @@ export class Orchestrator {
                 }
 
                 taskStore.appendEvent({ taskId, type: "TASK_CANCELLED" });
-                void hooks.emit("task:cancelled", { executionContext });
+                await hooks.emit("task:cancelled", { executionContext });
             } else {
                 const errorMessage = error instanceof Error ? error.message : String(error);
 
@@ -372,7 +373,7 @@ export class Orchestrator {
                     { taskId, agentName: executionContext.agentName, error },
                     "TASK_FAILED"
                 );
-                void hooks.emit("task:failed", { executionContext, error: errorMessage });
+                await hooks.emit("task:failed", { executionContext, error: errorMessage });
             }
 
             throw error;

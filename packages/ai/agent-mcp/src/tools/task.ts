@@ -49,6 +49,9 @@ async function runEphemeralTask(
 
     const taskId = generateId();
     const ephemeralSessionId = generateId();
+    const rootTaskId = callerContext
+        ? (callerContext.rootTaskId ?? callerContext.taskId)
+        : undefined;
 
     const executionContext: ExecutionContext = {
         taskId,
@@ -57,6 +60,7 @@ async function runEphemeralTask(
         agentDefinition,
         callingAgentName: callerContext?.agentName,
         parentTaskId: callerContext?.taskId,
+        rootTaskId: rootTaskId ?? undefined,
         recursionDepth: (callerContext?.recursionDepth ?? -1) + 1,
         toolCallCount: 0,
     };
@@ -180,6 +184,12 @@ export async function taskTool(
         recursionDepth: (callerContext?.recursionDepth ?? -1) + 1,
     });
 
+    // Derive rootTaskId at creation time from the in-memory callerContext chain.
+    // A DB walk is deliberately avoided — ephemeral tasks have no tasks row.
+    const rootTaskId = callerContext
+        ? (callerContext.rootTaskId ?? callerContext.taskId)
+        : undefined;
+
     // 4. Build execution context
     const executionContext: ExecutionContext = {
         taskId: task.id,
@@ -188,6 +198,7 @@ export async function taskTool(
         agentDefinition,
         callingAgentName: callerContext?.agentName,
         parentTaskId: callerContext?.taskId,
+        rootTaskId: rootTaskId ?? undefined,
         recursionDepth: (callerContext?.recursionDepth ?? -1) + 1,
         toolCallCount: 0,
     };
