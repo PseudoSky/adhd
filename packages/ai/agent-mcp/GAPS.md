@@ -32,12 +32,29 @@ Confirmed implementation gaps in the current codebase. Each has a clear fix path
 
 ---
 
+## 5. Agent and task metrics — not implemented
+
+**What's missing:** No aggregated visibility into agent or task performance. Operators cannot answer: which agent is most expensive? What is agent X's success rate this week? Which tasks are slowest? How many tokens has a given agent consumed across all sessions?
+
+**Impact:** Cost attribution, performance tuning, and anomaly detection all require manual querying of raw `task_usage` and `tasks` rows. No pre-computed aggregates, no time-windowed rollups, no per-agent summaries.
+
+**Depends on:** Gap #4 item "Token usage tracking" — the `task_usage` table (Phase 1 CORE) must exist before metrics can be computed.
+
+**Fix path:** `@adhd/metrics-plugin` (Phase 2, Strategic 8.10 — highest-scored MOAT feature). Exposes MCP tools:
+- `agent_metrics` — per-agent rollup: total tasks, success/failure count, total tokens consumed, average latency, last active
+- `task_metrics` — per-task breakdown: latency, token cost, tool call count, subtree cost (recursive via `root_task_id`)
+- `metrics_summary` — server-wide snapshot: active agents, tasks today, total token spend, error rate
+
+All read-only queries over `task_usage` + `tasks`. No new hooks required — plugin only reads DB.
+
+---
+
 ## 4. Phase 1 roadmap items not started
 
-The following CORE features from Phase 1 of the build order are unimplemented:
+The following CORE features from Phase 1 of the build order are unimplemented or in progress:
 
 | Feature | Notes |
 |---|---|
-| Token usage tracking | No token count stored per task or session |
+| Token usage tracking | **Status: implemented** — `task_usage` table populated on every model call; `usage_query` MCP tool exposes per-task and subtree token counts; `task` and `result` tools include a `usage` rollup in their responses |
 | Per-task priority queue | `p-queue` wrapper exists but no priority levels |
 | Per-agent concurrency limit | No per-agent cap, only server-wide `QUEUE_CONCURRENCY` |
