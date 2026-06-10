@@ -1,3 +1,4 @@
+import { createRequire } from "module";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -7,6 +8,9 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type http from "node:http";
+
+const _require = createRequire(import.meta.url);
+const PACKAGE_VERSION: string = (_require("../package.json") as { version: string }).version;
 
 import { logger } from "./logger.js";
 import type { AgentStore } from "./store/agent-store.js";
@@ -363,7 +367,7 @@ session_clear({ "session_id": "abc-123" })
 
 export function createServer(deps: ServerDeps): Server {
     const server = new Server(
-        { name: "agent-mcp", version: "1.0.0" },
+        { name: "agent-mcp", version: PACKAGE_VERSION },
         { capabilities: { tools: {} } }
     );
 
