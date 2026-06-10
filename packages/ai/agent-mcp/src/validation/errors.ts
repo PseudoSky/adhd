@@ -21,6 +21,10 @@ export const errorCodeSchema = z.enum([
 
   // Runtime
   "PROVIDER_ERROR",
+  "PROVIDER_TIMEOUT",
+  "PROVIDER_AUTH_ERROR",
+  "PROVIDER_RATE_LIMITED",
+  "CONTEXT_WINDOW_EXCEEDED",
   "MCP_CLIENT_ERROR",
 
   // Validation

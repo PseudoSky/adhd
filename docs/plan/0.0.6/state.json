@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "provider-error-codes",
+  "current_state": "context-error-code",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -47,9 +47,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "provider-error-codes": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T01:05:00Z",
+      "done_ts": "2026-06-10T01:18:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "context-error-code": {
       "status": "pending",
@@ -93,6 +94,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T01:18:00Z",
+      "from": "provider-error-codes",
+      "to": "context-error-code",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "validation/errors.ts: PROVIDER_TIMEOUT/PROVIDER_AUTH_ERROR/PROVIDER_RATE_LIMITED/CONTEXT_WINDOW_EXCEEDED added to errorCodeSchema. orchestrator.ts catch block: timeout first (signal.aborted|composedSignal.aborted|AbortError|TimeoutError→PROVIDER_TIMEOUT), then auth (AuthenticationError|401→PROVIDER_AUTH_ERROR), then rate-limit (429→PROVIDER_RATE_LIMITED), then generic fallback. anthropic.ts: ToolError import added; onFailedAttempt short-circuits 401 with PROVIDER_AUTH_ERROR. All 5 criteria pass, 49/49 tests green."
+    },
     {
       "ts": "2026-06-10T01:05:00Z",
       "from": "cache-tokens",
