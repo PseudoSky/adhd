@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "audit-foundation",
+  "current_state": "code-review",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -77,9 +77,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "audit-foundation": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T02:00:00Z",
+      "done_ts": "2026-06-10T02:20:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "code-review": {
       "status": "pending",
@@ -98,6 +99,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T02:20:00Z",
+      "from": "audit-foundation",
+      "to": "code-review",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "3 script bugs fixed in audit_006.py: (1) dist path missing src/ subdir — vite-dts emits to agent-mcp-types/domain.d.ts not agent-mcp-types/src/domain.d.ts; (2) schema-migration.4 checked only newest migration for stop_reason but stop_reason is in 0002 and cache tokens in 0003 — fixed to check combined text; (3) robustness-fixes.2 regex matched PROVIDER_ERROR+cancelled throw sites (legitimate code) — narrowed to message.includes('cancelled') detection pattern. All 3 are guard-script bugs, no source changes needed. audit_006.py --phase foundation exits 0."
+    },
     {
       "ts": "2026-06-10T02:00:00Z",
       "from": "robustness-fixes",
@@ -195,5 +204,13 @@
       "note": "Added cacheReadTokens?/cacheCreationTokens? to TokenUsage in domain.ts; added PROVIDER_TIMEOUT/PROVIDER_AUTH_ERROR/PROVIDER_RATE_LIMITED to AgentMcpErrorCode in errors.ts; updated barrel TokenUsageExtShape in index.ts. All 8 criteria pass. agent-mcp-types and agent-mcp build clean. Note: unstaged changes to anthropic.ts (OAuth beta header + defaultMaxTokens) and validation/agent.ts (versionedBaseUrlSchema) are included in this commit as they were pre-authored changes on disk."
     }
   ],
-  "amendment_log": []
+  "amendment_log": [
+    {
+      "ts": "2026-06-10T02:20:00Z",
+      "by": "claude-sonnet-4-6",
+      "criterion": "stop-reason-types.1 / schema-migration.4 / robustness-fixes.2",
+      "change": "Fixed 3 bugs in audit_006.py guard script. (1) dist path: agent-mcp-types emits domain.d.ts at dist root, not under src/. (2) schema-migration.4: stop_reason is in 0002, cache tokens in 0003 — script was checking only newest file; changed to combined-text scan matching cache-tokens.4 approach. (3) robustness-fixes.2: regex PROVIDER_ERROR.*cancelled matched legitimate throw sites; narrowed to message.includes('cancelled') which was the actual old fragile isCancelled idiom.",
+      "source_changed": false
+    }
+  ]
 }
