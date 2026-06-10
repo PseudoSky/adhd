@@ -111,6 +111,8 @@ Features that become hook consumers:
 | 8 | Session branching | 7.0 | 6.4 | 6 | 5 | 6.20 | NICHE | **PLUGIN** |
 | 9 | Webhook notifications | 6.3 | 5.4 | 5 | 6 | 6.18 | MOAT | **PLUGIN** |
 | 10 | Token usage tracking | 8.2 | 7.0 | 8 | 3 | 6.12 | TABLE STAKES | **CORE** |
+| 10a | max_tokens + stop_reason tracking | 7.5 | 9.0 | 10 | 2 | 6.38 | TABLE STAKES | **CORE** |
+| 10b | Context window full handling | 8.5 | 6.0 | 8 | 3 | 6.50 | TABLE STAKES | **CORE** |
 | 11 | Session export | 7.5 | 6.2 | 7 | 4 | 6.10 | TABLE STAKES | **PLUGIN** |
 | 12 | Shared blackboard | 6.8 | 4.2 | 6 | 5 | 6.08 | NICHE | **SERVICE** |
 | 13 | Session message pinning | 6.5 | 6.4 | 2 | 9 | 7.50 | NICHE | **PLUGIN** |
@@ -194,8 +196,10 @@ Prerequisite for everything else. No new user-facing features, but unblocks the 
 
 1. **Lifecycle event middleware** — 11 hooks in orchestrator
 2. **Token usage tracking** — CORE, straightforward, high necessity ✓ (implemented)
-3. **Per-task priority queue** — CORE, highest strategic score among infrastructure features
-4. **Per-agent concurrency limit** — CORE, needed before multi-agent production use
+   - *0.0.6 follow-on:* `max_tokens` + `stop_reason` columns in `task_usage` — detect truncated outputs; see Gap #6
+3. **Context window full handling** — CORE; detect `CONTEXT_WINDOW_EXCEEDED` + sliding-window truncation; configurable via `AGENT_MCP_CONTEXT_LIMIT`; see Gap #7
+4. **Per-task priority queue** — CORE, highest strategic score among infrastructure features
+5. **Per-agent concurrency limit** — CORE, needed before multi-agent production use
 
 ### Phase 2 — Moat Features (Plugins)
 
