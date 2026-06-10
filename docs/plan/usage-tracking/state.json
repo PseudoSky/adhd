@@ -4,9 +4,9 @@
   "current_state": "provider-token-signal",
   "states": {
     "provider-token-signal": {
-      "status": "in-progress",
+      "status": "complete",
       "started_at": "2026-06-09T00:00:00Z",
-      "completed_at": null,
+      "completed_at": "2026-06-09T00:10:00Z",
       "executor": "claude-sonnet-4-6"
     },
     "hook-token-payload": {
@@ -64,7 +64,16 @@
       "executor": null
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-06-09T00:10:00Z",
+      "from": "provider-token-signal",
+      "to": "hook-token-payload",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "TokenUsage added to domain.ts; ProviderChatResponse.usage? added to providers/types.ts; OpenAI and Anthropic providers populate usage from SDK response. Guard amended: vite-dts emits TokenUsage in domain.d.ts (barrel re-export), corrected grep to target full dist tree."
+    }
+  ],
   "amendment_log": [
     {
       "ts": "2026-06-09T00:00:00Z",
