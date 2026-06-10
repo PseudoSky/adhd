@@ -2,7 +2,7 @@
   "schema_version": 2,
   "title": "agent-mcp 0.0.6",
   "dag": "dag.json",
-  "current_state": "cache-tokens",
+  "current_state": "provider-error-codes",
   "states": {
     "stop-reason-types": {
       "status": "complete",
@@ -41,9 +41,10 @@
       "executor": "claude-sonnet-4-6"
     },
     "cache-tokens": {
-      "status": "pending",
-      "started_ts": null,
-      "done_ts": null
+      "status": "complete",
+      "started_ts": "2026-06-10T00:52:00Z",
+      "done_ts": "2026-06-10T01:05:00Z",
+      "executor": "claude-sonnet-4-6"
     },
     "provider-error-codes": {
       "status": "pending",
@@ -92,6 +93,14 @@
     }
   },
   "transition_log": [
+    {
+      "ts": "2026-06-10T01:05:00Z",
+      "from": "cache-tokens",
+      "to": "provider-error-codes",
+      "by": "claude-sonnet-4-6",
+      "guard_exit": 0,
+      "note": "anthropic.ts: cacheReadTokens/cacheCreationTokens forwarded from sdkUsage; maxTokens uses defaultMaxTokens() (which reads AGENT_MCP_DEFAULT_MAX_TOKENS env var). schema.ts: cache_read_input_tokens + cache_creation_input_tokens nullable integer columns added. drizzle-kit generated 0003_nifty_shriek.sql. UsagePlugin: cache columns included in INSERT values and UPSERT SET (COALESCE accumulation). All 5 criteria pass, build + 49/49 tests green."
+    },
     {
       "ts": "2026-06-10T00:52:00Z",
       "from": "env-var-fixes",

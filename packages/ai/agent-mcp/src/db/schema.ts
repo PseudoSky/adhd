@@ -140,6 +140,9 @@ export const taskUsageTable = sqliteTable(
         // null for claudecli (no maxTokens in config) and for tasks started before
         // this migration. Written once at task-start from provider.maxTokens.
         maxTokens: integer("max_tokens"),
+        // Anthropic prompt-caching tokens — null for other providers and non-caching tiers
+        cacheReadTokens: integer("cache_read_input_tokens"),
+        cacheCreationTokens: integer("cache_creation_input_tokens"),
         createdAt: text("created_at").notNull(),
     },
     (table) => [

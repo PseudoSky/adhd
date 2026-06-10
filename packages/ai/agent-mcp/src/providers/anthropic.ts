@@ -372,7 +372,9 @@ export class AnthropicProvider implements LLMProvider {
                     inputTokens: sdkUsage.input_tokens,
                     outputTokens: sdkUsage.output_tokens,
                     stopReason: normalisedStopReason,
-                    maxTokens: this.config.maxTokens,
+                    maxTokens: this.config.maxTokens ?? defaultMaxTokens(this.config.model),
+                    cacheReadTokens: sdkUsage.cache_read_input_tokens ?? undefined,
+                    cacheCreationTokens: sdkUsage.cache_creation_input_tokens ?? undefined,
                 },
             };
         };

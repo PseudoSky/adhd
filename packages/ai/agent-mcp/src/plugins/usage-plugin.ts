@@ -141,6 +141,8 @@ export class UsagePlugin implements Plugin {
                     isComplete: 0,
                     stopReason: acc?.mostSevereStopReason ?? incoming,
                     maxTokens: acc?.maxTokens ?? null,
+                    cacheReadTokens: tokenUsage?.cacheReadTokens ?? null,
+                    cacheCreationTokens: tokenUsage?.cacheCreationTokens ?? null,
                     createdAt: nowIso(),
                 })
                 .onConflictDoUpdate({
@@ -151,6 +153,8 @@ export class UsagePlugin implements Plugin {
                         toolCallCount: sql`${taskUsageTable.toolCallCount} + ${toolCalls}`,
                         modelCalls: sql`${taskUsageTable.modelCalls} + 1`,
                         stopReason: acc?.mostSevereStopReason ?? incoming,
+                        cacheReadTokens: sql`COALESCE(${taskUsageTable.cacheReadTokens}, 0) + ${tokenUsage?.cacheReadTokens ?? 0}`,
+                        cacheCreationTokens: sql`COALESCE(${taskUsageTable.cacheCreationTokens}, 0) + ${tokenUsage?.cacheCreationTokens ?? 0}`,
                         // maxTokens deliberately OMITTED from SET — constant per task
                     },
                 })
