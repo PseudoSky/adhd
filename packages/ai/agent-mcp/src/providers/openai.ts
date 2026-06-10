@@ -130,11 +130,12 @@ export class OpenAIProvider implements LLMProvider {
                 createdAt: nowIso(),
             };
 
+            const sdkUsage = response.usage;
             return {
                 message,
                 stopReason: toolCalls.length > 0 ? "tool_calls" : "completed",
-                usage: response.usage
-                    ? { inputTokens: response.usage.prompt_tokens, outputTokens: response.usage.completion_tokens }
+                usage: sdkUsage
+                    ? { inputTokens: sdkUsage.prompt_tokens, outputTokens: sdkUsage.completion_tokens }
                     : undefined,
             };
         };
