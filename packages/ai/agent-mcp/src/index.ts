@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 import "dotenv/config";
 
+/** Default max_tokens for providers that do not set maxTokens in their config. */
+export const AGENT_MCP_DEFAULT_MAX_TOKENS = parseInt(
+    process.env["AGENT_MCP_DEFAULT_MAX_TOKENS"] ?? "8192",
+    10
+);
+
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
@@ -36,8 +42,8 @@ async function main() {
     const queue = new BackgroundQueue();
     const orchestrator = new Orchestrator();
     const policy = new PolicyEngine({
-        serverMaxDepth: parseInt(process.env["MAX_DEPTH"] ?? "5", 10),
-        serverMaxToolLoops: parseInt(process.env["MAX_TOOL_LOOPS"] ?? "10", 10),
+        serverMaxDepth: parseInt(process.env["AGENT_MCP_MAX_DEPTH"] ?? "5", 10),
+        serverMaxToolLoops: parseInt(process.env["AGENT_MCP_MAX_TOOL_LOOPS"] ?? "50", 10),
         serverAllowedAgents: process.env["ALLOWED_AGENTS"]
             ?.split(",")
             .map(s => s.trim())
