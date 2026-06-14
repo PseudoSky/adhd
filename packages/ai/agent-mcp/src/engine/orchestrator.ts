@@ -5,6 +5,7 @@ import type { IHookRegistry } from "@adhd/agent-mcp-types";
 import { ToolError } from "../validation/errors.js";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
+import { emitTaskEvent } from "../streaming/event-bus.js";
 
 import type { McpClientRegistry } from "../clients/registry.js";
 import type { PolicyEngine } from "./policy.js";
@@ -90,6 +91,7 @@ export class Orchestrator {
         try {
             // Mark task as running
             taskStore.updateStatus(taskId, "running");
+            emitTaskEvent({ type: "status_change", taskId, status: "running" });
             await hooks.emit("task:start", { executionContext, messages: currentMessages, rootTaskId: executionContext.rootTaskId });
 
             let finalContent = "";
@@ -294,6 +296,7 @@ export class Orchestrator {
                         // 2. Persist suspension to DB BEFORE awaiting [inv:resume-token-db-persisted]
                         //    This ordering ensures the token survives a process restart.
                         await taskStore.updateStatus(taskId, "awaiting_input", { resumeToken });
+                        emitTaskEvent({ type: "status_change", taskId, status: "awaiting_input" });
 
                         // 3. Register resolver and await userInput.
                         //    Wire into the AbortSignal so task_cancel unblocks this promise —
@@ -309,6 +312,7 @@ export class Orchestrator {
 
                         // 4. Mark running again
                         await taskStore.updateStatus(taskId, "running");
+                        emitTaskEvent({ type: "status_change", taskId, status: "running" });
 
                         // 5. Store userInput to inject as tool result in Phase 3
                         hitlResults.set(tc.id, userInput);
@@ -350,6 +354,15 @@ export class Orchestrator {
                     nonHitlToolCalls.map(async (toolCall) => {
                         const qualifiedToolName = `${toolCall.server}__${toolCall.tool}`;
 
+                        // Emit tool_call SSE event before dispatch
+                        emitTaskEvent({
+                            type: "tool_call",
+                            taskId,
+                            toolName: qualifiedToolName,
+                            toolCallId: toolCall.id,
+                            input: toolCall.arguments,
+                        });
+
                         taskStore.appendEvent({
                             taskId,
                             type: "TOOL_CALL",
@@ -382,6 +395,14 @@ export class Orchestrator {
                             taskId,
                             type: "TOOL_RESULT",
                             payload: { callId: toolCall.id, tool: qualifiedToolName, isError },
+                        });
+
+                        // Emit tool_result SSE event after result received
+                        emitTaskEvent({
+                            type: "tool_result",
+                            taskId,
+                            toolCallId: toolCall.id,
+                            content: toolResult,
                         });
 
                         logger.debug({ taskId, tool: qualifiedToolName, isError }, "TOOL_RESULT");
@@ -449,6 +470,7 @@ export class Orchestrator {
                 result: finalContent,
                 completedAt: nowIso(),
             });
+            emitTaskEvent({ type: "status_change", taskId, status: "completed" });
 
             taskStore.appendEvent({
                 taskId,
@@ -462,6 +484,9 @@ export class Orchestrator {
             );
 
             await hooks.emit("task:completed", { executionContext, result: finalContent });
+
+            // Emit done on the successful completion path
+            emitTaskEvent({ type: "done", taskId, result: finalContent, error: null });
 
             return { result: finalContent };
         } catch (error) {
@@ -478,15 +503,20 @@ export class Orchestrator {
                 } catch {
                     // already cancelled — ignore
                 }
+                emitTaskEvent({ type: "status_change", taskId, status: "cancelled" });
 
                 taskStore.appendEvent({ taskId, type: "TASK_CANCELLED" });
                 await hooks.emit("task:cancelled", { executionContext });
+
+                // Emit done on the cancellation path — SSE clients must not hang
+                emitTaskEvent({ type: "done", taskId, result: null, error: "Task was cancelled" });
             } else {
                 const errorMessage = error instanceof Error ? error.message : String(error);
 
                 taskStore.updateStatus(taskId, "failed", {
                     error: errorMessage,
                 });
+                emitTaskEvent({ type: "status_change", taskId, status: "failed" });
 
                 taskStore.appendEvent({
                     taskId,
@@ -499,6 +529,9 @@ export class Orchestrator {
                     "TASK_FAILED"
                 );
                 await hooks.emit("task:failed", { executionContext, error: errorMessage });
+
+                // Emit done on the failure path
+                emitTaskEvent({ type: "done", taskId, result: null, error: errorMessage });
             }
 
             throw error;
