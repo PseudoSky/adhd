@@ -1,0 +1,130 @@
+{
+  "schema_version": 2,
+  "title": "hitl-interrupts",
+  "spec_sources": [
+    "packages/ai/agent-mcp/ROADMAP.md"
+  ],
+  "executor": "sox-active:typescript-pro",
+  "phases": ["foundation", "engine", "convergence"],
+  "terminal": "done",
+  "nodes": {
+    "hitl-schema": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": [],
+      "guard": "grep -q 'awaiting_input' packages/ai/agent-mcp/src/db/schema.ts && grep -q 'resume_token' packages/ai/agent-mcp/src/db/schema.ts && python3 -c \"import os; sqls=[f for f in os.listdir('packages/ai/agent-mcp/drizzle') if f.endswith('.sql')]; assert len(sqls)>=5, f'expected >=5, got {len(sqls)}'\"",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/drizzle/"
+      ],
+      "context": "contexts/hitl-schema.md",
+      "notes": "Add awaiting_input to status enum. Add resume_token TEXT column. Generate migration 0005_*.",
+      "changes": {
+        "deletes": [],
+        "resigns": ["tasksTable"],
+        "renames": []
+      }
+    },
+    "hitl-types": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": ["hitl-schema"],
+      "guard": "grep -q '\"awaiting_input\"' packages/ai/agent-mcp/src/validation/task.ts && grep -q 'resumeToken' packages/ai/agent-mcp/src/validation/task.ts && npx --yes nx build agent-mcp 2>&1 | grep -q 'Successfully ran'",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/validation/task.ts",
+        "packages/ai/agent-mcp/src/store/task-store.ts"
+      ],
+      "context": "contexts/hitl-types.md",
+      "notes": "Add awaiting_input to taskStatusSchema. Add resumeToken to task schema. TaskStore.updateStatus accepts resumeToken.",
+      "changes": {
+        "deletes": [],
+        "resigns": ["taskStatusSchema", "taskSchema", "TaskStore.updateStatus"],
+        "renames": []
+      }
+    },
+    "hitl-orchestrator": {
+      "kind": "work",
+      "phase": "engine",
+      "depends_on": ["hitl-types"],
+      "guard": "grep -q 'request_human_input' packages/ai/agent-mcp/src/engine/orchestrator.ts && grep -q 'awaiting_input' packages/ai/agent-mcp/src/engine/orchestrator.ts && npx --yes nx test agent-mcp 2>&1 | grep -qE 'passed'",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "packages/ai/agent-mcp/src/__tests__/hitl-orchestrator.test.ts"
+      ],
+      "context": "contexts/hitl-orchestrator.md",
+      "notes": "Intercept request_human_input before MCP dispatch. Suspend task (awaiting_input + resumeToken). Export resolveHitl().",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    },
+    "hitl-resume-tool": {
+      "kind": "work",
+      "phase": "engine",
+      "depends_on": ["hitl-orchestrator"],
+      "guard": "grep -q 'task_resume' packages/ai/agent-mcp/src/tools/task.ts && grep -q 'resumeToken' packages/ai/agent-mcp/src/tools/task.ts && grep -q 'task_resume' packages/ai/agent-mcp/src/server.ts && npx --yes nx test agent-mcp 2>&1 | grep -qE 'passed'",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/tools/task.ts",
+        "packages/ai/agent-mcp/src/__tests__/hitl-resume.test.ts",
+        "packages/ai/agent-mcp/src/server.ts"
+      ],
+      "context": "contexts/hitl-resume-tool.md",
+      "notes": "Add task_resume MCP tool. Validates resumeToken. Resolves in-memory Promise via resolveHitl().",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    },
+    "audit-foundation": {
+      "kind": "audit",
+      "phase": "engine",
+      "depends_on": ["hitl-resume-tool"],
+      "guard": "python3 docs/plan/hitl-interrupts/scripts/audit_hitl.py --phase foundation",
+      "artifacts": [
+        "docs/plan/hitl-interrupts/scripts/audit_hitl.py"
+      ],
+      "context": "contexts/audit-foundation.md",
+      "notes": "Checks hitl-schema + hitl-types + hitl-orchestrator + hitl-resume-tool acceptance criteria."
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "convergence",
+      "depends_on": ["audit-foundation"],
+      "guard": "test -f docs/plan/hitl-interrupts/.code-review-complete",
+      "artifacts": ["docs/plan/hitl-interrupts/.code-review-complete"],
+      "context": "contexts/code-review.md",
+      "notes": "Human hold point. Reviewer inspects diff + runs audit. Creates sentinel when satisfied."
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "convergence",
+      "depends_on": ["code-review"],
+      "guard": "python3 docs/plan/hitl-interrupts/scripts/audit_hitl.py --phase final",
+      "artifacts": [
+        "docs/plan/hitl-interrupts/scripts/audit_hitl.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": "Full DoD + reference conformance audit."
+    },
+    "docs-and-publish": {
+      "kind": "work",
+      "phase": "convergence",
+      "depends_on": ["audit-final"],
+      "guard": "node -e \"const p=require('./packages/ai/agent-mcp/package.json');process.exit(p.version==='0.3.0'?0:1)\" && npm info @adhd/agent-mcp version 2>/dev/null | grep -q '0.3.0'",
+      "artifacts": [
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp-types/package.json",
+        "ROADMAP.md"
+      ],
+      "context": "contexts/docs-and-publish.md",
+      "notes": "Bump to 0.3.0. Bump agent-mcp-types if TaskStatus exported. Mark ROADMAP #20 shipped.",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    }
+  }
+}

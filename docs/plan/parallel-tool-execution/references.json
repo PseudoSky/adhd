@@ -1,0 +1,16 @@
+{
+  "tool-error-throw": {
+    "anchor": "packages/ai/agent-mcp/src/engine/orchestrator.ts:181",
+    "rule": "all operational errors inside the orchestrator loop use `throw new ToolError(\"CODE\", message)` where CODE is a member of AgentMcpErrorCode; raw Error objects are never thrown past the orchestrator boundary",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:tool-error-throw]",
+    "audit_check": "[audit-final.ref-tool-error-throw]"
+  },
+  "policy-before-dispatch": {
+    "anchor": "packages/ai/agent-mcp/src/engine/orchestrator.ts:249",
+    "rule": "policy.check() is called for each tool call before client.callTool() is invoked; the check reads the current toolCallCount which must already reflect this dispatch",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:policy-before-dispatch]",
+    "audit_check": "[audit-final.ref-policy-before-dispatch]"
+  }
+}
