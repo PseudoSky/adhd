@@ -8,9 +8,9 @@
       "status": "complete",
       "executor": null,
       "started_at": "2026-06-14T03:38:47.767Z",
-      "done_at": "2026-06-14T03:39:46.454Z",
+      "done_at": "2026-06-14T03:39:54.368Z",
       "start_ref": "fd9c609fcfd514216a546bd0948bc9282729841e",
-      "end_ref": "b3ce2614734b6c6aef3a84f3d0e2544fdf6f3ae2"
+      "end_ref": "8a848ce673c0596894f22c3891dd557b2d16f916"
     },
     "task-types": {
       "status": "pending",
@@ -60,6 +60,18 @@
       "to": "schema-columns",
       "start_ref": "fd9c609fcfd514216a546bd0948bc9282729841e",
       "end_ref": "b3ce2614734b6c6aef3a84f3d0e2544fdf6f3ae2",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "4 cols + 2 statuses, single migration 0004"
+    },
+    {
+      "ts": "2026-06-14T03:39:54.368Z",
+      "from": "task-types",
+      "to": "schema-columns",
+      "start_ref": "fd9c609fcfd514216a546bd0948bc9282729841e",
+      "end_ref": "8a848ce673c0596894f22c3891dd557b2d16f916",
       "audit_exit": 1,
       "audit_criteria_passed": 0,
       "audit_criteria_total": 0,
