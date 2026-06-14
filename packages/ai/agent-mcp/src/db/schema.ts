@@ -72,7 +72,7 @@ export const tasksTable = sqliteTable("tasks", {
     parentTaskId: text("parent_task_id"),
     recursionDepth: integer("recursion_depth").notNull().default(0),
     status: text("status", {
-        enum: ["pending", "running", "completed", "failed", "cancelled"]
+        enum: ["pending", "running", "completed", "failed", "cancelled", "waiting", "awaiting_input"]
     }).notNull().default("pending"),
     prompt: text("prompt").notNull(),
     result: text("result"),
@@ -81,6 +81,12 @@ export const tasksTable = sqliteTable("tasks", {
     updatedAt: text("updated_at").notNull(),
     completedAt: text("completed_at"),
     cancelledAt: text("cancelled_at"),
+    // Dependency DAG fields (consumed by task-dependency-dag plan)
+    depends_on: text("depends_on"),           // nullable JSON array of upstream task IDs
+    on_upstream_failure: text("on_upstream_failure"), // nullable: 'fail'|'skip' (default: 'fail')
+    inputs: text("inputs"),                   // nullable JSON blob: upstream taskId→result map
+    // HITL suspension field (consumed by hitl-interrupts plan)
+    resume_token: text("resume_token"),       // nullable UUID written before await
 });
 
 // ──────────────────────────────────────────────

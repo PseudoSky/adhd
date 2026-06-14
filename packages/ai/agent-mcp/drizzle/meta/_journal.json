@@ -29,6 +29,13 @@
       "when": 1781069217143,
       "tag": "0003_nifty_shriek",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1781408344547,
+      "tag": "0004_brief_shocker",
+      "breakpoints": true
     }
   ]
 }
