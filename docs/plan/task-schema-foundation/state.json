@@ -13,11 +13,11 @@
       "end_ref": "8a848ce673c0596894f22c3891dd557b2d16f916"
     },
     "task-types": {
-      "status": "pending",
+      "status": "in_progress",
       "executor": null,
-      "started_at": null,
+      "started_at": "2026-06-14T03:40:31.166Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "43013ceff6f4e0f03b85a62e76772df160506c8b",
       "end_ref": null
     },
     "audit-foundation": {
