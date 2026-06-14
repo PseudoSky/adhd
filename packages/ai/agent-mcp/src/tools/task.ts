@@ -2,6 +2,7 @@ import { logger } from "../logger.js";
 import type { BackgroundQueue } from "../engine/queue.js";
 import type { DagEngine } from "../engine/dag-engine.js";
 import type { Orchestrator } from "../engine/orchestrator.js";
+import { resolveHitl } from "../engine/orchestrator.js";
 import type { PolicyEngine } from "../engine/policy.js";
 import type { InProcessToolDescriptor, InProcessToolHandler } from "../clients/in-process.js";
 import { createProvider } from "../providers/factory.js";
@@ -429,7 +430,7 @@ export function taskList(input: TaskListInput, deps: Pick<TaskDeps, "taskStore">
 export function taskCancel(input: TaskCancelInput, deps: Pick<TaskDeps, "taskStore">): { success: true } {
     const task = deps.taskStore.read(input.task_id); // throws TASK_NOT_FOUND
 
-    const cancellableStatuses = ["pending", "running"] as const;
+    const cancellableStatuses = ["pending", "running", "awaiting_input"] as const;
     if (!cancellableStatuses.includes(task.status as typeof cancellableStatuses[number])) {
         throw new ToolError(
             "TASK_NOT_CANCELLABLE",
@@ -439,6 +440,48 @@ export function taskCancel(input: TaskCancelInput, deps: Pick<TaskDeps, "taskSto
 
     deps.taskStore.cancel(input.task_id);
     return { success: true };
+}
+
+/**
+ * `task_resume` tool — resumes a suspended `awaiting_input` task by providing
+ * the `userInput` that the orchestrator is waiting for.
+ *
+ * The caller must supply the `resumeToken` that was written to the DB when the
+ * task was suspended. If the process restarted while the task was suspended the
+ * in-memory resolver no longer exists; the task is auto-failed and
+ * `TASK_NOT_RESUMABLE` is thrown so the caller knows not to retry.
+ */
+export async function taskResume(
+    input: { taskId: string; resumeToken: string; userInput: string },
+    deps: Pick<TaskDeps, "taskStore">
+): Promise<{ success: true; taskId: string }> {
+    const task = deps.taskStore.read(input.taskId); // throws TASK_NOT_FOUND
+
+    if (task.status !== "awaiting_input") {
+        throw new ToolError(
+            "VALIDATION_ERROR",
+            `Task '${input.taskId}' is not awaiting input (status: ${task.status})`
+        );
+    }
+
+    if (task.resumeToken !== input.resumeToken) {
+        throw new ToolError("VALIDATION_ERROR", "Invalid resumeToken");
+    }
+
+    const resolved = resolveHitl(input.taskId, input.userInput);
+    if (!resolved) {
+        // Process restarted — in-memory resolver is gone. Auto-fail the task so it
+        // doesn't remain stranded in awaiting_input with no escape path.
+        deps.taskStore.updateStatus(input.taskId, "failed", {
+            error: "Task could not be resumed: server restarted while task was suspended. Create a new task.",
+        });
+        throw new ToolError(
+            "TASK_NOT_RESUMABLE",
+            `Task '${input.taskId}' has no active suspension (process restarted; task has been failed)`
+        );
+    }
+
+    return { success: true, taskId: input.taskId };
 }
 
 export function resultTool(
