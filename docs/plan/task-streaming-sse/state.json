@@ -1,6 +1,6 @@
 {
   "plan": "task-streaming-sse",
-  "current_state": "audit-foundation",
+  "current_state": "code-review",
   "states": {
     "stream-event-bus": {
       "status": "complete",
@@ -31,11 +31,11 @@
       "end_ref": "849992d2a4ba489fe5f5801998fe968eb11c155e"
     },
     "audit-foundation": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-14T04:20:56.040Z",
-      "done_at": null,
+      "done_at": "2026-06-14T04:21:22.932Z",
       "start_ref": "d8edf918017862553c35f5e0388a48d9bb6ddd35",
-      "end_ref": null
+      "end_ref": "2a207c691e2aa80b1f9412ab060d821750381de8"
     },
     "code-review": {
       "status": "pending",
@@ -107,6 +107,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "stream: z.boolean().optional() in both sessionModeSchema and ephemeralModeSchema; stream_url computed from SSE_BASE_URL/SSE_PORT in taskTool session mode; 7 new tests all pass (98 total)"
+    },
+    {
+      "ts": "2026-06-14T04:21:22.932Z",
+      "from": "audit-foundation",
+      "to": "audit-foundation",
+      "start_ref": "d8edf918017862553c35f5e0388a48d9bb6ddd35",
+      "end_ref": "2a207c691e2aa80b1f9412ab060d821750381de8",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "foundation audit green: 20/20 checks passed; audit_sse.py --phase foundation exit 0"
     }
   ],
   "amendment_log": [
