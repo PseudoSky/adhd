@@ -1,0 +1,23 @@
+{
+  "orchestrator-message-loop": {
+    "anchor": "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+    "rule": "Token events are emitted when streaming chunks arrive from the model provider. The orchestrator must emit token events inside the streaming chunk iterator, not after the full response.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:orchestrator-message-loop]",
+    "audit_check": "[audit-final.ref-orchestrator-message-loop]"
+  },
+  "task-tool-response": {
+    "anchor": "packages/ai/agent-mcp/src/tools/task.ts",
+    "rule": "stream_url is added to the task creation response only when input.stream === true. When stream is false or omitted, stream_url must NOT appear in the response.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:task-tool-response]",
+    "audit_check": "[audit-final.ref-task-tool-response]"
+  },
+  "sse-protocol": {
+    "anchor": "packages/ai/agent-mcp/src/streaming/sse-server.ts",
+    "rule": "SSE response must set Content-Type: text/event-stream and Cache-Control: no-cache. Each event: 'event: <type>\\ndata: <JSON>\\n\\n'. Keep-alive: ': ping\\n\\n' every 15 seconds.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:sse-protocol]",
+    "audit_check": "[audit-final.ref-sse-protocol]"
+  }
+}

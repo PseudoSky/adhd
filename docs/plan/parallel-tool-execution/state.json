@@ -1,0 +1,55 @@
+{
+  "schema_version": 3,
+  "title": "parallel-tool-execution",
+  "dag": "dag.json",
+  "current_state": "parallel-dispatch",
+  "states": {
+    "parallel-dispatch": {
+      "status": "pending",
+      "executor": null,
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "audit-foundation": {
+      "status": "pending",
+      "executor": null,
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "code-review": {
+      "status": "pending",
+      "executor": null,
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "audit-final": {
+      "status": "pending",
+      "executor": null,
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "docs-and-publish": {
+      "status": "pending",
+      "executor": null,
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    }
+  },
+  "transition_log": [],
+  "amendment_log": [],
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.8",
+    "hash": "fd74ba3328ea"
+  }
+}

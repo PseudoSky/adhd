@@ -1,0 +1,78 @@
+{
+  "schema_version": 2,
+  "title": "parallel-tool-execution",
+  "spec_sources": [
+    "packages/ai/agent-mcp/ROADMAP.md"
+  ],
+  "executor": "sox-active:typescript-pro",
+  "phases": ["foundation", "convergence"],
+  "terminal": "done",
+  "nodes": {
+    "parallel-dispatch": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": [],
+      "guard": "grep -q 'Promise.all' packages/ai/agent-mcp/src/engine/orchestrator.ts && ! grep -q 'for (const toolCall of toolCalls)' packages/ai/agent-mcp/src/engine/orchestrator.ts && npx --yes nx test agent-mcp 2>&1 | grep -qE 'passed'",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "packages/ai/agent-mcp/src/__tests__/orchestrator.test.ts"
+      ],
+      "context": "contexts/parallel-dispatch.md",
+      "notes": "The only source file that changes is orchestrator.ts (lines 232-361). Replace the sequential for-loop with a two-step pattern: (1) serial pre-dispatch loop that runs policy.check() and increments toolCallCount for each tool, aborting the batch on any policy violation; (2) Promise.all that concurrently emits TOOL_CALL event, calls client.callTool, catches non-fatal errors as isError=true results. Append all results after Promise.all resolves. The key footgun: toolCallCount must be incremented BEFORE policy.check() in the pre-dispatch loop, not after result-append as in the old code.",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    },
+    "audit-foundation": {
+      "kind": "audit",
+      "phase": "foundation",
+      "depends_on": ["parallel-dispatch"],
+      "guard": "python3 docs/plan/parallel-tool-execution/scripts/audit_parallel.py --phase foundation",
+      "artifacts": [
+        "docs/plan/parallel-tool-execution/scripts/audit_parallel.py"
+      ],
+      "context": "contexts/audit-foundation.md",
+      "notes": "Checks: Promise.all present, sequential loop absent, call-ID keying, policy check before callTool, toolCallCount arithmetic, test suite green."
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "convergence",
+      "depends_on": ["audit-foundation"],
+      "guard": "test -f docs/plan/parallel-tool-execution/.code-review-complete",
+      "artifacts": ["docs/plan/parallel-tool-execution/.code-review-complete"],
+      "context": "contexts/code-review.md",
+      "notes": "Human hold point. Reviewer inspects orchestrator.ts diff and runs the foundation audit. Creates sentinel when satisfied."
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "convergence",
+      "depends_on": ["code-review"],
+      "guard": "python3 docs/plan/parallel-tool-execution/scripts/audit_parallel.py --phase final",
+      "artifacts": [
+        "docs/plan/parallel-tool-execution/scripts/audit_parallel.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": "Runs all foundation checks plus full build verification and DoD coverage checks."
+    },
+    "docs-and-publish": {
+      "kind": "work",
+      "phase": "convergence",
+      "depends_on": ["audit-final"],
+      "guard": "node -e \"const p=require('./packages/ai/agent-mcp/package.json');process.exit(p.version==='0.1.0'?0:1)\" && npm info @adhd/agent-mcp version 2>/dev/null | grep -q '0.1.0'",
+      "artifacts": [
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp/CLAUDE.md",
+        "packages/ai/agent-mcp/README.md"
+      ],
+      "context": "contexts/docs-and-publish.md",
+      "notes": "Bump agent-mcp to 0.1.0. Note parallel tool execution in CLAUDE.md and README. Follow PUBLISHING.md exactly.",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    }
+  }
+}

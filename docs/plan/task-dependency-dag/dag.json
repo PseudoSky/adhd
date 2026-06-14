@@ -1,0 +1,115 @@
+{
+  "schema_version": 2,
+  "title": "task-dependency-dag",
+  "spec_sources": [
+    "packages/ai/agent-mcp/ROADMAP.md"
+  ],
+  "executor": "sox-active:typescript-pro",
+  "phases": ["foundation", "engine", "convergence"],
+  "terminal": "done",
+  "nodes": {
+    "dag-schema": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": [],
+      "guard": "grep -q 'depends_on' packages/ai/agent-mcp/src/db/schema.ts && grep -q 'waiting' packages/ai/agent-mcp/src/db/schema.ts && python3 -c \"import os; sqls=[f for f in os.listdir('packages/ai/agent-mcp/drizzle') if f.endswith('.sql')]; assert len(sqls)>=4, f'expected >=4 migrations, got {len(sqls)}'\"",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/drizzle/"
+      ],
+      "context": "contexts/dag-schema.md",
+      "notes": "Add depends_on (TEXT, JSON array nullable), on_upstream_failure (TEXT nullable, 'fail'|'skip'), inputs (TEXT, JSON blob nullable) to tasksTable. Add 'waiting' to the status enum. Run: cd packages/ai/agent-mcp && npx drizzle-kit generate. Current migration count is 3 (0000..0003); new one will be 0004_*.",
+      "changes": {
+        "deletes": [],
+        "resigns": ["tasksTable"],
+        "renames": []
+      }
+    },
+    "dag-types": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": ["dag-schema"],
+      "guard": "grep -q 'waiting' packages/ai/agent-mcp/src/validation/task.ts && grep -q 'dependsOn' packages/ai/agent-mcp/src/validation/task.ts && npx --yes nx build agent-mcp 2>&1 | grep -q 'Successfully ran'",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/validation/task.ts",
+        "packages/ai/agent-mcp/src/validation/execution.ts",
+        "packages/ai/agent-mcp/src/store/task-store.ts"
+      ],
+      "context": "contexts/dag-types.md",
+      "notes": "Add 'waiting' to taskStatusSchema. Add dependsOn, onUpstreamFailure, inputs to taskSchema. Add depends_on/on_upstream_failure to taskToolInputSchema (both session and ephemeral modes). Update TaskStore.create() to accept dependsOn/onUpstreamFailure and set initial status to 'waiting' when dependsOn.length > 0. Update TaskStore.read() and list() to include new fields.",
+      "changes": {
+        "deletes": [],
+        "resigns": ["taskStatusSchema", "taskSchema", "taskToolInputSchema", "TaskStore.create"],
+        "renames": []
+      }
+    },
+    "dag-engine": {
+      "kind": "work",
+      "phase": "engine",
+      "depends_on": ["dag-types"],
+      "guard": "test -f packages/ai/agent-mcp/src/engine/dag-engine.ts && grep -q 'dispatchReady' packages/ai/agent-mcp/src/engine/dag-engine.ts && grep -q 'cycle' packages/ai/agent-mcp/src/engine/dag-engine.ts && npx --yes nx test agent-mcp 2>&1 | grep -qE 'passed'",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/engine/dag-engine.ts",
+        "packages/ai/agent-mcp/src/tools/task.ts",
+        "packages/ai/agent-mcp/src/__tests__/dag-engine.test.ts",
+        "packages/ai/agent-mcp/src/index.ts"
+      ],
+      "context": "contexts/dag-engine.md",
+      "notes": "New DagEngine class: (a) validateNoCycle(taskId, dependsOn, db) — BFS/DFS check at creation time; (b) dispatchReady(completedTaskId, db, queue, taskStore) — scans tasks WHERE depends_on LIKE '%completedTaskId%' that are 'waiting', checks all deps resolved, dispatches. Wire dispatchReady into the task completion path in tools/task.ts (after taskStore.updateStatus 'completed'). Wire validateNoCycle into task creation in tools/task.ts before taskStore.create().",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    },
+    "audit-foundation": {
+      "kind": "audit",
+      "phase": "engine",
+      "depends_on": ["dag-engine"],
+      "guard": "python3 docs/plan/task-dependency-dag/scripts/audit_dag.py --phase foundation",
+      "artifacts": [
+        "docs/plan/task-dependency-dag/scripts/audit_dag.py"
+      ],
+      "context": "contexts/audit-foundation.md",
+      "notes": "Checks schema columns, type schema additions, DagEngine existence, dispatchReady, cycle detection, and test suite."
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "convergence",
+      "depends_on": ["audit-foundation"],
+      "guard": "test -f docs/plan/task-dependency-dag/.code-review-complete",
+      "artifacts": ["docs/plan/task-dependency-dag/.code-review-complete"],
+      "context": "contexts/code-review.md",
+      "notes": "Human hold point. Reviewer checks schema, types, DagEngine, dispatch wiring, tests."
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "convergence",
+      "depends_on": ["code-review"],
+      "guard": "python3 docs/plan/task-dependency-dag/scripts/audit_dag.py --phase final",
+      "artifacts": [
+        "docs/plan/task-dependency-dag/scripts/audit_dag.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": "Runs all checks plus full build, test suite, and DoD coverage."
+    },
+    "docs-and-publish": {
+      "kind": "work",
+      "phase": "convergence",
+      "depends_on": ["audit-final"],
+      "guard": "node -e \"const p=require('./packages/ai/agent-mcp/package.json');process.exit(p.version==='0.2.0'?0:1)\" && npm info @adhd/agent-mcp version 2>/dev/null | grep -q '0.2.0'",
+      "artifacts": [
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp-types/package.json",
+        "ROADMAP.md"
+      ],
+      "context": "contexts/docs-and-publish.md",
+      "notes": "Bump agent-mcp to 0.2.0. Bump agent-mcp-types if TaskStatus type gains 'waiting'. Document depends_on, on_upstream_failure, inputs in CLAUDE.md and README.",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    }
+  }
+}
