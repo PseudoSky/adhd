@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "plan": "hitl-interrupts",
-  "current_state": "audit-foundation",
+  "current_state": "code-review",
   "states": {
     "hitl-orchestrator": {
       "status": "complete",
@@ -18,11 +18,11 @@
       "end_ref": "c746f90441095cf31cacbd8258a49818189bbd8e"
     },
     "audit-foundation": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-14T04:08:05.179Z",
-      "done_at": null,
+      "done_at": "2026-06-14T04:08:24.806Z",
       "start_ref": "55c6443e9bbc8ee0fe32a0774c7698de0f5194eb",
-      "end_ref": null
+      "end_ref": "2e8b3a4963e44a8234a9e62ab306e853e6b0ab7f"
     },
     "code-review": {
       "status": "pending",
@@ -70,6 +70,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "task_resume with token validation; TASK_NOT_RESUMABLE registered; awaiting_input cancellable"
+    },
+    {
+      "ts": "2026-06-14T04:08:24.806Z",
+      "from": "audit-foundation",
+      "to": "audit-foundation",
+      "start_ref": "55c6443e9bbc8ee0fe32a0774c7698de0f5194eb",
+      "end_ref": "2e8b3a4963e44a8234a9e62ab306e853e6b0ab7f",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "foundation audit green"
     }
   ],
   "amendment_log": [
