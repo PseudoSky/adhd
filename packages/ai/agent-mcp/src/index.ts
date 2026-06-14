@@ -18,6 +18,7 @@ import { HookRegistry } from "./engine/hooks.js";
 import { PolicyEngine } from "./engine/policy.js";
 import { UsagePlugin } from "./plugins/index.js";
 import { startServer } from "./server.js";
+import { startSseServer } from "./streaming/sse-server.js";
 import { enqueueExistingTask } from "./tools/task.js";
 import { tasksTable } from "./db/schema.js";
 import { eq } from "drizzle-orm";
@@ -75,6 +76,9 @@ async function main() {
     };
 
     const dagEngine = new DagEngine(dbAny, queue, taskStore, dispatchFn);
+
+    // Start SSE server alongside MCP server — shares taskStore for terminal-on-connect checks.
+    const sseServer = startSseServer(taskStore);
 
     const { close } = await startServer({
         agentStore,
@@ -138,6 +142,9 @@ async function main() {
     const shutdown = async (signal: string) => {
         logger.info({ signal }, "Server shutdown");
         await close();
+        sseServer.close(() => {
+            // SSE connections drained
+        });
         process.exit(0);
     };
 
