@@ -12,6 +12,33 @@ import type { TaskStore } from "../store/task-store.js";
 import type { SessionStore } from "../store/session-store.js";
 import { windowMessages } from "../store/session-store.js";
 
+// ── HITL (Human-in-the-Loop) support ─────────────────────────────────────────
+
+/** Built-in tool name intercepted before any MCP client dispatch. */
+const HITL_TOOL_NAME = "request_human_input";
+
+/**
+ * Module-scoped resolver map: taskId → resolver function.
+ * Populated when an orchestrator suspends awaiting human input.
+ * Entries are cleared when resolved or when the task is cancelled.
+ */
+const hitlResolvers = new Map<string, (userInput: string) => void>();
+
+/**
+ * Resolve a suspended HITL task with the provided user input.
+ * Returns `true` if the resolver was found and called; `false` if the
+ * process restarted and the in-memory resolver no longer exists.
+ */
+export function resolveHitl(taskId: string, userInput: string): boolean {
+    const resolve = hitlResolvers.get(taskId);
+    if (!resolve) return false;
+    hitlResolvers.delete(taskId);
+    resolve(userInput);
+    return true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface OrchestratorRunInput {
     executionContext: ExecutionContext;
     messages: Message[];
@@ -23,6 +50,12 @@ export interface OrchestratorRunInput {
     signal: AbortSignal;
     taskId: string;
     hooks?: IHookRegistry;
+    /**
+     * Set to `true` for ephemeral (one-shot) tasks that have no durable DB row.
+     * When `true`, `request_human_input` is forbidden (no DB row means
+     * `resume_token` cannot be persisted and `task_resume` cannot validate it).
+     */
+    isEphemeral?: boolean;
 }
 
 /** No-op IHookRegistry used as a fallback when none is provided. */
@@ -47,6 +80,7 @@ export class Orchestrator {
             signal,
             taskId,
             hooks = noopHooks,
+            isEphemeral = false,
         } = input;
 
         // Working copy of messages — we append to this as the loop progresses
@@ -232,10 +266,63 @@ export class Orchestrator {
                 // Phase 1 — serial pre-dispatch loop (policy + count).
                 // Uses variable name `tc` to distinguish from the old sequential per-tool dispatch
                 // that has been replaced by Phase 2 (Promise.all concurrent execution below).
+                //
+                // HITL intercept: `request_human_input` is intercepted here (before Phase 2)
+                // and never reaches the MCP client. [inv:request-human-input-intercept]
+                const hitlResults = new Map<string, string>(); // toolCall.id → userInput
                 for (const tc of toolCalls) {
                     if (signal.aborted) {
                         throw new ToolError("PROVIDER_ERROR", "Task was cancelled before tool call");
                     }
+
+                    // ── HITL intercept ──────────────────────────────────────
+                    if (tc.tool === HITL_TOOL_NAME) {
+                        // Ephemeral tasks have no DB row — cannot persist resume_token.
+                        // Detect via the explicit flag or by checking if taskStore.read exists
+                        // (captureTaskStore in runEphemeralTask omits the read method).
+                        const isEphemeralTask = isEphemeral || typeof (taskStore as { read?: unknown }).read !== "function";
+                        if (isEphemeralTask) {
+                            throw new ToolError(
+                                "VALIDATION_ERROR",
+                                "request_human_input is not supported for ephemeral tasks"
+                            );
+                        }
+
+                        // 1. Generate a resumeToken
+                        const resumeToken = crypto.randomUUID();
+
+                        // 2. Persist suspension to DB BEFORE awaiting [inv:resume-token-db-persisted]
+                        //    This ordering ensures the token survives a process restart.
+                        await taskStore.updateStatus(taskId, "awaiting_input", { resumeToken });
+
+                        // 3. Register resolver and await userInput.
+                        //    Wire into the AbortSignal so task_cancel unblocks this promise —
+                        //    without this, cancelling an awaiting_input task leaves the promise
+                        //    pending forever and the orchestrator's async context leaks.
+                        const userInput = await new Promise<string>((resolve, reject) => {
+                            hitlResolvers.set(taskId, resolve);
+                            signal.addEventListener("abort", () => {
+                                hitlResolvers.delete(taskId);
+                                reject(new ToolError("PROVIDER_ERROR", "Task cancelled while awaiting human input"));
+                            }, { once: true });
+                        });
+
+                        // 4. Mark running again
+                        await taskStore.updateStatus(taskId, "running");
+
+                        // 5. Store userInput to inject as tool result in Phase 3
+                        hitlResults.set(tc.id, userInput);
+
+                        // Return resume token to the caller via event log; continue to next tc
+                        taskStore.appendEvent({
+                            taskId,
+                            type: "TOOL_CALL",
+                            payload: { tool: HITL_TOOL_NAME, callId: tc.id, resumeToken },
+                        });
+                        continue;
+                    }
+                    // ── end HITL intercept ──────────────────────────────────
+
                     // Increment BEFORE policy check — see [inv:toolCallCount-increment-before-check]
                     executionContext.toolCallCount++;
                     const qualifiedToolName = `${tc.server}__${tc.tool}`;
@@ -256,8 +343,11 @@ export class Orchestrator {
                 }
 
                 // Phase 2 — Promise.all concurrent execution.
+                // HITL calls are excluded (already handled in Phase 1 — their results
+                // are in hitlResults and will be injected in Phase 3).
+                const nonHitlToolCalls = toolCalls.filter(tc => tc.tool !== HITL_TOOL_NAME);
                 const toolResults = await Promise.all(
-                    toolCalls.map(async (toolCall) => {
+                    nonHitlToolCalls.map(async (toolCall) => {
                         const qualifiedToolName = `${toolCall.server}__${toolCall.tool}`;
 
                         taskStore.appendEvent({
@@ -310,13 +400,29 @@ export class Orchestrator {
                 );
 
                 // Phase 3 — serial result append (preserves order per [inv:message-order]).
-                for (const { toolCall, toolResult, isError } of toolResults) {
+                // Build a lookup for non-HITL results; then iterate original toolCalls
+                // order so HITL and non-HITL results are interleaved correctly.
+                const toolResultByCallId = new Map(toolResults.map(r => [r.toolCall.id, r]));
+                for (const tc of toolCalls) {
+                    let toolResult: unknown;
+                    let isError = false;
+
+                    if (hitlResults.has(tc.id)) {
+                        // HITL tool: inject userInput as the result
+                        toolResult = hitlResults.get(tc.id);
+                    } else {
+                        const r = toolResultByCallId.get(tc.id);
+                        if (!r) continue; // should not happen
+                        toolResult = r.toolResult;
+                        isError = r.isError;
+                    }
+
                     const toolResultMessage: Message = {
                         id: generateId(),
                         sessionId: executionContext.sessionId,
                         role: "tool",
                         toolResults: [{
-                            toolCallId: toolCall.id,  // [inv:call-id-keying]
+                            toolCallId: tc.id,  // [inv:call-id-keying]
                             result: toolResult,
                             isError,
                         }],
