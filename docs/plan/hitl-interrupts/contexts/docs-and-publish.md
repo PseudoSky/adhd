@@ -20,7 +20,7 @@ Bump `agent-mcp` to 0.3.0, build, publish to npm, and update ROADMAP.md to mark 
 
 - **Version bumps:**
   - `packages/ai/agent-mcp/package.json`: `0.2.0` → `0.3.0`
-  - `agent-mcp-types`: bump only if `TaskStatus` is exported and gained `"awaiting_input"`.
+  - `agent-mcp-types`: **already bumped** by `task-schema-foundation`. Do not bump here.
 
 - **Smoke test:** Start server. Create a task with an agent that calls `request_human_input`.
   Verify:
@@ -46,8 +46,7 @@ Bump `agent-mcp` to 0.3.0, build, publish to npm, and update ROADMAP.md to mark 
 ```text
 read_only:  ["PUBLISHING.md", "ROADMAP.md"]
 mutates:    ["packages/ai/agent-mcp/package.json",
-             "ROADMAP.md",
-             "packages/ai/agent-mcp-types/package.json"]
+             "ROADMAP.md"]
 ```
 
 ---

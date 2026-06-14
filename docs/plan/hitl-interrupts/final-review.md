@@ -11,16 +11,22 @@
 - [x] **dod.7** `"awaiting_input"` in `taskStatusSchema` and `tasksTable` enum
 - [x] **dod.8** `agent-mcp` published at version `0.3.0`
 
+## Planner Amendment (2026-06-13)
+
+hitl-schema and hitl-types nodes were extracted to the new `task-schema-foundation` plan (v0.1.5).
+The `resume_token` column, `"awaiting_input"` status, and updated `TaskStore.updateStatus` signature
+are now a prerequisite plan. hitl-orchestrator is the first node of this plan; it assumes three
+prior plans are deployed: task-schema-foundation (schema/types), parallel-tool-execution (parallel
+dispatch loop), and task-dependency-dag (DagEngine + waiting-task handling).
+
 ## Plan Completeness
 
 - [x] README.md with DoD clauses
-- [x] dag.json (8 nodes: hitl-schema, hitl-types, hitl-orchestrator, hitl-resume-tool, audit-foundation, code-review, audit-final, docs-and-publish)
-- [x] state.json (current_state: hitl-schema, all pending)
+- [x] dag.json (6 nodes: hitl-orchestrator, hitl-resume-tool, audit-foundation, code-review, audit-final, docs-and-publish)
+- [x] state.json (current_state: hitl-orchestrator, all pending)
 - [x] references.json
 - [x] state-machine.md
 - [x] contexts/_shared.md
-- [x] contexts/hitl-schema.md
-- [x] contexts/hitl-types.md
 - [x] contexts/hitl-orchestrator.md
 - [x] contexts/hitl-resume-tool.md
 - [x] contexts/audit-foundation.md

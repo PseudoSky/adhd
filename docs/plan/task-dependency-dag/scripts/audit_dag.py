@@ -2,8 +2,11 @@
 """
 audit_dag.py — acceptance-criteria audit for task-dependency-dag plan.
 
+NOTE: dag-schema and dag-types nodes were extracted to the task-schema-foundation plan.
+This audit only checks dag-engine criteria (the remaining foundation work in this plan).
+
 Usage:
-  python3 audit_dag.py --phase foundation   # checks dag-schema + dag-types + dag-engine
+  python3 audit_dag.py --phase foundation   # checks dag-engine criteria
   python3 audit_dag.py --phase final        # checks DoD clauses + full coverage
 """
 import argparse
@@ -34,55 +37,7 @@ def check(label, cmd, *, expect_zero=True):
 # ── Phase foundation ──────────────────────────────────────────────────────────
 
 def phase_foundation():
-    print("\n=== dag-schema ===")
     results = []
-    results.append(check(
-        "[dag-schema.1] depends_on column in schema.ts",
-        "grep -q 'depends_on' packages/ai/agent-mcp/src/db/schema.ts",
-    ))
-    results.append(check(
-        "[dag-schema.2] on_upstream_failure column in schema.ts",
-        "grep -q 'on_upstream_failure' packages/ai/agent-mcp/src/db/schema.ts",
-    ))
-    results.append(check(
-        '[dag-schema.3] inputs column in schema.ts',
-        "grep -q '\"inputs\"' packages/ai/agent-mcp/src/db/schema.ts",
-    ))
-    results.append(check(
-        '[dag-schema.4] "waiting" in status enum',
-        'grep -q \'"waiting"\' packages/ai/agent-mcp/src/db/schema.ts',
-    ))
-    results.append(check(
-        "[dag-schema.5] Drizzle migration generated (>=4 .sql files)",
-        "python3 -c \"import os; sqls=[f for f in os.listdir('packages/ai/agent-mcp/drizzle') if f.endswith('.sql')]; assert len(sqls)>=4, f'expected >=4, got {len(sqls)}'\"",
-    ))
-
-    print("\n=== dag-types ===")
-    results.append(check(
-        '[dag-types.1] "waiting" in taskStatusSchema',
-        "grep -q '\"waiting\"' packages/ai/agent-mcp/src/validation/task.ts",
-    ))
-    results.append(check(
-        "[dag-types.2] dependsOn field in taskSchema",
-        "grep -q 'dependsOn' packages/ai/agent-mcp/src/validation/task.ts",
-    ))
-    results.append(check(
-        "[dag-types.3] onUpstreamFailure field in taskSchema",
-        "grep -q 'onUpstreamFailure' packages/ai/agent-mcp/src/validation/task.ts",
-    ))
-    results.append(check(
-        "[dag-types.4] depends_on in taskToolInputSchema",
-        "grep -q 'depends_on' packages/ai/agent-mcp/src/validation/task.ts",
-    ))
-    results.append(check(
-        "[dag-types.5] TaskStore.create() sets 'waiting' when dependsOn",
-        "grep -q 'waiting' packages/ai/agent-mcp/src/store/task-store.ts",
-    ))
-    results.append(check(
-        "[dag-types.6] Build passes after type changes",
-        "npx nx build agent-mcp 2>&1 | grep -q 'Successfully ran'",
-    ))
-
     print("\n=== dag-engine ===")
     results.append(check(
         "[dag-engine.1] engine/dag-engine.ts exists",
@@ -110,7 +65,11 @@ def phase_foundation():
     ))
     results.append(check(
         "[dag-engine.7] All tests pass",
-        "npx nx test agent-mcp 2>&1 | grep -qE 'passed'",
+        "npx --yes nx test agent-mcp 2>&1 | grep -qE 'passed'",
+    ))
+    results.append(check(
+        "[dag-engine.8] inputs field in ExecutionContext (validation/execution.ts)",
+        "grep -q 'inputs' packages/ai/agent-mcp/src/validation/execution.ts",
     ))
 
     return results

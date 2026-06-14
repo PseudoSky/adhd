@@ -1,11 +1,25 @@
 # hitl-orchestrator
 
-**Phase:** engine · **Depends on:** hitl-types · **Guard:**
+**Phase:** engine · **Depends on:** — · **Guard:**
 ```bash
 grep -q 'request_human_input' packages/ai/agent-mcp/src/engine/orchestrator.ts && \
 grep -q 'awaiting_input' packages/ai/agent-mcp/src/engine/orchestrator.ts && \
-npx nx test agent-mcp 2>&1 | grep -qE 'passed'
+npx --yes nx test agent-mcp 2>&1 | grep -qE 'passed'
 ```
+
+> **PREREQUISITE: three prior plans must be deployed before this node.**
+>
+> From **`task-schema-foundation`**: `resume_token` column in `schema.ts`; `"awaiting_input"` in
+> `taskStatusSchema`; `TaskStore.updateStatus()` accepts `resumeToken`.
+>
+> From **`parallel-tool-execution` (0.1.0)**: `orchestrator.ts` has the parallel dispatch loop
+> (`Promise.all`). The HITL intercept fires in the Phase 1 serial pre-dispatch loop (before
+> `Promise.all`). Without 0.1.0, the intercept targets the wrong loop structure.
+>
+> From **`task-dependency-dag` (0.2.0)**: `DagEngine` exists and processes `"waiting"` tasks.
+> The `finally`-block dispatch wiring from 0.2.0 is extended here to handle the HITL path.
+>
+> This node does **not** add migrations, modify `validation/task.ts`, or modify `task-store.ts`.
 
 ---
 

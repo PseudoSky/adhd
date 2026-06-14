@@ -5,54 +5,20 @@
     "packages/ai/agent-mcp/ROADMAP.md"
   ],
   "executor": "sox-active:typescript-pro",
-  "phases": ["foundation", "engine", "convergence"],
+  "phases": ["engine", "convergence"],
   "terminal": "done",
   "nodes": {
-    "hitl-schema": {
-      "kind": "work",
-      "phase": "foundation",
-      "depends_on": [],
-      "guard": "grep -q 'awaiting_input' packages/ai/agent-mcp/src/db/schema.ts && grep -q 'resume_token' packages/ai/agent-mcp/src/db/schema.ts && python3 -c \"import os; sqls=[f for f in os.listdir('packages/ai/agent-mcp/drizzle') if f.endswith('.sql')]; assert len(sqls)>=5, f'expected >=5, got {len(sqls)}'\"",
-      "artifacts": [
-        "packages/ai/agent-mcp/src/db/schema.ts",
-        "packages/ai/agent-mcp/drizzle/"
-      ],
-      "context": "contexts/hitl-schema.md",
-      "notes": "Add awaiting_input to status enum. Add resume_token TEXT column. Generate migration 0005_*.",
-      "changes": {
-        "deletes": [],
-        "resigns": ["tasksTable"],
-        "renames": []
-      }
-    },
-    "hitl-types": {
-      "kind": "work",
-      "phase": "foundation",
-      "depends_on": ["hitl-schema"],
-      "guard": "grep -q '\"awaiting_input\"' packages/ai/agent-mcp/src/validation/task.ts && grep -q 'resumeToken' packages/ai/agent-mcp/src/validation/task.ts && npx --yes nx build agent-mcp 2>&1 | grep -q 'Successfully ran'",
-      "artifacts": [
-        "packages/ai/agent-mcp/src/validation/task.ts",
-        "packages/ai/agent-mcp/src/store/task-store.ts"
-      ],
-      "context": "contexts/hitl-types.md",
-      "notes": "Add awaiting_input to taskStatusSchema. Add resumeToken to task schema. TaskStore.updateStatus accepts resumeToken.",
-      "changes": {
-        "deletes": [],
-        "resigns": ["taskStatusSchema", "taskSchema", "TaskStore.updateStatus"],
-        "renames": []
-      }
-    },
     "hitl-orchestrator": {
       "kind": "work",
       "phase": "engine",
-      "depends_on": ["hitl-types"],
+      "depends_on": [],
       "guard": "grep -q 'request_human_input' packages/ai/agent-mcp/src/engine/orchestrator.ts && grep -q 'awaiting_input' packages/ai/agent-mcp/src/engine/orchestrator.ts && npx --yes nx test agent-mcp 2>&1 | grep -qE 'passed'",
       "artifacts": [
         "packages/ai/agent-mcp/src/engine/orchestrator.ts",
         "packages/ai/agent-mcp/src/__tests__/hitl-orchestrator.test.ts"
       ],
       "context": "contexts/hitl-orchestrator.md",
-      "notes": "Intercept request_human_input before MCP dispatch. Suspend task (awaiting_input + resumeToken). Export resolveHitl().",
+      "notes": "PREREQUISITE: task-schema-foundation AND parallel-tool-execution AND task-dependency-dag must all be deployed first. resume_token column and 'awaiting_input' status exist (foundation); parallel dispatch loop exists in orchestrator.ts (0.1.0); DagEngine processes 'waiting' tasks (0.2.0). This node intercepts request_human_input before MCP dispatch. Suspend task (awaiting_input + resumeToken). Export resolveHitl().",
       "changes": {
         "deletes": [],
         "resigns": [],
@@ -86,7 +52,7 @@
         "docs/plan/hitl-interrupts/scripts/audit_hitl.py"
       ],
       "context": "contexts/audit-foundation.md",
-      "notes": "Checks hitl-schema + hitl-types + hitl-orchestrator + hitl-resume-tool acceptance criteria."
+      "notes": "Checks hitl-orchestrator + hitl-resume-tool acceptance criteria."
     },
     "code-review": {
       "kind": "review",
@@ -115,11 +81,10 @@
       "guard": "node -e \"const p=require('./packages/ai/agent-mcp/package.json');process.exit(p.version==='0.3.0'?0:1)\" && npm info @adhd/agent-mcp version 2>/dev/null | grep -q '0.3.0'",
       "artifacts": [
         "packages/ai/agent-mcp/package.json",
-        "packages/ai/agent-mcp-types/package.json",
         "ROADMAP.md"
       ],
       "context": "contexts/docs-and-publish.md",
-      "notes": "Bump to 0.3.0. Bump agent-mcp-types if TaskStatus exported. Mark ROADMAP #20 shipped.",
+      "notes": "Bump to 0.3.0. agent-mcp-types was already bumped by task-schema-foundation. Mark ROADMAP #20 shipped.",
       "changes": {
         "deletes": [],
         "resigns": [],
