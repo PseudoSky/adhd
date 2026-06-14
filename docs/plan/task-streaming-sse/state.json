@@ -24,10 +24,10 @@
       "end_ref": "c48bdbbfce2f848bcd69cc2430ed65226f657a37"
     },
     "stream-task-tool": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-14T04:18:08.156Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "bf1e071f0bf5bfd1de87cf0fbacc12dfc84dfec0",
       "end_ref": null
     },
     "audit-foundation": {
