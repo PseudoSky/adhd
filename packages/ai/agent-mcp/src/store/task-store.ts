@@ -27,17 +27,27 @@ export class TaskStore {
         prompt: string;
         parentTaskId?: string;
         recursionDepth?: number;
+        dependsOn?: string[];
+        onUpstreamFailure?: "fail" | "skip";
+        inputs?: Record<string, string>;
     }): Task {
         const now = nowIso();
         const id = generateId();
+
+        // A task with upstream dependencies starts in "waiting" until DagEngine
+        // dispatches it (downstream task-dependency-dag plan).
+        const status = input.dependsOn && input.dependsOn.length > 0 ? "waiting" : "pending";
 
         this.db.insert(tasksTable).values({
             id,
             sessionId: input.sessionId,
             parentTaskId: input.parentTaskId ?? null,
             recursionDepth: input.recursionDepth ?? 0,
-            status: "pending",
+            status,
             prompt: input.prompt,
+            depends_on: input.dependsOn ? JSON.stringify(input.dependsOn) : null,
+            on_upstream_failure: input.onUpstreamFailure ?? null,
+            inputs: input.inputs ? JSON.stringify(input.inputs) : null,
             createdAt: now,
             updatedAt: now,
         }).run();
@@ -48,6 +58,8 @@ export class TaskStore {
                 sessionId: input.sessionId,
                 parentTaskId: input.parentTaskId,
                 recursionDepth: input.recursionDepth ?? 0,
+                status,
+                dependsOn: input.dependsOn,
             },
             "Task created"
         );
@@ -63,6 +75,7 @@ export class TaskStore {
             error?: string;
             completedAt?: string;
             cancelledAt?: string;
+            resumeToken?: string; // written when transitioning to 'awaiting_input'
         }
     ): Task {
         const now = nowIso();
@@ -76,6 +89,7 @@ export class TaskStore {
                 error: fields?.error ?? null,
                 completedAt: fields?.completedAt ?? null,
                 cancelledAt: fields?.cancelledAt ?? null,
+                resume_token: fields?.resumeToken ?? null,
             })
             .where(eq(tasksTable.id, id))
             .run();
@@ -110,6 +124,10 @@ export class TaskStore {
             updatedAt: row.updatedAt,
             completedAt: row.completedAt ?? undefined,
             cancelledAt: row.cancelledAt ?? undefined,
+            dependsOn: row.depends_on ? JSON.parse(row.depends_on) : null,
+            onUpstreamFailure: row.on_upstream_failure ?? null,
+            inputs: row.inputs ? JSON.parse(row.inputs) : null,
+            resumeToken: row.resume_token ?? null,
         });
     }
 
@@ -147,6 +165,10 @@ export class TaskStore {
                 updatedAt: row.updatedAt,
                 completedAt: row.completedAt ?? undefined,
                 cancelledAt: row.cancelledAt ?? undefined,
+                dependsOn: row.depends_on ? JSON.parse(row.depends_on) : null,
+                onUpstreamFailure: row.on_upstream_failure ?? null,
+                inputs: row.inputs ? JSON.parse(row.inputs) : null,
+                resumeToken: row.resume_token ?? null,
             })
         );
     }
