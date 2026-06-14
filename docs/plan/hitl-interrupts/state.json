@@ -1,14 +1,14 @@
 {
   "schema_version": 3,
   "plan": "hitl-interrupts",
-  "current_state": "hitl-orchestrator",
+  "current_state": "hitl-resume-tool",
   "states": {
     "hitl-orchestrator": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-14T04:00:37.097Z",
-      "done_at": null,
+      "done_at": "2026-06-14T04:04:09.241Z",
       "start_ref": "b08890aaaeb0bca64852ba71ae16c8f0987c7ae3",
-      "end_ref": null
+      "end_ref": "d3d2d0e2bb77a1f44c537bb14884cf28d1d5821c"
     },
     "hitl-resume-tool": {
       "status": "pending",
@@ -46,7 +46,20 @@
       "end_ref": null
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-06-14T04:04:09.241Z",
+      "from": "hitl-orchestrator",
+      "to": "hitl-orchestrator",
+      "start_ref": "b08890aaaeb0bca64852ba71ae16c8f0987c7ae3",
+      "end_ref": "d3d2d0e2bb77a1f44c537bb14884cf28d1d5821c",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "HITL intercept in Phase-1 loop; DB-persist resumeToken before await; abort-wired"
+    }
+  ],
   "amendment_log": [
     {
       "at": "2026-06-13",
