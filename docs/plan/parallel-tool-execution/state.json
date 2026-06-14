@@ -5,11 +5,11 @@
   "current_state": "parallel-dispatch",
   "states": {
     "parallel-dispatch": {
-      "status": "pending",
+      "status": "in_progress",
       "executor": null,
-      "started_at": null,
+      "started_at": "2026-06-14T03:28:40.256Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "e28a3578b6f1014488cda64d84389c370d8ac89a",
       "end_ref": null
     },
     "audit-foundation": {
