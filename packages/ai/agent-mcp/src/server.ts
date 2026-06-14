@@ -18,6 +18,7 @@ import type { SessionStore } from "./store/session-store.js";
 import type { TaskStore } from "./store/task-store.js";
 import { BackgroundQueue } from "./engine/queue.js";
 import { Orchestrator } from "./engine/orchestrator.js";
+import type { DagEngine } from "./engine/dag-engine.js";
 import type { PolicyEngine } from "./engine/policy.js";
 import type { InProcessToolDescriptor, InProcessToolHandler } from "./clients/in-process.js";
 import type { IHookRegistry } from "@adhd/agent-mcp-types";
@@ -60,6 +61,8 @@ export interface ServerDeps {
     /** Drizzle DB handle — used by usage_query and to enrich task/result responses. */
     db: Database;
     selfUrl?: string;
+    /** DagEngine — manages dependency cycle detection and fan-in dispatch. */
+    dagEngine: DagEngine;
 }
 
 function toMcpErrorContent(error: unknown): { content: Array<{ type: "text"; text: string }>; isError: true } {
@@ -453,6 +456,7 @@ export function createServer(deps: ServerDeps): Server {
                         inProcessDescriptors,
                         inProcessHandler,
                         db: deps.db,
+                        dagEngine: deps.dagEngine,
                     },
                     ctx
                 );
@@ -646,6 +650,7 @@ export function createServer(deps: ServerDeps): Server {
                             inProcessDescriptors,
                             inProcessHandler,
                             db: deps.db,
+                            dagEngine: deps.dagEngine,
                         })
                         // No callerContext — top-level call
                     );

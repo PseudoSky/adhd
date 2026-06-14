@@ -1,5 +1,6 @@
 import { logger } from "../logger.js";
 import type { BackgroundQueue } from "../engine/queue.js";
+import type { DagEngine } from "../engine/dag-engine.js";
 import type { Orchestrator } from "../engine/orchestrator.js";
 import type { PolicyEngine } from "../engine/policy.js";
 import type { InProcessToolDescriptor, InProcessToolHandler } from "../clients/in-process.js";
@@ -41,6 +42,11 @@ export interface TaskDeps {
      * task's token-usage rollup (direct + subtree). See [dod.2].
      */
     db: Database;
+    /**
+     * DagEngine — manages dependency cycle detection and fan-in dispatch.
+     * Injected at server startup (index.ts) to avoid circular imports.
+     */
+    dagEngine: DagEngine;
 }
 
 /**
@@ -187,11 +193,20 @@ export async function taskTool(
     const agentDefinition = deps.sessionStore.getAgentDefinition(input.session_id);
 
     // 3. Create task row
+    // Validate no dependency cycle before inserting the row.
+    // [inv:cycle-check-synchronous] — throws ToolError("VALIDATION_ERROR") on cycle.
+    const dependsOn = (input as { depends_on?: string[] }).depends_on ?? [];
+    const prospectiveTaskId = generateId();
+    if (dependsOn.length > 0) {
+        deps.dagEngine.validateNoCycle(prospectiveTaskId, dependsOn);
+    }
+
     const task = deps.taskStore.create({
         sessionId: input.session_id,
         prompt: input.prompt,
         parentTaskId: callerContext?.taskId,
         recursionDepth: (callerContext?.recursionDepth ?? -1) + 1,
+        dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
     });
 
     // Derive rootTaskId at creation time from the in-memory callerContext chain.
@@ -260,18 +275,25 @@ export async function taskTool(
 
     // 9. Run orchestrator
     const runTask = async (): Promise<void> => {
-        await deps.orchestrator.run({
-            executionContext,
-            messages: allMessages,
-            registry,
-            provider,
-            policy: deps.policy,
-            taskStore: deps.taskStore,
-            sessionStore: deps.sessionStore,
-            signal: controller.signal,
-            taskId: task.id,
-            hooks: deps.hooks,
-        });
+        try {
+            await deps.orchestrator.run({
+                executionContext,
+                messages: allMessages,
+                registry,
+                provider,
+                policy: deps.policy,
+                taskStore: deps.taskStore,
+                sessionStore: deps.sessionStore,
+                signal: controller.signal,
+                taskId: task.id,
+                hooks: deps.hooks,
+            });
+        } finally {
+            // [inv:dispatch-on-completion] — dispatchReady fires on every terminal
+            // event (completed, failed, cancelled) so dependent waiting tasks are
+            // evaluated regardless of how this task ended.
+            await deps.dagEngine.dispatchReady(task.id);
+        }
     };
 
     if (input.background) {
@@ -305,6 +327,99 @@ export async function taskTool(
             usage,
         };
     }
+}
+
+/**
+ * Re-enqueue an existing task row that is already in "pending" status.
+ *
+ * Called by DagEngine.dispatchFn (built in index.ts) when a waiting task
+ * transitions to pending after all its dependencies complete. The task row
+ * already exists in the DB — this function only builds the runtime context
+ * (executionContext, messages, provider, registry) and enqueues it.
+ *
+ * Also used on server startup to re-enqueue tasks orphaned by a crash between
+ * DagEngine's DB update and queue.enqueue().
+ */
+export async function enqueueExistingTask(taskId: string, deps: TaskDeps): Promise<void> {
+    const task = deps.taskStore.read(taskId);
+    const session = deps.sessionStore.read(task.sessionId);
+
+    if (session.status !== "active") {
+        logger.warn(
+            { taskId, sessionId: task.sessionId },
+            "enqueueExistingTask: session is not active, skipping dispatch"
+        );
+        return;
+    }
+
+    const agentDefinition = deps.sessionStore.getAgentDefinition(task.sessionId);
+
+    const executionContext: ExecutionContext = {
+        taskId,
+        sessionId: task.sessionId,
+        agentName: agentDefinition.name,
+        agentDefinition,
+        recursionDepth: task.recursionDepth,
+        toolCallCount: 0,
+        inputs: task.inputs ?? undefined,
+    };
+
+    const controller = new AbortController();
+    deps.taskStore.registerCancellation(taskId, controller);
+
+    const provider = createProvider(agentDefinition.provider, agentDefinition.mcpServers);
+
+    const existingMessages = deps.sessionStore.getMessages(task.sessionId);
+    const userMessage = {
+        id: generateId(),
+        sessionId: task.sessionId,
+        role: "user" as const,
+        content: task.prompt,
+        createdAt: nowIso(),
+    };
+    const messages = [...existingMessages, userMessage];
+
+    const allMessages = agentDefinition.systemPrompt
+        ? [
+              {
+                  id: generateId(),
+                  sessionId: task.sessionId,
+                  role: "system" as const,
+                  content: agentDefinition.systemPrompt,
+                  createdAt: nowIso(),
+              },
+              ...messages,
+          ]
+        : messages;
+
+    const registry = new McpClientRegistryCtor(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        agentDefinition.mcpServers as any,
+        deps.selfUrl,
+        deps.inProcessDescriptors,
+        deps.inProcessHandler,
+        executionContext
+    );
+
+    deps.queue.enqueue(taskId, async () => {
+        try {
+            await deps.orchestrator.run({
+                executionContext,
+                messages: allMessages,
+                registry,
+                provider,
+                policy: deps.policy,
+                taskStore: deps.taskStore,
+                sessionStore: deps.sessionStore,
+                signal: controller.signal,
+                taskId,
+                hooks: deps.hooks,
+            });
+        } finally {
+            // [inv:dispatch-on-completion] — dispatchReady fires on every terminal event
+            await deps.dagEngine.dispatchReady(taskId);
+        }
+    });
 }
 
 export function taskList(input: TaskListInput, deps: Pick<TaskDeps, "taskStore">): Task[] {

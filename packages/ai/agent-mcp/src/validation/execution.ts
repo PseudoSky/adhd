@@ -25,6 +25,12 @@ export const executionContextSchema = z.object({
   // to enforce the toolLoops ceiling.
   recursionDepth: z.number().int().nonnegative(),
   toolCallCount: z.number().int().nonnegative(),
+
+  // Upstream task results keyed by upstream taskId.
+  // Populated by DagEngine at dispatch time from the task row's `inputs` JSON field.
+  // Only present for tasks that have depends_on entries; omit from runtime context
+  // if not set on the task row.
+  inputs: z.record(z.string(), z.string()).optional(),
 });
 
 export type { ExecutionContext } from "@adhd/agent-mcp-types";
