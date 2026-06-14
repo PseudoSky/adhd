@@ -125,7 +125,7 @@ if not any(p in src for p in ['input.stream', 'stream === true', 'if (stream', '
     sys.exit(1)
 print('OK')
 " """,
-        expect_ok=True,
+        expect_zero=True,
     ))
     results.append(check(
         "[stream-task-tool.5] Tests pass",
