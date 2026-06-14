@@ -3,10 +3,10 @@
   "current_state": "stream-event-bus",
   "states": {
     "stream-event-bus": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-14T04:12:43.016Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "93bc228aec274e0b9906803085adc7a2df4269d7",
       "end_ref": null
     },
     "stream-http-server": {
