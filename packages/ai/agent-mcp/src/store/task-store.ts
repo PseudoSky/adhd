@@ -30,9 +30,12 @@ export class TaskStore {
         dependsOn?: string[];
         onUpstreamFailure?: "fail" | "skip";
         inputs?: Record<string, string>;
+        // Optional caller-supplied id so a pre-insert cycle check validates the
+        // SAME id that is actually inserted. Falls back to a generated id.
+        id?: string;
     }): Task {
         const now = nowIso();
-        const id = generateId();
+        const id = input.id ?? generateId();
 
         // A task with upstream dependencies starts in "waiting" until DagEngine
         // dispatches it (downstream task-dependency-dag plan).
@@ -89,7 +92,12 @@ export class TaskStore {
                 error: fields?.error ?? null,
                 completedAt: fields?.completedAt ?? null,
                 cancelledAt: fields?.cancelledAt ?? null,
-                resume_token: fields?.resumeToken ?? null,
+                // Only touch resume_token when explicitly supplied — a plain status
+                // transition (e.g. -> "running") must NOT wipe a token that the
+                // HITL resume tool still needs to read back.
+                ...(fields?.resumeToken !== undefined
+                    ? { resume_token: fields.resumeToken }
+                    : {}),
             })
             .where(eq(tasksTable.id, id))
             .run();

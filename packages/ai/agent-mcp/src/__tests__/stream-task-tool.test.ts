@@ -117,9 +117,7 @@ describe("stream-task-tool — stream_url in task response", () => {
     const originalEnv = { ...process.env };
 
     afterEach(() => {
-        // Restore env
-        process.env["SSE_PORT"] = originalEnv["SSE_PORT"];
-        process.env["SSE_BASE_URL"] = originalEnv["SSE_BASE_URL"];
+        // Restore env: clear, then conditionally restore the original value.
         delete process.env["SSE_PORT"];
         delete process.env["SSE_BASE_URL"];
         if (originalEnv["SSE_PORT"]) process.env["SSE_PORT"] = originalEnv["SSE_PORT"];

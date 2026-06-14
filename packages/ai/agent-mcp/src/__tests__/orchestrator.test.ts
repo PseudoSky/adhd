@@ -17,6 +17,13 @@ import type { SessionStore } from "../store/session-store.js";
 const registry = {
     listAllTools: async () => [],
     closeAll: async () => {},
+    // Defensive: tests that dispatch tools provide their own registry. If a test
+    // using this shared stub ever reaches getClient (e.g. policy enforcement is
+    // moved out of the Phase-1 pre-dispatch loop), fail with a clear message
+    // instead of "getClient is not a function".
+    getClient: async () => {
+        throw new Error("shared registry stub: getClient must not be reached");
+    },
 } as unknown as McpClientRegistry;
 
 const policy = {

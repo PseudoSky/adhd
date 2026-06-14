@@ -1,6 +1,7 @@
 import http from "node:http";
-import { subscribeToTask, emitTaskEvent, type TaskStreamEvent } from "./event-bus.js";
+import { subscribeToTask, type TaskStreamEvent } from "./event-bus.js";
 import type { TaskStore } from "../store/task-store.js";
+import { logger } from "../logger.js";
 
 const SSE_PORT = parseInt(process.env["SSE_PORT"] ?? "3001", 10);
 const KEEPALIVE_INTERVAL_MS = 15_000;
@@ -8,8 +9,10 @@ const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
 
 export function startSseServer(taskStore: TaskStore): http.Server {
     const server = http.createServer((req, res) => {
-        // Route: GET /tasks/:id/stream
-        const match = req.url?.match(/^\/tasks\/([^/]+)\/stream$/);
+        // Route: GET /tasks/:id/stream — :id must be a UUID
+        const match = req.url?.match(
+            /^\/tasks\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/stream$/i
+        );
         if (!match || req.method !== "GET") {
             res.writeHead(404);
             res.end("Not found");
@@ -42,13 +45,23 @@ export function startSseServer(taskStore: TaskStore): http.Server {
         }
 
         if (existingTask && TERMINAL_STATUSES.includes(existingTask.status as typeof TERMINAL_STATUSES[number])) {
-            emitTaskEvent({ type: "status_change", taskId, status: existingTask.status });
-            emitTaskEvent({
+            // Write directly to THIS response. The connection has not subscribed
+            // yet, so emitting on the shared bus would miss this client entirely
+            // and would also spuriously close any OTHER client still subscribed to
+            // the same task (their handler would see a second done and clean up).
+            const statusEvent: TaskStreamEvent = {
+                type: "status_change",
+                taskId,
+                status: existingTask.status,
+            };
+            const doneEvent: TaskStreamEvent = {
                 type: "done",
                 taskId,
                 result: existingTask.result ?? null,
                 error: existingTask.error ?? null,
-            });
+            };
+            res.write(`event: ${statusEvent.type}\ndata: ${JSON.stringify(statusEvent)}\n\n`);
+            res.write(`event: ${doneEvent.type}\ndata: ${JSON.stringify(doneEvent)}\n\n`);
             clearInterval(pingTimer);
             res.end();
             return;
@@ -83,7 +96,9 @@ export function startSseServer(taskStore: TaskStore): http.Server {
     // Bind to localhost by default — exposes on all interfaces only if SSE_HOST is set.
     const SSE_HOST = process.env["SSE_HOST"] ?? "127.0.0.1";
     server.listen(SSE_PORT, SSE_HOST, () => {
-        console.log(`SSE server listening on ${SSE_HOST}:${SSE_PORT}`);
+        // Use the pino logger (stderr) — never console.log, which writes to
+        // stdout and corrupts the MCP JSON-RPC transport on the shared process.
+        logger.info({ host: SSE_HOST, port: SSE_PORT }, "SSE server listening");
     });
 
     return server;

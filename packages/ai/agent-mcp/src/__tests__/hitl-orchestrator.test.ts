@@ -159,11 +159,10 @@ describe("HITL orchestrator", () => {
             await runPromise;
         });
 
-        it("the resumeToken DB write happens BEFORE the promise await (ordering invariant)", async () => {
+        it("writes resumeToken to the DB before registering the resolver (ordering invariant)", async () => {
             const ctx = makeCtx();
             const taskId = generateId();
             let resumeTokenWrittenAt: number | undefined;
-            let promiseAwaitStartedAt: number | undefined;
 
             const orderedStore = {
                 updateStatus: vi.fn((_id: string, status: string, fields?: Record<string, unknown>) => {
@@ -177,42 +176,13 @@ describe("HITL orchestrator", () => {
                 read: vi.fn(() => ({})),
             } as unknown as TaskStore;
 
-            const trackingProvider: LLMProvider = {
-                chat: async () => ({
-                    message: {
-                        id: generateId(),
-                        sessionId: ctx.sessionId,
-                        role: "assistant",
-                        content: null,
-                        toolCalls: [
-                            {
-                                id: "hitl-call-order",
-                                server: "built-in",
-                                tool: "request_human_input",
-                                arguments: {},
-                            },
-                        ],
-                        createdAt: nowIso(),
-                    },
-                    stopReason: "tool_calls" as const,
-                }),
-            };
-
-            // Wrap the provider to detect when the promise starts (after updateStatus)
-            const originalChat = trackingProvider.chat.bind(trackingProvider);
-            let resolveHitlLocal: ((v: string) => void) | undefined;
-            const interceptedProvider: LLMProvider = {
-                chat: async (opts) => {
-                    const result = await originalChat(opts);
-                    return result;
-                },
-            };
-
+            // hitlProvider returns the HITL call once, then completes after resume —
+            // so the orchestrator finishes cleanly and leaves no dangling promise.
             const runPromise = new Orchestrator().run({
                 executionContext: ctx,
                 messages: [makeUserMessage(ctx.sessionId)],
                 registry,
-                provider: interceptedProvider,
+                provider: hitlProvider([]),
                 policy,
                 taskStore: orderedStore,
                 sessionStore,
@@ -220,18 +190,20 @@ describe("HITL orchestrator", () => {
                 taskId,
             });
 
-            // Small delay so orchestrator processes the HITL call and writes to DB
+            // Let the orchestrator reach the HITL intercept and suspend.
             await new Promise(r => setTimeout(r, 30));
 
-            // DB write must have happened
+            // The DB write must have already happened during suspension...
             expect(resumeTokenWrittenAt).toBeDefined();
 
-            // Now resolve
-            resolveHitl(taskId, "human answer");
+            // ...and resolveHitl must succeed, which is only possible once the
+            // resolver is registered. The resolver is registered immediately AFTER
+            // the awaited DB write (orchestrator step 2 -> step 3), so a true resolve
+            // proves the write preceded the await.
+            const resolved = resolveHitl(taskId, "human answer");
+            expect(resolved).toBe(true);
 
-            // Let it complete (it will spin waiting for next provider call, but provider
-            // will keep returning tool_calls, causing an infinite loop — that's fine for
-            // this timing test; we just abort after verifying ordering).
+            await runPromise;
         });
     });
 
