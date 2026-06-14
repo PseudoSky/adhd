@@ -2,15 +2,15 @@
   "schema_version": 3,
   "title": "task-dependency-dag",
   "dag": "dag.json",
-  "current_state": "dag-engine",
+  "current_state": "audit-foundation",
   "states": {
     "dag-engine": {
-      "status": "in_progress",
+      "status": "complete",
       "executor": null,
       "started_at": "2026-06-14T03:46:53.562Z",
-      "done_at": null,
+      "done_at": "2026-06-14T03:53:58.170Z",
       "start_ref": "087966f0df81fb689c43b874756cee64da6b8b07",
-      "end_ref": null
+      "end_ref": "e1aafbdb6bac07e16ba038f01b7d04ccb0d65c08"
     },
     "audit-foundation": {
       "status": "pending",
@@ -45,7 +45,20 @@
       "end_ref": null
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-06-14T03:53:58.170Z",
+      "from": "dag-engine",
+      "to": "dag-engine",
+      "start_ref": "087966f0df81fb689c43b874756cee64da6b8b07",
+      "end_ref": "e1aafbdb6bac07e16ba038f01b7d04ccb0d65c08",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "DagEngine cycle+fan-in, dispatchFn injection, finally-wired dispatchReady, execution inputs"
+    }
+  ],
   "amendment_log": [
     {
       "at": "2026-06-13",
