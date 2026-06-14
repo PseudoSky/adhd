@@ -1,6 +1,6 @@
 {
   "plan": "task-streaming-sse",
-  "current_state": "stream-task-tool",
+  "current_state": "audit-foundation",
   "states": {
     "stream-event-bus": {
       "status": "complete",
@@ -24,11 +24,11 @@
       "end_ref": "c48bdbbfce2f848bcd69cc2430ed65226f657a37"
     },
     "stream-task-tool": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-14T04:18:08.156Z",
-      "done_at": null,
+      "done_at": "2026-06-14T04:20:18.373Z",
       "start_ref": "bf1e071f0bf5bfd1de87cf0fbacc12dfc84dfec0",
-      "end_ref": null
+      "end_ref": "849992d2a4ba489fe5f5801998fe968eb11c155e"
     },
     "audit-foundation": {
       "status": "pending",
@@ -95,6 +95,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "emitTaskEvent wired: status_change on running/awaiting_input/completed/cancelled/failed; tool_call before Phase-2 dispatch; tool_result after each result; done on completion+failure+cancellation paths; 9 new tests all pass (91 total)"
+    },
+    {
+      "ts": "2026-06-14T04:20:18.373Z",
+      "from": "stream-task-tool",
+      "to": "stream-task-tool",
+      "start_ref": "bf1e071f0bf5bfd1de87cf0fbacc12dfc84dfec0",
+      "end_ref": "849992d2a4ba489fe5f5801998fe968eb11c155e",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "stream: z.boolean().optional() in both sessionModeSchema and ephemeralModeSchema; stream_url computed from SSE_BASE_URL/SSE_PORT in taskTool session mode; 7 new tests all pass (98 total)"
     }
   ],
   "amendment_log": [],
