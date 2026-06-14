@@ -65,6 +65,18 @@
       "at": "2026-06-13",
       "author": "planner",
       "summary": "Extract hitl-schema + hitl-types nodes into task-schema-foundation plan. Schema/types work (resume_token column; 'awaiting_input' status; TaskStore.updateStatus resumeToken) moved to prerequisite plan. hitl-orchestrator now depends_on: [] and assumes foundation + 0.1.0 + 0.2.0 are deployed. agent-mcp-types/package.json removed from docs-and-publish artifacts (foundation owns that bump)."
+    },
+    {
+      "ts": "2026-06-14T04:05:30.910Z",
+      "state": "hitl-resume-tool",
+      "class": "executor",
+      "type": "reservation-expansion",
+      "reason": "TASK_NOT_RESUMABLE error code required by DoD hitl-resume-tool.4 must be registered in AgentMcpErrorCode + errorCodeSchema for the build to compile; additive enum member, no behavior change",
+      "files_synced": [
+        "packages/ai/agent-mcp-types/src/errors.ts",
+        "packages/ai/agent-mcp/src/validation/errors.ts"
+      ],
+      "by": "pseudosky"
     }
   ],
   "authored_with": {
