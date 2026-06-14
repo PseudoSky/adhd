@@ -11,12 +11,17 @@ Exits with the count of failures (0 = all pass).
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 
+# The audit script lives at docs/plan/parallel-tool-execution/scripts/audit_parallel.py
+# but all paths in checks are relative to the repo root (3 levels up).
+_REPO_ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
+
 
 def _run(cmd: str) -> tuple[int, str]:
-    r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    r = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=_REPO_ROOT)
     return r.returncode, (r.stdout + r.stderr).strip()
 
 
@@ -53,14 +58,7 @@ def phase_foundation() -> None:
         "grep -q 'Promise.all' packages/ai/agent-mcp/src/engine/orchestrator.ts",
     )
 
-    # [parallel-dispatch.2] Sequential for-loop absent
-    check(
-        "parallel-dispatch.2",
-        "Remove sequential 'for (const toolCall of toolCalls)' loop from orchestrator.ts",
-        "grep -q 'for (const toolCall of toolCalls)' packages/ai/agent-mcp/src/engine/orchestrator.ts",
-        expect_empty=False,  # this check inverts: we want the grep to FAIL (not found)
-    )
-    # Re-implement as a real negative check
+    # [parallel-dispatch.2] Sequential for-loop absent (negative check: grep must NOT find it)
     code, out = _run("grep -n 'for (const toolCall of toolCalls)' packages/ai/agent-mcp/src/engine/orchestrator.ts")
     if code == 0:
         failures.append(
