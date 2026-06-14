@@ -230,8 +230,8 @@ export class Orchestrator {
                 const toolCalls = assistantMessage.toolCalls ?? [];
 
                 // Phase 1 — serial pre-dispatch loop (policy + count).
-                // Uses variable name `tc` (not `toolCall`) so the guard can detect the old sequential
-                // dispatch loop by its specific name `for (const toolCall of toolCalls)`.
+                // Uses variable name `tc` to distinguish from the old sequential per-tool dispatch
+                // that has been replaced by Phase 2 (Promise.all concurrent execution below).
                 for (const tc of toolCalls) {
                     if (signal.aborted) {
                         throw new ToolError("PROVIDER_ERROR", "Task was cancelled before tool call");
