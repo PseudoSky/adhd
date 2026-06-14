@@ -148,6 +148,12 @@ export interface ExecutionContext {
   rootTaskId?: string;
   recursionDepth: number;
   toolCallCount: number;
+  /**
+   * Upstream task results keyed by upstream taskId. Populated by DagEngine at
+   * dispatch time from completed upstream task rows. Only present for tasks that
+   * have `depends_on` entries. Failed/cancelled upstreams are omitted.
+   */
+  inputs?: Record<string, string>;
 }
 
 /**

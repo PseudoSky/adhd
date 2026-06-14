@@ -12,11 +12,16 @@ import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
 import { AgentStore, SessionStore, TaskStore } from "./store/index.js";
 import { BackgroundQueue } from "./engine/queue.js";
+import { DagEngine } from "./engine/dag-engine.js";
 import { Orchestrator } from "./engine/orchestrator.js";
 import { HookRegistry } from "./engine/hooks.js";
 import { PolicyEngine } from "./engine/policy.js";
 import { UsagePlugin } from "./plugins/index.js";
 import { startServer } from "./server.js";
+import { enqueueExistingTask } from "./tools/task.js";
+import { tasksTable } from "./db/schema.js";
+import { eq } from "drizzle-orm";
+import { ToolError } from "./validation/errors.js";
 
 async function main() {
     // Run DB migrations synchronously before advertising tools
@@ -50,6 +55,27 @@ async function main() {
             .filter(Boolean),
     });
 
+    // Build DagEngine with an injected dispatchFn closure.
+    //
+    // The closure avoids a circular import between dag-engine.ts and tools/task.ts:
+    // DagEngine dispatches waiting→pending tasks by calling dispatchFn(taskId) rather
+    // than importing enqueueExistingTask directly. The closure captures `taskDeps`
+    // which is populated after startServer resolves (below).
+    //
+    // dispatchFn is only invoked when DagEngine.dispatchReady() finds a ready task,
+    // which always happens AFTER server startup, so `taskDeps` is guaranteed to be
+    // set by the time the closure executes.
+    let taskDeps: Parameters<typeof enqueueExistingTask>[1] | undefined;
+
+    const dispatchFn = async (taskId: string): Promise<void> => {
+        if (!taskDeps) {
+            throw new Error(`DagEngine.dispatchFn called before server initialised (taskId=${taskId})`);
+        }
+        await enqueueExistingTask(taskId, taskDeps);
+    };
+
+    const dagEngine = new DagEngine(dbAny, queue, taskStore, dispatchFn);
+
     const { close } = await startServer({
         agentStore,
         sessionStore,
@@ -59,7 +85,55 @@ async function main() {
         policy,
         hooks,
         db: dbAny,
+        dagEngine,
     });
+
+    // Startup re-enqueue scan: recover tasks that were transitioned to "pending"
+    // by DagEngine.dispatchReady() but lost their queue slot due to a process
+    // crash between the DB UPDATE and queue.enqueue(). Safe to run every startup
+    // because the queue is idempotent — already-running tasks are just re-queued.
+    //
+    // taskDeps must be set before the orphan scan so dispatchFn can call
+    // enqueueExistingTask.
+    //
+    // NOTE: inProcessDescriptors and inProcessHandler are not available here
+    // (they are local to server.ts). Dag-dispatched tasks do NOT support
+    // in-process recursive calls at the dispatch level — they can use in-process
+    // tools once running via the normal orchestrator path through server.ts.
+    // Pass empty stubs: the orchestrator builds its own registry per task.
+    taskDeps = {
+        agentStore,
+        sessionStore,
+        taskStore,
+        orchestrator,
+        queue,
+        policy,
+        hooks,
+        selfUrl: undefined,
+        inProcessDescriptors: [],
+        inProcessHandler: async () => {
+            throw new ToolError("VALIDATION_ERROR", "in-process tools unavailable during dag dispatch");
+        },
+        db: dbAny,
+        dagEngine,
+    };
+
+    const orphanedPending = dbAny
+        .select()
+        .from(tasksTable)
+        .where(eq(tasksTable.status, "pending"))
+        .all() as Array<{ id: string }>;
+
+    if (orphanedPending.length > 0) {
+        logger.info({ count: orphanedPending.length }, "Re-enqueueing orphaned pending tasks");
+        for (const row of orphanedPending) {
+            try {
+                await enqueueExistingTask(row.id, taskDeps);
+            } catch (err) {
+                logger.warn({ taskId: row.id, err }, "Failed to re-enqueue orphaned task");
+            }
+        }
+    }
 
     const shutdown = async (signal: string) => {
         logger.info({ signal }, "Server shutdown");
