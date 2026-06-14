@@ -4,10 +4,10 @@
   "current_state": "hitl-orchestrator",
   "states": {
     "hitl-orchestrator": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-14T04:00:37.097Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "b08890aaaeb0bca64852ba71ae16c8f0987c7ae3",
       "end_ref": null
     },
     "hitl-resume-tool": {
