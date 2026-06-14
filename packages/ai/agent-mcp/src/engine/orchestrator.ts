@@ -334,8 +334,6 @@ export class Orchestrator {
                     }
                     // ── end HITL intercept ──────────────────────────────────
 
-                    // Increment BEFORE policy check — see [inv:toolCallCount-increment-before-check]
-                    executionContext.toolCallCount++;
                     const qualifiedToolName = `${tc.server}__${tc.tool}`;
                     await hooks.emit("pre:tool_call", {
                         executionContext,
@@ -351,6 +349,14 @@ export class Orchestrator {
                                 ? (tc.arguments as { name?: string })?.name
                                 : undefined,
                     });
+                    // Increment AFTER policy.check — see [inv:toolCallCount-increment-after-check].
+                    // policy.check enforces "allow while toolCallCount < max" (it expects the
+                    // count of calls already accounted for), so incrementing BEFORE the check
+                    // fired the cap one call early (effective max-1). Counting per tool here —
+                    // still inside the serial pre-dispatch loop, not Phase 3 — keeps the limit
+                    // enforced WITHIN a single concurrent batch: each tool's check sees the
+                    // running count from prior tools in this same loop.
+                    executionContext.toolCallCount++;
                 }
 
                 // Phase 2 — Promise.all concurrent execution.

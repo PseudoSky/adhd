@@ -6,7 +6,7 @@ import { generateId } from "../utils/ids.js";
 import type { LLMProvider, ProviderChatResponse } from "../providers/types.js";
 import type { ExecutionContext, Message } from "../validation/index.js";
 import type { McpClientRegistry } from "../clients/registry.js";
-import type { PolicyEngine } from "../engine/policy.js";
+import { PolicyEngine } from "../engine/policy.js";
 import type { TaskStore } from "../store/task-store.js";
 import type { SessionStore } from "../store/session-store.js";
 
@@ -288,6 +288,64 @@ describe("Orchestrator", () => {
                 code: "PROVIDER_ERROR",
                 message: expect.stringContaining("upstream API exploded"),
             });
+        });
+    });
+
+    describe("tool-loop cap enforcement (regression: off-by-one)", () => {
+        it("executes exactly serverMaxToolLoops tool calls before MAX_TOOL_LOOPS_EXCEEDED", async () => {
+            const MAX = 3;
+            const ctx = makeCtx({ timeoutMs: 5000 });
+            const realPolicy = new PolicyEngine({ serverMaxDepth: 10, serverMaxToolLoops: MAX });
+
+            let executed = 0;
+            const countingRegistry = {
+                listAllTools: async () => [
+                    { name: "test-server__loop-tool", description: "", inputSchema: { type: "object", properties: {} } },
+                ],
+                getClient: async () => ({
+                    callTool: async () => {
+                        executed++;
+                        return "ok";
+                    },
+                }),
+                closeAll: async () => {},
+            } as unknown as McpClientRegistry;
+
+            // One tool call every turn, never completing — the ONLY thing that stops
+            // the loop is the tool-loop policy cap.
+            const loopingProvider: LLMProvider = {
+                chat: async () => ({
+                    message: {
+                        id: generateId(),
+                        sessionId: ctx.sessionId,
+                        role: "assistant",
+                        content: null,
+                        toolCalls: [
+                            { id: generateId(), server: "test-server", tool: "loop-tool", arguments: {} },
+                        ],
+                        createdAt: nowIso(),
+                    },
+                    stopReason: "tool_calls" as const,
+                }),
+            };
+
+            await expect(
+                new Orchestrator().run({
+                    executionContext: ctx,
+                    messages: [makeUserMessage(ctx.sessionId)],
+                    registry: countingRegistry,
+                    provider: loopingProvider,
+                    policy: realPolicy,
+                    taskStore,
+                    sessionStore,
+                    signal: new AbortController().signal,
+                    taskId: generateId(),
+                })
+            ).rejects.toMatchObject({ code: "MAX_TOOL_LOOPS_EXCEEDED" });
+
+            // Exactly MAX calls execute — not MAX-1. Incrementing toolCallCount BEFORE
+            // policy.check (the old off-by-one) would stop one call early at MAX-1 (2).
+            expect(executed).toBe(MAX);
         });
     });
 

@@ -39,8 +39,6 @@ preserved except execution order within a single tool-call batch.
       if (signal.aborted) {
           throw new ToolError("PROVIDER_ERROR", "Task was cancelled before tool call");
       }
-      // Increment BEFORE policy check — see [inv:toolCallCount-increment-before-check]
-      executionContext.toolCallCount++;
       const qualifiedToolName = `${tc.server}__${tc.tool}`;
       await hooks.emit("pre:tool_call", {
           executionContext,
@@ -56,6 +54,11 @@ preserved except execution order within a single tool-call batch.
                   ? (tc.arguments as { name?: string })?.name
                   : undefined,
       });
+      // Increment AFTER the check — see [inv:toolCallCount-increment-after-check].
+      // policy.check throws at `count >= max`, so it must see the count EXCLUDING this
+      // call; incrementing first would cut the effective cap to max-1. Counting per
+      // tool here still enforces the limit within a concurrent batch.
+      executionContext.toolCallCount++;
   }
   ```
 
@@ -138,7 +141,7 @@ preserved except execution order within a single tool-call batch.
   The empty-tool-call guard that follows the loop (lines 363–371) is unchanged — it still checks
   `(assistantMessage.toolCalls ?? []).length === 0` after the batch.
 
-- **Invariants:** See `[inv:toolCallCount-increment-before-check]`, `[inv:fatal-policy-codes]`,
+- **Invariants:** See `[inv:toolCallCount-increment-after-check]`, `[inv:fatal-policy-codes]`,
   `[inv:call-id-keying]`, `[inv:message-order]` in `_shared.md`.
 
 - **Validation:** `grep -q 'Promise.all' orchestrator.ts && ! grep -q 'for (const toolCall of toolCalls)'`
@@ -156,8 +159,8 @@ Checked by `audit-foundation` as slug-keyed IDs.
       `! grep -q 'for (const toolCall of toolCalls)' packages/ai/agent-mcp/src/engine/orchestrator.ts`
 - [ ] **[parallel-dispatch.3]** `toolCallId` in the result message uses `toolCall.id` (not a generated ID or index).
       `grep -q 'toolCallId: toolCall.id' packages/ai/agent-mcp/src/engine/orchestrator.ts`
-- [ ] **[parallel-dispatch.4]** `executionContext.toolCallCount++` appears in orchestrator.ts BEFORE `policy.check(` in a pre-dispatch serial loop.
-      `grep -n 'toolCallCount++\|policy.check(' packages/ai/agent-mcp/src/engine/orchestrator.ts` — count++ line must precede policy.check line
+- [ ] **[parallel-dispatch.4]** `executionContext.toolCallCount++` appears in orchestrator.ts AFTER `policy.check(` in a pre-dispatch serial loop.
+      `grep -n 'toolCallCount++\|policy.check(' packages/ai/agent-mcp/src/engine/orchestrator.ts` — count++ line must follow policy.check line (policy.check sees `count < max`; incrementing first cuts the cap to max-1)
 - [ ] **[parallel-dispatch.5]** Fatal policy codes re-throw (not caught as isError). Test: policy violation → task fails (not continues).
       `npx nx test agent-mcp -- --reporter=verbose 2>&1 | grep -q 'policy'`
 - [ ] **[parallel-dispatch.6]** All existing tests pass.
@@ -202,10 +205,12 @@ mutates:    [
 
 ## Notes for executor
 
-- **Footgun: toolCallCount increment moved.** The old code incremented `toolCallCount` AFTER
-  appending the tool result. The new code increments BEFORE policy.check() in Phase 1. Both are
-  correct for their model but the test for `MAX_TOOL_LOOPS_EXCEEDED` must be updated if it checks
-  count state mid-execution.
+- **Footgun: toolCallCount increment moved into Phase 1.** The old sequential code incremented
+  `toolCallCount` in Phase 3 (after appending the tool result). The parallel version increments
+  per tool in the Phase-1 pre-dispatch loop so the cap is enforced WITHIN a single concurrent
+  batch. It must be incremented AFTER `policy.check()`, not before: `policy.check` throws at
+  `count >= max`, so the count it sees must exclude the current call — incrementing first cuts
+  the effective cap to max-1. See `[inv:toolCallCount-increment-after-check]`.
 - **Footgun: Phase 1 can throw a ToolError.** If `policy.check()` throws `MAX_TOOL_LOOPS_EXCEEDED`,
   the Phase 1 for-loop throws synchronously before `Promise.all` is reached. The catch block at
   the top of `Orchestrator.run()` handles this correctly — no special handling needed.
