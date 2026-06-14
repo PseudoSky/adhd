@@ -13,11 +13,11 @@
       "end_ref": "e1aafbdb6bac07e16ba038f01b7d04ccb0d65c08"
     },
     "audit-foundation": {
-      "status": "pending",
+      "status": "in_progress",
       "executor": null,
-      "started_at": null,
+      "started_at": "2026-06-14T03:54:17.257Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "9dd87a31117421273a6eff96d1c8aa22fd300b44",
       "end_ref": null
     },
     "code-review": {
