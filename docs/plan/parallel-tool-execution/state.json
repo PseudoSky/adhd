@@ -2,7 +2,7 @@
   "schema_version": 3,
   "title": "parallel-tool-execution",
   "dag": "dag.json",
-  "current_state": "audit-foundation",
+  "current_state": "code-review",
   "states": {
     "parallel-dispatch": {
       "status": "complete",
@@ -13,12 +13,12 @@
       "end_ref": "cd5bbd92e3c42e1c7c4016b12c18714b64094c80"
     },
     "audit-foundation": {
-      "status": "in_progress",
+      "status": "complete",
       "executor": null,
       "started_at": "2026-06-14T03:35:36.550Z",
-      "done_at": null,
+      "done_at": "2026-06-14T03:35:54.329Z",
       "start_ref": "7734443b9ab038d90ef1c6a8a386f13cf74ce159",
-      "end_ref": null
+      "end_ref": "0c628ea045ddfe8cba29c18e4ec235cefe0d7fca"
     },
     "code-review": {
       "status": "pending",
@@ -69,6 +69,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "parallel dispatch via Promise.all; toolCallCount before policy.check; order-preserving append"
+    },
+    {
+      "ts": "2026-06-14T03:35:54.329Z",
+      "from": "audit-foundation",
+      "to": "audit-foundation",
+      "start_ref": "7734443b9ab038d90ef1c6a8a386f13cf74ce159",
+      "end_ref": "0c628ea045ddfe8cba29c18e4ec235cefe0d7fca",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "foundation audit green"
     }
   ],
   "amendment_log": [],
