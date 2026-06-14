@@ -31,10 +31,10 @@
       "end_ref": "849992d2a4ba489fe5f5801998fe968eb11c155e"
     },
     "audit-foundation": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-14T04:20:56.040Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "d8edf918017862553c35f5e0388a48d9bb6ddd35",
       "end_ref": null
     },
     "code-review": {
