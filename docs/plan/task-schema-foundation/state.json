@@ -5,11 +5,11 @@
   "current_state": "schema-columns",
   "states": {
     "schema-columns": {
-      "status": "pending",
+      "status": "in_progress",
       "executor": null,
-      "started_at": null,
+      "started_at": "2026-06-14T03:38:47.767Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "fd9c609fcfd514216a546bd0948bc9282729841e",
       "end_ref": null
     },
     "task-types": {
