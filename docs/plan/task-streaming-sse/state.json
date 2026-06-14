@@ -10,10 +10,10 @@
       "end_ref": "416c61812889ed95499da22d7864afbce907f512"
     },
     "stream-http-server": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-14T04:13:29.035Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "d8c32f2cd19b59df3fd70550e94527c05ee82f3f",
       "end_ref": null
     },
     "stream-orchestrator": {
