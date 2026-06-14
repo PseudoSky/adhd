@@ -302,12 +302,19 @@ export class Orchestrator {
                         //    Wire into the AbortSignal so task_cancel unblocks this promise —
                         //    without this, cancelling an awaiting_input task leaves the promise
                         //    pending forever and the orchestrator's async context leaks.
+                        let abortHandler: (() => void) | undefined;
                         const userInput = await new Promise<string>((resolve, reject) => {
                             hitlResolvers.set(taskId, resolve);
-                            signal.addEventListener("abort", () => {
+                            abortHandler = () => {
                                 hitlResolvers.delete(taskId);
                                 reject(new ToolError("PROVIDER_ERROR", "Task cancelled while awaiting human input"));
-                            }, { once: true });
+                            };
+                            signal.addEventListener("abort", abortHandler, { once: true });
+                        }).finally(() => {
+                            // Remove the abort listener once the promise settles so a
+                            // later cancellation of this (now-resumed) task does not fire
+                            // a stale handler / leak a listener on the long-lived signal.
+                            if (abortHandler) signal.removeEventListener("abort", abortHandler);
                         });
 
                         // 4. Mark running again

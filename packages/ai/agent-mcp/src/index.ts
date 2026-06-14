@@ -142,9 +142,9 @@ async function main() {
     const shutdown = async (signal: string) => {
         logger.info({ signal }, "Server shutdown");
         await close();
-        sseServer.close(() => {
-            // SSE connections drained
-        });
+        // Await SSE drain before exiting — close() is callback-based, so calling
+        // process.exit on the next line would race the drain.
+        await new Promise<void>(resolve => sseServer.close(() => resolve()));
         process.exit(0);
     };
 

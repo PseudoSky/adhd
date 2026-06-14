@@ -22,13 +22,11 @@ Confirmed implementation gaps in the current codebase. Each has a clear fix path
 
 ---
 
-## 3. Streaming — not implemented
+## 3. Streaming — SSE event streaming shipped (0.4.0); token streaming deferred (0.5.0)
 
-**Current state:** All providers return a complete response after the full tool-use loop. No partial token streaming is exposed to callers.
+**Status (0.4.0):** Task-level SSE streaming is implemented. A separate Node HTTP server (`streaming/sse-server.ts`, default port `SSE_PORT=3001`) exposes `GET /tasks/:id/stream`; the orchestrator emits `tool_call`, `tool_result`, `status_change`, and `done` events through an in-memory `EventBus` (`streaming/event-bus.ts`). The `task` tool returns a `stream_url` when called with `stream: true` in background mode.
 
-**Roadmap position:** Feature #30, lowest strategic score (3.68). Scored TABLE STAKES — needed eventually, but low differentiation. Blocked on lifecycle middleware hooks (Phase 1) which must exist before stream events can be forwarded.
-
-**Fix path:** Add a `task_stream` tool (or SSE endpoint) that subscribes to the orchestrator lifecycle hooks and forwards events as NDJSON. `claudecli` already has internal streaming via `--output-format stream-json` — it just needs to be forwarded rather than buffered.
+**Still deferred to 0.5.0 — `token` events:** The `LLMProvider` interface (`providers/types.ts`) returns `Promise<ProviderChatResponse>` — a complete response, not a streaming iterator. Per-token streaming requires a breaking interface change, so `token` events are defined in the `TaskStreamEvent` union but never emitted in 0.4.0. `done` is always emitted (including on the cancellation path). `claudecli` already has internal streaming via `--output-format stream-json` — it could be forwarded once the provider interface supports an async iterator.
 
 ---
 
@@ -95,3 +93,15 @@ The following CORE features from Phase 1 of the build order are unimplemented or
 | Token usage tracking | **Status: implemented** — `task_usage` table populated on every model call; `usage_query` MCP tool exposes per-task and subtree token counts; `task` and `result` tools include a `usage` rollup in their responses |
 | Per-task priority queue | `p-queue` wrapper exists but no priority levels |
 | Per-agent concurrency limit | No per-agent cap, only server-wide `QUEUE_CONCURRENCY` |
+
+---
+
+## 8. Parallel tool dispatch — behavioral changes (0.1.0)
+
+Tool calls within a single model turn now execute concurrently (`Promise.all`) instead of sequentially. Three observable behavior changes, intentional but worth documenting:
+
+1. **`toolCallCount` is incremented in the Phase-1 pre-dispatch loop, before `policy.check()`** (`[inv:toolCallCount-increment-before-check]`). The old code incremented after appending each result. Net effect: the effective `AGENT_MCP_MAX_TOOL_LOOPS` cap now counts the about-to-run batch, so a batch that would cross the limit is rejected up front rather than after the fact. Deliberate — do not "fix" by moving the increment.
+
+2. **Hook ordering: `pre:tool_call` for all calls in a batch fire serially in Phase 1, but `post:tool_call` fire from within the concurrent `Promise.all` arms.** A hook consumer can no longer assume strict `pre(A)→post(A)→pre(B)→post(B)` pairing — `post` events may interleave/reorder within a batch. Tool *result messages* are still appended in original `toolCalls` order (`[inv:message-order]`).
+
+3. **Cancellation is observed only after the whole batch settles.** `signal` is not threaded into individual `client.callTool()` calls, so aborting mid-batch lets all in-flight calls run to completion before the abort is seen on the next loop iteration. (Pre-existing — sequential code also didn't abort mid-tool — but the window is wider now.) Threading `signal` into `callTool` would tighten cancellation latency.

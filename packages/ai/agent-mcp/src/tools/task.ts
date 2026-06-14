@@ -197,17 +197,23 @@ export async function taskTool(
     // Validate no dependency cycle before inserting the row.
     // [inv:cycle-check-synchronous] — throws ToolError("VALIDATION_ERROR") on cycle.
     const dependsOn = (input as { depends_on?: string[] }).depends_on ?? [];
-    const prospectiveTaskId = generateId();
+    const onUpstreamFailure = (input as { on_upstream_failure?: "fail" | "skip" })
+        .on_upstream_failure;
+    // Generate the id up front so the cycle check validates the SAME id that is
+    // inserted below (TaskStore.create reuses input.id when provided).
+    const newTaskId = generateId();
     if (dependsOn.length > 0) {
-        deps.dagEngine.validateNoCycle(prospectiveTaskId, dependsOn);
+        deps.dagEngine.validateNoCycle(newTaskId, dependsOn);
     }
 
     const task = deps.taskStore.create({
+        id: newTaskId,
         sessionId: input.session_id,
         prompt: input.prompt,
         parentTaskId: callerContext?.taskId,
         recursionDepth: (callerContext?.recursionDepth ?? -1) + 1,
         dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
+        onUpstreamFailure,
     });
 
     // Derive rootTaskId at creation time from the in-memory callerContext chain.
@@ -297,10 +303,16 @@ export async function taskTool(
         }
     };
 
-    // Compute stream_url when input.stream is true
+    // Compute stream_url when streaming is requested for a backgrounded task.
+    // A synchronous task is already complete by the time the caller gets the
+    // response, so an SSE URL for it would only ever hit the terminal-on-connect
+    // path and close immediately — omit it.
     const ssePort = process.env["SSE_PORT"] ?? "3001";
     const sseBaseUrl = process.env["SSE_BASE_URL"] ?? `http://localhost:${ssePort}`;
-    const streamUrl = input.stream ? `${sseBaseUrl}/tasks/${task.id}/stream` : undefined;
+    const streamUrl =
+        input.stream && input.background
+            ? `${sseBaseUrl}/tasks/${task.id}/stream`
+            : undefined;
 
     if (input.background) {
         // Enqueue for background execution — return immediately
