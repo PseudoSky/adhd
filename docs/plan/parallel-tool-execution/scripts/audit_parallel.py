@@ -74,12 +74,14 @@ def phase_foundation() -> None:
         "grep -q 'toolCallId: toolCall.id' packages/ai/agent-mcp/src/engine/orchestrator.ts",
     )
 
-    # [parallel-dispatch.4] toolCallCount++ appears before policy.check in orchestrator
+    # [parallel-dispatch.4] toolCallCount++ appears AFTER policy.check in the pre-dispatch loop.
+    # policy.check enforces `count < max` (throws at >=), so the count it sees must EXCLUDE the
+    # current call; incrementing before the check reduces the effective cap by one (max-1).
     check(
         "parallel-dispatch.4",
-        "toolCallCount must be incremented before policy.check() in the pre-dispatch loop",
+        "toolCallCount must be incremented AFTER policy.check() passes in the pre-dispatch loop",
         r"""python3 -c "
-import re, sys
+import sys
 src = open('packages/ai/agent-mcp/src/engine/orchestrator.ts').read()
 # Find line numbers of toolCallCount++ and policy.check(
 lines = src.splitlines()
@@ -89,8 +91,8 @@ if count_inc is None:
     print('FAIL: toolCallCount++ not found'); sys.exit(1)
 if policy_chk is None:
     print('FAIL: policy.check( not found'); sys.exit(1)
-if count_inc >= policy_chk:
-    print(f'FAIL: toolCallCount++ at line {count_inc+1} is not before policy.check( at line {policy_chk+1}')
+if count_inc <= policy_chk:
+    print(f'FAIL: toolCallCount++ at line {count_inc+1} is not after policy.check( at line {policy_chk+1}')
     sys.exit(1)
 print('OK')
 " """,

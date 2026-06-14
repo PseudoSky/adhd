@@ -14,8 +14,9 @@ result objects — they do not throw.
 
 `policy.check()` fires for each tool before `client.callTool()`. In the new parallel
 implementation, this means the pre-dispatch serial loop MUST:
-1. Increment `executionContext.toolCallCount` first.
-2. Call `policy.check({executionContext, targetTool, targetAgentName})`.
+1. Call `policy.check({executionContext, targetTool, targetAgentName})`.
+2. Increment `executionContext.toolCallCount` AFTER the check passes — see
+   `[inv:toolCallCount-increment-after-check]`.
 3. On policy violation (throws a `ToolError` with a fatal code), abort the entire batch — the
    `Promise.all` is never reached.
 
@@ -29,13 +30,21 @@ Three `ToolError` codes are fatal and re-throw from the tool-result catch block:
 Any other error is caught and surfaced as `isError: true` in the tool result, and the tool loop
 continues.
 
-## [inv:toolCallCount-increment-before-check]
+## [inv:toolCallCount-increment-after-check]
 
-`executionContext.toolCallCount` is incremented BEFORE `policy.check()` is called for each
-dispatch — not after the result is appended. This ensures the policy limit check sees the count
-that WILL be true after dispatch, not the count at the time of check. This differs from the
-original sequential code (which incremented after append) and is the correct semantics for the
-parallel case.
+`executionContext.toolCallCount` is incremented AFTER `policy.check()` passes, but still inside
+the serial pre-dispatch loop (per tool) — NOT after the result is appended in Phase 3.
+
+Rationale: `policy.check()` enforces `toolCallCount < effectiveMaxToolLoops` (it throws at
+`>=`), treating the count as "calls already accounted for". So the check must see the count of
+prior calls, not a count that already includes the current one — otherwise the effective cap is
+reduced by one (e.g. max 50 would block on the 50th call, allowing only 49). Incrementing per
+tool here (rather than in Phase 3) still enforces the limit WITHIN a single concurrent batch:
+each tool's `policy.check()` sees the running count incremented by the prior tools in the same
+loop.
+
+(Earlier revisions of this plan incremented BEFORE the check; that was an off-by-one bug —
+the comparison in `policy.check` was calibrated for the increment-after-check ordering.)
 
 ## [inv:call-id-keying]
 
