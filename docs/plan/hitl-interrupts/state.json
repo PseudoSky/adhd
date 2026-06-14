@@ -11,10 +11,10 @@
       "end_ref": "d3d2d0e2bb77a1f44c537bb14884cf28d1d5821c"
     },
     "hitl-resume-tool": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-14T04:04:27.831Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "27dfffb993190ecc05a9880e014b5022bd8c71e9",
       "end_ref": null
     },
     "audit-foundation": {
