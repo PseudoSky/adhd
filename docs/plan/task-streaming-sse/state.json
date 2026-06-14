@@ -109,7 +109,19 @@
       "note": "stream: z.boolean().optional() in both sessionModeSchema and ephemeralModeSchema; stream_url computed from SSE_BASE_URL/SSE_PORT in taskTool session mode; 7 new tests all pass (98 total)"
     }
   ],
-  "amendment_log": [],
+  "amendment_log": [
+    {
+      "ts": "2026-06-14T04:20:46.713Z",
+      "state": "audit-foundation",
+      "class": "executor",
+      "type": "reservation-expansion",
+      "reason": "audit_sse.py line 128 used wrong kwarg expect_ok=True (check() signature is expect_zero=True); fixed to prevent TypeError crashing the audit before any checks ran",
+      "files_synced": [
+        "docs/plan/task-streaming-sse/scripts/audit_sse.py"
+      ],
+      "by": "pseudosky"
+    }
+  ],
   "schema_version": 3,
   "authored_with": {
     "plugin": "workflow",
