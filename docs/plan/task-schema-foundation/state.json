@@ -2,15 +2,15 @@
   "schema_version": 3,
   "title": "task-schema-foundation",
   "dag": "dag.json",
-  "current_state": "schema-columns",
+  "current_state": "task-types",
   "states": {
     "schema-columns": {
-      "status": "in_progress",
+      "status": "complete",
       "executor": null,
       "started_at": "2026-06-14T03:38:47.767Z",
-      "done_at": null,
+      "done_at": "2026-06-14T03:39:46.454Z",
       "start_ref": "fd9c609fcfd514216a546bd0948bc9282729841e",
-      "end_ref": null
+      "end_ref": "b3ce2614734b6c6aef3a84f3d0e2544fdf6f3ae2"
     },
     "task-types": {
       "status": "pending",
@@ -53,7 +53,20 @@
       "end_ref": null
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-06-14T03:39:46.454Z",
+      "from": "schema-columns",
+      "to": "schema-columns",
+      "start_ref": "fd9c609fcfd514216a546bd0948bc9282729841e",
+      "end_ref": "b3ce2614734b6c6aef3a84f3d0e2544fdf6f3ae2",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "4 cols + 2 statuses, single migration 0004"
+    }
+  ],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
