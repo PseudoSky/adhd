@@ -50,6 +50,12 @@ export default defineConfig({
       dir: '../../../node_modules/.vitest',
     },
     environment: 'node',
+    // better-sqlite3 is a native addon. Running test files' forks in parallel
+    // races their in-memory DB finalization against in-flight fire-and-forget
+    // background tasks (DagEngine dispatch, queued orchestrator runs),
+    // intermittently segfaulting (SIGSEGV / exit 139) at teardown. Each file is
+    // clean in isolation; serialize file execution to remove the cross-fork race.
+    fileParallelism: false,
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
 
     reporters: ['default'],
