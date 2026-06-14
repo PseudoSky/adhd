@@ -5,11 +5,11 @@
   "current_state": "dag-engine",
   "states": {
     "dag-engine": {
-      "status": "pending",
+      "status": "in_progress",
       "executor": null,
-      "started_at": null,
+      "started_at": "2026-06-14T03:46:53.562Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "087966f0df81fb689c43b874756cee64da6b8b07",
       "end_ref": null
     },
     "audit-foundation": {
