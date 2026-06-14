@@ -297,6 +297,11 @@ export async function taskTool(
         }
     };
 
+    // Compute stream_url when input.stream is true
+    const ssePort = process.env["SSE_PORT"] ?? "3001";
+    const sseBaseUrl = process.env["SSE_BASE_URL"] ?? `http://localhost:${ssePort}`;
+    const streamUrl = input.stream ? `${sseBaseUrl}/tasks/${task.id}/stream` : undefined;
+
     if (input.background) {
         // Enqueue for background execution — return immediately
         deps.queue.enqueue(task.id, runTask);
@@ -306,10 +311,14 @@ export async function taskTool(
             "Task enqueued for background execution"
         );
 
-        return {
+        const response: TaskToolOutput = {
             task_id: task.id,
             status: "pending",
         };
+        if (streamUrl) {
+            response.stream_url = streamUrl;
+        }
+        return response;
     } else {
         // Synchronous execution — wait for completion
         try {
@@ -321,12 +330,16 @@ export async function taskTool(
 
         const finalTask = deps.taskStore.read(task.id);
         const usage = buildTaskUsageReport(deps.db, finalTask.id);
-        return {
+        const response: TaskToolOutput = {
             task_id: finalTask.id,
             status: finalTask.status,
             result: finalTask.result,
             usage,
         };
+        if (streamUrl) {
+            response.stream_url = streamUrl;
+        }
+        return response;
     }
 }
 
