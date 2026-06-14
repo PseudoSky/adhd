@@ -31,7 +31,7 @@ import {
     agentList,
 } from "./tools/agent-crud.js";
 import { agentTool, sessionList, sessionClose, sessionClear } from "./tools/session.js";
-import { taskTool, taskList, taskCancel, resultTool } from "./tools/task.js";
+import { taskTool, taskList, taskCancel, taskResume, resultTool } from "./tools/task.js";
 import { usageQuery, type Database } from "./tools/usage.js";
 import { ToolError } from "./validation/errors.js";
 import {
@@ -49,6 +49,14 @@ import {
     resultInputSchema,
     taskUsageInputSchema,
 } from "./validation/index.js";
+
+// Input schema for the task_resume tool (defined here to avoid modifying the
+// read_only validation/task.ts in this node).
+const taskResumeInputSchema = z.object({
+    taskId: z.string().uuid().describe("ID of the awaiting_input task to resume"),
+    resumeToken: z.string().uuid().describe("Token returned when the task was suspended"),
+    userInput: z.string().describe("The human's response to inject as the tool result"),
+});
 
 export interface ServerDeps {
     agentStore: AgentStore;
@@ -404,6 +412,11 @@ export function createServer(deps: ServerDeps): Server {
             inputSchema: toMcpInputSchema(taskCancelInputSchema),
         },
         {
+            name: "task_resume",
+            description: "Resume a suspended awaiting_input task by providing the human's response",
+            inputSchema: toMcpInputSchema(taskResumeInputSchema),
+        },
+        {
             name: "session_list",
             description: "List sessions",
             inputSchema: toMcpInputSchema(sessionListInputSchema),
@@ -473,6 +486,8 @@ export function createServer(deps: ServerDeps): Server {
                 return taskList(taskListInputSchema.parse(args), { taskStore: deps.taskStore });
             case "task_cancel":
                 return taskCancel(taskCancelInputSchema.parse(args), { taskStore: deps.taskStore });
+            case "task_resume":
+                return taskResume(taskResumeInputSchema.parse(args), { taskStore: deps.taskStore });
             case "session_list":
                 return sessionList(sessionListInputSchema.parse(args), {
                     agentStore: deps.agentStore,
@@ -558,6 +573,11 @@ export function createServer(deps: ServerDeps): Server {
                 name: "task_cancel",
                 description: "Cancel a running or pending task",
                 inputSchema: toMcpInputSchema(taskCancelInputSchema),
+            },
+            {
+                name: "task_resume",
+                description: "Resume a suspended awaiting_input task by providing the human's response and the resumeToken issued at suspension",
+                inputSchema: toMcpInputSchema(taskResumeInputSchema),
             },
             {
                 name: "result",
@@ -660,6 +680,11 @@ export function createServer(deps: ServerDeps): Server {
 
                 case "task_cancel":
                     return toMcpContent(taskCancel(taskCancelInputSchema.parse(args), { taskStore: deps.taskStore }));
+
+                case "task_resume":
+                    return toMcpContent(
+                        await taskResume(taskResumeInputSchema.parse(args), { taskStore: deps.taskStore })
+                    );
 
                 case "result":
                     return toMcpContent(

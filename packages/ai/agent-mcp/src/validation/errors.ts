@@ -13,6 +13,7 @@ export const errorCodeSchema = z.enum([
   // Task
   "TASK_NOT_FOUND",
   "TASK_NOT_CANCELLABLE",
+  "TASK_NOT_RESUMABLE",
 
   // Policy / delegation
   "DELEGATION_NOT_ALLOWED",
