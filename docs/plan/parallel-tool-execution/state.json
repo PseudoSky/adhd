@@ -8,9 +8,9 @@
       "status": "complete",
       "executor": null,
       "started_at": "2026-06-14T03:28:40.256Z",
-      "done_at": "2026-06-14T03:31:23.581Z",
+      "done_at": "2026-06-14T03:35:25.256Z",
       "start_ref": "e28a3578b6f1014488cda64d84389c370d8ac89a",
-      "end_ref": "a408c3e0efcaaae397a9b62da34e765fbf2e6c5c"
+      "end_ref": "cd5bbd92e3c42e1c7c4016b12c18714b64094c80"
     },
     "audit-foundation": {
       "status": "pending",
@@ -55,6 +55,18 @@
       "audit_exit": 6,
       "audit_criteria_passed": 0,
       "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "parallel dispatch via Promise.all; toolCallCount before policy.check; order-preserving append"
+    },
+    {
+      "ts": "2026-06-14T03:35:25.256Z",
+      "from": "audit-foundation",
+      "to": "parallel-dispatch",
+      "start_ref": "e28a3578b6f1014488cda64d84389c370d8ac89a",
+      "end_ref": "cd5bbd92e3c42e1c7c4016b12c18714b64094c80",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "parallel dispatch via Promise.all; toolCallCount before policy.check; order-preserving append"
     }
