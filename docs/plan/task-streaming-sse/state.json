@@ -17,10 +17,10 @@
       "end_ref": "41ca06b0e6af569b577dcf1982ec8020b0c45bc7"
     },
     "stream-orchestrator": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-14T04:14:58.537Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "5c8073648a38fdf5919ec1f83eaf9313346facb0",
       "end_ref": null
     },
     "stream-task-tool": {
