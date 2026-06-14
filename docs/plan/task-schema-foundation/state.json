@@ -2,7 +2,7 @@
   "schema_version": 3,
   "title": "task-schema-foundation",
   "dag": "dag.json",
-  "current_state": "audit-foundation",
+  "current_state": "code-review",
   "states": {
     "schema-columns": {
       "status": "complete",
@@ -21,12 +21,12 @@
       "end_ref": "96f13ec91d9d5d35ad4d070024c5f79fef4678ea"
     },
     "audit-foundation": {
-      "status": "in_progress",
+      "status": "complete",
       "executor": null,
       "started_at": "2026-06-14T03:43:06.085Z",
-      "done_at": null,
+      "done_at": "2026-06-14T03:43:14.594Z",
       "start_ref": "da52da3337e47002477469f1237fda3da8cb9bf3",
-      "end_ref": null
+      "end_ref": "1e0dff2b5d72a6de5ceeb967323ec298abe552fe"
     },
     "code-review": {
       "status": "pending",
@@ -89,6 +89,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "types→validation→store; build green, 52/52 tests pass"
+    },
+    {
+      "ts": "2026-06-14T03:43:14.594Z",
+      "from": "audit-foundation",
+      "to": "audit-foundation",
+      "start_ref": "da52da3337e47002477469f1237fda3da8cb9bf3",
+      "end_ref": "1e0dff2b5d72a6de5ceeb967323ec298abe552fe",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "foundation audit green"
     }
   ],
   "amendment_log": [],
