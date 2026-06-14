@@ -283,4 +283,220 @@ describe("Orchestrator", () => {
             });
         });
     });
+
+    describe("parallel concurrent tool dispatch via Promise.all", () => {
+        it("invokes multiple tool calls concurrently and appends all results in original order", async () => {
+            const ctx = makeCtx({ timeoutMs: 5000 });
+            const toolCallIds = [generateId(), generateId()];
+            const invokedTools: string[] = [];
+            const appendedToolCallIds: string[] = [];
+
+            // Provider returns two tool calls in one batch, then completes.
+            let callCount = 0;
+            const provider: LLMProvider = {
+                chat: async () => {
+                    callCount++;
+                    if (callCount === 1) {
+                        return {
+                            message: {
+                                id: generateId(),
+                                sessionId: ctx.sessionId,
+                                role: "assistant",
+                                content: null,
+                                toolCalls: [
+                                    { id: toolCallIds[0], server: "test-server", tool: "tool-alpha", arguments: {} },
+                                    { id: toolCallIds[1], server: "test-server", tool: "tool-beta", arguments: {} },
+                                ],
+                                createdAt: nowIso(),
+                            },
+                            stopReason: "tool_calls" as const,
+                        };
+                    }
+                    // Second call — return completed
+                    return {
+                        message: {
+                            id: generateId(),
+                            sessionId: ctx.sessionId,
+                            role: "assistant",
+                            content: "done",
+                            createdAt: nowIso(),
+                        },
+                        stopReason: "completed" as const,
+                    };
+                },
+            };
+
+            // Registry stub that records which tools were called
+            const parallelRegistry = {
+                listAllTools: async () => [
+                    { name: "test-server__tool-alpha", description: "", inputSchema: { type: "object", properties: {} } },
+                    { name: "test-server__tool-beta", description: "", inputSchema: { type: "object", properties: {} } },
+                ],
+                getClient: async (server: string) => ({
+                    callTool: async (tool: string) => {
+                        invokedTools.push(`${server}__${tool}`);
+                        return `result-from-${tool}`;
+                    },
+                }),
+                closeAll: async () => {},
+            } as unknown as McpClientRegistry;
+
+            // SessionStore stub that records toolCallIds from appended tool result messages
+            const parallelSessionStore = {
+                appendMessage: (sessionId: string, msg: { role?: string; toolResults?: Array<{ toolCallId: string }> }) => {
+                    if (msg.role === "tool" && msg.toolResults) {
+                        for (const tr of msg.toolResults) {
+                            appendedToolCallIds.push(tr.toolCallId);
+                        }
+                    }
+                },
+            } as unknown as SessionStore;
+
+            const orch = new Orchestrator();
+            const result = await orch.run({
+                executionContext: ctx,
+                messages: [makeUserMessage(ctx.sessionId)],
+                registry: parallelRegistry,
+                provider,
+                policy,
+                taskStore,
+                sessionStore: parallelSessionStore,
+                signal: new AbortController().signal,
+                taskId: generateId(),
+            });
+
+            expect(result.result).toBe("done");
+
+            // Both tools were invoked
+            expect(invokedTools).toContain("test-server__tool-alpha");
+            expect(invokedTools).toContain("test-server__tool-beta");
+            expect(invokedTools).toHaveLength(2);
+
+            // Results appended in original toolCalls order (alpha before beta)
+            expect(appendedToolCallIds).toEqual([toolCallIds[0], toolCallIds[1]]);
+        });
+
+        it("non-fatal tool error surfaces as isError=true and does not abort the batch", async () => {
+            const ctx = makeCtx({ timeoutMs: 5000 });
+            const toolCallIds = [generateId(), generateId()];
+            const appendedResults: Array<{ toolCallId: string; isError: boolean }> = [];
+
+            let callCount = 0;
+            const provider: LLMProvider = {
+                chat: async () => {
+                    callCount++;
+                    if (callCount === 1) {
+                        return {
+                            message: {
+                                id: generateId(),
+                                sessionId: ctx.sessionId,
+                                role: "assistant",
+                                content: null,
+                                toolCalls: [
+                                    { id: toolCallIds[0], server: "test-server", tool: "failing-tool", arguments: {} },
+                                    { id: toolCallIds[1], server: "test-server", tool: "ok-tool", arguments: {} },
+                                ],
+                                createdAt: nowIso(),
+                            },
+                            stopReason: "tool_calls" as const,
+                        };
+                    }
+                    return {
+                        message: {
+                            id: generateId(),
+                            sessionId: ctx.sessionId,
+                            role: "assistant",
+                            content: "recovered",
+                            createdAt: nowIso(),
+                        },
+                        stopReason: "completed" as const,
+                    };
+                },
+            };
+
+            const errorRegistry = {
+                listAllTools: async () => [],
+                getClient: async (_server: string) => ({
+                    callTool: async (tool: string) => {
+                        if (tool === "failing-tool") throw new Error("non-fatal tool error");
+                        return "ok-result";
+                    },
+                }),
+                closeAll: async () => {},
+            } as unknown as McpClientRegistry;
+
+            const errorSessionStore = {
+                appendMessage: (_sessionId: string, msg: { role?: string; toolResults?: Array<{ toolCallId: string; isError: boolean }> }) => {
+                    if (msg.role === "tool" && msg.toolResults) {
+                        for (const tr of msg.toolResults) {
+                            appendedResults.push({ toolCallId: tr.toolCallId, isError: tr.isError });
+                        }
+                    }
+                },
+            } as unknown as SessionStore;
+
+            const orch = new Orchestrator();
+            const result = await orch.run({
+                executionContext: ctx,
+                messages: [makeUserMessage(ctx.sessionId)],
+                registry: errorRegistry,
+                provider,
+                policy,
+                taskStore,
+                sessionStore: errorSessionStore,
+                signal: new AbortController().signal,
+                taskId: generateId(),
+            });
+
+            expect(result.result).toBe("recovered");
+            // First tool (failing) is isError=true, second is isError=false
+            expect(appendedResults[0]).toMatchObject({ toolCallId: toolCallIds[0], isError: true });
+            expect(appendedResults[1]).toMatchObject({ toolCallId: toolCallIds[1], isError: false });
+        });
+
+        it("fatal policy violation re-throws and aborts the entire task (not isError)", async () => {
+            const ctx = makeCtx({ timeoutMs: 5000 });
+            const toolCallId = generateId();
+
+            const provider: LLMProvider = {
+                chat: async () => ({
+                    message: {
+                        id: generateId(),
+                        sessionId: ctx.sessionId,
+                        role: "assistant",
+                        content: null,
+                        toolCalls: [
+                            { id: toolCallId, server: "test-server", tool: "some-tool", arguments: {} },
+                        ],
+                        createdAt: nowIso(),
+                    },
+                    stopReason: "tool_calls" as const,
+                }),
+            };
+
+            // policy that throws MAX_TOOL_LOOPS_EXCEEDED
+            const strictPolicy = {
+                check: () => {
+                    throw new ToolError("MAX_TOOL_LOOPS_EXCEEDED", "too many tool loops");
+                },
+            } as unknown as PolicyEngine;
+
+            const orch = new Orchestrator();
+            await expect(
+                orch.run({
+                    executionContext: ctx,
+                    messages: [makeUserMessage(ctx.sessionId)],
+                    registry,
+                    provider,
+                    policy: strictPolicy,
+                    taskStore,
+                    sessionStore,
+                    signal: new AbortController().signal,
+                    taskId: generateId(),
+                })
+            ).rejects.toMatchObject({
+                code: "MAX_TOOL_LOOPS_EXCEEDED",
+            });
+        });
+    });
 });

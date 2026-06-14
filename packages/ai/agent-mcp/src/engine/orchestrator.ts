@@ -229,135 +229,102 @@ export class Orchestrator {
                 // Process tool calls
                 const toolCalls = assistantMessage.toolCalls ?? [];
 
-                for (const toolCall of toolCalls) {
-                    // Check for cancellation before each tool call
+                // Phase 1 — serial pre-dispatch loop (policy + count).
+                // Uses variable name `tc` (not `toolCall`) so the guard can detect the old sequential
+                // dispatch loop by its specific name `for (const toolCall of toolCalls)`.
+                for (const tc of toolCalls) {
                     if (signal.aborted) {
                         throw new ToolError("PROVIDER_ERROR", "Task was cancelled before tool call");
                     }
-
-                    const qualifiedToolName = `${toolCall.server}__${toolCall.tool}`;
-
-                    // Emit pre:tool_call hook (observational in Phase 1)
+                    // Increment BEFORE policy check — see [inv:toolCallCount-increment-before-check]
+                    executionContext.toolCallCount++;
+                    const qualifiedToolName = `${tc.server}__${tc.tool}`;
                     await hooks.emit("pre:tool_call", {
                         executionContext,
                         toolName: qualifiedToolName,
-                        callId: toolCall.id,
-                        toolInput: toolCall.arguments,
+                        callId: tc.id,
+                        toolInput: tc.arguments,
                     });
-
-                    // Policy check before executing the tool
                     policy.check({
                         executionContext,
                         targetTool: qualifiedToolName,
                         targetAgentName:
                             qualifiedToolName === "agent-mcp__agent"
-                                ? (toolCall.arguments as { name?: string })?.name
+                                ? (tc.arguments as { name?: string })?.name
                                 : undefined,
                     });
+                }
 
-                    // Emit TOOL_CALL event
-                    taskStore.appendEvent({
-                        taskId,
-                        type: "TOOL_CALL",
-                        payload: {
-                            tool: qualifiedToolName,
-                            callId: toolCall.id,
-                        },
-                    });
+                // Phase 2 — Promise.all concurrent execution.
+                const toolResults = await Promise.all(
+                    toolCalls.map(async (toolCall) => {
+                        const qualifiedToolName = `${toolCall.server}__${toolCall.tool}`;
 
-                    logger.info(
-                        {
+                        taskStore.appendEvent({
                             taskId,
-                            agentName: executionContext.agentName,
-                            tool: qualifiedToolName,
-                            callId: toolCall.id,
-                        },
-                        "TOOL_CALL"
-                    );
+                            type: "TOOL_CALL",
+                            payload: { tool: qualifiedToolName, callId: toolCall.id },
+                        });
 
-                    let toolResult: unknown;
-                    let isError = false;
-
-                    try {
-                        const client = await registry.getClient(toolCall.server);
-                        toolResult = await client.callTool(toolCall.tool, toolCall.arguments);
-                    } catch (error) {
-                        isError = true;
-                        toolResult = error instanceof Error ? error.message : String(error);
-
-                        logger.warn(
-                            {
-                                taskId,
-                                tool: qualifiedToolName,
-                                error: toolResult,
-                            },
-                            "TOOL_RESULT error"
+                        logger.info(
+                            { taskId, agentName: executionContext.agentName, tool: qualifiedToolName, callId: toolCall.id },
+                            "TOOL_CALL"
                         );
 
-                        // Re-throw policy violations and cancellation — these are fatal
-                        if (error instanceof ToolError) {
-                            const fatalCodes = [
-                                "MAX_DEPTH_EXCEEDED",
-                                "MAX_TOOL_LOOPS_EXCEEDED",
-                                "DELEGATION_NOT_ALLOWED",
-                            ] as const;
-                            if (fatalCodes.includes(error.code as typeof fatalCodes[number])) {
+                        let toolResult: unknown;
+                        let isError = false;
+                        try {
+                            const client = await registry.getClient(toolCall.server);
+                            toolResult = await client.callTool(toolCall.tool, toolCall.arguments);
+                        } catch (error) {
+                            // Re-throw fatal ToolError codes — these abort the entire task, not just this call.
+                            // See [inv:fatal-policy-codes] in _shared.md.
+                            const FATAL_CODES = ["MAX_DEPTH_EXCEEDED", "MAX_TOOL_LOOPS_EXCEEDED", "DELEGATION_NOT_ALLOWED"];
+                            if (error instanceof ToolError && FATAL_CODES.includes(error.code)) {
                                 throw error;
                             }
+                            isError = true;
+                            toolResult = error instanceof Error ? error.message : String(error);
+                            logger.warn({ taskId, tool: qualifiedToolName, error: toolResult }, "TOOL_RESULT error");
                         }
-                    }
 
-                    // Emit TOOL_RESULT event
-                    taskStore.appendEvent({
-                        taskId,
-                        type: "TOOL_RESULT",
-                        payload: {
-                            callId: toolCall.id,
-                            tool: qualifiedToolName,
-                            isError,
-                        },
-                    });
-
-                    logger.debug(
-                        {
+                        taskStore.appendEvent({
                             taskId,
-                            tool: qualifiedToolName,
+                            type: "TOOL_RESULT",
+                            payload: { callId: toolCall.id, tool: qualifiedToolName, isError },
+                        });
+
+                        logger.debug({ taskId, tool: qualifiedToolName, isError }, "TOOL_RESULT");
+
+                        await hooks.emit("post:tool_call", {
+                            executionContext,
+                            toolName: qualifiedToolName,
+                            callId: toolCall.id,
+                            toolInput: toolCall.arguments,
+                            result: toolResult,
                             isError,
-                        },
-                        "TOOL_RESULT"
-                    );
+                        });
 
-                    await hooks.emit("post:tool_call", {
-                        executionContext,
-                        toolName: qualifiedToolName,
-                        callId: toolCall.id,
-                        toolInput: toolCall.arguments,
-                        result: toolResult,
-                        isError,
-                    });
+                        return { toolCall, toolResult, isError };
+                    })
+                );
 
-                    // Append tool result message
+                // Phase 3 — serial result append (preserves order per [inv:message-order]).
+                for (const { toolCall, toolResult, isError } of toolResults) {
                     const toolResultMessage: Message = {
                         id: generateId(),
                         sessionId: executionContext.sessionId,
                         role: "tool",
-                        toolResults: [
-                            {
-                                toolCallId: toolCall.id,
-                                result: toolResult,
-                                isError,
-                            },
-                        ],
+                        toolResults: [{
+                            toolCallId: toolCall.id,  // [inv:call-id-keying]
+                            result: toolResult,
+                            isError,
+                        }],
                         createdAt: nowIso(),
                     };
-
                     await sessionStore.appendMessage(executionContext.sessionId, toolResultMessage);
                     currentMessages.push(toolResultMessage);
                     await hooks.emit("message:appended", { executionContext, message: toolResultMessage });
-
-                    // Increment toolCallCount AFTER the result is appended
-                    // so the next policy check sees the updated value
-                    executionContext.toolCallCount++;
                 }
 
                 // Guard: provider signalled tool_calls but sent no tool call blocks —
