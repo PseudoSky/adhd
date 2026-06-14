@@ -1,10 +1,18 @@
 {
   "schema_version": 3,
-  "title": "task-dependency-dag",
+  "title": "task-schema-foundation",
   "dag": "dag.json",
-  "current_state": "dag-engine",
+  "current_state": "schema-columns",
   "states": {
-    "dag-engine": {
+    "schema-columns": {
+      "status": "pending",
+      "executor": null,
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "task-types": {
       "status": "pending",
       "executor": null,
       "started_at": null,
@@ -46,13 +54,7 @@
     }
   },
   "transition_log": [],
-  "amendment_log": [
-    {
-      "at": "2026-06-13",
-      "author": "planner",
-      "summary": "Extract dag-schema + dag-types nodes into task-schema-foundation plan. Schema/types work (depends_on, on_upstream_failure, inputs, resume_token columns; 'waiting'/'awaiting_input' status; TaskStore create/updateStatus) moved to prerequisite plan. dag-engine now depends_on: [] and assumes foundation is deployed. validation/execution.ts added to dag-engine artifacts. agent-mcp-types/package.json removed from docs-and-publish (foundation owns that bump)."
-    }
-  ],
+  "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.8",

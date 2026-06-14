@@ -1,12 +1,22 @@
 # dag-engine
 
-**Phase:** engine · **Depends on:** dag-types · **Guard:**
+**Phase:** engine · **Depends on:** — · **Guard:**
 ```bash
 test -f packages/ai/agent-mcp/src/engine/dag-engine.ts && \
 grep -q 'dispatchReady' packages/ai/agent-mcp/src/engine/dag-engine.ts && \
 grep -q 'cycle\|Cycle' packages/ai/agent-mcp/src/engine/dag-engine.ts && \
-npx nx test agent-mcp 2>&1 | grep -qE 'passed'
+npx --yes nx test agent-mcp 2>&1 | grep -qE 'passed'
 ```
+
+> **PREREQUISITE: `task-schema-foundation` must be deployed before this node executes.**
+> Required codebase state:
+> - `depends_on`, `on_upstream_failure`, `inputs` columns in `schema.ts` + migration 0004_*
+> - `"waiting"` and `"awaiting_input"` in `taskStatusSchema` (`validation/task.ts`)
+> - `TaskStore.create()` accepts `dependsOn`, `onUpstreamFailure`; sets `"waiting"` when `dependsOn.length > 0`
+> - `@adhd/agent-mcp-types` `TaskStatus` union includes both new values
+>
+> This node does NOT add migrations, does NOT modify `validation/task.ts` or `task-store.ts`.
+> Those are owned by `task-schema-foundation`.
 
 ---
 
@@ -202,7 +212,9 @@ Create `DagEngine` with two public methods: `validateNoCycle()` (pre-creation cy
 - [ ] **[dag-engine.6]** Test file exists with tests for single-dep, fan-in, fail/skip propagation.
       `test -f packages/ai/agent-mcp/src/__tests__/dag-engine.test.ts`
 - [ ] **[dag-engine.7]** All tests pass.
-      `npx nx test agent-mcp 2>&1 | grep -qE 'passed'`
+      `npx --yes nx test agent-mcp 2>&1 | grep -qE 'passed'`
+- [ ] **[dag-engine.8]** `inputs` field added to `ExecutionContext` in `validation/execution.ts`.
+      `grep -q 'inputs' packages/ai/agent-mcp/src/validation/execution.ts`
 
 ---
 
@@ -216,7 +228,8 @@ read_only:  ["packages/ai/agent-mcp/src/db/schema.ts",
 mutates:    ["packages/ai/agent-mcp/src/engine/dag-engine.ts",
              "packages/ai/agent-mcp/src/tools/task.ts",
              "packages/ai/agent-mcp/src/__tests__/dag-engine.test.ts",
-             "packages/ai/agent-mcp/src/index.ts"]
+             "packages/ai/agent-mcp/src/index.ts",
+             "packages/ai/agent-mcp/src/validation/execution.ts"]
 ```
 
 ---
@@ -225,6 +238,7 @@ mutates:    ["packages/ai/agent-mcp/src/engine/dag-engine.ts",
 
 - **Added:** `DagEngine` class in `engine/dag-engine.ts` with `validateNoCycle()` + `dispatchReady()`
 - **Modified:** `tools/task.ts` — wires DagEngine at creation and completion
+- **Modified:** `validation/execution.ts` — `ExecutionContext` gains `inputs?: Record<string,string>`
 
 ---
 

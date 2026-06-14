@@ -1,0 +1,98 @@
+{
+  "schema_version": 2,
+  "title": "task-schema-foundation",
+  "spec_sources": [
+    "packages/ai/agent-mcp/ROADMAP.md"
+  ],
+  "executor": "sox-active:typescript-pro",
+  "phases": ["foundation", "convergence"],
+  "terminal": "done",
+  "nodes": {
+    "schema-columns": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": [],
+      "guard": "grep -q 'depends_on' packages/ai/agent-mcp/src/db/schema.ts && grep -q 'resume_token' packages/ai/agent-mcp/src/db/schema.ts && grep -q '\"waiting\"' packages/ai/agent-mcp/src/db/schema.ts && grep -q '\"awaiting_input\"' packages/ai/agent-mcp/src/db/schema.ts && python3 -c \"import os; sqls=[f for f in os.listdir('packages/ai/agent-mcp/drizzle') if f.endswith('.sql')]; assert len(sqls)>=4, f'expected >=4 migrations, got {len(sqls)}'\"",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/drizzle/"
+      ],
+      "context": "contexts/schema-columns.md",
+      "notes": "ONE migration (0004_*) covers all four new columns: depends_on, on_upstream_failure, inputs, resume_token. ONE status enum extension covers both 'waiting' and 'awaiting_input'. Never split into two migrations — the downstream plans assume both statuses exist before they start.",
+      "changes": {
+        "deletes": [],
+        "resigns": ["tasksTable"],
+        "renames": []
+      }
+    },
+    "task-types": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": ["schema-columns"],
+      "guard": "grep -q '\"waiting\"' packages/ai/agent-mcp/src/validation/task.ts && grep -q '\"awaiting_input\"' packages/ai/agent-mcp/src/validation/task.ts && grep -q 'resumeToken' packages/ai/agent-mcp/src/validation/task.ts && grep -q 'dependsOn' packages/ai/agent-mcp/src/validation/task.ts && npx --yes nx build agent-mcp 2>&1 | grep -q 'Successfully ran'",
+      "artifacts": [
+        "packages/ai/agent-mcp-types/src/index.ts",
+        "packages/ai/agent-mcp/src/validation/task.ts",
+        "packages/ai/agent-mcp/src/store/task-store.ts"
+      ],
+      "context": "contexts/task-types.md",
+      "notes": "PREREQUISITE ORDER: update agent-mcp-types FIRST. validation/task.ts re-exports TaskStatus from @adhd/agent-mcp-types; any assignment of 'waiting' or 'awaiting_input' to TaskStatus produces a TS error until the types package is updated and rebuilt.",
+      "changes": {
+        "deletes": [],
+        "resigns": ["taskStatusSchema", "taskSchema", "taskToolInputSchema", "TaskStore.create", "TaskStore.updateStatus"],
+        "renames": []
+      }
+    },
+    "audit-foundation": {
+      "kind": "audit",
+      "phase": "foundation",
+      "depends_on": ["task-types"],
+      "guard": "python3 docs/plan/task-schema-foundation/scripts/audit_schema_foundation.py --phase foundation",
+      "artifacts": [
+        "docs/plan/task-schema-foundation/scripts/audit_schema_foundation.py"
+      ],
+      "context": "contexts/audit-foundation.md",
+      "notes": "Verifies schema-columns.1-5 and task-types.1-6. All checks must pass before code-review."
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "convergence",
+      "depends_on": ["audit-foundation"],
+      "guard": "test -f docs/plan/task-schema-foundation/.code-review-complete",
+      "artifacts": [
+        "docs/plan/task-schema-foundation/.code-review-complete"
+      ],
+      "context": "contexts/code-review.md",
+      "notes": "Human hold point. Reviewer inspects migration, schema, types diff. Creates sentinel when satisfied."
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "convergence",
+      "depends_on": ["code-review"],
+      "guard": "python3 docs/plan/task-schema-foundation/scripts/audit_schema_foundation.py --phase final",
+      "artifacts": [
+        "docs/plan/task-schema-foundation/scripts/audit_schema_foundation.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": "Full DoD coverage: schema columns, status enum, store methods, types export, build, publish."
+    },
+    "docs-and-publish": {
+      "kind": "work",
+      "phase": "convergence",
+      "depends_on": ["audit-final"],
+      "guard": "node -e \"const p=require('./packages/ai/agent-mcp/package.json');process.exit(p.version==='0.1.5'?0:1)\" && npm info @adhd/agent-mcp version 2>/dev/null | grep -q '0.1.5'",
+      "artifacts": [
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp-types/package.json",
+        "ROADMAP.md"
+      ],
+      "context": "contexts/docs-and-publish.md",
+      "notes": "Bump agent-mcp to 0.1.5. Bump agent-mcp-types (TaskStatus gains 'waiting' + 'awaiting_input'). Note in ROADMAP that this foundation enables 0.2.0 and 0.3.0 to run in parallel.",
+      "changes": {
+        "deletes": [],
+        "resigns": [],
+        "renames": []
+      }
+    }
+  }
+}

@@ -3,6 +3,27 @@
   "plans_root": "docs/plan",
   "plans": [
     {
+      "plan": "task-schema-foundation",
+      "dir": "task-schema-foundation",
+      "status": "published",
+      "assumed_baseline": [],
+      "mutate_set": [
+        "ROADMAP.md",
+        "docs/plan/task-schema-foundation/.code-review-complete",
+        "docs/plan/task-schema-foundation/scripts/audit_schema_foundation.py",
+        "packages/ai/agent-mcp-types/package.json",
+        "packages/ai/agent-mcp-types/src/index.ts",
+        "packages/ai/agent-mcp/drizzle/",
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/store/task-store.ts",
+        "packages/ai/agent-mcp/src/validation/task.ts"
+      ],
+      "references": [],
+      "depends_on": [],
+      "updated_at": "2026-06-13T00:00:00.000Z"
+    },
+    {
       "plan": "parallel-tool-execution",
       "dir": "parallel-tool-execution",
       "status": "published",
@@ -24,51 +45,41 @@
       "plan": "task-dependency-dag",
       "dir": "task-dependency-dag",
       "status": "published",
-      "assumed_baseline": ["parallel-tool-execution"],
+      "assumed_baseline": ["task-schema-foundation"],
       "mutate_set": [
         "ROADMAP.md",
         "docs/plan/task-dependency-dag/.code-review-complete",
         "docs/plan/task-dependency-dag/scripts/audit_dag.py",
-        "packages/ai/agent-mcp-types/package.json",
-        "packages/ai/agent-mcp/drizzle/",
         "packages/ai/agent-mcp/package.json",
         "packages/ai/agent-mcp/src/__tests__/dag-engine.test.ts",
-        "packages/ai/agent-mcp/src/db/schema.ts",
         "packages/ai/agent-mcp/src/engine/dag-engine.ts",
         "packages/ai/agent-mcp/src/index.ts",
-        "packages/ai/agent-mcp/src/store/task-store.ts",
         "packages/ai/agent-mcp/src/tools/task.ts",
-        "packages/ai/agent-mcp/src/validation/execution.ts",
-        "packages/ai/agent-mcp/src/validation/task.ts"
+        "packages/ai/agent-mcp/src/validation/execution.ts"
       ],
       "references": [],
       "depends_on": [],
-      "updated_at": "2026-06-14T02:36:31.455Z"
+      "updated_at": "2026-06-13T00:00:00.000Z"
     },
     {
       "plan": "hitl-interrupts",
       "dir": "hitl-interrupts",
       "status": "published",
-      "assumed_baseline": ["task-dependency-dag"],
+      "assumed_baseline": ["task-schema-foundation", "parallel-tool-execution", "task-dependency-dag"],
       "mutate_set": [
         "ROADMAP.md",
         "docs/plan/hitl-interrupts/.code-review-complete",
         "docs/plan/hitl-interrupts/scripts/audit_hitl.py",
-        "packages/ai/agent-mcp-types/package.json",
-        "packages/ai/agent-mcp/drizzle/",
         "packages/ai/agent-mcp/package.json",
         "packages/ai/agent-mcp/src/__tests__/hitl-orchestrator.test.ts",
         "packages/ai/agent-mcp/src/__tests__/hitl-resume.test.ts",
-        "packages/ai/agent-mcp/src/db/schema.ts",
         "packages/ai/agent-mcp/src/engine/orchestrator.ts",
         "packages/ai/agent-mcp/src/server.ts",
-        "packages/ai/agent-mcp/src/store/task-store.ts",
-        "packages/ai/agent-mcp/src/tools/task.ts",
-        "packages/ai/agent-mcp/src/validation/task.ts"
+        "packages/ai/agent-mcp/src/tools/task.ts"
       ],
       "references": [],
       "depends_on": [],
-      "updated_at": "2026-06-14T02:36:31.495Z"
+      "updated_at": "2026-06-13T00:00:00.000Z"
     },
     {
       "plan": "task-streaming-sse",
@@ -94,5 +105,5 @@
       "updated_at": "2026-06-14T02:36:31.533Z"
     }
   ],
-  "updated_at": "2026-06-14T02:36:31.541Z"
+  "updated_at": "2026-06-13T00:00:00.000Z"
 }

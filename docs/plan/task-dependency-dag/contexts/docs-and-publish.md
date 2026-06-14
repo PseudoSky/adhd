@@ -21,8 +21,7 @@ as shipped.
 
 - **Version bumps:**
   - `packages/ai/agent-mcp/package.json`: `0.1.0` → `0.2.0`
-  - `agent-mcp-types` bump: **only if** `TaskStatus` (or `"waiting"`) is exported from
-    `packages/ai/agent-mcp-types/`. If so, bump agent-mcp-types to the next minor.
+  - `agent-mcp-types`: **already bumped** by `task-schema-foundation`. Do not bump here.
 
 - **Changelog / ROADMAP:** Mark ROADMAP.md issues #23 (task dependency DAG) and #14 (task
   chaining) as shipped in 0.2.0.
@@ -50,8 +49,7 @@ as shipped.
 ```text
 read_only:  ["PUBLISHING.md", "ROADMAP.md"]
 mutates:    ["packages/ai/agent-mcp/package.json",
-             "ROADMAP.md",
-             "packages/ai/agent-mcp-types/package.json"]
+             "ROADMAP.md"]
 ```
 
 ---

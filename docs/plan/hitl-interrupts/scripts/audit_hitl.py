@@ -2,8 +2,11 @@
 """
 audit_hitl.py — acceptance-criteria audit for hitl-interrupts plan.
 
+NOTE: hitl-schema and hitl-types nodes were extracted to the task-schema-foundation plan.
+This audit only checks hitl-orchestrator and hitl-resume-tool criteria.
+
 Usage:
-  python3 audit_hitl.py --phase foundation   # hitl-schema + hitl-types + hitl-orchestrator + hitl-resume-tool
+  python3 audit_hitl.py --phase foundation   # hitl-orchestrator + hitl-resume-tool checks
   python3 audit_hitl.py --phase final        # DoD clauses + full coverage
 """
 import argparse
@@ -31,39 +34,7 @@ def check(label, cmd, *, expect_zero=True):
 # ── Phase foundation ──────────────────────────────────────────────────────────
 
 def phase_foundation():
-    print("\n=== hitl-schema ===")
     results = []
-    results.append(check(
-        "[hitl-schema.1] 'awaiting_input' in tasksTable status enum",
-        "grep -q 'awaiting_input' packages/ai/agent-mcp/src/db/schema.ts",
-    ))
-    results.append(check(
-        "[hitl-schema.2] resume_token column in tasksTable",
-        "grep -q 'resume_token' packages/ai/agent-mcp/src/db/schema.ts",
-    ))
-    results.append(check(
-        "[hitl-schema.3] Drizzle migration generated (>=5 .sql files)",
-        "python3 -c \"import os; sqls=[f for f in os.listdir('packages/ai/agent-mcp/drizzle') if f.endswith('.sql')]; assert len(sqls)>=5, f'expected >=5, got {len(sqls)}'\"",
-    ))
-
-    print("\n=== hitl-types ===")
-    results.append(check(
-        '[hitl-types.1] "awaiting_input" in taskStatusSchema',
-        "grep -q '\"awaiting_input\"' packages/ai/agent-mcp/src/validation/task.ts",
-    ))
-    results.append(check(
-        "[hitl-types.2] resumeToken field in taskSchema",
-        "grep -q 'resumeToken' packages/ai/agent-mcp/src/validation/task.ts",
-    ))
-    results.append(check(
-        "[hitl-types.3] TaskStore.updateStatus accepts resumeToken",
-        "grep -q 'resumeToken' packages/ai/agent-mcp/src/store/task-store.ts",
-    ))
-    results.append(check(
-        "[hitl-types.4] Build passes",
-        "npx nx build agent-mcp 2>&1 | grep -q 'Successfully ran'",
-    ))
-
     print("\n=== hitl-orchestrator ===")
     results.append(check(
         "[hitl-orchestrator.1] request_human_input constant/string in orchestrator.ts",
@@ -83,7 +54,7 @@ def phase_foundation():
     ))
     results.append(check(
         "[hitl-orchestrator.5] Tests pass",
-        "npx nx test agent-mcp 2>&1 | grep -qE 'passed'",
+        "npx --yes nx test agent-mcp 2>&1 | grep -qE 'passed'",
     ))
 
     print("\n=== hitl-resume-tool ===")
@@ -105,7 +76,7 @@ def phase_foundation():
     ))
     results.append(check(
         "[hitl-resume-tool.5] Tests pass",
-        "npx nx test agent-mcp 2>&1 | grep -qE 'passed'",
+        "npx --yes nx test agent-mcp 2>&1 | grep -qE 'passed'",
     ))
 
     return results
