@@ -2,15 +2,15 @@
   "schema_version": 3,
   "title": "parallel-tool-execution",
   "dag": "dag.json",
-  "current_state": "parallel-dispatch",
+  "current_state": "audit-foundation",
   "states": {
     "parallel-dispatch": {
-      "status": "in_progress",
+      "status": "complete",
       "executor": null,
       "started_at": "2026-06-14T03:28:40.256Z",
-      "done_at": null,
+      "done_at": "2026-06-14T03:31:23.581Z",
       "start_ref": "e28a3578b6f1014488cda64d84389c370d8ac89a",
-      "end_ref": null
+      "end_ref": "a408c3e0efcaaae397a9b62da34e765fbf2e6c5c"
     },
     "audit-foundation": {
       "status": "pending",
@@ -45,7 +45,20 @@
       "end_ref": null
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-06-14T03:31:23.581Z",
+      "from": "parallel-dispatch",
+      "to": "parallel-dispatch",
+      "start_ref": "e28a3578b6f1014488cda64d84389c370d8ac89a",
+      "end_ref": "a408c3e0efcaaae397a9b62da34e765fbf2e6c5c",
+      "audit_exit": 6,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "parallel dispatch via Promise.all; toolCallCount before policy.check; order-preserving append"
+    }
+  ],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
