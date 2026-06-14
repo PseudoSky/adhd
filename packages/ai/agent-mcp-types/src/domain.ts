@@ -7,7 +7,14 @@ export interface TokenUsage {
   cacheCreationTokens?: number; // Anthropic cache_creation_input_tokens (undefined for other providers)
 }
 
-export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
+export type TaskStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "waiting"         // blocked on depends_on; DagEngine dispatches when all deps complete
+  | "awaiting_input"; // suspended in HITL Promise; task_resume resolves it
 export type TaskEventType =
   | "MODEL_REQUEST" | "MODEL_RESPONSE"
   | "TOOL_CALL" | "TOOL_RESULT"
@@ -26,6 +33,12 @@ export interface Task {
   updatedAt: string;
   completedAt?: string;
   cancelledAt?: string;
+  // Dependency DAG fields
+  dependsOn?: string[] | null;
+  onUpstreamFailure?: "fail" | "skip" | null;
+  inputs?: Record<string, string> | null;
+  // HITL suspension field
+  resumeToken?: string | null;
 }
 
 export interface TaskEvent {
