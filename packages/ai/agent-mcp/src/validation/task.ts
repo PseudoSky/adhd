@@ -68,6 +68,7 @@ const sessionModeSchema = z.object({
   background: z.boolean().default(false),
   depends_on: z.array(z.string().uuid()).optional(),
   on_upstream_failure: z.enum(["fail", "skip"]).optional(),
+  stream: z.boolean().optional(),
   // resume_token is server-generated; not accepted from user input
 });
 
@@ -77,6 +78,7 @@ const ephemeralModeSchema = z.object({
   prompt: z.string().min(1),
   depends_on: z.array(z.string().uuid()).optional(),
   on_upstream_failure: z.enum(["fail", "skip"]).optional(),
+  stream: z.boolean().optional(),
   // resume_token is server-generated; not accepted from user input
 });
 
@@ -86,6 +88,9 @@ export const taskToolOutputSchema = z.object({
   task_id: z.string().uuid(),
   status: taskStatusSchema,
   result: z.string().optional(),
+  // SSE stream URL — present when the task was created with stream: true.
+  // Format: ${SSE_BASE_URL}/tasks/${taskId}/stream
+  stream_url: z.string().optional(),
   // Token usage rollup for this task and its delegation subtree. Absent when
   // the task recorded zero model calls (still running, or cancelled before its
   // first model call). See [shape:TaskUsageReport].
