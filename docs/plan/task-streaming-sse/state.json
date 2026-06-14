@@ -1,6 +1,6 @@
 {
   "plan": "task-streaming-sse",
-  "current_state": "stream-orchestrator",
+  "current_state": "stream-task-tool",
   "states": {
     "stream-event-bus": {
       "status": "complete",
@@ -17,11 +17,11 @@
       "end_ref": "41ca06b0e6af569b577dcf1982ec8020b0c45bc7"
     },
     "stream-orchestrator": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-14T04:14:58.537Z",
-      "done_at": null,
+      "done_at": "2026-06-14T04:17:52.230Z",
       "start_ref": "5c8073648a38fdf5919ec1f83eaf9313346facb0",
-      "end_ref": null
+      "end_ref": "c48bdbbfce2f848bcd69cc2430ed65226f657a37"
     },
     "stream-task-tool": {
       "status": "pending",
@@ -83,6 +83,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "sse-server.ts created: startSseServer(taskStore) param, GET /tasks/:id/stream, SSE_PORT, keep-alive ping, terminal-on-connect short-circuit, cleaned guard; wired into index.ts startup + SIGTERM/SIGINT shutdown block"
+    },
+    {
+      "ts": "2026-06-14T04:17:52.230Z",
+      "from": "stream-orchestrator",
+      "to": "stream-orchestrator",
+      "start_ref": "5c8073648a38fdf5919ec1f83eaf9313346facb0",
+      "end_ref": "c48bdbbfce2f848bcd69cc2430ed65226f657a37",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "emitTaskEvent wired: status_change on running/awaiting_input/completed/cancelled/failed; tool_call before Phase-2 dispatch; tool_result after each result; done on completion+failure+cancellation paths; 9 new tests all pass (91 total)"
     }
   ],
   "amendment_log": [],
