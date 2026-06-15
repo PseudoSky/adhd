@@ -19,6 +19,35 @@ import { windowMessages } from "../store/session-store.js";
 const HITL_TOOL_NAME = "request_human_input";
 
 /**
+ * Tool definition advertised to the model when `allowHumanInput === true` on
+ * the agent and the task is non-ephemeral.
+ *
+ * Name encodes as `builtin__request_human_input`:
+ *  - server = "builtin"  (both OpenAI and Anthropic split on first "__")
+ *  - tool   = "request_human_input"  ← matches HITL_TOOL_NAME
+ *
+ * The existing Phase-1 intercept (`tc.tool === HITL_TOOL_NAME`) catches it
+ * before Phase-2 dispatch, so it is never forwarded to any MCP client.
+ */
+const HITL_BUILTIN_TOOL_DEFINITION = {
+    name: "builtin__request_human_input",
+    description:
+        "Pause the task to ask the human operator a question. The task suspends " +
+        "until a human answers via task_resume. Use when you need human confirmation, " +
+        "a decision, or missing information you cannot obtain yourself.",
+    inputSchema: {
+        type: "object",
+        properties: {
+            prompt: {
+                type: "string",
+                description: "The question to ask the human.",
+            },
+        },
+        required: ["prompt"],
+    },
+} as const;
+
+/**
  * Module-scoped resolver map: taskId → resolver function.
  * Populated when an orchestrator suspends awaiting human input.
  * Entries are cleared when resolved or when the task is cancelled.
@@ -114,6 +143,12 @@ export class Orchestrator {
 
                 // Gather available tools from the registry
                 const tools = await registry.listAllTools();
+
+                // Append the built-in HITL tool when the agent opts in AND the
+                // task is durable (non-ephemeral has a DB row for the resume token).
+                if (executionContext.agentDefinition.allowHumanInput === true && !isEphemeral) {
+                    tools.push(HITL_BUILTIN_TOOL_DEFINITION);
+                }
 
                 // Emit MODEL_REQUEST event
                 taskStore.appendEvent({

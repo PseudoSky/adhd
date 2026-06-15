@@ -102,6 +102,12 @@ export const agentDefinitionSchema = z.object({
   mcpServers: z.record(z.string(), mcpServerConfigSchema).default({}),
   permissions: agentPermissionsSchema.default({}),
   maxToolLoops: z.number().int().positive().optional(),
+  /**
+   * Opt-in: advertise builtin__request_human_input to the model so it can
+   * pause a task and ask the human operator a question. Default false/undefined.
+   * Has no effect on ephemeral tasks (no DB row → no resume token).
+   */
+  allowHumanInput: z.boolean().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -125,6 +131,7 @@ const agentPatchSchema = z.object({
   mcpServers: z.record(z.string(), mcpServerConfigSchema).optional(),
   permissions: agentPermissionsSchema.optional(),
   maxToolLoops: z.number().int().positive().optional(),
+  allowHumanInput: z.boolean().optional(),
 });
 
 export const agentUpdateInputSchema = z.object({

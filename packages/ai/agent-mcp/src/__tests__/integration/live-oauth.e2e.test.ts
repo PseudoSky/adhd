@@ -19,7 +19,27 @@ import { describe, it, expect } from "vitest";
 
 const isLive = process.env["AGENT_MCP_LIVE"] === "1";
 
-describe.skipIf(!isLive)("live-oauth.e2e – real Anthropic provider (AGENT_MCP_LIVE=1 only)", () => {
+// Provider is selectable so the same real-orchestrator-loop vehicle can run
+// against a local LM Studio model OR the Anthropic API (env OAuth token).
+//   AGENT_MCP_LIVE_PROVIDER=lmstudio  → local LM Studio (LMSTUDIO_BASE_URL/API_KEY env)
+//   default                          → anthropic via ANTHROPIC_AUTH_TOKEN
+const LIVE_PROVIDER =
+    process.env["AGENT_MCP_LIVE_PROVIDER"] === "lmstudio"
+        ? {
+              type: "lmstudio" as const,
+              model:
+                  process.env["AGENT_MCP_LIVE_MODEL"] ??
+                  "qwen3.5-9b-claude-4.6-highiq-instruct-heretic-uncensored-mlx-mxfp8",
+              timeoutMs: 120_000,
+          }
+        : {
+              type: "anthropic" as const,
+              model: "claude-sonnet-4-6",
+              authTokenEnv: "ANTHROPIC_AUTH_TOKEN",
+              timeoutMs: 30_000,
+          };
+
+describe.skipIf(!isLive)(`live-oauth.e2e – real ${LIVE_PROVIDER.type} provider (AGENT_MCP_LIVE=1 only)`, () => {
     it("two echo tools called in one turn via real model", async () => {
         if (!isLive) return;
 
@@ -33,12 +53,7 @@ describe.skipIf(!isLive)("live-oauth.e2e – real Anthropic provider (AGENT_MCP_
             const agentName = "e2e-live-agent";
             harness.agentStore.create({
                 name: agentName,
-                provider: {
-                    type: "anthropic",
-                    model: "claude-sonnet-4-6",
-                    authTokenEnv: "ANTHROPIC_AUTH_TOKEN",
-                    timeoutMs: 30_000,
-                },
+                provider: LIVE_PROVIDER,
                 systemPrompt: "You are a test agent. When asked to call both tools, call them in one turn.",
                 mcpServers: {},
                 permissions: {},
@@ -109,7 +124,7 @@ describe.skipIf(!isLive)("live-oauth.e2e – real Anthropic provider (AGENT_MCP_
         }
     }, 60_000);
 
-    it("request_human_input + taskResume via real model", async () => {
+    it("request_human_input + taskResume via real model (allowHumanInput=true → model must suspend)", async () => {
         if (!isLive) return;
 
         const { buildHarness, drainQueue } = await import("./harness.js");
@@ -120,18 +135,17 @@ describe.skipIf(!isLive)("live-oauth.e2e – real Anthropic provider (AGENT_MCP_
 
         try {
             const agentName = "e2e-live-hitl-agent";
+            // allowHumanInput: true → builtin__request_human_input is advertised to the model
             harness.agentStore.create({
                 name: agentName,
-                provider: {
-                    type: "anthropic",
-                    model: "claude-sonnet-4-6",
-                    authTokenEnv: "ANTHROPIC_AUTH_TOKEN",
-                    timeoutMs: 30_000,
-                },
+                provider: LIVE_PROVIDER,
                 systemPrompt:
-                    "You are a test agent. When the user asks, call request_human_input to ask for their confirmation before completing.",
+                    "You are a test agent. When the user asks you to call request_human_input, " +
+                    "you MUST call the builtin__request_human_input tool before responding. " +
+                    "Do not answer without calling that tool first.",
                 mcpServers: {},
                 permissions: {},
+                allowHumanInput: true,
             });
 
             const agentDef = harness.agentStore.read(agentName);
@@ -161,7 +175,8 @@ describe.skipIf(!isLive)("live-oauth.e2e – real Anthropic provider (AGENT_MCP_
                 {
                     session_id: session.id,
                     prompt:
-                        "Please call request_human_input to ask me 'do you confirm?' before you respond. Wait for my answer.",
+                        "Please call request_human_input to ask me 'do you confirm?' before you respond. " +
+                        "You must call it — do not skip it.",
                     background: true,
                 },
                 patchedDeps
@@ -169,8 +184,9 @@ describe.skipIf(!isLive)("live-oauth.e2e – real Anthropic provider (AGENT_MCP_
 
             const taskId = taskOut.task_id;
 
-            // Wait for awaiting_input
-            const deadline = Date.now() + 20_000;
+            // Wait for awaiting_input — no lenient fallback: the model has the tool
+            // advertised and must call it. If it doesn't, the test fails.
+            const deadline = Date.now() + 30_000;
             while (Date.now() < deadline) {
                 const row = harness.taskStore.read(taskId);
                 if (row.status === "awaiting_input") break;
@@ -179,27 +195,26 @@ describe.skipIf(!isLive)("live-oauth.e2e – real Anthropic provider (AGENT_MCP_
             }
 
             const suspended = harness.taskStore.read(taskId);
-            // Model-independent: if model suspended, resume it
-            if (suspended.status === "awaiting_input" && suspended.resumeToken) {
-                await taskResume(
-                    {
-                        taskId,
-                        resumeToken: suspended.resumeToken!,
-                        userInput: "yes, confirmed",
-                    },
-                    { taskStore: harness.taskStore }
-                );
+            // Hard assertion: the model MUST have called request_human_input → status is awaiting_input
+            expect(suspended.status).toBe("awaiting_input");
+            expect(suspended.resumeToken).toBeTruthy();
 
-                await drainQueue(harness.queue, 20_000);
+            // Resume with human answer
+            await taskResume(
+                {
+                    taskId,
+                    resumeToken: suspended.resumeToken!,
+                    userInput: "yes, confirmed",
+                },
+                { taskStore: harness.taskStore }
+            );
 
-                const final = harness.taskStore.read(taskId);
-                expect(final.status).toBe("completed");
-            } else {
-                // Model may have skipped the HITL call — just check it completed
-                expect(["completed", "awaiting_input"]).toContain(suspended.status);
-            }
+            await drainQueue(harness.queue, 30_000);
+
+            const final = harness.taskStore.read(taskId);
+            expect(final.status).toBe("completed");
         } finally {
             await harness.teardown();
         }
-    }, 90_000);
+    }, 120_000);
 });
