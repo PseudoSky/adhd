@@ -33,8 +33,13 @@
 import { describe, it, expect } from "vitest";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import os from "node:os";
 
 const isLive = process.env["AGENT_MCP_LIVE"] === "1";
+
+// Keep the calc fixture's log out of the repo (it defaults to writing next to
+// itself); send it to a temp file the test doesn't assert on.
+const CALC_LOG = path.join(os.tmpdir(), "agent-mcp-dag-calc.log");
 
 // Provider reliability (observed, not assumed): with the default Anthropic
 // provider this test passed 100% of runs; with a local lmstudio 14B it passed
@@ -166,7 +171,7 @@ describe.skipIf(!isLive)(
                         '(e.g. "12 * 12"). You MUST call the `calculate` tool with that exact ' +
                         "expression — never compute it yourself. Reply with ONLY the numeric result.",
                     mcpServers: {
-                        calc: { transport: "stdio", command: "node", args: [CALC_SERVER] },
+                        calc: { transport: "stdio", command: "node", args: [CALC_SERVER], env: { CALC_LOG } },
                     },
                     permissions: {},
                 });
@@ -195,7 +200,7 @@ describe.skipIf(!isLive)(
                         "together. Reply with the final product.",
                     mcpServers: {
                         "agent-mcp": { transport: "stdio", command: "node", args: ["noop"] },
-                        calc: { transport: "stdio", command: "node", args: [CALC_SERVER] },
+                        calc: { transport: "stdio", command: "node", args: [CALC_SERVER], env: { CALC_LOG } },
                     },
                     permissions: { allowedAgents: ["dag-fanout"] },
                 });

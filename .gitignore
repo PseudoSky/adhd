@@ -54,3 +54,6 @@ out
 
 
 storybook-static
+
+# agent-mcp live-dag test fixture log (redirected to tmp via CALC_LOG; this is a safety net)
+packages/ai/agent-mcp/src/__tests__/integration/fixtures/calc-server.log
