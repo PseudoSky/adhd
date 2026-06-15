@@ -71,6 +71,13 @@ src/
 
 ## Key design decisions
 
+> These document **why** the current code is shaped the way it is — read them
+> before changing the relevant area so you don't regress something by accident.
+> They are explanatory, **not immutable**: a deliberate, understood redesign is
+> fair game (update the rationale + tests when you do). Work we actively intend
+> to change is tracked in [BACKLOG.md](./BACKLOG.md), and shipped history is in
+> [CHANGELOG.md](./CHANGELOG.md).
+
 **In-process recursion.** When an agent's `mcpServers` includes `"agent-mcp"`, the `McpClientRegistry` detects the name and routes tool calls to `InProcessMcpClient` instead of spawning a subprocess. This avoids network hops for recursive delegation and is how orchestrator→sub-agent calls work. The key must be exactly `"agent-mcp"` (or the URL must match `selfUrl` for http/sse transport).
 
 **Anthropic OAuth keychain (`useClaudeOauth`).** Setting `useClaudeOauth: true` on an anthropic provider causes `AnthropicProvider` to read the OAuth access token directly from the macOS keychain service `Claude Code-credentials` on every `chat()` call. The token is automatically refreshed when within 5 minutes of expiry. This lets Claude Max subscribers run agents without an API key or billing setup. **macOS only** — depends on the `security` CLI. On other platforms use `authTokenEnv` instead.
@@ -83,10 +90,10 @@ src/
 
 **Tool name prefixing.** `McpClientRegistry.listAllTools()` prefixes every tool as `<server>__<tool>`. The orchestrator uses this qualified name for policy checks and tool dispatch.
 
-**Parallel tool dispatch — invariants (do NOT "fix" these).** Tool calls within one model turn execute concurrently (`Promise.all`). Three intentional consequences:
-- `toolCallCount` is incremented in the Phase-1 pre-dispatch loop, **before** `policy.check()` (`[inv:toolCallCount-increment-before-check]`). `policy.check()` enforces `count < max`, so counting the about-to-run batch up front means a batch that would cross `AGENT_MCP_MAX_TOOL_LOOPS` is rejected before it runs, not after. Moving the increment after the check silently raises the effective cap by one.
-- `pre:tool_call` hooks for a batch fire serially in Phase 1, but `post:tool_call` hooks fire from within the concurrent `Promise.all` arms — so hook consumers **cannot** assume strict `pre(A)→post(A)→pre(B)→post(B)` pairing; `post` events may interleave. Tool *result messages* are still appended in original `toolCalls` order (`[inv:message-order]`).
-- Cancellation is observed only after the in-flight batch settles (the task `signal` is not threaded into individual `callTool()` calls). Tightening this is tracked as BACKLOG DEBT-003.
+**Parallel tool dispatch — footguns, not commandments.** Tool calls within one model turn execute concurrently (`Promise.all`). The points below explain *why the code looks the way it does* so you don't regress them **by accident** while changing nearby code. They are not "never touch" — a deliberate, understood redesign is welcome; just don't flip them inadvertently, and update the `[inv:…]` tags + tests if you do. (Things we actively *want* to change live in [BACKLOG.md](./BACKLOG.md), not here.)
+- **Footgun — `toolCallCount` is incremented before `policy.check()`** (`[inv:toolCallCount-increment-before-check]`). `policy.check()` enforces `count < max`, so counting the about-to-run batch up front means a batch that would cross `AGENT_MCP_MAX_TOOL_LOOPS` is rejected before it runs. Moving the increment after the check silently raises the effective cap by one — so if you reorder this, do it intentionally and re-derive the cap semantics, don't "tidy" it.
+- **Contract — `post:tool_call` hooks may interleave within a batch.** `pre:tool_call` for a batch fires serially in Phase 1, but `post:tool_call` fires from inside the concurrent `Promise.all` arms, so hook consumers **cannot** assume strict `pre(A)→post(A)→pre(B)→post(B)` pairing. Tool *result messages* are still appended in original `toolCalls` order (`[inv:message-order]`). This is inherent to concurrent dispatch; serialising to "fix" it would defeat the feature.
+- **Known limitation (tracked, not settled) — cancellation latency.** Cancellation is observed only after the in-flight batch settles (the task `signal` isn't threaded into individual `callTool()` calls). This is a limitation we intend to improve — see **BACKLOG.md DEBT-003**, not a decision to preserve.
 
 ## Environment variables
 
