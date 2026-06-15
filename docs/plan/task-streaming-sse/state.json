@@ -1,6 +1,6 @@
 {
   "plan": "task-streaming-sse",
-  "current_state": "docs-and-publish",
+  "current_state": "done",
   "states": {
     "stream-event-bus": {
       "status": "complete",
@@ -52,11 +52,11 @@
       "end_ref": "234406178a794f214b848e4f13464e9b3ef0d8d9"
     },
     "docs-and-publish": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-15T16:45:07.911Z",
-      "done_at": null,
+      "done_at": "2026-06-15T16:45:08.902Z",
       "start_ref": "d33a999ed611f485d621c9f0e4ea3bf93f9b300e",
-      "end_ref": null
+      "end_ref": "bf3e57a37fc04fff1852568269c301986a4f5936"
     }
   },
   "transition_log": [
@@ -143,6 +143,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Final DoD audit green (all criteria) at consolidated 1.0.0."
+    },
+    {
+      "ts": "2026-06-15T16:45:08.902Z",
+      "from": "docs-and-publish",
+      "to": "docs-and-publish",
+      "start_ref": "d33a999ed611f485d621c9f0e4ea3bf93f9b300e",
+      "end_ref": "bf3e57a37fc04fff1852568269c301986a4f5936",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Shipped in consolidated @adhd/agent-mcp@1.0.0 (published to npm); ROADMAP updated."
     }
   ],
   "amendment_log": [
