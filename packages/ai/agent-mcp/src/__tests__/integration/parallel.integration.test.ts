@@ -34,7 +34,8 @@ import { nowIso } from "../../utils/timestamps.js";
 import { generateId } from "../../utils/ids.js";
 import type { ExecutionContext, Message } from "../../validation/index.js";
 import { ToolError } from "../../validation/errors.js";
-import { taskTool } from "../../tools/task.js";
+import { taskTool, taskCancel } from "../../tools/task.js";
+import type { TaskDeps } from "../../tools/task.js";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Shared helpers
@@ -445,5 +446,104 @@ describe("parallel.integration – concurrent Promise.all dispatch", () => {
         // toolACompleted remains false because this bEnteredLatch is a DIFFERENT latch object
         // from the first test. The seqHandlers use their own local bEnteredLatch above.
         // The key proof: test 1 completed without timeout → concurrent.
+    });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// DEBT-003 — task cancellation interrupts an in-flight tool call
+// ──────────────────────────────────────────────────────────────────────────────
+//
+// The orchestrator threads the composed task-cancel/timeout signal into
+// client.callTool(tool, args, signal). This test proves the consumer-visible
+// outcome: cancelling a task mid-tool-call aborts the in-flight call instead of
+// waiting for it to finish.
+//
+// TEETH (two independent failure modes if the signal is NOT threaded):
+//   - capturedSignal is undefined  → `expect(capturedSignal).toBeDefined()` fails.
+//   - the stub callTool hangs forever (no signal to abort on) → the orchestrator's
+//     Promise.all never settles → drainQueue() times out → the test fails.
+
+describe("DEBT-003 – cancel interrupts an in-flight tool call via the threaded signal", () => {
+    it("callTool receives the composed signal; cancelling mid-call aborts it (not left hanging)", async () => {
+        const harness = await buildHarness({ skipOrphanScan: true });
+        try {
+            const agentName = `cancel-agent-${generateId()}`;
+            harness.agentStore.create({
+                name: agentName,
+                provider: { type: "openai", model: "test-model" },
+                systemPrompt: "test",
+                mcpServers: {},
+                permissions: {},
+            });
+            const agentDef = harness.agentStore.read(agentName);
+            const session = harness.sessionStore.create({ agentName, agentDefinition: agentDef });
+
+            // Provider: one tool call, then (would) complete — we cancel during the call.
+            const callId = generateId();
+            const provider = new ScriptedProvider([
+                { type: "tool_calls", toolCalls: [{ id: callId, server: "slow-server", tool: "slow", arguments: {} }] },
+                { type: "completed", content: "done" },
+            ]);
+
+            // Stub registry whose callTool captures the signal and hangs until it aborts.
+            const callToolEntered = new Latch();
+            let capturedSignal: AbortSignal | undefined;
+            let signalAborted = false;
+            const registry = {
+                listAllTools: async (): Promise<ToolDefinition[]> => [
+                    { name: "slow-server__slow", description: "slow tool", inputSchema: { type: "object", properties: {} } },
+                ],
+                getClient: async (): Promise<IMcpClient> => ({
+                    listTools: async (): Promise<ToolDefinition[]> => [
+                        { name: "slow", description: "slow tool", inputSchema: {} },
+                    ],
+                    callTool: async (_tool: string, _args: unknown, signal?: AbortSignal): Promise<unknown> => {
+                        capturedSignal = signal;
+                        callToolEntered.release();
+                        return new Promise((_resolve, reject) => {
+                            if (!signal) return; // not threaded → hang forever (teeth)
+                            const onAbort = () => {
+                                signalAborted = true;
+                                reject(new Error("tool call aborted via threaded signal"));
+                            };
+                            if (signal.aborted) { onAbort(); return; }
+                            signal.addEventListener("abort", onAbort, { once: true });
+                        });
+                    },
+                    close: async (): Promise<void> => {},
+                }),
+                closeAll: async (): Promise<void> => {},
+            } as unknown as McpClientRegistry;
+
+            const patchedDeps: TaskDeps = {
+                ...harness.taskDeps,
+                orchestrator: {
+                    run: (input: Parameters<typeof harness.orchestrator.run>[0]) =>
+                        harness.orchestrator.run({
+                            ...input,
+                            provider: provider as unknown as Parameters<typeof harness.orchestrator.run>[0]["provider"],
+                            registry,
+                        }),
+                } as Orchestrator,
+            };
+
+            const out = await taskTool(
+                { session_id: session.id, prompt: "call the slow tool", background: true },
+                patchedDeps
+            );
+
+            // Wait until the tool call is in-flight, then cancel.
+            await callToolEntered.wait(5_000);
+            expect(capturedSignal).toBeDefined(); // threaded (teeth: undefined pre-fix)
+
+            taskCancel({ task_id: out.task_id }, { taskStore: harness.taskStore });
+            await drainQueue(harness.queue, 5_000); // hangs (times out) if the call wasn't aborted
+
+            expect(signalAborted).toBe(true); // the in-flight call was interrupted
+            const final = harness.taskStore.read(out.task_id);
+            expect(["cancelled", "failed"]).toContain(final.status);
+        } finally {
+            await harness.teardown();
+        }
     });
 });
