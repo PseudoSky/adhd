@@ -1,7 +1,7 @@
 {
   "schema_version": 3,
   "plan": "hitl-interrupts",
-  "current_state": "code-review",
+  "current_state": "audit-final",
   "states": {
     "hitl-orchestrator": {
       "status": "complete",
@@ -25,11 +25,11 @@
       "end_ref": "2e8b3a4963e44a8234a9e62ab306e853e6b0ab7f"
     },
     "code-review": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-15T15:08:48.293Z",
-      "done_at": null,
+      "done_at": "2026-06-15T15:08:48.675Z",
       "start_ref": "30350b0a49fb115ee26c1bee904dc1d8bdef9aa7",
-      "end_ref": null
+      "end_ref": "7890d431602738b81a0a49c162da59a1118a91de"
     },
     "audit-final": {
       "status": "pending",
@@ -82,6 +82,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "foundation audit green"
+    },
+    {
+      "ts": "2026-06-15T15:08:48.675Z",
+      "from": "code-review",
+      "to": "code-review",
+      "start_ref": "30350b0a49fb115ee26c1bee904dc1d8bdef9aa7",
+      "end_ref": "7890d431602738b81a0a49c162da59a1118a91de",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Human sign-off recorded (pseudosky, 2026-06-15): features verified end-to-end live — real-DB FK migration preserved task_events; recursive DAG with all tool calls confirmed via calc-server.log + task_events + usage_query."
     }
   ],
   "amendment_log": [
