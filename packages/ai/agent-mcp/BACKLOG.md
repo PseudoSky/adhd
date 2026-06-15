@@ -47,53 +47,10 @@ nice-to-have / cleanup.
 
 ## 🐞 Bugs
 
-### BUG-001 — SSE server crashes the whole process on `EADDRINUSE`
-- **Status:** backlog
-- **Priority:** P1
-- **Area:** streaming (`src/streaming/sse-server.ts`, `src/index.ts`)
-- **Reported:** 2026-06-15
+_No open bugs. Resolved bugs are in the **Done** section below (BUG-001 was fixed)._
 
-**Problem / Description**
-The server unconditionally starts the SSE HTTP server on a fixed port
-(`SSE_PORT`, default `3001`) at startup. If that port is already in use, the
-HTTP server emits an `'error'` event (`Error: listen EADDRINUSE ... :3001`) that
-is **not handled**, so Node throws it as an unhandled `'error'` event and the
-**entire MCP server process exits** — even though the core MCP stdio transport
-and the DB are fine. Surfaced by the 1.0.0 post-publish smoke test when a second
-agent-mcp instance booted while another already held `3001`.
-
-**Impact**
-Any environment where `3001` is occupied (a second agent-mcp instance, another
-service, a leftover process) cannot start agent-mcp at all. The failure is
-opaque (a raw stack trace, not an actionable error) and takes down a server
-whose primary function (stdio MCP) never needed the port.
-
-**Proposed fix / Approach**
-- Attach an `'error'` handler to the SSE `http.Server` and fail gracefully:
-  log an actionable warning and either (a) continue running with SSE disabled,
-  or (b) bind to an ephemeral port (`listen(0)`) and report the chosen port.
-- Consider making SSE **opt-in** (only start it when a task actually requests
-  `stream: true`, or behind an env flag) rather than always-on at boot.
-- Make the port configurable and documented (it already reads `SSE_PORT`).
-
-**Acceptance criteria**
-- Starting a second agent-mcp instance (or any process holding `3001`) does
-  **not** crash the server; the MCP stdio transport still works.
-- A test binds `3001`, boots the server, and asserts the process stays alive
-  and serves MCP (SSE disabled-or-rebound, with a logged warning).
-
-**References**
-- `src/streaming/sse-server.ts` (`startSseServer`), `src/index.ts` (boot order:
-  migrate → MCP stdio → SSE).
-- Smoke evidence: `Error: listen EADDRINUSE: address already in use 127.0.0.1:3001`.
-- Related: streaming subsystem (see CHANGELOG 1.0.0 → SSE streaming; FEAT-001).
-
-**Follow-up — audit for other unhandled exceptions (tracked as [DEBT-001]).**
-This bug is one instance of an unhandled async/event error taking down the
-process. We should investigate what **other** unhandled exceptions / unhandled
-promise rejections / unhandled `'error'` events exist (SSE writes, provider
-network calls, stdio transport, better-sqlite3, the background queue) and add a
-consistent top-level safety net. See DEBT-001.
+> The follow-on "audit for other unhandled exceptions" spawned by BUG-001 is
+> tracked separately as **DEBT-001** (still open).
 
 ---
 
@@ -239,30 +196,42 @@ fundamental subprocess-model limitation and document it clearly (consider
 
 **References** — `src/providers/claudecli.ts`. (Migrated from GAPS §1.)
 
-### DEBT-003 — Tighten cancellation latency (thread `signal` into `callTool`)
-- **Status:** backlog
-- **Priority:** P3
-- **Area:** engine (`src/engine/orchestrator.ts`, clients)
-- **Reported:** 2026-06-15
-
-**Problem / Description**
-The task-cancellation `AbortSignal` is not threaded into individual
-`client.callTool()` calls, so aborting mid-batch lets all in-flight tool calls
-run to completion before the abort is observed on the next loop iteration.
-Pre-existing (sequential code didn't abort mid-tool either), but the parallel
-(`Promise.all`) dispatch widened the window.
-
-**Impact** Cancellation is slower than necessary; in-flight tool calls aren't interrupted.
-
-**Proposed fix / Approach** Pass the composed `signal` through to `callTool`; have clients honor it.
-
-**Acceptance criteria** A cancel mid-batch aborts in-flight tool calls (or returns promptly) rather than waiting for the whole batch to settle.
-
-**References** — `src/engine/orchestrator.ts`. (Migrated from GAPS §8 item 3.)
-
 ---
 
 ## ✅ Done
 
-_Move closed `BUG-/FEAT-/DEBT-` entries here with their **Closed** date, or link_
-_to the commit/PR. (Empty for now — this file was created in 1.0.0.)_
+### BUG-001 — SSE server crashes the whole process on `EADDRINUSE`
+- **Status:** done
+- **Priority:** P1 · **Area:** streaming
+- **Reported:** 2026-06-15 · **Closed:** 2026-06-15
+
+**Resolution.** `startSseServer` now takes optional `port`/`host` params and
+attaches an `'error'` handler to the `http.Server`: a bind failure (e.g.
+`EADDRINUSE`) is logged with an actionable warning and SSE streaming degrades to
+unavailable — the stdio MCP transport keeps serving instead of the process
+crashing on an unhandled `'error'` event. The integration harness now binds an
+ephemeral port via the new `port` param (no more double-`listen`).
+**Test:** `sse.integration.test.ts` → "BUG-001 … bind failure does not crash the
+process" (teeth-checked: removing the handler makes vitest catch the unhandled
+EADDRINUSE error and the run fails). The broader unhandled-exception audit
+remains open as **DEBT-001**.
+
+### DEBT-003 — Cancellation latency (thread `signal` into `callTool`)
+- **Status:** done
+- **Priority:** P3 · **Area:** engine
+- **Reported:** 2026-06-15 · **Closed:** 2026-06-15
+
+**Resolution.** `IMcpClient.callTool` gained an optional `signal?: AbortSignal`;
+the orchestrator threads the composed task-cancel/timeout signal into both
+dispatch sites (the `Promise.all` batch and the claudecli `executeTool` path).
+The stdio client composes it with its per-call timeout; the http client forwards
+it; the in-process client short-circuits if already aborted. A cancel mid-call
+now interrupts the in-flight tool call instead of waiting for the batch.
+**Test:** `parallel.integration.test.ts` → "DEBT-003 … cancel interrupts an
+in-flight tool call via the threaded signal" (teeth-checked: dropping the signal
+arg makes the stub hang → the test times out).
+
+---
+
+_Open `BUG-/FEAT-/DEBT-` entries live in the sections above; move them here with a_
+_**Closed** date + resolution when shipped._

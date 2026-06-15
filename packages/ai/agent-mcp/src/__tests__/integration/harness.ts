@@ -147,14 +147,17 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
     let ssePort: number | undefined;
 
     if (opts.withSse) {
-        sseServer = startSseServer(taskStore);
-        // Override SSE_PORT to the ephemeral port after listen
+        // Bind an ephemeral port (0) directly — startSseServer does the single
+        // listen() internally; we just wait for it and read the chosen port.
+        sseServer = startSseServer(taskStore, 0, "127.0.0.1");
         await new Promise<void>((resolve) => {
-            sseServer!.listen(0, "127.0.0.1", () => {
-                const addr = sseServer!.address() as { port: number };
-                ssePort = addr.port;
+            const readPort = () => {
+                const addr = sseServer!.address() as { port: number } | null;
+                ssePort = addr?.port;
                 resolve();
-            });
+            };
+            if (sseServer!.listening) readPort();
+            else sseServer!.once("listening", readPort);
         });
     }
 

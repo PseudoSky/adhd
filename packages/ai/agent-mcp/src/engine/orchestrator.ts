@@ -188,7 +188,7 @@ export class Orchestrator {
                         executeTool: async (server, tool, args) => {
                             const client = await registry.getClient(server);
                             try {
-                                const result = await client.callTool(tool, args);
+                                const result = await client.callTool(tool, args, composedSignal);
                                 return { result, isError: false };
                             } catch (error) {
                                 return {
@@ -438,7 +438,10 @@ export class Orchestrator {
                         let isError = false;
                         try {
                             const client = await registry.getClient(resolved.server);
-                            toolResult = await client.callTool(resolved.tool, toolCall.arguments);
+                            // Thread the composed task-cancel/timeout signal so a
+                            // cancel mid-batch interrupts this in-flight call
+                            // instead of waiting for the whole batch (DEBT-003).
+                            toolResult = await client.callTool(resolved.tool, toolCall.arguments, composedSignal);
                         } catch (error) {
                             // Re-throw fatal ToolError codes — these abort the entire task, not just this call.
                             // See [inv:fatal-policy-codes] in _shared.md.

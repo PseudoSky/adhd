@@ -7,7 +7,23 @@ const SSE_PORT = parseInt(process.env["SSE_PORT"] ?? "3001", 10);
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
 
-export function startSseServer(taskStore: TaskStore): http.Server {
+/**
+ * Start the task-streaming SSE server.
+ *
+ * @param port  port to bind (default `SSE_PORT` env, else 3001). Pass `0` for an
+ *              ephemeral port (used by tests).
+ * @param host  host to bind (default `SSE_HOST` env, else 127.0.0.1).
+ *
+ * A bind failure (e.g. `EADDRINUSE` when the port is already taken) is handled
+ * gracefully: it is logged and SSE streaming is left unavailable, but the
+ * process does NOT crash — the stdio MCP transport, which never needed the
+ * port, keeps serving. (BUG-001)
+ */
+export function startSseServer(
+    taskStore: TaskStore,
+    port: number = SSE_PORT,
+    host: string = process.env["SSE_HOST"] ?? "127.0.0.1"
+): http.Server {
     const server = http.createServer((req, res) => {
         // Route: GET /tasks/:id/stream — :id must be a UUID
         const match = req.url?.match(
@@ -93,12 +109,29 @@ export function startSseServer(taskStore: TaskStore): http.Server {
         req.on("close", cleanup);
     });
 
-    // Bind to localhost by default — exposes on all interfaces only if SSE_HOST is set.
-    const SSE_HOST = process.env["SSE_HOST"] ?? "127.0.0.1";
-    server.listen(SSE_PORT, SSE_HOST, () => {
+    // Handle bind/runtime errors so an unhandled 'error' event can't crash the
+    // whole MCP process (BUG-001). EADDRINUSE (port already taken) is the common
+    // case — degrade to "SSE unavailable" rather than taking down the server.
+    server.on("error", (err: NodeJS.ErrnoException) => {
+        if (err.code === "EADDRINUSE") {
+            logger.warn(
+                { host, port, err: err.message },
+                "SSE server could not bind (port already in use) — task SSE streaming is DISABLED; the MCP server continues normally. Set SSE_PORT to a free port to enable streaming."
+            );
+        } else {
+            logger.error(
+                { host, port, code: err.code, err: err.message },
+                "SSE server error — task streaming disabled"
+            );
+        }
+    });
+
+    server.listen(port, host, () => {
         // Use the pino logger (stderr) — never console.log, which writes to
         // stdout and corrupts the MCP JSON-RPC transport on the shared process.
-        logger.info({ host: SSE_HOST, port: SSE_PORT }, "SSE server listening");
+        const addr = server.address();
+        const boundPort = addr && typeof addr === "object" ? addr.port : port;
+        logger.info({ host, port: boundPort }, "SSE server listening");
     });
 
     return server;

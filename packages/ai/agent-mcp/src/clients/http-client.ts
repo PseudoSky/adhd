@@ -28,15 +28,21 @@ abstract class BaseHttpMcpClient implements IMcpClient {
         }));
     }
 
-    async callTool(toolName: string, args: unknown): Promise<unknown> {
+    async callTool(toolName: string, args: unknown, signal?: AbortSignal): Promise<unknown> {
         if (!this.client) {
             throw new ToolError("MCP_CLIENT_ERROR", `Client '${this.serverName}' not connected`);
         }
 
-        const result = await this.client.callTool({
-            name: toolName,
-            arguments: args as Record<string, unknown>,
-        });
+        // Thread the caller's cancellation/timeout signal so a task cancel
+        // interrupts this in-flight call (DEBT-003).
+        const result = await this.client.callTool(
+            {
+                name: toolName,
+                arguments: args as Record<string, unknown>,
+            },
+            undefined,
+            signal ? { signal } : undefined
+        );
 
         if (result.isError) {
             throw new ToolError(

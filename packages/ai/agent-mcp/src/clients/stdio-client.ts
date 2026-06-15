@@ -74,19 +74,26 @@ export class StdioMcpClient implements IMcpClient {
         }));
     }
 
-    async callTool(toolName: string, args: unknown): Promise<unknown> {
+    async callTool(toolName: string, args: unknown, callerSignal?: AbortSignal): Promise<unknown> {
         if (!this.client) {
             throw new ToolError("MCP_CLIENT_ERROR", `Client '${this.serverName}' not connected`);
         }
 
-        const signal = this.config.timeoutMs
+        // Compose the caller's cancellation/timeout signal (DEBT-003 — lets a
+        // task cancel interrupt this in-flight call) with the client-level
+        // per-call timeout. Either may fire first.
+        const timeoutSignal = this.config.timeoutMs
             ? AbortSignal.timeout(this.config.timeoutMs)
             : undefined;
+        const signal =
+            callerSignal && timeoutSignal
+                ? AbortSignal.any([callerSignal, timeoutSignal])
+                : (callerSignal ?? timeoutSignal);
 
         const result = await this.client.callTool(
             { name: toolName, arguments: args as Record<string, unknown> },
             undefined,
-            { signal }
+            signal ? { signal } : undefined
         );
 
         if (result.isError) {
