@@ -36,6 +36,13 @@
       "when": 1781408344547,
       "tag": "0004_brief_shocker",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1781497705486,
+      "tag": "0005_clear_lenny_balinger",
+      "breakpoints": true
     }
   ]
 }

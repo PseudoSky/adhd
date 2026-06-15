@@ -16,7 +16,9 @@ export type { TaskStatus } from "@adhd/agent-mcp-types";
 
 export const taskSchema = z.object({
   id: z.string().uuid(),
-  sessionId: z.string().uuid(),
+  // Nullable: ephemeral tasks (agent_name one-shot mode) have no session row.
+  sessionId: z.string().uuid().optional(),
+  isEphemeral: z.boolean().default(false),
   parentTaskId: z.string().uuid().optional(),
   recursionDepth: z.number().int().nonnegative(),
   status: taskStatusSchema,
@@ -100,6 +102,8 @@ export const taskToolOutputSchema = z.object({
 export const taskListInputSchema = z.object({
   session_id: z.string().uuid().optional(),
   status: taskStatusSchema.optional(),
+  // Optional filter: true = ephemeral-only, false = session-backed only, omitted = all
+  is_ephemeral: z.boolean().optional(),
 });
 
 export const taskCancelInputSchema = z.object({

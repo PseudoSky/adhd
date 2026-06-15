@@ -64,12 +64,16 @@ export const messagesTable = sqliteTable("messages", {
 // ──────────────────────────────────────────────
 export const tasksTable = sqliteTable("tasks", {
     id: text("id").primaryKey(),
-    sessionId: text("session_id")
-        .notNull()
-        .references(() => sessionsTable.id, {
-            onDelete: "cascade"
-        }),
+    // Nullable: ephemeral tasks (agent_name one-shot mode) have no session row.
+    // No FK reference: the session may not exist (ephemeral) or may have been
+    // deleted; we never want a cascade-delete triggered by session cleanup to
+    // destroy task history.
+    sessionId: text("session_id"),
     parentTaskId: text("parent_task_id"),
+    // SQLite boolean: 0 = session-backed task, 1 = ephemeral one-shot task.
+    // Ephemeral tasks persist a tasks row + task_events + task_usage but
+    // have no sessions row and no messages rows.
+    isEphemeral: integer("is_ephemeral").notNull().default(0),
     recursionDepth: integer("recursion_depth").notNull().default(0),
     status: text("status", {
         enum: ["pending", "running", "completed", "failed", "cancelled", "waiting", "awaiting_input"]

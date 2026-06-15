@@ -16,7 +16,6 @@ import type {
     Task,
     TaskCancelInput,
     TaskListInput,
-    TaskStatus,
     TaskToolInput,
     TaskToolOutput,
     TaskUsageReport,
@@ -51,8 +50,9 @@ export interface TaskDeps {
 }
 
 /**
- * One-shot ephemeral execution: loads the agent definition but creates no session
- * row and persists no messages. Always synchronous.
+ * One-shot ephemeral execution: runs a prompt against an agent without creating a
+ * session row or persisting any messages. Persists a tasks row + task_events +
+ * task_usage so the run is observable via task_list / result / metrics.
  */
 async function runEphemeralTask(
     input: { agent_name: string; prompt: string },
@@ -62,10 +62,23 @@ async function runEphemeralTask(
     const agentDefinition = deps.agentStore.read(input.agent_name);
 
     const taskId = generateId();
+    // Use a synthetic session ID only as an in-memory identifier for message
+    // threading within this run — it is never written to the DB.
     const ephemeralSessionId = generateId();
     const rootTaskId = callerContext
         ? (callerContext.rootTaskId ?? callerContext.taskId)
         : undefined;
+
+    // Persist the tasks row so this run is observable (task_list, result tool, metrics).
+    // session_id is NULL and is_ephemeral=1 — no sessions row is created.
+    deps.taskStore.create({
+        id: taskId,
+        sessionId: null,
+        isEphemeral: true,
+        prompt: input.prompt,
+        parentTaskId: callerContext?.taskId,
+        recursionDepth: (callerContext?.recursionDepth ?? -1) + 1,
+    });
 
     const executionContext: ExecutionContext = {
         taskId,
@@ -101,22 +114,7 @@ async function runEphemeralTask(
           ]
         : [userMessage];
 
-    // Capture final status/result without touching the DB
-    let capturedStatus: TaskStatus = "pending";
-    let capturedResult: string | undefined;
-
-    const captureTaskStore = {
-        updateStatus: (_id: string, status: TaskStatus, fields?: { result?: string }) => {
-            capturedStatus = status;
-            if (fields?.result !== undefined) capturedResult = fields.result;
-            return {} as Task;
-        },
-        // eslint-disable-next-line @typescript-eslint/no-empty-function
-        appendEvent: () => {},
-        // eslint-disable-next-line @typescript-eslint/no-empty-function
-        unregisterCancellation: () => {},
-    } as unknown as TaskStore;
-
+    // No messages are persisted — noopSessionStore swallows appendMessage calls.
     const noopSessionStore = {
         // eslint-disable-next-line @typescript-eslint/no-empty-function
         appendMessage: async () => {},
@@ -132,6 +130,7 @@ async function runEphemeralTask(
     );
 
     const controller = new AbortController();
+    deps.taskStore.registerCancellation(taskId, controller);
 
     try {
         await deps.orchestrator.run({
@@ -140,22 +139,26 @@ async function runEphemeralTask(
             registry,
             provider,
             policy: deps.policy,
-            taskStore: captureTaskStore,
+            taskStore: deps.taskStore,  // REAL store — events + status persisted
             sessionStore: noopSessionStore,
             signal: controller.signal,
             taskId,
             hooks: deps.hooks,
+            isEphemeral: true,           // forbids request_human_input
         });
     } catch {
-        // Orchestrator already captured status via captureTaskStore
+        // Orchestrator already updated status via deps.taskStore
+    } finally {
+        deps.taskStore.unregisterCancellation(taskId);
     }
 
+    const finalTask = deps.taskStore.read(taskId);
     const usage = buildTaskUsageReport(deps.db, taskId);
 
     return {
         task_id: taskId,
-        status: capturedStatus,
-        result: capturedResult,
+        status: finalTask.status,
+        result: finalTask.result,
         usage,
     };
 }
@@ -368,6 +371,25 @@ export async function taskTool(
  */
 export async function enqueueExistingTask(taskId: string, deps: TaskDeps): Promise<void> {
     const task = deps.taskStore.read(taskId);
+
+    // Ephemeral tasks have no session row and no in-memory provider context.
+    // If the process restarted, the orchestrator context is gone and the task
+    // cannot be resumed. Mark it failed so it doesn't linger as pending.
+    if (task.isEphemeral || !task.sessionId) {
+        logger.warn(
+            { taskId, isEphemeral: task.isEphemeral },
+            "enqueueExistingTask: skipping ephemeral task — context lost on restart"
+        );
+        try {
+            deps.taskStore.updateStatus(taskId, "failed", {
+                error: "Ephemeral task context lost on server restart; create a new task.",
+            });
+        } catch {
+            // Already in a terminal state — ignore
+        }
+        return;
+    }
+
     const session = deps.sessionStore.read(task.sessionId);
 
     if (session.status !== "active") {

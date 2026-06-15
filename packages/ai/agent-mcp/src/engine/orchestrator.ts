@@ -81,9 +81,11 @@ export interface OrchestratorRunInput {
     taskId: string;
     hooks?: IHookRegistry;
     /**
-     * Set to `true` for ephemeral (one-shot) tasks that have no durable DB row.
-     * When `true`, `request_human_input` is forbidden (no DB row means
-     * `resume_token` cannot be persisted and `task_resume` cannot validate it).
+     * Set to `true` for ephemeral (one-shot) tasks (agent_name mode).
+     * Ephemeral tasks DO persist a tasks row + task_events + task_usage, but
+     * have no sessions row and no messages rows. When `true`,
+     * `request_human_input` is forbidden because HITL cannot be resumed across
+     * a process restart without a durable session context.
      */
     isEphemeral?: boolean;
 }
@@ -314,11 +316,10 @@ export class Orchestrator {
 
                     // ── HITL intercept ──────────────────────────────────────
                     if (tc.tool === HITL_TOOL_NAME) {
-                        // Ephemeral tasks have no DB row — cannot persist resume_token.
-                        // Detect via the explicit flag or by checking if taskStore.read exists
-                        // (captureTaskStore in runEphemeralTask omits the read method).
-                        const isEphemeralTask = isEphemeral || typeof (taskStore as { read?: unknown }).read !== "function";
-                        if (isEphemeralTask) {
+                        // Ephemeral tasks have no session row — cannot persist resume_token
+                        // (no DB row means task_resume cannot validate it and HITL cannot
+                        // be resumed after a process restart). Reject via isEphemeral flag.
+                        if (isEphemeral) {
                             throw new ToolError(
                                 "VALIDATION_ERROR",
                                 "request_human_input is not supported for ephemeral tasks"
