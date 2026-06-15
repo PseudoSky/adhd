@@ -369,7 +369,15 @@ export class Orchestrator {
                     }
                     // ── end HITL intercept ──────────────────────────────────
 
-                    const qualifiedToolName = `${tc.server}__${tc.tool}`;
+                    // Resolve the REAL {server,tool}: OpenAI-compatible/local models
+                    // rewrite '-' → '_' in tool names, so the returned name may not
+                    // match what we advertised. Resolving here keeps the qualified
+                    // name correct for the policy delegation check (otherwise a
+                    // mangled name would bypass the allowedAgents gate) and dispatch.
+                    const resolved =
+                        registry.resolveToolName?.(`${tc.server}__${tc.tool}`) ??
+                        { server: tc.server, tool: tc.tool };
+                    const qualifiedToolName = `${resolved.server}__${resolved.tool}`;
                     await hooks.emit("pre:tool_call", {
                         executionContext,
                         toolName: qualifiedToolName,
@@ -400,7 +408,10 @@ export class Orchestrator {
                 const nonHitlToolCalls = toolCalls.filter(tc => tc.tool !== HITL_TOOL_NAME);
                 const toolResults = await Promise.all(
                     nonHitlToolCalls.map(async (toolCall) => {
-                        const qualifiedToolName = `${toolCall.server}__${toolCall.tool}`;
+                        const resolved =
+                            registry.resolveToolName?.(`${toolCall.server}__${toolCall.tool}`) ??
+                            { server: toolCall.server, tool: toolCall.tool };
+                        const qualifiedToolName = `${resolved.server}__${resolved.tool}`;
 
                         // Emit tool_call SSE event before dispatch
                         emitTaskEvent({
@@ -425,8 +436,8 @@ export class Orchestrator {
                         let toolResult: unknown;
                         let isError = false;
                         try {
-                            const client = await registry.getClient(toolCall.server);
-                            toolResult = await client.callTool(toolCall.tool, toolCall.arguments);
+                            const client = await registry.getClient(resolved.server);
+                            toolResult = await client.callTool(resolved.tool, toolCall.arguments);
                         } catch (error) {
                             // Re-throw fatal ToolError codes — these abort the entire task, not just this call.
                             // See [inv:fatal-policy-codes] in _shared.md.

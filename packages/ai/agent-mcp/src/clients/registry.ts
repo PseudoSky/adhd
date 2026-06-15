@@ -6,6 +6,7 @@ import { InProcessMcpClient } from "./in-process.js";
 import { HttpMcpClient, SseMcpClient } from "./http-client.js";
 import { StdioMcpClient } from "./stdio-client.js";
 import type { IMcpClient } from "./types.js";
+import { TOOL_NAME_SEPARATOR, normalizeToolName } from "./tool-naming.js";
 
 /**
  * McpClientRegistry — per-task lifetime.
@@ -21,6 +22,10 @@ import type { IMcpClient } from "./types.js";
 export class McpClientRegistry {
     private readonly clients = new Map<string, IMcpClient>();
     private readonly connectPromises = new Map<string, Promise<void>>();
+    // advertised tool name (and its normalized form) → real { server, tool }.
+    // Populated by listAllTools(); lets resolveToolName() recover the real target
+    // even when a model rewrites '-' → '_' in the name it calls back with.
+    private readonly toolTargets = new Map<string, { server: string; tool: string }>();
 
     constructor(
         private readonly mcpServers: Record<string, McpServerConfig>,
@@ -44,13 +49,25 @@ export class McpClientRegistry {
         return false;
     }
 
-    private async getOrCreateClient(name: string): Promise<IMcpClient> {
+    /**
+     * Map a (possibly model-normalized) server name back to a configured key.
+     * OpenAI-compatible/local models rewrite '-' → '_', so a tool call to
+     * 'agent_mcp__…' must still resolve to the configured 'agent-mcp' server.
+     */
+    private resolveServerName(name: string): string {
+        if (this.mcpServers[name]) return name;
+        const norm = normalizeToolName(name);
+        return Object.keys(this.mcpServers).find((k) => normalizeToolName(k) === norm) ?? name;
+    }
+
+    private async getOrCreateClient(rawName: string): Promise<IMcpClient> {
+        const name = this.resolveServerName(rawName);
         const existing = this.clients.get(name);
         if (existing) return existing;
 
         const config = this.mcpServers[name];
         if (!config) {
-            throw new Error(`No MCP server config found for server: '${name}'`);
+            throw new Error(`No MCP server config found for server: '${rawName}'`);
         }
 
         if (this.isSelfReferential(name, config)) {
@@ -111,10 +128,13 @@ export class McpClientRegistry {
                 const tools = await client.listTools();
 
                 for (const tool of tools) {
-                    allTools.push({
-                        ...tool,
-                        name: `${serverName}__${tool.name}`,
-                    });
+                    const advertised = `${serverName}${TOOL_NAME_SEPARATOR}${tool.name}`;
+                    const target = { server: serverName, tool: tool.name };
+                    // Index both the advertised name and its normalized form so a
+                    // model that rewrites '-' → '_' still resolves to the real target.
+                    this.toolTargets.set(advertised, target);
+                    this.toolTargets.set(normalizeToolName(advertised), target);
+                    allTools.push({ ...tool, name: advertised });
                 }
             } catch (error) {
                 logger.warn(
@@ -125,6 +145,26 @@ export class McpClientRegistry {
         }
 
         return allTools;
+    }
+
+    /**
+     * Resolve a tool name AS RETURNED BY A MODEL back to its real { server, tool }.
+     * Tries the exact advertised name, then the normalized form (handles models
+     * that rewrite '-' → '_'), then falls back to a literal `__` split for names
+     * the registry never advertised (preserves prior behavior).
+     */
+    resolveToolName(advertised: string): { server: string; tool: string } {
+        const hit =
+            this.toolTargets.get(advertised) ??
+            this.toolTargets.get(normalizeToolName(advertised));
+        if (hit) return hit;
+        const i = advertised.indexOf(TOOL_NAME_SEPARATOR);
+        return i === -1
+            ? { server: advertised, tool: advertised }
+            : {
+                  server: advertised.slice(0, i),
+                  tool: advertised.slice(i + TOOL_NAME_SEPARATOR.length),
+              };
     }
 
     /** Tear down all clients — called from Orchestrator's finally block */
