@@ -46,13 +46,35 @@ code-tasking/
 
 ---
 
-## Scenarios (difficulty ↑)
+## Scenarios
+
+Two tiers. **Floor** = simple, additive, single-locus changes (mostly feature work)
+— what the model *should* handle; they establish the competence floor and a control
+for the harder set. **Discriminators** = subtle diagnosis / cross-layer fixes that
+separate "produces plausible output" from "produces correct output."
+
+### Floor (simple — feature/additive, no extended debugging)
+
+| slug | task | what it probes |
+|---|---|---|
+| [`tasklist-ephemeral-filter`](scenarios/tasklist-ephemeral-filter.md) | add an optional `is_ephemeral` filter to the task-list tool + query | additive feature; `!== undefined` + boolean→0/1 |
+| [`sse-port-param`](scenarios/sse-port-param.md) | add an optional, defaulted `port` parameter to `startSseServer` | optional param that preserves existing callers |
+| [`task-status-enum-extend`](scenarios/task-status-enum-extend.md) | add `waiting` + `awaiting_input` to the status enum in **both** schema + Zod | find & update *all* declaration sites consistently |
+| [`export-sqlite-type-annotation`](scenarios/export-sqlite-type-annotation.md) | export a `const` that triggers TS4023; make the build pass | knows the TS4023 "cannot be named" → explicit type annotation |
+
+### Discriminators (hard — subtle diagnosis / cross-layer)
 
 | slug | bug | why it's hard |
 |---|---|---|
 | [`audit-ref-policy-comment`](scenarios/audit-ref-policy-comment.md) | a `policy.check before Promise.all` audit greps the first `Promise.all` line — which is a *comment* | careful reasoning about a self-contained script |
 | [`sse-eaddrinuse`](scenarios/sse-eaddrinuse.md) | SSE server's unhandled `'error'` event crashes the whole process when the port is taken | requires knowing `'error'` is an **async emitter event**, not a thrown exception |
 | [`fk-cascade-migration`](scenarios/fk-cascade-migration.md) | migration 0005's table-rebuild cascade-wipes `task_events` despite an in-SQL `PRAGMA foreign_keys=OFF` | requires knowing `PRAGMA foreign_keys` is a **no-op inside a transaction** *and* that the fix lives in a different file (connection setup), not the SQL |
+
+> Candidate scenarios not yet written up (proposed, from this session): `cancel-signal-threading`
+> (mechanical multi-file), `no-bug-control` (false-positive control), `oauth-identity-system-block` /
+> `vite-emptyoutdir-stale-version` / `nx-worktree-project-conflict` (niche discriminators),
+> `cancel-reason-not-persisted` / `hitl-tool-unreachable` (cross-component), `toolcallcount-off-by-one`
+> (small), `better-sqlite3-teardown-segfault` (multi-cause).
 
 ---
 
