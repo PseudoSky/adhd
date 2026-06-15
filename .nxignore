@@ -1,0 +1,6 @@
+# Git worktrees created by Claude Code live under .claude/worktrees/ and are
+# full copies of the repo. nx must NOT scan them — otherwise every project is
+# defined in two locations and the project graph fails with
+# ProjectsWithConflictingNamesError. (.gitignore already lists .claude/, but
+# .nxignore makes the intent explicit and independent of git-ignore semantics.)
+.claude
