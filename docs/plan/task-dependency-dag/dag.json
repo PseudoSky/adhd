@@ -63,13 +63,13 @@
       "kind": "work",
       "phase": "convergence",
       "depends_on": ["audit-final"],
-      "guard": "node -e \"const p=require('./packages/ai/agent-mcp/package.json');process.exit(p.version==='0.2.0'?0:1)\" && npm info @adhd/agent-mcp version 2>/dev/null | grep -q '0.2.0'",
+      "guard": "node -e \"const p=require('./packages/ai/agent-mcp/package.json');process.exit(p.version==='1.0.0'?0:1)\" && npm info @adhd/agent-mcp version 2>/dev/null | grep -q '1.0.0'",
       "artifacts": [
         "packages/ai/agent-mcp/package.json",
         "ROADMAP.md"
       ],
       "context": "contexts/docs-and-publish.md",
-      "notes": "Bump agent-mcp to 0.2.0. agent-mcp-types was already bumped by task-schema-foundation (TaskStatus gains 'waiting'/'awaiting_input'). Document depends_on, on_upstream_failure, inputs in CLAUDE.md and README.",
+      "notes": "Bump agent-mcp to 1.0.0. agent-mcp-types was already bumped by task-schema-foundation (TaskStatus gains 'waiting'/'awaiting_input'). Document depends_on, on_upstream_failure, inputs in CLAUDE.md and README.",
       "changes": {
         "deletes": [],
         "resigns": [],
