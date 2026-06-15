@@ -1,6 +1,6 @@
 {
   "plan": "task-streaming-sse",
-  "current_state": "audit-final",
+  "current_state": "docs-and-publish",
   "states": {
     "stream-event-bus": {
       "status": "complete",
@@ -45,11 +45,11 @@
       "end_ref": "917ffcf515996e2fb7e51a18dcf48aae81c5c302"
     },
     "audit-final": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-15T16:44:47.602Z",
-      "done_at": null,
+      "done_at": "2026-06-15T16:45:07.669Z",
       "start_ref": "1dc8e0d933d5ed0098a9656051e4ab2b03320cd3",
-      "end_ref": null
+      "end_ref": "234406178a794f214b848e4f13464e9b3ef0d8d9"
     },
     "docs-and-publish": {
       "status": "pending",
@@ -131,6 +131,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Human sign-off recorded (pseudosky, 2026-06-15): features verified end-to-end live — real-DB FK migration preserved task_events; recursive DAG with all tool calls confirmed via calc-server.log + task_events + usage_query."
+    },
+    {
+      "ts": "2026-06-15T16:45:07.669Z",
+      "from": "audit-final",
+      "to": "audit-final",
+      "start_ref": "1dc8e0d933d5ed0098a9656051e4ab2b03320cd3",
+      "end_ref": "234406178a794f214b848e4f13464e9b3ef0d8d9",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Final DoD audit green (all criteria) at consolidated 1.0.0."
     }
   ],
   "amendment_log": [
