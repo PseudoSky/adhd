@@ -19,7 +19,6 @@ import crypto from "node:crypto";
 
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { fileURLToPath } from "node:url";
 
 import * as schema from "../../db/schema.js";
@@ -33,6 +32,7 @@ import { HookRegistry } from "../../engine/hooks.js";
 import { PolicyEngine } from "../../engine/policy.js";
 import { startSseServer } from "../../streaming/sse-server.js";
 import { enqueueExistingTask } from "../../tools/task.js";
+import { runMigrationsOn } from "../../db/migrate-runner.js";
 import { taskTool, taskCancel, taskResume } from "../../tools/task.js";
 import type { TaskDeps } from "../../tools/task.js";
 import type { AgentCreateInput } from "../../validation/index.js";
@@ -110,8 +110,12 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
 
     const db = drizzle(rawSqlite, { schema }) as unknown as TestDb;
 
-    // Run migrations — same folder as production
-    migrate(db as Parameters<typeof migrate>[0], { migrationsFolder: MIGRATIONS_FOLDER });
+    // Run migrations — same folder + FK-safe runner as production
+    runMigrationsOn(
+        rawSqlite,
+        db as Parameters<typeof runMigrationsOn>[1],
+        MIGRATIONS_FOLDER
+    );
 
     const hooks = new HookRegistry();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

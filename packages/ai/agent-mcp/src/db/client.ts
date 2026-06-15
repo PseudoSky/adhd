@@ -22,7 +22,7 @@ if (!fs.existsSync(directory)) {
     });
 }
 
-const sqlite =
+export const sqlite: Database.Database =
     new Database(resolvedPath);
 
 sqlite.pragma("journal_mode = WAL");
