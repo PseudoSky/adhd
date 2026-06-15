@@ -34,12 +34,28 @@ cd <repo-root>
 npx nx build <project-name>
 ```
 
-### 3. Publish from dist
+### 3. Publish
+
+**Preferred — `nx release publish` (enforces a clean build + tests first).**
 
 ```bash
+npx nx release publish --projects=<name>          # add --dry-run to preview
+```
+
+The `nx-release-publish` target has `dependsOn: ["build", "test"]` (see each
+publishable project's `project.json`, plus the `nx.json` `targetDefaults`
+baseline). Because the `build` target runs with `clean: true` (it wipes `dist/`
+and recompiles from source), **publishing always rebuilds from source and runs
+the test suite first** — a stray manual edit in `dist/` can never be published,
+and a red test suite blocks the release. This is the required path.
+
+**Manual fallback** (only if `nx release` is unavailable — does NOT enforce the
+clean-build/test gate, so run the build + tests yourself first):
+
+```bash
+npx nx build <name> && npx nx test <name>
 npm publish dist/packages/<path>/<name> --access public
-# If prompted for OTP:
-npm publish dist/packages/<path>/<name> --access public --otp=<code>
+# If prompted for OTP: add --otp=<code>
 ```
 
 ### 4. Commit version bump

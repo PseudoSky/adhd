@@ -93,14 +93,17 @@ def phase_final():
     dod_results.append(check(
         "[dod.1] Migration 0004_*.sql exists with all four columns",
         r"""python3 -c "
-import os, glob, sys
-sqls = sorted(glob.glob('packages/ai/agent-mcp/drizzle/*.sql'))
-if len(sqls) < 4:
-    print(f'FAIL: expected >=4 migrations, got {len(sqls)}'); sys.exit(1)
-migration = open(sqls[3]).read()  # 0004_* is the 4th file (0-indexed)
+import glob, sys
+# Match the 0004_* migration by number, not list position — positional
+# indexing breaks when other migrations (0001_task_usage, 0005_*) shift the
+# index away from the migration number.
+cands = sorted(glob.glob('packages/ai/agent-mcp/drizzle/0004_*.sql'))
+if not cands:
+    print('FAIL: no 0004_*.sql migration found'); sys.exit(1)
+migration = open(cands[0]).read()
 for col in ['depends_on', 'on_upstream_failure', 'inputs', 'resume_token']:
     if col not in migration:
-        print(f'FAIL: column {col!r} not in migration 0004'); sys.exit(1)
+        print(f'FAIL: column {col!r} not in {cands[0]}'); sys.exit(1)
 print('OK')
 " """,
     ))
@@ -126,8 +129,8 @@ print('OK')
         "npx --yes nx build agent-mcp 2>&1 | grep -q 'Successfully ran'",
     ))
     dod_results.append(check(
-        "[dod.6] Version bumped to 0.1.5",
-        "node -e \"const p=require('./packages/ai/agent-mcp/package.json'); process.exit(p.version==='0.1.5'?0:1)\"",
+        "[dod.6] Version bumped to 1.0.0",
+        "node -e \"const p=require('./packages/ai/agent-mcp/package.json'); process.exit(p.version==='1.0.0'?0:1)\"",
     ))
 
     return foundation_results + dod_results

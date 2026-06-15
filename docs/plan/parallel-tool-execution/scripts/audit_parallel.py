@@ -217,18 +217,18 @@ def phase_final() -> None:
         "test -f docs/plan/parallel-tool-execution/.code-review-complete",
     )
 
-    # [docs-and-publish.1] package.json version = 0.1.0
+    # [docs-and-publish.1] package.json version = 1.0.0
     check(
         "docs-and-publish.1",
-        "packages/ai/agent-mcp/package.json version must be 0.1.0",
-        "node -e \"const p=require('./packages/ai/agent-mcp/package.json');process.exit(p.version==='0.1.0'?0:1)\"",
+        "packages/ai/agent-mcp/package.json version must be 1.0.0",
+        "node -e \"const p=require('./packages/ai/agent-mcp/package.json');process.exit(p.version==='1.0.0'?0:1)\"",
     )
 
-    # [docs-and-publish.2] npm registry shows 0.1.0
+    # [docs-and-publish.2] npm registry shows 1.0.0
     check(
         "docs-and-publish.2",
-        "npm info @adhd/agent-mcp version must return 0.1.0",
-        "npm info @adhd/agent-mcp version 2>/dev/null | grep -q '0.1.0'",
+        "npm info @adhd/agent-mcp version must return 1.0.0",
+        "npm info @adhd/agent-mcp version 2>/dev/null | grep -q '1.0.0'",
     )
 
     # [ref:policy-before-dispatch] policy.check appears before Promise.all
@@ -239,8 +239,13 @@ def phase_final() -> None:
 import sys
 src = open('packages/ai/agent-mcp/src/engine/orchestrator.ts').read()
 lines = src.splitlines()
-policy_line = next((i for i, l in enumerate(lines) if 'policy.check(' in l), None)
-promise_line = next((i for i, l in enumerate(lines) if 'Promise.all' in l), None)
+def is_comment(l):
+    s = l.strip()
+    return s.startswith('//') or s.startswith('*') or s.startswith('/*')
+# Skip comment lines — a doc comment mentioning 'Promise.all' must not be
+# mistaken for the actual concurrent-dispatch call.
+policy_line = next((i for i, l in enumerate(lines) if 'policy.check(' in l and not is_comment(l)), None)
+promise_line = next((i for i, l in enumerate(lines) if 'Promise.all' in l and not is_comment(l)), None)
 if policy_line is None or promise_line is None:
     print('FAIL: policy.check or Promise.all not found'); sys.exit(1)
 if policy_line >= promise_line:
