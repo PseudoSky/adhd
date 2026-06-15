@@ -192,28 +192,26 @@ describe("sse.integration – frame ordering", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("sse.integration – done on cancel", () => {
-    it("cancel a running task → client receives a done frame with non-null error (not stuck)", async () => {
+    // ── Live-bus path ───────────────────────────────────────────────────────────
+    // Client is connected BEFORE the task is cancelled.  The done frame arrives
+    // through the live event bus with the error string from the orchestrator.
+    it("live-bus: cancel a running task → client receives done with non-null error (not stuck)", async () => {
         const harness = await buildHarness({ withSse: true });
 
         try {
             const { sessionId } = await setupAgent(harness);
             const port = harness.ssePort!;
 
-            // Two latches are needed to synchronize provider ↔ SSE client ↔ test:
+            // Two latches synchronize provider ↔ SSE client ↔ test:
             //
-            // 1. sseReadyLatch  — released by the test AFTER the SSE client has
-            //    connected and the subscription is known to be active. The provider
-            //    blocks on this before entering its abort-wait; this prevents the
-            //    task from reaching "running" (and emitting events) before the SSE
-            //    client is subscribed. Without this, the task could complete the
-            //    cancel cycle entirely before the HTTP connection is established,
-            //    causing terminal-on-connect to fire (which sends `error: null`
-            //    because cancelled tasks have no `error` in the DB).
+            // 1. sseReadyLatch  — released via onConnected when the HTTP 200
+            //    headers arrive (server has accepted the SSE request and the
+            //    subscribeToTask listener is active). The provider blocks here
+            //    so the task cannot emit events before the client is subscribed.
             //
-            // 2. taskRunningLatch — released by the provider once it is INSIDE the
-            //    abort-wait (i.e., it has already unblocked from sseReadyLatch).
-            //    The test waits on this before issuing the cancel to confirm the
-            //    task is genuinely blocked and the SSE subscription is active.
+            // 2. taskRunningLatch — released by the provider once it is inside
+            //    its abort-wait (unblocked from sseReadyLatch). The test waits
+            //    on this before issuing the cancel.
             const sseReadyLatch = new Latch();
             const taskRunningLatch = new Latch();
 
@@ -222,18 +220,11 @@ describe("sse.integration – done on cancel", () => {
                 chat: async ({ signal }: { signal?: AbortSignal }) => {
                     if (firstCall) {
                         firstCall = false;
-                        // Block until the SSE client is confirmed connected.
-                        // This ensures the subscription is active before any
-                        // events are emitted (task start emits status_change:running).
                         await sseReadyLatch.wait(5_000);
-                        // Signal that we are about to enter the abort-wait
                         taskRunningLatch.release();
                     }
                     return new Promise<never>((_, reject) => {
-                        if (signal?.aborted) {
-                            reject(new Error("aborted"));
-                            return;
-                        }
+                        if (signal?.aborted) { reject(new Error("aborted")); return; }
                         signal?.addEventListener("abort", () => reject(new Error("aborted")));
                     });
                 },
@@ -251,32 +242,22 @@ describe("sse.integration – done on cancel", () => {
                 } as Orchestrator,
             };
 
-            // Start background task — the provider will block at sseReadyLatch
-            // until we release it below (after SSE client is connected).
+            // Start background task — provider blocks at sseReadyLatch until
+            // the SSE connection is confirmed.
             const taskOut = await taskTool(
                 { session_id: sessionId, prompt: "hanging task", background: true },
                 patchedDeps
             );
             const taskId = taskOut.task_id;
 
-            // Connect SSE client. Task is still in "pending" (provider has not
-            // been called yet — it is blocked on sseReadyLatch). So the
-            // terminal-on-connect path does NOT fire; the client subscribes via
-            // the live bus.
-            //
-            // The onConnected callback fires when the HTTP 200 response headers
-            // arrive (the server has accepted the SSE request and registered
-            // its subscribeToTask listener). At that point it is safe to release
-            // sseReadyLatch and let the provider proceed.
+            // Connect SSE client. onConnected fires when the 200 headers arrive,
+            // releasing the provider to proceed.
             const framesPromise = collectSseFrames(port, taskId, 8_000, () => {
                 sseReadyLatch.release();
             });
 
-            // Now wait for the provider to confirm it is in the abort-wait
-            // (i.e., the task is blocked awaiting cancellation).
             await taskRunningLatch.wait(5_000);
 
-            // Poll until status === "running" in the DB (should be immediate).
             const deadline = Date.now() + 5_000;
             while (Date.now() < deadline) {
                 const row = harness.taskStore.read(taskId);
@@ -284,34 +265,104 @@ describe("sse.integration – done on cancel", () => {
                 await new Promise((r) => setImmediate(r));
             }
 
-            // Cancel the task — the abort fires, provider.chat() rejects,
-            // orchestrator catch emits done: {error: "Task was cancelled"}.
             taskCancel({ task_id: taskId }, { taskStore: harness.taskStore });
-
-            // Wait for queue to drain
             await drainQueue(harness.queue, 5_000);
 
-            // Collect frames
             const frames = await framesPromise;
             const types = frames.map((f) => f.type);
 
-            // Must have a done frame
             expect(types).toContain("done");
-
-            // done is last
             const doneIdx = types.lastIndexOf("done");
             expect(doneIdx).toBe(types.length - 1);
 
-            // done has a non-null error (cancelled).
-            //
-            // NOTE: If this assertion fails with error=null, it indicates that
-            // the SSE client received the "done" frame via the TERMINAL-ON-CONNECT
-            // path (task was already cancelled before the SSE subscription was
-            // established). The terminal-on-connect path reads the DB `error`
-            // column, which is null for cancelled tasks (the orchestrator only
-            // emits the error string on the ephemeral bus, not to the DB).
-            // The sseReadyLatch above prevents this race; if it fires, it means
-            // the synchronization is broken.
+            const doneFrame = frames[doneIdx];
+            // done.error must be truthy: "Task was cancelled" from the orchestrator
+            // catch path, delivered over the live event bus.
+            expect(doneFrame.data.error).toBeTruthy();
+        } finally {
+            await harness.teardown();
+        }
+    });
+
+    // ── Terminal-on-connect path ────────────────────────────────────────────────
+    // Client connects AFTER the task is already cancelled (status = "cancelled"
+    // in the DB). The SSE server reads the row and writes done directly to the
+    // response without touching the shared bus. The `error` field must come from
+    // the DB column, not the in-memory bus event — proving the product fix that
+    // persists "Task was cancelled" to the DB `error` column actually works.
+    it("terminal-on-connect: client connects after cancel → done.error truthy (from DB, not bus)", async () => {
+        const harness = await buildHarness({ withSse: true });
+
+        try {
+            const { sessionId } = await setupAgent(harness);
+            const port = harness.ssePort!;
+
+            // sseReadyLatch lets us block the task until after we've confirmed
+            // the task is cancelled (we DON'T connect the SSE client before cancel).
+            const taskEnteredLatch = new Latch();
+
+            let firstCall = true;
+            const provider = {
+                chat: async ({ signal }: { signal?: AbortSignal }) => {
+                    if (firstCall) {
+                        firstCall = false;
+                        taskEnteredLatch.release();
+                    }
+                    return new Promise<never>((_, reject) => {
+                        if (signal?.aborted) { reject(new Error("aborted")); return; }
+                        signal?.addEventListener("abort", () => reject(new Error("aborted")));
+                    });
+                },
+            };
+
+            const patchedDeps: TaskDeps = {
+                ...harness.taskDeps,
+                orchestrator: {
+                    run: (input: Parameters<typeof harness.orchestrator.run>[0]) =>
+                        harness.orchestrator.run({
+                            ...input,
+                            provider: provider as unknown as Parameters<typeof harness.orchestrator.run>[0]["provider"],
+                            registry: makeEmptyRegistry(),
+                        }),
+                } as Orchestrator,
+            };
+
+            // Start background task — intentionally do NOT connect SSE yet
+            const taskOut = await taskTool(
+                { session_id: sessionId, prompt: "cancel then connect", background: true },
+                patchedDeps
+            );
+            const taskId = taskOut.task_id;
+
+            // Wait until the task is running (provider entered its abort-wait)
+            await taskEnteredLatch.wait(5_000);
+            const dl = Date.now() + 5_000;
+            while (Date.now() < dl) {
+                if (harness.taskStore.read(taskId).status === "running") break;
+                await new Promise((r) => setImmediate(r));
+            }
+
+            // Cancel BEFORE the SSE client connects
+            taskCancel({ task_id: taskId }, { taskStore: harness.taskStore });
+            await drainQueue(harness.queue, 5_000);
+
+            // Confirm cancelled in DB with the error persisted
+            const cancelledRow = harness.taskStore.read(taskId);
+            expect(cancelledRow.status).toBe("cancelled");
+            expect(cancelledRow.error).toBeTruthy();
+
+            // NOW connect the SSE client — task is already terminal → terminal-on-connect
+            // The server reads the row and writes status_change + done directly to the
+            // response.  done.error comes from the DB `error` column, not the bus.
+            const frames = await collectSseFrames(port, taskId, 5_000);
+            const types = frames.map((f) => f.type);
+
+            expect(types).toContain("done");
+            const doneIdx = types.lastIndexOf("done");
+            expect(doneIdx).toBe(types.length - 1);
+
+            // This is the key assertion: error is truthy even via terminal-on-connect
+            // because the product now persists "Task was cancelled" to the DB.
             const doneFrame = frames[doneIdx];
             expect(doneFrame.data.error).toBeTruthy();
         } finally {

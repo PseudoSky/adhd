@@ -79,12 +79,21 @@ export interface HarnessOptions {
     dbPath?: string;
     /**
      * Skip the automatic orphan-scan re-enqueue on build.
-     * Use this when the test needs to manually trigger enqueueExistingTask
-     * with custom (patched) deps — e.g., in the restart integration test —
-     * to avoid a race between the auto-scan (which uses unpatched deps and
-     * a real OpenAI provider that fails) and the manually-patched run.
+     * Prefer `defaultProvider` over this flag: that keeps the real scan
+     * exercised while avoiding the external-provider race.
      */
     skipOrphanScan?: boolean;
+    /**
+     * Inject a scripted LLMProvider into the harness orchestrator so every
+     * task dispatched through taskDeps (including the startup orphan scan)
+     * uses it instead of the real provider built from agentDefinition.provider.
+     *
+     * This mirrors the pattern used for per-task provider injection but applies
+     * it at harness construction time — so the orphan scan that fires during
+     * buildHarness already has the right provider, with no race against a
+     * parallel bad-provider run.
+     */
+    defaultProvider?: LLMProvider;
 }
 
 /**
@@ -145,12 +154,22 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
         });
     }
 
-    // Build taskDeps — same shape as index.ts
+    // Build taskDeps — same shape as index.ts.
+    // When defaultProvider is supplied, wrap the orchestrator so every run
+    // that goes through taskDeps (including the startup orphan scan) uses it
+    // instead of the real provider built from agentDefinition.provider.
+    const effectiveOrchestrator: Orchestrator = opts.defaultProvider
+        ? ({
+            run: (input: Parameters<Orchestrator["run"]>[0]) =>
+                orchestrator.run({ ...input, provider: opts.defaultProvider! }),
+          } as Orchestrator)
+        : orchestrator;
+
     taskDeps = {
         agentStore,
         sessionStore,
         taskStore,
-        orchestrator,
+        orchestrator: effectiveOrchestrator,
         queue,
         policy,
         hooks,
@@ -204,7 +223,9 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
         sessionStore,
         taskStore,
         queue,
-        orchestrator,
+        // Expose the effective orchestrator (wrapped when defaultProvider is set)
+        // so per-test overrides in runTaskViaToolWithProvider compose correctly.
+        orchestrator: effectiveOrchestrator,
         policy,
         dagEngine,
         taskDeps: taskDeps as TaskDeps,
