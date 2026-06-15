@@ -29,11 +29,11 @@
       "end_ref": "1e0dff2b5d72a6de5ceeb967323ec298abe552fe"
     },
     "code-review": {
-      "status": "pending",
+      "status": "in_progress",
       "executor": null,
-      "started_at": null,
+      "started_at": "2026-06-15T15:08:49.555Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "7b7066a77ce086712033ad0afa520b7cb921565f",
       "end_ref": null
     },
     "audit-final": {
