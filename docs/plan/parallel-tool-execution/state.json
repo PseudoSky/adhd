@@ -37,11 +37,11 @@
       "end_ref": "46c5df1996442cc31968ed552402e1da6de55317"
     },
     "docs-and-publish": {
-      "status": "pending",
+      "status": "in_progress",
       "executor": null,
-      "started_at": null,
+      "started_at": "2026-06-15T16:42:00.868Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "692a905e48331f4768383818bff950109224b462",
       "end_ref": null
     }
   },
