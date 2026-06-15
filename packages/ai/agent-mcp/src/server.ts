@@ -113,7 +113,7 @@ function toMcpContent(value: unknown): { content: Array<{ type: "text"; text: st
  * variant properties into a single flat object schema so every MCP client
  * (including LM Studio) accepts the tool list.
  */
-function toMcpInputSchema(schema: z.ZodTypeAny): Record<string, unknown> {
+export function toMcpInputSchema(schema: z.ZodTypeAny): Record<string, unknown> {
     const jsonSchema = z.toJSONSchema(schema) as Record<string, unknown>;
 
     // Plain object schema — strip the JSON Schema $schema declaration that some
