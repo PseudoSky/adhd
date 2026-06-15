@@ -60,14 +60,14 @@
       "kind": "work",
       "phase": "convergence",
       "depends_on": ["audit-final"],
-      "guard": "node -e \"const p=require('./packages/ai/agent-mcp/package.json');process.exit(p.version==='0.1.0'?0:1)\" && npm info @adhd/agent-mcp version 2>/dev/null | grep -q '0.1.0'",
+      "guard": "node -e \"const p=require('./packages/ai/agent-mcp/package.json');process.exit(p.version==='1.0.0'?0:1)\" && npm info @adhd/agent-mcp version 2>/dev/null | grep -q '1.0.0'",
       "artifacts": [
         "packages/ai/agent-mcp/package.json",
         "packages/ai/agent-mcp/CLAUDE.md",
         "packages/ai/agent-mcp/README.md"
       ],
       "context": "contexts/docs-and-publish.md",
-      "notes": "Bump agent-mcp to 0.1.0. Note parallel tool execution in CLAUDE.md and README. Follow PUBLISHING.md exactly.",
+      "notes": "Bump agent-mcp to 1.0.0. Note parallel tool execution in CLAUDE.md and README. Follow PUBLISHING.md exactly.",
       "changes": {
         "deletes": [],
         "resigns": [],

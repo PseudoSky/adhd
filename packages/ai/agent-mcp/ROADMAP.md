@@ -188,6 +188,24 @@ Both low necessity and low differentiation. Wire in existing best-in-class solut
 
 ---
 
+## Shipped in 1.0.0
+
+The first consolidated release ships the full task-orchestration core as one
+interdependent version:
+
+- **Task schema foundation** — `depends_on`, `on_upstream_failure`, `inputs`,
+  `resume_token` columns; `waiting` + `awaiting_input` statuses.
+- **Parallel tool execution** — concurrent (`Promise.all`) tool dispatch per turn.
+- **Task dependency DAG** (#14 task chaining) — fan-in via `depends_on`, cycle
+  rejection, fail/skip upstream policy.
+- **HITL interrupts** (#13) — `request_human_input` + `task_resume`.
+- **Task streaming (SSE)** — `stream: true` → `stream_url`; tool/status/done events.
+- **Token usage tracking** (#2) — `task_usage` + `usage_query`.
+- **Ephemeral task observability** — `agent_name` one-shot runs persist
+  tasks/events/usage (nullable `session_id` + `is_ephemeral`).
+
+---
+
 ## Recommended Build Order
 
 ### Phase 1 — Foundation (Core + Middleware)
@@ -220,8 +238,8 @@ Ship as separate `@adhd/*-plugin` packages consuming Phase 1 hooks.
 
 ### Phase 4 — Completeness
 
-13. **HITL interrupts** — High BI score but complex; defer until Phase 1 hooks are proven
-14. **Task chaining** — CORE, but dependent on DAG work
+13. **HITL interrupts** — ✓ shipped 1.0.0 (`request_human_input` + `task_resume`)
+14. **Task chaining** — ✓ shipped 1.0.0 (task dependency DAG: `depends_on` fan-in)
 15. **Conversation summarisation** (`@adhd/summary-plugin`)
 16. **Structured output enforcement** — Mostly provider-side
 
