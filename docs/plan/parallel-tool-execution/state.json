@@ -2,7 +2,7 @@
   "schema_version": 3,
   "title": "parallel-tool-execution",
   "dag": "dag.json",
-  "current_state": "code-review",
+  "current_state": "audit-final",
   "states": {
     "parallel-dispatch": {
       "status": "complete",
@@ -21,12 +21,12 @@
       "end_ref": "0c628ea045ddfe8cba29c18e4ec235cefe0d7fca"
     },
     "code-review": {
-      "status": "in_progress",
+      "status": "complete",
       "executor": null,
       "started_at": "2026-06-15T15:08:48.941Z",
-      "done_at": null,
+      "done_at": "2026-06-15T15:08:49.294Z",
       "start_ref": "97197d15454ac5fe33d5bb685f3bcdd2257d2620",
-      "end_ref": null
+      "end_ref": "9181cd5cd731f99ac39e3086ddd78aa290f72d82"
     },
     "audit-final": {
       "status": "pending",
@@ -81,6 +81,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "foundation audit green"
+    },
+    {
+      "ts": "2026-06-15T15:08:49.294Z",
+      "from": "code-review",
+      "to": "code-review",
+      "start_ref": "97197d15454ac5fe33d5bb685f3bcdd2257d2620",
+      "end_ref": "9181cd5cd731f99ac39e3086ddd78aa290f72d82",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Human sign-off recorded (pseudosky, 2026-06-15): features verified end-to-end live — real-DB FK migration preserved task_events; recursive DAG with all tool calls confirmed via calc-server.log + task_events + usage_query."
     }
   ],
   "amendment_log": [],
