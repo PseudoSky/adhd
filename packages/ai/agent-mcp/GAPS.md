@@ -4,6 +4,28 @@ Confirmed implementation gaps in the current codebase. Each has a clear fix path
 
 ---
 
+## 9. Ephemeral task observability — CLOSED (0.0.9)
+
+**What was missing:** Ephemeral tasks (agent_name one-shot mode via `runEphemeralTask`) wrote nothing to the DB. A `captureTaskStore` stub captured final status in local variables only. No `tasks` row existed, so `task_list`, the `result` tool, and the `task_usage` metrics were all blind to ephemeral runs.
+
+**Fix applied (this release):**
+
+- `tasks.session_id` is now **nullable** (no FK to sessions; removed `.notNull()` and `.references()`). Session-backed tasks continue to write a session ID; ephemeral tasks write `NULL`.
+- New column `tasks.is_ephemeral INTEGER NOT NULL DEFAULT 0` (SQLite boolean). Set to `1` for every ephemeral run.
+- Migration `0005_clear_lenny_balinger.sql` recreates the `tasks` table via SQLite's table-rename pattern (wrapped in `PRAGMA foreign_keys=OFF/ON`) and backfills `is_ephemeral=0` for all existing rows. The `task_events.task_id → tasks.id ON DELETE CASCADE` FK is preserved through the recreate.
+- `runEphemeralTask` now calls `deps.taskStore.create({ sessionId: null, isEphemeral: true, ... })` and passes the **real** `deps.taskStore` (not the old `captureTaskStore` stub) to the orchestrator. No messages are persisted — `noopSessionStore` is still passed so `appendMessage` calls are discarded.
+- `resultTool` and `task_list` now work on ephemeral task IDs because the row exists.
+- `request_human_input` remains **forbidden** for ephemeral tasks (no session row = no durable resume context). The orchestrator now relies solely on the `isEphemeral` flag (duck-type fallback removed).
+- Startup orphan scan (`enqueueExistingTask`) early-returns on ephemeral rows and marks them `failed` ("context lost on restart") instead of attempting a session lookup that would throw `SESSION_NOT_FOUND`.
+
+**What is still NOT persisted for ephemeral tasks:** `sessions` row, `messages` rows. The run is observable but not resumable.
+
+**Retention pruning:** No automatic cleanup of old ephemeral task rows is implemented. Retention pruning is deferred.
+
+**Domain type change:** `Task.sessionId` is now `string | undefined` (was `string`). Callers that assumed a session ID is always present must guard on `task.isEphemeral` or `task.sessionId !== undefined`.
+
+---
+
 ## 1. `claudecli` — hooks, policy, and event logging are blind to internal tool calls
 
 **What happens:** When a `claudecli` agent makes tool calls, the entire exchange (tool call → result → next model turn) happens inside the subprocess. The orchestrator's tool-use loop never fires, so `pre:tool_call`, `post:tool_call`, and `TOOL_CALL`/`TOOL_RESULT` task events are not emitted. Policy checks (max tool loops, delegation allowlist) are also skipped for those calls.

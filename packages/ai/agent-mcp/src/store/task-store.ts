@@ -23,13 +23,14 @@ export class TaskStore {
     ) {}
 
     create(input: {
-        sessionId: string;
+        sessionId: string | null;
         prompt: string;
         parentTaskId?: string;
         recursionDepth?: number;
         dependsOn?: string[];
         onUpstreamFailure?: "fail" | "skip";
         inputs?: Record<string, string>;
+        isEphemeral?: boolean;
         // Optional caller-supplied id so a pre-insert cycle check validates the
         // SAME id that is actually inserted. Falls back to a generated id.
         id?: string;
@@ -43,8 +44,9 @@ export class TaskStore {
 
         this.db.insert(tasksTable).values({
             id,
-            sessionId: input.sessionId,
+            sessionId: input.sessionId ?? null,
             parentTaskId: input.parentTaskId ?? null,
+            isEphemeral: input.isEphemeral ? 1 : 0,
             recursionDepth: input.recursionDepth ?? 0,
             status,
             prompt: input.prompt,
@@ -62,6 +64,7 @@ export class TaskStore {
                 parentTaskId: input.parentTaskId,
                 recursionDepth: input.recursionDepth ?? 0,
                 status,
+                isEphemeral: input.isEphemeral ?? false,
                 dependsOn: input.dependsOn,
             },
             "Task created"
@@ -121,7 +124,8 @@ export class TaskStore {
 
         return taskSchema.parse({
             id: row.id,
-            sessionId: row.sessionId,
+            sessionId: row.sessionId ?? undefined,
+            isEphemeral: row.isEphemeral === 1,
             parentTaskId: row.parentTaskId ?? undefined,
             recursionDepth: row.recursionDepth,
             status: row.status,
@@ -150,6 +154,10 @@ export class TaskStore {
             conditions.push(eq(tasksTable.status, input.status));
         }
 
+        if (input.is_ephemeral !== undefined) {
+            conditions.push(eq(tasksTable.isEphemeral, input.is_ephemeral ? 1 : 0));
+        }
+
         const rows =
             conditions.length > 0
                 ? this.db
@@ -162,7 +170,8 @@ export class TaskStore {
         return rows.map(row =>
             taskSchema.parse({
                 id: row.id,
-                sessionId: row.sessionId,
+                sessionId: row.sessionId ?? undefined,
+                isEphemeral: row.isEphemeral === 1,
                 parentTaskId: row.parentTaskId ?? undefined,
                 recursionDepth: row.recursionDepth,
                 status: row.status,

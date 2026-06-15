@@ -336,12 +336,12 @@ describe("HITL orchestrator", () => {
             const orch = new Orchestrator();
             const taskId = generateId();
 
-            // Ephemeral captureTaskStore has no `read` method — simulates runEphemeralTask
+            // Ephemeral tasks now use the real TaskStore, detected via isEphemeral: true flag
             const ephemeralStore = {
                 updateStatus: vi.fn(() => ({} as ReturnType<TaskStore["updateStatus"]>)),
                 appendEvent: vi.fn(() => {}),
                 unregisterCancellation: vi.fn(() => {}),
-                // NOTE: no `read` method — this is how the orchestrator detects ephemeral
+                read: vi.fn(() => ({})),
             } as unknown as TaskStore;
 
             let callCount = 0;
@@ -380,6 +380,7 @@ describe("HITL orchestrator", () => {
                     sessionStore,
                     signal: new AbortController().signal,
                     taskId,
+                    isEphemeral: true, // explicit flag — no duck-type fallback needed
                 })
             ).rejects.toMatchObject({
                 code: "VALIDATION_ERROR",

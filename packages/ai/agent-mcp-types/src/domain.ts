@@ -22,7 +22,10 @@ export type TaskEventType =
 
 export interface Task {
   id: string;
-  sessionId: string;
+  /** Undefined for ephemeral (agent_name one-shot) tasks; present for session-backed tasks. */
+  sessionId?: string;
+  /** True for ephemeral one-shot tasks that have no session row and no messages rows. */
+  isEphemeral: boolean;
   parentTaskId?: string;
   recursionDepth: number;
   status: TaskStatus;
