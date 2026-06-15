@@ -226,17 +226,37 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
         // 3. One event-loop tick so the last task's finally-block DB writes settle.
         await new Promise<void>((r) => setImmediate(r));
 
-        // 4. Deliberately DO NOT call rawSqlite.close() here. A native better-sqlite3
-        //    close() that races any still-settling statement segfaults the process
-        //    (exit 139) — and a native crash is not catchable by try/catch, so it
-        //    surfaces as a non-zero suite exit even though every test passed. The
-        //    connection is reclaimed when the process exits (after all async work is
-        //    done), which is race-free. We just unlink the temp file; unlinking an
-        //    open sqlite file is POSIX-safe (inode persists until the handle drops).
-        try {
-            fs.unlinkSync(dbPath);
-        } catch {
-            // ignore
+        // 4. Close the connection cleanly BEFORE unlinking the file.
+        //
+        //    The previous strategy (leak the handle, unlink the open file) caused
+        //    the intermittent teardown SIGSEGV (exit 139): in WAL mode, at process
+        //    exit better-sqlite3's destructor checkpoints the WAL — but the backing
+        //    file had already been unlinked, so the checkpoint operates on a deleted
+        //    file and crashes the native addon. Leaking also let connections
+        //    accumulate across the suite, multiplying the destructor work at exit.
+        //
+        //    Closing here, after onIdle()+setImmediate have settled all statements,
+        //    is race-free: TRUNCATE-checkpoint the WAL into the still-present file,
+        //    then close(). better-sqlite3 finalizes drizzle's cached statements on
+        //    close. Only then do we unlink the (now fully released) files.
+        if (rawSqlite.open) {
+            try {
+                rawSqlite.pragma("wal_checkpoint(TRUNCATE)");
+            } catch {
+                // checkpoint is best-effort
+            }
+            try {
+                rawSqlite.close();
+            } catch {
+                // already closed (e.g. a test closed it explicitly)
+            }
+        }
+        for (const suffix of ["", "-wal", "-shm"]) {
+            try {
+                fs.unlinkSync(`${dbPath}${suffix}`);
+            } catch {
+                // ignore — file may not exist (e.g. -wal after TRUNCATE close)
+            }
         }
     };
 
