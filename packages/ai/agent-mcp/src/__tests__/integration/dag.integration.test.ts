@@ -14,15 +14,17 @@
  *     C's inputs only contains B's result (not A's). guards: skip-policy dead
  *
  *  4. Cycle detection: depends_on forming a cycle → ToolError VALIDATION_ERROR,
- *     NO task row inserted (query DB to confirm). guards: cycle-check ran against
- *     a throwaway id (pre-fix: the cycle check would use a different id than inserted)
+ *     NO task row inserted (query DB to confirm).
+ *     guards: engine BFS validateNoCycle correctness; the BLOCK-2 tool-wiring
+ *     fix (same id passed to validateNoCycle and create) is covered separately
+ *     by task-tool-dag-wiring.test.ts.
  *
  *  5. Restart: leave a task "pending" in DB without queue slot, tear down + rebuild
- *     from same temp DB → orphan scan re-enqueues → task runs.
+ *     from same temp DB → the REAL startup orphan scan re-enqueues → task runs.
  */
 
 import { describe, it, expect } from "vitest";
-import { buildHarness, rebuildHarness, drainQueue } from "./harness.js";
+import { buildHarness, drainQueue } from "./harness.js";
 import type { Harness } from "./harness.js";
 import { Orchestrator } from "../../engine/orchestrator.js";
 import type { McpClientRegistry } from "../../clients/registry.js";
@@ -293,13 +295,19 @@ describe("dag.integration – on_upstream_failure", () => {
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Scenario 4 — Cycle detection
-// guards: cycle-check ran against a throwaway id (pre-fix: the check used a
-// different id than the one actually inserted, so cycles involving the new
-// task's id slipped through)
+//
+// guards: DagEngine BFS correctness — validateNoCycle detects self-cycles and
+//         transitive cycles; no task row is inserted when a cycle is caught.
+//
+// NOTE: The BLOCK-2 bug ("cycle-check ran against a throwaway id, not the id
+//       that was actually inserted") was a wiring bug at the taskTool call site.
+//       That wiring is tested separately in task-tool-dag-wiring.test.ts (which
+//       exercises the real taskTool→validateNoCycle→create sequence with the
+//       same id).  The two tests here guard the engine BFS logic itself.
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("dag.integration – cycle detection", () => {
-    it("self-cycle: new task depends on itself → VALIDATION_ERROR, NO row inserted", async () => {
+    it("engine BFS: self-cycle detected → ToolError VALIDATION_ERROR", async () => {
         const harness = await buildHarness();
 
         try {
@@ -312,28 +320,13 @@ describe("dag.integration – cycle detection", () => {
                 .from(tasksTable)
                 .all().length;
 
-            // The fix: taskTool generates newTaskId FIRST, then calls
-            // validateNoCycle(newTaskId, dependsOn) with that SAME id.
-            // A self-cycle (depends_on=[newTaskId]) must be caught before insert.
-            //
-            // Pre-fix: validateNoCycle used a throwaway id, so depends_on=[throwawayId]
-            // was checked for cycles involving throwawayId — not newTaskId. The actual
-            // newTaskId (different) would be inserted, so the self-reference slipped through.
-            //
-            // We test by calling validateNoCycle directly with the same id in depends_on:
+            // Self-cycle: a task whose depends_on list contains its own id.
             const selfId = generateId();
-
             expect(() =>
                 harness.dagEngine.validateNoCycle(selfId, [selfId])
             ).toThrow(ToolError);
 
-            // Also verify via taskTool: create task A, then create B with depends_on=[B_id]
-            // where B_id is generated upfront (this tests the real production wiring)
-            // taskTool internally generates newTaskId then calls validateNoCycle(newTaskId, ...)
-            // We can't inject a specific newTaskId from outside, but we can test the
-            // DagEngine directly as the canonical source of truth.
-
-            // Direct validation: forming a chain A→B→A
+            // Transitive cycle: C→B→A→C
             const taskARow = harness.taskStore.create({ sessionId, prompt: "task A" });
             const taskBRow = harness.taskStore.create({
                 sessionId,
@@ -341,11 +334,8 @@ describe("dag.integration – cycle detection", () => {
                 dependsOn: [taskARow.id],
             });
 
-            // Now try to create task C that depends on B where B→A
-            // Then artificially make A depend on C (which would form C→B→A→C)
-            // Use validateNoCycle with C's future id directly:
             const cId = generateId();
-            // Update A in DB to depend on cId (forming the cycle)
+            // Artificially wire A to depend on cId so the BFS finds the cycle
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (harness.db as any)
                 .update(tasksTable)
@@ -353,66 +343,39 @@ describe("dag.integration – cycle detection", () => {
                 .where(eq(tasksTable.id, taskARow.id))
                 .run();
 
-            // Now validateNoCycle(cId, [taskBRow.id]) should detect: cId→B→A→cId
+            // BFS from [taskBRow.id] reaches taskARow → depends_on=[cId] → cId == newTaskId → CYCLE
             expect(() =>
                 harness.dagEngine.validateNoCycle(cId, [taskBRow.id])
             ).toThrow(ToolError);
 
-            // And via taskTool: try to create a task with depends_on=[taskBRow.id]
-            // where taskBRow's chain cycles back to whatever taskId taskTool generates.
-            // We can't predict the generated id, but we know the cycle goes B→A→(some id in deps),
-            // not through the new task's id. So taskTool WON'T throw here for a normal dependency.
-            //
-            // The correct test for the "pre-fix bug" is the direct DagEngine test above.
-            // Row count must not have changed from our direct DB manipulation:
+            // cId was never inserted — only A and B
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const afterCount = (harness.db as any)
                 .select()
                 .from(tasksTable)
                 .all().length;
-
-            // Only A and B rows were inserted (C was never inserted — cycle caught before)
             expect(afterCount).toBe(beforeCount + 2);
         } finally {
             await harness.teardown();
         }
     });
 
-    it("taskTool: cycle detected → VALIDATION_ERROR; NO new task row inserted", async () => {
+    it("engine BFS: transitive cycle caught; validateNoCycle throws before any DB insert", async () => {
         const harness = await buildHarness();
 
         try {
             const { sessionId } = await setupAgent(harness);
 
-            // Create A (pending)
             const taskARow = harness.taskStore.create({ sessionId, prompt: "task A" });
 
-            // Count rows after A
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const beforeCount = (harness.db as any)
                 .select()
                 .from(tasksTable)
                 .all().length;
 
-            // taskTool generates newTaskId first, then calls validateNoCycle(newTaskId, [taskARow.id])
-            // BFS from taskARow.id: taskARow has no depends_on → chain is [taskARow.id]
-            // newTaskId is not in that chain → no cycle → should succeed normally.
-            //
-            // To create an actual cycle through taskTool: we need depends_on to contain
-            // a task that eventually points back to the new task's id.
-            // Since taskTool generates the id internally, we can't pre-arrange this without
-            // the implementation detail. So we test via DagEngine directly above.
-            //
-            // However: if taskARow already has depends_on=[newTaskId], that would be a cycle.
-            // We simulate this: update taskARow to depend on a pre-known id, then try to
-            // create that id via taskTool (depends_on=[taskARow.id]).
-            //
-            // But taskTool doesn't accept a pre-supplied id from the caller.
-            // The correct integration test: use the DagEngine directly for the cycle check.
-            // The taskTool-level test verifies that when validateNoCycle throws, no row is inserted.
-
-            // Simple case: try to create a task with a depends_on chain that clearly cycles.
-            // Artificially update taskARow to have depends_on pointing to a future id.
+            // Wire A to depend on a future id so the BFS detects a cycle when
+            // we call validateNoCycle(futureId, [taskARow.id]).
             const futureId = generateId();
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (harness.db as any)
@@ -421,18 +384,18 @@ describe("dag.integration – cycle detection", () => {
                 .where(eq(tasksTable.id, taskARow.id))
                 .run();
 
-            // validateNoCycle(futureId, [taskARow.id]) → BFS: taskARow.id → depends_on=[futureId] → futureId matches newTaskId → CYCLE
+            // BFS: taskARow.id → depends_on=[futureId] → futureId == newTaskId → CYCLE
             expect(() =>
                 harness.dagEngine.validateNoCycle(futureId, [taskARow.id])
             ).toThrow(ToolError);
 
-            // Verify row count unchanged (cycle caught before insert)
+            // No new row was inserted — the error fires before any insert
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const afterCount = (harness.db as any)
                 .select()
                 .from(tasksTable)
                 .all().length;
-            expect(afterCount).toBe(beforeCount); // only taskARow was inserted before
+            expect(afterCount).toBe(beforeCount);
         } finally {
             await harness.teardown();
         }
@@ -444,7 +407,7 @@ describe("dag.integration – cycle detection", () => {
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("dag.integration – restart orphan scan", () => {
-    it("pending task in DB without queue slot → harness re-enqueues and runs it via enqueueExistingTask", async () => {
+    it("pending task in DB without queue slot → real startup orphan scan re-enqueues and runs it", async () => {
         const harness = await buildHarness();
         const dbPath = harness.dbPath;
         let taskId: string;
@@ -454,77 +417,68 @@ describe("dag.integration – restart orphan scan", () => {
             const setup = await setupAgent(harness);
             sessionId = setup.sessionId;
 
-            // Create a task in "pending" state (simulating crash between DB update and enqueue)
+            // Create a task in "pending" state, simulating a crash that happened
+            // between DagEngine writing status="pending" to the DB and the queue
+            // enqueue call.  The task row exists but has no in-flight queue slot.
             const task = harness.taskStore.create({ sessionId, prompt: "orphaned task" });
             taskId = task.id;
             expect(task.status).toBe("pending");
 
-            // Simulate crash: close DB without running queue
+            // Simulate the crash: close the DB without letting the queue run.
             harness.rawSqlite.close();
-            // Prevent normal teardown from trying to use closed DB
             harness.teardown = async () => {};
         } catch (err) {
             await harness.teardown();
             throw err;
         }
 
-        // Rebuild harness from same DB file with skipOrphanScan=true so the
-        // automatic orphan scan does NOT run during rebuild.
+        // Build a tracking provider that records whether it was called.
+        let orchestratorCallCount = 0;
+        const trackingProvider = {
+            chat: async () => {
+                orchestratorCallCount++;
+                return {
+                    message: {
+                        id: generateId(),
+                        sessionId,
+                        role: "assistant" as const,
+                        content: "orphan ran",
+                        createdAt: nowIso(),
+                    },
+                    stopReason: "completed" as const,
+                };
+            },
+        };
+
+        // Rebuild from the SAME DB file and inject the tracking provider via
+        // defaultProvider so the REAL startup orphan scan uses it.
         //
-        // Without this flag, buildHarness would immediately re-enqueue the
-        // orphaned task using unpatched deps (real OpenAI provider with no API
-        // key). That run would fail and write status="failed" to the DB, and
-        // because it uses the real provider it can take seconds to timeout —
-        // racing with (and overwriting) the correctly-patched run we trigger
-        // manually below.
+        // The production startup sequence (index.ts) does exactly what
+        // buildHarness does: open DB, run migrations, build deps, then scan
+        // for "pending" rows and call enqueueExistingTask for each.  By passing
+        // defaultProvider we exercise that real scan path end-to-end without
+        // needing to call enqueueExistingTask manually from the test.
         //
-        // With skipOrphanScan=true we control exactly when the orphan runs and
-        // with which provider — proving the restart→re-enqueue behavior without
-        // the external-provider race.
-        const harness2 = await buildHarness({ dbPath, skipOrphanScan: true });
+        // An empty McpClientRegistry is wired in through the defaultProvider
+        // wrapper so the real orchestrator doesn't try to resolve MCP clients.
+        const harness2 = await buildHarness({
+            dbPath,
+            defaultProvider: {
+                chat: (input) =>
+                    trackingProvider.chat(),
+            },
+        });
 
         try {
-            let orchestratorCallCount = 0;
-            const trackingProvider = {
-                chat: async () => {
-                    orchestratorCallCount++;
-                    return {
-                        message: {
-                            id: generateId(),
-                            sessionId,
-                            role: "assistant" as const,
-                            content: "orphan ran",
-                            createdAt: nowIso(),
-                        },
-                        stopReason: "completed" as const,
-                    };
-                },
-            };
-
-            const patchedDeps: TaskDeps = {
-                ...harness2.taskDeps,
-                orchestrator: {
-                    run: (input: Parameters<typeof harness2.orchestrator.run>[0]) =>
-                        harness2.orchestrator.run({
-                            ...input,
-                            provider: trackingProvider,
-                            registry: makeEmptyRegistry(),
-                        }),
-                } as Orchestrator,
-            };
-            Object.assign(harness2.taskDeps, patchedDeps);
-
-            // The orphaned task is still "pending" in the rebuilt DB.
-            // Manually trigger enqueueExistingTask (mirrors the startup orphan scan in index.ts)
-            const { enqueueExistingTask } = await import("../../tools/task.js");
-            await enqueueExistingTask(taskId!, patchedDeps);
-
-            // Wait for the orphaned task to run
+            // The orphan scan fires inside buildHarness BEFORE this line.
+            // Give the queue time to drain (the orphaned task is already running).
             await drainQueue(harness2.queue, 8_000);
 
             const finalTask = harness2.taskStore.read(taskId!);
             expect(finalTask.status).toBe("completed");
             expect(finalTask.result).toBe("orphan ran");
+            // Exactly one orchestrator call — proves the real scan found and
+            // dispatched the orphaned task (not a manual enqueueExistingTask call).
             expect(orchestratorCallCount).toBe(1);
         } finally {
             await harness2.teardown();

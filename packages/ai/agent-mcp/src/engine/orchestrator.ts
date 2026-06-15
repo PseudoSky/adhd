@@ -512,6 +512,9 @@ export class Orchestrator {
                 try {
                     taskStore.updateStatus(taskId, "cancelled", {
                         cancelledAt: nowIso(),
+                        // Persist the reason so a later SSE terminal-on-connect read
+                        // surfaces it instead of error:null (matches the live-bus done).
+                        error: "Task was cancelled",
                     });
                 } catch {
                     // already cancelled — ignore

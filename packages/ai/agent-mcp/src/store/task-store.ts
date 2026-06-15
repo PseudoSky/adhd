@@ -231,6 +231,9 @@ export class TaskStore {
 
         this.updateStatus(taskId, "cancelled", {
             cancelledAt: nowIso(),
+            // Persist the reason so a client that connects AFTER cancellation
+            // (SSE terminal-on-connect) reads it from the row instead of null.
+            error: "Task was cancelled",
         });
 
         logger.info({ taskId }, "Task cancelled");
