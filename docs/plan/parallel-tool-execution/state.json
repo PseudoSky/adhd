@@ -2,7 +2,7 @@
   "schema_version": 3,
   "title": "parallel-tool-execution",
   "dag": "dag.json",
-  "current_state": "docs-and-publish",
+  "current_state": "done",
   "states": {
     "parallel-dispatch": {
       "status": "complete",
@@ -37,12 +37,12 @@
       "end_ref": "46c5df1996442cc31968ed552402e1da6de55317"
     },
     "docs-and-publish": {
-      "status": "in_progress",
+      "status": "complete",
       "executor": null,
       "started_at": "2026-06-15T16:42:00.868Z",
-      "done_at": null,
+      "done_at": "2026-06-15T16:42:01.821Z",
       "start_ref": "692a905e48331f4768383818bff950109224b462",
-      "end_ref": null
+      "end_ref": "5186d88209ab6daa0ab6b324c73ecf6eabb49810"
     }
   },
   "transition_log": [
@@ -105,6 +105,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Final DoD audit green at consolidated 1.0.0 (parallel Promise.all dispatch, fatal-code re-throw, tests pass)."
+    },
+    {
+      "ts": "2026-06-15T16:42:01.821Z",
+      "from": "docs-and-publish",
+      "to": "docs-and-publish",
+      "start_ref": "692a905e48331f4768383818bff950109224b462",
+      "end_ref": "5186d88209ab6daa0ab6b324c73ecf6eabb49810",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Published @adhd/agent-mcp@1.0.0 (+ agent-mcp-types@1.0.0) to npm as part of the consolidated release; ROADMAP marked shipped."
     }
   ],
   "amendment_log": [],
