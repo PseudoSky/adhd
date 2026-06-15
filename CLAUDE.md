@@ -65,6 +65,19 @@ _Always verify the `project.json` after generation to ensure tags were applied c
 - **UI/Hooks:** Use `layer:test-ui` (JSDOM/Storybook). Focus on component states and user interactions.
 - **Verification:** Before marking a task as complete, you must run the relevant test suite and ensure 0 failures.
 
+### Proving features actually work (verification standard)
+
+Green unit tests and passing `grep` audits are **not** proof a feature works. On a recent agent-mcp roadmap every plan was "green," yet driving the features through their real components surfaced four real bugs (an off-by-one cap, a lost cancellation reason, an unreachable HITL trigger, and a broken OAuth path). Hold every feature — and every plan's Definition of Done — to this bar:
+
+1. **Verify the consumer outcome through REAL components, not mocks.** Add at least one integration test that wires the actual stores / engine / server / tools (real DB, real queue, real HTTP) and drives the feature the way a consumer does. Mock only the external boundary (the LLM/provider, a third-party API) — never the thing under test.
+2. **Assertions must have teeth.** A behavioral test must FAIL if the bug is reintroduced. Prove it: revert the fix (or run a deliberately-wrong negative-control variant) and confirm the test goes red. A test that stays green when the code is broken proves nothing.
+3. **Be deterministic without timing.** Prove concurrency with latches/barriers, await events with bounded deadlines, prove persistence by reopening the store — never `sleep`/wall-clock. A flaky proof is not a proof.
+4. **Trust exit codes, not stdout.** Never gate on `… | grep -q passed` — it ignores the process exit code and hides crashes/failures (a ~50% teardown segfault once "passed" this way). Key on the runner's exit status.
+5. **For LLM features, verify with a real model end-to-end.** A scripted/mock provider can fake a tool call the real model can't actually make — that exact gap left HITL unreachable until a live run exposed it. Add a live test gated behind an env flag (e.g. `AGENT_MCP_LIVE=1`, so CI stays offline) that runs a real model through the real loop and asserts model-independent invariants.
+6. **Assert the consumer-visible outcome, not the implementation shape.** "`Promise.all` is present" is a proxy; "an agent gets N results back, faster" is the outcome. An implementation-shaped check can stay green while the guarantee regresses.
+
+When authoring a plan with the `plan-state-machine` skill, each behavioral DoD clause must name the real entrypoint + observable and be proven by an audit check that drives it. **Never mark a task complete on proxy evidence.**
+
 ## 🔄 8. Refactoring & Purity Protocol (CRITICAL)
 
 You are responsible for maintaining the health of the shared ecosystem. **Follow these rules for every code change:**
