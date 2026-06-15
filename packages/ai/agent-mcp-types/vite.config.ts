@@ -25,6 +25,13 @@ export default defineConfig({
   // See: https://vitejs.dev/guide/build.html#library-mode
   build: {
     outDir: '../../../dist/packages/ai/agent-mcp-types',
+    // Clean the output dir on every build. outDir is outside `root`, so vite
+    // defaults emptyOutDir to false — which left a STALE dist/package.json
+    // (old version) in place, because @nx/vite:build only writes the dist
+    // package.json when one doesn't already exist. Without this, a version bump
+    // would not reach the published package. Forcing it keeps publish honest
+    // (clean build from source every time).
+    emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {
       transformMixedEsModules: true,
