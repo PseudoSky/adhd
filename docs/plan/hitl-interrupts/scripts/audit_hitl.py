@@ -118,8 +118,8 @@ def phase_final():
         "grep -q '\"awaiting_input\"' packages/ai/agent-mcp/src/validation/task.ts",
     ))
     dod_results.append(check(
-        "[dod.8] Version bumped to 0.3.0",
-        "node -e \"const p=require('./packages/ai/agent-mcp/package.json'); process.exit(p.version==='0.3.0'?0:1)\"",
+        "[dod.8] Version bumped to 1.0.0",
+        "node -e \"const p=require('./packages/ai/agent-mcp/package.json'); process.exit(p.version==='1.0.0'?0:1)\"",
     ))
 
     print("\n=== Reference conformance ===")

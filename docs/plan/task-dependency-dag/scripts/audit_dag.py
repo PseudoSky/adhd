@@ -115,8 +115,8 @@ def phase_final():
         "python3 -c \"import os; sqls=[f for f in os.listdir('packages/ai/agent-mcp/drizzle') if f.endswith('.sql')]; assert len(sqls)>=4\"",
     ))
     dod_results.append(check(
-        "[dod.9] Version bumped to 0.2.0",
-        "node -e \"const p=require('./packages/ai/agent-mcp/package.json'); process.exit(p.version==='0.2.0'?0:1)\"",
+        "[dod.9] Version bumped to 1.0.0",
+        "node -e \"const p=require('./packages/ai/agent-mcp/package.json'); process.exit(p.version==='1.0.0'?0:1)\"",
     ))
 
     print("\n=== Reference conformance ===")

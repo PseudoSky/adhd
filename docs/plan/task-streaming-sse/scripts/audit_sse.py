@@ -78,8 +78,8 @@ def phase_foundation():
         "grep -qE 'emitTaskEvent|eventBus' packages/ai/agent-mcp/src/engine/orchestrator.ts",
     ))
     results.append(check(
-        "[stream-orchestrator.2] token events deferred to 0.5.0 — LLMProvider has no streaming interface in 0.4.0 (SKIP: always passes)",
-        "true",  # deferred — no check required in 0.4.0
+        "[stream-orchestrator.2] token events deferred to 0.5.0 — LLMProvider has no streaming interface in 1.0.0 (SKIP: always passes)",
+        "true",  # deferred — no check required in 1.0.0
     ))
     results.append(check(
         "[stream-orchestrator.3] tool_call event emitted",
@@ -175,8 +175,8 @@ def phase_final():
         "grep -q 'startSseServer' packages/ai/agent-mcp/src/index.ts",
     ))
     dod_results.append(check(
-        "[dod.9] Version bumped to 0.4.0",
-        "node -e \"const p=require('./packages/ai/agent-mcp/package.json'); process.exit(p.version==='0.4.0'?0:1)\"",
+        "[dod.9] Version bumped to 1.0.0",
+        "node -e \"const p=require('./packages/ai/agent-mcp/package.json'); process.exit(p.version==='1.0.0'?0:1)\"",
     ))
 
     print("\n=== Reference conformance ===")
