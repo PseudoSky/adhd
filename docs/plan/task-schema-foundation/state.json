@@ -2,7 +2,7 @@
   "schema_version": 3,
   "title": "task-schema-foundation",
   "dag": "dag.json",
-  "current_state": "docs-and-publish",
+  "current_state": "done",
   "states": {
     "schema-columns": {
       "status": "complete",
@@ -45,12 +45,12 @@
       "end_ref": "693039852a42f42fdb2529e93c872e64f8aa892d"
     },
     "docs-and-publish": {
-      "status": "in_progress",
+      "status": "complete",
       "executor": null,
       "started_at": "2026-06-15T16:44:12.927Z",
-      "done_at": null,
+      "done_at": "2026-06-15T16:44:14.208Z",
       "start_ref": "8685929cf5b074095421e60bcb1afe7314edf8d3",
-      "end_ref": null
+      "end_ref": "0aaebe646f27206c90fb87324d7ba4527b66ed5c"
     }
   },
   "transition_log": [
@@ -125,6 +125,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Final DoD audit green (all criteria) at consolidated 1.0.0."
+    },
+    {
+      "ts": "2026-06-15T16:44:14.208Z",
+      "from": "docs-and-publish",
+      "to": "docs-and-publish",
+      "start_ref": "8685929cf5b074095421e60bcb1afe7314edf8d3",
+      "end_ref": "0aaebe646f27206c90fb87324d7ba4527b66ed5c",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Shipped in consolidated @adhd/agent-mcp@1.0.0 (published to npm); ROADMAP updated."
     }
   ],
   "amendment_log": [],
