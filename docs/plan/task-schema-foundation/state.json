@@ -2,7 +2,7 @@
   "schema_version": 3,
   "title": "task-schema-foundation",
   "dag": "dag.json",
-  "current_state": "code-review",
+  "current_state": "audit-final",
   "states": {
     "schema-columns": {
       "status": "complete",
@@ -29,12 +29,12 @@
       "end_ref": "1e0dff2b5d72a6de5ceeb967323ec298abe552fe"
     },
     "code-review": {
-      "status": "in_progress",
+      "status": "complete",
       "executor": null,
       "started_at": "2026-06-15T15:08:49.555Z",
-      "done_at": null,
+      "done_at": "2026-06-15T15:08:49.900Z",
       "start_ref": "7b7066a77ce086712033ad0afa520b7cb921565f",
-      "end_ref": null
+      "end_ref": "23ff14b01072b82318512acb3098594476229b6f"
     },
     "audit-final": {
       "status": "pending",
@@ -101,6 +101,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "foundation audit green"
+    },
+    {
+      "ts": "2026-06-15T15:08:49.900Z",
+      "from": "code-review",
+      "to": "code-review",
+      "start_ref": "7b7066a77ce086712033ad0afa520b7cb921565f",
+      "end_ref": "23ff14b01072b82318512acb3098594476229b6f",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Human sign-off recorded (pseudosky, 2026-06-15): features verified end-to-end live — real-DB FK migration preserved task_events; recursive DAG with all tool calls confirmed via calc-server.log + task_events + usage_query."
     }
   ],
   "amendment_log": [],
