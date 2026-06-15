@@ -33,6 +33,7 @@ import { generateId } from "../../utils/ids.js";
 import { taskTool, taskCancel } from "../../tools/task.js";
 import type { TaskDeps } from "../../tools/task.js";
 import { emitTaskEvent, subscribeToTask } from "../../streaming/event-bus.js";
+import { startSseServer } from "../../streaming/sse-server.js";
 import http from "node:http";
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -529,6 +530,53 @@ describe("sse.integration – terminal-on-connect", () => {
                 unsubscribe();
             }
         } finally {
+            await harness.teardown();
+        }
+    });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// BUG-001 — SSE bind failure (EADDRINUSE) must NOT crash the process
+// ──────────────────────────────────────────────────────────────────────────────
+//
+// Occupy a port, then start the SSE server on that same port. Before the fix,
+// the http.Server's unhandled 'error' event (EADDRINUSE) threw and took down
+// the whole process. After the fix, startSseServer attaches an 'error' handler,
+// so it logs + degrades to "SSE unavailable" and the process survives.
+//
+// TEETH: this test attaches NO 'error' listener of its own — so without the
+// in-server handler the unhandled 'error' would crash the worker and fail the
+// file. Reaching the assertions proves the process stayed alive.
+
+describe("BUG-001 – SSE bind failure does not crash the process", () => {
+    it("startSseServer on an occupied port degrades gracefully (no unhandled-error crash)", async () => {
+        const harness = await buildHarness(); // no withSse — just need a real taskStore
+        // Occupy a port.
+        const blocker = http.createServer();
+        await new Promise<void>((resolve) => blocker.listen(0, "127.0.0.1", () => resolve()));
+        const port = (blocker.address() as { port: number }).port;
+
+        let sse: http.Server | undefined;
+        try {
+            // Bind the SSE server to the already-taken port → EADDRINUSE.
+            sse = startSseServer(harness.taskStore, port, "127.0.0.1");
+
+            // It cannot bind (port taken), so 'listening' never fires; bound by a
+            // deadline. No 'error' listener here — preserves the teeth.
+            const listened = await Promise.race([
+                new Promise<boolean>((res) => sse!.once("listening", () => res(true))),
+                new Promise<boolean>((res) => setTimeout(() => res(false), 400)),
+            ]);
+
+            expect(listened).toBe(false);      // never bound — port was occupied
+            expect(sse.listening).toBe(false); // not serving
+            // Reaching here = the EADDRINUSE 'error' was handled, not fatal.
+        } finally {
+            await new Promise<void>((resolve) => {
+                if (sse) sse.close(() => resolve());
+                else resolve();
+            });
+            await new Promise<void>((resolve) => blocker.close(() => resolve()));
             await harness.teardown();
         }
     });

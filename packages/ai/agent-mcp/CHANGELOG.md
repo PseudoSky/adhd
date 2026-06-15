@@ -9,6 +9,24 @@ planning in [ROADMAP.md](./ROADMAP.md).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **SSE bind failure no longer crashes the server** (BUG-001). `startSseServer`
+  attaches an `'error'` handler and accepts `port`/`host` params; if the port is
+  taken (`EADDRINUSE`), SSE streaming degrades to unavailable with a logged
+  warning instead of an unhandled `'error'` taking down the whole MCP process.
+
+### Changed
+- **Tool-call cancellation latency** (DEBT-003). `IMcpClient.callTool` accepts an
+  optional `AbortSignal`; the orchestrator threads the composed
+  task-cancel/timeout signal into tool dispatch (batch + claudecli paths), so
+  cancelling a task interrupts an in-flight tool call instead of waiting for the
+  batch to settle. stdio composes it with its per-call timeout; http forwards it;
+  in-process short-circuits if already aborted.
+
+---
+
 ## [1.0.0] — 2026-06-15
 
 First consolidated release: the full task-orchestration core, shipped as one

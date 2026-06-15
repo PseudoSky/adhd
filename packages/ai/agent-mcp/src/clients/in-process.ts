@@ -37,7 +37,12 @@ export class InProcessMcpClient implements IMcpClient {
         }));
     }
 
-    async callTool(toolName: string, args: unknown): Promise<unknown> {
+    async callTool(toolName: string, args: unknown, signal?: AbortSignal): Promise<unknown> {
+        // If the task was already cancelled/timed out, don't start the in-process
+        // call (which would spin up a recursive sub-task). Mid-flight cancellation
+        // of an in-process sub-task is handled by that sub-task's own cancellation
+        // signal via the task registry, not by this signal. (DEBT-003)
+        signal?.throwIfAborted();
         return this.handler(toolName, args, this.context);
     }
 
