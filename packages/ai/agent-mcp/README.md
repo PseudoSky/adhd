@@ -250,6 +250,8 @@ Reads the OAuth token that Claude Code stores in the macOS keychain under `Claud
 
 > **Platform note:** `useClaudeOauth` only works on macOS. Use `authTokenEnv` on Linux or Windows.
 
+**What OAuth mode adds to your agent's system prompt.** When the Anthropic token is an OAuth/subscription token (`sk-ant-oat…` — used by both `useClaudeOauth` and an OAuth `authTokenEnv`), the provider automatically (a) sets the `anthropic-beta: oauth-2025-04-20` header and (b) prepends the Claude Code identity — `"You are Claude Code, Anthropic's official CLI for Claude."` — to the request's `system` **as a distinct first block**, with your agent's own system prompt preserved as the second block. Anthropic's OAuth gate requires this: a request whose `system` isn't the identity as its own block is rejected with a *misleading* `429 rate_limit_error` (with no rate-limit headers). So under OAuth your model is told it is "Claude Code" before it sees your agent's instructions. Plain API keys (`sk-ant-api…`) get neither the header nor the identity and use your system prompt verbatim.
+
 ### Claude CLI
 
 ```json

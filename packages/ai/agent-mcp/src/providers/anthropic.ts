@@ -262,6 +262,15 @@ function toAnthropicMessages(messages: Message[]): MessageParam[] {
     });
 }
 
+// Subscription OAuth tokens (sk-ant-oat…) only work against the Messages API when
+// BOTH of these hold (verified by direct-API bisect — see chat()):
+//   1. the request carries the `anthropic-beta: oauth-2025-04-20` header, and
+//   2. THIS identity is sent as the first `system` block in ARRAY form — not
+//      concatenated with the agent's system prompt into a single string.
+// Bisect: identity-only string → 200; identity+prompt joined into one string → 429;
+// [identity block, prompt block] array → 200. Either omission yields a *misleading*
+// `429 rate_limit_error` (no rate-limit headers), which is why OAuth was silently
+// broken for any agent that had its own system prompt. Plain API keys need neither.
 const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.";
 
 export class AnthropicProvider implements LLMProvider {
