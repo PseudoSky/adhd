@@ -51,4 +51,13 @@ export class BackgroundQueue {
     get size(): number {
         return this.queue.size;
     }
+
+    /**
+     * Returns a Promise that resolves when the queue has drained to idle
+     * (all currently enqueued and running tasks have finished).
+     * Delegates to p-queue's own `onIdle()`.
+     */
+    onIdle(): Promise<void> {
+        return this.queue.onIdle();
+    }
 }

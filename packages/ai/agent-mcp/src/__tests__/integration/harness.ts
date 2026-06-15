@@ -202,13 +202,35 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
     }
 
     const teardown = async (): Promise<void> => {
+        // 1. Close the SSE server first so no new HTTP responses write to the DB.
         if (sseServer) {
             await new Promise<void>((resolve) => sseServer!.close(() => resolve()));
         }
-        // Wait for all background tasks to drain
-        await drainQueue(queue);
-        rawSqlite.close();
-        // Clean up temp file
+
+        // 2. Drain the queue fully via p-queue's onIdle() — more reliable than
+        //    polling pending+size, which can momentarily read zero between tasks.
+        //    Race against a 15s deadline to avoid hanging test suite.
+        await Promise.race([
+            queue.onIdle(),
+            new Promise<void>((_, reject) =>
+                setTimeout(() => reject(new Error("teardown: queue.onIdle() timed out after 15s")), 15_000)
+            ),
+        ]).catch(() => {
+            // Log but don't rethrow — we still need to close the DB.
+        });
+
+        // 3. One event-loop tick so the last task's finally-block DB writes settle.
+        await new Promise<void>((r) => setImmediate(r));
+
+        // 4. Close SQLite inside try/catch — if a task's finally already closed it,
+        //    better-sqlite3 throws; ignore that rather than masking the real test result.
+        try {
+            rawSqlite.close();
+        } catch {
+            // already closed
+        }
+
+        // 5. Clean up temp file
         try {
             fs.unlinkSync(dbPath);
         } catch {
@@ -252,18 +274,18 @@ export async function rebuildHarness(dbPath: string, opts: Omit<HarnessOptions, 
 
 /**
  * Wait for the queue to drain (all enqueued tasks finished).
- * Uses a polling loop with a bounded deadline.
+ * Uses p-queue's onIdle() with a bounded deadline, which is more reliable
+ * than polling pending+size (which can momentarily read zero between batches).
  */
 export async function drainQueue(queue: BackgroundQueue, timeoutMs = 10_000): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
-    while ((queue.pending + queue.size) > 0) {
-        if (Date.now() > deadline) {
-            throw new Error(`drainQueue timed out after ${timeoutMs}ms`);
-        }
-        await new Promise((r) => setImmediate(r));
-    }
-    // One more tick to let the last task's finally-block settle
-    await new Promise((r) => setImmediate(r));
+    await Promise.race([
+        queue.onIdle(),
+        new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error(`drainQueue timed out after ${timeoutMs}ms`)), timeoutMs)
+        ),
+    ]);
+    // One extra tick to let the last task's finally-block DB writes settle.
+    await new Promise<void>((r) => setImmediate(r));
 }
 
 /**

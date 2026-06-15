@@ -133,6 +133,13 @@ export interface AgentDefinition {
   mcpServers: Record<string, McpServerConfig>;
   permissions: AgentPermissions;
   maxToolLoops?: number;
+  /**
+   * When `true`, advertise the built-in `builtin__request_human_input` tool to
+   * the model so it can pause a task to ask the human operator a question.
+   * Defaults to `false` / `undefined` (opt-in, backward compatible).
+   * Has no effect on ephemeral tasks (no DB row to persist the resume token).
+   */
+  allowHumanInput?: boolean;
   createdAt: string;
   updatedAt: string;
 }
