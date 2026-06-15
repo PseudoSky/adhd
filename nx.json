@@ -183,6 +183,11 @@
         "production",
         "^production"
       ]
+    },
+    "nx-release-publish": {
+      "dependsOn": [
+        "build"
+      ]
     }
   },
   "targetDependencies": {
