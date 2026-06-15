@@ -50,11 +50,19 @@ export default defineConfig({
       dir: '../../../node_modules/.vitest',
     },
     environment: 'node',
-    // better-sqlite3 is a native addon. Running test files' forks in parallel
-    // races their in-memory DB finalization against in-flight fire-and-forget
-    // background tasks (DagEngine dispatch, queued orchestrator runs),
-    // intermittently segfaulting (SIGSEGV / exit 139) at teardown. Each file is
-    // clean in isolation; serialize file execution to remove the cross-fork race.
+    // better-sqlite3 is a native addon. Two settings together keep its teardown
+    // race-free (it otherwise SIGSEGVs / exits 139 even though every test passes):
+    //   1. pool: 'forks' — run test files in child PROCESSES, not worker threads.
+    //      better-sqlite3's native finalizers are stable on real process exit but
+    //      crash intermittently when a worker_thread is torn down with the addon
+    //      loaded (the default 'threads' pool).
+    //   2. fileParallelism: false — serialize files so one file's background
+    //      tasks (DagEngine dispatch, queued orchestrator runs) can't race another
+    //      file's DB finalization.
+    // The integration harness also closes each connection (TRUNCATE-checkpoint +
+    // close) BEFORE unlinking its temp DB, so handles never accumulate or get
+    // checkpointed against a deleted file.
+    pool: 'forks',
     fileParallelism: false,
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
 
