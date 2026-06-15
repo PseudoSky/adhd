@@ -518,7 +518,7 @@ The task transitions back to `running` and the loop continues with the answer in
 Call `task` with `stream: true` in background mode to get a `stream_url` back. A separate
 HTTP server (default `SSE_PORT=3001`) exposes `GET /tasks/:id/stream`, emitting
 `tool_call`, `tool_result`, `status_change`, and `done` events as the task runs.
-(Per-token streaming is not yet emitted — see GAPS.md.)
+(Per-token streaming is not yet emitted — see BACKLOG.md, FEAT-001.)
 
 ### Usage / cost tracking
 

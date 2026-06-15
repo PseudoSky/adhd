@@ -5,8 +5,13 @@ build, and tech debt to pay down.
 
 **How this relates to the other docs:**
 - **[ROADMAP.md](./ROADMAP.md)** — strategic, scored feature planning ("what to build and why, in what order"). High-level.
-- **[GAPS.md](./GAPS.md)** — known implementation gaps / limitations of *shipped* behavior, with a fix path. Descriptive.
-- **BACKLOG.md** (this file) — concrete, prioritized work items ready to pick up. When a backlog item ships, mark it `done` here and, if it closed a gap, update GAPS.md.
+- **[CHANGELOG.md](./CHANGELOG.md)** — what shipped, per version.
+- **CLAUDE.md → Key design decisions** — durable behavioral invariants/caveats of shipped code (the "why does it behave this way" reference for maintainers).
+- **BACKLOG.md** (this file) — concrete, prioritized work items ready to pick up. When an item ships, move it to the **Done** section here and add a CHANGELOG entry.
+
+> Note: the former `GAPS.md` was retired — its open items became backlog entries
+> (below), its shipped items became CHANGELOG entries, and its intentional
+> behavioral caveats moved to CLAUDE.md's Key design decisions.
 
 ---
 
@@ -31,7 +36,7 @@ build, and tech debt to pay down.
 
 **Acceptance criteria** — how we know it's done (testable).
 
-**References** — files, commits, issues, related GAPS/ROADMAP entries.
+**References** — files, commits, issues, related ROADMAP/CHANGELOG entries.
 ```
 
 **Priority legend:** P0 = breaks production / data loss; P1 = significant
@@ -81,7 +86,7 @@ whose primary function (stdio MCP) never needed the port.
 - `src/streaming/sse-server.ts` (`startSseServer`), `src/index.ts` (boot order:
   migrate → MCP stdio → SSE).
 - Smoke evidence: `Error: listen EADDRINUSE: address already in use 127.0.0.1:3001`.
-- Related: GAPS.md §3 (streaming).
+- Related: streaming subsystem (see CHANGELOG 1.0.0 → SSE streaming; FEAT-001).
 
 **Follow-up — audit for other unhandled exceptions (tracked as [DEBT-001]).**
 This bug is one instance of an unhandled async/event error taking down the
@@ -94,8 +99,73 @@ consistent top-level safety net. See DEBT-001.
 
 ## ✨ Features
 
-_None tracked yet. Strategic feature candidates live in [ROADMAP.md](./ROADMAP.md);_
-_promote one here (as `FEAT-NNN`) when it's scoped and ready to build._
+### FEAT-001 — Per-token (incremental) streaming
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** streaming, providers
+- **Reported:** 2026-06-15
+
+**Problem / Description**
+Task-level SSE streaming shipped in 1.0.0 (`tool_call`/`tool_result`/
+`status_change`/`done`), but `token` events are defined in the
+`TaskStreamEvent` union and never emitted. The `LLMProvider` interface returns
+a complete `ProviderChatResponse`, not a streaming iterator, so per-token output
+isn't surfaced.
+
+**Impact**
+No live token-by-token output to consumers; UIs can't render tokens as they
+arrive.
+
+**Proposed fix / Approach**
+Breaking `LLMProvider` change to support an async-iterator/streaming mode; emit
+`token` events through the existing `EventBus`. `claudecli` already streams
+internally via `--output-format stream-json` and could forward once the
+interface supports it.
+
+**Acceptance criteria**
+- Providers can stream tokens; `token` events arrive on `/tasks/:id/stream`
+  before `done`; existing non-streaming callers unaffected.
+
+**References** — `src/providers/types.ts`, `src/streaming/*`. (Migrated from GAPS §3; was "deferred to 0.5.0".)
+
+### FEAT-002 — Agent & task metrics plugin (`@adhd/metrics-plugin`)
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** observability (plugin over `task_usage` + `tasks`)
+- **Reported:** 2026-06-15
+
+**Problem / Description**
+No aggregated visibility: which agent is most expensive, success rate over a
+window, slowest tasks, tokens per agent. Only raw `task_usage`/`tasks` rows.
+
+**Impact** Cost attribution, perf tuning, and anomaly detection require manual querying.
+
+**Proposed fix / Approach**
+`@adhd/metrics-plugin` exposing `agent_metrics`, `task_metrics` (incl. recursive
+subtree cost via `root_task_id`), and `metrics_summary` — all read-only over
+`task_usage` + `tasks`. Depends on the shipped token-usage tracking.
+
+**Acceptance criteria** Three MCP tools return correct rollups; no new hooks required.
+
+**References** — ROADMAP Strategic 8.10 (highest-scored MOAT feature). (Migrated from GAPS §5.)
+
+### FEAT-003 — Queue priority levels + per-agent concurrency limit
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** engine (`src/engine/queue.ts`)
+- **Reported:** 2026-06-15
+
+**Problem / Description**
+The background queue is a `p-queue` wrapper with no priority levels, and there's
+no per-agent concurrency cap — only a server-wide `QUEUE_CONCURRENCY`.
+
+**Impact** No way to prioritise urgent tasks; one hot agent can starve others under load.
+
+**Proposed fix / Approach** Add priority levels to the queue; add a per-agent concurrency cap (config on the agent definition or server).
+
+**Acceptance criteria** Higher-priority tasks dispatch first; a per-agent cap is enforced independently of the server-wide limit.
+
+**References** — `src/engine/queue.ts`. (Migrated from GAPS §4 Phase-1 items.)
 
 ---
 
@@ -138,6 +208,57 @@ instead kill the server or disappear.
 - Triggered by BUG-001.
 - Likely files: `src/streaming/*`, `src/engine/queue.ts`, `src/providers/*`,
   `src/index.ts`, `src/db/client.ts`.
+
+### DEBT-002 — `claudecli` provider: tool calls invisible to hooks, policy, and events
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** providers (`src/providers/claudecli.ts`), engine
+- **Reported:** 2026-06-15
+
+**Problem / Description**
+For a `claudecli` agent, the whole tool exchange (tool call → result → next
+turn) happens inside the `claude` subprocess. The orchestrator's tool-use loop
+never fires, so `pre:tool_call` / `post:tool_call` hooks and
+`TOOL_CALL`/`TOOL_RESULT` task events are not emitted, and policy checks
+(max tool loops, delegation allowlist) are skipped for those calls. The final
+result is still returned correctly.
+
+**Impact**
+Hook consumers, the task event log, and delegation-policy enforcement are all
+blind to claudecli tool calls.
+
+**Proposed fix / Approach**
+Either (a) surface tool calls out of the subprocess via `stream-json` and
+re-emit them into the orchestrator's event/policy system, or (b) accept it as a
+fundamental subprocess-model limitation and document it clearly (consider
+`wontfix` + a prominent caveat).
+
+**Acceptance criteria**
+- Tool calls by claudecli agents emit events + are policy-checked, **or** the
+  limitation is explicitly documented and the entry closed as `wontfix`.
+
+**References** — `src/providers/claudecli.ts`. (Migrated from GAPS §1.)
+
+### DEBT-003 — Tighten cancellation latency (thread `signal` into `callTool`)
+- **Status:** backlog
+- **Priority:** P3
+- **Area:** engine (`src/engine/orchestrator.ts`, clients)
+- **Reported:** 2026-06-15
+
+**Problem / Description**
+The task-cancellation `AbortSignal` is not threaded into individual
+`client.callTool()` calls, so aborting mid-batch lets all in-flight tool calls
+run to completion before the abort is observed on the next loop iteration.
+Pre-existing (sequential code didn't abort mid-tool either), but the parallel
+(`Promise.all`) dispatch widened the window.
+
+**Impact** Cancellation is slower than necessary; in-flight tool calls aren't interrupted.
+
+**Proposed fix / Approach** Pass the composed `signal` through to `callTool`; have clients honor it.
+
+**Acceptance criteria** A cancel mid-batch aborts in-flight tool calls (or returns promptly) rather than waiting for the whole batch to settle.
+
+**References** — `src/engine/orchestrator.ts`. (Migrated from GAPS §8 item 3.)
 
 ---
 

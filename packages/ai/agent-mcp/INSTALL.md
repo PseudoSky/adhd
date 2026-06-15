@@ -357,4 +357,5 @@ If the tool is not visible, the server failed to start. Check that `DATABASE_PAT
 - [README.md](./README.md) — full tool reference and architecture overview
 - [PUBLISHING.md](./PUBLISHING.md) — smoke test procedure after each publish
 - [AGENT-DEV.md](./AGENT-DEV.md) — dev loop for LLM agents making changes to this package
-- [GAPS.md](./GAPS.md) — known limitations and their fix paths
+- [BACKLOG.md](./BACKLOG.md) — open bugs, features, and tech debt
+- [CHANGELOG.md](./CHANGELOG.md) — what shipped, per version

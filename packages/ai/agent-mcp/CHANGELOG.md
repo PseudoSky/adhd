@@ -1,0 +1,87 @@
+# Changelog
+
+All notable changes to `@adhd/agent-mcp`. Format based on
+[Keep a Changelog](https://keepachangelog.com/); this project uses
+[Semantic Versioning](https://semver.org/).
+
+Open/actionable work lives in [BACKLOG.md](./BACKLOG.md); strategic feature
+planning in [ROADMAP.md](./ROADMAP.md).
+
+---
+
+## [1.0.0] — 2026-06-15
+
+First consolidated release: the full task-orchestration core, shipped as one
+interdependent version.
+
+### Added
+- **Task dependency DAG.** `task` accepts `depends_on`; a task stays `waiting`
+  until all upstreams reach a terminal state, then is dispatched with their
+  results injected. `on_upstream_failure: "fail" | "skip"`. Cycles are rejected
+  at submit time (`VALIDATION_ERROR`, no row created).
+- **Parallel tool execution.** Multiple tool calls in one model turn execute
+  concurrently (`Promise.all`) instead of serially.
+- **Human-in-the-loop.** Opt-in `allowHumanInput` advertises
+  `request_human_input`; a calling task suspends in `awaiting_input` with a
+  `resume_token`; the new `task_resume` tool continues it.
+- **Task-level SSE streaming.** `task` with `stream: true` (background) returns a
+  `stream_url`; a separate HTTP server (`SSE_PORT`, default 3001) emits
+  `tool_call` / `tool_result` / `status_change` / `done` events.
+- **Ephemeral task observability.** `task` with `agent_name` (one-shot, no
+  session) now persists a `tasks` row (`is_ephemeral=1`, `session_id` NULL),
+  `task_events`, and `task_usage` — so `result`, `task_list`, and `usage_query`
+  work on ephemeral task IDs. No `sessions`/`messages` rows are written.
+- **Task schema foundation.** `depends_on`, `on_upstream_failure`, `inputs`,
+  `resume_token` columns; `waiting` + `awaiting_input` statuses.
+
+### Fixed
+- **Migration `0005` no longer cascade-wipes `task_events`.** The table-recreate
+  in `0005` would `DROP TABLE tasks` with foreign keys enforced, cascading to
+  every `task_events` row — drizzle-kit's in-SQL `PRAGMA foreign_keys=OFF` is a
+  no-op inside the migrator transaction. The migration now runs through
+  `runMigrationsOn` (`db/migrate-runner.ts`), which toggles FK enforcement off
+  on the connection around `migrate()`. Verified on a real DB (148 events
+  preserved); regression guard at `scripts/verify-fk-safe-migration.mjs`.
+- **Tool-name round-trip** robust to model normalization (`<server>__<tool>`
+  resolution survives `-`→`_` mangling by local models).
+- **Anthropic OAuth**: send the Claude Code identity as a distinct system block
+  (fixed spurious 429s); persist rotated keychain credentials after refresh so
+  Claude Code stays in sync.
+
+### Changed
+- **Publishing is gated on a clean build + tests.** `nx-release-publish`
+  `dependsOn: ["build","test"]` (agent-mcp) / `["build"]` (types); `build` runs
+  `clean`, and `agent-mcp-types` now sets `emptyOutDir: true` — so a stray
+  `dist/` edit or stale version can never be published. See PUBLISHING.md.
+- **Parallel-dispatch behavior** (intentional; see CLAUDE.md → Key design
+  decisions for the durable invariants): `toolCallCount` is incremented before
+  `policy.check()` so a batch that would cross `AGENT_MCP_MAX_TOOL_LOOPS` is
+  rejected up front; `post:tool_call` hooks may interleave within a batch
+  (result *messages* still append in call order); cancellation is observed only
+  after the in-flight batch settles.
+- **Test runner** uses `pool: 'forks'` and the integration harness closes each
+  SQLite connection before unlinking — eliminating an intermittent
+  better-sqlite3 teardown `SIGSEGV` (exit 139) at process teardown.
+
+### Internal
+- Test infra: real-component integration suite + a gated live recursive-DAG e2e
+  (`AGENT_MCP_LIVE=1`). `toMcpInputSchema` exported from `server.ts`.
+
+---
+
+## [0.0.6]
+
+### Added
+- **Token usage tracking.** `task_usage` table populated on every model call;
+  `usage_query` MCP tool exposes per-task and delegation-subtree token counts;
+  `task` and `result` responses include a `usage` rollup.
+- **`max_tokens` + `stop_reason`** columns on `task_usage` — distinguish a
+  truncated response (`stop_reason` = `length`/`max_tokens`) from a normal
+  completion, and compute output/`max_tokens` utilisation.
+- **Context-window handling.** Provider context-length errors are normalised to
+  a dedicated `CONTEXT_WINDOW_EXCEEDED` code; opt-in sliding-window truncation of
+  oldest non-system messages via `AGENT_MCP_CONTEXT_LIMIT`.
+
+---
+
+_Earlier 0.0.x releases predate this changelog._
