@@ -9,7 +9,7 @@ planning in [ROADMAP.md](./ROADMAP.md).
 
 ---
 
-## [Unreleased]
+## [1.0.1] — 2026-06-15
 
 ### Fixed
 - **SSE bind failure no longer crashes the server** (BUG-001). `startSseServer`
