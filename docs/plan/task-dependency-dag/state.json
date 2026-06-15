@@ -2,7 +2,7 @@
   "schema_version": 3,
   "title": "task-dependency-dag",
   "dag": "dag.json",
-  "current_state": "code-review",
+  "current_state": "audit-final",
   "states": {
     "dag-engine": {
       "status": "complete",
@@ -21,12 +21,12 @@
       "end_ref": "c2301b5fa3d589cfbedd004b63411dbf252e0a57"
     },
     "code-review": {
-      "status": "in_progress",
+      "status": "complete",
       "executor": null,
       "started_at": "2026-06-15T15:07:46.381Z",
-      "done_at": null,
+      "done_at": "2026-06-15T15:07:46.855Z",
       "start_ref": "12736135b6a19cbd53a180cd67bdc855487cf17f",
-      "end_ref": null
+      "end_ref": "bee866662f556e01f2885a272e7da58ea543a4a6"
     },
     "audit-final": {
       "status": "pending",
@@ -69,6 +69,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "foundation audit green"
+    },
+    {
+      "ts": "2026-06-15T15:07:46.855Z",
+      "from": "code-review",
+      "to": "code-review",
+      "start_ref": "12736135b6a19cbd53a180cd67bdc855487cf17f",
+      "end_ref": "bee866662f556e01f2885a272e7da58ea543a4a6",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Human sign-off recorded: features verified end-to-end live (real-DB FK migration preserved 148 task_events; recursive multiply_set->fan_out->math_worker DAG with all calc tool calls confirmed across calc-server.log + task_events + usage_query)."
     }
   ],
   "amendment_log": [
