@@ -39,6 +39,14 @@ testem.log
 Thumbs.db
 
 .nx/cache
+.nx/workspace-data
+
+# Claude Code local state + git worktrees. The worktrees under
+# .claude/worktrees/ are full repo copies; if nx scans them it sees every
+# project name twice and fails the project graph with
+# ProjectsWithConflictingNamesError. Keep this ignored (also prevents
+# `git add -A` from sweeping local job/worktree state into commits).
+.claude/
 
 # Next.js
 .next
