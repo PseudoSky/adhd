@@ -83,6 +83,11 @@ src/
 
 **Tool name prefixing.** `McpClientRegistry.listAllTools()` prefixes every tool as `<server>__<tool>`. The orchestrator uses this qualified name for policy checks and tool dispatch.
 
+**Parallel tool dispatch — invariants (do NOT "fix" these).** Tool calls within one model turn execute concurrently (`Promise.all`). Three intentional consequences:
+- `toolCallCount` is incremented in the Phase-1 pre-dispatch loop, **before** `policy.check()` (`[inv:toolCallCount-increment-before-check]`). `policy.check()` enforces `count < max`, so counting the about-to-run batch up front means a batch that would cross `AGENT_MCP_MAX_TOOL_LOOPS` is rejected before it runs, not after. Moving the increment after the check silently raises the effective cap by one.
+- `pre:tool_call` hooks for a batch fire serially in Phase 1, but `post:tool_call` hooks fire from within the concurrent `Promise.all` arms — so hook consumers **cannot** assume strict `pre(A)→post(A)→pre(B)→post(B)` pairing; `post` events may interleave. Tool *result messages* are still appended in original `toolCalls` order (`[inv:message-order]`).
+- Cancellation is observed only after the in-flight batch settles (the task `signal` is not threaded into individual `callTool()` calls). Tightening this is tracked as BACKLOG DEBT-003.
+
 ## Environment variables
 
 | Variable | Default | Description |
@@ -163,6 +168,11 @@ Or set `authTokenEnv: "MY_TOKEN_VAR"` in the provider config to read from a name
 
 **claudecli provider** — uses whatever credentials `claude auth status` shows. On token-injection failure, throws `PROVIDER_AUTH_ERROR` with the keychain error and the same recovery hint.
 
-## Known Gaps
+## Backlog, history, and roadmap
 
-See [GAPS.md](./GAPS.md).
+- Open work (bugs, features, tech debt): [BACKLOG.md](./BACKLOG.md)
+- What shipped, per version: [CHANGELOG.md](./CHANGELOG.md)
+- Strategic feature planning: [ROADMAP.md](./ROADMAP.md)
+
+(The former `GAPS.md` was retired: open items → BACKLOG, shipped items →
+CHANGELOG, behavioral invariants → "Key design decisions" above.)
