@@ -350,10 +350,20 @@ export class AnthropicProvider implements LLMProvider {
         const systemPrompt = systemMessages.map(m => m.content || "").join("\n") || undefined;
 
         const run = async (): Promise<ProviderChatResponse> => {
-            // sk-ant-oat OAuth tokens require the Claude Code identity in the system
-            // prompt (proven: WITH identity → 200, WITHOUT → 429). API keys do not.
+            // sk-ant-oat OAuth tokens require the Claude Code identity as a DISTINCT
+            // first system block (array form) — NOT concatenated into one string.
+            // Anthropic's OAuth gate rejects a single system string that isn't exactly
+            // the identity with a misleading 429 rate_limit_error, so any agent that
+            // has its own system prompt fails unless the identity is its own block.
+            // (Proven by bisect: array form → 200; identity+prompt joined string → 429.)
+            // API-key mode keeps the plain string.
             const effectiveSystem = this._useOauthIdentity
-                ? [CLAUDE_CODE_IDENTITY, systemPrompt].filter(Boolean).join("\n\n")
+                ? [
+                      { type: "text" as const, text: CLAUDE_CODE_IDENTITY },
+                      ...(systemPrompt
+                          ? [{ type: "text" as const, text: systemPrompt }]
+                          : []),
+                  ]
                 : systemPrompt;
 
             // Use streaming to avoid the SDK's synchronous "Streaming is required

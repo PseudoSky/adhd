@@ -222,15 +222,13 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
         // 3. One event-loop tick so the last task's finally-block DB writes settle.
         await new Promise<void>((r) => setImmediate(r));
 
-        // 4. Close SQLite inside try/catch — if a task's finally already closed it,
-        //    better-sqlite3 throws; ignore that rather than masking the real test result.
-        try {
-            rawSqlite.close();
-        } catch {
-            // already closed
-        }
-
-        // 5. Clean up temp file
+        // 4. Deliberately DO NOT call rawSqlite.close() here. A native better-sqlite3
+        //    close() that races any still-settling statement segfaults the process
+        //    (exit 139) — and a native crash is not catchable by try/catch, so it
+        //    surfaces as a non-zero suite exit even though every test passed. The
+        //    connection is reclaimed when the process exits (after all async work is
+        //    done), which is race-free. We just unlink the temp file; unlinking an
+        //    open sqlite file is POSIX-safe (inode persists until the handle drops).
         try {
             fs.unlinkSync(dbPath);
         } catch {

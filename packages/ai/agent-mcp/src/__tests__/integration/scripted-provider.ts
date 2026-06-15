@@ -73,7 +73,7 @@ export class ScriptedProvider implements LLMProvider {
                 id: generateId(),
                 sessionId,
                 role: "assistant",
-                content: null,
+                content: undefined,
                 toolCalls: [
                     {
                         id: callId,
@@ -99,7 +99,7 @@ export class ScriptedProvider implements LLMProvider {
             id: generateId(),
             sessionId,
             role: "assistant",
-            content: null,
+            content: undefined,
             toolCalls: calls,
             createdAt: nowIso(),
         };
