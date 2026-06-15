@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Stateful MCP-native agent runtime with provider abstraction and recursive delegation",
   "type": "module",
   "publishConfig": {
