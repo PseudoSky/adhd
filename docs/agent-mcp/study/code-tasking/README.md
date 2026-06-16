@@ -52,7 +52,18 @@ code-tasking/
     audit-ref-policy-comment.md  ← a grep-based audit fooled by a comment
   tests/
     test-<n>/mcp.jsonl           ← the exact MCP request bodies for that test, in order
+    test-<n>/mcp.anthropic.jsonl ← (Experiment 6 tests) the same prompt, anthropic worker
+  results/                       ← authoritative server-side capture (responses + usage)
+    runs.jsonl                   ← every task: prompt + full raw result + usage telemetry
+    usage.json                   ← the task_usage table (tokens, tool_call_count, latency)
+    INDEX.md                     ← chronological run table
 ```
+
+`tests/` holds the **requests**; `results/` holds the **responses + usage**, dumped
+verbatim from the published server's DB (the ephemeral-observability persistence).
+Join them on the `prompt` text. The telemetry is what substantiates the
+"tool-less by construction" control above (`tool_call_count = 0` for every worker
+run). See [`results/README.md`](results/README.md).
 
 - A **scenario** = the coding task, the raw correct solution, and the success rubric. Provider-/prompt-independent.
 - A **test** = one way a scenario was posed to the local model (which context/levers were supplied) + the observed result. Tests cite a scenario and are graded by its rubric.
