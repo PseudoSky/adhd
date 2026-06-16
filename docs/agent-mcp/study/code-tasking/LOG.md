@@ -132,8 +132,24 @@ Chronological. Each test = one way a [scenario](scenarios/) was posed to the loc
 
 ---
 
+## Experiment 6 — capable-model differential (Anthropic, *same exact prompts*)
+> The control for the study's central claim. Re-run the failing prompts on a capable model (`claude-sonnet-4-6`) with the **identical system prompt + identical user prompt** — only the provider swapped. If the capable model passes, the failure is **model-bound** (capability), not **prompt-bound** (task design). Workers: `fixer-anthropic` (SP = the `code-fixer` role) and `impl-anthropic` (SP = the `code-impl` role); both deleted after. The `<test>A` runs reuse the user prompt from the cited original test. (FK framings deduped — the near-identical variants would all pass on a capable model; ran the minimal and the full-context framings.)
+
+| re-run | original (14B) | Anthropic, same prompt | requests |
+|---|---|---|---|
+| **2A** — FK underspecified | FAIL (invalid MySQL syntax) | **PASS** — FK-cascade-on-rebuild cause; *unprompted*, surfaced the migrator-transaction PRAGMA subtlety as a contingency. (Weak spot: caveat #4 suggests `RESTRICT` "going forward" — would weaken the cascade — but the minimal prompt never stated the keep-cascade constraint.) | `tests/test-2/mcp.anthropic.jsonl` |
+| **6A** — FK full-context | FAIL (inverted cause) | **PASS** — exact "`PRAGMA` no-op inside the migrator transaction" cause; connection-level `fkWasOn` + `try/finally` toggle (restore via the **write** form); offered both `db.session.client` and export-`sqlite`; cited SQLite §2.2. **Cleaner than the human-shipped fix.** | `tests/test-6/mcp.anthropic.jsonl` (incl. the shared `fixer-anthropic` create) |
+| **7A** — SSE full-context | FAIL (`try/catch` on async event) | **PASS** — async `'error'` event cause; `server.on("error")`; optional port; updated the caller guard. (Minor: declared `\| null` though it never returns null.) | `tests/test-7/mcp.anthropic.jsonl` |
+| **8A** — audit neutral | FAIL (missed the comment) | **PASS** — comment-on-306 cause; `is_code_line` skip on both matches; flagged the same `/* */` block-comment limitation the shipped fix has. | `tests/test-8/mcp.anthropic.jsonl` |
+| **18A** — TS4023 | FAIL (renamed the var) | **PASS** — explicit type annotation (`type Database as DatabaseType`); NOTE explains the exact `.d.ts`-nameability rule. | `tests/test-18/mcp.anthropic.jsonl` (incl. `impl-anthropic` create + both cleanups) |
+
+**Differential: 5/5 PASS on the exact prompts the 14B failed** — including the underspecified FK and the TS4023 gotcha, in two cases more cleanly than the human-shipped fix. **The failures are model-bound, not prompt-bound:** the same context that left the 14B confabulating was sufficient for a capable model to diagnose and fix correctly. This is the direct evidence for the recipe — put the cognition on a capable model; the local model's job is application + orchestration behind a verification gate.
+
+---
+
 ## Cross-test synthesis
 
+- **The failures are the *model*, not the task** (Experiment 6). Re-running the 5 distinct failing prompts on `claude-sonnet-4-6` — identical system + user prompts — gave **5/5 correct** fixes (including the underspecified FK and the TS4023 gotcha; twice cleaner than the shipped fix). So "design the task better" has a ceiling set by the model: the reliable lever is **routing the diagnosis to a capable model**, not more scaffolding on the small one.
 - **The floor is real — pure additive/mechanical work is reliable** (Tests 15–17: 3/3 clean). But it's bounded by knowledge, not size: Test 18, a *one-line* change carrying a specialized detail (TS4023 needs a type annotation), failed the **same way** as the hard scenarios — misread the error, pattern-matched a keyword, shipped a plausible non-fix. So the safe leaf is "additive change with **no embedded knowledge gotcha**"; any gotcha must be supplied.
 - **Correctness ladder:** the reliable wins were Tests 15–17 (additive), Test 4 (small bug + pointer), Test 5 (fix pre-specified). Every test that required the model to *diagnose a subtle cause*, *compose a cross-layer fix*, or *apply a specialized fact it didn't have* failed — regardless of role, scaffold, injected facts, or orchestration.
 - **The wall is synthesis + grounding, not retrieval** (Test 10): it selects the right facts but can't compose them, and fabricates to cover the gap.
