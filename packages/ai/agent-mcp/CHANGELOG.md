@@ -9,7 +9,7 @@ planning in [ROADMAP.md](./ROADMAP.md).
 
 ---
 
-## [1.1.0] — 2026-06-16
+## [1.1.1] — 2026-06-16
 
 ### Added
 - **`usage_query` now supports `group_by` aggregation** (FEAT-002 partial). Pass
