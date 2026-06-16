@@ -15,8 +15,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 GRADES = os.path.join(HERE, "..", "results", "grades.manual.json")
 
 WEIGHT = {"PASS": 1.0, "NEAR": 0.5, "PARTIAL": 0.5, "FAIL": 0.0, "ERROR": 0.0}
-# model key in each test dict -> display label
+# model key in each test dict -> display label (ascending capability)
 MODELS = [
+    ("gemma_4_e4b", "gemma-4-e4b"),
     ("qwen2.5_14b", "qwen2.5-14b"),
     ("qwen3.5_9b_claude_distill", "qwen3.5-9b"),
     ("claude_haiku_4_5", "haiku-4.5"),
