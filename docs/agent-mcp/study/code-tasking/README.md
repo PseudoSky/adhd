@@ -21,8 +21,22 @@ bodies** for every step.
 | Distributor | The strong session model acted as the DAG root, fanning tasks to local workers. Tasks are **ephemeral** (`agent_name` mode) unless a multi-turn session was needed. |
 | Grader | Manual inspection against each scenario's rubric (see caveats). |
 
-The subjects are three **real** bugs fixed earlier in the same engineering session,
+The subjects are **real** bugs/changes from earlier in the same engineering session,
 so we have a verified ground-truth fix for each (see `scenarios/`).
+
+### Controls / threats to validity
+
+- **Tool-less by construction.** Every worker — local *and* Anthropic — was created
+  with `mcpServers: {}` and `permissions: {}`, so it had **no filesystem, web, or
+  repo access and no agent-mcp recursion** (Test 14's `lead` is the sole exception:
+  it had `mcpServers:{agent-mcp}` to dispatch sub-agents, which also have no tools).
+  Confirmed empirically: every graded run reports `modelCalls: 1, toolCallCount: 0,
+  stopReason: "stop"` — a single completion with no tool calls. **No model could
+  read the actual source or the shipped fix; all reasoning is from the inlined
+  prompt.** The Anthropic differential (Experiment 6) is therefore apples-to-apples:
+  identical system + user prompt, only the provider swapped. The capable model's
+  edge is latent training knowledge, not repo access.
+- **n=1, non-deterministic, manual grading** — see Caveats below.
 
 ---
 
