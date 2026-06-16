@@ -22,7 +22,7 @@
   },
   "claude_sonnet_4_6": {
    "display": "sonnet-4.6",
-   "source": "results/runs.anthropic-sonnet46.jsonl + Exp6"
+   "source": "results/runs.anthropic-sonnet46.jsonl (temp=0, greedy)"
   }
  },
  "grades_legend": "PASS = correct cause + working fix \u00b7 NEAR/PARTIAL = correct/working fix with a wrong or muddled stated cause \u00b7 FAIL = wrong cause and non-working fix \u00b7 ERROR = orchestration plumbing failure (not a coding verdict)",
@@ -458,7 +458,7 @@
    },
    "claude_sonnet_4_6": {
     "grade": "ERROR",
-    "note": "lead called bare `agent` (no server prefix) \u2192 orchestrator rejected \u2192 task failed; orphaned a sub-agent session (BUG-002 repro)"
+    "note": "lead called bare `agent` (no server prefix) \u2192 orchestrator rejected \u2192 task failed (DEBT-004); same at default temp AND greedy \u2014 sonnet is stable here; orphaned a sub-agent session (BUG-002 repro)"
    }
   },
   {

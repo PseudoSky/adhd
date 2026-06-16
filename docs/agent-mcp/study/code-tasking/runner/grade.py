@@ -95,7 +95,18 @@ def grade_file(path):
         steps = sorted(by_test[test], key=lambda x: x["step"])
         final = steps[-1]
         combined = "\n".join(s["result"] for s in steps).lower()  # judge on all turns
-        errored = any(s.get("error") for s in steps) or final.get("result_status") == "failed" or len(final["result"]) < 200
+        # A failed task returns a `{task_id,status:"failed",usage}` envelope (no
+        # "result" field) — often >200 chars, so detect the status explicitly.
+        def is_failed_envelope(txt):
+            try:
+                o = json.loads(txt)
+                return isinstance(o, dict) and o.get("status") == "failed"
+            except Exception:
+                return False
+        errored = (any(s.get("error") for s in steps)
+                   or final.get("result_status") == "failed"
+                   or is_failed_envelope(final["result"])
+                   or len(final["result"]) < 200)
         sigs = SIGS[final["scenario"]](combined) if not errored else []
         passed = (not errored) and all(v for _, v in sigs)
         out.append({"test": test, "scenario": final["scenario"], "tier": final["tier"],
