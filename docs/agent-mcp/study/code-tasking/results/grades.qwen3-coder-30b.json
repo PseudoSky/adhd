@@ -1,0 +1,412 @@
+[
+ {
+  "test": 1,
+  "scenario": "sse-eaddrinuse",
+  "tier": "discriminator",
+  "posing": "A code-fixer SSE",
+  "mode": "single",
+  "verdict": "CHECK",
+  "signals": [
+   {
+    "name": "identifies async 'error' EventEmitter event (not try/catch)",
+    "ok": false
+   },
+   {
+    "name": "adds server.on/once('error') handler",
+    "ok": true
+   },
+   {
+    "name": "process survives / SSE disabled",
+    "ok": false
+   },
+   {
+    "name": "port injectable",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 2,
+  "scenario": "fk-cascade-migration",
+  "tier": "discriminator",
+  "posing": "B1 underspecified FK",
+  "mode": "single",
+  "verdict": "CHECK",
+  "signals": [
+   {
+    "name": "names PRAGMA-no-op-in-transaction cause",
+    "ok": false
+   },
+   {
+    "name": "connection-level fix (pragma OFF before migrate, restore after)",
+    "ok": false
+   },
+   {
+    "name": "keeps the cascade (does not weaken it)",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 3,
+  "scenario": "fk-cascade-migration",
+  "tier": "discriminator",
+  "posing": "B2 full-context FK",
+  "mode": "single",
+  "verdict": "CHECK",
+  "signals": [
+   {
+    "name": "names PRAGMA-no-op-in-transaction cause",
+    "ok": false
+   },
+   {
+    "name": "connection-level fix (pragma OFF before migrate, restore after)",
+    "ok": true
+   },
+   {
+    "name": "keeps the cascade (does not weaken it)",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 4,
+  "scenario": "audit-ref-policy-comment",
+  "tier": "discriminator",
+  "posing": "C audit (hinted)",
+  "mode": "single",
+  "verdict": "PASS",
+  "signals": [
+   {
+    "name": "identifies comment false-match",
+    "ok": true
+   },
+   {
+    "name": "fix ignores comments / matches real code",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 5,
+  "scenario": "fk-cascade-migration",
+  "tier": "discriminator",
+  "posing": "B3 spelled-out fix+API",
+  "mode": "single",
+  "verdict": "PASS",
+  "signals": [
+   {
+    "name": "names PRAGMA-no-op-in-transaction cause",
+    "ok": true
+   },
+   {
+    "name": "connection-level fix (pragma OFF before migrate, restore after)",
+    "ok": true
+   },
+   {
+    "name": "keeps the cascade (does not weaken it)",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 6,
+  "scenario": "fk-cascade-migration",
+  "tier": "discriminator",
+  "posing": "B_FULL code-fixer FK",
+  "mode": "single",
+  "verdict": "CHECK",
+  "signals": [
+   {
+    "name": "names PRAGMA-no-op-in-transaction cause",
+    "ok": false
+   },
+   {
+    "name": "connection-level fix (pragma OFF before migrate, restore after)",
+    "ok": false
+   },
+   {
+    "name": "keeps the cascade (does not weaken it)",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 7,
+  "scenario": "sse-eaddrinuse",
+  "tier": "discriminator",
+  "posing": "A_FULL code-fixer SSE",
+  "mode": "single",
+  "verdict": "CHECK",
+  "signals": [
+   {
+    "name": "identifies async 'error' EventEmitter event (not try/catch)",
+    "ok": false
+   },
+   {
+    "name": "adds server.on/once('error') handler",
+    "ok": true
+   },
+   {
+    "name": "process survives / SSE disabled",
+    "ok": false
+   },
+   {
+    "name": "port injectable",
+    "ok": false
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 8,
+  "scenario": "audit-ref-policy-comment",
+  "tier": "discriminator",
+  "posing": "C_NEUTRAL audit",
+  "mode": "single",
+  "verdict": "PASS",
+  "signals": [
+   {
+    "name": "identifies comment false-match",
+    "ok": true
+   },
+   {
+    "name": "fix ignores comments / matches real code",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 9,
+  "scenario": "fk-cascade-migration",
+  "tier": "discriminator",
+  "posing": "V1 ts-pro FK",
+  "mode": "single",
+  "verdict": "CHECK",
+  "signals": [
+   {
+    "name": "names PRAGMA-no-op-in-transaction cause",
+    "ok": false
+   },
+   {
+    "name": "connection-level fix (pragma OFF before migrate, restore after)",
+    "ok": true
+   },
+   {
+    "name": "keeps the cascade (does not weaken it)",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 10,
+  "scenario": "fk-cascade-migration",
+  "tier": "discriminator",
+  "posing": "V3 ts-pro FK + distractor facts",
+  "mode": "single",
+  "verdict": "PASS",
+  "signals": [
+   {
+    "name": "names PRAGMA-no-op-in-transaction cause",
+    "ok": true
+   },
+   {
+    "name": "connection-level fix (pragma OFF before migrate, restore after)",
+    "ok": true
+   },
+   {
+    "name": "keeps the cascade (does not weaken it)",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 11,
+  "scenario": "sse-eaddrinuse",
+  "tier": "discriminator",
+  "posing": "ts-pro SSE",
+  "mode": "single",
+  "verdict": "PASS",
+  "signals": [
+   {
+    "name": "identifies async 'error' EventEmitter event (not try/catch)",
+    "ok": true
+   },
+   {
+    "name": "adds server.on/once('error') handler",
+    "ok": true
+   },
+   {
+    "name": "process survives / SSE disabled",
+    "ok": true
+   },
+   {
+    "name": "port injectable",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 12,
+  "scenario": "fk-cascade-migration",
+  "tier": "discriminator",
+  "posing": "M1 multi-turn synth\u2192code",
+  "mode": "multiturn",
+  "verdict": "CHECK",
+  "signals": [
+   {
+    "name": "names PRAGMA-no-op-in-transaction cause",
+    "ok": false
+   },
+   {
+    "name": "connection-level fix (pragma OFF before migrate, restore after)",
+    "ok": true
+   },
+   {
+    "name": "keeps the cascade (does not weaken it)",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 13,
+  "scenario": "fk-cascade-migration",
+  "tier": "discriminator",
+  "posing": "M2 adversarial architect",
+  "mode": "single",
+  "verdict": "CHECK",
+  "signals": [
+   {
+    "name": "names PRAGMA-no-op-in-transaction cause",
+    "ok": false
+   },
+   {
+    "name": "connection-level fix (pragma OFF before migrate, restore after)",
+    "ok": false
+   },
+   {
+    "name": "keeps the cascade (does not weaken it)",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 14,
+  "scenario": "fk-cascade-migration",
+  "tier": "discriminator",
+  "posing": "M3 orchestrate lead\u2192synth\u2192coder",
+  "mode": "orchestrate",
+  "verdict": "CHECK",
+  "signals": [
+   {
+    "name": "names PRAGMA-no-op-in-transaction cause",
+    "ok": false
+   },
+   {
+    "name": "connection-level fix (pragma OFF before migrate, restore after)",
+    "ok": true
+   },
+   {
+    "name": "keeps the cascade (does not weaken it)",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 15,
+  "scenario": "tasklist-ephemeral-filter",
+  "tier": "floor",
+  "posing": "floor: is_ephemeral filter",
+  "mode": "single",
+  "verdict": "PASS",
+  "signals": [
+   {
+    "name": "zod boolean optional",
+    "ok": true
+   },
+   {
+    "name": "query uses is_ephemeral with undefined guard / 0|1",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 16,
+  "scenario": "sse-port-param",
+  "tier": "floor",
+  "posing": "floor: sse port param",
+  "mode": "single",
+  "verdict": "PASS",
+  "signals": [
+   {
+    "name": "optional port param, defaulted",
+    "ok": true
+   },
+   {
+    "name": "existing callers unaffected (taskStore-only still works)",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 17,
+  "scenario": "task-status-enum-extend",
+  "tier": "floor",
+  "posing": "floor: status enum extend",
+  "mode": "single",
+  "verdict": "PASS",
+  "signals": [
+   {
+    "name": "adds waiting",
+    "ok": true
+   },
+   {
+    "name": "adds awaiting_input",
+    "ok": true
+   },
+   {
+    "name": "touches both sites (schema enum + zod)",
+    "ok": true
+   }
+  ],
+  "error": null
+ },
+ {
+  "test": 18,
+  "scenario": "export-sqlite-type-annotation",
+  "tier": "floor",
+  "posing": "floor: TS4023 export",
+  "mode": "single",
+  "verdict": "CHECK",
+  "signals": [
+   {
+    "name": "explicit type annotation resolving TS4023",
+    "ok": false
+   },
+   {
+    "name": "adds export",
+    "ok": true
+   },
+   {
+    "name": "not 'any', not a fabricated type",
+    "ok": true
+   }
+  ],
+  "error": null
+ }
+]

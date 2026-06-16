@@ -169,6 +169,13 @@ Chronological. Each test = one way a [scenario](scenarios/) was posed to the loc
 
 **Five-model scoreboard + failure reasons: `runner/scoreboard.py`, `runner/failures.py`; full table: [`results/comparison.md`](results/comparison.md)** (verdicts in `results/grades.manual.json`).
 
+## Experiment 11 — code-specialization at scale: Qwen3-Coder-30B-A3B (full battery)
+> Does a dedicated 30B *coder* (MoE, 3B active; MLX-4bit on the M1 Max) crack the FK diagnosis wall that general-instruct and the distill couldn't? Ran all 18 on `qwen3-coder-30b-a3b-instruct-mlx`. Responses in `results/runs.qwen3-coder-30b.jsonl`. (First load failed — LM Studio's loading guardrail blocked the 256k-context default; relaxed + a one-shot probe, then ran.)
+
+**Result: 8 PASS / 3 NEAR / 7 FAIL (score 9.5/18, 53%) — slots between qwen3.5-9b and haiku.** Two real wins from code-specialization: it's the **first *local* model to catch the audit comment-on-306 trap (T8)**, and it clears **APPLY 4/4** — T5 the cleanest connection-level fix of any small model (restores FK via the *write* form, unlike the 14B's read-form bug). On SSE (T1/T7) it adds the right `server.on('error')` handler but mis-frames the mechanism as "listen() throws an unhandled exception" → `NEAR`. **But cold FK `DIAGNOSE` is still 1/9** — it gets cascade-on-rebuild but never reaches the in-SQL-PRAGMA-is-a-no-op crux/connection fix, and on T9 it *denies* cascade outright. T13 it correctly rejected the planted wrong diagnosis + located the right layer (NEAR). T14 orchestrated correctly (synth→coder, composed — no prefix trip) but with a wrong fix, like the 14B.
+
+**Takeaway: code-specialization + size buy *application* and careful *code-reading* (APPLY 4/4, the audit catch), not *cross-layer synthesis* (FK DIAGNOSE ties the 9B distill at 1/9).** Six-model `DIAGNOSE` ladder: gemma 0/9 · 14b 0/9 · qwen3.5-9b 1/9 · **qwen3-coder-30b 1/9** · haiku 4/9 · sonnet 9/9 — only the frontier model clears it.
+
 ---
 
 ## Cross-test synthesis
