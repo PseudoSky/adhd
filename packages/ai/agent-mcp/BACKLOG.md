@@ -47,7 +47,62 @@ nice-to-have / cleanup.
 
 ## 🐞 Bugs
 
-_No open bugs. Resolved bugs are in the **Done** section below (BUG-001 was fixed)._
+### BUG-002 — Delegation-opened sessions are never reaped → leak + undeletable sub-agent
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** engine (orchestrator), store/session, store/agent
+- **Reported:** 2026-06-15
+
+**Problem / Description** — A session created during a task (e.g. an orchestrating
+agent calls the `agent` tool to instantiate a stateful session for a sub-agent)
+is **only** closed by an explicit `session_close`. Nothing reaps it when the
+creating task reaches a terminal state. `SessionStore.create()` always writes
+`status: "active"` (`store/session-store.ts:32`); the orchestrator's `finally`
+only tears down the MCP client registry (`registry.closeAll()`,
+`engine/orchestrator.ts:604-606`) — it does **not** close sessions; and a
+stdio-spawned child server dying leaves its DB session rows `active`. So if a
+delegating task **fails mid-delegation**, the sub-agent's session is orphaned in
+`active` forever. Because `AgentStore.delete()` hard-refuses when any session for
+the agent is `active` (`store/agent-store.ts:108-121`, `AGENT_HAS_ACTIVE_SESSIONS`),
+that sub-agent becomes **undeletable** until someone manually finds and closes the
+orphan session.
+
+**Reproduction (observed):** in the code-tasking study's orchestration test, a
+`lead` agent delegated to `synth-coder` (opening a session), then the `lead` task
+failed (`PROVIDER_ERROR` — unrelated tool-naming trip). The `synth-coder` session
+stayed `active`; `agent_delete synth-coder` then failed with
+`AGENT_HAS_ACTIVE_SESSIONS`. Manual recovery: `session_list {agentName, status:active}`
+→ `session_close` → `agent_delete`.
+
+**Impact** — Session/row leak on every failed (or never-explicitly-closed)
+delegation, and orchestrator sub-agents accumulate undeletable definitions. Hits
+any recursive/orchestration workload, exactly where reliability matters most.
+Silent: the only symptom is a later `AGENT_HAS_ACTIVE_SESSIONS`.
+
+**Proposed fix / Approach** — Distinguish *delegation-scoped* sessions (opened by
+an orchestrating task for a sub-agent) from *user-persistent* sessions (meant to
+outlive a task for multi-turn): the former should be closed when the parent task
+reaches a terminal state (track session ids opened during the task; close them in
+the orchestrator `finally`, including the failure path). User-persistent sessions
+must **not** be auto-closed. As an operational escape hatch, add a
+`force`/`cascade` option to `agent_delete` that closes the agent's `active`
+sessions and then deletes. Optionally reap sessions idle past a TTL on startup.
+
+**Acceptance criteria**
+- An orchestration where the parent task **fails** after opening a sub-agent
+  session leaves **no** `active` orphan session (integration test drives a real
+  lead→sub-agent delegation, forces the parent to fail, then asserts
+  `session_list {status:"active"}` is empty and `agent_delete` succeeds).
+- A user-opened persistent session is **not** closed by an unrelated task ending
+  (negative control — must stay `active`).
+- `agent_delete {force:true}` closes active sessions and deletes; without `force`
+  the `AGENT_HAS_ACTIVE_SESSIONS` guard is unchanged.
+- Reverting the fix turns the first test red.
+
+**References** — `engine/orchestrator.ts:604-606` (finally only closes the registry),
+`store/session-store.ts:32` (`create` → `status:"active"`), `store/session-store.ts:127`
+(`close`), `store/agent-store.ts:108-121` (delete guard). Surfaced by
+`docs/agent-mcp/study/code-tasking/` (Experiment 7/8, test-14 orchestration).
 
 > The follow-on "audit for other unhandled exceptions" spawned by BUG-001 is
 > tracked separately as **DEBT-001** (still open).
@@ -195,6 +250,47 @@ fundamental subprocess-model limitation and document it clearly (consider
   limitation is explicitly documented and the entry closed as `wontfix`.
 
 **References** — `src/providers/claudecli.ts`. (Migrated from GAPS §1.)
+
+---
+
+### DEBT-004 — Orchestration hard-fails when a model calls a bare (unprefixed) tool name
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** engine (orchestrator tool dispatch), clients/registry
+- **Reported:** 2026-06-15
+
+**Problem / Description** — Sub-server tools are exposed to a delegating agent as
+`<server>__<tool>` (intentional — see CLAUDE.md "Tool name prefixing"). But when a
+model emits the **bare** name (`agent` / `task` instead of `agent-mcp__agent`),
+dispatch throws `Invalid tool name (missing server prefix)` and the whole task
+fails. More-capable models do this readily: in the code-tasking study, both
+`claude-sonnet-4-6` and `qwen3.5-9b` `lead` agents called bare `agent`/`task` and
+failed test-14, while the smaller `qwen2.5-14b` happened to use the prefixed form.
+So orchestration reliability currently depends on the model guessing a naming
+convention rather than on capability — a sharp DX edge that makes the headline
+recursive-delegation feature flaky precisely for strong models.
+
+**Impact** — Orchestration/delegation tasks fail non-deterministically by model;
+the error is opaque to the model (it can't easily self-correct). Undermines the
+recursive-delegation value prop.
+
+**Proposed fix / Approach** — When a called tool name is **unambiguous** across the
+registry (exactly one server exposes a tool with that bare name), resolve it
+instead of throwing. If ambiguous, throw an actionable error that lists the
+qualified candidates (e.g. `agent-mcp__agent`) so the model can retry. Keep the
+qualified name canonical for policy/dispatch.
+
+**Acceptance criteria**
+- A `lead` whose model calls bare `agent`/`task` completes the delegation (the
+  bare name resolves to the single `agent-mcp` server). Integration test drives a
+  real orchestration with a stubbed model that emits bare names; reverting the
+  resolver turns it red.
+- An ambiguous bare name yields an error message naming the qualified candidates.
+- Existing prefixed calls and policy checks are unchanged.
+
+**References** — CLAUDE.md "Tool name prefixing"; `clients/registry.ts`
+(`listAllTools()` prefixing), `engine/orchestrator.ts` (tool dispatch). Surfaced by
+`docs/agent-mcp/study/code-tasking/` test-14 (Experiments 7 & 8).
 
 ---
 
