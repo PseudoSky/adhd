@@ -111,9 +111,31 @@ Chronological. Each test = one way a [scenario](scenarios/) was posed to the loc
 
 ---
 
+## Experiment 5 — the "floor": simple, additive scenarios
+> Hypothesis: the model reliably handles single-locus additive changes (establishes a competence floor + a control for the hard set). Worker: `code-impl` (a neutral "make this small change" role), created in Test 15, deleted after Test 18.
+
+### Test 15 — add an optional list filter · scenario: `tasklist-ephemeral-filter`
+- **Result: PASS.** Optional param added; used `!== undefined` (correctly keeps the `false`/`0` case) + a consistent `eq`. Chose `z.number().int()` (caller passes 0/1) instead of the shipped `z.boolean()` + `? 1 : 0` — a different public API but internally consistent and correct.
+- Requests: `tests/test-15/mcp.jsonl`
+
+### Test 16 — add an optional parameter · scenario: `sse-port-param`
+- **Result: PASS.** Optional `port`/`host` defaulted via `?? SSE_PORT`, used in `listen()`, existing callers unaffected — equivalent to the shipped fix. Only missed the bonus (reporting the *actual* bound port for the ephemeral `0` case).
+- Requests: `tests/test-16/mcp.jsonl`
+
+### Test 17 — extend an enum in two places · scenario: `task-status-enum-extend`
+- **Result: PASS (perfect).** Both the Drizzle and Zod enums updated consistently; existing values preserved; even flagged "check no other part references an outdated list."
+- Requests: `tests/test-17/mcp.jsonl`
+
+### Test 18 — export + a TS4023 gotcha · scenario: `export-sqlite-type-annotation`
+- **Result: FAIL.** Renamed the export to `sqliteInstance` believing TS4023 was a "naming conflict" — but that is **still TS4023** (the build still fails); it never added the type annotation. The one embedded knowledge-detail tripped it: it pattern-matched "name" in the error and "fixed" the wrong thing — the discriminators' failure shape, in miniature.
+- Requests: `tests/test-18/mcp.jsonl`
+
+---
+
 ## Cross-test synthesis
 
-- **Correctness ladder:** only Test 4 (small bug + pointer) and Test 5 (fix pre-specified) produced usable output. Every test that required the model to *diagnose a subtle cause* or *compose a cross-layer fix* failed — regardless of role, scaffold, injected facts, or orchestration.
+- **The floor is real — pure additive/mechanical work is reliable** (Tests 15–17: 3/3 clean). But it's bounded by knowledge, not size: Test 18, a *one-line* change carrying a specialized detail (TS4023 needs a type annotation), failed the **same way** as the hard scenarios — misread the error, pattern-matched a keyword, shipped a plausible non-fix. So the safe leaf is "additive change with **no embedded knowledge gotcha**"; any gotcha must be supplied.
+- **Correctness ladder:** the reliable wins were Tests 15–17 (additive), Test 4 (small bug + pointer), Test 5 (fix pre-specified). Every test that required the model to *diagnose a subtle cause*, *compose a cross-layer fix*, or *apply a specialized fact it didn't have* failed — regardless of role, scaffold, injected facts, or orchestration.
 - **The wall is synthesis + grounding, not retrieval** (Test 10): it selects the right facts but can't compose them, and fabricates to cover the gap.
 - **Levers help the wrong things:** role/discipline → better process + (sometimes) calibration; structured-out → caps *some* fabrication; orchestration → reliable dispatch. None supply the missing knowledge.
 - **Confidence is not a safe signal:** broken fixes were rated High (Tests 11, 12, 14).
