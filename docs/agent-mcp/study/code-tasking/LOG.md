@@ -162,9 +162,12 @@ Chronological. Each test = one way a [scenario](scenarios/) was posed to the loc
 
 **Result: 12 PASS / 3 NEAR / 3 FAIL.** Haiku clears the floor (T15–18, incl. the TS4023 gotcha), `APPLY` (4/4), SSE diagnosis (T1/T7/T11), and the neutral audit (T8 — it caught the comment-on-306 that fooled *both* small models). But on the FK bug it is the **dangerous middle: right fix, wrong reason** — T6/T9/T12 land a *working* connection-level fix (`db._.client` pragma toggle + try/finally) while stating a *wrong* mechanism ("deferred FK checks until commit", "migrator opens a separate connection", "re-enable validation"), graded `NEAR`; T2/T13 fail outright. The specialized `ts-pro` SP did **not** repair the reasoning (T9 still confabulated "deferred FK"). On T14 it **orchestrated correctly** (used the prefixed tools, dispatched synth→coder, composed — no prefix trip) but with the wrong fix, exactly like the 14B. So `DIAGNOSE` strict pass-rate is **4/9** (7/9 crediting the NEARs) — clearly between qwen3.5-9b (1/9) and sonnet-4.6 (9/9).
 
-**Four-model table + by-requirement ladder: [`results/comparison.md`](results/comparison.md).**
+## Experiment 10 — size-floor probe: gemma-4-e4b (4B, full battery)
+> Does raw parameter count, not capability tier, set the floor? Ran all 18 on the 4B `gemma-4-e4b` (LM Studio) through the same harness. Responses in `results/runs.gemma-4-e4b.jsonl`.
 
-**The full three-model table + by-requirement pass-rates: [`results/comparison.md`](results/comparison.md)** (machine-readable verdicts in `results/grades.manual.json`).
+**Result: 4 PASS / 2 NEAR / 11 FAIL / 1 ERROR (score 5.0/18) — it ties the 14B.** A 4B holds the `ADDITIVE` floor (T15–17, 3/3) and applies fixes it's handed (T5 connection-level OFF→migrate→try, NEAR) or that its role supplies (T11 added `server.on('error')`, NEAR — better than the 14B, which ignored the same fact). But it diagnoses **nothing**: every `DIAGNOSE` test (0/9) confabulates a cause — "`server.listen()` throws synchronously" (T1), "CREATE TABLE sets up constraints before INSERT" (T3), the inverted "PRAGMA OFF causes the deletion" (T13); and on T10 it *selected* the right "ignored inside a transaction" fact but then applied the PRAGMA **in**-transaction (the no-op) — wrong fix layer. T14 errored in the tool loop (a 4B lead couldn't drive the delegation). **Takeaway: diagnosis tracks the capability tier, not the parameter count** — gemma-4B ≈ qwen2.5-14B, both 0/9 on diagnosis, while a *frontier* small model (haiku) clears 4/9.
+
+**Five-model scoreboard + failure reasons: `runner/scoreboard.py`, `runner/failures.py`; full table: [`results/comparison.md`](results/comparison.md)** (verdicts in `results/grades.manual.json`).
 
 ---
 

@@ -17,6 +17,7 @@ import json, os, sys, textwrap
 HERE = os.path.dirname(os.path.abspath(__file__))
 GRADES = os.path.join(HERE, "..", "results", "grades.manual.json")
 MODELS = [
+    ("gemma_4_e4b", "gemma-4-e4b"),
     ("qwen2.5_14b", "qwen2.5-14b"),
     ("qwen3.5_9b_claude_distill", "qwen3.5-9b"),
     ("claude_haiku_4_5", "haiku-4.5"),
