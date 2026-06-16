@@ -86,21 +86,23 @@ VGEM={
  15:("PASS","optional is_ephemeral filter"),16:("PASS","optional port/host defaulted"),
  17:("PASS","both enums extended"),18:("FAIL","exported db; sqlite line unchanged — no Database.Database annotation (still TS4023)")}
 
+# Qwen3-Coder run at temperature=0 (greedy), max_tokens=8192 — the only model run
+# with controlled sampling. Verdicts below are from that deterministic run.
 VQ3C={
  1:("NEAR","added server.on('error') but mis-frames the mechanism as 'throws an unhandled exception'"),
  2:("FAIL","cascade-on-rebuild noted; no connection-level fix (underspecified)"),
- 3:("FAIL","muddled 'FK checked at the end of each transaction'; no connection-level fix"),
- 4:("PASS","caught the comment match (hinted)"),
- 5:("PASS","clean connection-level OFF→migrate→restore, restored via the WRITE form (cleaner than the 14B)"),
+ 3:("FAIL","muddled 'FK check happens at the statement level'; mis-describes the rename; no connection fix"),
+ 4:("PASS","comment-skip fix (hinted)"),
+ 5:("PASS","correct: 'PRAGMA ignored inside transactions'; connection-level OFF→migrate→restore"),
  6:("FAIL","cascade-on-rebuild noted but never reaches the in-SQL-PRAGMA-is-a-no-op crux / connection fix"),
- 7:("NEAR","added server.on('error') but frames it as 'listen() throws an uncaught error'"),
- 8:("PASS","caught the comment-on-306 false match — the FIRST local model to do so"),
- 9:("FAIL","denies cascade ('task_events is dropped/recreated, not cascade behavior') — wrong"),
- 10:("PASS","selected the connection/sqlite-level PRAGMA approach + a real before/after test"),
+ 7:("NEAR","added server.on('error') but frames it as 'uncaught exception bubbles up'"),
+ 8:("PASS","fix skips comment lines (`not line.strip().startswith('//')`) — addresses the comment false-match; first local model to"),
+ 9:("FAIL","wrong: claims 'PRAGMA OFF disables checking, not the cascade behavior itself'"),
+ 10:("NEAR","acknowledges the in-SQL PRAGMA is insufficient but the fix layer stays vague ('manage FK during migration'), not the connection-level toggle  [PASS on the default-temp draw — sampling-sensitive cell]"),
  11:("PASS","applied the role's fact: server.on('error'), no try/catch trap"),
- 12:("FAIL","defeatist — 'can't fix without changing drizzle-kit'; muddled"),
- 13:("NEAR","correctly REJECTED the planted wrong diagnosis + pushed the fix to the right layer, but the txn-no-op mechanism stays fuzzy"),
- 14:("FAIL","orchestrated correctly (synth→coder, composed) but the fix was wrong/vague"),
+ 12:("FAIL","defeatist — 'the fix must be in Drizzle ORM's migration implementation'"),
+ 13:("PASS","correct: 'Drizzle's transaction wrapper does not respect the in-script PRAGMA OFF'; fix = set FK OFF before migrate in db/migrate.ts; rejected the planted wrong dx  [NEAR on the default-temp draw — sampling-sensitive cell]"),
+ 14:("FAIL","orchestrated correctly (synth→coder, composed) but the fix was vague/wrong"),
  15:("PASS","optional is_ephemeral filter"),16:("PASS","optional port/host defaulted"),
  17:("PASS","both enums extended"),18:("FAIL","exported db; sqlite line unchanged — no Database.Database annotation")}
 
@@ -109,7 +111,7 @@ MODELS=[
  ("gemma_4_e4b","gemma-4-e4b","results/runs.gemma-4-e4b.jsonl",VGEM),
  ("qwen2.5_14b","qwen2.5-14b","(original study tests/test-*/mcp.jsonl)",V14B),
  ("qwen3.5_9b_claude_distill","qwen3.5-9b","results/runs.qwen35-9b-hiq.jsonl",VQ35),
- ("qwen3_coder_30b","qwen3-coder-30b","results/runs.qwen3-coder-30b.jsonl",VQ3C),
+ ("qwen3_coder_30b","qwen3-coder-30b","results/runs.qwen3-coder-30b.jsonl (temp=0, greedy)",VQ3C),
  ("claude_haiku_4_5","haiku-4.5","results/runs.anthropic-haiku45.jsonl",VHAI),
  ("claude_sonnet_4_6","sonnet-4.6","results/runs.anthropic-sonnet46.jsonl + Exp6",VSON),
 ]
@@ -146,6 +148,12 @@ md=["# Multi-model differential — code-tasking study","",
  "pass and is **overridden** here (it false-passes 'right fix / wrong cause' cases). ",
  "`NEAR`/`PARTIAL` = correct or working fix with a wrong/muddled stated cause; `ERROR` =",
  "orchestration plumbing failure, not a coding verdict. Columns in ascending capability.","",
+ "> **Sampling:** `qwen3-coder-30b` was run at **temperature 0 (greedy, deterministic)**; the other",
+ "> five ran at the provider **default temperature** (LM Studio ~0.8, Anthropic 1.0) — single draws.",
+ "> So each non-qwen3-coder cell is one stochastic sample (the study's n=1 caveat). Re-running",
+ "> qwen3-coder at temp 0 vs its earlier default-temp draw left the **score identical (9.5)** but",
+ "> swapped two cells (T13 NEAR→PASS, T10 PASS→NEAR) — borderline cells are sampling-sensitive; the",
+ "> ladder shape is not. (`run-study.mjs --temperature 0` makes any model deterministic.)","",
  "| # | requires | SP | posing | " + " | ".join(LABELS) + " |",
  "|---|---|---|---|" + "---|"*len(LABELS)]
 for i in range(1,19):

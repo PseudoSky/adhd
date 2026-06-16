@@ -9,6 +9,13 @@ pass and is **overridden** here (it false-passes 'right fix / wrong cause' cases
 `NEAR`/`PARTIAL` = correct or working fix with a wrong/muddled stated cause; `ERROR` =
 orchestration plumbing failure, not a coding verdict. Columns in ascending capability.
 
+> **Sampling:** `qwen3-coder-30b` was run at **temperature 0 (greedy, deterministic)**; the other
+> five ran at the provider **default temperature** (LM Studio ~0.8, Anthropic 1.0) — single draws.
+> So each non-qwen3-coder cell is one stochastic sample (the study's n=1 caveat). Re-running
+> qwen3-coder at temp 0 vs its earlier default-temp draw left the **score identical (9.5)** but
+> swapped two cells (T13 NEAR→PASS, T10 PASS→NEAR) — borderline cells are sampling-sensitive; the
+> ladder shape is not. (`run-study.mjs --temperature 0` makes any model deterministic.)
+
 | # | requires | SP | posing | gemma-4-e4b | qwen2.5-14b | qwen3.5-9b | qwen3-coder-30b | haiku-4.5 | sonnet-4.6 |
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | DIAGNOSE | `code-fixer` | SSE well-scoped | FAIL | PARTIAL | FAIL | NEAR | PASS | PASS |
@@ -20,10 +27,10 @@ orchestration plumbing failure, not a coding verdict. Columns in ascending capab
 | 7 | DIAGNOSE | `code-fixer` | SSE full-context | FAIL | FAIL | FAIL | NEAR | PASS | PASS |
 | 8 | DIAGNOSE | `code-fixer` | audit neutral | FAIL | FAIL | FAIL | PASS | PASS | PASS |
 | 9 | DIAGNOSE | `ts-pro` | FK role-primed (ts-pro) | FAIL | FAIL | FAIL | FAIL | NEAR | PASS |
-| 10 | APPLY | `ts-pro` | FK facts-in-prompt (select) | FAIL | FAIL | PASS | PASS | PASS | PASS |
+| 10 | APPLY | `ts-pro` | FK facts-in-prompt (select) | FAIL | FAIL | PASS | NEAR | PASS | PASS |
 | 11 | APPLY | `ts-pro` | SSE fact-in-role | NEAR | FAIL | FAIL | PASS | PASS | PASS |
 | 12 | DIAGNOSE | `synth-coder` | FK multi-turn synth→code | FAIL | FAIL | PASS | FAIL | NEAR | PASS |
-| 13 | DIAGNOSE | `architect` | FK adversarial architect | FAIL | FAIL | FAIL | NEAR | FAIL | PASS |
+| 13 | DIAGNOSE | `architect` | FK adversarial architect | FAIL | FAIL | FAIL | PASS | FAIL | PASS |
 | 14 | ORCH | `lead` | FK orchestrate lead→synth→coder | ERROR | FAIL | ERROR | FAIL | FAIL | ERROR |
 | 15 | ADDITIVE | `code-impl` | floor: list filter | PASS | PASS | PASS | PASS | PASS | PASS |
 | 16 | ADDITIVE | `code-impl` | floor: optional port param | PASS | PASS | PASS | PASS | PASS | PASS |
@@ -42,16 +49,16 @@ orchestration plumbing failure, not a coding verdict. Columns in ascending capab
 | requires | gemma-4-e4b | qwen2.5-14b | qwen3.5-9b | qwen3-coder-30b | haiku-4.5 | sonnet-4.6 |
 |---|---|---|---|---|---|---|
 | ADDITIVE | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 | 3/3 |
-| APPLY | 1/4 | 1/4 | 3/4 | 4/4 | 4/4 | 4/4 |
+| APPLY | 1/4 | 1/4 | 3/4 | 3/4 | 4/4 | 4/4 |
 | GOTCHA | 0/1 | 0/1 | 0/1 | 0/1 | 1/1 | 1/1 |
-| DIAGNOSE | 0/9 | 0/9 | 1/9 | 1/9 | 4/9 | 9/9 |
+| DIAGNOSE | 0/9 | 0/9 | 1/9 | 2/9 | 4/9 | 9/9 |
 | ORCH | 0/1 | 0/1 | 0/1 | 0/1 | 0/1 | 0/1 |
 
 ### What it shows
 
 - **A capability ladder, and the rung that matters is `DIAGNOSE`.** Floor (`ADDITIVE`) is 3/3
   for every model. `APPLY` (fix handed over / selectable / scaffolded) climbs with capability.
-  But cold cross-layer **diagnosis** separates them sharply: gemma-4-e4b 0/9 · qwen2.5-14b 0/9 · qwen3.5-9b 1/9 · qwen3-coder-30b 1/9 · haiku-4.5 4/9 · sonnet-4.6 9/9.
+  But cold cross-layer **diagnosis** separates them sharply: gemma-4-e4b 0/9 · qwen2.5-14b 0/9 · qwen3.5-9b 1/9 · qwen3-coder-30b 2/9 · haiku-4.5 4/9 · sonnet-4.6 9/9.
 - **Size alone is not the axis.** gemma-4-e4b (4B) ties qwen2.5-14b — both hold the floor and
   fail every cold diagnosis. The 4B even matches the 14B on a couple of APPLY tests (it added
   the SSE handler its role supplied; the 14B ignored it). Diagnosis tracks capability tier, not
@@ -73,7 +80,7 @@ orchestration plumbing failure, not a coding verdict. Columns in ascending capab
 | gemma-4-e4b | lead PROVIDER_ERROR — orchestration failed (4B lead could not drive the delegation) |
 | qwen2.5-14b | coordinated (synth→coder) but fix wrong + fabricated imports |
 | qwen3.5-9b | lead made one delegation then returned an EMPTY result (0 chars, status completed) — degenerate, no fix |
-| qwen3-coder-30b | orchestrated correctly (synth→coder, composed) but the fix was wrong/vague |
+| qwen3-coder-30b | orchestrated correctly (synth→coder, composed) but the fix was vague/wrong |
 | haiku-4.5 | orchestrated CORRECTLY (dispatched synth→coder, composed — no prefix trip) but the fix was wrong ('separate connection') |
 | sonnet-4.6 | lead called bare `agent` (no server prefix) → orchestrator rejected → task failed; orphaned a sub-agent session (BUG-002 repro) |
 
@@ -97,9 +104,9 @@ Same FK-cascade bug, only the topology varies — isolating what structure buys.
 | direct single-shot | 1 agent · 1 turn · depth 0 | T6 | FAIL | FAIL | FAIL | FAIL | NEAR | PASS |
 | direct + fix handed over | 1 agent · 1 turn · depth 0 | T5 | NEAR | NEAR | PASS | PASS | PASS | PASS |
 | direct + heavy role (ts-pro) | 1 agent · 1 turn · depth 0 | T9 | FAIL | FAIL | FAIL | FAIL | NEAR | PASS |
-| direct + facts in prompt | 1 agent · 1 turn · depth 0 | T10 | FAIL | FAIL | PASS | PASS | PASS | PASS |
+| direct + facts in prompt | 1 agent · 1 turn · depth 0 | T10 | FAIL | FAIL | PASS | NEAR | PASS | PASS |
 | stateful multi-turn (diagnose→code) | 1 agent · 2 turns · depth 0 | T12 | FAIL | FAIL | PASS | FAIL | NEAR | PASS |
-| pipeline review stage (architect) | 1 agent · 1 turn · depth 0 | T13 | FAIL | FAIL | FAIL | NEAR | FAIL | PASS |
+| pipeline review stage (architect) | 1 agent · 1 turn · depth 0 | T13 | FAIL | FAIL | FAIL | PASS | FAIL | PASS |
 | recursive orchestration (lead→synth→coder) | 3 agents · depth 1 | T14 | ERROR | FAIL | ERROR | FAIL | FAIL | ERROR |
 
 - **Information/step-scaffolding moves small models; agent fan-out does not.** The structures

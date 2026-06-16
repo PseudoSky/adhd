@@ -14,7 +14,7 @@
   },
   "qwen3_coder_30b": {
    "display": "qwen3-coder-30b",
-   "source": "results/runs.qwen3-coder-30b.jsonl"
+   "source": "results/runs.qwen3-coder-30b.jsonl (temp=0, greedy)"
   },
   "claude_haiku_4_5": {
    "display": "haiku-4.5",
@@ -109,7 +109,7 @@
    },
    "qwen3_coder_30b": {
     "grade": "FAIL",
-    "note": "muddled 'FK checked at the end of each transaction'; no connection-level fix"
+    "note": "muddled 'FK check happens at the statement level'; mis-describes the rename; no connection fix"
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
@@ -140,7 +140,7 @@
    },
    "qwen3_coder_30b": {
     "grade": "PASS",
-    "note": "caught the comment match (hinted)"
+    "note": "comment-skip fix (hinted)"
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
@@ -171,7 +171,7 @@
    },
    "qwen3_coder_30b": {
     "grade": "PASS",
-    "note": "clean connection-level OFF\u2192migrate\u2192restore, restored via the WRITE form (cleaner than the 14B)"
+    "note": "correct: 'PRAGMA ignored inside transactions'; connection-level OFF\u2192migrate\u2192restore"
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
@@ -233,7 +233,7 @@
    },
    "qwen3_coder_30b": {
     "grade": "NEAR",
-    "note": "added server.on('error') but frames it as 'listen() throws an uncaught error'"
+    "note": "added server.on('error') but frames it as 'uncaught exception bubbles up'"
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
@@ -264,7 +264,7 @@
    },
    "qwen3_coder_30b": {
     "grade": "PASS",
-    "note": "caught the comment-on-306 false match \u2014 the FIRST local model to do so"
+    "note": "fix skips comment lines (`not line.strip().startswith('//')`) \u2014 addresses the comment false-match; first local model to"
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
@@ -295,7 +295,7 @@
    },
    "qwen3_coder_30b": {
     "grade": "FAIL",
-    "note": "denies cascade ('task_events is dropped/recreated, not cascade behavior') \u2014 wrong"
+    "note": "wrong: claims 'PRAGMA OFF disables checking, not the cascade behavior itself'"
    },
    "claude_haiku_4_5": {
     "grade": "NEAR",
@@ -325,8 +325,8 @@
     "note": "SELECTED the right fact + conn-level fix, HIGH"
    },
    "qwen3_coder_30b": {
-    "grade": "PASS",
-    "note": "selected the connection/sqlite-level PRAGMA approach + a real before/after test"
+    "grade": "NEAR",
+    "note": "acknowledges the in-SQL PRAGMA is insufficient but the fix layer stays vague ('manage FK during migration'), not the connection-level toggle  [PASS on the default-temp draw \u2014 sampling-sensitive cell]"
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
@@ -388,7 +388,7 @@
    },
    "qwen3_coder_30b": {
     "grade": "FAIL",
-    "note": "defeatist \u2014 'can't fix without changing drizzle-kit'; muddled"
+    "note": "defeatist \u2014 'the fix must be in Drizzle ORM's migration implementation'"
    },
    "claude_haiku_4_5": {
     "grade": "NEAR",
@@ -418,8 +418,8 @@
     "note": "rejects wrong cause, lands another ('something else deletes them')"
    },
    "qwen3_coder_30b": {
-    "grade": "NEAR",
-    "note": "correctly REJECTED the planted wrong diagnosis + pushed the fix to the right layer, but the txn-no-op mechanism stays fuzzy"
+    "grade": "PASS",
+    "note": "correct: 'Drizzle's transaction wrapper does not respect the in-script PRAGMA OFF'; fix = set FK OFF before migrate in db/migrate.ts; rejected the planted wrong dx  [NEAR on the default-temp draw \u2014 sampling-sensitive cell]"
    },
    "claude_haiku_4_5": {
     "grade": "FAIL",
@@ -450,7 +450,7 @@
    },
    "qwen3_coder_30b": {
     "grade": "FAIL",
-    "note": "orchestrated correctly (synth\u2192coder, composed) but the fix was wrong/vague"
+    "note": "orchestrated correctly (synth\u2192coder, composed) but the fix was vague/wrong"
    },
    "claude_haiku_4_5": {
     "grade": "FAIL",
