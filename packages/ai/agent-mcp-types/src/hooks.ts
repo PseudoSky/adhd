@@ -38,3 +38,37 @@ export interface Plugin {
   name: string;
   install(hooks: IHookRegistry): void | Promise<void>;
 }
+
+/**
+ * Context object passed to an external plugin factory at server startup.
+ *
+ * - `db`     — the live SQLite database handle; cast to `BetterSQLite3Database<any>`
+ *              inside your plugin package if you need direct DB access.
+ * - `config` — the validated plugin options from the `config` block in
+ *              `agent-mcp.config.json`. If the plugin exports a `configSchema`,
+ *              the server validates `config` against it before calling the factory
+ *              (failures skip the plugin). Always an object — defaults to `{}` when
+ *              the config block is omitted.
+ */
+export interface PluginContext {
+  db: unknown;
+  config: Record<string, unknown>;
+}
+
+/**
+ * The shape external plugin packages must export as their `default` export
+ * **or** as a named `createPlugin` export.
+ *
+ * Example (plugin package `src/index.ts`):
+ * ```ts
+ * import { z } from "zod";
+ * import type { PluginContext, Plugin } from "@adhd/agent-mcp-types";
+ *
+ * export const configSchema = z.object({ maxUSD: z.number().positive() });
+ *
+ * export default function createPlugin({ db, config }: PluginContext): Plugin {
+ *   return new MyPlugin(db, config as { maxUSD: number });
+ * }
+ * ```
+ */
+export type PluginFactory = (ctx: PluginContext) => Plugin | Promise<Plugin>;
