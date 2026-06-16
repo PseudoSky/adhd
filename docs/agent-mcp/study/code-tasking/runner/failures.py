@@ -20,6 +20,7 @@ MODELS = [
     ("gemma_4_e4b", "gemma-4-e4b"),
     ("qwen2.5_14b", "qwen2.5-14b"),
     ("qwen3.5_9b_claude_distill", "qwen3.5-9b"),
+    ("qwen3_coder_30b", "qwen3-coder-30b"),
     ("claude_haiku_4_5", "haiku-4.5"),
     ("claude_sonnet_4_6", "sonnet-4.6"),
 ]
