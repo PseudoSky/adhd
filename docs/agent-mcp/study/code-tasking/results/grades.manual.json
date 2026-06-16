@@ -10,7 +10,7 @@
   },
   "qwen3.5_9b_claude_distill": {
    "display": "qwen3.5-9b",
-   "source": "results/runs.qwen35-9b-hiq.jsonl"
+   "source": "results/runs.qwen35-9b-hiq.jsonl (temp=0, greedy)"
   },
   "qwen3_coder_30b": {
    "display": "qwen3-coder-30b",
@@ -18,7 +18,7 @@
   },
   "claude_haiku_4_5": {
    "display": "haiku-4.5",
-   "source": "results/runs.anthropic-haiku45.jsonl"
+   "source": "results/runs.anthropic-haiku45.jsonl (temp=0, greedy)"
   },
   "claude_sonnet_4_6": {
    "display": "sonnet-4.6",
@@ -43,7 +43,7 @@
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "confabulates 'something calls process.exit()'"
+    "note": "'server.listen() throws an unhandled exception, no try-catch' \u2014 wrong (async 'error' event)"
    },
    "qwen3_coder_30b": {
     "grade": "NEAR",
@@ -51,7 +51,7 @@
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
-    "note": "unhandled 'error' event named; adds server.on('error'); port injectable"
+    "note": "names the 'error' event + adds server.on('error'); flags hardcoded port"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -74,7 +74,7 @@
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "naive in-SQL FK disable the txn no-op defeats"
+    "note": "naive in-SQL FK disable the txn no-op defeats (underspecified)"
    },
    "qwen3_coder_30b": {
     "grade": "FAIL",
@@ -82,7 +82,7 @@
    },
    "claude_haiku_4_5": {
     "grade": "FAIL",
-    "note": "fix = in-SQL PRAGMA OFF/ON \u2014 the no-op the migrator transaction defeats"
+    "note": "confused 'FK constraints disabled by default'; no connection-level fix"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -105,7 +105,7 @@
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "misreads the rename direction"
+    "note": "muddled 'PRAGMA OFF only affects the new table'; no connection fix"
    },
    "qwen3_coder_30b": {
     "grade": "FAIL",
@@ -113,7 +113,7 @@
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
-    "note": "'PRAGMA per-connection, in-txn OFF ineffective'; connection-level fix"
+    "note": "correct: PRAGMA is connection-scoped, the client's ON persists across the in-SQL OFF; connection-level fix"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -167,7 +167,7 @@
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "PASS",
-    "note": "applied handed-over cause: conn-level OFF\u2192migrate\u2192restore"
+    "note": "correct: 'pragmas ignored inside the migrator transaction'; connection-level fix (handed)"
    },
    "qwen3_coder_30b": {
     "grade": "PASS",
@@ -175,7 +175,7 @@
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
-    "note": "restated the handed-over cause; connection-level OFF\u2192migrate\u2192restore"
+    "note": "applied the handed-over connection-level fix"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -198,7 +198,7 @@
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "re-enable-after-migration confab"
+    "note": "confab 'FK checks disabled during rebuild'"
    },
    "qwen3_coder_30b": {
     "grade": "FAIL",
@@ -206,7 +206,7 @@
    },
    "claude_haiku_4_5": {
     "grade": "NEAR",
-    "note": "wrong 're-enable validation' cause, but the FIX is correct: db._.client pragma OFF + try/finally restore"
+    "note": "wrong cause ('better-sqlite3 runs the migration as a single prepared statement') but a connection-level fix"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -229,7 +229,7 @@
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "'no try/catch around listen' (async 'error')"
+    "note": "'listen throws EADDRINUSE synchronously' \u2014 wrong; no real handler"
    },
    "qwen3_coder_30b": {
     "grade": "NEAR",
@@ -237,7 +237,7 @@
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
-    "note": "unhandled 'error' event; handler + injectable port"
+    "note": "names the async 'error' event + handler + injectable port"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -260,7 +260,7 @@
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "invents 'both on line 410'"
+    "note": "'>= operator / 388 vs 410' \u2014 misses the Promise.all-in-comment-306"
    },
    "qwen3_coder_30b": {
     "grade": "PASS",
@@ -268,7 +268,7 @@
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
-    "note": "caught the comment-on-306 false match (fooled both small models)"
+    "note": "caught the comment-on-306 false match"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -291,7 +291,7 @@
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "accepts cascade-on-rebuild, never reaches the txn-no-op crux"
+    "note": "denies cascade; 're-enable foreign_keys=ON' theory"
    },
    "qwen3_coder_30b": {
     "grade": "FAIL",
@@ -299,7 +299,7 @@
    },
    "claude_haiku_4_5": {
     "grade": "NEAR",
-    "note": "ts-pro SP; wrong 'deferred FK violation' cause, connection-level fix present (SP did not fix the reasoning)"
+    "note": "speculates the migrator 'skips PRAGMA statements' (wrong) but lands a connection-level fix"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -322,7 +322,7 @@
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "PASS",
-    "note": "SELECTED the right fact + conn-level fix, HIGH"
+    "note": "SELECTED the right facts from the distractor list (migrator txn \u2192 in-SQL PRAGMA ignored \u2192 cascade) + sqlite-level fix"
    },
    "qwen3_coder_30b": {
     "grade": "NEAR",
@@ -330,7 +330,7 @@
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
-    "note": "selected FK-active-during-rebuild from the distractor list, rejected the rest"
+    "note": "'in-SQL PRAGMA OFF is ineffective inside a transaction' + connection-level fix"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -353,7 +353,7 @@
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "'synchronous listen() throws' \u2014 wrong; no handler"
+    "note": "SSE fact-in-role ignored; no handler"
    },
    "qwen3_coder_30b": {
     "grade": "PASS",
@@ -361,7 +361,7 @@
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
-    "note": "unhandled 'error' event; clean handler + port"
+    "note": "applied the role's fact: server.on('error'), no try/catch trap"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -383,16 +383,16 @@
     "note": "anti-fab capped one hallucination, relocated to invalid SQL"
    },
    "qwen3.5_9b_claude_distill": {
-    "grade": "PASS",
-    "note": "NEEDS path: (db as any).session.client + layer-correct helper"
+    "grade": "FAIL",
+    "note": "correctly notes sqlite is module-private but falls back to 'verify FK with queries before/after' \u2014 does not disable FK, non-working  [PASS on the default-temp draw, which found (db as any).session.client \u2014 sampling-sensitive]"
    },
    "qwen3_coder_30b": {
     "grade": "FAIL",
     "note": "defeatist \u2014 'the fix must be in Drizzle ORM's migration implementation'"
    },
    "claude_haiku_4_5": {
-    "grade": "NEAR",
-    "note": "wrong 'migrator opens a separate connection' theory; fix still toggles the raw connection pragma"
+    "grade": "PASS",
+    "note": "correct: 'connection-level foreign_keys=ON overrides the migration SQL's PRAGMA'; layer-correct toggle helpers  [NEAR on the default-temp draw \u2014 sampling-sensitive cell]"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -415,7 +415,7 @@
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "rejects wrong cause, lands another ('something else deletes them')"
+    "note": "rejects the planted dx but lands another wrong cause ('task ID recreation breaks referential integrity')"
    },
    "qwen3_coder_30b": {
     "grade": "PASS",
@@ -423,7 +423,7 @@
    },
    "claude_haiku_4_5": {
     "grade": "FAIL",
-    "note": "architect: wrong 'SQLite defers FK checks until commit' cause"
+    "note": "wrong 'FK pragma state leaks across the transaction boundary; re-validates at commit' theory"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -445,16 +445,16 @@
     "note": "coordinated (synth\u2192coder) but fix wrong + fabricated imports"
    },
    "qwen3.5_9b_claude_distill": {
-    "grade": "ERROR",
-    "note": "lead made one delegation then returned an EMPTY result (0 chars, status completed) \u2014 degenerate, no fix"
+    "grade": "FAIL",
+    "note": "orchestrated correctly (synth\u2192coder, composed) but the fix was wrong  [ERROR/empty on the default-temp draw \u2014 sampling-sensitive]"
    },
    "qwen3_coder_30b": {
     "grade": "FAIL",
     "note": "orchestrated correctly (synth\u2192coder, composed) but the fix was vague/wrong"
    },
    "claude_haiku_4_5": {
-    "grade": "FAIL",
-    "note": "orchestrated CORRECTLY (dispatched synth\u2192coder, composed \u2014 no prefix trip) but the fix was wrong ('separate connection')"
+    "grade": "ERROR",
+    "note": "lead called bare `agent` (no server prefix) \u2192 task failed \u2014 the DEBT-004 trip; hit at temp=0, whereas it coordinated cleanly on the default-temp draw [sampling-sensitive]"
    },
    "claude_sonnet_4_6": {
     "grade": "ERROR",
@@ -578,7 +578,7 @@
    },
    "claude_haiku_4_5": {
     "grade": "PASS",
-    "note": "explicit Database.Database annotation"
+    "note": "explicit `import type { Database as DatabaseType }` annotation"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
