@@ -147,9 +147,24 @@ Chronological. Each test = one way a [scenario](scenarios/) was posed to the loc
 
 ---
 
+## Experiment 7 — Anthropic across the *full remaining set* (automated)
+> Experiment 6 ran 5 hand-built prompts; Experiment 7 closes the column by running **every other test** (1, 3–5, 9–17) on `claude-sonnet-4-6` through the new automated harness (`runner/run-study.mjs` + `runner/plan.json`), identical system + user prompts, provider swapped. Responses in `results/runs.anthropic-sonnet46.jsonl`; usage in `results/usage.json`.
+
+**Result: 12/12 PASS on the coding tasks** (T1, T3, T4, T5, T9, T10, T11, T12, T13, T15, T16, T17). Highlights: T13 the adversarial `architect` correctly *rejected* the planted wrong diagnosis and produced the grounded spec (the 14B inverted the fix); T10 selected the right facts among distractors **and** synthesized the connection-level fix (the 14B selected then hallucinated `new Migrator`); T11 used `server.once("error", …)` and rejected two distractor mechanisms. **T14 (orchestration) errored** — the `lead` called a bare `agent` tool and tripped the orchestrator's `missing server prefix` rule (a tool-naming artifact, not a coding failure; see Experiment 8 — qwen3.5 errored identically). Combined with Experiment 6, **Anthropic is 17/17 on the gradeable coding tasks.**
+
+## Experiment 8 — second local model: a 9B "claude-4.6 high-IQ" distill (full battery)
+> Does a small model *distilled toward Claude-4.6* close the gap the 14B couldn't? Ran all 18 tests on `qwen3.5-9b-claude-4.6-highiq-instruct-heretic-uncensored-mlx-mxfp8` (LM Studio) through the same harness. Responses in `results/runs.qwen35-9b-hiq.jsonl`.
+
+**Result: 7 PASS / 10 FAIL / 1 ERROR.** It passes exactly the categories the 14B already passed — `ADDITIVE` floor (T15–17), and `APPLY` cases where the answer is handed over (T5), selectable from a fact list (T10), or scaffolded by a multi-turn NEEDS step (T12). **Every `DIAGNOSE` test failed** with the same confabulation shape as the 14B (T1 "something calls `process.exit()`", T3 misreads the table-rebuild rename, T8 "both on line 410", T13 "something else deletes them"); the TS4023 gotcha (T18) failed too. Net of the 14B it *gained* T5/T10/T12 (better application + calibration — e.g. T12 correctly surfaced `(db as any).session.client` via NEEDS instead of fabricating) and *regressed* on T1 — a smaller model that follows instructions better but **does not diagnose any better**. T14 errored on the same tool-prefix trip as sonnet.
+
+**The full three-model table + by-requirement pass-rates: [`results/comparison.md`](results/comparison.md)** (machine-readable verdicts in `results/grades.manual.json`).
+
+---
+
 ## Cross-test synthesis
 
-- **The failures are the *model*, not the task** (Experiment 6). Re-running the 5 distinct failing prompts on `claude-sonnet-4-6` — identical system + user prompts — gave **5/5 correct** fixes (including the underspecified FK and the TS4023 gotcha; twice cleaner than the shipped fix). So "design the task better" has a ceiling set by the model: the reliable lever is **routing the diagnosis to a capable model**, not more scaffolding on the small one.
+- **The failures are the *model*, not the task** (Experiments 6–7). Re-running every failing/remaining prompt on `claude-sonnet-4-6` — identical system + user prompts — gave **17/17 correct** fixes on the gradeable coding tasks (including the underspecified FK and the TS4023 gotcha; several cleaner than the shipped fix). So "design the task better" has a ceiling set by the model: the reliable lever is **routing the diagnosis to a capable model**, not more scaffolding on the small one.
+- **Distilling "high-IQ Claude" into a 9B does not transfer the diagnosis capability** (Experiment 8). `qwen3.5-9b-claude-4.6-highiq` passed **0/9 `DIAGNOSE` tests cold** (1/9 if you count the multi-turn-scaffolded T12) — the same wall as the 14B. The distill bought better *application* of given facts and better calibration (it gained T5/T10/T12 over the 14B), but every cold cross-layer synthesis still confabulated. Cross-layer diagnosis is a property of the frontier model, not a style you can distill into 9B. `results/comparison.md`.
 - **The floor is real — pure additive/mechanical work is reliable** (Tests 15–17: 3/3 clean). But it's bounded by knowledge, not size: Test 18, a *one-line* change carrying a specialized detail (TS4023 needs a type annotation), failed the **same way** as the hard scenarios — misread the error, pattern-matched a keyword, shipped a plausible non-fix. So the safe leaf is "additive change with **no embedded knowledge gotcha**"; any gotcha must be supplied.
 - **Correctness ladder:** the reliable wins were Tests 15–17 (additive), Test 4 (small bug + pointer), Test 5 (fix pre-specified). Every test that required the model to *diagnose a subtle cause*, *compose a cross-layer fix*, or *apply a specialized fact it didn't have* failed — regardless of role, scaffold, injected facts, or orchestration.
 - **The wall is synthesis + grounding, not retrieval** (Test 10): it selects the right facts but can't compose them, and fabricates to cover the gap.

@@ -14,12 +14,11 @@ bodies** for every step.
 
 | | |
 |---|---|
-| Local model | `qwen2.5-14b-instruct` (LM Studio, OpenAI-compatible) |
-| Provider config | `{ "type": "lmstudio", "model": "qwen2.5-14b-instruct", "timeoutMs": 180000 }` |
+| Models compared | `qwen2.5-14b-instruct` and `qwen3.5-9b-claude-4.6-highiq-…` (LM Studio) · `claude-sonnet-4-6` (Anthropic) — same prompts, provider swapped |
 | MCP server | `agent-mcp-published` = `npx -y @adhd/agent-mcp@latest` (v1.0.1) |
-| DB | `agents-published.db` (isolated from the dev DB) |
-| Distributor | The strong session model acted as the DAG root, fanning tasks to local workers. Tasks are **ephemeral** (`agent_name` mode) unless a multi-turn session was needed. |
-| Grader | Manual inspection against each scenario's rubric (see caveats). |
+| DB | `agents-published.db` (isolated from the dev DB; persists every task + usage) |
+| Harness | [`runner/run-study.mjs`](runner/run-study.mjs) drives `plan.json` against any provider/model over stdio MCP. Tasks are **ephemeral** (`agent_name` mode) unless a multi-turn session/orchestration was needed. |
+| Grader | `runner/grade.py` (conservative auto-pass) → **hand-verified with teeth** against each scenario's rubric; final verdicts in `results/grades.manual.json`. |
 
 The subjects are **real** bugs/changes from earlier in the same engineering session,
 so we have a verified ground-truth fix for each (see `scenarios/`).
@@ -53,10 +52,23 @@ code-tasking/
   tests/
     test-<n>/mcp.jsonl           ← the exact MCP request bodies for that test, in order
     test-<n>/mcp.anthropic.jsonl ← (Experiment 6 tests) the same prompt, anthropic worker
-  results/                       ← authoritative server-side capture (responses + usage)
-    runs.jsonl                   ← every task: prompt + full raw result + usage telemetry
+  runner/                        ← one-command harness (drives any provider/model)
+    plan.json                    ← provider-agnostic test definitions (derived from tests/*.jsonl)
+    run-study.mjs                ← MCP client that replays plan.json against a model
+    grade.py                     ← conservative rubric auto-grader (first pass)
+  results/                       ← responses + usage capture
+    runs.jsonl                   ← every task in the server DB: prompt + raw result + usage
+    runs.<label>.jsonl           ← one harness run (e.g. anthropic-sonnet46, qwen35-9b-hiq)
     usage.json                   ← the task_usage table (tokens, tool_call_count, latency)
+    comparison.md                ← three-model differential table + by-requirement pass-rates
+    grades.manual.json           ← hand-graded verdicts (authoritative, override the auto-grader)
     INDEX.md                     ← chronological run table
+```
+
+Re-run the whole battery against any model in one command:
+```bash
+node runner/run-study.mjs --label <name> --provider lmstudio|anthropic --model <model> --tests all
+python3 runner/grade.py <name>      # first-pass grade; then hand-verify the CHECKs
 ```
 
 `tests/` holds the **requests**; `results/` holds the **responses + usage**, dumped
@@ -113,6 +125,7 @@ separate "produces plausible output" from "produces correct output."
 6. **Two positives:** the offload *topology* works (a 14B `lead` reliably dispatched synth→coder→compose, Test 14), and the only reliable success was **spelling out the fix layer + handing the exact API** (Test 5) — i.e., offload *application*, not *diagnosis*.
 7. **The failures are model-bound, not prompt-bound** (Experiment 6). Re-running the *exact* failing prompts on `claude-sonnet-4-6` — same system + user prompt, only the provider swapped — passed **5/5** (incl. the underspecified FK and the TS4023 gotcha; twice cleaner than the human-shipped fix). The same context that left the 14B confabulating was sufficient for a capable model.
 8. **The floor (Tests 15–17) is real but knowledge-bounded:** pure additive/mechanical edits pass reliably; a *one-line* change with a specialized detail (Test 18, TS4023) fails the same way as the hard set.
+9. **A 9B "Claude-4.6 high-IQ distill" does not close the gap** (Experiment 8). Running all 18 tests on `qwen3.5-9b-claude-4.6-highiq` scored **7 PASS / 10 FAIL** — it passes only the same categories the 14B did (additive + fix-handed-over), and fails **every cold diagnosis test** with the identical confabulation shape. Distillation bought *application + calibration*, not *synthesis*. Full three-model table: [`results/comparison.md`](results/comparison.md). The whole battery is now a one-command harness — [`runner/`](runner/) — that runs `plan.json` against any provider/model.
 
 ### Recipe that actually works
 > **Cognition at the root, application at the leaves, verification on every edge.**
