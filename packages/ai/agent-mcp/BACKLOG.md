@@ -307,6 +307,38 @@ qualified name canonical for policy/dispatch.
 
 ---
 
+### DEBT-005 — provider `timeoutMs` doesn't bound the OpenAI-SDK client's HTTP timeout
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** providers (`src/providers/openai.ts`)
+- **Reported:** 2026-06-16
+
+**Problem / Description** — The OpenAI/LM Studio provider constructs `new OpenAI({apiKey, baseURL})`
+without a `timeout`, so it uses the SDK default (~10 min). The agent's `timeoutMs` only feeds the
+orchestrator's `AbortSignal.timeout()` — it is **not** passed to the SDK client. With a slow local
+model, the SDK's own HTTP timeout fires first and throws `Request timed out` (a generic
+`PROVIDER_ERROR`), *not* the actionable `PROVIDER_TIMEOUT` ("increase timeoutMs…"), and **raising
+`timeoutMs` has no effect**. Observed running a dense 27B reasoning model: long responses (~15 tok/s
+× verbose `<think>`) died at the SDK limit regardless of `--timeout 1200000`.
+
+**Impact** — Slow models (large dense / long reasoning) can't complete long generations; the failure
+is mislabeled and un-tunable via the documented knob. Bit the code-tasking study (6 of the 27b's
+verbose cells DNF'd as `Request timed out`).
+
+**Proposed fix / Approach** — Pass the resolved timeout to the SDK client (or per-request):
+`new OpenAI({ …, timeout: this.config.timeoutMs })`, or `client.chat.completions.create(body, { signal, timeout })`. Then `timeoutMs` bounds both the abort signal and the HTTP request consistently.
+Consider the same audit for the anthropic provider's client.
+
+**Acceptance criteria** — With a stubbed slow provider, a request that exceeds the SDK default but is
+under `timeoutMs` completes (doesn't throw `Request timed out`); one that exceeds `timeoutMs` throws
+the actionable `PROVIDER_TIMEOUT`. Reverting the passthrough turns the first test red.
+
+**References** — `src/providers/openai.ts` (client construction + `chat()`); error seen as
+"Provider call failed: Request timed out." Surfaced by `docs/agent-mcp/study/code-tasking/`
+(Qwen3.5-27B-opus-distilled run, Experiment 12).
+
+---
+
 ## ✅ Done
 
 ### BUG-001 — SSE server crashes the whole process on `EADDRINUSE`

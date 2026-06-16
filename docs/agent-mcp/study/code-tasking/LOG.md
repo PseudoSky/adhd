@@ -186,6 +186,13 @@ Earlier runs set **only** `model` + `timeout` — temperature ran at provider de
 
 Takeaway: **borderline cells are sampling-sensitive; the ladder shape is not.** Greedy DIAGNOSE ladder: gemma 0/9 · 14b 0/9 · qwen3.5-9b 0/9 · qwen3-coder 2/9 · haiku 5/9 · sonnet 9/9.
 
+## Experiment 12 — Qwen3.5-27B-Claude-4.6-Opus-Distilled (dense, reasoning; temp=0) — PARTIAL/INCONCLUSIVE
+> A dense 27B *reasoning* distill (emits a `<think>` block; MLX-4bit ~15 GB on the M1 Max). Ran at temp=0. **Not added to the scoreboard** — 6 of 18 cells DNF'd.
+
+**Why partial:** at ~15 tok/s, the verbose cells exceeded the **OpenAI-SDK client's ~10-min HTTP timeout** (error `Request timed out`), which agent-mcp's `timeoutMs` does **not** override — so `--timeout 1200000` had no effect (logged as **BACKLOG DEBT-005**). DNF: T3, T9, T10, T11, T12, T13 — including most of the *cold-FK-synthesis* cells.
+
+**12/18 completed → 9 PASS / 1 NEAR / 2 FAIL.** Strong where it ran: SSE 2/2 (T1/T7, names the `'error'` event), audit 2/2 (**T8 neutral caught cold**), and **T18 (TS4023) PASS — first local model to clear that gotcha** (`: Database` annotation + `export {sqlite}`); floor 3/3. Misses: T2 (naive in-SQL FK disable — same trap), **T6 (the one cold full-context FK that ran → re-enable-validation confab, FAIL)**; T14 orchestrated but hedged a "defensive fix" (NEAR). **Verdict on FK diagnosis: inconclusive** — the cells that would settle it (T3/9/12/13) timed out, and the one that ran (T6) failed. Moving to the **MoE 35B-A3B opus-distill** (3B-active → ~3× faster, clears the HTTP limit) for a complete column on this lineage. Partial results retained in the DB / `runs.jsonl`, not the board.
+
 ---
 
 ## Cross-test synthesis
