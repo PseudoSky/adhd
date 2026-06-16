@@ -9,6 +9,20 @@ planning in [ROADMAP.md](./ROADMAP.md).
 
 ---
 
+## [1.1.2] — 2026-06-16
+
+### Internal
+
+- **Nx release pipeline now enforces build + test before publish.** Added
+  `"projectsRelationship": "independent"` to `nx.json` release config (fixes
+  `npx nx release publish --projects=agent-mcp` which previously failed with a
+  config validation error) and promoted `dependsOn: ["build", "test"]` from
+  `project.json` to the workspace-level `targetDefaults.nx-release-publish`.
+  The canonical publish command is now `npx nx release publish --projects=agent-mcp`
+  rather than manual `npm publish`. No runtime changes.
+
+---
+
 ## [1.1.1] — 2026-06-16
 
 ### Added
