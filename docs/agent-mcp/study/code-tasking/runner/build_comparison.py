@@ -72,7 +72,7 @@ VSON[6]=("PASS","exact PRAGMA-no-op-in-transaction; conn-level fkWasOn + try/fin
 VSON[10]=("PASS","selected the right facts AND synthesized the connection-level fix")
 VSON[13]=("PASS","rejected the planted wrong diagnosis; correct cause + grounded spec")
 VSON[18]=("PASS","explicit type annotation + .d.ts-nameability note")
-VSON[14]=("ERROR","lead called bare `agent` (no server prefix) → orchestrator rejected → task failed; orphaned a sub-agent session (BUG-002 repro)")
+VSON[14]=("ERROR","lead called bare `agent` (no server prefix) → orchestrator rejected → task failed (DEBT-004); same at default temp AND greedy — sonnet is stable here; orphaned a sub-agent session (BUG-002 repro)")
 
 VGEM={
  1:("FAIL","'server.listen() throws synchronously' — wrong; it's the async 'error' event"),
@@ -119,7 +119,7 @@ MODELS=[
  ("qwen3.5_9b_claude_distill","qwen3.5-9b","results/runs.qwen35-9b-hiq.jsonl (temp=0, greedy)",VQ35),
  ("qwen3_coder_30b","qwen3-coder-30b","results/runs.qwen3-coder-30b.jsonl (temp=0, greedy)",VQ3C),
  ("claude_haiku_4_5","haiku-4.5","results/runs.anthropic-haiku45.jsonl (temp=0, greedy)",VHAI),
- ("claude_sonnet_4_6","sonnet-4.6","results/runs.anthropic-sonnet46.jsonl + Exp6",VSON),
+ ("claude_sonnet_4_6","sonnet-4.6","results/runs.anthropic-sonnet46.jsonl (temp=0, greedy)",VSON),
 ]
 def tal(v):
     p=sum(v[i][0]=="PASS" for i in range(1,19)); n=sum(v[i][0] in("NEAR","PARTIAL") for i in range(1,19))
@@ -154,12 +154,12 @@ md=["# Multi-model differential — code-tasking study","",
  "pass and is **overridden** here (it false-passes 'right fix / wrong cause' cases). ",
  "`NEAR`/`PARTIAL` = correct or working fix with a wrong/muddled stated cause; `ERROR` =",
  "orchestration plumbing failure, not a coding verdict. Columns in ascending capability.","",
- "> **Sampling:** `qwen3-coder-30b` was run at **temperature 0 (greedy, deterministic)**; the other",
- "> five ran at the provider **default temperature** (LM Studio ~0.8, Anthropic 1.0) — single draws.",
- "> So each non-qwen3-coder cell is one stochastic sample (the study's n=1 caveat). Re-running",
- "> qwen3-coder at temp 0 vs its earlier default-temp draw left the **score identical (9.5)** but",
- "> swapped two cells (T13 NEAR→PASS, T10 PASS→NEAR) — borderline cells are sampling-sensitive; the",
- "> ladder shape is not. (`run-study.mjs --temperature 0` makes any model deterministic.)","",
+ "> **Sampling:** `qwen3.5-9b`, `qwen3-coder-30b`, `haiku-4.5`, and `sonnet-4.6` were run at",
+ "> **temperature 0 (greedy, deterministic)**; `gemma-4-e4b` and `qwen2.5-14b` remain provider-default",
+ "> single draws. Borderline cells are sampling-sensitive — greedy moved qwen3.5-9b 7.0→6.0 (its lone",
+ "> diagnosis pass was luck → 0/9), haiku 13.5→14.0, and flipped haiku's T14 into the prefix trip;",
+ "> sonnet was **identical at both temps** (17 PASS / T14 trip) — the frontier model doesn't wobble.",
+ "> The **ladder shape is invariant** to temperature. (`run-study.mjs --temperature 0` for determinism.)","",
  "| # | requires | SP | posing | " + " | ".join(LABELS) + " |",
  "|---|---|---|---|" + "---|"*len(LABELS)]
 for i in range(1,19):
