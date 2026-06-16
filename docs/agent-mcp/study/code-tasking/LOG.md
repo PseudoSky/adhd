@@ -177,7 +177,14 @@ Chronological. Each test = one way a [scenario](scenarios/) was posed to the loc
 **Takeaway: code-specialization + size buy *application* and careful *code-reading*, not reliable *cross-layer synthesis* (FK DIAGNOSE 2/9).** Six-model `DIAGNOSE` ladder: gemma 0/9 · 14b 0/9 · qwen3.5-9b 1/9 · **qwen3-coder-30b 2/9** · haiku 4/9 · sonnet 9/9 — only the frontier model clears it.
 
 ### Temperature control (methodology fix)
-Earlier runs set **only** `model` + `timeout` — temperature ran at provider defaults (LM Studio ~0.8, Anthropic 1.0), so every cell was a single stochastic draw (the study's n=1 caveat, now named). `run-study.mjs` now controls **temperature (default 0) + max_tokens**; verified end-to-end (direct LM Studio probe: temp 0 → 0.996 run-to-run similarity = greedy, vs temp 0.8 → 0.567 = sampling; source forwards it at `providers/openai.ts:95`). Residual: MLX/Metal MoE has ~0.4% float/expert-routing non-determinism even at greedy — too small to flip a grade. Re-running qwen3-coder at temp 0 vs its default-temp draw kept the **score identical (9.5)** but swapped two borderline cells (**T13 NEAR→PASS, T10 PASS→NEAR**) — concrete evidence that borderline cells are sampling-sensitive while the ladder shape is not. The other five models remain default-temp single draws (re-run with `--temperature 0` for a fully deterministic board).
+Earlier runs set **only** `model` + `timeout` — temperature ran at provider defaults (LM Studio ~0.8, Anthropic 1.0), so every cell was a single stochastic draw (the study's n=1 caveat, now named). `run-study.mjs` now controls **temperature (default 0) + max_tokens**; verified end-to-end (direct LM Studio probe: temp 0 → 0.996 run-to-run similarity = greedy, vs temp 0.8 → 0.567 = sampling; source forwards it at `providers/openai.ts:95`). Residual: MLX/Metal MoE has ~0.4% float/expert-routing non-determinism even at greedy — too small to flip a grade.
+
+**Greedy reruns (temp=0) so far — qwen3-coder-30b, qwen3.5-9b, haiku-4.5** (gemma, qwen2.5-14b, sonnet remain default-temp single draws). Scores held shape; several borderline cells moved, which is the point:
+- **qwen3-coder-30b:** 9.5 → **9.5** (T13 NEAR→PASS, T10 PASS→NEAR — offset).
+- **qwen3.5-9b:** 7.0 → **6.0**. Its *only* diagnosis "pass" (T12, multi-turn) was **sampling luck** — at greedy it correctly notes `sqlite` is private but falls back to "verify FK with queries" (non-working) → DIAGNOSE **1/9 → 0/9**, joining gemma + the 14b at the floor. (T14 also flipped ERROR/empty → FAIL: it orchestrated this time, wrong fix.)
+- **haiku-4.5:** 13.5 → **14.0** (T12 NEAR→PASS). And T14 flipped FAIL→**ERROR**: greedy haiku's `lead` hit the **bare-`agent` prefix trip (DEBT-004)** that it dodged at default temp — so that trip is itself sampling-sensitive (sonnet hit it both times).
+
+Takeaway: **borderline cells are sampling-sensitive; the ladder shape is not.** Greedy DIAGNOSE ladder: gemma 0/9 · 14b 0/9 · qwen3.5-9b 0/9 · qwen3-coder 2/9 · haiku 5/9 · sonnet 9/9.
 
 ---
 

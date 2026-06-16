@@ -21,7 +21,7 @@
    },
    {
     "name": "port injectable",
-    "ok": true
+    "ok": false
    }
   ],
   "error": null
@@ -63,7 +63,7 @@
    },
    {
     "name": "connection-level fix (pragma OFF before migrate, restore after)",
-    "ok": true
+    "ok": false
    },
    {
     "name": "keeps the cascade (does not weaken it)",
@@ -97,11 +97,11 @@
   "tier": "discriminator",
   "posing": "B3 spelled-out fix+API",
   "mode": "single",
-  "verdict": "CHECK",
+  "verdict": "PASS",
   "signals": [
    {
     "name": "names PRAGMA-no-op-in-transaction cause",
-    "ok": false
+    "ok": true
    },
    {
     "name": "connection-level fix (pragma OFF before migrate, restore after)",
@@ -120,11 +120,11 @@
   "tier": "discriminator",
   "posing": "B_FULL code-fixer FK",
   "mode": "single",
-  "verdict": "CHECK",
+  "verdict": "PASS",
   "signals": [
    {
     "name": "names PRAGMA-no-op-in-transaction cause",
-    "ok": false
+    "ok": true
    },
    {
     "name": "connection-level fix (pragma OFF before migrate, restore after)",
@@ -147,7 +147,7 @@
   "signals": [
    {
     "name": "identifies async 'error' EventEmitter event (not try/catch)",
-    "ok": true
+    "ok": false
    },
    {
     "name": "adds server.on/once('error') handler",
@@ -155,7 +155,7 @@
    },
    {
     "name": "process survives / SSE disabled",
-    "ok": false
+    "ok": true
    },
    {
     "name": "port injectable",
@@ -262,11 +262,11 @@
   "tier": "discriminator",
   "posing": "M1 multi-turn synth\u2192code",
   "mode": "multiturn",
-  "verdict": "PASS",
+  "verdict": "CHECK",
   "signals": [
    {
     "name": "names PRAGMA-no-op-in-transaction cause",
-    "ok": true
+    "ok": false
    },
    {
     "name": "connection-level fix (pragma OFF before migrate, restore after)",
@@ -308,8 +308,21 @@
   "tier": "discriminator",
   "posing": "M3 orchestrate lead\u2192synth\u2192coder",
   "mode": "orchestrate",
-  "verdict": "ERROR",
-  "signals": [],
+  "verdict": "CHECK",
+  "signals": [
+   {
+    "name": "names PRAGMA-no-op-in-transaction cause",
+    "ok": false
+   },
+   {
+    "name": "connection-level fix (pragma OFF before migrate, restore after)",
+    "ok": false
+   },
+   {
+    "name": "keeps the cascade (does not weaken it)",
+    "ok": true
+   }
+  ],
   "error": null
  },
  {
