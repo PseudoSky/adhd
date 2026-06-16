@@ -60,3 +60,45 @@ shape with a real bug; `ERROR` = orchestration plumbing failure, not a coding ve
   tool-naming convention, *not* capability — excluded from the capability tally.
 
 _Usage/latency per run: `results/usage.json` (all tasks) + `results/runs.<label>.jsonl`._
+
+---
+
+## Results by delegation structure
+
+Holding the **same** bug constant (the FK-cascade migration scenario) and varying only
+the delegation topology isolates what the structure itself buys. `depth` = recursion
+depth; `ERROR` = orchestration plumbing trip, not a coding verdict.
+
+| structure | topology | test | 14B | qwen3.5-9b | sonnet-4.6 |
+|---|---|---|---|---|---|
+| direct single-shot | 1 agent · 1 turn · depth 0 | T2 | FAIL | FAIL | PASS |
+| direct single-shot | 1 agent · 1 turn · depth 0 | T3 | FAIL | FAIL | PASS |
+| direct single-shot | 1 agent · 1 turn · depth 0 | T6 | FAIL | FAIL | PASS |
+| direct + fix handed over | 1 agent · 1 turn · depth 0 | T5 | NEAR | PASS | PASS |
+| direct + heavy role (ts-pro) | 1 agent · 1 turn · depth 0 | T9 | FAIL | FAIL | PASS |
+| direct + facts in prompt | 1 agent · 1 turn · depth 0 | T10 | FAIL | PASS | PASS |
+| stateful multi-turn (diagnose→code) | 1 agent · 2 turns · depth 0 | T12 | FAIL | PASS | PASS |
+| pipeline review stage (architect) | 1 agent · 1 turn · depth 0 | T13 | FAIL | FAIL | PASS |
+| recursive orchestration (lead→synth→coder) | 3 agents · depth 1 | T14 | FAIL¹ | ERROR² | ERROR² |
+
+¹ 14B coordinated correctly (dispatched synth→coder, composed) but the fix was wrong.
+² Both capable models tripped the orchestrator's bare-tool-name rule (see BACKLOG
+DEBT-004); the orchestration also orphaned a sub-agent session (BACKLOG BUG-002).
+
+### What the structure buys
+
+- **Information content moves the needle; agent/turn fan-out does not.** The only
+  structures that flipped a small model FAIL→PASS were ones that *added information*
+  (T5 hands over the fix, T10 lists the facts) or *scaffolded the reasoning into
+  steps* (T12 diagnose-then-code, which let qwen3.5-9b reach the NEEDS path). Adding
+  **agents or review stages without adding information** — the pipeline reviewer (T13)
+  and the recursive orchestration (T14) — did **not** rescue either small model.
+- **More machinery = more failure surface, not more capability.** Recursive
+  orchestration was the *only* structure that broke the frontier model — and it broke
+  on **plumbing** (the tool-prefix trip), not reasoning, while also leaking a session.
+  The richest delegation topology had the worst reliability across all three models.
+- **The frontier model needs the least structure.** sonnet-4.6 solved the bug
+  direct, single-shot, depth 0 (T2/T3/T6) — every elaboration was unnecessary for it
+  and the most elaborate one actively hurt. The recipe stands: put cognition on a
+  capable model and keep the delegation graph shallow; reserve fan-out for genuinely
+  parallel work, not for trying to manufacture a diagnosis a small model can't make.
