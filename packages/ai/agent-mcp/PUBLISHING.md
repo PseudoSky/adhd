@@ -6,46 +6,58 @@ See the [root PUBLISHING.md](../../../../PUBLISHING.md) for the general version-
 
 ---
 
-## 0. Pre-publish: verify the local build BEFORE publishing
+## Pre-publish checklist
 
-**This step is mandatory. Do not run `npm publish` until it passes.**
+**Run the full sequence below, top-to-bottom, without skipping steps.**
 
-### 0a. Build
+### Step 1 — Bump the version (from workspace root)
 
 ```bash
-npx nx reset && npx nx build agent-mcp
+# run from /path/to/adhd (workspace root), NOT from inside packages/ai/agent-mcp
+npm version patch --no-git-tag-version --prefix packages/ai/agent-mcp
 ```
 
-`nx reset` is required (not just `--skip-nx-cache`). `--skip-nx-cache` skips the
-task-level result cache but the Nx file-hash cache can still serve a stale asset
-copy — causing the `drizzle/` migrations folder to be silently absent from `dist/`.
-`nx reset` busts both caches. The build is configured with `clean: true` — it wipes
-the output directory first, then compiles TypeScript, copies `drizzle/` (migrations),
-and auto-copies `package.json` (with the correct version) to
-`dist/packages/ai/agent-mcp/`. No manual copy needed.
+Or edit `packages/ai/agent-mcp/package.json` manually.  The version change
+invalidates Nx's build cache so the next build is always fresh.
 
-After building, confirm the output contains the migrations folder:
+> ⚠️ **CWD matters.** Never `cd packages/ai/agent-mcp && npm version` — that
+> changes your shell CWD, and relative paths like `ls dist/...` will silently
+> resolve to the wrong directory for the rest of the session.
+
+### Step 2 — Clean dist and build
+
+```bash
+rm -rf dist/packages/ai/agent-mcp
+npx nx build agent-mcp --skip-nx-cache
+```
+
+Removing the dist directory first guarantees that Nx's task-result cache cannot
+serve a stale entry. `--skip-nx-cache` ensures the executor actually runs.
+The build is configured with `clean: true` — it wipes the output directory,
+compiles TypeScript, copies `drizzle/` (migrations), and writes `package.json`.
+
+After building, confirm all three folders are present:
 
 ```bash
 ls dist/packages/ai/agent-mcp/
 # must show: drizzle  package.json  src
 ```
 
-If `drizzle/` is absent, the published server will crash with
-`Can't find meta/_journal.json` on every startup. Do not proceed.
+If `drizzle/` is absent the published server crashes at startup with
+`Can't find meta/_journal.json`. Do not proceed.
 
-### 0b. Reload the MCP connection
+### Step 3 — Reload the MCP connection
 
 In Claude Code, run `/mcp` and confirm `agent-mcp` (the local dist server) reconnects
 successfully. A `-32000` error means the server crashed at startup — do not proceed.
 
-### 0c. Verify server version
+### Step 4 — Verify server version
 
 After reconnecting, call the `guide` tool on `agent-mcp`. The response includes the
 server version in the MCP server info. Confirm it matches the version in
 `packages/ai/agent-mcp/package.json`.
 
-### 0d. Run a functional smoke test
+### Step 5 — Run a functional smoke test
 
 Create a minimal agent, run a task, and clean up — all against the **local** server
 (`mcp__agent-mcp__*`, not `mcp__agent-mcp-published__*`):
@@ -59,9 +71,31 @@ agent_delete: { name: "pre-pub-check" }
 
 Only proceed to publish once the task completes successfully.
 
+### Step 6 — Publish
+
+```bash
+npx nx release publish --projects=agent-mcp
+```
+
+This command:
+1. Runs `npx nx test agent-mcp` (via `dependsOn: ["build", "test"]`)
+2. Runs `npx nx build agent-mcp` — served from cache (Step 2 just built it; inputs unchanged)
+3. Runs `npm publish dist/packages/ai/agent-mcp --access public`
+
+To preview what would be published without actually pushing to npm:
+
+```bash
+npx nx release publish --projects=agent-mcp --dry-run
+```
+
+The dry-run output lists every file in the tarball. Confirm `drizzle/` appears before
+doing the real publish.
+
 ---
 
-## 1. Start LM Studio
+## Smoke test against the published version
+
+### 1. Start LM Studio
 
 Open LM Studio, load a model, and enable the local server on `http://localhost:1234`.
 
@@ -77,7 +111,7 @@ Note the exact model ID returned — you will need it below.
 
 ---
 
-## 2. Verify .mcp.json points to the latest published version
+### 2. Verify .mcp.json points to the latest published version
 
 Check `.mcp.json` in the repo root. The `agent-mcp-published` entry must use `@adhd/agent-mcp@latest`:
 
@@ -108,7 +142,7 @@ Reconnect MCP in Claude Code (`/mcp`) and confirm `agent-mcp-published` shows as
 
 ---
 
-## 3. Run the Claude → LM Studio smoke test
+### 3. Run the Claude → LM Studio smoke test
 
 The following MCP tool sequence dispatches a task through a `claudecli` orchestrator
 that delegates to an LM Studio worker. Run these in order via Claude Code MCP tools
@@ -163,7 +197,7 @@ Expected: `status: "completed"` with a result that quotes the worker's answer.
 
 ---
 
-## 4. Verify logs via the database
+### 4. Verify logs via the database
 
 The SQLite database is the authoritative record of what actually ran.
 
