@@ -13,12 +13,26 @@ See the [root PUBLISHING.md](../../../../PUBLISHING.md) for the general version-
 ### 0a. Build
 
 ```bash
-npx nx build agent-mcp --skip-nx-cache
+npx nx reset && npx nx build agent-mcp
 ```
 
-The build is configured with `clean: true` — it wipes the output directory first, then
-compiles TypeScript, copies `drizzle/` (migrations), and auto-copies `package.json`
-(with the correct version) to `dist/packages/ai/agent-mcp/`. No manual copy needed.
+`nx reset` is required (not just `--skip-nx-cache`). `--skip-nx-cache` skips the
+task-level result cache but the Nx file-hash cache can still serve a stale asset
+copy — causing the `drizzle/` migrations folder to be silently absent from `dist/`.
+`nx reset` busts both caches. The build is configured with `clean: true` — it wipes
+the output directory first, then compiles TypeScript, copies `drizzle/` (migrations),
+and auto-copies `package.json` (with the correct version) to
+`dist/packages/ai/agent-mcp/`. No manual copy needed.
+
+After building, confirm the output contains the migrations folder:
+
+```bash
+ls dist/packages/ai/agent-mcp/
+# must show: drizzle  package.json  src
+```
+
+If `drizzle/` is absent, the published server will crash with
+`Can't find meta/_journal.json` on every startup. Do not proceed.
 
 ### 0b. Reload the MCP connection
 
