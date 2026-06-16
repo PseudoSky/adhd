@@ -1,16 +1,24 @@
 {
  "models": {
-  "qwen2.5-14b-instruct": {
-   "label": "(original study tests/test-*/mcp.jsonl)"
+  "gemma_4_e4b": {
+   "display": "gemma-4-e4b",
+   "source": "results/runs.gemma-4-e4b.jsonl"
   },
-  "qwen3.5-9b-claude-4.6-highiq-...": {
-   "label": "results/runs.qwen35-9b-hiq.jsonl"
+  "qwen2.5_14b": {
+   "display": "qwen2.5-14b",
+   "source": "(original study tests/test-*/mcp.jsonl)"
   },
-  "claude-haiku-4-5-20251001": {
-   "label": "results/runs.anthropic-haiku45.jsonl"
+  "qwen3.5_9b_claude_distill": {
+   "display": "qwen3.5-9b",
+   "source": "results/runs.qwen35-9b-hiq.jsonl"
   },
-  "claude-sonnet-4-6": {
-   "label": "results/runs.anthropic-sonnet46.jsonl + Exp6"
+  "claude_haiku_4_5": {
+   "display": "haiku-4.5",
+   "source": "results/runs.anthropic-haiku45.jsonl"
+  },
+  "claude_sonnet_4_6": {
+   "display": "sonnet-4.6",
+   "source": "results/runs.anthropic-sonnet46.jsonl + Exp6"
   }
  },
  "grades_legend": "PASS = correct cause + working fix \u00b7 NEAR/PARTIAL = correct/working fix with a wrong or muddled stated cause \u00b7 FAIL = wrong cause and non-working fix \u00b7 ERROR = orchestration plumbing failure (not a coding verdict)",
@@ -21,6 +29,10 @@
    "requires": "DIAGNOSE",
    "posing": "SSE well-scoped",
    "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "'server.listen() throws synchronously' \u2014 wrong; it's the async 'error' event"
+   },
    "qwen2.5_14b": {
     "grade": "PARTIAL",
     "note": "handler \u2713 but cause wrong + breaks sync caller"
@@ -44,6 +56,10 @@
    "requires": "DIAGNOSE",
    "posing": "FK underspecified",
    "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "FK confab; never reaches the transaction-no-op"
+   },
    "qwen2.5_14b": {
     "grade": "FAIL",
     "note": "invalid MySQL dialect, weakens cascade"
@@ -67,6 +83,10 @@
    "requires": "DIAGNOSE",
    "posing": "FK context-rich",
    "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "'CREATE TABLE sets up constraints before INSERT' \u2014 DDL-ordering confab"
+   },
    "qwen2.5_14b": {
     "grade": "FAIL",
     "note": "BEGIN/COMMIT in the SQL \u2014 still a no-op"
@@ -90,6 +110,10 @@
    "requires": "APPLY",
    "posing": "audit + pointer hint",
    "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "PASS",
+    "note": "comment-skip fix (hinted)"
+   },
    "qwen2.5_14b": {
     "grade": "PASS",
     "note": "comment-skip fix (pointer did the work)"
@@ -113,6 +137,10 @@
    "requires": "APPLY",
    "posing": "FK fix+API handed over",
    "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "NEAR",
+    "note": "applied the handed-over connection-level OFF\u2192migrate\u2192try; spurious await on sync calls; restore unconfirmed"
+   },
    "qwen2.5_14b": {
     "grade": "NEAR",
     "note": "right approach; restore used READ form \u2192 FK never re-enabled"
@@ -136,6 +164,10 @@
    "requires": "DIAGNOSE",
    "posing": "FK full-context",
    "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "FK confab"
+   },
    "qwen2.5_14b": {
     "grade": "FAIL",
     "note": "cause inverted; irrelevant fix"
@@ -159,6 +191,10 @@
    "requires": "DIAGNOSE",
    "posing": "SSE full-context",
    "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "'error callback provided by listen()' \u2014 muddled; no clear 'error' handler/cause"
+   },
    "qwen2.5_14b": {
     "grade": "FAIL",
     "note": "try/catch around async listen \u2014 can't catch 'error'"
@@ -182,6 +218,10 @@
    "requires": "DIAGNOSE",
    "posing": "audit neutral",
    "system_prompt": "code-fixer",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "'finds an earlier instance' \u2014 circles it but never identifies the comment-on-306"
+   },
    "qwen2.5_14b": {
     "grade": "FAIL",
     "note": "missed the comment; still matches it"
@@ -205,6 +245,10 @@
    "requires": "DIAGNOSE",
    "posing": "FK role-primed (ts-pro)",
    "system_prompt": "ts-pro",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "FK ts-pro \u2014 confab, no txn-no-op"
+   },
    "qwen2.5_14b": {
     "grade": "FAIL",
     "note": "raised 'transaction scope' but fix = BEGIN/COMMIT in SQL"
@@ -228,6 +272,10 @@
    "requires": "APPLY",
    "posing": "FK facts-in-prompt (select)",
    "system_prompt": "ts-pro",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "selected the 'ignored inside transaction' fact but applied the PRAGMA IN-transaction (the no-op) \u2014 wrong fix layer"
+   },
    "qwen2.5_14b": {
     "grade": "FAIL",
     "note": "selected facts, hallucinated migrate API"
@@ -251,6 +299,10 @@
    "requires": "APPLY",
    "posing": "SSE fact-in-role",
    "system_prompt": "ts-pro",
+   "gemma_4_e4b": {
+    "grade": "NEAR",
+    "note": "role supplied the fact; added server.on('error') (load-bearing fix) but cause muddled / port unconfirmed"
+   },
    "qwen2.5_14b": {
     "grade": "FAIL",
     "note": "ignored the fact; uncompilable; High-confidence wrong"
@@ -274,6 +326,10 @@
    "requires": "DIAGNOSE",
    "posing": "FK multi-turn synth\u2192code",
    "system_prompt": "synth-coder (anti-fab)",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "FK multi-turn \u2014 confab"
+   },
    "qwen2.5_14b": {
     "grade": "FAIL",
     "note": "anti-fab capped one hallucination, relocated to invalid SQL"
@@ -297,6 +353,10 @@
    "requires": "DIAGNOSE",
    "posing": "FK adversarial architect",
    "system_prompt": "architect (adversarial)",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "architect: inverted cause ('PRAGMA OFF causes the deletion')"
+   },
    "qwen2.5_14b": {
     "grade": "FAIL",
     "note": "rejected wrong cause but inverted the fix"
@@ -320,6 +380,10 @@
    "requires": "ORCH",
    "posing": "FK orchestrate lead\u2192synth\u2192coder",
    "system_prompt": "lead (orchestrator)",
+   "gemma_4_e4b": {
+    "grade": "ERROR",
+    "note": "lead PROVIDER_ERROR \u2014 orchestration failed (4B lead could not drive the delegation)"
+   },
    "qwen2.5_14b": {
     "grade": "FAIL",
     "note": "coordinated (synth\u2192coder) but fix wrong + fabricated imports"
@@ -343,6 +407,10 @@
    "requires": "ADDITIVE",
    "posing": "floor: list filter",
    "system_prompt": "code-impl",
+   "gemma_4_e4b": {
+    "grade": "PASS",
+    "note": "optional is_ephemeral filter"
+   },
    "qwen2.5_14b": {
     "grade": "PASS",
     "note": "number enum (different API, consistent)"
@@ -366,6 +434,10 @@
    "requires": "ADDITIVE",
    "posing": "floor: optional port param",
    "system_prompt": "code-impl",
+   "gemma_4_e4b": {
+    "grade": "PASS",
+    "note": "optional port/host defaulted"
+   },
    "qwen2.5_14b": {
     "grade": "PASS",
     "note": "optional port/host defaulted"
@@ -389,6 +461,10 @@
    "requires": "ADDITIVE",
    "posing": "floor: extend enum",
    "system_prompt": "code-impl",
+   "gemma_4_e4b": {
+    "grade": "PASS",
+    "note": "both enums extended"
+   },
    "qwen2.5_14b": {
     "grade": "PASS",
     "note": "both enums updated; flagged other refs"
@@ -412,6 +488,10 @@
    "requires": "GOTCHA",
    "posing": "floor+TS4023 gotcha",
    "system_prompt": "code-impl",
+   "gemma_4_e4b": {
+    "grade": "FAIL",
+    "note": "exported db; sqlite line unchanged \u2014 no Database.Database annotation (still TS4023)"
+   },
    "qwen2.5_14b": {
     "grade": "FAIL",
     "note": "renamed var \u2014 still TS4023; no annotation"

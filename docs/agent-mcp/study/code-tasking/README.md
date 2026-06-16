@@ -14,7 +14,7 @@ bodies** for every step.
 
 | | |
 |---|---|
-| Models compared | `qwen2.5-14b-instruct` and `qwen3.5-9b-claude-4.6-highiq-…` (LM Studio) · `claude-haiku-4-5` and `claude-sonnet-4-6` (Anthropic) — same prompts, provider swapped |
+| Models compared | `gemma-4-e4b`, `qwen2.5-14b-instruct`, `qwen3.5-9b-claude-4.6-highiq-…` (LM Studio) · `claude-haiku-4-5`, `claude-sonnet-4-6` (Anthropic) — same prompts, provider swapped |
 | MCP server | `agent-mcp-published` = `npx -y @adhd/agent-mcp@latest` (v1.0.1) |
 | DB | `agents-published.db` (isolated from the dev DB; persists every task + usage) |
 | Harness | [`runner/run-study.mjs`](runner/run-study.mjs) drives `plan.json` against any provider/model over stdio MCP. Tasks are **ephemeral** (`agent_name` mode) unless a multi-turn session/orchestration was needed. |
@@ -127,10 +127,12 @@ separate "produces plausible output" from "produces correct output."
 8. **The floor (Tests 15–17) is real but knowledge-bounded:** pure additive/mechanical edits pass reliably; a *one-line* change with a specialized detail (Test 18, TS4023) fails the same way as the hard set.
 9. **A capability ladder, and the rung that matters is diagnosis** (Experiments 7–9). Four models, identical prompts, by-requirement strict pass-rate — floor is flat, diagnosis fans out:
 
-   | `DIAGNOSE` (cold synthesis) | qwen2.5-14b | qwen3.5-9b (claude-distill) | claude-haiku-4-5 | claude-sonnet-4-6 |
-   |---|---|---|---|---|
-   | strict PASS | 0/9 | 1/9 | 4/9 | **9/9** |
+   | `DIAGNOSE` (cold synthesis) | gemma-4-e4b | qwen2.5-14b | qwen3.5-9b (distill) | claude-haiku-4-5 | claude-sonnet-4-6 |
+   |---|---|---|---|---|---|
+   | strict PASS | 0/9 | 0/9 | 1/9 | 4/9 | **9/9** |
+   | overall score / 18 | 5.0 | 5.0 | 7.0 | 13.5 | 17.0 |
 
+   - **Size is not the axis** — a 4B (gemma-4-e4b) ties the 14B: both hold the floor and diagnose nothing (0/9). Diagnosis tracks *capability tier*, not parameter count. (`runner/scoreboard.py` renders this from `grades.manual.json`; `runner/failures.py` shows why each non-PASS failed.)
    - The **9B "Claude-4.6 high-IQ distill" did not inherit diagnosis** — it matches the 14B wall (only clears supplied/scaffolded tests). Distillation bought *application + calibration*, not *synthesis*.
    - **Haiku-4.5 is the dangerous middle: right fix, wrong reason** — it often lands a working connection-level FK fix while stating a wrong mechanism ("deferred FK checks", "separate connection"). A test gate catches the bad ones; confidence doesn't.
    - **Only sonnet-4.6 gets cause *and* fix right every time.** Full four-model table + the orchestration breakdown: [`results/comparison.md`](results/comparison.md). The whole battery is a one-command harness — [`runner/`](runner/) — that runs `plan.json` against any provider/model.

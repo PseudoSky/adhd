@@ -1,6 +1,6 @@
 # Run index (auto-generated from results/runs.jsonl)
 
-`tc`=tool_call_count `mc`=model_calls `out`=output_tokens `ms`=latency. Join to requests via the prompt text.
+`tc`=tool_call_count `mc`=model_calls `out`=output_tokens `ms`=latency.
 
 | created_at | agent | provider | model | status | tc | mc | out | ms | prompt |
 |---|---|---|---|---|---|---|---|---|---|
@@ -115,3 +115,22 @@
 | 2026-06-16 02:14:58 | code-impl | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 209 | 2304 | Small feature. `startSseServer(taskStore)` always binds the … |
 | 2026-06-16 02:15:00 | code-impl | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 174 | 2493 | Small change. Add two new task statuses, `waiting` and `awai… |
 | 2026-06-16 02:15:03 | code-impl | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 205 | 2674 | Small change. `client.ts` keeps the raw connection module-pr… |
+| 2026-06-16 05:26:34 | code-fixer | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 415 | 27617 | Bug report. An MCP server (stdio JSON-RPC on stdout) also st… |
+| 2026-06-16 05:27:02 | code-fixer | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 365 | 6963 | Bug report. We have a SQLite database (accessed via Drizzle … |
+| 2026-06-16 05:27:09 | code-fixer | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 407 | 7942 | Bug report (SQLite + Drizzle ORM). Migration 0005 recreates … |
+| 2026-06-16 05:27:17 | code-fixer | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 222 | 4633 | Bug report (Python audit script). This check is supposed to … |
+| 2026-06-16 05:27:22 | code-fixer | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 266 | 5497 | Bug + constraints (SQLite + Drizzle better-sqlite3 migrator)… |
+| 2026-06-16 05:27:27 | code-fixer | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 409 | 8318 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 05:27:35 | code-fixer | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 625 | 11816 | Bug: this process is primarily a Model Context Protocol serv… |
+| 2026-06-16 05:27:47 | code-fixer | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 482 | 9687 | Bug: this Python audit check is supposed to verify that, in … |
+| 2026-06-16 05:27:57 | ts-pro | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 641 | 13425 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 05:28:10 | ts-pro | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 1332 | 25691 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 05:28:36 | ts-pro | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 1128 | 21413 | Bug: this process is primarily an MCP server speaking JSON-R… |
+| 2026-06-16 05:28:58 | synth-coder | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 821 | 16330 | DIAGNOSE this bug (do not write the fix yet).  SQLite via Dr… |
+| 2026-06-16 05:29:14 | synth-coder | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 1628 | 30553 | Now CODE the fix based on your diagnosis. Remember: only `db… |
+| 2026-06-16 05:29:44 | architect | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 963 | 18725 | Adversarially review this diagnosis and produce a corrected … |
+| 2026-06-16 05:30:03 | — | — | — | failed | — | — | — | — | Bug report to fix (orchestrate it): SQLite via Drizzle (bett… |
+| 2026-06-16 05:30:03 | code-impl | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 350 | 6983 | Small feature. Add an optional `is_ephemeral` filter to a ta… |
+| 2026-06-16 05:30:10 | code-impl | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 224 | 4750 | Small feature. `startSseServer(taskStore)` always binds the … |
+| 2026-06-16 05:30:15 | code-impl | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 172 | 3549 | Small change. Add two new task statuses, `waiting` and `awai… |
+| 2026-06-16 05:30:19 | code-impl | lmstudio | gemma-4-e4b-uncensored-hauhauc | completed | 0 | 1 | 157 | 3191 | Small change. `client.ts` keeps the raw connection module-pr… |
