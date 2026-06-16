@@ -1,31 +1,37 @@
 {
  "models": {
   "qwen2.5-14b-instruct": {
-   "label": "14b-qwen25",
-   "runs": "tests/test-*/mcp.jsonl (original study)"
+   "label": "(original study tests/test-*/mcp.jsonl)"
   },
-  "qwen3.5-9b-claude-4.6-highiq-instruct-heretic-uncensored-mlx-mxfp8": {
-   "label": "qwen35-9b-hiq",
-   "runs": "results/runs.qwen35-9b-hiq.jsonl"
+  "qwen3.5-9b-claude-4.6-highiq-...": {
+   "label": "results/runs.qwen35-9b-hiq.jsonl"
+  },
+  "claude-haiku-4-5-20251001": {
+   "label": "results/runs.anthropic-haiku45.jsonl"
   },
   "claude-sonnet-4-6": {
-   "label": "anthropic-sonnet46",
-   "runs": "results/runs.anthropic-sonnet46.jsonl + Exp6 tests/test-{2,6,7,8,18}/mcp.anthropic.jsonl"
+   "label": "results/runs.anthropic-sonnet46.jsonl + Exp6"
   }
  },
+ "grades_legend": "PASS = correct cause + working fix \u00b7 NEAR/PARTIAL = correct/working fix with a wrong or muddled stated cause \u00b7 FAIL = wrong cause and non-working fix \u00b7 ERROR = orchestration plumbing failure (not a coding verdict)",
  "tests": [
   {
    "test": 1,
    "scenario": "sse-eaddrinuse",
    "requires": "DIAGNOSE",
    "posing": "SSE well-scoped",
+   "system_prompt": "code-fixer",
    "qwen2.5_14b": {
     "grade": "PARTIAL",
-    "note": "handler \u2713 but cause wrong (UnhandledPromiseRejection) + breaks sync caller"
+    "note": "handler \u2713 but cause wrong + breaks sync caller"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "confabulates 'something calls process.exit()'; misses the 'error' event"
+    "note": "confabulates 'something calls process.exit()'"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "unhandled 'error' event named; adds server.on('error'); port injectable"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -37,13 +43,18 @@
    "scenario": "fk-cascade-migration",
    "requires": "DIAGNOSE",
    "posing": "FK underspecified",
+   "system_prompt": "code-fixer",
    "qwen2.5_14b": {
     "grade": "FAIL",
-    "note": "MySQL/Postgres dialect, invalid in SQLite; weakens cascade"
+    "note": "invalid MySQL dialect, weakens cascade"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "plausible 'disable FK in the migration' \u2014 the naive in-SQL fix the txn no-op defeats"
+    "note": "naive in-SQL FK disable the txn no-op defeats"
+   },
+   "claude_haiku_4_5": {
+    "grade": "FAIL",
+    "note": "fix = in-SQL PRAGMA OFF/ON \u2014 the no-op the migrator transaction defeats"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -55,13 +66,18 @@
    "scenario": "fk-cascade-migration",
    "requires": "DIAGNOSE",
    "posing": "FK context-rich",
+   "system_prompt": "code-fixer",
    "qwen2.5_14b": {
     "grade": "FAIL",
-    "note": "adds BEGIN/COMMIT inside the SQL \u2014 still a no-op (migrator owns the txn)"
+    "note": "BEGIN/COMMIT in the SQL \u2014 still a no-op"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "misreads the rename direction; invents 'PRAGMA takes effect after'"
+    "note": "misreads the rename direction"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "'PRAGMA per-connection, in-txn OFF ineffective'; connection-level fix"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -73,13 +89,18 @@
    "scenario": "audit-ref-policy-comment",
    "requires": "APPLY",
    "posing": "audit + pointer hint",
+   "system_prompt": "code-fixer",
    "qwen2.5_14b": {
     "grade": "PASS",
-    "note": "correct comment-skipping fix (pointer did the diagnosis)"
+    "note": "comment-skip fix (pointer did the work)"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "PASS",
-    "note": "correct comment-skip fix (hinted)"
+    "note": "comment-skip fix (hinted)"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "comment-skip fix (hinted)"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -91,13 +112,18 @@
    "scenario": "fk-cascade-migration",
    "requires": "APPLY",
    "posing": "FK fix+API handed over",
+   "system_prompt": "code-fixer",
    "qwen2.5_14b": {
     "grade": "NEAR",
-    "note": "right approach but restore used the READ form \u2192 FK never re-enabled"
+    "note": "right approach; restore used READ form \u2192 FK never re-enabled"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "PASS",
-    "note": "restated the handed-over cause + applied connection-level pragma OFF\u2192migrate\u2192restore"
+    "note": "applied handed-over cause: conn-level OFF\u2192migrate\u2192restore"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "restated the handed-over cause; connection-level OFF\u2192migrate\u2192restore"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -109,13 +135,18 @@
    "scenario": "fk-cascade-migration",
    "requires": "DIAGNOSE",
    "posing": "FK full-context",
+   "system_prompt": "code-fixer",
    "qwen2.5_14b": {
     "grade": "FAIL",
-    "note": "root cause inverted (PRAGMA OFF *causes* it); irrelevant fix"
+    "note": "cause inverted; irrelevant fix"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "confabulated re-enable-after-migration theory"
+    "note": "re-enable-after-migration confab"
+   },
+   "claude_haiku_4_5": {
+    "grade": "NEAR",
+    "note": "wrong 're-enable validation' cause, but the FIX is correct: db._.client pragma OFF + try/finally restore"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -127,13 +158,18 @@
    "scenario": "sse-eaddrinuse",
    "requires": "DIAGNOSE",
    "posing": "SSE full-context",
+   "system_prompt": "code-fixer",
    "qwen2.5_14b": {
     "grade": "FAIL",
-    "note": "try/catch around async listen \u2014 cannot catch the 'error' event"
+    "note": "try/catch around async listen \u2014 can't catch 'error'"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "'no try/catch around listen' \u2014 classic wrong (async 'error' event)"
+    "note": "'no try/catch around listen' (async 'error')"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "unhandled 'error' event; handler + injectable port"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -145,13 +181,18 @@
    "scenario": "audit-ref-policy-comment",
    "requires": "DIAGNOSE",
    "posing": "audit neutral",
+   "system_prompt": "code-fixer",
    "qwen2.5_14b": {
     "grade": "FAIL",
-    "note": "missed the comment; re.finditer still matches it"
+    "note": "missed the comment; still matches it"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "invents that policy.check and Promise.all are 'both on line 410'"
+    "note": "invents 'both on line 410'"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "caught the comment-on-306 false match (fooled both small models)"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -162,14 +203,19 @@
    "test": 9,
    "scenario": "fk-cascade-migration",
    "requires": "DIAGNOSE",
-   "posing": "FK role-primed",
+   "posing": "FK role-primed (ts-pro)",
+   "system_prompt": "ts-pro",
    "qwen2.5_14b": {
     "grade": "FAIL",
-    "note": "raised 'transaction scope' but fix still BEGIN/COMMIT in SQL"
+    "note": "raised 'transaction scope' but fix = BEGIN/COMMIT in SQL"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "accepts cascade-on-rebuild but never reaches the transaction-no-op crux"
+    "note": "accepts cascade-on-rebuild, never reaches the txn-no-op crux"
+   },
+   "claude_haiku_4_5": {
+    "grade": "NEAR",
+    "note": "ts-pro SP; wrong 'deferred FK violation' cause, connection-level fix present (SP did not fix the reasoning)"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -181,13 +227,18 @@
    "scenario": "fk-cascade-migration",
    "requires": "APPLY",
    "posing": "FK facts-in-prompt (select)",
+   "system_prompt": "ts-pro",
    "qwen2.5_14b": {
     "grade": "FAIL",
-    "note": "selected the right facts, failed to synthesize, hallucinated migrate API"
+    "note": "selected facts, hallucinated migrate API"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "PASS",
-    "note": "SELECTED the right fact from the distractor list + rejected the rest; correct conn-level fix, HIGH"
+    "note": "SELECTED the right fact + conn-level fix, HIGH"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "selected FK-active-during-rebuild from the distractor list, rejected the rest"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -199,13 +250,18 @@
    "scenario": "sse-eaddrinuse",
    "requires": "APPLY",
    "posing": "SSE fact-in-role",
+   "system_prompt": "ts-pro",
    "qwen2.5_14b": {
     "grade": "FAIL",
-    "note": "ignored the fact, try/catch anyway; uncompilable; High-confidence wrong"
+    "note": "ignored the fact; uncompilable; High-confidence wrong"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "'synchronous listen() throws on EADDRINUSE' \u2014 wrong; no real handler"
+    "note": "'synchronous listen() throws' \u2014 wrong; no handler"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "unhandled 'error' event; clean handler + port"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -217,13 +273,18 @@
    "scenario": "fk-cascade-migration",
    "requires": "DIAGNOSE",
    "posing": "FK multi-turn synth\u2192code",
+   "system_prompt": "synth-coder (anti-fab)",
    "qwen2.5_14b": {
     "grade": "FAIL",
-    "note": "anti-fab capped the connection hallucination but relocated it to invalid SQL"
+    "note": "anti-fab capped one hallucination, relocated to invalid SQL"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "PASS",
-    "note": "correct NEEDS path: surfaced (db as any).session.client AND a layer-correct withForeignKeysDisabled helper"
+    "note": "NEEDS path: (db as any).session.client + layer-correct helper"
+   },
+   "claude_haiku_4_5": {
+    "grade": "NEAR",
+    "note": "wrong 'migrator opens a separate connection' theory; fix still toggles the raw connection pragma"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -235,17 +296,22 @@
    "scenario": "fk-cascade-migration",
    "requires": "DIAGNOSE",
    "posing": "FK adversarial architect",
+   "system_prompt": "architect (adversarial)",
    "qwen2.5_14b": {
     "grade": "FAIL",
-    "note": "architect rejected wrong cause but inverted the fix (foreign_keys=ON)"
+    "note": "rejected wrong cause but inverted the fix"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "rejects the wrong cause but lands on a different wrong one ('something else deletes them')"
+    "note": "rejects wrong cause, lands another ('something else deletes them')"
+   },
+   "claude_haiku_4_5": {
+    "grade": "FAIL",
+    "note": "architect: wrong 'SQLite defers FK checks until commit' cause"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
-    "note": "rejected the wrong diagnosis and produced the correct cause + grounded spec"
+    "note": "rejected the planted wrong diagnosis; correct cause + grounded spec"
    }
   },
   {
@@ -253,17 +319,22 @@
    "scenario": "fk-cascade-migration",
    "requires": "ORCH",
    "posing": "FK orchestrate lead\u2192synth\u2192coder",
+   "system_prompt": "lead (orchestrator)",
    "qwen2.5_14b": {
     "grade": "FAIL",
-    "note": "coordination succeeded (dispatched synth\u2192coder), fix wrong + fabricated imports"
+    "note": "coordinated (synth\u2192coder) but fix wrong + fabricated imports"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "ERROR",
-    "note": "orchestration tripped the tool-prefix rule: called bare `agent` (missing server prefix)"
+    "note": "lead made one delegation then returned an EMPTY result (0 chars, status completed) \u2014 degenerate, no fix"
+   },
+   "claude_haiku_4_5": {
+    "grade": "FAIL",
+    "note": "orchestrated CORRECTLY (dispatched synth\u2192coder, composed \u2014 no prefix trip) but the fix was wrong ('separate connection')"
    },
    "claude_sonnet_4_6": {
     "grade": "ERROR",
-    "note": "same tool-prefix trip as qwen3.5: lead called bare `agent` (missing server prefix)"
+    "note": "lead called bare `agent` (no server prefix) \u2192 orchestrator rejected \u2192 task failed; orphaned a sub-agent session (BUG-002 repro)"
    }
   },
   {
@@ -271,13 +342,18 @@
    "scenario": "tasklist-ephemeral-filter",
    "requires": "ADDITIVE",
    "posing": "floor: list filter",
+   "system_prompt": "code-impl",
    "qwen2.5_14b": {
     "grade": "PASS",
-    "note": "optional param, !== undefined; chose number enum (different but consistent)"
+    "note": "number enum (different API, consistent)"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "PASS",
-    "note": "z.boolean().optional() + eq condition \u2014 correct"
+    "note": "z.boolean().optional() + eq"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "optional is_ephemeral filter"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -289,13 +365,18 @@
    "scenario": "sse-port-param",
    "requires": "ADDITIVE",
    "posing": "floor: optional port param",
+   "system_prompt": "code-impl",
    "qwen2.5_14b": {
     "grade": "PASS",
-    "note": "optional port/host defaulted; existing callers unaffected"
+    "note": "optional port/host defaulted"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "PASS",
-    "note": "optional port?/host?, effectivePort = port ?? SSE_PORT; callers unaffected"
+    "note": "optional port?/host?, port ?? SSE_PORT"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "optional port/host defaulted"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -307,13 +388,18 @@
    "scenario": "task-status-enum-extend",
    "requires": "ADDITIVE",
    "posing": "floor: extend enum",
+   "system_prompt": "code-impl",
    "qwen2.5_14b": {
     "grade": "PASS",
-    "note": "both enums updated consistently; even flagged other refs"
+    "note": "both enums updated; flagged other refs"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "PASS",
-    "note": "both enums extended, existing values kept"
+    "note": "both enums; values kept"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "both enums extended"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
@@ -325,17 +411,22 @@
    "scenario": "export-sqlite-type-annotation",
    "requires": "GOTCHA",
    "posing": "floor+TS4023 gotcha",
+   "system_prompt": "code-impl",
    "qwen2.5_14b": {
     "grade": "FAIL",
-    "note": "renamed the var (still TS4023); never added the type annotation"
+    "note": "renamed var \u2014 still TS4023; no annotation"
    },
    "qwen3.5_9b_claude_distill": {
     "grade": "FAIL",
-    "note": "exports db (already exported) with a confused comment; never adds Database.Database annotation"
+    "note": "exports db; no Database.Database annotation"
+   },
+   "claude_haiku_4_5": {
+    "grade": "PASS",
+    "note": "explicit Database.Database annotation"
    },
    "claude_sonnet_4_6": {
     "grade": "PASS",
-    "note": "explicit type annotation (type Database as DatabaseType) + .d.ts-nameability note"
+    "note": "explicit type annotation + .d.ts-nameability note"
    }
   }
  ]

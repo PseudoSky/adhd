@@ -14,7 +14,7 @@ bodies** for every step.
 
 | | |
 |---|---|
-| Models compared | `qwen2.5-14b-instruct` and `qwen3.5-9b-claude-4.6-highiq-…` (LM Studio) · `claude-sonnet-4-6` (Anthropic) — same prompts, provider swapped |
+| Models compared | `qwen2.5-14b-instruct` and `qwen3.5-9b-claude-4.6-highiq-…` (LM Studio) · `claude-haiku-4-5` and `claude-sonnet-4-6` (Anthropic) — same prompts, provider swapped |
 | MCP server | `agent-mcp-published` = `npx -y @adhd/agent-mcp@latest` (v1.0.1) |
 | DB | `agents-published.db` (isolated from the dev DB; persists every task + usage) |
 | Harness | [`runner/run-study.mjs`](runner/run-study.mjs) drives `plan.json` against any provider/model over stdio MCP. Tasks are **ephemeral** (`agent_name` mode) unless a multi-turn session/orchestration was needed. |
@@ -125,7 +125,15 @@ separate "produces plausible output" from "produces correct output."
 6. **Two positives:** the offload *topology* works (a 14B `lead` reliably dispatched synth→coder→compose, Test 14), and the only reliable success was **spelling out the fix layer + handing the exact API** (Test 5) — i.e., offload *application*, not *diagnosis*.
 7. **The failures are model-bound, not prompt-bound** (Experiment 6). Re-running the *exact* failing prompts on `claude-sonnet-4-6` — same system + user prompt, only the provider swapped — passed **5/5** (incl. the underspecified FK and the TS4023 gotcha; twice cleaner than the human-shipped fix). The same context that left the 14B confabulating was sufficient for a capable model.
 8. **The floor (Tests 15–17) is real but knowledge-bounded:** pure additive/mechanical edits pass reliably; a *one-line* change with a specialized detail (Test 18, TS4023) fails the same way as the hard set.
-9. **A 9B "Claude-4.6 high-IQ distill" does not close the gap** (Experiment 8). Running all 18 tests on `qwen3.5-9b-claude-4.6-highiq` scored **7 PASS / 10 FAIL** — it passes only the same categories the 14B did (additive + fix-handed-over), and fails **every cold diagnosis test** with the identical confabulation shape. Distillation bought *application + calibration*, not *synthesis*. Full three-model table: [`results/comparison.md`](results/comparison.md). The whole battery is now a one-command harness — [`runner/`](runner/) — that runs `plan.json` against any provider/model.
+9. **A capability ladder, and the rung that matters is diagnosis** (Experiments 7–9). Four models, identical prompts, by-requirement strict pass-rate — floor is flat, diagnosis fans out:
+
+   | `DIAGNOSE` (cold synthesis) | qwen2.5-14b | qwen3.5-9b (claude-distill) | claude-haiku-4-5 | claude-sonnet-4-6 |
+   |---|---|---|---|---|
+   | strict PASS | 0/9 | 1/9 | 4/9 | **9/9** |
+
+   - The **9B "Claude-4.6 high-IQ distill" did not inherit diagnosis** — it matches the 14B wall (only clears supplied/scaffolded tests). Distillation bought *application + calibration*, not *synthesis*.
+   - **Haiku-4.5 is the dangerous middle: right fix, wrong reason** — it often lands a working connection-level FK fix while stating a wrong mechanism ("deferred FK checks", "separate connection"). A test gate catches the bad ones; confidence doesn't.
+   - **Only sonnet-4.6 gets cause *and* fix right every time.** Full four-model table + the orchestration breakdown: [`results/comparison.md`](results/comparison.md). The whole battery is a one-command harness — [`runner/`](runner/) — that runs `plan.json` against any provider/model.
 
 ### Recipe that actually works
 > **Cognition at the root, application at the leaves, verification on every edge.**
