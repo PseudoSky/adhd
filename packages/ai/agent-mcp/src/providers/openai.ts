@@ -4,6 +4,7 @@ import pRetry from "p-retry";
 
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
+import { resolveToolCallName } from "../clients/tool-naming.js";
 
 import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
 
@@ -107,15 +108,17 @@ export class OpenAIProvider implements LLMProvider {
                 for (const tc of choice.message.tool_calls) {
                     if (tc.type !== "function") continue;
 
-                    const separatorIndex = tc.function.name.indexOf("__");
-                    if (separatorIndex === -1) {
-                        throw new Error(`Invalid tool name (missing server prefix): ${tc.function.name}`);
-                    }
+                    // Resolve qualified or bare tool names against the advertised set
+                    // (a bare `task` → `agent-mcp__task` when unambiguous; DEBT-004).
+                    const { server, tool } = resolveToolCallName(
+                        tc.function.name,
+                        (request.tools ?? []).map((t) => t.name)
+                    );
 
                     toolCalls.push({
                         id: tc.id,
-                        server: tc.function.name.slice(0, separatorIndex),
-                        tool: tc.function.name.slice(separatorIndex + 2),
+                        server,
+                        tool,
                         arguments: JSON.parse(tc.function.arguments),
                     });
                 }

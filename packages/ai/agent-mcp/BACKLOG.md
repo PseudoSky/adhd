@@ -254,10 +254,21 @@ fundamental subprocess-model limitation and document it clearly (consider
 ---
 
 ### DEBT-004 — Orchestration hard-fails when a model calls a bare (unprefixed) tool name
-- **Status:** backlog
+- **Status:** done (in source; ships in the next publish) · **Closed:** 2026-06-16
 - **Priority:** P2
-- **Area:** engine (orchestrator tool dispatch), clients/registry
+- **Area:** providers (openai/anthropic/claudecli), clients/tool-naming
 - **Reported:** 2026-06-15
+
+**Resolution (2026-06-16):** added `resolveToolCallName(rawName, advertised)` in
+`clients/tool-naming.ts` — a qualified `<server>__<tool>` name splits as before; a
+**bare** name resolves against the advertised tool set (unique match → qualify;
+ambiguous → actionable error listing the qualified candidates; none → literal split
+so downstream "unknown tool" still surfaces). All three providers now call it
+instead of throwing "missing server prefix". Tested in `__tests__/tool-naming.test.ts`
+(unit: unique/ambiguous/normalized/unknown; **consumer:** the real `OpenAIProvider`
+resolves a bare `task` → `{agent-mcp, task}` instead of throwing). Not yet published —
+the study's runner uses `@adhd/agent-mcp@1.0.1`, so T14 in the comparison still
+reflects the unpatched server until a 1.0.2 publish.
 
 **Problem / Description** — Sub-server tools are exposed to a delegating agent as
 `<server>__<tool>` (intentional — see CLAUDE.md "Tool name prefixing"). But when a

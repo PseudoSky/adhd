@@ -9,6 +9,19 @@ planning in [ROADMAP.md](./ROADMAP.md).
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Orchestration no longer hard-fails on a bare (unprefixed) tool name** (DEBT-004).
+  Models that emit `task` / `agent` instead of the advertised `agent-mcp__task`
+  used to crash the whole task with "Invalid tool name (missing server prefix)".
+  A new `resolveToolCallName` resolves a bare name against the advertised tool set
+  (unique → qualify; ambiguous → actionable error naming the candidates), wired
+  into the openai/anthropic/claudecli providers. Surfaced by the code-tasking
+  study (recursive-orchestration test failed for sonnet-4.6 and haiku-4.5).
+
+---
+
 ## [1.0.1] — 2026-06-15
 
 ### Fixed
