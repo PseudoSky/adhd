@@ -45,6 +45,7 @@ const execFileAsync = promisify(execFile);
 
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
+import { resolveToolCallName } from "../clients/tool-naming.js";
 import type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from "./types.js";
 import type { McpServerConfig, ProviderConfig, Message } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
@@ -358,25 +359,23 @@ export class ClaudeCliProvider implements LLMProvider {
                             if (qualifiedName.startsWith("mcp__")) {
                                 qualifiedName = qualifiedName.slice(5);
                             }
-                            const sepIdx = qualifiedName.indexOf("__");
-                            if (sepIdx === -1) {
-                                toolResultText = `Invalid tool name (missing server prefix): ${block.name}`;
+                            try {
+                                // Resolve qualified or bare names against the advertised set
+                                // (a bare `task` → `agent-mcp__task` when unambiguous; DEBT-004).
+                                const { server, tool } = resolveToolCallName(
+                                    qualifiedName,
+                                    (request.tools ?? []).map((t) => t.name)
+                                );
+                                const { result, isError: err } = await request.executeTool(
+                                    server, tool, block.input
+                                );
+                                toolResultText = typeof result === "string"
+                                    ? result
+                                    : JSON.stringify(result);
+                                isError = err;
+                            } catch (err) {
+                                toolResultText = err instanceof Error ? err.message : String(err);
                                 isError = true;
-                            } else {
-                                const server = qualifiedName.slice(0, sepIdx);
-                                const tool   = qualifiedName.slice(sepIdx + 2);
-                                try {
-                                    const { result, isError: err } = await request.executeTool(
-                                        server, tool, block.input
-                                    );
-                                    toolResultText = typeof result === "string"
-                                        ? result
-                                        : JSON.stringify(result);
-                                    isError = err;
-                                } catch (err) {
-                                    toolResultText = err instanceof Error ? err.message : String(err);
-                                    isError = true;
-                                }
                             }
                         } else {
                             toolResultText = "Tool execution not available (no executeTool callback)";
