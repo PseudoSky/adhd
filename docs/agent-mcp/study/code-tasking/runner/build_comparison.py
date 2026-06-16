@@ -35,31 +35,37 @@ V14B={1:("PARTIAL","handler ✓ but cause wrong + breaks sync caller"),2:("FAIL"
  13:("FAIL","rejected wrong cause but inverted the fix"),14:("FAIL","coordinated (synth→coder) but fix wrong + fabricated imports"),
  15:("PASS","number enum (different API, consistent)"),16:("PASS","optional port/host defaulted"),
  17:("PASS","both enums updated; flagged other refs"),18:("FAIL","renamed var — still TS4023; no annotation")}
-VQ35={1:("FAIL","confabulates 'something calls process.exit()'"),2:("FAIL","naive in-SQL FK disable the txn no-op defeats"),
- 3:("FAIL","misreads the rename direction"),4:("PASS","comment-skip fix (hinted)"),
- 5:("PASS","applied handed-over cause: conn-level OFF→migrate→restore"),6:("FAIL","re-enable-after-migration confab"),
- 7:("FAIL","'no try/catch around listen' (async 'error')"),8:("FAIL","invents 'both on line 410'"),
- 9:("FAIL","accepts cascade-on-rebuild, never reaches the txn-no-op crux"),10:("PASS","SELECTED the right fact + conn-level fix, HIGH"),
- 11:("FAIL","'synchronous listen() throws' — wrong; no handler"),12:("PASS","NEEDS path: (db as any).session.client + layer-correct helper"),
- 13:("FAIL","rejects wrong cause, lands another ('something else deletes them')"),14:("ERROR","lead made one delegation then returned an EMPTY result (0 chars, status completed) — degenerate, no fix"),
+# qwen3.5-9b re-run at temperature=0 (greedy), max_tokens=8192.
+VQ35={1:("FAIL","'server.listen() throws an unhandled exception, no try-catch' — wrong (async 'error' event)"),
+ 2:("FAIL","naive in-SQL FK disable the txn no-op defeats (underspecified)"),
+ 3:("FAIL","muddled 'PRAGMA OFF only affects the new table'; no connection fix"),4:("PASS","comment-skip fix (hinted)"),
+ 5:("PASS","correct: 'pragmas ignored inside the migrator transaction'; connection-level fix (handed)"),
+ 6:("FAIL","confab 'FK checks disabled during rebuild'"),
+ 7:("FAIL","'listen throws EADDRINUSE synchronously' — wrong; no real handler"),8:("FAIL","'>= operator / 388 vs 410' — misses the Promise.all-in-comment-306"),
+ 9:("FAIL","denies cascade; 're-enable foreign_keys=ON' theory"),10:("PASS","SELECTED the right facts from the distractor list (migrator txn → in-SQL PRAGMA ignored → cascade) + sqlite-level fix"),
+ 11:("FAIL","SSE fact-in-role ignored; no handler"),
+ 12:("FAIL","correctly notes sqlite is module-private but falls back to 'verify FK with queries before/after' — does not disable FK, non-working  [PASS on the default-temp draw, which found (db as any).session.client — sampling-sensitive]"),
+ 13:("FAIL","rejects the planted dx but lands another wrong cause ('task ID recreation breaks referential integrity')"),
+ 14:("FAIL","orchestrated correctly (synth→coder, composed) but the fix was wrong  [ERROR/empty on the default-temp draw — sampling-sensitive]"),
  15:("PASS","z.boolean().optional() + eq"),16:("PASS","optional port?/host?, port ?? SSE_PORT"),
  17:("PASS","both enums; values kept"),18:("FAIL","exports db; no Database.Database annotation")}
-VHAI={1:("PASS","unhandled 'error' event named; adds server.on('error'); port injectable"),
- 2:("FAIL","fix = in-SQL PRAGMA OFF/ON — the no-op the migrator transaction defeats"),
- 3:("PASS","'PRAGMA per-connection, in-txn OFF ineffective'; connection-level fix"),
+# Haiku run at temperature=0 (greedy), max_tokens=8192.
+VHAI={1:("PASS","names the 'error' event + adds server.on('error'); flags hardcoded port"),
+ 2:("FAIL","confused 'FK constraints disabled by default'; no connection-level fix"),
+ 3:("PASS","correct: PRAGMA is connection-scoped, the client's ON persists across the in-SQL OFF; connection-level fix"),
  4:("PASS","comment-skip fix (hinted)"),
- 5:("PASS","restated the handed-over cause; connection-level OFF→migrate→restore"),
- 6:("NEAR","wrong 're-enable validation' cause, but the FIX is correct: db._.client pragma OFF + try/finally restore"),
- 7:("PASS","unhandled 'error' event; handler + injectable port"),
- 8:("PASS","caught the comment-on-306 false match (fooled both small models)"),
- 9:("NEAR","ts-pro SP; wrong 'deferred FK violation' cause, connection-level fix present (SP did not fix the reasoning)"),
- 10:("PASS","selected FK-active-during-rebuild from the distractor list, rejected the rest"),
- 11:("PASS","unhandled 'error' event; clean handler + port"),
- 12:("NEAR","wrong 'migrator opens a separate connection' theory; fix still toggles the raw connection pragma"),
- 13:("FAIL","architect: wrong 'SQLite defers FK checks until commit' cause"),
- 14:("FAIL","orchestrated CORRECTLY (dispatched synth→coder, composed — no prefix trip) but the fix was wrong ('separate connection')"),
+ 5:("PASS","applied the handed-over connection-level fix"),
+ 6:("NEAR","wrong cause ('better-sqlite3 runs the migration as a single prepared statement') but a connection-level fix"),
+ 7:("PASS","names the async 'error' event + handler + injectable port"),
+ 8:("PASS","caught the comment-on-306 false match"),
+ 9:("NEAR","speculates the migrator 'skips PRAGMA statements' (wrong) but lands a connection-level fix"),
+ 10:("PASS","'in-SQL PRAGMA OFF is ineffective inside a transaction' + connection-level fix"),
+ 11:("PASS","applied the role's fact: server.on('error'), no try/catch trap"),
+ 12:("PASS","correct: 'connection-level foreign_keys=ON overrides the migration SQL's PRAGMA'; layer-correct toggle helpers  [NEAR on the default-temp draw — sampling-sensitive cell]"),
+ 13:("FAIL","wrong 'FK pragma state leaks across the transaction boundary; re-validates at commit' theory"),
+ 14:("ERROR","lead called bare `agent` (no server prefix) → task failed — the DEBT-004 trip; hit at temp=0, whereas it coordinated cleanly on the default-temp draw [sampling-sensitive]"),
  15:("PASS","optional is_ephemeral filter"),16:("PASS","optional port/host defaulted"),
- 17:("PASS","both enums extended"),18:("PASS","explicit Database.Database annotation")}
+ 17:("PASS","both enums extended"),18:("PASS","explicit `import type { Database as DatabaseType }` annotation")}
 VSON={i:("PASS","") for i in range(1,19)}
 VSON[2]=("PASS","FK-cascade-on-rebuild; unprompted surfaced the migrator-transaction subtlety")
 VSON[6]=("PASS","exact PRAGMA-no-op-in-transaction; conn-level fkWasOn + try/finally; cleaner than the shipped fix")
@@ -110,9 +116,9 @@ VQ3C={
 MODELS=[
  ("gemma_4_e4b","gemma-4-e4b","results/runs.gemma-4-e4b.jsonl",VGEM),
  ("qwen2.5_14b","qwen2.5-14b","(original study tests/test-*/mcp.jsonl)",V14B),
- ("qwen3.5_9b_claude_distill","qwen3.5-9b","results/runs.qwen35-9b-hiq.jsonl",VQ35),
+ ("qwen3.5_9b_claude_distill","qwen3.5-9b","results/runs.qwen35-9b-hiq.jsonl (temp=0, greedy)",VQ35),
  ("qwen3_coder_30b","qwen3-coder-30b","results/runs.qwen3-coder-30b.jsonl (temp=0, greedy)",VQ3C),
- ("claude_haiku_4_5","haiku-4.5","results/runs.anthropic-haiku45.jsonl",VHAI),
+ ("claude_haiku_4_5","haiku-4.5","results/runs.anthropic-haiku45.jsonl (temp=0, greedy)",VHAI),
  ("claude_sonnet_4_6","sonnet-4.6","results/runs.anthropic-sonnet46.jsonl + Exp6",VSON),
 ]
 def tal(v):
