@@ -24,7 +24,7 @@ Give any LLM the ability to spawn, delegate to, and coordinate other AI agents �
 | `task_list` | List tasks, optionally filtered by session, status, or `is_ephemeral` |
 | `task_cancel` | Cancel a pending or running task |
 | `task_resume` | Resume a task suspended in `awaiting_input` by supplying the human's answer (see Human-in-the-loop) |
-| `usage_query` | Query recorded token usage from `task_usage` by `task_id` (returns the full delegation subtree), `root_task_id`, `agent_name`, or time window |
+| `usage_query` | Query recorded token usage. Filters by `task_id` (returns full delegation subtree), `root_task_id`, `agent_name`, or `since`. Set `group_by: "agent" \| "model" \| "provider"` to aggregate token spend, latency, and success/fail counts by that dimension — ordered by total token spend desc |
 | `guide` | Return the full server usage guide |
 
 ---
@@ -524,8 +524,11 @@ HTTP server (default `SSE_PORT=3001`) exposes `GET /tasks/:id/stream`, emitting
 
 Every model call records tokens, `max_tokens`, `stop_reason`, latency, and tool-call
 count to `task_usage`. `task` and `result` include a `usage` rollup (the task plus its
-full delegation subtree); `usage_query` reports by `task_id`, `root_task_id`,
-`agent_name`, or time window.
+full delegation subtree); `usage_query` reports raw rows by `task_id`, `root_task_id`,
+`agent_name`, or time window. Pass `group_by: "agent" | "model" | "provider"` to
+aggregate across all matching rows — each group includes `taskCount`,
+`completedCount`, `failedCount`, `cancelledCount`, token totals, and `avgLatencyMs`,
+ordered by total token spend descending.
 
 ---
 

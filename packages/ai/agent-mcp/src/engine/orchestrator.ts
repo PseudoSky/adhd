@@ -119,6 +119,14 @@ export class Orchestrator {
         const currentMessages: Message[] = [...input.messages];
         const contextLimit = parseInt(process.env["AGENT_MCP_CONTEXT_LIMIT"] ?? "0", 10);
 
+        // BUG-002: track sessions opened by delegation during this task so we can
+        // close them on failure or cancellation, preventing orphaned active sessions
+        // that make sub-agents undeletable (AGENT_HAS_ACTIVE_SESSIONS).
+        // On success we leave them open — the caller has the session IDs and may
+        // want to continue using them. Only failure/cancel paths close them.
+        const delegationSessions = new Set<string>();
+        let taskSucceeded = false;
+
         try {
             // Mark task as running
             taskStore.updateStatus(taskId, "running");
@@ -442,6 +450,15 @@ export class Orchestrator {
                             // cancel mid-batch interrupts this in-flight call
                             // instead of waiting for the whole batch (DEBT-003).
                             toolResult = await client.callTool(resolved.tool, toolCall.arguments, composedSignal);
+
+                            // BUG-002: capture session IDs opened by delegation so we
+                            // can close them on failure, preventing undeletable sub-agents.
+                            if (qualifiedToolName === "agent-mcp__agent" && toolResult != null) {
+                                const maybeId = (toolResult as Record<string, unknown>)["session_id"];
+                                if (typeof maybeId === "string") {
+                                    delegationSessions.add(maybeId);
+                                }
+                            }
                         } catch (error) {
                             // Re-throw fatal ToolError codes — these abort the entire task, not just this call.
                             // See [inv:fatal-policy-codes] in _shared.md.
@@ -551,6 +568,7 @@ export class Orchestrator {
             // Emit done on the successful completion path
             emitTaskEvent({ type: "done", taskId, result: finalContent, error: null });
 
+            taskSucceeded = true;
             return { result: finalContent };
         } catch (error) {
             // Determine if this is a cancellation or a real failure
@@ -602,6 +620,19 @@ export class Orchestrator {
 
             throw error;
         } finally {
+            // BUG-002: close delegation-scoped sessions on failure/cancellation so
+            // sub-agents don't become undeletable (AGENT_HAS_ACTIVE_SESSIONS guard).
+            // On success the caller keeps the session IDs; on failure/cancel they're
+            // orphaned and must be reaped here.
+            if (!taskSucceeded) {
+                for (const sessionId of delegationSessions) {
+                    try {
+                        sessionStore.close(sessionId);
+                    } catch {
+                        // Already closed or not found — ignore
+                    }
+                }
+            }
             // Per-task registry teardown — always runs
             await registry.closeAll();
             taskStore.unregisterCancellation(taskId);

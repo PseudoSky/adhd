@@ -9,9 +9,57 @@ planning in [ROADMAP.md](./ROADMAP.md).
 
 ---
 
-## [Unreleased]
+## [1.1.0] — 2026-06-16
+
+### Added
+- **`usage_query` now supports `group_by` aggregation** (FEAT-002 partial). Pass
+  `group_by: "agent" | "model" | "provider"` to aggregate `task_usage` rows along
+  that dimension instead of returning raw rows. Each group includes `taskCount`,
+  `completedCount`, `failedCount`, `cancelledCount` (via LEFT JOIN with `tasks`),
+  `inputTokens`, `outputTokens`, `toolCallCount`, `modelCalls`, `avgLatencyMs`
+  (zero-latency rows excluded), and `cacheReadTokens`/`cacheCreationTokens`.
+  Groups are ordered by total token spend (input + output) descending. All
+  existing filters (`agent_name`, `since`, `task_id`, `root_task_id`, `limit`)
+  compose with AND before grouping. Existing bare calls without `group_by` are
+  unchanged. 12 new tests in `__tests__/usage-group-by.test.ts`.
+- **External plugin loading with config file, default locations, and schema enforcement** (FEAT-004).
+  Plugins are now declared in `agent-mcp.config.json` (supports per-plugin `config`
+  blocks) and discovered automatically — no env var required for the common case.
+  Config file search order: `AGENT_MCP_CONFIG` env var → `{cwd}/agent-mcp.config.json`
+  → `~/.agent-mcp/config.json` (global). The config file format is validated by the
+  server on startup (Zod). Per-plugin schema enforcement: if a plugin module exports
+  `configSchema` with a `.safeParse()` method, the server validates the plugin's
+  `config` block before invoking the factory; validation failure logs a structured
+  error and skips that plugin without affecting others. The validated (coerced +
+  defaulted) result is passed as `ctx.config`. `AGENT_MCP_PLUGINS` env var retained
+  as a no-options shorthand (CI/simple activations); config-file entries load first.
+  Plugin loading extracted to `src/plugins/loader.ts`. Added `PluginContext.config`
+  and `PluginFactory` to `@adhd/agent-mcp-types`. 20 new tests in
+  `__tests__/plugin-loader.test.ts` cover discovery, config validation, schema
+  enforcement, and failure resilience. See `PLUGINS.md`.
 
 ### Fixed
+- **`timeoutMs` now bounds the SDK's HTTP timeout** (DEBT-005). `OpenAIProvider`
+  passes `timeout: config.timeoutMs ?? 60_000` to the `OpenAI` constructor (and
+  `AnthropicProvider` does the same). Previously the SDK's built-in ~10-minute
+  default fired before a user-configured `timeoutMs > 600s`, producing a generic
+  `PROVIDER_ERROR: "Request timed out."` instead of the actionable
+  `PROVIDER_TIMEOUT` — and raising `timeoutMs` had no effect. `LMStudioProvider`
+  inherits the fix via `OpenAIProvider`. Surfaced by the code-tasking study
+  (6 DNF on the 27B dense model).
+- **Delegation-opened sessions are now reaped on task failure** (BUG-002).
+  `Orchestrator.run()` tracks session IDs returned by `agent-mcp__agent` tool
+  calls; on failure or cancellation the `finally` block closes them, preventing
+  orphaned `active` sessions that made sub-agents permanently undeletable
+  (`AGENT_HAS_ACTIVE_SESSIONS`). Sessions are NOT closed on success. Added
+  `force: boolean` to `agent_delete` as a recovery escape hatch that closes
+  active sessions before deleting — for existing orphans from the pre-fix era.
+- **Top-level unhandled exception safety net** (DEBT-001). `index.ts` now
+  registers `process.on("uncaughtException")` and `process.on("unhandledRejection")`
+  handlers before `main()`, logging a structured `fatal` entry and calling
+  `process.exit(1)`. Added a clarifying comment to `BackgroundQueue.enqueue()`
+  explaining why swallowing is intentional there (the orchestrator has already
+  updated task status; rethrowing would kill the server for a per-task error).
 - **Orchestration no longer hard-fails on a bare (unprefixed) tool name** (DEBT-004).
   Models that emit `task` / `agent` instead of the advertised `agent-mcp__task`
   used to crash the whole task with "Invalid tool name (missing server prefix)".
@@ -46,6 +94,15 @@ First consolidated release: the full task-orchestration core, shipped as one
 interdependent version.
 
 ### Added
+- **Lifecycle event middleware.** `HookRegistry` implements `IHookRegistry`
+  (from `@adhd/agent-mcp-types`) with 11 hooks emitted across the orchestrator
+  (`task:start`, `pre:model_request`, `post:model_response`, `pre:tool_call`,
+  `post:tool_call`, `message:appended`, `task:completed`, `task:failed`,
+  `task:cancelled`), `SessionStore` (`session:created`), and `AgentStore`
+  (`agent:mutated`). Plugin packages can register handlers via `hooks.register()`
+  without modifying the orchestrator loop. `UsagePlugin` is the first consumer
+  and ships alongside. The `hooks` registry is passed through the full call chain
+  (server → task tool → orchestrator → stores).
 - **Task dependency DAG.** `task` accepts `depends_on`; a task stays `waiting`
   until all upstreams reach a terminal state, then is dispatched with their
   results injected. `on_upstream_failure: "fail" | "skip"`. Cycles are rejected

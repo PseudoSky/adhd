@@ -80,9 +80,17 @@ export class OpenAIProvider implements LLMProvider {
 
     constructor(config: Extract<ProviderConfig, { type: "openai" }>) {
         this.config = config;
+        // DEBT-005: pass timeoutMs to the SDK client so the SDK's built-in HTTP
+        // timeout (default ~10 min) never fires before our AbortSignal.timeout().
+        // Without this, slow local models exceed the SDK default and throw a
+        // generic "Request timed out" (APIConnectionTimeoutError) that hits the
+        // catch-all PROVIDER_ERROR branch instead of the actionable PROVIDER_TIMEOUT,
+        // and raising timeoutMs has no effect. Aligning the two means our
+        // composedSignal always fires first, giving the right error + message.
         this.client = new OpenAI({
             apiKey: process.env[config.apiKeyEnv ?? "OPENAI_API_KEY"],
             baseURL: config.baseURL,
+            timeout: config.timeoutMs ?? 60_000,
         });
     }
 
