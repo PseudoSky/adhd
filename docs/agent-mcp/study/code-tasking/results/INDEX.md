@@ -172,3 +172,24 @@
 | 2026-06-16 06:00:21 | code-impl | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 230 | 4853 | Small feature. `startSseServer(taskStore)` always binds the … |
 | 2026-06-16 06:00:26 | code-impl | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 144 | 3175 | Small change. Add two new task statuses, `waiting` and `awai… |
 | 2026-06-16 06:00:29 | code-impl | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 164 | 3684 | Small change. `client.ts` keeps the raw connection module-pr… |
+| 2026-06-16 06:13:02 | code-fixer | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 329 | 7608 | Bug report. An MCP server (stdio JSON-RPC on stdout) also st… |
+| 2026-06-16 06:13:10 | code-fixer | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 357 | 7240 | Bug report. We have a SQLite database (accessed via Drizzle … |
+| 2026-06-16 06:13:17 | code-fixer | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 247 | 5634 | Bug report (SQLite + Drizzle ORM). Migration 0005 recreates … |
+| 2026-06-16 06:13:23 | code-fixer | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 358 | 7715 | Bug report (Python audit script). This check is supposed to … |
+| 2026-06-16 06:13:30 | code-fixer | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 248 | 5679 | Bug + constraints (SQLite + Drizzle better-sqlite3 migrator)… |
+| 2026-06-16 06:13:36 | code-fixer | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 241 | 5845 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 06:13:42 | code-fixer | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 400 | 8743 | Bug: this process is primarily a Model Context Protocol serv… |
+| 2026-06-16 06:13:51 | code-fixer | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 340 | 7314 | Bug: this Python audit check is supposed to verify that, in … |
+| 2026-06-16 06:13:58 | ts-pro | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 2807 | 58945 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 06:14:57 | ts-pro | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 685 | 14748 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 06:15:12 | ts-pro | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 866 | 21953 | Bug: this process is primarily an MCP server speaking JSON-R… |
+| 2026-06-16 06:15:12 | code-fixer | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 247 | 7068 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 06:15:26 | code-fixer | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 254 | 9409 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 06:15:34 | synth-coder | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 841 | 18279 | DIAGNOSE this bug (do not write the fix yet).  SQLite via Dr… |
+| 2026-06-16 06:15:52 | synth-coder | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 4172 | 104847 | Now CODE the fix based on your diagnosis. Remember: only `db… |
+| 2026-06-16 06:17:37 | architect | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 1311 | 26923 | Adversarially review this diagnosis and produce a corrected … |
+| 2026-06-16 06:18:04 | lead | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 643 | 22113 | Bug report to fix (orchestrate it): SQLite via Drizzle (bett… |
+| 2026-06-16 06:18:26 | code-impl | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 241 | 5356 | Small feature. Add an optional `is_ephemeral` filter to a ta… |
+| 2026-06-16 06:18:31 | code-impl | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 290 | 6469 | Small feature. `startSseServer(taskStore)` always binds the … |
+| 2026-06-16 06:18:38 | code-impl | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 144 | 3289 | Small change. Add two new task statuses, `waiting` and `awai… |
+| 2026-06-16 06:18:41 | code-impl | lmstudio | qwen3-coder-30b-a3b-instruct-m | completed | 0 | 1 | 166 | 3778 | Small change. `client.ts` keeps the raw connection module-pr… |

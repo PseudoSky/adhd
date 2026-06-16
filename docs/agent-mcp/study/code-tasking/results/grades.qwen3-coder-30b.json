@@ -63,7 +63,7 @@
    },
    {
     "name": "connection-level fix (pragma OFF before migrate, restore after)",
-    "ok": true
+    "ok": false
    },
    {
     "name": "keeps the cascade (does not weaken it)",
@@ -159,7 +159,7 @@
    },
    {
     "name": "port injectable",
-    "ok": false
+    "ok": true
    }
   ],
   "error": null
@@ -170,11 +170,11 @@
   "tier": "discriminator",
   "posing": "C_NEUTRAL audit",
   "mode": "single",
-  "verdict": "PASS",
+  "verdict": "CHECK",
   "signals": [
    {
     "name": "identifies comment false-match",
-    "ok": true
+    "ok": false
    },
    {
     "name": "fix ignores comments / matches real code",
@@ -212,11 +212,11 @@
   "tier": "discriminator",
   "posing": "V3 ts-pro FK + distractor facts",
   "mode": "single",
-  "verdict": "PASS",
+  "verdict": "CHECK",
   "signals": [
    {
     "name": "names PRAGMA-no-op-in-transaction cause",
-    "ok": true
+    "ok": false
    },
    {
     "name": "connection-level fix (pragma OFF before migrate, restore after)",
@@ -285,15 +285,15 @@
   "tier": "discriminator",
   "posing": "M2 adversarial architect",
   "mode": "single",
-  "verdict": "CHECK",
+  "verdict": "PASS",
   "signals": [
    {
     "name": "names PRAGMA-no-op-in-transaction cause",
-    "ok": false
+    "ok": true
    },
    {
     "name": "connection-level fix (pragma OFF before migrate, restore after)",
-    "ok": false
+    "ok": true
    },
    {
     "name": "keeps the cascade (does not weaken it)",

@@ -41,16 +41,24 @@ const PROVIDER = arg("provider", "lmstudio"); // lmstudio | anthropic
 const MODEL = arg("model");
 const TESTS = arg("tests", "all");
 const TIMEOUT = parseInt(arg("timeout", PROVIDER === "anthropic" ? "90000" : "180000"), 10);
+// Controlled sampling: temperature 0 (greedy/deterministic) + a fixed token cap by
+// default, so a run is reproducible instead of a single draw at the provider's
+// default temperature. Both overridable. (agent-mcp's provider config exposes
+// temperature [0–1] and maxTokens; top_p is not exposed — moot at temp 0.)
+const TEMPERATURE = parseFloat(arg("temperature", "0"));
+const MAX_TOKENS = parseInt(arg("max-tokens", "8192"), 10);
 const DRYRUN = argv.includes("--dry-run");
 if (!LABEL || !MODEL) {
-  console.error("required: --label <str> --model <str> [--provider lmstudio|anthropic] [--tests all|csv]");
+  console.error("required: --label <str> --model <str> [--provider lmstudio|anthropic] [--tests all|csv] [--temperature 0] [--max-tokens 8192]");
   process.exit(2);
 }
 
-const providerObj = () =>
-  PROVIDER === "anthropic"
-    ? { type: "anthropic", model: MODEL, authTokenEnv: "ANTHROPIC_AUTH_TOKEN", timeoutMs: TIMEOUT }
-    : { type: "lmstudio", model: MODEL, timeoutMs: TIMEOUT };
+const providerObj = () => {
+  const base = { model: MODEL, timeoutMs: TIMEOUT, temperature: TEMPERATURE, maxTokens: MAX_TOKENS };
+  return PROVIDER === "anthropic"
+    ? { type: "anthropic", authTokenEnv: "ANTHROPIC_AUTH_TOKEN", ...base }
+    : { type: "lmstudio", ...base };
+};
 
 const plan = JSON.parse(readFileSync(join(__dir, "plan.json"), "utf8"));
 
@@ -94,7 +102,7 @@ const unwrap = (raw) => {
 };
 
 async function main() {
-  console.log(`[runner] label=${LABEL} provider=${PROVIDER} model=${MODEL} tests=[${selected.join(",")}] timeout=${TIMEOUT}ms`);
+  console.log(`[runner] label=${LABEL} provider=${PROVIDER} model=${MODEL} temp=${TEMPERATURE} max_tokens=${MAX_TOKENS} tests=[${selected.join(",")}] timeout=${TIMEOUT}ms`);
   if (DRYRUN) {
     for (const t of runTests) console.log(`  would run test-${t.id} (${t.mode}) ${t.posing}`);
     return;
@@ -190,8 +198,8 @@ async function main() {
 }
 
 function rec(t, step, agent, prompt, u) {
-  return { label: LABEL, provider: PROVIDER, model: MODEL, test: t.id, scenario: t.scenario,
-    tier: t.tier, posing: t.posing, mode: t.mode, step, agent, prompt,
+  return { label: LABEL, provider: PROVIDER, model: MODEL, temperature: TEMPERATURE, max_tokens: MAX_TOKENS,
+    test: t.id, scenario: t.scenario, tier: t.tier, posing: t.posing, mode: t.mode, step, agent, prompt,
     result: u.text, result_task_id: u.task_id, result_status: u.status };
 }
 

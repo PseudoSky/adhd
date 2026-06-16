@@ -129,11 +129,12 @@ separate "produces plausible output" from "produces correct output."
 
    | | gemma-4-e4b | qwen2.5-14b | qwen3.5-9b (distill) | qwen3-coder-30b | claude-haiku-4-5 | claude-sonnet-4-6 |
    |---|---|---|---|---|---|---|
-   | `DIAGNOSE` strict PASS | 0/9 | 0/9 | 1/9 | 1/9 | 4/9 | **9/9** |
+   | `DIAGNOSE` strict PASS | 0/9 | 0/9 | 1/9 | 2/9 | 4/9 | **9/9** |
    | overall score / 18 | 5.0 | 5.0 | 7.0 | 9.5 | 13.5 | 17.0 |
 
    - **Size is not the axis** — a 4B (gemma-4-e4b) ties the 14B: both hold the floor and diagnose nothing (0/9). Diagnosis tracks *capability tier*, not parameter count. (`runner/scoreboard.py` renders this from `grades.manual.json`; `runner/failures.py` shows why each non-PASS failed.)
-   - **Code-specialization ≠ diagnosis** — the 30B coder (Qwen3-Coder-30B) is the first *local* model to catch the audit comment-trap and clears APPLY 4/4, but its cold FK diagnosis (1/9) ties the 9B distill. It buys careful code-reading + application, not cross-layer synthesis.
+   - **Code-specialization ≠ reliable diagnosis** — the 30B coder (Qwen3-Coder-30B, run greedy) is the first *local* model to catch the audit comment-trap and clears APPLY 3/4, but its cold FK diagnosis (2/9) only edges the 9B distill. It buys careful code-reading + application, not dependable cross-layer synthesis.
+   - **Sampling caveat:** only `qwen3-coder-30b` was run at **temperature 0 (greedy)**; the other five are single draws at provider-default temp (LM Studio ~0.8, Anthropic 1.0). Borderline cells are sampling-sensitive (re-running qwen3-coder greedy swapped T13↔T10, same score); the ladder shape is not. Use `run-study.mjs --temperature 0` for a deterministic board.
    - The **9B "Claude-4.6 high-IQ distill" did not inherit diagnosis** — it matches the 14B wall (only clears supplied/scaffolded tests). Distillation bought *application + calibration*, not *synthesis*.
    - **Haiku-4.5 is the dangerous middle: right fix, wrong reason** — it often lands a working connection-level FK fix while stating a wrong mechanism ("deferred FK checks", "separate connection"). A test gate catches the bad ones; confidence doesn't.
    - **Only sonnet-4.6 gets cause *and* fix right every time.** Full four-model table + the orchestration breakdown: [`results/comparison.md`](results/comparison.md). The whole battery is a one-command harness — [`runner/`](runner/) — that runs `plan.json` against any provider/model.
