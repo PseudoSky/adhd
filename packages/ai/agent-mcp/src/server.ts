@@ -361,6 +361,37 @@ session_clear({ "session_id": "abc-123" })
 
 ---
 
+## Token usage and metrics
+
+Every model call is recorded in \`task_usage\`. Use \`usage_query\` to query it:
+
+\`\`\`jsonc
+// Raw rows for a specific task (includes delegation subtree)
+usage_query({ "task_id": "t-456" })
+
+// Aggregate by agent — which agent costs the most?
+usage_query({ "group_by": "agent" })
+// → groups[]: [{ key: "orchestrator", taskCount: 10, completedCount: 8,
+//               failedCount: 1, cancelledCount: 1,
+//               inputTokens: 45000, outputTokens: 12000,
+//               avgLatencyMs: 18500, ... }, ...]
+
+// Aggregate by model within a time window
+usage_query({ "group_by": "model", "since": "2026-06-01T00:00:00Z" })
+
+// Aggregate by provider (openai / anthropic / lmstudio / claudecli)
+usage_query({ "group_by": "provider" })
+
+// Combine filters: per-model breakdown for one agent
+usage_query({ "agent_name": "orchestrator", "group_by": "model" })
+\`\`\`
+
+All existing filters (\`task_id\`, \`root_task_id\`, \`agent_name\`, \`since\`, \`limit\`)
+compose with \`group_by\`. Without \`group_by\`, raw rows are returned ordered by
+\`created_at\` desc.
+
+---
+
 ## Common errors
 
 | error code              | meaning                                               |
@@ -434,7 +465,9 @@ export function createServer(deps: ServerDeps): Server {
         {
             name: "usage_query",
             description:
-                "Query recorded token usage from task_usage by task_id (returns the full delegation subtree), root_task_id, agent_name, or time window",
+                "Query recorded token usage. Filters: task_id (returns full delegation subtree), root_task_id, agent_name, since (ISO-8601). " +
+                "Set group_by='agent'|'model'|'provider' to aggregate by that dimension — returns one row per group with taskCount, completedCount, failedCount, cancelledCount, token totals, and avgLatencyMs, ordered by total token spend desc. " +
+                "Without group_by, returns raw task_usage rows ordered by created_at desc.",
             inputSchema: toMcpInputSchema(taskUsageInputSchema),
         },
         {
@@ -531,7 +564,7 @@ export function createServer(deps: ServerDeps): Server {
             },
             {
                 name: "agent_delete",
-                description: "Delete a stored agent definition",
+                description: "Delete a stored agent definition. Pass force:true to close any active sessions first (recovery tool for orphaned sessions from failed delegations).",
                 inputSchema: toMcpInputSchema(agentDeleteInputSchema),
             },
             {
@@ -587,7 +620,9 @@ export function createServer(deps: ServerDeps): Server {
             {
                 name: "usage_query",
                 description:
-                    "Query recorded token usage from task_usage by task_id (returns the full delegation subtree), root_task_id, agent_name, or time window. Bare {} returns the most recent rows.",
+                    "Query recorded token usage. Filters: task_id (returns full delegation subtree), root_task_id, agent_name, since (ISO-8601). " +
+                    "Set group_by='agent'|'model'|'provider' to aggregate by that dimension — returns one row per group with taskCount, completedCount, failedCount, cancelledCount, token totals, and avgLatencyMs, ordered by total token spend desc. " +
+                    "Without group_by, returns raw task_usage rows ordered by created_at desc.",
                 inputSchema: toMcpInputSchema(taskUsageInputSchema),
             },
             {
@@ -605,19 +640,19 @@ export function createServer(deps: ServerDeps): Server {
         try {
             switch (name) {
                 case "agent_create":
-                    return toMcpContent(agentCreate(agentCreateInputSchema.parse(args), { agentStore: deps.agentStore }));
+                    return toMcpContent(agentCreate(agentCreateInputSchema.parse(args), { agentStore: deps.agentStore, sessionStore: deps.sessionStore }));
 
                 case "agent_read":
-                    return toMcpContent(agentRead(agentReadInputSchema.parse(args), { agentStore: deps.agentStore }));
+                    return toMcpContent(agentRead(agentReadInputSchema.parse(args), { agentStore: deps.agentStore, sessionStore: deps.sessionStore }));
 
                 case "agent_update":
-                    return toMcpContent(agentUpdate(agentUpdateInputSchema.parse(args), { agentStore: deps.agentStore }));
+                    return toMcpContent(agentUpdate(agentUpdateInputSchema.parse(args), { agentStore: deps.agentStore, sessionStore: deps.sessionStore }));
 
                 case "agent_delete":
-                    return toMcpContent(agentDelete(agentDeleteInputSchema.parse(args), { agentStore: deps.agentStore }));
+                    return toMcpContent(agentDelete(agentDeleteInputSchema.parse(args), { agentStore: deps.agentStore, sessionStore: deps.sessionStore }));
 
                 case "agent_list":
-                    return toMcpContent(agentList(args, { agentStore: deps.agentStore }));
+                    return toMcpContent(agentList(args, { agentStore: deps.agentStore, sessionStore: deps.sessionStore }));
 
                 case "agent":
                     return toMcpContent(

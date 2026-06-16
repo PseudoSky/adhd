@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, or, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, or, sql, type SQL } from "drizzle-orm";
 
 const SEVERITY: Record<string, number> = { length: 3, tool_calls: 2, stop: 1, unknown: 0 };
 
@@ -11,8 +11,9 @@ function mostSevereStr(a: string | undefined, b: string | undefined): string | u
 
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
-import { taskUsageTable } from "../db/schema.js";
+import { taskUsageTable, tasksTable } from "../db/schema.js";
 import type {
+  GroupedUsageRow,
   TaskUsageInput,
   TaskUsageReport,
   UsageSummary,
@@ -29,6 +30,12 @@ export type TaskUsageRow = typeof taskUsageTable.$inferSelect;
 
 export interface UsageQueryResult {
   rows: TaskUsageRow[];
+  /**
+   * Populated only when `group_by` is set in the input. Each entry aggregates
+   * all matching tasks along the chosen dimension (agent, model, or provider).
+   * `rows` is empty when `groups` is present.
+   */
+  groups?: GroupedUsageRow[];
   summary: {
     totalInputTokens: number;
     totalOutputTokens: number;
@@ -107,12 +114,58 @@ export function usageQuery(db: Database, input: TaskUsageInput): UsageQueryResul
     filters.push(eq(taskUsageTable.isComplete, 1));
   }
 
+  const whereClause = filters.length > 0 ? and(...filters) : undefined;
   const limit = input?.limit ?? 50;
 
+  // ── Grouped aggregation path ──────────────────────────────────────────────
+  if (input?.group_by) {
+    // Map the group_by enum to the actual column reference.
+    const groupCol =
+      input.group_by === "model"    ? taskUsageTable.model :
+      input.group_by === "provider" ? taskUsageTable.providerType :
+                                      taskUsageTable.agentName; // "agent"
+
+    const groups = db
+      .select({
+        key: groupCol,
+        taskCount:          sql<number>`count(*)`,
+        completedCount:     sql<number>`sum(case when ${tasksTable.status} = 'completed' then 1 else 0 end)`,
+        failedCount:        sql<number>`sum(case when ${tasksTable.status} = 'failed' then 1 else 0 end)`,
+        cancelledCount:     sql<number>`sum(case when ${tasksTable.status} = 'cancelled' then 1 else 0 end)`,
+        inputTokens:        sql<number>`sum(${taskUsageTable.inputTokens})`,
+        outputTokens:       sql<number>`sum(${taskUsageTable.outputTokens})`,
+        toolCallCount:      sql<number>`sum(${taskUsageTable.toolCallCount})`,
+        modelCalls:         sql<number>`sum(${taskUsageTable.modelCalls})`,
+        avgLatencyMs:       sql<number>`avg(case when ${taskUsageTable.latencyMs} > 0 then ${taskUsageTable.latencyMs} else null end)`,
+        cacheReadTokens:    sql<number | null>`sum(${taskUsageTable.cacheReadTokens})`,
+        cacheCreationTokens: sql<number | null>`sum(${taskUsageTable.cacheCreationTokens})`,
+      })
+      .from(taskUsageTable)
+      .leftJoin(tasksTable, eq(taskUsageTable.taskId, tasksTable.id))
+      .where(whereClause)
+      .groupBy(groupCol)
+      .orderBy(desc(sql`sum(${taskUsageTable.inputTokens} + ${taskUsageTable.outputTokens})`))
+      .limit(limit)
+      .all() as GroupedUsageRow[];
+
+    const totalInputTokens  = groups.reduce((n, r) => n + r.inputTokens, 0);
+    const totalOutputTokens = groups.reduce((n, r) => n + r.outputTokens, 0);
+    const totalToolCalls    = groups.reduce((n, r) => n + r.toolCallCount, 0);
+    const totalModelCalls   = groups.reduce((n, r) => n + r.modelCalls, 0);
+    const taskCount         = groups.reduce((n, r) => n + r.taskCount, 0);
+
+    return {
+      rows: [],
+      groups,
+      summary: { totalInputTokens, totalOutputTokens, totalToolCalls, totalModelCalls, taskCount },
+    };
+  }
+
+  // ── Raw rows path (original behaviour) ───────────────────────────────────
   const rows = db
     .select()
     .from(taskUsageTable)
-    .where(filters.length > 0 ? and(...filters) : undefined)
+    .where(whereClause)
     .orderBy(desc(taskUsageTable.createdAt))
     .limit(limit)
     .all();

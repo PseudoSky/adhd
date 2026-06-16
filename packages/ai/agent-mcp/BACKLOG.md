@@ -48,10 +48,12 @@ nice-to-have / cleanup.
 ## 🐞 Bugs
 
 ### BUG-002 — Delegation-opened sessions are never reaped → leak + undeletable sub-agent
-- **Status:** backlog
+- **Status:** done (in source; ships in the next publish) · **Closed:** 2026-06-16
 - **Priority:** P2
 - **Area:** engine (orchestrator), store/session, store/agent
 - **Reported:** 2026-06-15
+
+**Resolution (2026-06-16):** Two complementary fixes. (1) **Orchestrator reap**: `Orchestrator.run()` now tracks a `delegationSessions: Set<string>` — every `agent-mcp__agent` tool call result is inspected for a `session_id`; on failure or cancellation (i.e. `!taskSucceeded`) the `finally` block closes each tracked session, suppressing `SESSION_CLOSED` errors for races. Sessions are NOT closed on success so the caller can continue using them. (2) **`agent_delete` force flag**: `agentDeleteInputSchema` gains an optional `force: boolean`; `agentDelete()` lists active sessions and closes them before calling `agentStore.delete()` when `force: true` — the recovery escape hatch for existing orphans. `AgentCrudDeps` now includes `sessionStore`; all five crud call sites in `server.ts` updated. Tested in `__tests__/bug-002-session-reap.test.ts` (6 tests: failure closes sessions, success doesn't, cancel closes, force closes+deletes, no-force skips, force swallows SESSION_CLOSED; teeth verified by reverting the respective code paths).
 
 **Problem / Description** — A session created during a task (e.g. an orchestrating
 agent calls the `agent` tool to instantiate a stateful session for a sub-agent)
@@ -140,11 +142,20 @@ interface supports it.
 
 **References** — `src/providers/types.ts`, `src/streaming/*`. (Migrated from GAPS §3; was "deferred to 0.5.0".)
 
-### FEAT-002 — Agent & task metrics plugin (`@adhd/metrics-plugin`)
-- **Status:** backlog
+### FEAT-002 — Agent & task metrics via `usage_query` `group_by`
+- **Status:** done (in source; ships in next publish) · **Closed:** 2026-06-16
 - **Priority:** P2
-- **Area:** observability (plugin over `task_usage` + `tasks`)
+- **Area:** observability (`tools/usage.ts`, `validation/usage.ts`)
 - **Reported:** 2026-06-15
+
+**Resolution (2026-06-16):** Added `group_by: "agent" | "model" | "provider"` to
+`usage_query`. When set, the query does a LEFT JOIN with `tasks` and aggregates by
+the chosen dimension, returning `taskCount`, `completedCount`, `failedCount`,
+`cancelledCount`, token totals, `avgLatencyMs` (zero-latency excluded), and cache
+tokens per group, ordered by total token spend desc. All existing filters compose
+before grouping. No new MCP tool, no plugin, no interface change — the right home
+for a query over core-owned tables is the core tool that already owns that surface.
+12 tests in `__tests__/usage-group-by.test.ts`.
 
 **Problem / Description**
 No aggregated visibility: which agent is most expensive, success rate over a
@@ -152,14 +163,34 @@ window, slowest tasks, tokens per agent. Only raw `task_usage`/`tasks` rows.
 
 **Impact** Cost attribution, perf tuning, and anomaly detection require manual querying.
 
-**Proposed fix / Approach**
-`@adhd/metrics-plugin` exposing `agent_metrics`, `task_metrics` (incl. recursive
-subtree cost via `root_task_id`), and `metrics_summary` — all read-only over
-`task_usage` + `tasks`. Depends on the shipped token-usage tracking.
-
-**Acceptance criteria** Three MCP tools return correct rollups; no new hooks required.
-
 **References** — ROADMAP Strategic 8.10 (highest-scored MOAT feature). (Migrated from GAPS §5.)
+
+### FEAT-004 — External plugin loading via `AGENT_MCP_PLUGINS` env var
+- **Status:** done (in source; ships in next publish) · **Closed:** 2026-06-16
+- **Priority:** P2
+- **Area:** server startup (`index.ts`), types (`agent-mcp-types`)
+- **Reported:** 2026-06-16
+
+**Resolution (2026-06-16):** Implemented `loadExternalPlugins()` in `index.ts`.
+`AGENT_MCP_PLUGINS` is a comma-separated list of module specifiers (absolute file
+paths or npm package names). Each module must export a `createPlugin(ctx: PluginContext): Plugin`
+factory as `default` or named export. Resolution order: CWD's `node_modules` first
+(covers `npx` and project-installed packages), then the server binary's own location.
+Failures are logged at `error` level and skipped — a bad plugin never kills the server.
+Added `PluginContext` and `PluginFactory` types to `@adhd/agent-mcp-types`. Documented
+both activation paths (env var and hard-wired in `index.ts`) plus the full `.mcp.json`
+shape in `PLUGINS.md`.
+
+**Problem / Description** — Plugins were compile-time only (import in `index.ts`,
+rebuild). The published `npx @adhd/agent-mcp@latest` entry had no mechanism to
+activate external plugins. Users of the published package couldn't add plugins
+without forking the package.
+
+**Impact** — Plugin system not usable by external consumers of the published package.
+
+**References** — `src/index.ts` (`loadExternalPlugins`), `packages/ai/agent-mcp-types/src/hooks.ts` (`PluginContext`, `PluginFactory`), `PLUGINS.md`.
+
+---
 
 ### FEAT-003 — Queue priority levels + per-agent concurrency limit
 - **Status:** backlog
@@ -184,10 +215,12 @@ no per-agent concurrency cap — only a server-wide `QUEUE_CONCURRENCY`.
 ## 🔧 Tech Debt / Improvements
 
 ### DEBT-001 — Audit & harden against unhandled exceptions across the server
-- **Status:** backlog
+- **Status:** done (in source; ships in the next publish) · **Closed:** 2026-06-16
 - **Priority:** P1
 - **Area:** server-wide (streaming, providers, engine/queue, db, transport)
 - **Reported:** 2026-06-15
+
+**Resolution (2026-06-16):** Completed the error boundary audit and added the missing top-level safety net. Boundary inventory: (a) **SSE server** — `'error'` event handler added in BUG-001; degrades to unavailable on bind failure. (b) **BackgroundQueue** — `catch` in `enqueue()` swallows task errors after the orchestrator's own `try/catch/finally` has already updated task status; rethrowing would turn a per-task failure into an unhandled rejection and kill the server. Added an explanatory comment referencing DEBT-001 to confirm this is intentional. (c) **Orchestrator** — per-task `try/catch/finally` updates status and re-throws to the queue's swallower. (d) **Providers** — `pRetry` wraps network calls; the orchestrator's inner `try/catch` translates provider errors to typed `ToolError` codes. (e) **Top-level gap (now fixed)**: added `process.on("uncaughtException")` + `process.on("unhandledRejection")` handlers in `index.ts` before `main()` — log fatal + `process.exit(1)` so any structural bug that slips through all the per-component handlers produces structured output instead of an opaque crash. Tested in `__tests__/bug-002-session-reap.test.ts` (DEBT-001 section: queue error-swallowing verified with two cases — `onIdle()` resolves after a throwing task, and subsequent tasks still run).
 
 **Problem / Description**
 BUG-001 showed a single unhandled `'error'` event (SSE `EADDRINUSE`) can crash
@@ -308,10 +341,12 @@ qualified name canonical for policy/dispatch.
 ---
 
 ### DEBT-005 — provider `timeoutMs` doesn't bound the OpenAI-SDK client's HTTP timeout
-- **Status:** backlog
+- **Status:** done (in source; ships in the next publish) · **Closed:** 2026-06-16
 - **Priority:** P2
 - **Area:** providers (`src/providers/openai.ts`)
 - **Reported:** 2026-06-16
+
+**Resolution (2026-06-16):** `OpenAIProvider` constructor now passes `timeout: config.timeoutMs ?? 60_000` to `new OpenAI({...})`, aligning the SDK's built-in HTTP timeout with the user-configured value. All `AnthropicProvider` client construction sites (`constructor` + OAuth refresh path in `chat()`) similarly receive `timeout: this.config.timeoutMs`. Without the passthrough, slow models exceeded the SDK's ~10-min default and threw `APIConnectionTimeoutError` ("Request timed out.") — a generic `PROVIDER_ERROR` that bypassed the actionable `PROVIDER_TIMEOUT` path and ignored `timeoutMs` entirely. `LMStudioProvider` inherits the fix through `OpenAIProvider`'s constructor. Tested in `__tests__/debt-005-sdk-timeout.test.ts` (4 tests: explicit timeout, default fallback, large value, LMStudio inheritance; reverting the `timeout:` line makes the constructor-arg assertion fail).
 
 **Problem / Description** — The OpenAI/LM Studio provider constructs `new OpenAI({apiKey, baseURL})`
 without a `timeout`, so it uses the SDK default (~10 min). The agent's `timeoutMs` only feeds the

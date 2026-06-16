@@ -17,12 +17,28 @@ import { Orchestrator } from "./engine/orchestrator.js";
 import { HookRegistry } from "./engine/hooks.js";
 import { PolicyEngine } from "./engine/policy.js";
 import { UsagePlugin } from "./plugins/index.js";
+import { loadExternalPlugins } from "./plugins/loader.js";
 import { startServer } from "./server.js";
 import { startSseServer } from "./streaming/sse-server.js";
 import { enqueueExistingTask } from "./tools/task.js";
 import { tasksTable } from "./db/schema.js";
 import { eq } from "drizzle-orm";
 import { ToolError } from "./validation/errors.js";
+
+// DEBT-001: top-level safety net for anything that escapes the per-component
+// handlers (SSE 'error' event: BUG-001; queue catch: BackgroundQueue.enqueue;
+// orchestrator try/catch; provider pRetry). An unhandled error here means a
+// structural bug — log structured context and exit so the process doesn't
+// silently hang or produce opaque output.
+process.on("uncaughtException", (err) => {
+    logger.fatal({ err }, "Uncaught exception — exiting");
+    process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+    logger.fatal({ reason }, "Unhandled promise rejection — exiting");
+    process.exit(1);
+});
 
 async function main() {
     // Run DB migrations synchronously before advertising tools
@@ -43,6 +59,11 @@ async function main() {
     // Must never throw — handlers are internally guarded.
     const usagePlugin = new UsagePlugin(dbAny);
     await usagePlugin.install(hooks);
+
+    // External plugins: loaded from AGENT_MCP_PLUGINS env var.
+    // Each entry is a module specifier (absolute path or npm package name) that
+    // exports a createPlugin(ctx) factory. Failures are logged and skipped.
+    await loadExternalPlugins(hooks, dbAny);
 
     // Instantiate engine components
     const queue = new BackgroundQueue();

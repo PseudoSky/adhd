@@ -35,8 +35,11 @@ export class BackgroundQueue {
             try {
                 await runFn();
             } catch (error) {
-                // The orchestrator's try/catch already updates the task status.
-                // Log here for observability, but don't rethrow (would crash the queue).
+                // DEBT-001 error boundary: the orchestrator's try/catch/finally already
+                // updates the task status and emits TASK_FAILED before re-throwing.
+                // Swallowing here is intentional — rethrowing would surface as an
+                // unhandled rejection in p-queue and reach our process.on("unhandledRejection")
+                // handler, killing the server for a per-task failure. Log for observability.
                 logger.error({ taskId, error }, "Background task failed");
             }
         });

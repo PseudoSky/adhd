@@ -145,6 +145,13 @@ export const agentReadInputSchema = z.object({
 
 export const agentDeleteInputSchema = z.object({
   name: z.string().min(1),
+  /**
+   * When true, close any active sessions for the agent before deleting it.
+   * Without this flag, deletion fails with AGENT_HAS_ACTIVE_SESSIONS if any
+   * session is still open. Use this as a recovery tool when a failed delegation
+   * left orphaned sessions (BUG-002 escape hatch).
+   */
+  force: z.boolean().optional(),
 });
 
 export const agentListInputSchema = z.object({}).optional();

@@ -299,7 +299,7 @@ export class AnthropicProvider implements LLMProvider {
         const authToken = process.env[config.authTokenEnv ?? "ANTHROPIC_AUTH_TOKEN"] || undefined;
 
         if (apiKey) {
-            this.client = new Anthropic({ apiKey });
+            this.client = new Anthropic({ apiKey, timeout: config.timeoutMs });
         } else if (authToken) {
             // OAuth tokens (sk-ant-oat…) require the oauth-2025-04-20 beta header;
             // without it the Messages API returns 429. API keys (sk-ant-api…) do not.
@@ -307,11 +307,15 @@ export class AnthropicProvider implements LLMProvider {
             this._useOauthIdentity = isOauth;
             this.client = new Anthropic({
                 authToken,
+                timeout: config.timeoutMs,
                 ...(isOauth ? { defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" } } : {}),
             });
         } else {
             // No credentials found via env — SDK will throw a clear AuthenticationError
-            this.client = new Anthropic();
+            // DEBT-005: pass timeoutMs so SDK timeout aligns with our AbortSignal.
+            // Less critical than OpenAI: Anthropic uses .stream() which bypasses the
+            // SDK's synchronous 10-minute limit, but we align for consistency.
+            this.client = new Anthropic({ timeout: config.timeoutMs });
         }
     }
 
@@ -325,6 +329,7 @@ export class AnthropicProvider implements LLMProvider {
                 this._useOauthIdentity = true;
                 this.client = new Anthropic({
                     authToken,
+                    timeout: this.config.timeoutMs,
                     defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
                 });
             } catch (keychainErr) {
@@ -336,12 +341,13 @@ export class AnthropicProvider implements LLMProvider {
 
                 if (apiKey) {
                     this._useOauthIdentity = false;
-                    this.client = new Anthropic({ apiKey });
+                    this.client = new Anthropic({ apiKey, timeout: this.config.timeoutMs });
                 } else if (authToken) {
                     const isOauth = authToken.startsWith("sk-ant-oat");
                     this._useOauthIdentity = isOauth;
                     this.client = new Anthropic({
                         authToken,
+                        timeout: this.config.timeoutMs,
                         ...(isOauth ? { defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" } } : {}),
                     });
                 } else {

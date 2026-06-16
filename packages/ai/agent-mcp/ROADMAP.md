@@ -193,6 +193,13 @@ Both low necessity and low differentiation. Wire in existing best-in-class solut
 The first consolidated release ships the full task-orchestration core as one
 interdependent version:
 
+- **Lifecycle event middleware** — `HookRegistry` with 11 hooks emitted across
+  the orchestrator (`task:start`, `pre:model_request`, `post:model_response`,
+  `pre:tool_call`, `post:tool_call`, `message:appended`, `task:completed`,
+  `task:failed`, `task:cancelled`), `SessionStore` (`session:created`), and
+  `AgentStore` (`agent:mutated`). Plugin packages consume these hooks without
+  touching the orchestrator loop. `UsagePlugin` is the first consumer (shipped
+  alongside). `IHookRegistry` interface exported from `@adhd/agent-mcp-types`.
 - **Task schema foundation** — `depends_on`, `on_upstream_failure`, `inputs`,
   `resume_token` columns; `waiting` + `awaiting_input` statuses.
 - **Parallel tool execution** — concurrent (`Promise.all`) tool dispatch per turn.
@@ -208,14 +215,14 @@ interdependent version:
 
 ## Recommended Build Order
 
-### Phase 1 — Foundation (Core + Middleware)
+### Phase 1 — Foundation (Core + Middleware) ✓ Complete
 
-Prerequisite for everything else. No new user-facing features, but unblocks the plugin ecosystem.
+All Phase 1 prerequisites shipped in 1.0.0 / 0.0.6. Plugin ecosystem is unblocked.
 
-1. **Lifecycle event middleware** — 11 hooks in orchestrator
-2. **Token usage tracking** — CORE, straightforward, high necessity ✓ (implemented)
-   - *0.0.6 follow-on:* `max_tokens` + `stop_reason` columns in `task_usage` — detect truncated outputs; see Gap #6
-3. **Context window full handling** — CORE; detect `CONTEXT_WINDOW_EXCEEDED` + sliding-window truncation; configurable via `AGENT_MCP_CONTEXT_LIMIT`; see Gap #7
+1. **Lifecycle event middleware** ✓ — 11 hooks across orchestrator + stores (1.0.0)
+2. **Token usage tracking** ✓ — `task_usage` + `usage_query` (0.0.6)
+   - `max_tokens` + `stop_reason` columns ✓ (0.0.6)
+3. **Context window full handling** ✓ — `CONTEXT_WINDOW_EXCEEDED` + sliding-window truncation via `AGENT_MCP_CONTEXT_LIMIT` (0.0.6)
 4. **Per-task priority queue** — CORE, highest strategic score among infrastructure features
 5. **Per-agent concurrency limit** — CORE, needed before multi-agent production use
 
