@@ -263,12 +263,14 @@ fundamental subprocess-model limitation and document it clearly (consider
 `<server>__<tool>` (intentional — see CLAUDE.md "Tool name prefixing"). But when a
 model emits the **bare** name (`agent` / `task` instead of `agent-mcp__agent`),
 dispatch throws `Invalid tool name (missing server prefix)` and the whole task
-fails. More-capable models do this readily: in the code-tasking study, both
-`claude-sonnet-4-6` and `qwen3.5-9b` `lead` agents called bare `agent`/`task` and
-failed test-14, while the smaller `qwen2.5-14b` happened to use the prefixed form.
-So orchestration reliability currently depends on the model guessing a naming
-convention rather than on capability — a sharp DX edge that makes the headline
-recursive-delegation feature flaky precisely for strong models.
+fails. Observed in the code-tasking study: `claude-sonnet-4-6`'s `lead` called a
+bare `agent` and failed test-14 (`tasks` row `7062edff`). It is **model-specific,
+not universal** — in the same study `claude-haiku-4-5` and `qwen2.5-14b` leads used
+the prefixed names and orchestrated fine (the `qwen3.5-9b` lead failed test-14 a
+different way — empty output). So orchestration reliability currently depends in
+part on the model guessing a naming convention rather than purely on capability —
+a sharp, silent DX edge: when a model trips it, the whole delegation dies with an
+error it can't easily self-correct.
 
 **Impact** — Orchestration/delegation tasks fail non-deterministically by model;
 the error is opaque to the model (it can't easily self-correct). Undermines the

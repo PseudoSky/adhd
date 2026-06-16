@@ -73,24 +73,45 @@
 | 2026-06-16 01:37:56 | — | — | — | failed | — | — | — | — | Small feature. `startSseServer(taskStore)` always binds the … |
 | 2026-06-16 01:37:56 | — | — | — | failed | — | — | — | — | Small change. Add two new task statuses, `waiting` and `awai… |
 | 2026-06-16 01:37:56 | — | — | — | failed | — | — | — | — | Small change. `client.ts` keeps the raw connection module-pr… |
-| 2026-06-16 01:39:36 | code-impl | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 125 | 41592 | Small change. Add two new task statuses, `waiting` and `awai… |
-| 2026-06-16 01:40:38 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 746 | 25793 | Bug report. An MCP server (stdio JSON-RPC on stdout) also st… |
-| 2026-06-16 01:41:04 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 258 | 8628 | Bug report. We have a SQLite database (accessed via Drizzle … |
-| 2026-06-16 01:41:12 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 240 | 8659 | Bug report (SQLite + Drizzle ORM). Migration 0005 recreates … |
-| 2026-06-16 01:41:21 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 460 | 14822 | Bug report (Python audit script). This check is supposed to … |
-| 2026-06-16 01:41:36 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 256 | 9237 | Bug + constraints (SQLite + Drizzle better-sqlite3 migrator)… |
-| 2026-06-16 01:41:45 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 499 | 16795 | Bug: after our DB migrations run on an existing populated da… |
-| 2026-06-16 01:42:02 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 413 | 14014 | Bug: this process is primarily a Model Context Protocol serv… |
-| 2026-06-16 01:42:16 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 186 | 7330 | Bug: this Python audit check is supposed to verify that, in … |
-| 2026-06-16 01:42:23 | ts-pro | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 1786 | 56604 | Bug: after our DB migrations run on an existing populated da… |
-| 2026-06-16 01:43:20 | ts-pro | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 1752 | 54811 | Bug: after our DB migrations run on an existing populated da… |
-| 2026-06-16 01:44:15 | ts-pro | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 983 | 31676 | Bug: this process is primarily an MCP server speaking JSON-R… |
+| 2026-06-16 01:39:36 | code-impl | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 125 | 41592 | Small change. Add two new task statuses, `waiting` and `awai… |
+| 2026-06-16 01:40:38 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 746 | 25793 | Bug report. An MCP server (stdio JSON-RPC on stdout) also st… |
+| 2026-06-16 01:41:04 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 258 | 8628 | Bug report. We have a SQLite database (accessed via Drizzle … |
+| 2026-06-16 01:41:12 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 240 | 8659 | Bug report (SQLite + Drizzle ORM). Migration 0005 recreates … |
+| 2026-06-16 01:41:21 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 460 | 14822 | Bug report (Python audit script). This check is supposed to … |
+| 2026-06-16 01:41:36 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 256 | 9237 | Bug + constraints (SQLite + Drizzle better-sqlite3 migrator)… |
+| 2026-06-16 01:41:45 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 499 | 16795 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 01:42:02 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 413 | 14014 | Bug: this process is primarily a Model Context Protocol serv… |
+| 2026-06-16 01:42:16 | code-fixer | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 186 | 7330 | Bug: this Python audit check is supposed to verify that, in … |
+| 2026-06-16 01:42:23 | ts-pro | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 1786 | 56604 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 01:43:20 | ts-pro | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 1752 | 54811 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 01:44:15 | ts-pro | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 983 | 31676 | Bug: this process is primarily an MCP server speaking JSON-R… |
 | 2026-06-16 01:44:46 | synth-coder | anthropic | claude-sonnet-4-6 | completed | 0 | 1 | 1155 | 26199 | DIAGNOSE this bug (do not write the fix yet).  SQLite via Dr… |
 | 2026-06-16 01:45:12 | synth-coder | anthropic | claude-sonnet-4-6 | completed | 0 | 1 | 3461 | 51172 | Now CODE the fix based on your diagnosis. Remember: only `db… |
-| 2026-06-16 01:46:04 | architect | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 1815 | 57021 | Adversarially review this diagnosis and produce a corrected … |
-| 2026-06-16 01:47:01 | lead | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 1 | 2 | 1810 | 104456 | Bug report to fix (orchestrate it): SQLite via Drizzle (bett… |
+| 2026-06-16 01:46:04 | architect | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 1815 | 57021 | Adversarially review this diagnosis and produce a corrected … |
+| 2026-06-16 01:47:01 | lead | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 1 | 2 | 1810 | 104456 | Bug report to fix (orchestrate it): SQLite via Drizzle (bett… |
 | 2026-06-16 01:47:19 | synth-coder | anthropic | claude-sonnet-4-6 | completed | 0 | 1 | 1418 | 31205 | DIAGNOSE this bug (do not code): SQLite via Drizzle (better-… |
-| 2026-06-16 01:48:45 | code-impl | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 221 | 8232 | Small feature. Add an optional `is_ephemeral` filter to a ta… |
-| 2026-06-16 01:48:53 | code-impl | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 166 | 6326 | Small feature. `startSseServer(taskStore)` always binds the … |
-| 2026-06-16 01:49:00 | code-impl | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 123 | 4898 | Small change. Add two new task statuses, `waiting` and `awai… |
-| 2026-06-16 01:49:05 | code-impl | lmstudio | qwen3.5-9b-claude-4.6-highiq-instr | completed | 0 | 1 | 126 | 5293 | Small change. `client.ts` keeps the raw connection module-pr… |
+| 2026-06-16 01:48:45 | code-impl | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 221 | 8232 | Small feature. Add an optional `is_ephemeral` filter to a ta… |
+| 2026-06-16 01:48:53 | code-impl | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 166 | 6326 | Small feature. `startSseServer(taskStore)` always binds the … |
+| 2026-06-16 01:49:00 | code-impl | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 123 | 4898 | Small change. Add two new task statuses, `waiting` and `awai… |
+| 2026-06-16 01:49:05 | code-impl | lmstudio | qwen3.5-9b-claude-4.6-highiq-i | completed | 0 | 1 | 126 | 5293 | Small change. `client.ts` keeps the raw connection module-pr… |
+| 2026-06-16 02:10:56 | code-fixer | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 543 | 5314 | Bug report. An MCP server (stdio JSON-RPC on stdout) also st… |
+| 2026-06-16 02:11:01 | code-fixer | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 325 | 5058 | Bug report. We have a SQLite database (accessed via Drizzle … |
+| 2026-06-16 02:11:06 | code-fixer | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 453 | 5171 | Bug report (SQLite + Drizzle ORM). Migration 0005 recreates … |
+| 2026-06-16 02:11:11 | code-fixer | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 350 | 3609 | Bug report (Python audit script). This check is supposed to … |
+| 2026-06-16 02:11:15 | code-fixer | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 301 | 4780 | Bug + constraints (SQLite + Drizzle better-sqlite3 migrator)… |
+| 2026-06-16 02:11:20 | code-fixer | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 427 | 4852 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 02:11:25 | code-fixer | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 531 | 4727 | Bug: this process is primarily a Model Context Protocol serv… |
+| 2026-06-16 02:11:29 | code-fixer | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 310 | 2975 | Bug: this Python audit check is supposed to verify that, in … |
+| 2026-06-16 02:11:32 | ts-pro | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 2430 | 23447 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 02:11:56 | ts-pro | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 1978 | 19275 | Bug: after our DB migrations run on an existing populated da… |
+| 2026-06-16 02:12:15 | ts-pro | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 2039 | 16789 | Bug: this process is primarily an MCP server speaking JSON-R… |
+| 2026-06-16 02:12:32 | synth-coder | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 1515 | 17269 | DIAGNOSE this bug (do not write the fix yet).  SQLite via Dr… |
+| 2026-06-16 02:12:49 | synth-coder | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 2813 | 24558 | Now CODE the fix based on your diagnosis. Remember: only `db… |
+| 2026-06-16 02:13:14 | architect | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 1488 | 16672 | Adversarially review this diagnosis and produce a corrected … |
+| 2026-06-16 02:13:30 | lead | anthropic | claude-haiku-4-5-20251001 | completed | 2 | 3 | 5496 | 85327 | Bug report to fix (orchestrate it): SQLite via Drizzle (bett… |
+| 2026-06-16 02:13:33 | synth-coder | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 2224 | 22860 | DIAGNOSE this bug (do not code): SQLite via Drizzle (better-… |
+| 2026-06-16 02:14:19 | coder | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 2612 | 20185 | SQLite via Drizzle (better-sqlite3). After runMigrations() a… |
+| 2026-06-16 02:14:56 | code-impl | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 250 | 2285 | Small feature. Add an optional `is_ephemeral` filter to a ta… |
+| 2026-06-16 02:14:58 | code-impl | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 209 | 2304 | Small feature. `startSseServer(taskStore)` always binds the … |
+| 2026-06-16 02:15:00 | code-impl | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 174 | 2493 | Small change. Add two new task statuses, `waiting` and `awai… |
+| 2026-06-16 02:15:03 | code-impl | anthropic | claude-haiku-4-5-20251001 | completed | 0 | 1 | 205 | 2674 | Small change. `client.ts` keeps the raw connection module-pr… |

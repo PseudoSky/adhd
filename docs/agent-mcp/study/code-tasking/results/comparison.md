@@ -1,104 +1,105 @@
-# Three-model differential — code-tasking study
+# Multi-model differential — code-tasking study
 
-Same harness, same `plan.json`, same system+user prompts. Only the model varies.
-Verdicts are **hand-graded with teeth** against `scenarios/<slug>.md` (the auto-grader in
-`runner/grade.py` is a conservative first pass; these override it). `PARTIAL`/`NEAR` = correct
-shape with a real bug; `ERROR` = orchestration plumbing failure, not a coding verdict.
+Same harness (`runner/`), same `plan.json`, same system+user prompts — **including the
+specialized SP variants** (`code-fixer` T1–8, the staff-level `ts-pro` persona T9–11, the
+anti-fabrication `synth-coder` T12, the adversarial `architect` T13, the `lead` orchestrator
+T14, `code-impl` T15–18). Only the model varies. Verdicts are **hand-graded with teeth**
+against `scenarios/<slug>.md`; the auto-grader (`runner/grade.py`) is a conservative first
+pass and is **overridden** here (it false-passes 'right fix / wrong cause' cases). 
+`NEAR`/`PARTIAL` = correct or working fix with a wrong/muddled stated cause; `ERROR` =
+orchestration plumbing failure, not a coding verdict.
 
-| # | requires | posing | qwen2.5-14b | qwen3.5-9b (claude-distill) | sonnet-4.6 |
-|---|---|---|---|---|---|
-| 1 | DIAGNOSE | SSE well-scoped | PARTIAL | FAIL | PASS |
-| 2 | DIAGNOSE | FK underspecified | FAIL | FAIL | PASS |
-| 3 | DIAGNOSE | FK context-rich | FAIL | FAIL | PASS |
-| 4 | APPLY | audit + pointer hint | PASS | PASS | PASS |
-| 5 | APPLY | FK fix+API handed over | NEAR | PASS | PASS |
-| 6 | DIAGNOSE | FK full-context | FAIL | FAIL | PASS |
-| 7 | DIAGNOSE | SSE full-context | FAIL | FAIL | PASS |
-| 8 | DIAGNOSE | audit neutral | FAIL | FAIL | PASS |
-| 9 | DIAGNOSE | FK role-primed | FAIL | FAIL | PASS |
-| 10 | APPLY | FK facts-in-prompt (select) | FAIL | PASS | PASS |
-| 11 | APPLY | SSE fact-in-role | FAIL | FAIL | PASS |
-| 12 | DIAGNOSE | FK multi-turn synth→code | FAIL | PASS | PASS |
-| 13 | DIAGNOSE | FK adversarial architect | FAIL | FAIL | PASS |
-| 14 | ORCH | FK orchestrate lead→synth→coder | FAIL | ERROR | ERROR |
-| 15 | ADDITIVE | floor: list filter | PASS | PASS | PASS |
-| 16 | ADDITIVE | floor: optional port param | PASS | PASS | PASS |
-| 17 | ADDITIVE | floor: extend enum | PASS | PASS | PASS |
-| 18 | GOTCHA | floor+TS4023 gotcha | FAIL | FAIL | PASS |
+| # | requires | SP | posing | qwen2.5-14b | qwen3.5-9b | haiku-4.5 | sonnet-4.6 |
+|---|---|---|---|---|---|---|---|
+| 1 | DIAGNOSE | `code-fixer` | SSE well-scoped | PARTIAL | FAIL | PASS | PASS |
+| 2 | DIAGNOSE | `code-fixer` | FK underspecified | FAIL | FAIL | FAIL | PASS |
+| 3 | DIAGNOSE | `code-fixer` | FK context-rich | FAIL | FAIL | PASS | PASS |
+| 4 | APPLY | `code-fixer` | audit + pointer hint | PASS | PASS | PASS | PASS |
+| 5 | APPLY | `code-fixer` | FK fix+API handed over | NEAR | PASS | PASS | PASS |
+| 6 | DIAGNOSE | `code-fixer` | FK full-context | FAIL | FAIL | NEAR | PASS |
+| 7 | DIAGNOSE | `code-fixer` | SSE full-context | FAIL | FAIL | PASS | PASS |
+| 8 | DIAGNOSE | `code-fixer` | audit neutral | FAIL | FAIL | PASS | PASS |
+| 9 | DIAGNOSE | `ts-pro` | FK role-primed (ts-pro) | FAIL | FAIL | NEAR | PASS |
+| 10 | APPLY | `ts-pro` | FK facts-in-prompt (select) | FAIL | PASS | PASS | PASS |
+| 11 | APPLY | `ts-pro` | SSE fact-in-role | FAIL | FAIL | PASS | PASS |
+| 12 | DIAGNOSE | `synth-coder` | FK multi-turn synth→code | FAIL | PASS | NEAR | PASS |
+| 13 | DIAGNOSE | `architect` | FK adversarial architect | FAIL | FAIL | FAIL | PASS |
+| 14 | ORCH | `lead` | FK orchestrate lead→synth→coder | FAIL | ERROR | FAIL | ERROR |
+| 15 | ADDITIVE | `code-impl` | floor: list filter | PASS | PASS | PASS | PASS |
+| 16 | ADDITIVE | `code-impl` | floor: optional port param | PASS | PASS | PASS | PASS |
+| 17 | ADDITIVE | `code-impl` | floor: extend enum | PASS | PASS | PASS | PASS |
+| 18 | GOTCHA | `code-impl` | floor+TS4023 gotcha | FAIL | FAIL | PASS | PASS |
 
-**Tally** (18 tests): qwen2.5-14b **4 PASS** / 1 NEAR / 13 FAIL · qwen3.5-9b **7 PASS** / 10 FAIL / 1 ERROR · sonnet-4.6 **17 PASS** / 1 ERROR.
+**Tally** (18 tests):
+- qwen2.5-14b: **4 PASS** / 2 NEAR / 12 FAIL
+- qwen3.5-9b (claude-distill): **7 PASS** / 10 FAIL / 1 ERROR
+- claude-haiku-4-5: **12 PASS** / 3 NEAR / 3 FAIL
+- claude-sonnet-4-6: **17 PASS** / 1 ERROR
 
-### Pass-rate by what the test *requires*
-| requires | qwen2.5-14b | qwen3.5-9b | sonnet-4.6 |
-|---|---|---|---|
-| ADDITIVE | 3/3 | 3/3 | 3/3 |
-| APPLY | 1/4 | 3/4 | 4/4 |
-| GOTCHA | 0/1 | 0/1 | 1/1 |
-| DIAGNOSE | 0/9 | 1/9 | 9/9 |
-| ORCH | 0/1 | 0/1 | 0/1 |
+### Pass-rate by what the test *requires* (strict PASS only)
+| requires | qwen2.5-14b | qwen3.5-9b | haiku-4.5 | sonnet-4.6 |
+|---|---|---|---|---|
+| ADDITIVE | 3/3 | 3/3 | 3/3 | 3/3 |
+| APPLY | 1/4 | 3/4 | 4/4 | 4/4 |
+| GOTCHA | 0/1 | 0/1 | 1/1 | 1/1 |
+| DIAGNOSE | 0/9 | 1/9 | 4/9 | 9/9 |
+| ORCH | 0/1 | 0/1 | 0/1 | 0/1 |
 
 ### What it shows
 
-- **The wall is unchanged by the 9B "claude-4.6 high-IQ" distill.** qwen3.5-9b clears exactly the
-  categories the 14B already cleared — `ADDITIVE` floor work, and `APPLY` cases where the fix is
-  handed over (T5), selectable from a fact list (T10), or scaffolded by a multi-turn NEEDS step
-  (T12). Every `DIAGNOSE` test — cold cross-layer synthesis from the code — **failed**, the same
-  confabulation shape as the 14B (T1 'something calls process.exit()', T3 misreads the rename, T8
-  'both on line 410', T13 'something else deletes them').
-- **The distill bought application + calibration, not synthesis.** Net of the 14B, qwen3.5-9b
-  *gained* T5 (clean apply vs the 14B's restore-form bug), T10 (synthesized the selected facts vs
-  the 14B's hallucinated API), and T12 (correct `session.client` NEEDS vs the 14B's relocated
-  fabrication) — and *regressed* on T1 (the 14B at least kept the `.on('error')` handler). It is a
-  *smaller* model (9B vs 14B) that follows instructions and applies given facts better, but does
-  not diagnose any better.
-- **Only the frontier model clears `DIAGNOSE`.** sonnet-4.6 passed all 9 diagnosis tests (and 17/17
-  gradeable), several more cleanly than the human-shipped fix. The capability that matters here —
-  subtle multi-file diagnosis — did not distill into 9B; it is a property of the frontier model.
-- **T14 (orchestration) errored identically for both sonnet-4.6 and qwen3.5-9b** (the lead called a
-  bare `agent` tool, tripping the orchestrator's `missing server prefix` rule) while the original
-  14B lead followed the convention. Orchestration reliability here is about following the harness's
-  tool-naming convention, *not* capability — excluded from the capability tally.
+- **A capability ladder, and the rung that matters is `DIAGNOSE`.** Floor (`ADDITIVE`) is 3/3
+  for all four. `APPLY` (fix handed over / selectable / scaffolded) climbs with capability.
+  But cold cross-layer **diagnosis** separates them sharply: qwen2.5-14b 0/9, qwen3.5-9b 1/9,
+  haiku-4.5 4/9 strict (7/9 if you credit its right-fix/wrong-cause NEARs), sonnet-4.6 **9/9**.
+- **The 9B "Claude-4.6 high-IQ distill" did not inherit diagnosis.** qwen3.5-9b matches the 14B
+  wall — it only clears tests where the answer is supplied or scaffolded; every from-scratch
+  diagnosis confabulates. Distillation bought application + calibration, not synthesis.
+- **Haiku-4.5 is the dangerous middle: right fix, wrong reason.** It often lands a *working*
+  connection-level FK fix (`db._.client` pragma toggle) while stating a *wrong* mechanism
+  ('deferred FK checks until commit', 'migrator opens a separate connection', 're-enable
+  validation') — see T6/T9/T12/T13/T14. A test gate catches the bad ones; self-reported
+  confidence does not. The specialized `ts-pro` SP did **not** fix this (T9 still confabulated).
+- **Only sonnet-4.6 gets cause *and* fix right every time** — 17/17 on the gradeable tasks,
+  several cleaner than the human-shipped fix.
 
-_Usage/latency per run: `results/usage.json` (all tasks) + `results/runs.<label>.jsonl`._
+### Orchestration (T14) failed four different ways — none about coding ability
+| model | T14 outcome |
+|---|---|
+| qwen2.5-14b | **coordinated** (dispatched synth→coder, composed) but the fix was wrong |
+| qwen3.5-9b | lead made one delegation then returned an **empty** result (0 chars, `completed`) — degenerate |
+| haiku-4.5 | **coordinated correctly** (used the prefixed tools, composed) but the fix was wrong |
+| sonnet-4.6 | called a **bare `agent`** tool → `missing server prefix` → task **failed**; orphaned a sub-agent session |
+
+So the bare-tool-name trip (BACKLOG **DEBT-004**) is **model-specific, not universal**: sonnet
+hit it, haiku did not. The orphaned-session leak (BACKLOG **BUG-002**) was the sonnet run.
+Orchestration reliability here is about following the harness's tool conventions + actually
+composing a result — orthogonal to whether the model can diagnose the bug.
+
+_Per-run responses: `results/runs.<label>.jsonl`. Usage/latency: `results/usage.json`._
 
 ---
 
 ## Results by delegation structure
 
-Holding the **same** bug constant (the FK-cascade migration scenario) and varying only
-the delegation topology isolates what the structure itself buys. `depth` = recursion
-depth; `ERROR` = orchestration plumbing trip, not a coding verdict.
+Same FK-cascade bug, only the topology varies — isolating what structure buys.
 
-| structure | topology | test | 14B | qwen3.5-9b | sonnet-4.6 |
-|---|---|---|---|---|---|
-| direct single-shot | 1 agent · 1 turn · depth 0 | T2 | FAIL | FAIL | PASS |
-| direct single-shot | 1 agent · 1 turn · depth 0 | T3 | FAIL | FAIL | PASS |
-| direct single-shot | 1 agent · 1 turn · depth 0 | T6 | FAIL | FAIL | PASS |
-| direct + fix handed over | 1 agent · 1 turn · depth 0 | T5 | NEAR | PASS | PASS |
-| direct + heavy role (ts-pro) | 1 agent · 1 turn · depth 0 | T9 | FAIL | FAIL | PASS |
-| direct + facts in prompt | 1 agent · 1 turn · depth 0 | T10 | FAIL | PASS | PASS |
-| stateful multi-turn (diagnose→code) | 1 agent · 2 turns · depth 0 | T12 | FAIL | PASS | PASS |
-| pipeline review stage (architect) | 1 agent · 1 turn · depth 0 | T13 | FAIL | FAIL | PASS |
-| recursive orchestration (lead→synth→coder) | 3 agents · depth 1 | T14 | FAIL¹ | ERROR² | ERROR² |
+| structure | topology | test | 14B | qwen3.5-9b | haiku-4.5 | sonnet-4.6 |
+|---|---|---|---|---|---|---|
+| direct single-shot | 1 agent · 1 turn · depth 0 | T2 | FAIL | FAIL | FAIL | PASS |
+| direct single-shot | 1 agent · 1 turn · depth 0 | T3 | FAIL | FAIL | PASS | PASS |
+| direct single-shot | 1 agent · 1 turn · depth 0 | T6 | FAIL | FAIL | NEAR | PASS |
+| direct + fix handed over | 1 agent · 1 turn · depth 0 | T5 | NEAR | PASS | PASS | PASS |
+| direct + heavy role (ts-pro) | 1 agent · 1 turn · depth 0 | T9 | FAIL | FAIL | NEAR | PASS |
+| direct + facts in prompt | 1 agent · 1 turn · depth 0 | T10 | FAIL | PASS | PASS | PASS |
+| stateful multi-turn (diagnose→code) | 1 agent · 2 turns · depth 0 | T12 | FAIL | PASS | NEAR | PASS |
+| pipeline review stage (architect) | 1 agent · 1 turn · depth 0 | T13 | FAIL | FAIL | FAIL | PASS |
+| recursive orchestration (lead→synth→coder) | 3 agents · depth 1 | T14 | FAIL | ERROR | FAIL | ERROR |
 
-¹ 14B coordinated correctly (dispatched synth→coder, composed) but the fix was wrong.
-² Both capable models tripped the orchestrator's bare-tool-name rule (see BACKLOG
-DEBT-004); the orchestration also orphaned a sub-agent session (BACKLOG BUG-002).
-
-### What the structure buys
-
-- **Information content moves the needle; agent/turn fan-out does not.** The only
-  structures that flipped a small model FAIL→PASS were ones that *added information*
-  (T5 hands over the fix, T10 lists the facts) or *scaffolded the reasoning into
-  steps* (T12 diagnose-then-code, which let qwen3.5-9b reach the NEEDS path). Adding
-  **agents or review stages without adding information** — the pipeline reviewer (T13)
-  and the recursive orchestration (T14) — did **not** rescue either small model.
-- **More machinery = more failure surface, not more capability.** Recursive
-  orchestration was the *only* structure that broke the frontier model — and it broke
-  on **plumbing** (the tool-prefix trip), not reasoning, while also leaking a session.
-  The richest delegation topology had the worst reliability across all three models.
-- **The frontier model needs the least structure.** sonnet-4.6 solved the bug
-  direct, single-shot, depth 0 (T2/T3/T6) — every elaboration was unnecessary for it
-  and the most elaborate one actively hurt. The recipe stands: put cognition on a
-  capable model and keep the delegation graph shallow; reserve fan-out for genuinely
-  parallel work, not for trying to manufacture a diagnosis a small model can't make.
+- **Information/step-scaffolding moves small models; agent fan-out does not.** The structures
+  that flipped a small model toward PASS *added information* (T5 handed, T10 facts) or *staged
+  the reasoning* (T12). Adding agents/review stages without information (T13, T14) did not.
+- **The richest topology (T14) was the least reliable across the board** — every model failed it,
+  for four different reasons (table above), none about diagnosis ability. Keep delegation graphs
+  shallow; reserve fan-out for genuinely parallel work, not to manufacture a missing diagnosis.
+- **The frontier model needs the least structure**: sonnet solved the bug direct/single-shot/depth-0
+  (T2/T3/T6); the most elaborate structure was the only thing that broke it (on plumbing).
