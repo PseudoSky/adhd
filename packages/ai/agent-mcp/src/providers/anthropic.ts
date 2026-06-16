@@ -8,6 +8,7 @@ const execFileAsync = promisify(execFile);
 
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
+import { resolveToolCallName } from "../clients/tool-naming.js";
 
 import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
@@ -400,15 +401,17 @@ export class AnthropicProvider implements LLMProvider {
                 }
 
                 if (block.type === "tool_use") {
-                    const separatorIndex = block.name.indexOf("__");
-                    if (separatorIndex === -1) {
-                        throw new Error(`Invalid tool name (missing server prefix): ${block.name}`);
-                    }
+                    // Resolve qualified or bare tool names against the advertised set
+                    // (a bare `agent` → `agent-mcp__agent` when unambiguous; DEBT-004).
+                    const { server, tool } = resolveToolCallName(
+                        block.name,
+                        (request.tools ?? []).map((t) => t.name)
+                    );
 
                     toolCalls.push({
                         id: block.id,
-                        server: block.name.slice(0, separatorIndex),
-                        tool: block.name.slice(separatorIndex + 2),
+                        server,
+                        tool,
                         arguments: block.input,
                     });
                 }
