@@ -86,6 +86,8 @@ separate "produces plausible output" from "produces correct output."
 4. **Role priming + reasoning scaffolds improve *process and calibration*, not correctness** (Tests 9–11); a fact embedded in the role didn't even override the model's default (`try/catch` on SSE).
 5. **No orchestration topology rescues a missing fact** (Tests 12–14): multi-turn, adversarial-architect, and orchestrator-dispatch each refined the *wrong* answer; broken fixes were rated **High** confidence.
 6. **Two positives:** the offload *topology* works (a 14B `lead` reliably dispatched synth→coder→compose, Test 14), and the only reliable success was **spelling out the fix layer + handing the exact API** (Test 5) — i.e., offload *application*, not *diagnosis*.
+7. **The failures are model-bound, not prompt-bound** (Experiment 6). Re-running the *exact* failing prompts on `claude-sonnet-4-6` — same system + user prompt, only the provider swapped — passed **5/5** (incl. the underspecified FK and the TS4023 gotcha; twice cleaner than the human-shipped fix). The same context that left the 14B confabulating was sufficient for a capable model.
+8. **The floor (Tests 15–17) is real but knowledge-bounded:** pure additive/mechanical edits pass reliably; a *one-line* change with a specialized detail (Test 18, TS4023) fails the same way as the hard set.
 
 ### Recipe that actually works
 > **Cognition at the root, application at the leaves, verification on every edge.**
