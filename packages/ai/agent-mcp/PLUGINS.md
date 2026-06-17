@@ -16,8 +16,8 @@ can never kill a running task.
 | **Nx project name** | `agent-mcp-<name>` |
 | **Directory** | `packages/ai/agent-mcp-<name>/` |
 | **Nx tags** | `layer:logic`, `platform:node` |
-| **Peer dependency** | `@adhd/agent-mcp-types` (zero-runtime-dep types package) |
-| **Runtime dependency** | `@adhd/agent-mcp` is NOT a dependency — plugins depend only on the types |
+| **Peer dependency** | `@adhd/agent-mcp-types` — shared types **and** the concrete `HookRegistry` class |
+| **Runtime dependency** | `@adhd/agent-mcp` is NOT a dependency — plugins depend only on `@adhd/agent-mcp-types` |
 | **Error contract** | Every handler must be wrapped in `try/catch` — never throw |
 
 Examples: `@adhd/agent-mcp-metrics`, `@adhd/agent-mcp-budget`,
@@ -32,8 +32,11 @@ This is the full workflow from zero to a loaded plugin.
 ### 1. Scaffold
 
 ```bash
-./generate-lib.sh lib agent-mcp-<name> logic node
+scripts/generate-lib.sh lib agent-mcp-<name> logic node
 ```
+
+The script detects the `agent-mcp-` prefix and routes to `packages/ai/` automatically,
+matching the convention of `@adhd/agent-mcp-budget`. Verify the output:
 
 Verify `packages/ai/agent-mcp-<name>/project.json` contains:
 
@@ -306,7 +309,8 @@ Most plugins should be stateless or hold in-memory state (see
 Unit-test plugins in isolation using a real `HookRegistry`:
 
 ```ts
-import { HookRegistry } from "@adhd/agent-mcp/src/engine/hooks.js";
+// HookRegistry lives in @adhd/agent-mcp-types — no dependency on the server package needed
+import { HookRegistry } from "@adhd/agent-mcp-types";
 
 const hooks = new HookRegistry();
 const plugin = new MyPlugin({ threshold: 50 });
@@ -339,7 +343,7 @@ migrations.
 
 ## Checklist for a new plugin
 
-- [ ] Scaffold: `./generate-lib.sh lib agent-mcp-<name> logic node`
+- [ ] Scaffold: `scripts/generate-lib.sh lib agent-mcp-<name> logic node` (lands in `packages/ai/` automatically)
 - [ ] `project.json` tags: `layer:logic`, `platform:node`
 - [ ] `package.json` name: `@adhd/agent-mcp-<name>`, peer on `@adhd/agent-mcp-types`
 - [ ] Plugin class implements `Plugin` (`name` + `install`)

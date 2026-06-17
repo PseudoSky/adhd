@@ -145,11 +145,48 @@ separate "produces plausible output" from "produces correct output."
 
 ---
 
+## Planned experiments
+
+### Speculative decoding via dflash-mlx
+
+The study's local ceiling (qwen3-coder-30B, 2/9 on diagnosis) leaves the question open: **does a larger reasoning-capable local model actually clear the diagnosis wall, or is this fundamentally a capability-tier gap that parameter count alone can't bridge?**
+
+Testing the full 35B reasoning distill has been impractical — generation speed on a dense 35B makes a 14-test battery take hours and long reasoning chains hit SDK timeout before completing (DEBT-005). Speculative decoding addresses the throughput side: a small draft model generates candidate tokens at low cost; the large target model verifies/corrects in parallel, yielding 2–4× effective throughput with identical output quality.
+
+The model is already running — added and confirmed working well with speculative
+decoding via `dflash-mlx`. Generation speed is solid at this scale.
+
+```bash
+dflash-serve \
+  --model Jackrong/MLX-Qwen3.5-35B-A3B-Claude-4.6-Opus-Reasoning-Distilled-4bit \
+  --draft-model yugeshkarunamurthy/Qwen3.5-4b-Dflash-6bit-MLX \
+  --port 8080
+```
+
+Then replay the study battery against `lmstudio` provider at `localhost:8080`:
+
+```bash
+node runner/run-study.mjs --label qwen35-35b-dflash --provider lmstudio \
+  --model Jackrong/MLX-Qwen3.5-35B-A3B-Claude-4.6-Opus-Reasoning-Distilled-4bit \
+  --tests all --temperature 0
+python3 runner/grade.py qwen35-35b-dflash
+```
+
+The model is a 35B MoE (3.5B active params) distilled from Claude 4.6 Opus reasoning —
+the same reasoning behaviour that sonnet-4.6 used to go 9/9 on diagnosis, compressed
+into a locally-runnable architecture. If the distill transferred the diagnostic
+reasoning and not just the application, it should clear a meaningfully higher fraction
+of the 0/9 diagnosis wall the current local ceiling (30B coder, 2/9) barely dented.
+If it doesn't, that's the result: the gap is a capability-tier property, not a
+throughput/parameter-count one.
+
+---
+
 ## Caveats
 
 - **One model, n=1 per test, non-deterministic.** Treat the *pattern* across the ~14 runs as the signal, not any single transcript (e.g. SSE landed the right mechanism in Test 1 but not Test 7).
 - **Manual grading.** No fix was executed against a build/test in-loop; grading is by inspection against the rubric. Closing that loop is itself finding #6.
-- **Untested high-value variables:** a reasoning-tuned / larger local model as the synthesizer, and a real execution loop on the leaf.
+- **Untested high-value variables:** a reasoning-tuned / larger local model as the synthesizer (see Planned experiments above), and a real execution loop on the leaf.
 
 ## Replaying
 
