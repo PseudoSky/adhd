@@ -27,6 +27,7 @@
     "skipDefaultLibCheck": true,
     "paths": {
       "@adhd/agent-mcp": ["./packages/ai/agent-mcp/src/index.ts"],
+      "@adhd/agent-mcp-budget": ["./packages/ai/agent-mcp-budget/src/index.ts"],
       "@adhd/agent-mcp-types": ["./packages/ai/agent-mcp-types/src/index.ts"],
       "@adhd/data": ["./packages/data/src/index.ts"],
       "@adhd/decompile": ["./packages/decompile/src/index.ts"],

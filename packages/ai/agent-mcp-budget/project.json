@@ -1,0 +1,32 @@
+{
+  "name": "agent-mcp-budget",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/ai/agent-mcp-budget/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:logic", "platform:node"],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/ai/agent-mcp-budget",
+        "main": "packages/ai/agent-mcp-budget/src/index.ts",
+        "tsConfig": "packages/ai/agent-mcp-budget/tsconfig.lib.json",
+        "assets": ["packages/ai/agent-mcp-budget/*.md"]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  }
+}
