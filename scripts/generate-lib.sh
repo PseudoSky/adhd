@@ -39,7 +39,11 @@ case $LAYER in
   *)                                  DIR="other" ;;
 esac
 
-# Force 'node-tools' directory if it's node-only logic
+# agent-mcp plugin packages always live in packages/ai/ regardless of layer/platform.
+# Do this check before the node-tools override below so it takes precedence.
+if [[ "$NAME" == agent-mcp-* && "$DIR" != "ai" ]]; then DIR="ai"; fi
+
+# Force 'node-tools' directory if it's node-only logic (non-plugin shared utilities)
 if [[ "$PLATFORM" == "node" && "$DIR" == "shared" ]]; then DIR="node-tools"; fi
 
 echo "🏗️  Generating LIB: $NAME"

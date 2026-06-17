@@ -92,7 +92,8 @@ package-specific verification steps. Check there for the full smoke-test procedu
 | Package | Publishing doc |
 |---|---|
 | `@adhd/agent-mcp` | [`packages/ai/agent-mcp/PUBLISHING.md`](packages/ai/agent-mcp/PUBLISHING.md) |
-| `@adhd/agent-mcp-types` | (no integration test required — types only) |
+| `@adhd/agent-mcp-types` | Smoke test: `node -e "import('@adhd/agent-mcp-types').then(m => console.log(typeof m.HookRegistry))"` should print `function` |
+| `@adhd/agent-mcp-budget` | Smoke test: `node -e "import('@adhd/agent-mcp-budget').then(m => console.log(typeof m.createPlugin))"` should print `function` |
 
 ---
 
