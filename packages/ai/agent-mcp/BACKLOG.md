@@ -544,6 +544,68 @@ model for a first-class stop reason.
 
 ---
 
+### DEBT-009 — `@adhd/agent-mcp-types` ships untested runtime code (`HookRegistry`)
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** `packages/ai/agent-mcp-types/`
+- **Reported:** 2026-06-17
+
+**Problem / Description** — `@adhd/agent-mcp-types` was originally a types-only
+package (interfaces, enums, type aliases — zero runtime behaviour). When `HookRegistry`
+was relocated here from `agent-mcp` to break the circular build dep (DEBT-006), the
+package gained a concrete class with real runtime behaviour: map management, async
+iteration, error-swallowing logic in `emit()`, throw-propagation logic in `enforce()`.
+To avoid a vitest "no test files found" exit-1, `passWithNoTests: true` was added to
+`vite.config.ts`. That flag now silently suppresses the missing-coverage gap —
+`npx nx test agent-mcp-types` exits 0 and reports nothing, making it invisible that
+the package's only runtime code is completely untested.
+
+The `HookRegistry` implementation is exercised *indirectly* through
+`agent-mcp/src/__tests__/enforcement.test.ts`, but that's a downstream consumer
+importing the class as a user would — not a unit test owned by the package. If a
+regression is introduced in `registry.ts`, the failure surfaces in a different
+package's test run, with no clear ownership signal.
+
+**Impact**
+- Any regression in `HookRegistry` (emit swallowing, enforce propagation, handler
+  ordering, multi-handler abort-on-first-throw) is invisible to `nx test agent-mcp-types`.
+- `passWithNoTests: true` is a footgun: a future contributor who removes the one
+  import of `HookRegistry` from `agent-mcp-types/src/index.ts` (say, during a
+  refactor) will see zero test failures — the package's tests still pass, because
+  there are none.
+- Ownership is diffuse: the tests that cover `HookRegistry` live in `agent-mcp`,
+  but the code lives in `agent-mcp-types`. A PR touching only `agent-mcp-types`
+  won't obviously trigger those tests.
+
+**Proposed fix / Approach** — Add a `src/__tests__/registry.test.ts` to
+`packages/ai/agent-mcp-types/` and remove `passWithNoTests: true`:
+
+- `emit()` swallows handler errors (does not reject)
+- `emit()` calls all handlers even if one throws
+- `enforce()` propagates the first `IEnforcementError` throw
+- `enforce()` swallows non-`IEnforcementError` throws (continues other handlers)
+- `enforce()` aborts on first `IEnforcementError` (remaining handlers not called)
+- Multiple `register()` / `registerEnforcement()` calls stack handlers correctly
+- "Teeth" check: revert the swallow and confirm `emit()` test goes red
+
+These are pure unit tests — no SQLite, no provider, no `agent-mcp` import needed.
+The tests already exist conceptually in `agent-mcp/src/__tests__/enforcement.test.ts`;
+they should be canonical in the package that owns the code.
+
+**Acceptance criteria**
+- `npx nx test agent-mcp-types` runs real tests and exits non-zero on a regression.
+- `passWithNoTests: true` removed from `vite.config.ts`.
+- All behavioural invariants above covered by at least one test with a teeth check.
+- `agent-mcp/src/__tests__/enforcement.test.ts` retains its orchestrator-level
+  integration tests (which use `HookRegistry` as a dependency) but does not
+  duplicate the unit-level registry tests.
+
+**References** — `packages/ai/agent-mcp-types/src/registry.ts` (runtime code),
+`packages/ai/agent-mcp-types/vite.config.ts` (`passWithNoTests: true`),
+`packages/ai/agent-mcp/src/__tests__/enforcement.test.ts` (downstream coverage).
+
+---
+
 ## ✅ Done
 
 ### BUG-001 — SSE server crashes the whole process on `EADDRINUSE`
