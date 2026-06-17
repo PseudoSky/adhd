@@ -192,6 +192,56 @@ without forking the package.
 
 ---
 
+### FEAT-005 — Enforcement hook API (`registerEnforcement` / `enforce`)
+- **Status:** done · **Closed:** 2026-06-17
+- **Priority:** P1
+- **Area:** engine (orchestrator), types (`agent-mcp-types`)
+- **Reported:** 2026-06-17
+
+**Resolution (2026-06-17):** Added `registerEnforcement<E>(event, handler)` and
+`enforce<E>(event, payload)` to `IHookRegistry` and `HookRegistry`. Unlike `emit()`,
+`enforce()` propagates `IEnforcementError` throws — all other errors are swallowed.
+The orchestrator calls `hooks.enforce("pre:model_request")` before every LLM call; an
+`IEnforcementError` becomes `ToolError("BUDGET_EXCEEDED")`. New types in
+`@adhd/agent-mcp-types@1.1.0`: `IEnforcementError`, `EnforcementEvent`,
+`EnforcementHandler`, `EnforcementEventMap`. `BUDGET_EXCEEDED` added to
+`AgentMcpErrorCode`. Tested in `__tests__/enforcement.test.ts`: propagates / swallows /
+aborts on first throw; orchestrator bails on 2nd call; "teeth" test distinguishing
+`register` from `registerEnforcement`.
+
+**Problem / Description** — `emit()` swallows all handler errors (safety net for
+observational plugins). Budget and guardrail plugins need a throw-propagating path to
+abort model calls before they are made.
+
+**References** — `packages/ai/agent-mcp-types/src/hooks.ts`,
+`packages/ai/agent-mcp-types/src/registry.ts`,
+`packages/ai/agent-mcp/src/engine/orchestrator.ts`,
+`packages/ai/agent-mcp/src/__tests__/enforcement.test.ts`.
+
+---
+
+### FEAT-006 — `@adhd/agent-mcp-budget` cost budget plugin
+- **Status:** done · **Closed:** 2026-06-17
+- **Priority:** P2
+- **Area:** new package (`packages/ai/agent-mcp-budget/`)
+- **Reported:** 2026-06-17
+
+**Resolution (2026-06-17):** Shipped `@adhd/agent-mcp-budget@0.0.2`. Registers a
+`pre:model_request` enforcement handler and a `post:model_response` observational
+handler. Configurable limits via `configSchema` (Zod): `maxModelCalls`,
+`maxTotalTokens`, `maxInputTokens`, `maxOutputTokens`, `maxWallClockMs`, `maxModelMs`,
+`maxCostUSD`. Exports `createPlugin` factory and `configSchema` for server-side
+validation. Activated via `agent-mcp.config.json`. End-to-end integration tested
+against the real built binary in `plugin-loader.test.ts` (both config-file and
+`AGENT_MCP_PLUGINS` env-var paths). ROADMAP Strategic 6.98 (MOAT — "Cost budget
+enforcement"). See `PLUGINS.md`.
+
+**References** — `packages/ai/agent-mcp-budget/src/index.ts`,
+`packages/ai/agent-mcp/src/__tests__/plugin-loader.test.ts`,
+`packages/ai/agent-mcp/PLUGINS.md`. ROADMAP feature #4.
+
+---
+
 ### FEAT-003 — Queue priority levels + per-agent concurrency limit
 - **Status:** backlog
 - **Priority:** P2
@@ -371,6 +421,56 @@ the actionable `PROVIDER_TIMEOUT`. Reverting the passthrough turns the first tes
 **References** — `src/providers/openai.ts` (client construction + `chat()`); error seen as
 "Provider call failed: Request timed out." Surfaced by `docs/agent-mcp/study/code-tasking/`
 (Qwen3.5-27B-opus-distilled run, Experiment 12).
+
+---
+
+### DEBT-006 — `HookRegistry` class relocated to `@adhd/agent-mcp-types`
+- **Status:** done · **Closed:** 2026-06-17
+- **Priority:** P1
+- **Area:** types (`packages/ai/agent-mcp-types/`), engine (`packages/ai/agent-mcp/src/engine/hooks.ts`)
+- **Reported:** 2026-06-17
+
+**Resolution (2026-06-17):** Moved the concrete `HookRegistry` class from
+`packages/ai/agent-mcp/src/engine/hooks.ts` to
+`packages/ai/agent-mcp-types/src/registry.ts`. `engine/hooks.ts` is now a one-line
+re-export: `export { HookRegistry } from "@adhd/agent-mcp-types"`. Exported from the
+`agent-mcp-types` package root so plugin tests can import directly without a server
+package dependency. Tested via the existing `enforcement.test.ts` suite (both
+`HookRegistry` from `@adhd/agent-mcp-types` and via `agent-mcp` re-export are
+exercised end-to-end).
+
+**Problem / Description** — `agent-mcp-budget` tests imported `HookRegistry` from
+`@adhd/agent-mcp`, creating a circular Nx project-graph build edge:
+`agent-mcp:build → agent-mcp-budget:build → agent-mcp:build`. The Nx graph scanner
+tracks all imports, including test files, so `tsconfig.lib.json` exclusions don't
+help. Moving `HookRegistry` to the lowest shared package breaks the cycle.
+
+**References** — `packages/ai/agent-mcp-types/src/registry.ts`,
+`packages/ai/agent-mcp-types/src/index.ts`,
+`packages/ai/agent-mcp/src/engine/hooks.ts`,
+`packages/ai/agent-mcp-budget/src/__tests__/budget-plugin.test.ts`.
+
+---
+
+### DEBT-007 — `generate-lib.sh` routing and post-generation patches
+- **Status:** done · **Closed:** 2026-06-17
+- **Priority:** P2
+- **Area:** tooling (`scripts/generate-lib.sh`)
+- **Reported:** 2026-06-17
+
+**Resolution (2026-06-17):** Two fixes to `scripts/generate-lib.sh`:
+(1) **`agent-mcp-*` routing**: added a guard before the `node-tools` override so any
+library named `agent-mcp-*` routes to `packages/ai/` regardless of layer/platform.
+Without this, `logic node` packages fell into `packages/node-tools/`. The check runs
+first so it takes precedence.
+(2) **Post-generation patches**: after scaffolding, the script now applies two
+idempotent patches — `emptyOutDir: true` in `vite.config.ts` (prevents stale
+`dist/package.json` surviving a version bump) and `dependsOn: ["build","test"]` on
+the `nx-release-publish` target in `project.json` (enforces clean build + passing
+tests before every publish). Both patches skip if already present. Implemented via
+an inline Python3 heredoc (vite config) and a Node.js heredoc (project.json).
+
+**References** — `scripts/generate-lib.sh`.
 
 ---
 
