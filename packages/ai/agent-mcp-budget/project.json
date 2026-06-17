@@ -11,22 +11,33 @@
       }
     }
   },
-  "tags": ["layer:logic", "platform:node"],
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
         "outputPath": "dist/packages/ai/agent-mcp-budget",
         "main": "packages/ai/agent-mcp-budget/src/index.ts",
         "tsConfig": "packages/ai/agent-mcp-budget/tsconfig.lib.json",
-        "assets": ["packages/ai/agent-mcp-budget/*.md"]
+        "assets": [
+          "packages/ai/agent-mcp-budget/*.md"
+        ]
       }
     },
     "nx-release-publish": {
       "options": {
         "packageRoot": "dist/{projectRoot}"
-      }
+      },
+      "dependsOn": [
+        "build",
+        "test"
+      ]
     }
   }
 }
