@@ -474,6 +474,76 @@ an inline Python3 heredoc (vite config) and a Node.js heredoc (project.json).
 
 ---
 
+### DEBT-008 — Enforcement API couples core to plugin stop-reason semantics
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** engine (orchestrator), types (`agent-mcp-types`)
+- **Reported:** 2026-06-17
+
+**Problem / Description** — The current enforcement path requires the orchestrator
+to duck-type `IEnforcementError` (`if (err.isEnforcementError)`) and hard-code a
+conversion to `ToolError("BUDGET_EXCEEDED")`. This creates a directional coupling
+from the core to plugin-space: the orchestrator must know that a plugin threw
+something, and must decide how to surface it as a terminal task state. The same
+pattern will repeat for every new enforcement class (guardrails, capability profiles,
+cost-per-turn caps) — each adding another `if` branch or a second error code to
+the orchestrator's catch block.
+
+More fundamentally, "budget exceeded" is a *stop reason* — structurally identical
+to `CONTEXT_WINDOW_EXCEEDED` or `MAX_TOOL_LOOPS_EXCEEDED` — not a plugin exception
+that bubbles up through the orchestrator's generic error handler. The current design
+accidentally makes the orchestrator's error-handling path into the plugin communication
+channel, rather than having plugins signal through a first-class task termination
+mechanism.
+
+**Impact** — Every new enforcement category requires a core change (new `if` branch
+or new error code in the orchestrator's catch). Plugins cannot declare a stop reason
+without knowing how the orchestrator will translate it. The semantics of `enforce()`
+are already partially core-aware (the orchestrator must check `isEnforcementError`),
+making the "plugin never touches core" invariant aspirational rather than structural.
+
+**Proposed fix / Approach** — Generalize `IEnforcementError` into a
+`TaskTerminationSignal` (or extend the existing stop-reason vocabulary) that the
+orchestrator recognizes as "terminate task cleanly with this stop reason, no error."
+Options:
+
+1. **Stop-reason signal**: `enforce()` resolves (not rejects) with an optional
+   `{ terminate: true; reason: AgentMcpErrorCode; message: string }` return value.
+   The orchestrator checks the resolved value, not the catch block — cleaner control
+   flow, no duck-typing. Enforcement handlers that want to abort return a termination
+   object; those that just validate return `undefined`.
+
+2. **Typed abort**: Replace `IEnforcementError` with a dedicated `EnforcementAbort`
+   class that extends `Error` and carries a `stopReason: AgentMcpErrorCode`. The
+   orchestrator catches `EnforcementAbort` specifically (instanceof check, not
+   duck-type) and maps `stopReason` directly to the task failure code — no
+   hard-coded `"BUDGET_EXCEEDED"` translation.
+
+3. **Pre:model_request returns a verdict**: `enforce()` aggregates handler results
+   into a `{ proceed: boolean; reason?: AgentMcpErrorCode; message?: string }` and
+   the orchestrator checks the verdict synchronously — closest to a guardrail
+   middleware pattern.
+
+Any of these removes the requirement that the orchestrator know about specific plugin
+error codes and decouples the stop-reason vocabulary from the exception hierarchy.
+
+**Acceptance criteria**
+- Adding a new enforcement stop reason (e.g. `CAPABILITY_VIOLATION`) requires no
+  change to orchestrator code — only a new `AgentMcpErrorCode` value and a plugin
+  handler.
+- The orchestrator's catch block has no `isEnforcementError` duck-type check.
+- Existing `@adhd/agent-mcp-budget` behaviour is preserved under the new API.
+- A negative-control test: a plugin that returns/throws a non-termination value does
+  not abort the model call.
+
+**References** — `packages/ai/agent-mcp/src/engine/orchestrator.ts` (enforce call +
+catch block), `packages/ai/agent-mcp-types/src/hooks.ts` (`IEnforcementError`,
+`EnforcementEvent`), `packages/ai/agent-mcp-budget/src/index.ts` (current throw
+usage). Related: `CONTEXT_WINDOW_EXCEEDED` handling in `orchestrator.ts` as the
+model for a first-class stop reason.
+
+---
+
 ## ✅ Done
 
 ### BUG-001 — SSE server crashes the whole process on `EADDRINUSE`
