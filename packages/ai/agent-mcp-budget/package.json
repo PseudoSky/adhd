@@ -1,0 +1,26 @@
+{
+  "name": "@adhd/agent-mcp-budget",
+  "version": "0.0.1",
+  "description": "Budget enforcement plugin for @adhd/agent-mcp — caps token spend, cost, wall-clock time, and model calls per task/session/agent",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "typings": "./index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./index.mjs",
+      "require": "./index.js",
+      "types": "./index.d.ts"
+    }
+  },
+  "peerDependencies": {
+    "@adhd/agent-mcp-types": "*"
+  },
+  "dependencies": {
+    "zod": "*",
+    "better-sqlite3": "*"
+  }
+}
