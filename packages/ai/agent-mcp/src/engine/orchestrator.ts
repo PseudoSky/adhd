@@ -1,7 +1,7 @@
 import { logger } from "../logger.js";
 import type { LLMProvider } from "../providers/types.js";
 import type { ExecutionContext, Message } from "../validation/index.js";
-import type { IHookRegistry } from "@adhd/agent-mcp-types";
+import type { IHookRegistry, IEnforcementError } from "@adhd/agent-mcp-types";
 import { ToolError } from "../validation/errors.js";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
@@ -90,10 +90,21 @@ export interface OrchestratorRunInput {
     isEphemeral?: boolean;
 }
 
+/** Duck-type check — avoids importing the budget plugin to identify its errors. */
+function isEnforcementError(err: unknown): err is IEnforcementError {
+    return (
+        typeof err === "object" &&
+        err !== null &&
+        (err as IEnforcementError).isEnforcementError === true
+    );
+}
+
 /** No-op IHookRegistry used as a fallback when none is provided. */
 const noopHooks: IHookRegistry = {
     register: () => undefined,
     emit: async () => undefined,
+    registerEnforcement: () => undefined,
+    enforce: async () => undefined,
 };
 
 export interface OrchestratorRunResult {
@@ -177,8 +188,18 @@ export class Orchestrator {
                     "MODEL_REQUEST"
                 );
 
-                // Emit pre:model_request hook
+                // Emit pre:model_request hook (observational — errors swallowed)
                 await hooks.emit("pre:model_request", { executionContext, messages: currentMessages, tools });
+
+                // Enforcement hooks — throws propagate; budget violations surface as BUDGET_EXCEEDED
+                try {
+                    await hooks.enforce("pre:model_request", { executionContext, messages: currentMessages, tools });
+                } catch (err: unknown) {
+                    if (isEnforcementError(err)) {
+                        throw new ToolError("BUDGET_EXCEEDED", err.message);
+                    }
+                    throw err;
+                }
 
                 // Call the LLM provider
                 let providerResponse;

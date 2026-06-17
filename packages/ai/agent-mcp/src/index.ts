@@ -7,6 +7,9 @@ export const AGENT_MCP_DEFAULT_MAX_TOKENS = parseInt(
     10
 );
 
+// Re-export HookRegistry so plugins can import it for testing without deep internal paths
+export { HookRegistry } from "./engine/hooks.js";
+
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";

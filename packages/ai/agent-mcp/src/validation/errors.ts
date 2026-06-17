@@ -30,6 +30,9 @@ export const errorCodeSchema = z.enum([
 
   // Validation
   "VALIDATION_ERROR",
+
+  // Budget enforcement
+  "BUDGET_EXCEEDED",
 ]);
 
 import type { AgentMcpErrorCode } from "@adhd/agent-mcp-types";
