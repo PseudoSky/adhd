@@ -577,32 +577,57 @@ package's test run, with no clear ownership signal.
   but the code lives in `agent-mcp-types`. A PR touching only `agent-mcp-types`
   won't obviously trigger those tests.
 
-**Proposed fix / Approach** — Add a `src/__tests__/registry.test.ts` to
-`packages/ai/agent-mcp-types/` and remove `passWithNoTests: true`:
+**Proposed fix / Approach** — Extract `HookRegistry` out of `agent-mcp-types` into a
+dedicated `@adhd/agent-mcp-hooks` package (`packages/ai/agent-mcp-hooks/`,
+`layer:logic platform:shared`). Dependency graph after the move:
 
-- `emit()` swallows handler errors (does not reject)
-- `emit()` calls all handlers even if one throws
-- `enforce()` propagates the first `IEnforcementError` throw
-- `enforce()` swallows non-`IEnforcementError` throws (continues other handlers)
-- `enforce()` aborts on first `IEnforcementError` (remaining handlers not called)
-- Multiple `register()` / `registerEnforcement()` calls stack handlers correctly
-- "Teeth" check: revert the swallow and confirm `emit()` test goes red
+```
+agent-mcp-types      (interfaces/enums only — zero runtime, passWithNoTests removed)
+      ↑
+agent-mcp-hooks      (HookRegistry class — tested, platform:shared)
+    ↑       ↑
+agent-mcp   agent-mcp-budget  (and any future plugin packages)
+```
 
-These are pure unit tests — no SQLite, no provider, no `agent-mcp` import needed.
-The tests already exist conceptually in `agent-mcp/src/__tests__/enforcement.test.ts`;
-they should be canonical in the package that owns the code.
+`agent-mcp-types` goes back to being a pure-types package with no runtime code and no
+`passWithNoTests` workaround. `HookRegistry` gets a proper home with its own test suite.
+Plugin authors depend on `@adhd/agent-mcp-hooks` as a devDependency for unit-testing
+their handlers (the host server provides `HookRegistry` at runtime via `agent-mcp`, so
+it stays a devDep, not a peer). `agent-mcp` imports `HookRegistry` from
+`@adhd/agent-mcp-hooks` instead of from `agent-mcp-types`.
+
+Steps:
+1. `./generate-lib.sh lib agent-mcp-hooks logic shared` (routes to `packages/ai/`)
+2. Move `registry.ts` + enforcement implementation to `agent-mcp-hooks/src/`
+3. Update `agent-mcp-types/src/index.ts` — remove `HookRegistry` re-export
+4. Update `agent-mcp/src/engine/hooks.ts` — import from `@adhd/agent-mcp-hooks`
+5. Update `agent-mcp-budget` and any other consumers
+6. Write `agent-mcp-hooks/src/__tests__/registry.test.ts` with full behavioural coverage:
+   - `emit()` swallows handler errors (does not reject)
+   - `emit()` calls all handlers even if one throws
+   - `enforce()` propagates the first `IEnforcementError` throw
+   - `enforce()` swallows non-`IEnforcementError` throws
+   - `enforce()` aborts on first `IEnforcementError` (remaining handlers not called)
+   - Multiple stacked handlers work correctly
+   - Teeth check on each invariant
+7. Remove `passWithNoTests: true` from `agent-mcp-types/vite.config.ts`
+8. Update `PLUGINS.md` devDependency guidance (`@adhd/agent-mcp-hooks` for testing)
 
 **Acceptance criteria**
-- `npx nx test agent-mcp-types` runs real tests and exits non-zero on a regression.
-- `passWithNoTests: true` removed from `vite.config.ts`.
-- All behavioural invariants above covered by at least one test with a teeth check.
-- `agent-mcp/src/__tests__/enforcement.test.ts` retains its orchestrator-level
-  integration tests (which use `HookRegistry` as a dependency) but does not
-  duplicate the unit-level registry tests.
+- `npx nx test agent-mcp-types` exits 0 with no test files (no runtime code to cover).
+- `passWithNoTests: true` removed from `agent-mcp-types/vite.config.ts`.
+- `npx nx test agent-mcp-hooks` runs the registry unit tests and exits non-zero on a
+  regression in `HookRegistry`.
+- The Nx project graph has no circular edges involving `agent-mcp-types`,
+  `agent-mcp-hooks`, `agent-mcp`, or `agent-mcp-budget`.
+- `agent-mcp-budget/src/__tests__/budget-plugin.test.ts` imports `HookRegistry` from
+  `@adhd/agent-mcp-hooks`.
 
-**References** — `packages/ai/agent-mcp-types/src/registry.ts` (runtime code),
+**References** — `packages/ai/agent-mcp-types/src/registry.ts` (runtime code to move),
 `packages/ai/agent-mcp-types/vite.config.ts` (`passWithNoTests: true`),
-`packages/ai/agent-mcp/src/__tests__/enforcement.test.ts` (downstream coverage).
+`packages/ai/agent-mcp/src/engine/hooks.ts` (import to update),
+`packages/ai/agent-mcp-budget/src/__tests__/budget-plugin.test.ts` (import to update),
+`packages/ai/agent-mcp/PLUGINS.md` (devDependency guidance to update).
 
 ---
 
