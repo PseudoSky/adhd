@@ -9,6 +9,52 @@ planning in [ROADMAP.md](./ROADMAP.md).
 
 ---
 
+## [1.1.3] — 2026-06-17
+
+### Added
+- **Enforcement hook API.** `IHookRegistry` (and `HookRegistry`) gain
+  `registerEnforcement<E>(event, handler)` and `enforce<E>(event, payload)` — a
+  separate throw-propagating path distinct from `emit()`. The orchestrator calls
+  `hooks.enforce("pre:model_request")` before every LLM call; a handler that throws
+  an `IEnforcementError` causes the task to fail with `ToolError("BUDGET_EXCEEDED")`
+  and a human-readable message. Non-`IEnforcementError` throws are swallowed (same
+  contract as `emit()`). New types in `@adhd/agent-mcp-types@1.1.0`: `IEnforcementError`
+  (`{ isEnforcementError: true, code, message }`), `EnforcementEvent`
+  (`"pre:model_request"`), `EnforcementHandler<E>`, `EnforcementEventMap`.
+  `BUDGET_EXCEEDED` added to `AgentMcpErrorCode`. (FEAT-005)
+- **`@adhd/agent-mcp-budget` first-party plugin.** New package at
+  `packages/ai/agent-mcp-budget/`. Registers a `pre:model_request` enforcement
+  handler (throws when a limit is breached) and a `post:model_response` observational
+  handler (accumulates counters and elapsed time). Configurable limits via exported
+  `configSchema` (Zod): `maxModelCalls`, `maxTotalTokens`, `maxInputTokens`,
+  `maxOutputTokens`, `maxWallClockMs`, `maxModelMs`, `maxCostUSD`. Activated via
+  `agent-mcp.config.json`. Scaffold with `scripts/generate-lib.sh lib agent-mcp-<name>
+  logic node`. See `PLUGINS.md`. (FEAT-006)
+- **Real plugin loader integration tests.** `__tests__/plugin-loader.test.ts` drives
+  the actual compiled `dist/packages/ai/agent-mcp-budget/index.js` binary through both
+  the config-file and `AGENT_MCP_PLUGINS` env-var loading paths, asserting enforcement
+  fires on the second model call when `maxModelCalls: 1`.
+- **Live budget e2e test** (`__tests__/integration/live-budget.e2e.test.ts`, gated
+  behind `AGENT_MCP_BUDGET_LIVE=1`). Runs the real budget plugin against a local LM
+  Studio model and asserts `BUDGET_EXCEEDED` on the second call with `maxModelCalls: 1`.
+
+### Fixed
+- **`HookRegistry` class relocated to `@adhd/agent-mcp-types`** to eliminate a
+  circular Nx project-graph build dependency. `agent-mcp-budget` tests previously
+  imported `HookRegistry` from `@adhd/agent-mcp`, creating a
+  `agent-mcp:build → agent-mcp-budget:build → agent-mcp:build` cycle. The class now
+  lives in `packages/ai/agent-mcp-types/src/registry.ts`. `agent-mcp` re-exports it
+  via `engine/hooks.ts` (`export { HookRegistry } from "@adhd/agent-mcp-types"`) — no
+  public API change. (DEBT-006)
+
+### Internal
+- `scripts/generate-lib.sh`: `agent-mcp-*` prefixed packages now auto-route to
+  `packages/ai/` before the `node-tools` override runs. Post-generation patches added:
+  `emptyOutDir: true` in `vite.config.ts` and `dependsOn: ["build","test"]` in
+  `project.json → nx-release-publish`. Both patches are idempotent. (DEBT-007)
+
+---
+
 ## [1.1.2] — 2026-06-16
 
 ### Internal
