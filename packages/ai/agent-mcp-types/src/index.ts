@@ -3,6 +3,7 @@ import type { TokenUsage } from "./domain.js";
 export * from "./domain.js";
 export * from "./hooks.js";
 export * from "./errors.js";
+export { HookRegistry } from "./registry.js";
 
 // Explicit re-export to ensure TaskStatus literals ("waiting", "awaiting_input") appear
 // in the barrel declaration for tooling and audit greps.
