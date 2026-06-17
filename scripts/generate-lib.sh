@@ -57,3 +57,56 @@ npx nx g @nx/js:library $NAME \
   --publishable \
   --bundler vite \
   --no-interactive
+
+PACKAGE_DIR="packages/$DIR/$NAME"
+
+# ── Post-generation patches ────────────────────────────────────────────────────
+#
+# Fix two systematic gaps in the Nx-generated scaffolding:
+#
+# 1. vite.config.ts — add emptyOutDir:true
+#    Without this, the dist/ directory is never cleared between builds. When you
+#    bump package.json version and rebuild, the OLD dist/package.json survives
+#    (vite only writes files it produces, not the package.json). Result: npm
+#    publish ships the wrong version number.
+#
+# 2. project.json — add dependsOn:["build","test"] to nx-release-publish
+#    Without this, `nx release publish` runs directly against whatever is already
+#    in dist/ (possibly stale or untested). Adding dependsOn enforces a clean
+#    build + passing tests before every publish.
+
+VITE_CONFIG="$PACKAGE_DIR/vite.config.ts"
+if [[ -f "$VITE_CONFIG" ]]; then
+  python3 - "$VITE_CONFIG" <<'PYEOF'
+import sys, re
+path = sys.argv[1]
+src  = open(path).read()
+# Insert emptyOutDir: true immediately after the outDir: line (if not already present)
+if 'emptyOutDir' not in src:
+    src = re.sub(r'([ \t]*outDir:[^\n]+\n)', r'\1    emptyOutDir: true,\n', src)
+    open(path, 'w').write(src)
+    print(f"  ✅ patched {path}: added emptyOutDir: true")
+else:
+    print(f"  ℹ️  {path}: emptyOutDir already present, skipped")
+PYEOF
+fi
+
+PROJECT_JSON="$PACKAGE_DIR/project.json"
+if [[ -f "$PROJECT_JSON" ]]; then
+  node - "$PROJECT_JSON" <<'JSEOF'
+const fs   = require('fs');
+const path = process.argv[2];   // argv[0]=node, argv[1]='-', argv[2]=path
+const json = JSON.parse(fs.readFileSync(path, 'utf8'));
+const pub  = json?.targets?.['nx-release-publish'];
+if (pub && !pub.dependsOn) {
+  pub.dependsOn = ['build', 'test'];
+  fs.writeFileSync(path, JSON.stringify(json, null, 2) + '\n');
+  console.log(`  ✅ patched ${path}: added dependsOn:["build","test"] to nx-release-publish`);
+} else {
+  console.log(`  ℹ️  ${path}: dependsOn already present or no nx-release-publish target, skipped`);
+}
+JSEOF
+fi
+
+echo ""
+echo "✅ Done — verify $PACKAGE_DIR/project.json tags and vite.config.ts before committing."
