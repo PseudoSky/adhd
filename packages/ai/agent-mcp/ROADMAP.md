@@ -188,6 +188,45 @@ Both low necessity and low differentiation. Wire in existing best-in-class solut
 
 ---
 
+## Shipped in 1.1.x
+
+Released as three independent packages with independent version bumps.
+
+- **Enforcement hook API** (`@adhd/agent-mcp-types@1.1.0`, `@adhd/agent-mcp@1.1.3`) —
+  `IHookRegistry` gains `registerEnforcement()` + `enforce()`: a throw-propagating
+  path separate from `emit()`. The orchestrator calls `hooks.enforce("pre:model_request")`
+  before every LLM call; a handler throwing `IEnforcementError` aborts the call and
+  surfaces as `ToolError("BUDGET_EXCEEDED")`. `BUDGET_EXCEEDED` added to
+  `AgentMcpErrorCode`. `HookRegistry` concrete class relocated to `agent-mcp-types`
+  (eliminates circular Nx build dep; backwards-compatible re-export in `agent-mcp`).
+
+- **`@adhd/agent-mcp-budget@0.0.x`** — First-party cost budget plugin (ROADMAP
+  feature #4, Strategic 6.98). Registers a `pre:model_request` enforcement handler.
+  Configurable limits: `maxModelCalls`, `maxTotalTokens`, `maxInputTokens`,
+  `maxOutputTokens`, `maxWallClockMs`, `maxModelMs`, `maxCostUSD`. Exports
+  `configSchema` (Zod) for server-side config validation. Located at
+  `packages/ai/agent-mcp-budget/`. Scaffold new plugins with
+  `scripts/generate-lib.sh lib agent-mcp-<name> logic node`. See `PLUGINS.md`.
+
+- **Observability** (`@adhd/agent-mcp@1.1.1`) — `usage_query` gains `group_by`
+  aggregation (by agent / model / provider) with per-group task counts, token
+  totals, and average latency. (Partial of ROADMAP feature #0 "Agent and task metrics".)
+
+- **Plugin ecosystem** (`@adhd/agent-mcp@1.1.1`) — Config-file loading
+  (`agent-mcp.config.json`) with per-plugin Zod `configSchema` validation and
+  three search paths (env override, CWD, `~/.agent-mcp/`). `AGENT_MCP_PLUGINS`
+  env var as a no-options shorthand. See `PLUGINS.md`.
+
+- **Reliability fixes** (`@adhd/agent-mcp@1.1.1`) — delegation-opened sessions
+  reaped on task failure; `agent_delete {force:true}` escape hatch; top-level
+  unhandled exception safety net; bare tool-name resolution; `timeoutMs` now
+  bounds SDK HTTP timeout.
+
+- **Tooling** — `scripts/generate-lib.sh` routes `agent-mcp-*` packages to
+  `packages/ai/` automatically and patches `emptyOutDir` + `dependsOn` post-generation.
+
+---
+
 ## Shipped in 1.0.0
 
 The first consolidated release ships the full task-orchestration core as one
@@ -230,8 +269,8 @@ All Phase 1 prerequisites shipped in 1.0.0 / 0.0.6. Plugin ecosystem is unblocke
 
 Ship as separate `@adhd/*-plugin` packages consuming Phase 1 hooks.
 
-5. **Agent and task metrics** (`@adhd/metrics-plugin`) — Strategic 8.10; blocked on Phase 1 token usage tracking (task_usage table)
-6. **Cost budget enforcement** (`@adhd/budget-plugin`) — Strategic 6.98
+5. **Agent and task metrics** (`@adhd/metrics-plugin`) — Strategic 8.10; `usage_query group_by` ✓ (1.1.1, partial); full metrics plugin still backlog
+6. **Cost budget enforcement** ✓ — `@adhd/agent-mcp-budget@0.0.x` shipped `maxModelCalls`, `maxTotalTokens`, `maxInputTokens`, `maxOutputTokens`, `maxWallClockMs`, `maxModelMs`, `maxCostUSD` (1.1.3)
 7. **Agent capability profiles** — Plugin, extends agent definition schema
 8. **Webhook notifications** (`@adhd/webhook-plugin`) — Strategic 6.18
 9. **Scheduled tasks** — SERVICE or PLUGIN depending on persistence model chosen
