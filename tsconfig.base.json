@@ -38,7 +38,7 @@
       "@adhd/apigen-plugin-api-fastify": [
         "./packages/apigen/plugins/api-fastify/src/index.ts"
       ],
-      "@adhd/apigen-plugin-cli": ["./packages/apigen/plugins/cli/src/index.ts"],
+      "@adhd/apigen-plugin-cli-output": ["./packages/apigen/plugins/cli/src/index.ts"],
       "@adhd/apigen-plugin-jsonschema": [
         "./packages/apigen/plugins/jsonschema/src/index.ts"
       ],
