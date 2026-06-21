@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "plugin-fastify-checkpoint",
+  "current_state": "plugin-jsonschema",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -91,11 +91,11 @@
       "end_ref": "0f586a4c2ef92d57b628a7c84a6fa881148f07ed"
     },
     "plugin-fastify-checkpoint": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-21T21:11:20.974Z",
-      "done_at": null,
+      "done_at": "2026-06-21T21:12:44.442Z",
       "start_ref": "21cee438f7668a4237191d51adc7558f4050e7d6",
-      "end_ref": null
+      "end_ref": "9766b5c44b707fb5b323130c9b8da091f9105451"
     },
     "plugin-jsonschema": {
       "status": "pending",
@@ -314,6 +314,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Implemented generate() (emits routes.ts with POST /<id>/<fn>, imports dispatch from @adhd/apigen-runtime, no schema:{body} attachment) and run() (real Fastify in-process, abort-signal teardown). 9 vitest tests pass against real Fastify server: POST /test-pkg/getUser returns {id,name} matching direct function call. Added fastify@^4 to package.json; added resolutions:{estree-walker:2.0.2} to fix Nx vite-plugin-dts CJS compat broken by estree-walker@3 ESM-only hoisting. Guard (npx nx test apigen-plugin-api-fastify) exit 0."
+    },
+    {
+      "ts": "2026-06-21T21:12:44.442Z",
+      "from": "plugin-fastify-checkpoint",
+      "to": "plugin-fastify-checkpoint",
+      "start_ref": "21cee438f7668a4237191d51adc7558f4050e7d6",
+      "end_ref": "9766b5c44b707fb5b323130c9b8da091f9105451",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Human checkpoint cleared: plan owner approved the plugin-api-fastify reference (9/9 unit tests, dispatch not inlined, no AJV body schema, OutputPlugin conformant) via RESUME directive; checkpoints/fastify-approved.md created."
     }
   ],
   "amendment_log": [],
