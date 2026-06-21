@@ -42,10 +42,10 @@
       "end_ref": "1719847fac3788e0b978568325c550f3a02068fb"
     },
     "schema-composition": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T08:21:22.717Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "e78ea0f6f785011d60e9e28df909eed4c50f4c3f",
       "end_ref": null
     },
     "audit-core": {
