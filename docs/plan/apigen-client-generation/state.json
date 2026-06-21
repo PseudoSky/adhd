@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "cli-run-cmd",
+  "current_state": "audit-cli",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -140,11 +140,11 @@
       "end_ref": "81b4e2c4c0f9e4cb42fdf4537eb52af1016cbb2f"
     },
     "cli-run-cmd": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-21T23:28:22.622Z",
-      "done_at": null,
+      "done_at": "2026-06-21T23:33:51.335Z",
       "start_ref": "3644ab5232f00c5a762cea1325f3c8844c4eb2e5",
-      "end_ref": null
+      "end_ref": "6571b981b0b7371cb715be68da2cbef35fd259ec"
     },
     "nx-generator": {
       "status": "complete",
@@ -398,6 +398,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "test=0 lint=0 build=0. Implemented pipeline.ts (generateSchemas+composeSchemas wrapper), registry.ts (discoverPackages filesystem walk), commands/generate.ts (--source/--type/--out-dir/--export/--opt), commands/generate-registry.ts (--packages-dir/--tag/--exclude-tag). Updated src/index.ts wiring all 5 plugins. Added test fixtures api.ts + registry/pkg-a + pkg-b with __samples__. 10 tests pass covering all 5 AC. vite.config.ts externalized node builtins + plugin deps for platform:node build. .eslintrc.json fixture override added. package.json: commander ^14.0.3, dropped unused apigen-runtime dep. Explicit @nx/vite:test target added to project.json. Commit SHA: 81b4e2c."
+    },
+    {
+      "ts": "2026-06-21T23:33:51.335Z",
+      "from": "cli-run-cmd",
+      "to": "cli-run-cmd",
+      "start_ref": "3644ab5232f00c5a762cea1325f3c8844c4eb2e5",
+      "end_ref": "6571b981b0b7371cb715be68da2cbef35fd259ec",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented run.ts + run-registry.ts commands. run: dynamic import() of source module, filters non-function exports (excl __samples__), wires AbortController to SIGINT/SIGTERM, calls plugin.run(). run-registry: discoverPackages() multi-pkg, imports live fns per pkg, single plugin.run() call with full packages array. index.ts updated to register both. Test: 5/5 pass (rc=0) — covers no-run-method error, live fns import, __samples__ exclusion, abort resolution, --output flag absent, multi-pkg registry dispatch, live streaming-http MCP server round-trip via process.emit(SIGINT). Lint: rc=0. Build: rc=0. Commit: 6571b98."
     }
   ],
   "amendment_log": [],
