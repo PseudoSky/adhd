@@ -77,10 +77,10 @@
       "end_ref": "986faaae90d209aeb6ac4c003547524b54e42b0b"
     },
     "scaffold-plugins": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T15:27:36.929Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "90b72645a07e2208c95a0a42356f87a6456999a4",
       "end_ref": null
     },
     "plugin-api-fastify": {
