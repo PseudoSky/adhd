@@ -1,0 +1,192 @@
+{
+  "schema_version": 2,
+  "title": "apigen-client-generation",
+  "dag": "dag.json",
+  "dod_provenance": {
+    "confirmed_at": "2026-06-21T07:42:58.724Z",
+    "by": "pseudosky",
+    "note": "Caller confirmed DoD 2026-06-21: generalized fixture-derived observables (no hard-coded values), execute generated CLI, all 3 MCP transports, +7 integration checks, real-component + APIGEN_LIVE e2e. Approved apply-all.",
+    "dod_ids": [
+      "dod.1",
+      "dod.2",
+      "dod.3",
+      "dod.4",
+      "dod.5",
+      "dod.cli",
+      "dod.6",
+      "dod.7",
+      "dod.8"
+    ]
+  },
+  "current_state": "scaffold-packages",
+  "states": {
+    "scaffold-packages": {
+      "status": "in_progress",
+      "started_at": "2026-06-21T07:45:00.771Z",
+      "done_at": null,
+      "start_ref": "fb684ced0dcac5fa3e1fe8d919b546e676905f4a",
+      "end_ref": null
+    },
+    "core-types": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "schema-extraction": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "schema-composition": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "audit-core": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "runtime-middleware": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "runtime-dispatch": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "audit-runtime": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "scaffold-plugins": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "plugin-api-fastify": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "plugin-fastify-checkpoint": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "plugin-jsonschema": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "plugin-mcp": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "plugin-api-express": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "plugin-cli-output": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "audit-plugins": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "cli-generate-cmd": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "cli-run-cmd": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "nx-generator": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "audit-cli": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "integration-tests": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "audit-final": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "done": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    }
+  },
+  "transition_log": [],
+  "amendment_log": [],
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.15",
+    "hash": "a71a190f4d67"
+  }
+}
