@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "audit-runtime",
+  "current_state": "scaffold-plugins",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -70,11 +70,11 @@
       "end_ref": "a87e5f7587b459f04d2b3bb6ee285fd87b65f1bc"
     },
     "audit-runtime": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-21T15:26:33.586Z",
-      "done_at": null,
+      "done_at": "2026-06-21T15:26:37.482Z",
       "start_ref": "db53d613b4ba169dc1ccffa663848726b61757fb",
-      "end_ref": null
+      "end_ref": "986faaae90d209aeb6ac4c003547524b54e42b0b"
     },
     "scaffold-plugins": {
       "status": "pending",
@@ -278,6 +278,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Implemented needsEnvelopeField, dataParamNames, dispatch in packages/apigen/runtime/src/lib/dispatch.ts. All 8 tests pass (guard exit 0). Added additive export to index.ts: export { needsEnvelopeField, dataParamNames, dispatch } from ./lib/dispatch. Commit a87e5f7."
+    },
+    {
+      "ts": "2026-06-21T15:26:37.482Z",
+      "from": "audit-runtime",
+      "to": "audit-runtime",
+      "start_ref": "db53d613b4ba169dc1ccffa663848726b61757fb",
+      "end_ref": "986faaae90d209aeb6ac4c003547524b54e42b0b",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Runtime phase audit: 13/13 pass (rc=0, orchestrator-verified independently). dispatch single-path + no-plugin-import + no-node-builtins invariants green."
     }
   ],
   "amendment_log": [],
