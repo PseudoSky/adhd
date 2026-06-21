@@ -1,8 +1,13 @@
 {
   "name": "@adhd/apigen-nx",
   "version": "0.0.1",
-  "dependencies": {},
+  "dependencies": {
+    "@nx/devkit": "*",
+    "@adhd/apigen-core": "*"
+  },
   "main": "./index.js",
   "module": "./index.mjs",
-  "typings": "./index.d.ts"
+  "typings": "./index.d.ts",
+  "generators": "./generators.json",
+  "executors": "./executors.json"
 }
