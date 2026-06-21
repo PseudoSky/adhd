@@ -1,0 +1,2 @@
+export { <%= propertyName %>Plugin } from './lib/plugin'
+export default <%= propertyName %>Plugin
