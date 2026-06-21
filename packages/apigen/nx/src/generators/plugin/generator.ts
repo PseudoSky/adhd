@@ -34,6 +34,7 @@ export async function pluginGenerator(tree: Tree, options: PluginGeneratorSchema
       },
       test: {
         executor: '@nx/vite:test',
+        options: { configFile: `${projectDir}/vite.config.ts` },
       },
       'nx-release-publish': {
         dependsOn: ['build', 'test'],
