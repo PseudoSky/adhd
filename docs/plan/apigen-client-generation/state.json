@@ -133,10 +133,10 @@
       "end_ref": "4e2225efca62ec815fa8b8163a72e6e49ee72554"
     },
     "cli-generate-cmd": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T23:17:04.119Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "14452a2adbc6b0c38cacc3d955b6ccd1c00df109",
       "end_ref": null
     },
     "cli-run-cmd": {
