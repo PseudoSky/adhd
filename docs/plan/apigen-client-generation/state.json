@@ -35,10 +35,10 @@
       "end_ref": "c88cfcd4a4e5e811a6e578dde04b6b3e32dbb224"
     },
     "schema-extraction": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T08:05:11.755Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "6a3742261b39586f0af4ceac0fcf64321189413e",
       "end_ref": null
     },
     "schema-composition": {
