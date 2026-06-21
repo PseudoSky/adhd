@@ -1,0 +1,33 @@
+{
+  "name": "apigen-plugin-jsonschema",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "tags": ["layer:logic", "platform:node"],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "options": {
+        "outputPath": "dist/packages/apigen/plugins/jsonschema",
+        "emptyOutDir": true
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": ["{workspaceRoot}/coverage/packages/apigen/plugins/jsonschema"],
+      "options": {
+        "configFile": "packages/apigen/plugins/jsonschema/vite.config.ts"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": ["build", "test"],
+      "executor": "@nx/js:release-publish"
+    }
+  },
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "packages/apigen/plugins/jsonschema"
+      }
+    }
+  }
+}

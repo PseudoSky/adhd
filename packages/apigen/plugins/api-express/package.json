@@ -1,0 +1,9 @@
+{
+  "name": "@adhd/apigen-plugin-api-express",
+  "version": "0.0.1",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@adhd/apigen-core": "*",
+    "@adhd/apigen-runtime": "*"
+  }
+}
