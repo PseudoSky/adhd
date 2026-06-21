@@ -1,0 +1,19 @@
+import { describe, it, expect } from 'vitest'
+import { <%= propertyName %>Plugin } from '../lib/plugin'
+
+describe('<%= pluginName %> plugin', () => {
+  it('satisfies OutputPlugin interface', () => {
+    expect(typeof <%= propertyName %>Plugin.id).toBe('string')
+    expect(<%= propertyName %>Plugin.id).toBe('<%= pluginName %>')
+    expect(typeof <%= propertyName %>Plugin.generate).toBe('function')
+  })
+<% if (hasRun) { %>
+  it('has run() method', () => {
+    expect(typeof <%= propertyName %>Plugin.run).toBe('function')
+  })
+<% } else { %>
+  it('has no run() method (generate-only plugin)', () => {
+    expect(<%= propertyName %>Plugin.run).toBeUndefined()
+  })
+<% } %>
+})

@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "title": "Plugin generator",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Plugin name in kebab-case (e.g. 'python-grpc', 'api-fastify')"
+    },
+    "directory": {
+      "type": "string",
+      "description": "Target directory (default: packages/apigen/plugins/<name>)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable plugin description"
+    },
+    "hasRun": {
+      "type": "boolean",
+      "default": false,
+      "description": "Include a run() stub. Set true for server plugins (mcp, api-fastify, api-express) that start a long-running process."
+    }
+  },
+  "required": ["name"]
+}

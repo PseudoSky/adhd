@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "title": "Generate executor",
+  "description": "Run @adhd/apigen-cli generate as an Nx cache-aware target",
+  "type": "object",
+  "properties": {
+    "source": {
+      "type": "string",
+      "description": "Path to the source TypeScript file (relative to project root)"
+    },
+    "type": {
+      "type": "string",
+      "description": "Output plugin id (e.g. 'mcp', 'api-fastify')"
+    },
+    "outDir": {
+      "type": "string",
+      "description": "Output directory for generated files"
+    },
+    "exportMode": {
+      "type": "string",
+      "description": "Export mode: named, default, or named-object:<name>"
+    },
+    "options": {
+      "type": "object",
+      "description": "Plugin-specific key=value options",
+      "additionalProperties": { "type": "string" }
+    }
+  },
+  "required": ["source", "type", "outDir"]
+}
