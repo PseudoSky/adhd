@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "runtime-dispatch",
+  "current_state": "audit-runtime",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -63,11 +63,11 @@
       "end_ref": "143d54edd9d035b3ef12384e167a1e03b872b837"
     },
     "runtime-dispatch": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-21T15:23:29.653Z",
-      "done_at": null,
+      "done_at": "2026-06-21T15:25:34.276Z",
       "start_ref": "e264bc4606ed908857e6461532ede6aa4ee0f902",
-      "end_ref": null
+      "end_ref": "a87e5f7587b459f04d2b3bb6ee285fd87b65f1bc"
     },
     "audit-runtime": {
       "status": "pending",
@@ -266,6 +266,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Implemented 5 lib files (types, define-middleware, event-bus, build-context, api-package) + 2 test files + updated index.ts. Added @nx/vite:test target to project.json. Guard: npx nx test apigen-runtime --testFile=packages/apigen/runtime/src/test/api-package.spec.ts → 8/8 passed (exit 0). All 6 acceptance criteria verified: session schema has session+data fields, assertNoSelfSubscription throws ConfigurationError, observer middleware receives start+complete events, strict=true throws on unknown override key, buildContext accumulates sequentially, no Node-only/plugin imports in src/."
+    },
+    {
+      "ts": "2026-06-21T15:25:34.276Z",
+      "from": "runtime-dispatch",
+      "to": "runtime-dispatch",
+      "start_ref": "e264bc4606ed908857e6461532ede6aa4ee0f902",
+      "end_ref": "a87e5f7587b459f04d2b3bb6ee285fd87b65f1bc",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented needsEnvelopeField, dataParamNames, dispatch in packages/apigen/runtime/src/lib/dispatch.ts. All 8 tests pass (guard exit 0). Added additive export to index.ts: export { needsEnvelopeField, dataParamNames, dispatch } from ./lib/dispatch. Commit a87e5f7."
     }
   ],
   "amendment_log": [],
