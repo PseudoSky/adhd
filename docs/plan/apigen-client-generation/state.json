@@ -84,10 +84,10 @@
       "end_ref": "98dbc224dedbf760251abc2d487ffb3d373e8c60"
     },
     "plugin-api-fastify": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T15:39:58.829Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "23433af1e123e0e3d3e463a048145bb9ba53d292",
       "end_ref": null
     },
     "plugin-fastify-checkpoint": {
