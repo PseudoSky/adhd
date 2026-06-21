@@ -56,10 +56,10 @@
       "end_ref": "ba1bf593859accc8a1b3783615f6ee3024587db0"
     },
     "runtime-middleware": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T15:18:33.053Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "8687b2b42108100c118d375c0250b5b459ff23d9",
       "end_ref": null
     },
     "runtime-dispatch": {
