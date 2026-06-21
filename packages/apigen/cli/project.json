@@ -16,6 +16,15 @@
     "platform:node"
   ],
   "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/cli"
+      ],
+      "options": {
+        "configFile": "packages/apigen/cli/vite.config.ts"
+      }
+    },
     "build": {
       "executor": "@nx/vite:build",
       "outputs": [

@@ -1,7 +1,18 @@
 {
   "name": "@adhd/apigen-cli",
   "version": "0.0.1",
-  "dependencies": {},
+  "bin": {
+    "apigen-cli": "./src/index.ts"
+  },
+  "dependencies": {
+    "commander": "^14.0.3",
+    "@adhd/apigen-core": "*",
+    "@adhd/apigen-plugin-mcp": "*",
+    "@adhd/apigen-plugin-jsonschema": "*",
+    "@adhd/apigen-plugin-api-fastify": "*",
+    "@adhd/apigen-plugin-api-express": "*",
+    "@adhd/apigen-plugin-cli-output": "*"
+  },
   "main": "./index.js",
   "module": "./index.mjs",
   "typings": "./index.d.ts"
