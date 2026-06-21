@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "plugin-mcp",
+  "current_state": "plugin-api-express",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -105,11 +105,11 @@
       "end_ref": "85f0f8f8d9693889c54a9d1c5342ba03115b669f"
     },
     "plugin-mcp": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-21T21:35:37.486Z",
-      "done_at": null,
+      "done_at": "2026-06-21T21:48:12.028Z",
       "start_ref": "e74a0fe580832b16cd1d75af6a924d1bd3109378",
-      "end_ref": null
+      "end_ref": "daca7b554ed1241e0b6f2bd8d58bf626746bccb6"
     },
     "plugin-api-express": {
       "status": "pending",
@@ -350,6 +350,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Renamed project apigen-plugin-cli→apigen-plugin-cli-output to match guard/slug/convention (scaffold mis-named it); 14 tests pass, build clean."
+    },
+    {
+      "ts": "2026-06-21T21:48:12.028Z",
+      "from": "plugin-mcp",
+      "to": "plugin-mcp",
+      "start_ref": "e74a0fe580832b16cd1d75af6a924d1bd3109378",
+      "end_ref": "daca7b554ed1241e0b6f2bd8d58bf626746bccb6",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented full MCP plugin: plugin.ts (delegates generate/run, optionsSchema with all 3 transport enums), generate.ts (emits index.ts + server.ts per transport), run.ts (in-process server; streaming-http creates transport per request to avoid single-use limitation), templates/server-stdio.tpl.ts + server-http.tpl.ts. Guard: npx nx test apigen-plugin-mcp — 21/21 tests pass (3 spec files). tools/list verified via real StreamableHTTPServerTransport HTTP call returning SSE with correct tool names; callTool(getUser) verified against ground-truth direct call; callTool(listUsers) verified; abort signal closes server. All 3 transport values in optionsSchema enum. dispatch imported from @adhd/apigen-runtime, not inlined. No dep added (SDK already present at 1.29.0). Commit: daca7b5."
     }
   ],
   "amendment_log": [],
