@@ -91,10 +91,10 @@
       "end_ref": "0f586a4c2ef92d57b628a7c84a6fa881148f07ed"
     },
     "plugin-fastify-checkpoint": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T21:11:20.974Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "21cee438f7668a4237191d51adc7558f4050e7d6",
       "end_ref": null
     },
     "plugin-jsonschema": {
@@ -319,7 +319,7 @@
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
-    "version": "0.8.15",
-    "hash": "a71a190f4d67"
+    "version": "0.8.18",
+    "hash": "768a2f7be3f6"
   }
 }
