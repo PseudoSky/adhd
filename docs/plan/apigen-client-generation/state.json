@@ -63,10 +63,10 @@
       "end_ref": "143d54edd9d035b3ef12384e167a1e03b872b837"
     },
     "runtime-dispatch": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T15:23:29.653Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "e264bc4606ed908857e6461532ede6aa4ee0f902",
       "end_ref": null
     },
     "audit-runtime": {
