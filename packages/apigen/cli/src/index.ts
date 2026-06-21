@@ -2,7 +2,8 @@
 import { Command } from 'commander'
 import { registerGenerateCommand } from './lib/commands/generate'
 import { registerGenerateRegistryCommand } from './lib/commands/generate-registry'
-// run and run-registry are registered by the cli-run-cmd state
+import { registerRunCommand } from './lib/commands/run'
+import { registerRunRegistryCommand } from './lib/commands/run-registry'
 import mcpPlugin from '@adhd/apigen-plugin-mcp'
 import jsonschemaPlugin from '@adhd/apigen-plugin-jsonschema'
 import fastifyPlugin from '@adhd/apigen-plugin-api-fastify'
@@ -22,5 +23,7 @@ const program = new Command().name('apigen-cli').version('0.1.0')
 
 registerGenerateCommand(program, plugins)
 registerGenerateRegistryCommand(program, plugins)
+registerRunCommand(program, plugins)
+registerRunRegistryCommand(program, plugins)
 
 program.parseAsync()
