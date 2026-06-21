@@ -32,6 +32,17 @@
       "@adhd/apigen-cli": ["./packages/apigen/cli/src/index.ts"],
       "@adhd/apigen-core": ["./packages/apigen/core/src/index.ts"],
       "@adhd/apigen-nx": ["./packages/apigen/nx/src/index.ts"],
+      "@adhd/apigen-plugin-api-express": [
+        "./packages/apigen/plugins/api-express/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-api-fastify": [
+        "./packages/apigen/plugins/api-fastify/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-cli": ["./packages/apigen/plugins/cli/src/index.ts"],
+      "@adhd/apigen-plugin-jsonschema": [
+        "./packages/apigen/plugins/jsonschema/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-mcp": ["./packages/apigen/plugins/mcp/src/index.ts"],
       "@adhd/apigen-runtime": ["./packages/apigen/runtime/src/index.ts"],
       "@adhd/data": ["./packages/data/src/index.ts"],
       "@adhd/decompile": ["./packages/decompile/src/index.ts"],
