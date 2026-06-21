@@ -28,10 +28,10 @@
       "end_ref": "693fe3b6bbbb4faef68dea395bfe23007e25bb5e"
     },
     "core-types": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T07:54:23.784Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "bf6b37b116328db6c80f623d7ea669cf4039c7fa",
       "end_ref": null
     },
     "schema-extraction": {
