@@ -16,6 +16,15 @@
     "platform:shared"
   ],
   "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/runtime"
+      ],
+      "options": {
+        "configFile": "packages/apigen/runtime/vite.config.ts"
+      }
+    },
     "build": {
       "executor": "@nx/vite:build",
       "outputs": [
