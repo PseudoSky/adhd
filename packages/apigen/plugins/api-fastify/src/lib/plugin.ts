@@ -1,28 +1,23 @@
-import type {
-  OutputPlugin,
-  PluginInput,
-  PluginOutput,
-  RunInput,
-} from '@adhd/apigen-core';
+import type { OutputPlugin, PluginInput, PluginOutput, RunInput } from '@adhd/apigen-core'
+import { generate } from './generate'
+import { run } from './run'
 
 export const apiFastifyPlugin: OutputPlugin = {
   id: 'api-fastify',
   description: 'Expose functions as Fastify HTTP POST routes',
   optionsSchema: {
     type: 'object',
-    properties: {},
+    properties: {
+      port: { type: 'number', default: 3000 },
+      routePrefix: { type: 'string', default: '' },
+    },
   },
   generate(input: PluginInput): PluginOutput {
-    // TODO: implement — return { files: [{ path: '...', content: '...' }] }
-    return { files: [] };
+    return generate(input)
   },
-
-  async run(input: RunInput): Promise<void> {
-    // TODO: start server, register handlers, listen for input.signal
-    return new Promise<void>((resolve) => {
-      if (input.signal) input.signal.addEventListener('abort', () => resolve());
-    });
+  run(input: RunInput): Promise<void> {
+    return run(input)
   },
-};
+}
 
-export default apiFastifyPlugin;
+export default apiFastifyPlugin
