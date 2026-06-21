@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "plugin-jsonschema",
+  "current_state": "plugin-cli-output",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -119,10 +119,10 @@
       "end_ref": null
     },
     "plugin-cli-output": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T21:25:10.899Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "7fb4c9556e2e549fdc2a1944766fec92bae9ea9c",
       "end_ref": null
     },
     "audit-plugins": {
