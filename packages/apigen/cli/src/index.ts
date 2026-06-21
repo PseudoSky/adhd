@@ -1,1 +1,26 @@
-export * from './lib/apigen-cli';
+#!/usr/bin/env node
+import { Command } from 'commander'
+import { registerGenerateCommand } from './lib/commands/generate'
+import { registerGenerateRegistryCommand } from './lib/commands/generate-registry'
+// run and run-registry are registered by the cli-run-cmd state
+import mcpPlugin from '@adhd/apigen-plugin-mcp'
+import jsonschemaPlugin from '@adhd/apigen-plugin-jsonschema'
+import fastifyPlugin from '@adhd/apigen-plugin-api-fastify'
+import expressPlugin from '@adhd/apigen-plugin-api-express'
+import cliOutputPlugin from '@adhd/apigen-plugin-cli-output'
+import type { OutputPlugin } from '@adhd/apigen-core'
+
+const plugins: Record<string, OutputPlugin> = {
+  mcp: mcpPlugin,
+  jsonschema: jsonschemaPlugin,
+  'api-fastify': fastifyPlugin,
+  'api-express': expressPlugin,
+  cli: cliOutputPlugin,
+}
+
+const program = new Command().name('apigen-cli').version('0.1.0')
+
+registerGenerateCommand(program, plugins)
+registerGenerateRegistryCommand(program, plugins)
+
+program.parseAsync()
