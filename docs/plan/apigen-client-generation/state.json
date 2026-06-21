@@ -105,10 +105,10 @@
       "end_ref": "85f0f8f8d9693889c54a9d1c5342ba03115b669f"
     },
     "plugin-mcp": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T21:35:37.486Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "e74a0fe580832b16cd1d75af6a924d1bd3109378",
       "end_ref": null
     },
     "plugin-api-express": {
