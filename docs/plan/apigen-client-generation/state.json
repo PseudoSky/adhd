@@ -112,10 +112,10 @@
       "end_ref": "daca7b554ed1241e0b6f2bd8d58bf626746bccb6"
     },
     "plugin-api-express": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T21:49:32.691Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "42b7b8b4795edf06769ad6d951ec9c07f44ce8bb",
       "end_ref": null
     },
     "plugin-cli-output": {
