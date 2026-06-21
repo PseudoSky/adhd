@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "plugin-api-fastify",
+  "current_state": "plugin-fastify-checkpoint",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -84,11 +84,11 @@
       "end_ref": "98dbc224dedbf760251abc2d487ffb3d373e8c60"
     },
     "plugin-api-fastify": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-21T15:39:58.829Z",
-      "done_at": null,
+      "done_at": "2026-06-21T16:14:51.572Z",
       "start_ref": "23433af1e123e0e3d3e463a048145bb9ba53d292",
-      "end_ref": null
+      "end_ref": "0f586a4c2ef92d57b628a7c84a6fa881148f07ed"
     },
     "plugin-fastify-checkpoint": {
       "status": "pending",
@@ -302,6 +302,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Generated 5 plugins via nx g @adhd/apigen-nx:plugin (jsonschema, mcp, api-fastify, api-express, cli). Added vite.config.ts+tsconfig files (generator template gap). Patched project.json test targets with outputs+configFile. Fixed broken index.ts__tmpl__ default re-export. Also patched generated index.ts files. All 5 stubs build. Guard 5/5 passed (exit 0). Commit 98dbc22."
+    },
+    {
+      "ts": "2026-06-21T16:14:51.572Z",
+      "from": "plugin-api-fastify",
+      "to": "plugin-api-fastify",
+      "start_ref": "23433af1e123e0e3d3e463a048145bb9ba53d292",
+      "end_ref": "0f586a4c2ef92d57b628a7c84a6fa881148f07ed",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented generate() (emits routes.ts with POST /<id>/<fn>, imports dispatch from @adhd/apigen-runtime, no schema:{body} attachment) and run() (real Fastify in-process, abort-signal teardown). 9 vitest tests pass against real Fastify server: POST /test-pkg/getUser returns {id,name} matching direct function call. Added fastify@^4 to package.json; added resolutions:{estree-walker:2.0.2} to fix Nx vite-plugin-dts CJS compat broken by estree-walker@3 ESM-only hoisting. Guard (npx nx test apigen-plugin-api-fastify) exit 0."
     }
   ],
   "amendment_log": [],
