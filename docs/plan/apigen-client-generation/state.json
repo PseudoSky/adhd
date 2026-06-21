@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "plugin-cli-output",
+  "current_state": "plugin-mcp",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -98,11 +98,11 @@
       "end_ref": "9766b5c44b707fb5b323130c9b8da091f9105451"
     },
     "plugin-jsonschema": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-21T21:25:01.536Z",
-      "done_at": null,
+      "done_at": "2026-06-21T21:26:16.793Z",
       "start_ref": "d4b43399b81ee4f8508b9c8fb767f02300454437",
-      "end_ref": null
+      "end_ref": "85f0f8f8d9693889c54a9d1c5342ba03115b669f"
     },
     "plugin-mcp": {
       "status": "pending",
@@ -326,6 +326,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Human checkpoint cleared: plan owner approved the plugin-api-fastify reference (9/9 unit tests, dispatch not inlined, no AJV body schema, OutputPlugin conformant) via RESUME directive; checkpoints/fastify-approved.md created."
+    },
+    {
+      "ts": "2026-06-21T21:26:16.793Z",
+      "from": "plugin-cli-output",
+      "to": "plugin-jsonschema",
+      "start_ref": "d4b43399b81ee4f8508b9c8fb767f02300454437",
+      "end_ref": "85f0f8f8d9693889c54a9d1c5342ba03115b669f",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented generate() with path.join(pkg.id, fnName+.json) per function, pretty-print defaulting true, no run() method. 7/7 tests pass (emits correct paths, valid JSON, compact mode, interface shape, multi-fn, multi-pkg, pretty-print default). Guard: npx nx test apigen-plugin-jsonschema exit 0."
     }
   ],
   "amendment_log": [],
