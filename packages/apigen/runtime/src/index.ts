@@ -11,4 +11,4 @@ export type {
   GeneratedSchemas,
   ComposedSchemas,
 } from './lib/types'
-// Note: dispatch utilities come from runtime-dispatch state
+export { needsEnvelopeField, dataParamNames, dispatch } from './lib/dispatch'
