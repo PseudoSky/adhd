@@ -1,28 +1,24 @@
-import type {
-  OutputPlugin,
-  PluginInput,
-  PluginOutput,
-  RunInput,
-} from '@adhd/apigen-core';
+import type { OutputPlugin, PluginInput, PluginOutput, RunInput } from '@adhd/apigen-core'
+import { generate } from './generate'
+import { run } from './run'
 
 export const mcpPlugin: OutputPlugin = {
   id: 'mcp',
-  description: 'Expose functions as MCP tools (stdio, SSE, or streaming-HTTP)',
+  description: 'Expose functions as MCP tools (stdio, SSE, or streaming-HTTP transport)',
   optionsSchema: {
     type: 'object',
-    properties: {},
+    properties: {
+      transport: { type: 'string', enum: ['stdio', 'sse', 'streaming-http'] },
+      port: { type: 'number' },
+      toolDescriptions: { type: 'object', additionalProperties: { type: 'string' } },
+    },
   },
   generate(input: PluginInput): PluginOutput {
-    // TODO: implement — return { files: [{ path: '...', content: '...' }] }
-    return { files: [] };
+    return generate(input)
   },
-
-  async run(input: RunInput): Promise<void> {
-    // TODO: start server, register handlers, listen for input.signal
-    return new Promise<void>((resolve) => {
-      if (input.signal) input.signal.addEventListener('abort', () => resolve());
-    });
+  run(input: RunInput): Promise<void> {
+    return run(input)
   },
-};
+}
 
-export default mcpPlugin;
+export default mcpPlugin
