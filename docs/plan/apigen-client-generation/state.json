@@ -49,10 +49,10 @@
       "end_ref": "1c8fc5a28fba6e954f0eb6e7c9281f5e10c5e73e"
     },
     "audit-core": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T15:15:09.989Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "f12c9df6d44e9ebe43124589cad3f02478fbbe30",
       "end_ref": null
     },
     "runtime-middleware": {
