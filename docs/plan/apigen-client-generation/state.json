@@ -140,10 +140,10 @@
       "end_ref": "81b4e2c4c0f9e4cb42fdf4537eb52af1016cbb2f"
     },
     "cli-run-cmd": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T23:28:22.622Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "3644ab5232f00c5a762cea1325f3c8844c4eb2e5",
       "end_ref": null
     },
     "nx-generator": {
