@@ -9,12 +9,7 @@ export type {
   OutputPlugin,
 } from './lib/types'
 
-// Stubs — implemented in subsequent states
-export async function generateSchemas(
-  _opts: import('./lib/types').GenerateSchemasOptions
-): Promise<import('./lib/types').GeneratedSchemas> {
-  throw new Error('not implemented — see schema-extraction state')
-}
+export { generateSchemas } from './lib/generate-schemas'
 
 export function composeSchemas(
   _domainSchemas: import('./lib/types').GeneratedSchemas,
