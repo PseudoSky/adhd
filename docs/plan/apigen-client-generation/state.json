@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "nx-generator",
+  "current_state": "schema-extraction",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -147,11 +147,11 @@
       "end_ref": null
     },
     "nx-generator": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-21T07:59:06.023Z",
-      "done_at": null,
+      "done_at": "2026-06-21T08:03:44.510Z",
       "start_ref": "6d76a800e9e5d3b4429e3d3026173bbe170c747a",
-      "end_ref": null
+      "end_ref": "8ab11fa82044d9cb86b475ee47cd65d18b2fe883"
     },
     "audit-cli": {
       "status": "pending",
@@ -206,6 +206,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Wrote packages/apigen/core/src/lib/types.ts (GeneratedSchemas, ComposedSchemas, ExportMode, GenerateSchemasOptions, PluginInput, PluginOutput, RunInput, OutputPlugin) and replaced index.ts with type-only re-exports plus generateSchemas/composeSchemas stubs. Guard: npx nx build apigen-core exited 0 (313ms). AC verified: [core-types.1] build exit 0; [core-types.2] typeof generateSchemas === function in CJS output; [core-types.3] stub throws \"not implemented — see schema-extraction state\"; [core-types.4] grep for @adhd/apigen-runtime|@adhd/apigen-plugin produced no output. Commit: c88cfcd."
+    },
+    {
+      "ts": "2026-06-21T08:03:44.510Z",
+      "from": "nx-generator",
+      "to": "nx-generator",
+      "start_ref": "6d76a800e9e5d3b4429e3d3026173bbe170c747a",
+      "end_ref": "8ab11fa82044d9cb86b475ee47cd65d18b2fe883",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Implemented pluginGenerator (generators/plugin/generator.ts + schema.json + 4 EJS __files__ templates) and generateExecutor (executors/generate/executor.ts + schema.json). Added generators.json, executors.json, updated package.json deps and vite.config.ts externals, rewrote src/index.ts. Templates use propertyName (camelCase) for JS identifiers, fileName (kebab) for string id/description fields. 13 tests pass (7 generator + 5 executor + 1 legacy). Guard npx nx build apigen-nx exits 0. Commit: 8ab11fa."
     }
   ],
   "amendment_log": [],
