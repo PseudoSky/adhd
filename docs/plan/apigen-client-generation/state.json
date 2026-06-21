@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "schema-extraction",
+  "current_state": "nx-generator",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -147,10 +147,10 @@
       "end_ref": null
     },
     "nx-generator": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T07:59:06.023Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "6d76a800e9e5d3b4429e3d3026173bbe170c747a",
       "end_ref": null
     },
     "audit-cli": {
