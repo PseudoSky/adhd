@@ -8,7 +8,8 @@ export const <%= propertyName %>Plugin: OutputPlugin = {
     properties: {},
   },
   generate(input: PluginInput): PluginOutput {
-    // TODO: implement — return { files: [{ path: '...', content: '...' }] }
+    // TODO: read `input` (functions/packages) and emit files
+    void input
     return { files: [] }
   },<% if (hasRun) { %>
 
