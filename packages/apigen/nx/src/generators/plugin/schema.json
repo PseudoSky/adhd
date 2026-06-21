@@ -5,7 +5,9 @@
   "properties": {
     "name": {
       "type": "string",
-      "description": "Plugin name in kebab-case (e.g. 'python-grpc', 'api-fastify')"
+      "description": "Plugin name in kebab-case (e.g. 'python-grpc', 'api-fastify')",
+      "$default": { "$source": "argv", "index": 0 },
+      "x-prompt": "What name for the plugin?"
     },
     "directory": {
       "type": "string",
