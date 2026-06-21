@@ -1,5 +1,5 @@
 {
-  "name": "apigen-plugin-cli",
+  "name": "apigen-plugin-cli-output",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "projectType": "library",
   "tags": ["layer:logic", "platform:node"],

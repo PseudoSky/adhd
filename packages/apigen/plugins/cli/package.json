@@ -1,5 +1,5 @@
 {
-  "name": "@adhd/apigen-plugin-cli",
+  "name": "@adhd/apigen-plugin-cli-output",
   "version": "0.0.1",
   "main": "./src/index.ts",
   "dependencies": {

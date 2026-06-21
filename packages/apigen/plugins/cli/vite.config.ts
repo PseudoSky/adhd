@@ -25,7 +25,7 @@ export default defineConfig({
     },
     lib: {
       entry: 'src/index.ts',
-      name: 'apigen-plugin-cli',
+      name: 'apigen-plugin-cli-output',
       fileName: 'index',
       formats: ['es', 'cjs'],
     },
