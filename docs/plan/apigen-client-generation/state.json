@@ -126,10 +126,10 @@
       "end_ref": "06c5fe5e4deb50b329b0f9e71a5a1ff2996f704f"
     },
     "audit-plugins": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T21:59:33.517Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "9c2fc4aae197148cb6f1fc5255e40893d74f5e04",
       "end_ref": null
     },
     "cli-generate-cmd": {
