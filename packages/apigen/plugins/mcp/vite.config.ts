@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { builtinModules } from 'node:module';
 
 export default defineConfig({
   root: __dirname,
@@ -30,7 +31,14 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      external: [],
+      // platform:node lib — don't bundle node built-ins or the MCP SDK
+      // (the SDK's sse.js does a top-level `import { randomUUID } from 'node:crypto'`,
+      // which vite's lib build would otherwise externalize to a browser stub and fail).
+      external: [
+        /^node:/,
+        ...builtinModules,
+        /^@modelcontextprotocol\/sdk(\/|$)/,
+      ],
     },
   },
 
