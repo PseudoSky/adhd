@@ -70,10 +70,10 @@
       "end_ref": "a87e5f7587b459f04d2b3bb6ee285fd87b65f1bc"
     },
     "audit-runtime": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T15:26:33.586Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "db53d613b4ba169dc1ccffa663848726b61757fb",
       "end_ref": null
     },
     "scaffold-plugins": {
