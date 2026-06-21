@@ -1,5 +1,5 @@
 {
-  "extends": ["../../../.eslintrc.base.json"],
+  "extends": ["../../../../.eslintrc.base.json"],
   "ignorePatterns": ["!**/*"],
   "overrides": [
     {
@@ -24,13 +24,6 @@
             "ignoredFiles": ["{projectRoot}/vite.config.{js,ts,mjs,mts}"]
           }
         ]
-      }
-    },
-    {
-      "files": ["src/test/fixtures/**/*.ts"],
-      "rules": {
-        "@typescript-eslint/no-empty-function": "off",
-        "@typescript-eslint/no-unused-vars": "off"
       }
     }
   ]
