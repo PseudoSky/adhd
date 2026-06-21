@@ -1,7 +1,9 @@
 {
   "name": "@adhd/apigen-runtime",
   "version": "0.0.1",
-  "dependencies": {},
+  "dependencies": {
+    "@adhd/apigen-core": "0.0.1"
+  },
   "main": "./index.js",
   "module": "./index.mjs",
   "typings": "./index.d.ts"

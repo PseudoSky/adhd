@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { run } from '../lib/run'
+import { dispatch } from '@adhd/apigen-runtime'
 import type { RunInput } from '@adhd/apigen-core'
 
 // ---------- fixture ----------
@@ -182,12 +183,10 @@ describe('[plugin-mcp.4] run() streaming-http — tools/list + callTool via real
 
 describe('[plugin-mcp.5] run.ts does not inline dispatch logic', () => {
   it('run.ts imports dispatch from @adhd/apigen-runtime', async () => {
-    // Dynamic import to read the module's dependency chain — if dispatch were
-    // inlined, it would not appear as an import from @adhd/apigen-runtime.
-    // We verify via source-level: import the actual dispatch from runtime and
-    // confirm it is the same reference as what run() uses internally by
-    // checking the exported function identity (both point to the same runtime).
-    const { dispatch } = await import('@adhd/apigen-runtime')
+    // Static import (top of file) — nx forbids mixing static + dynamic imports
+    // of the same workspace lib. We assert the runtime exports `dispatch` so the
+    // import path run.ts relies on is correct; absence of inline dispatch logic
+    // is verified by the generate.spec 'no inline dispatch' test + the grep gate.
     expect(typeof dispatch).toBe('function')
     // The run module must re-export or use the same dispatch — absence of
     // inline logic is verified by the generate.spec 'no inline dispatch' test

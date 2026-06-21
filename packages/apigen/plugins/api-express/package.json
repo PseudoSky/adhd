@@ -4,6 +4,7 @@
   "main": "./src/index.ts",
   "dependencies": {
     "@adhd/apigen-core": "*",
-    "@adhd/apigen-runtime": "*"
+    "@adhd/apigen-runtime": "*",
+    "express": "^5.2.1"
   }
 }

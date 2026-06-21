@@ -2,8 +2,7 @@
   "name": "@adhd/apigen-nx",
   "version": "0.0.1",
   "dependencies": {
-    "@nx/devkit": "*",
-    "@adhd/apigen-core": "*"
+    "@nx/devkit": "*"
   },
   "main": "./index.js",
   "module": "./index.mjs",
