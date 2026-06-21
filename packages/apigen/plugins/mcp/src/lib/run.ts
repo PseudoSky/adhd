@@ -64,7 +64,7 @@ export async function run(input: RunInput): Promise<void> {
     const t = new StdioServerTransport()
     await server.connect(t)
     return new Promise<void>((resolve) => {
-      if (input.signal) input.signal.addEventListener('abort', resolve)
+      if (input.signal) input.signal.addEventListener('abort', () => resolve())
     })
   }
 
