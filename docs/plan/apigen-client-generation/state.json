@@ -98,10 +98,10 @@
       "end_ref": "9766b5c44b707fb5b323130c9b8da091f9105451"
     },
     "plugin-jsonschema": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-21T21:25:01.536Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "d4b43399b81ee4f8508b9c8fb767f02300454437",
       "end_ref": null
     },
     "plugin-mcp": {
