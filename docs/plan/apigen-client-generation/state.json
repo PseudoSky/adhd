@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "audit-plugins",
+  "current_state": "cli-generate-cmd",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -126,11 +126,11 @@
       "end_ref": "06c5fe5e4deb50b329b0f9e71a5a1ff2996f704f"
     },
     "audit-plugins": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-21T21:59:33.517Z",
-      "done_at": null,
+      "done_at": "2026-06-21T21:59:42.907Z",
       "start_ref": "9c2fc4aae197148cb6f1fc5255e40893d74f5e04",
-      "end_ref": null
+      "end_ref": "4e2225efca62ec815fa8b8163a72e6e49ee72554"
     },
     "cli-generate-cmd": {
       "status": "pending",
@@ -374,6 +374,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Implemented generate.ts (Router + res.json route emission), run.ts (real Express app, abort via server.close), plugin.ts (wired generate/run, full optionsSchema). Added express + @types/express + supertest via yarn (no package-lock.json). 10 tests pass: generate emits Router+dispatch import, routes use router.post+res.json not return, run() serves real HTTP POST via fetch integration tests. dispatch imported from @adhd/apigen-runtime — never inlined. Commit f0e7002."
+    },
+    {
+      "ts": "2026-06-21T21:59:42.907Z",
+      "from": "audit-plugins",
+      "to": "audit-plugins",
+      "start_ref": "9c2fc4aae197148cb6f1fc5255e40893d74f5e04",
+      "end_ref": "4e2225efca62ec815fa8b8163a72e6e49ee72554",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Plugins phase audit 19/19 (rc=0, orchestrator-verified). Fixed 2 real mcp build bugs the nx-test guard missed: TS2769 abort-listener (run.ts), and vite browser-externalization of node:crypto (externalized node builtins + mcp-sdk). All 5 plugins build+test."
     }
   ],
   "amendment_log": [],
