@@ -142,7 +142,7 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - then: an invalid_argument ApiError is returned and the fn is not invoked
   - entrypoint: `packages/apigen/cli/src/test/integration/canonical.spec.ts`
   - observable: `invoke() with data violating input schema throws ApiError{code:'invalid_argument'} and the target function is NEVER called; valid data passes through and returns ground truth`
-  - negative-control: `Remove the validation Layer from the harness -> bad data reaches the function -> the invalid_argument assertion goes red`
+  - negative-control: `Remove the validation Layer from the harness so packages/apigen/cli/src/test/integration/canonical.spec.ts sees bad data reach the function -> its invalid_argument assertion goes red`
   - delivered-by: `central-validation, layer-harness, audit-v2-harness, integration-tests-v2`
 - `[dod.11]` **Request envelope is sourced from transport metadata, not the body (behavioral)** — Request envelope is sourced from transport metadata, not the body.
   - given: a layer/envelope plugin declaring an envelope field
@@ -158,7 +158,7 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - then: each is served by its owning runtime behind one surface
   - entrypoint: `packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts`
   - observable: `With sources from two hosts behind one transport, an op tagged host A is answered by A's runtime and an op tagged host B by B's runtime; both return their in-process ground truth`
-  - negative-control: `Route all ops to a single runtime -> the cross-host op errors / returns the wrong runtime's value -> this clause goes red`
+  - negative-control: `Route all ops to a single runtime so packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts sees the cross-host op answered by the wrong runtime -> its owning-runtime assertion goes red`
   - delivered-by: `gateway, unified-cli, conformance-vectors, integration-tests-v2`
 - `[dod.13]` **One adhd-apigen orchestrator serves a target with operator-supplied Layer/mount plugins via --type/--use (behavioral)** — One adhd-apigen orchestrator serves a target with operator-supplied Layer/mount plugins via --type/--use.
   - given: a source plus --type and --use plugin selectors
@@ -166,7 +166,7 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - then: the chosen target serves with the chosen plugins composed
   - entrypoint: `packages/apigen/cli/src/test/integration/canonical.spec.ts`
   - observable: `adhd-apigen run --type mcp --use logger --use health presents the MCP target with the logger Layer active (per-op log) and the health mount answering _meta/health; --type selects the target, --use loads layer/mount/envelope plugins`
-  - negative-control: `Ignore --use -> logger Layer absent / health mount missing -> this clause goes red`
+  - negative-control: `Ignore --use so packages/apigen/cli/src/test/integration/canonical.spec.ts sees the logger Layer absent / health mount missing -> its --use composition assertion goes red`
   - delivered-by: `unified-cli, projection-transports, logger-layer-plugin, mount-plugins, integration-tests-v2`
 ---
 
