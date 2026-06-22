@@ -5,6 +5,7 @@
   "dependencies": {
     "@adhd/apigen-core": "*",
     "@adhd/apigen-runtime": "*",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "pino-http": "11.0.0"
   }
 }

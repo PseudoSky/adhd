@@ -35,7 +35,12 @@
               "@modelcontextprotocol/sdk",
               "fastify",
               "express",
-              "tsx"
+              "tsx",
+              "pino",
+              "pino-pretty",
+              "pino-http",
+              "thread-stream",
+              "sonic-boom"
             ]
           }
         ]

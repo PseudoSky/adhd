@@ -3,6 +3,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { discoverPackages } from '../registry'
 import { runPipeline } from '../pipeline'
+import { buildCliLogger } from '../logging'
 import type { OutputPlugin, PluginInput } from '@adhd/apigen-core'
 
 /** Parse --opt key=value pairs into an options record. */
@@ -42,6 +43,7 @@ export function registerGenerateRegistryCommand(
         throw new Error(`Unknown --type: ${opts.type}. Available: ${Object.keys(plugins).join(', ')}`)
       }
 
+      const logger = buildCliLogger(program)
       const options = parseOptPairs(opts.opt)
       const packagesDir = path.resolve(opts.packagesDir)
       const outputDir = path.resolve(opts.outDir)
@@ -58,7 +60,7 @@ export function registerGenerateRegistryCommand(
         const entryFile = findEntryFile(meta.dir)
         if (!entryFile) continue
 
-        const { schemas } = await runPipeline({ sourceFile: entryFile, tsconfig: opts.tsconfig })
+        const { schemas } = await runPipeline({ sourceFile: entryFile, tsconfig: opts.tsconfig, logger })
         pkgEntries.push({ id: meta.id, schemas, importPath: meta.importPath })
       }
 
@@ -66,6 +68,7 @@ export function registerGenerateRegistryCommand(
         packages: pkgEntries,
         outputDir,
         options,
+        logger,
       }
 
       const output = await plugin.generate(input)
@@ -75,6 +78,7 @@ export function registerGenerateRegistryCommand(
         fs.mkdirSync(path.dirname(dest), { recursive: true })
         fs.writeFileSync(dest, file.content)
       }
+      logger.info(`wrote ${output.files.length} files to ${outputDir}`)
     })
 }
 

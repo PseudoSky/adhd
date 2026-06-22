@@ -2,6 +2,7 @@ import { Command } from 'commander'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { runPipeline } from '../pipeline'
+import { buildCliLogger } from '../logging'
 import type { ExportMode, OutputPlugin, PluginInput } from '@adhd/apigen-core'
 
 /** Parse --opt key=value pairs into an options record. */
@@ -39,10 +40,11 @@ export function registerGenerateCommand(
         throw new Error(`Unknown --type: ${opts.type}. Available: ${Object.keys(plugins).join(', ')}`)
       }
 
+      const logger = buildCliLogger(program)
       const exportMode = resolveExportMode(opts.export)
       const options = parseOptPairs(opts.opt)
       const sourceFile = path.resolve(opts.source)
-      const { schemas } = await runPipeline({ sourceFile, exportMode, tsconfig: opts.tsconfig })
+      const { schemas } = await runPipeline({ sourceFile, exportMode, tsconfig: opts.tsconfig, logger })
 
       const packageId = path.basename(path.dirname(sourceFile))
       const outputDir = path.resolve(opts.outDir)
@@ -50,6 +52,7 @@ export function registerGenerateCommand(
         packages: [{ id: packageId, schemas, importPath: sourceFile }],
         outputDir,
         options,
+        logger,
       }
 
       const output = await plugin.generate(input)
@@ -59,5 +62,6 @@ export function registerGenerateCommand(
         fs.mkdirSync(path.dirname(dest), { recursive: true })
         fs.writeFileSync(dest, file.content)
       }
+      logger.info(`wrote ${output.files.length} files to ${outputDir}`)
     })
 }

@@ -2,7 +2,8 @@
   "name": "@adhd/apigen-runtime",
   "version": "0.0.1",
   "dependencies": {
-    "@adhd/apigen-core": "0.0.1"
+    "@adhd/apigen-core": "0.0.1",
+    "pino": "10.3.1"
   },
   "main": "./index.js",
   "module": "./index.mjs",

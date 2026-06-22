@@ -4,10 +4,11 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { dispatch } from '@adhd/apigen-runtime'
+import { dispatch, createLogger } from '@adhd/apigen-runtime'
+import type { Logger } from '@adhd/apigen-runtime'
 import type { RunInput } from '@adhd/apigen-core'
 
-function buildMcpServer(input: RunInput): {
+function buildMcpServer(input: RunInput, logger: Logger): {
   server: InstanceType<typeof Server>
   toolMetas: Record<string, { group: string; schema: unknown }>
 } {
@@ -40,15 +41,22 @@ function buildMcpServer(input: RunInput): {
     const meta = toolMetas[name]
     if (!meta) throw new Error(`Unknown tool: ${name}`)
     const pkg = input.packages.find((p) => p.id === meta.group)!
-    const result = await dispatch(
-      pkg.fns!,
-      pkg.createClient,
-      meta.schema as any,
-      name,
-      args as Record<string, unknown>,
-      ((args as any)['data'] ?? {}) as Record<string, unknown>,
-    )
-    return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    const start = Date.now()
+    try {
+      const result = await dispatch(
+        pkg.fns!,
+        pkg.createClient,
+        meta.schema as any,
+        name,
+        args as Record<string, unknown>,
+        ((args as any)['data'] ?? {}) as Record<string, unknown>,
+      )
+      logger.info({ tool: name, ms: Date.now() - start }, `→ ${name}`)
+      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+    } catch (err) {
+      logger.error({ tool: name, ms: Date.now() - start, err }, `✗ ${name}`)
+      throw err
+    }
   })
 
   return { server, toolMetas }
@@ -57,14 +65,26 @@ function buildMcpServer(input: RunInput): {
 export async function run(input: RunInput): Promise<void> {
   const transport = (input.options['transport'] as string) ?? 'stdio'
   const port = (input.options['port'] as number) ?? 3000
+  const host = (input.options['host'] as string) ?? '127.0.0.1'
+  // Fall back to a default stderr logger so logging never lands on stdout (the
+  // stdio JSON-RPC channel) even when the CLI did not supply one.
+  const logger = input.logger ?? createLogger()
 
-  const { server } = buildMcpServer(input)
+  logger.info(`mcp server starting (${transport})`)
+
+  const { server, toolMetas } = buildMcpServer(input, logger)
+  const toolNames = Object.keys(toolMetas)
+  logger.info({ tools: toolNames }, `${toolNames.length} tools available`)
 
   if (transport === 'stdio') {
     const t = new StdioServerTransport()
     await server.connect(t)
+    logger.info('stdio transport ready')
     return new Promise<void>((resolve) => {
-      if (input.signal) input.signal.addEventListener('abort', () => resolve())
+      if (input.signal) input.signal.addEventListener('abort', () => {
+        logger.info('mcp server shutting down')
+        resolve()
+      })
     })
   }
 
@@ -97,10 +117,15 @@ export async function run(input: RunInput): Promise<void> {
       }
     })
 
-    httpServer.listen(port)
+    httpServer.listen(port, host, () => {
+      logger.info({ host, port }, `listening on http://${host}:${port}`)
+    })
     return new Promise<void>((resolve) => {
       if (input.signal) {
-        input.signal.addEventListener('abort', () => httpServer.close(() => resolve()))
+        input.signal.addEventListener('abort', () => {
+          logger.info('mcp server shutting down')
+          httpServer.close(() => resolve())
+        })
       }
     })
   }
@@ -110,17 +135,22 @@ export async function run(input: RunInput): Promise<void> {
   // each request needs its own transport instance connected to a fresh Server.
   // We rebuild the server + transport per request so the MCP state is clean.
   const httpServer = createServer(async (req, res) => {
-    const { server: reqServer } = buildMcpServer(input)
+    const { server: reqServer } = buildMcpServer(input, logger)
     const mcpTransport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     })
     await reqServer.connect(mcpTransport)
     await mcpTransport.handleRequest(req, res)
   })
-  httpServer.listen(port)
+  httpServer.listen(port, host, () => {
+    logger.info({ host, port }, `listening on http://${host}:${port}`)
+  })
   return new Promise<void>((resolve) => {
     if (input.signal) {
-      input.signal.addEventListener('abort', () => httpServer.close(() => resolve()))
+      input.signal.addEventListener('abort', () => {
+        logger.info('mcp server shutting down')
+        httpServer.close(() => resolve())
+      })
     }
   })
 }
