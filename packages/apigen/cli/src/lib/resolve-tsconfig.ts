@@ -72,3 +72,28 @@ export function resolveTsconfig(sourceFile: string, explicit?: string): string {
   if (nearest) return nearest
   return builtinTsconfigPath()
 }
+
+/**
+ * Resolve the package namespace (id) for a source file.
+ *
+ * Precedence: explicit `--namespace` → the folder name CONTAINING the tsconfig
+ * (the `--tsconfig` dir if given, else the nearest `tsconfig.json` walking up) →
+ * the source file's parent folder name (when no project tsconfig is found).
+ *
+ * @param sourceFile - Path to the TypeScript source file.
+ * @param opts.namespace - Optional explicit `--namespace` override.
+ * @param opts.tsconfig  - Optional explicit `--tsconfig` value.
+ */
+export function resolveNamespace(
+  sourceFile: string,
+  opts: { namespace?: string; tsconfig?: string } = {},
+): string {
+  if (opts.namespace) return opts.namespace
+  const srcAbs = path.resolve(sourceFile)
+  if (opts.tsconfig) {
+    return path.basename(path.dirname(path.resolve(opts.tsconfig)))
+  }
+  const nearest = findNearestTsconfig(path.dirname(srcAbs))
+  if (nearest) return path.basename(path.dirname(nearest))
+  return path.basename(path.dirname(srcAbs))
+}
