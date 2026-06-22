@@ -480,29 +480,27 @@
     },
     "integration-tests-v2": {
       "kind": "work",
-      "model": "sonnet",
-      "effort": "medium",
-      "phase": "integration",
+      "phase": "v2-verify",
       "depends_on": [
-        "nx-generator"
+        "unified-cli",
+        "gateway",
+        "conformance-vectors",
+        "audit-v2-projection",
+        "audit-v2-harness",
+        "audit-v2-core"
       ],
-      "guard": "npx --yes nx test apigen-cli --testPathPattern=integration",
+      "guard": "npx --yes nx test apigen-cli",
       "artifacts": [
-        "packages/apigen/cli/src/test/fixtures/real-api.ts",
-        "packages/apigen/cli/src/test/fixtures/default-api.ts",
-        "packages/apigen/cli/src/test/fixtures/object-api.ts",
-        "packages/apigen/cli/src/test/fixtures/registry/pkg-c/index.ts",
-        "packages/apigen/cli/src/test/fixtures/registry/pkg-c/package.json",
-        "packages/apigen/cli/src/test/integration/schema.spec.ts",
-        "packages/apigen/cli/src/test/integration/dispatch.spec.ts",
-        "packages/apigen/cli/src/test/integration/mcp.spec.ts",
-        "packages/apigen/cli/src/test/integration/http.spec.ts",
-        "packages/apigen/cli/src/test/integration/parity.spec.ts",
-        "packages/apigen/cli/src/test/integration/registry.spec.ts",
-        "packages/apigen/cli/src/test/integration/export-modes.spec.ts"
+        "packages/apigen/cli/src/test/integration/canonical.spec.ts",
+        "packages/apigen/cli/src/test/integration/export-shape-matrix.spec.ts",
+        "packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts",
+        "packages/apigen/cli/src/test/fixtures/shapes/named.ts",
+        "packages/apigen/cli/src/test/fixtures/shapes/renamed.ts",
+        "packages/apigen/cli/src/test/fixtures/shapes/default-fn.ts",
+        "packages/apigen/cli/src/test/fixtures/shapes/default-object.ts"
       ],
       "context": "contexts/integration-tests-v2.md",
-      "notes": "14 integration tests across 7 spec files. Drive every public behavior through its real entrypoint: schema extraction on a real fixture, dispatch round-trip against real functions, MCP stdio via @modelcontextprotocol/sdk Client, Fastify+Express HTTP via fetch, generate/run parity, run-registry multi-package routing, all three export modes."
+      "notes": "Re-authored against the canonical contract (SPEC §15). REAL components: extractor->descriptor->harness->each transport. Export-shape matrix (named/renamed-as/default-fn/default-object/anonymous/CJS) proves F28/F29 closed. Mixed-host gateway test (ts+second host) proves §13 routing."
     },
     "canonical-descriptor": {
       "kind": "work",
