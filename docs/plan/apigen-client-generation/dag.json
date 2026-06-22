@@ -559,6 +559,19 @@
       ],
       "context": "contexts/audit-v2-core.md",
       "notes": "Export-shape matrix: named/renamed(as)/default-fn/default-object/anonymous/CJS source each yield correct descriptor ids + projections. Negative control: revert symbol-naming -> matrix goes red."
+    },
+    "layer-harness": {
+      "kind": "work",
+      "phase": "v2-harness",
+      "depends_on": [
+        "canonical-descriptor"
+      ],
+      "guard": "npx --yes nx test apigen-runtime",
+      "artifacts": [
+        "packages/apigen/runtime/src/lib/invoke.ts"
+      ],
+      "context": "contexts/layer-harness.md",
+      "notes": "SPEC §8: createInvoker(plugins)->invoke(op,call) composes the Layer stack around dispatch; typed-extension ctx (type-keyed, insert/read); generalizes v1 dispatch->invoke. Transports become thin adapters."
     }
   },
   "authored_with": {
