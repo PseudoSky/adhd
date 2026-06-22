@@ -1,0 +1,58 @@
+{
+  "schema-extraction": {
+    "anchor": "tools/executors/generate-schemas/executor.ts",
+    "rule": "ts-morph walks AST; ts-json-schema-generator builds JSON Schema from TS types; ctx excluded by parameter name match only (no TypeChecker)",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:reference-codebase]",
+    "audit_check": "[audit-core.7]"
+  },
+  "schema-composition": {
+    "anchor": "packages/system/service/src/lib/compose-schemas.ts",
+    "rule": "data:{} wrapper always present in required[], even for zero-param fns; middleware envelope merged at top level; false override removes field",
+    "discovered_via": "manual",
+    "shared_ref": "[inv:data-wrapper-always-present]",
+    "audit_check": "[audit-core.10]"
+  },
+  "middleware-types": {
+    "anchor": "packages/system/service/src/lib/middleware/types.ts",
+    "rule": "MiddlewareDef = { id, envelope?, createContext, eventMapping? }; eventMapping keys are selector strings (divergence from reference: reference uses handlerName→string[])",
+    "discovered_via": "manual",
+    "shared_ref": "[def:MiddlewareDef]",
+    "audit_check": "[audit-runtime.2]"
+  },
+  "mcp-consumer": {
+    "anchor": "packages/mcp-reverse-apis/src/bin.ts",
+    "rule": "ListTools from schema keys; CallTool dispatches via needsEnvelopeField + dispatch(); no per-transport branching in tool-call logic",
+    "discovered_via": "manual",
+    "shared_ref": "[def:dispatch]",
+    "audit_check": "[audit-plugins.5]"
+  },
+  "fastify-routes": {
+    "anchor": "apps/adhd-reverse-apis/src/app/routes/api.ts",
+    "rule": "POST /<pkgId>/<fnName>; body { data?, ...envelope }; NO Fastify schema validation on body (AJV rejects complex oneOf); dispatch() from @adhd/apigen-runtime",
+    "discovered_via": "manual",
+    "shared_ref": "[def:dispatch]",
+    "audit_check": "[plugin-api-fastify.4]"
+  },
+  "nx-generator-pattern": {
+    "anchor": "tools/generators/api-package/generator.ts",
+    "rule": "addProjectConfiguration + generateFiles(__files__ templates) + formatFiles(tree); tags must include layer: and platform:",
+    "discovered_via": "manual",
+    "shared_ref": "[inv:nx-platform-tags]",
+    "audit_check": "[nx-generator.2]"
+  },
+  "registry-discovery": {
+    "anchor": "tools/executors/generate-api-registry/executor.ts",
+    "rule": "fs.readdirSync on packages dir; filter by project.json tags; sort alphabetically; CLI version reads package.json tags/keywords instead",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:reference-codebase]",
+    "audit_check": "[audit-cli.7]"
+  },
+  "dispatch-single-path": {
+    "anchor": "packages/apigen/runtime/src/lib/dispatch.ts",
+    "rule": "dataParamNames and needsEnvelopeField defined ONLY in dispatch.ts; all plugins import from @adhd/apigen-runtime; no inline reimplementation",
+    "discovered_via": "manual",
+    "shared_ref": "[inv:dispatch-single-path]",
+    "audit_check": "[audit-final-v2.inv-dispatch-single-path]"
+  }
+}
