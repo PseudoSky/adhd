@@ -717,6 +717,21 @@
       ],
       "context": "contexts/package-restructure.md",
       "notes": "SPEC §12: split COMMON (core/naming/errors/schema/conformance/gateway + neutral codegen/*) vs PER-LANGUAGE ts/* (-core,-extractor,-runtime,plugins as apigen-ts-plugin-*). Rule: descriptor-in/artifact-out=common; touches host fns/runtime=per-language."
+    },
+    "unified-cli": {
+      "kind": "work",
+      "phase": "v2-packaging",
+      "depends_on": [
+        "package-restructure"
+      ],
+      "guard": "npx --yes nx test apigen-cli",
+      "artifacts": [
+        "packages/apigen/cli/src/lib/orchestrator.ts",
+        "packages/apigen/cli/src/lib/commands/run.ts",
+        "packages/apigen/cli/src/lib/commands/generate.ts"
+      ],
+      "context": "contexts/unified-cli.md",
+      "notes": "SPEC §13: the ONE adhd-apigen orchestrator — detect lang per source, drive per-lang extractor subprocess, merge into one descriptor, generate/run; --type <plugin> (target) and --use <plugin> (layer/mount/envelope; pkg specifier OR local path)."
     }
   },
   "authored_with": {
