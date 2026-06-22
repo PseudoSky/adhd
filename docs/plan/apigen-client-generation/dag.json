@@ -19,7 +19,8 @@
     "v2-core",
     "v2-harness",
     "v2-projection",
-    "v2-packaging"
+    "v2-packaging",
+    "v2-verify"
   ],
   "terminal": "done",
   "assumed_baseline": [],
