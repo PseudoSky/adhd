@@ -732,6 +732,19 @@
       ],
       "context": "contexts/unified-cli.md",
       "notes": "SPEC §13: the ONE adhd-apigen orchestrator — detect lang per source, drive per-lang extractor subprocess, merge into one descriptor, generate/run; --type <plugin> (target) and --use <plugin> (layer/mount/envelope; pkg specifier OR local path)."
+    },
+    "gateway": {
+      "kind": "work",
+      "phase": "v2-packaging",
+      "depends_on": [
+        "unified-cli"
+      ],
+      "guard": "npx --yes nx test apigen-gateway",
+      "artifacts": [
+        "packages/apigen/gateway/src/lib/gateway.ts"
+      ],
+      "context": "contexts/gateway.md",
+      "notes": "SPEC §13: @adhd/apigen-gateway — sidecar topology for mixed-host run (spawn per-language runtime, route each op to its owning runtime over local IPC, present one transport); single in-process fast path when all one host."
     }
   },
   "authored_with": {
