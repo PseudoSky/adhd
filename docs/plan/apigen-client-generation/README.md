@@ -136,6 +136,14 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - observable: `For named / renamed (export {x as y}) / default-fn / default-object / anonymous-default / CJS sources, the derived descriptor ids + per-transport projections (HTTP/MCP/CLI) deep-equal the EXPORTED-symbol names — never the declaration name`
   - negative-control: `Revert the extractor to name by declaration symbol -> renamed/default/CJS rows no longer match exported names -> this clause goes red`
   - delivered-by: `ts-extractor-by-symbol, naming-helpers, audit-v2-core, integration-tests-v2`
+- `[dod.10]` **Central validation Layer rejects invalid input before dispatch (behavioral)** — Central validation Layer rejects invalid input before dispatch.
+  - given: an operation with a typed input schema
+  - when: invoke is called with schema-violating data
+  - then: an invalid_argument ApiError is returned and the fn is not invoked
+  - entrypoint: `packages/apigen/cli/src/test/integration/canonical.spec.ts`
+  - observable: `invoke() with data violating input schema throws ApiError{code:'invalid_argument'} and the target function is NEVER called; valid data passes through and returns ground truth`
+  - negative-control: `Remove the validation Layer from the harness -> bad data reaches the function -> the invalid_argument assertion goes red`
+  - delivered-by: `central-validation, layer-harness, audit-v2-harness, integration-tests-v2`
 ---
 
 ## Execution model
