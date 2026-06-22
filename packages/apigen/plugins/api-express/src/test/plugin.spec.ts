@@ -74,7 +74,7 @@ describe('generate()', () => {
 
   it('[plugin-api-express.2] generated routes.ts imports dispatch from @adhd/apigen-runtime', () => {
     const out = generate(baseInput)
-    expect(out.files[0].content).toContain("import { dispatch } from '@adhd/apigen-runtime'")
+    expect(out.files[0].content).toMatch(/import \{[^}]*\bdispatch\b[^}]*\} from ['"]@adhd\/apigen-runtime['"]/)
   })
 
   it('[plugin-api-express.4] route shape is POST /<packageId>/<fnName>', () => {

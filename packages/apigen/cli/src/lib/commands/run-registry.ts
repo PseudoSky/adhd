@@ -4,6 +4,7 @@ import * as path from 'node:path'
 import { discoverPackages } from '../registry'
 import { runPipeline } from '../pipeline'
 import { importSource } from '../import-source'
+import { buildFnTable } from '@adhd/apigen-runtime'
 import { resolveTsconfig } from '../resolve-tsconfig'
 import { buildCliLogger } from '../logging'
 import type { OutputPlugin, RunInput } from '@adhd/apigen-core'
@@ -69,14 +70,10 @@ export function registerRunRegistryCommand(
         const tsconfig = resolveTsconfig(entryFile, opts.tsconfig)
         const { schemas, createClient } = await runPipeline({ sourceFile: entryFile, tsconfig, logger })
 
-        // Import the source module to get live function table (tsx loader handles .ts)
+        // Import the source module to get live function table (tsx loader handles .ts).
+        // buildFnTable keys default-exported functions by their declaration name.
         const mod = await importSource(entryFile, tsconfig)
-        const fns: Record<string, (...args: unknown[]) => unknown> = {}
-        for (const [key, val] of Object.entries(mod)) {
-          if (typeof val === 'function') {
-            fns[key] = val as (...args: unknown[]) => unknown
-          }
-        }
+        const fns = buildFnTable(mod)
 
         pkgEntries.push({
           id: meta.id,
