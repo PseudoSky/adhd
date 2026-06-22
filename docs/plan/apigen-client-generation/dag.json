@@ -614,6 +614,19 @@
       ],
       "context": "contexts/audit-v2-harness.md",
       "notes": "Drive invoke() through REAL Layers: order preserved, ctx threaded, validation rejects bad data with invalid_argument, error codes map per transport. Negative control: remove validation Layer -> bad-data test goes red."
+    },
+    "plugin-interface": {
+      "kind": "work",
+      "phase": "v2-projection",
+      "depends_on": [
+        "canonical-descriptor"
+      ],
+      "guard": "npx --yes nx build apigen-core",
+      "artifacts": [
+        "packages/apigen/core/src/lib/plugin.ts"
+      ],
+      "context": "contexts/plugin-interface.md",
+      "notes": "SPEC §7.1: Plugin{id,capabilities:{target,layer,mount,envelope}}; Call/Next/MountedOperation/EnvelopeCapability types; hook sugar compiles to a LayerCapability. The contract all plugins implement."
     }
   },
   "authored_with": {
