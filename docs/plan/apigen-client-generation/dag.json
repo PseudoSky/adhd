@@ -18,7 +18,8 @@
     "convergence",
     "v2-core",
     "v2-harness",
-    "v2-projection"
+    "v2-projection",
+    "v2-packaging"
   ],
   "terminal": "done",
   "assumed_baseline": [],
