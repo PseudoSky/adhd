@@ -1,11 +1,38 @@
-# apigen-core
+# @adhd/apigen-core
 
-This library was generated with [Nx](https://nx.dev).
+Schema **extraction** and **composition** for apigen, plus the shared types and the
+`OutputPlugin` contract every target plugin implements. Pure TypeScript — safe in Node and
+the browser (**platform: shared**).
 
-## Building
+Part of [apigen](../README.md). For end-to-end usage see [`../cli`](../cli).
 
-Run `nx build apigen-core` to build the library.
+## What it does
 
-## Running unit tests
+Reads a TypeScript source with [ts-morph](https://ts-morph.com/), derives JSON Schemas for
+each exported function's parameters and return type (via `ts-json-schema-generator`), and
+composes them with any middleware-contributed envelope fields. The first parameter named
+`ctx` is excluded from the schema by convention (name-only).
 
-Run `nx test apigen-core` to execute the unit tests via [Vitest](https://vitest.dev/).
+## Public API
+
+```ts
+import { generateSchemas, composeSchemas } from '@adhd/apigen-core'
+import type {
+  GeneratedSchemas, ComposedSchemas, ExportMode, GenerateSchemasOptions,
+  PluginInput, PluginOutput, RunInput, OutputPlugin, Logger,
+} from '@adhd/apigen-core'
+```
+
+- **`generateSchemas(opts)`** — source file → per-export input/output JSON Schemas.
+- **`composeSchemas(...)`** — fold middleware envelope fields into the composed `input`
+  (always with a `data: {}` wrapper, even for zero-param functions).
+- **`OutputPlugin`** — `{ id, generate(input): PluginOutput, run?(input): Promise<void> }`.
+  `PluginOutput.files` is language-agnostic (`{ path, content }[]`), so plugins may emit any
+  file type.
+
+## Develop
+
+```bash
+npx nx build apigen-core
+npx nx test  apigen-core
+```
