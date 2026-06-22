@@ -531,6 +531,20 @@
       ],
       "context": "contexts/naming-helpers.md",
       "notes": "SPEC §5: @adhd/apigen-naming — tokenizer + toKebab/toPascal/toSnake/toCamel + per-transport projection (HTTP kebab, MCP _, gRPC Pascal, CLI kebab); file-name normalize; default/default-object/index rules."
+    },
+    "ts-extractor-by-symbol": {
+      "kind": "work",
+      "phase": "v2-core",
+      "depends_on": [
+        "canonical-descriptor",
+        "naming-helpers"
+      ],
+      "guard": "npx --yes nx test apigen-core",
+      "artifacts": [
+        "packages/apigen/core/src/lib/extract.ts"
+      ],
+      "context": "contexts/ts-extractor-by-symbol.md",
+      "notes": "SPEC §4/§14, fixes F28/F29: name operations by EXPORTED SYMBOL (honor 'as' aliases; handle default/anonymous/renamed/CJS shapes); emit canonical descriptor incl typeText; ctx-first-param excluded; data-wrapper dissolved."
     }
   },
   "authored_with": {
