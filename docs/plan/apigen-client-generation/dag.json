@@ -745,6 +745,22 @@
       ],
       "context": "contexts/gateway.md",
       "notes": "SPEC §13: @adhd/apigen-gateway — sidecar topology for mixed-host run (spawn per-language runtime, route each op to its owning runtime over local IPC, present one transport); single in-process fast path when all one host."
+    },
+    "conformance-vectors": {
+      "kind": "work",
+      "phase": "v2-packaging",
+      "depends_on": [
+        "central-validation",
+        "layer-harness",
+        "canonical-descriptor"
+      ],
+      "guard": "npx --yes nx test apigen-conformance",
+      "artifacts": [
+        "packages/apigen/conformance/src/lib/vectors.ts",
+        "packages/apigen/conformance/project.json"
+      ],
+      "context": "contexts/conformance-vectors.md",
+      "notes": "SPEC §12/§14: @adhd/apigen-conformance — cross-language conformance vectors every host runtime must pass (descriptor round-trip, naming projection, validation, error mapping); codifies the host-SDK/extractor contract."
     }
   },
   "authored_with": {
