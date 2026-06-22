@@ -154,7 +154,7 @@
       "end_ref": "8ab11fa82044d9cb86b475ee47cd65d18b2fe883"
     },
     "audit-cli": {
-      "status": "pending",
+      "status": "blocked",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
@@ -412,7 +412,17 @@
       "note": "Implemented run.ts + run-registry.ts commands. run: dynamic import() of source module, filters non-function exports (excl __samples__), wires AbortController to SIGINT/SIGTERM, calls plugin.run(). run-registry: discoverPackages() multi-pkg, imports live fns per pkg, single plugin.run() call with full packages array. index.ts updated to register both. Test: 5/5 pass (rc=0) — covers no-run-method error, live fns import, __samples__ exclusion, abort resolution, --output flag absent, multi-pkg registry dispatch, live streaming-http MCP server round-trip via process.emit(SIGINT). Lint: rc=0. Build: rc=0. Commit: 6571b98."
     }
   ],
-  "amendment_log": [],
+  "amendment_log": [
+    {
+      "ts": "2026-06-22T15:36:10.126Z",
+      "state": "audit-cli",
+      "class": "planner",
+      "type": "replan",
+      "reason": "Supersede v1 TS-only verification tail with the v2 canonical standard (docs/apigen/SPEC.md): code-first descriptor, name-by-exported-symbol extractor (fixes F28/F29), Layer harness + central validation, metadata envelope, plugin capabilities (target/layer/mount/envelope), package restructure (common vs per-language), unified adhd-apigen CLI + sidecar gateway, re-authored integration/DoD against the canonical contract.",
+      "files_synced": [],
+      "by": "pseudosky"
+    }
+  ],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.18",
