@@ -680,6 +680,22 @@
       ],
       "context": "contexts/mount-plugins.md",
       "notes": "SPEC §7.2(b,c)/§12: MountCapability plugins. @adhd/apigen-openapi = neutral descriptor->OpenAPI content (common); thin per-host openapi + health mount plugins add _meta/openapi and _meta/health operations that flow through the harness."
+    },
+    "audit-v2-projection": {
+      "kind": "audit",
+      "phase": "v2-projection",
+      "depends_on": [
+        "projection-transports",
+        "logger-layer-plugin",
+        "mount-plugins",
+        "central-validation"
+      ],
+      "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase v2-projection",
+      "artifacts": [
+        "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+      ],
+      "context": "contexts/audit-v2-projection.md",
+      "notes": "Real servers: each transport returns ground-truth values; envelope rides metadata; logger Layer wraps; openapi/health mounts answer. Negative control: drop a route from a generated server -> tools/list/route set no longer deep-equals derived ground truth -> red."
     }
   },
   "authored_with": {
