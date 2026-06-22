@@ -599,6 +599,21 @@
       ],
       "context": "contexts/error-taxonomy.md",
       "notes": "SPEC §9: @adhd/apigen-errors — ApiError{code,message,details} on gRPC canonical code set + per-transport status maps (HTTP/gRPC/MCP/CLI)."
+    },
+    "audit-v2-harness": {
+      "kind": "audit",
+      "phase": "v2-harness",
+      "depends_on": [
+        "layer-harness",
+        "central-validation",
+        "error-taxonomy"
+      ],
+      "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase v2-harness",
+      "artifacts": [
+        "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+      ],
+      "context": "contexts/audit-v2-harness.md",
+      "notes": "Drive invoke() through REAL Layers: order preserved, ctx threaded, validation rejects bad data with invalid_argument, error codes map per transport. Negative control: remove validation Layer -> bad-data test goes red."
     }
   },
   "authored_with": {
