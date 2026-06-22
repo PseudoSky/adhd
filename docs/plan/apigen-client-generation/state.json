@@ -222,6 +222,13 @@
       "done_at": null,
       "start_ref": null,
       "end_ref": null
+    },
+    "audit-v2-harness": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
     }
   },
   "transition_log": [
