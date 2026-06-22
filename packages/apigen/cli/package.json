@@ -2,10 +2,16 @@
   "name": "@adhd/apigen-cli",
   "version": "0.0.1",
   "bin": {
-    "apigen-cli": "./src/index.ts"
+    "apigen-cli": "./index.js"
   },
   "dependencies": {
     "commander": "^14.0.3",
+    "ts-morph": "^23.0.0",
+    "ts-json-schema-generator": "^2.3.0",
+    "tsx": "^4.22.4",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "fastify": "^4.0.0",
+    "express": "^5.2.1",
     "@adhd/apigen-core": "*",
     "@adhd/apigen-plugin-mcp": "*",
     "@adhd/apigen-plugin-jsonschema": "*",

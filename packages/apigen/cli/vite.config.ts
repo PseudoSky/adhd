@@ -1,9 +1,24 @@
 /// <reference types='vitest' />
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
+import * as fs from 'node:fs';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { builtinModules } from 'node:module';
+
+const OUT_DIR = path.resolve(__dirname, '../../../dist/packages/apigen/cli');
+
+/** Ships the builtin default tsconfig beside the bundled entry so resolve-tsconfig can find it. */
+function copyDefaultTsconfig(): Plugin {
+  return {
+    name: 'apigen-copy-default-tsconfig',
+    closeBundle() {
+      const src = path.join(__dirname, 'src/lib/default-tsconfig.json');
+      fs.mkdirSync(OUT_DIR, { recursive: true });
+      fs.copyFileSync(src, path.join(OUT_DIR, 'default-tsconfig.json'));
+    },
+  };
+}
 
 export default defineConfig({
   root: __dirname,
@@ -15,6 +30,7 @@ export default defineConfig({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),
     }),
+    copyDefaultTsconfig(),
   ],
 
   build: {
@@ -31,16 +47,27 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      // platform:node entrypoint — externalize all node built-ins and heavy deps.
+      // platform:node standalone entrypoint — the whole @adhd/apigen-* graph
+      // (core, runtime, all 5 plugins) is INLINED into index.js so the built CLI
+      // runs from anywhere without resolving workspace packages. Only real npm
+      // deps and node built-ins stay external (resolved from the install tree).
       external: [
         /^node:/,
         ...builtinModules,
         /^@modelcontextprotocol\/sdk(\/|$)/,
-        /^@adhd\//,
         'commander',
         'fastify',
         'express',
+        'ts-morph',
+        'ts-json-schema-generator',
+        'typescript',
+        'tsx',
+        /^tsx\//,
       ],
+      output: {
+        // Real executable: node shebang on the built entry.
+        banner: '#!/usr/bin/env node',
+      },
     },
   },
 

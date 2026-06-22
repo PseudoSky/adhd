@@ -28,7 +28,15 @@
         "@nx/dependency-checks": [
           "error",
           {
-            "ignoredFiles": ["{projectRoot}/vite.config.{js,ts,mjs,mts}"]
+            "ignoredFiles": ["{projectRoot}/vite.config.{js,ts,mjs,mts}"],
+            "ignoredDependencies": [
+              "ts-morph",
+              "ts-json-schema-generator",
+              "@modelcontextprotocol/sdk",
+              "fastify",
+              "express",
+              "tsx"
+            ]
           }
         ]
       }

@@ -12,9 +12,13 @@ import { buildSchema } from './schema-builders/ts-json-schema'
  * @param opts - Extraction options including source file path, export mode, namespace, phase
  */
 export async function generateSchemas(opts: GenerateSchemasOptions): Promise<GeneratedSchemas> {
-  const { sourceFile: filePath, exportMode = { type: 'named' }, namespace = '', phase = '' } = opts
+  const { sourceFile: filePath, exportMode = { type: 'named' }, namespace = '', phase = '', tsconfig } = opts
 
-  const project = new Project({ skipAddingFilesFromTsConfig: true })
+  // When a tsconfig is supplied, honor its compilerOptions for type resolution but
+  // still avoid pulling its whole `include` graph in — we only need `filePath`.
+  const project = tsconfig
+    ? new Project({ tsConfigFilePath: tsconfig, skipAddingFilesFromTsConfig: true })
+    : new Project({ skipAddingFilesFromTsConfig: true })
   const sf: SourceFile = project.addSourceFileAtPath(filePath)
 
   type FnParam = { name: string; type: string; optional: boolean }
@@ -38,13 +42,13 @@ export async function generateSchemas(opts: GenerateSchemasOptions): Promise<Gen
 
     const properties: Record<string, unknown> = {}
     for (const p of domainParams) {
-      properties[p.name] = await buildSchema(project, sf, p.type)
+      properties[p.name] = await buildSchema(project, sf, p.type, tsconfig)
     }
 
     // Unwrap Promise<T> → T for the output schema
     const rawReturn = fn.returnType
     const resolvedReturn = rawReturn.replace(/^Promise<(.+)>$/, '$1').trim()
-    const outputSchema = await buildSchema(project, sf, resolvedReturn)
+    const outputSchema = await buildSchema(project, sf, resolvedReturn, tsconfig)
 
     schemas[fn.name] = {
       input: { type: 'object', properties, required } as Record<string, unknown>,

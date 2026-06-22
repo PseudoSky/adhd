@@ -1,6 +1,8 @@
 import { Command } from 'commander'
 import * as path from 'node:path'
 import { runPipeline } from '../pipeline'
+import { importSource } from '../import-source'
+import { resolveTsconfig } from '../resolve-tsconfig'
 import type { ExportMode, OutputPlugin, RunInput } from '@adhd/apigen-core'
 
 /** Parse --opt key=value pairs into an options record. */
@@ -22,8 +24,9 @@ export function registerRunCommand(
     .requiredOption('--source <path>', 'Path to TypeScript source file')
     .requiredOption('--type <plugin-id>', 'Output target')
     .option('--export <mode>', 'Export mode: "default" | "<named-object-name>" | omit for named exports')
+    .option('--tsconfig <path>', 'Explicit tsconfig.json; default resolves the nearest config or a builtin one')
     .option('--opt <key=value>', 'Plugin option (repeatable)', (val: string, prev: string[]) => [...prev, val], [] as string[])
-    .action(async (opts: { source: string; type: string; export?: string; opt: string[] }) => {
+    .action(async (opts: { source: string; type: string; export?: string; tsconfig?: string; opt: string[] }) => {
       const plugin = plugins[opts.type]
       if (!plugin?.run) throw new Error(`Plugin ${opts.type} does not support run mode`)
 
@@ -38,10 +41,11 @@ export function registerRunCommand(
 
       const options = parseOptPairs(opts.opt)
       const sourceFile = path.resolve(opts.source)
-      const { schemas, createClient } = await runPipeline({ sourceFile, exportMode })
+      const tsconfig = resolveTsconfig(sourceFile, opts.tsconfig)
+      const { schemas, createClient } = await runPipeline({ sourceFile, exportMode, tsconfig })
 
-      // Import the source module to get live function table
-      const mod = await import(sourceFile) as Record<string, unknown>
+      // Import the source module to get live function table (tsx loader handles .ts)
+      const mod = await importSource(sourceFile, tsconfig)
       const fns: Record<string, (...args: unknown[]) => unknown> = {}
       for (const [key, val] of Object.entries(mod)) {
         if (typeof val === 'function') {

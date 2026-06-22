@@ -31,8 +31,9 @@ export function registerGenerateCommand(
     .requiredOption('--type <plugin-id>', 'Output target: mcp | api-fastify | api-express | cli | jsonschema')
     .requiredOption('--out-dir <path>', 'Output directory')
     .option('--export <mode>', 'Export mode: "default" | "<named-object-name>" | omit for named exports')
+    .option('--tsconfig <path>', 'Explicit tsconfig.json; default resolves the nearest config or a builtin one')
     .option('--opt <key=value>', 'Plugin option (repeatable)', (val: string, prev: string[]) => [...prev, val], [] as string[])
-    .action(async (opts: { source: string; type: string; outDir: string; export?: string; opt: string[] }) => {
+    .action(async (opts: { source: string; type: string; outDir: string; export?: string; tsconfig?: string; opt: string[] }) => {
       const plugin = plugins[opts.type]
       if (!plugin) {
         throw new Error(`Unknown --type: ${opts.type}. Available: ${Object.keys(plugins).join(', ')}`)
@@ -41,7 +42,7 @@ export function registerGenerateCommand(
       const exportMode = resolveExportMode(opts.export)
       const options = parseOptPairs(opts.opt)
       const sourceFile = path.resolve(opts.source)
-      const { schemas } = await runPipeline({ sourceFile, exportMode })
+      const { schemas } = await runPipeline({ sourceFile, exportMode, tsconfig: opts.tsconfig })
 
       const packageId = path.basename(path.dirname(sourceFile))
       const outputDir = path.resolve(opts.outDir)
