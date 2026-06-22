@@ -545,6 +545,20 @@
       ],
       "context": "contexts/ts-extractor-by-symbol.md",
       "notes": "SPEC §4/§14, fixes F28/F29: name operations by EXPORTED SYMBOL (honor 'as' aliases; handle default/anonymous/renamed/CJS shapes); emit canonical descriptor incl typeText; ctx-first-param excluded; data-wrapper dissolved."
+    },
+    "audit-v2-core": {
+      "kind": "audit",
+      "phase": "v2-core",
+      "depends_on": [
+        "ts-extractor-by-symbol",
+        "naming-helpers"
+      ],
+      "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase v2-core",
+      "artifacts": [
+        "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+      ],
+      "context": "contexts/audit-v2-core.md",
+      "notes": "Export-shape matrix: named/renamed(as)/default-fn/default-object/anonymous/CJS source each yield correct descriptor ids + projections. Negative control: revert symbol-naming -> matrix goes red."
     }
   },
   "authored_with": {
