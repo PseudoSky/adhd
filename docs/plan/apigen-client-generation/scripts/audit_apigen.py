@@ -72,10 +72,10 @@ Criterion ID registry (referenced by gap-check.js):
     [cli-run-cmd.1] [cli-run-cmd.2] [cli-run-cmd.3] [cli-run-cmd.4] [cli-run-cmd.5]
 
   Integration phase (end-to-end behavioral tests — ALL 14 IDs executed):
-    [integration-tests.1] [integration-tests.2] [integration-tests.3] [integration-tests.4]
-    [integration-tests.5] [integration-tests.6] [integration-tests.7] [integration-tests.8]
-    [integration-tests.9] [integration-tests.10] [integration-tests.11] [integration-tests.12]
-    [integration-tests.13] [integration-tests.14]
+    [integration-tests-v2.1] [integration-tests-v2.2] [integration-tests-v2.3] [integration-tests-v2.4]
+    [integration-tests-v2.5] [integration-tests-v2.6] [integration-tests-v2.7] [integration-tests-v2.8]
+    [integration-tests-v2.9] [integration-tests-v2.10] [integration-tests-v2.11] [integration-tests-v2.12]
+    [integration-tests-v2.13] [integration-tests-v2.14]
 
   Guard phases (F1 — env-pinned via this .py invocation):
     [scaffold-packages.guard] [scaffold-plugins.guard]
@@ -85,9 +85,9 @@ Criterion ID registry (referenced by gap-check.js):
     [dod.1] [dod.1-sse] [dod.1-streaming-http] [dod.1-live]
     [dod.2] [dod.3] [dod.4] [dod.5] [dod.6] [dod.7] [dod.8]
     [dod.cli]
-    [audit-final.inv-type-flag-only] [audit-final.inv-dispatch-single-path]
-    [audit-final.inv-ctx-name-only] [audit-final.inv-language-agnostic-output]
-    [audit-final.inv-nx-platform-tags] [audit-final.schema-teeth]
+    [audit-final-v2.inv-type-flag-only] [audit-final-v2.inv-dispatch-single-path]
+    [audit-final-v2.inv-ctx-name-only] [audit-final-v2.inv-language-agnostic-output]
+    [audit-final-v2.inv-nx-platform-tags] [audit-final-v2.schema-teeth]
     [audit-core.7] [audit-core.10]
     [audit-runtime.2] [audit-plugins.5] [plugin-api-fastify.4]
     [nx-generator.2] [audit-cli.7]
@@ -497,84 +497,84 @@ def phase_integration() -> list[CheckResult]:
 
     # schema.spec.ts → .1 (ctx/optional/zero-param/data wrapper) + .2 (middleware + false override)
     results.append(check(
-        "integration-tests.1",
+        "integration-tests-v2.1",
         "schema: ctx excluded, filter optional, ping zero-param, data:{} required",
         "npx --yes nx test apigen-cli integration/schema -t 'schema extraction'"
     ))
     results.append(check(
-        "integration-tests.2",
+        "integration-tests-v2.2",
         "schema: middleware session field added; false override suppresses it from ping only",
         "npx --yes nx test apigen-cli integration/schema -t 'schema composition'"
     ))
 
     # dispatch.spec.ts → .3 (real fns round-trip) + .4 (positional arg order)
     results.append(check(
-        "integration-tests.3",
+        "integration-tests-v2.3",
         "dispatch: real functions round-trip (getUser/ping/void)",
         "npx --yes nx test apigen-cli integration/dispatch -t 'dispatch'"
     ))
     results.append(check(
-        "integration-tests.4",
+        "integration-tests-v2.4",
         "dispatch: createUser positional args arrive in correct order (not swapped)",
         "npx --yes nx test apigen-cli integration/dispatch -t 'correct positional arg order'"
     ))
 
     # mcp.spec.ts → .5 (tools/list) + .6 (callTool getUser) + .7 (callTool ping)
     results.append(check(
-        "integration-tests.5",
+        "integration-tests-v2.5",
         "mcp: tools/list returns exactly the fixture exports (no ctx-only tools)",
         "npx --yes nx test apigen-cli integration/mcp -t 'tools/list returns all exported functions'"
     ))
     results.append(check(
-        "integration-tests.6",
+        "integration-tests-v2.6",
         "mcp: callTool(getUser) returns correct User shape",
         "npx --yes nx test apigen-cli integration/mcp -t 'getUser tool call returns correct User shape'"
     ))
     results.append(check(
-        "integration-tests.7",
+        "integration-tests-v2.7",
         "mcp: callTool(ping) zero-param returns true",
         "npx --yes nx test apigen-cli integration/mcp -t 'ping tool call'"
     ))
 
     # http.spec.ts → .8 (Fastify+Express round-trip) + .9 (Fastify/Express parity)
     results.append(check(
-        "integration-tests.8",
+        "integration-tests-v2.8",
         "http: POST /<id>/getUser returns User from both Fastify and Express",
         "npx --yes nx test apigen-cli integration/http -t 'getUser'"
     ))
     results.append(check(
-        "integration-tests.9",
+        "integration-tests-v2.9",
         "http: Fastify and Express return identical JSON for the same request (route parity)",
         "npx --yes nx test apigen-cli integration/http -t 'same result as Fastify'"
     ))
 
     # parity.spec.ts → .10 (tools/list parity) + .11 (callTool parity, not just tools/list)
     results.append(check(
-        "integration-tests.10",
+        "integration-tests-v2.10",
         "parity: tools/list identical between run and generated server",
         "npx --yes nx test apigen-cli integration/parity -t 'tools/list is identical'"
     ))
     results.append(check(
-        "integration-tests.11",
+        "integration-tests-v2.11",
         "parity: callTool(getUser) identical JSON from run vs generated server",
         "npx --yes nx test apigen-cli integration/parity -t 'callTool returns identical response'"
     ))
 
     # registry.spec.ts → .12 (tag filter discovery) + .13 (correct routing)
     results.append(check(
-        "integration-tests.12",
+        "integration-tests-v2.12",
         "registry: --tag api discovers pkg-a+pkg-b, excludes pkg-c (exactly hello+world)",
         "npx --yes nx test apigen-cli integration/registry -t 'discovers api-tagged packages'"
     ))
     results.append(check(
-        "integration-tests.13",
+        "integration-tests-v2.13",
         "registry: callTool(hello) routes to pkg-a and returns 'a' (not pkg-b)",
         "npx --yes nx test apigen-cli integration/registry -t 'routes tool call to correct package'"
     ))
 
     # export-modes.spec.ts → .14 (default + named-object modes)
     results.append(check(
-        "integration-tests.14",
+        "integration-tests-v2.14",
         "export-modes: default and named-object extract same signatures as named mode",
         "npx --yes nx test apigen-cli integration/export-modes"
     ))
@@ -708,7 +708,7 @@ def phase_final() -> list[CheckResult]:
         "npx --yes nx test apigen-cli integration/schema -t 'suppresses session'"
     ))
 
-    # [audit-final.schema-teeth] guard the schema spec itself so dod.3/dod.4 cannot
+    # [audit-final-v2.schema-teeth] guard the schema spec itself so dod.3/dod.4 cannot
     # pass with a vacuous spec: the spec MUST contain the discriminating assertions.
     schema_spec = REPO_ROOT / "packages" / "apigen" / "cli" / "src" / "test" / "integration" / "schema.spec.ts"
     if schema_spec.exists():
@@ -716,13 +716,13 @@ def phase_final() -> list[CheckResult]:
         needed = ["not.toContain('ctx')", "toContain('session')", "not.toHaveProperty('session')"]
         missing = [tok for tok in needed if tok not in spec_src]
         results.append(CheckResult(
-            "[audit-final.schema-teeth] schema.spec.ts asserts ctx-absent + session-present + override-suppressed",
+            "[audit-final-v2.schema-teeth] schema.spec.ts asserts ctx-absent + session-present + override-suppressed",
             not missing,
             "" if not missing else f"schema.spec.ts missing teeth assertions: {missing}",
         ))
     else:
         results.append(CheckResult(
-            "[audit-final.schema-teeth] schema.spec.ts exists with teeth assertions",
+            "[audit-final-v2.schema-teeth] schema.spec.ts exists with teeth assertions",
             False, "integration/schema.spec.ts not found",
         ))
 
@@ -808,7 +808,7 @@ def phase_final() -> list[CheckResult]:
         "npx --yes nx g @adhd/apigen-nx:plugin test-plugin --directory packages/apigen/plugins/test-plugin --no-interactive && npx --yes nx build apigen-plugin-test-plugin"
     ))
 
-    # [audit-final.inv-type-flag-only] — [inv:type-flag-only]
+    # [audit-final-v2.inv-type-flag-only] — [inv:type-flag-only]
     results.append(grep_absent(
         "audit-final.inv-type-flag-only",
         "no --output flag anywhere in apigen packages",
@@ -816,16 +816,16 @@ def phase_final() -> list[CheckResult]:
         "packages/apigen/"
     ))
 
-    # [audit-final.inv-dispatch-single-path]
+    # [audit-final-v2.inv-dispatch-single-path]
     code, out = run("grep -rn 'function dataParamNames\\|function needsEnvelopeField' packages/apigen/ | grep -v 'dispatch.ts\\|dispatch.spec.ts'")
     passed = (out == "" or code != 0)
     results.append(CheckResult(
-        "[audit-final.inv-dispatch-single-path]",
+        "[audit-final-v2.inv-dispatch-single-path]",
         passed,
         f"duplicated:\n{out}" if not passed else ""
     ))
 
-    # [audit-final.inv-ctx-name-only]
+    # [audit-final-v2.inv-ctx-name-only]
     results.append(grep_absent(
         "audit-final.inv-ctx-name-only",
         "ctx filtered by name only",
@@ -833,7 +833,7 @@ def phase_final() -> list[CheckResult]:
         "packages/apigen/core/src/"
     ))
 
-    # [audit-final.inv-language-agnostic-output]
+    # [audit-final-v2.inv-language-agnostic-output]
     results.append(grep_absent(
         "audit-final.inv-language-agnostic-output",
         "no TS-specific content validation in plugins",
@@ -841,7 +841,7 @@ def phase_final() -> list[CheckResult]:
         "packages/apigen/plugins/"
     ))
 
-    # [audit-final.inv-nx-platform-tags]
+    # [audit-final-v2.inv-nx-platform-tags]
     for pkg_dir in sorted((REPO_ROOT / "packages" / "apigen").iterdir()):
         if pkg_dir.is_dir() and not pkg_dir.name.startswith("."):
             proj_json = pkg_dir / "project.json"
@@ -853,12 +853,73 @@ def phase_final() -> list[CheckResult]:
                     has_platform = any(t.startswith("platform:") for t in tags)
                     ok = has_layer and has_platform
                     results.append(CheckResult(
-                        f"[audit-final.inv-nx-platform-tags] {pkg_dir.name}",
+                        f"[audit-final-v2.inv-nx-platform-tags] {pkg_dir.name}",
                         ok,
                         "" if ok else f"tags={tags}, need layer: and platform:"
                     ))
                 except Exception as e:
-                    results.append(CheckResult(f"[audit-final.inv-nx-platform-tags] {pkg_dir.name}", False, str(e)))
+                    results.append(CheckResult(f"[audit-final-v2.inv-nx-platform-tags] {pkg_dir.name}", False, str(e)))
+
+    # ---------------------------------------------------------------------- #
+    # v2 canonical-contract DoD (SPEC docs/apigen/SPEC.md). STUB BINDINGS:
+    # these register the DoD<->check mapping (the forcing function) for the
+    # replan. The audit-final-v2 executor MUST replace each command with one
+    # that DRIVES the real entrypoint, DERIVES the expected observable, is
+    # exit-code-gated (never grep|-q proxy), and prove its negative-control
+    # goes red. Until integration-tests-v2 lands these fixtures/specs, the
+    # checks fail by design (no silent pass).
+    # ---------------------------------------------------------------------- #
+
+    # [dod.9] code-first round-trip closes F28/F29 — name by EXPORTED symbol
+    # across named/renamed(as)/default-fn/default-object/anonymous/CJS shapes.
+    # negative-control: name by declaration symbol → renamed/default/CJS rows red.
+    results.append(check(
+        "dod.9",
+        "export-shape matrix: descriptor ids + HTTP/MCP/CLI projections deep-equal the exported symbols",
+        "npx --yes nx test apigen-cli export-shape-matrix"
+    ))
+
+    # [dod.10] central validation Layer rejects invalid input before dispatch
+    # with ApiError{invalid_argument}; the target fn is never called.
+    # negative-control: remove the validation Layer → bad data reaches the fn → red.
+    results.append(check(
+        "dod.10",
+        "validation Layer: invalid input → ApiError{invalid_argument}; fn never called; valid input round-trips",
+        "test -f packages/apigen/cli/src/test/integration/canonical.spec.ts && "
+        "npx --yes nx test apigen-cli packages/apigen/cli/src/test/integration/canonical.spec.ts "
+        "-t 'asserts invalid_argument is thrown before dispatch and the fn is never called'"
+    ))
+
+    # [dod.11] request envelope sourced from transport METADATA (x-adhd-* /
+    # x-<plugin-id>-*), not the body.
+    # negative-control: bind envelope from body → metadata-sourced assertion red.
+    results.append(check(
+        "dod.11",
+        "envelope from metadata: header-sourced field populates envelope; body-only does not",
+        "npx --yes nx test apigen-cli canonical -t 'envelope from transport metadata'"
+    ))
+
+    # [dod.12] mixed-host run routes each op to its owning language runtime via
+    # the gateway, behind one transport surface.
+    # negative-control: route all ops to one runtime → cross-host op red.
+    results.append(check(
+        "dod.12",
+        "gateway mixed-host: op host A served by A's runtime, op host B by B's; both return ground truth",
+        "test -f packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts && "
+        "npx --yes nx test apigen-cli packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts "
+        "-t 'asserts each op is routed to its owning host runtime'"
+    ))
+
+    # [dod.13] one adhd-apigen orchestrator serves a target with operator-supplied
+    # Layer/mount plugins via --type/--use.
+    # negative-control: ignore --use → logger Layer / health mount absent → red.
+    results.append(check(
+        "dod.13",
+        "unified CLI: --type selects target; --use composes logger Layer + health mount on the served surface",
+        "test -f packages/apigen/cli/src/test/integration/canonical.spec.ts && "
+        "npx --yes nx test apigen-cli packages/apigen/cli/src/test/integration/canonical.spec.ts "
+        "-t 'asserts --type selects target and --use composes layer and mount plugins'"
+    ))
 
     return results
 
