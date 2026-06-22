@@ -585,6 +585,20 @@
       ],
       "context": "contexts/central-validation.md",
       "notes": "SPEC §6: built-in validation Layer — validate data vs input and envelope once before dispatch (AJV); fail -> ApiError{invalid_argument}. Replaces per-plugin/route-bound validation."
+    },
+    "error-taxonomy": {
+      "kind": "work",
+      "phase": "v2-harness",
+      "depends_on": [
+        "canonical-descriptor"
+      ],
+      "guard": "npx --yes nx test apigen-errors",
+      "artifacts": [
+        "packages/apigen/errors/src/lib/errors.ts",
+        "packages/apigen/errors/project.json"
+      ],
+      "context": "contexts/error-taxonomy.md",
+      "notes": "SPEC §9: @adhd/apigen-errors — ApiError{code,message,details} on gRPC canonical code set + per-transport status maps (HTTP/gRPC/MCP/CLI)."
     }
   },
   "authored_with": {
