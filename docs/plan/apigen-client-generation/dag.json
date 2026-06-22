@@ -696,6 +696,27 @@
       ],
       "context": "contexts/audit-v2-projection.md",
       "notes": "Real servers: each transport returns ground-truth values; envelope rides metadata; logger Layer wraps; openapi/health mounts answer. Negative control: drop a route from a generated server -> tools/list/route set no longer deep-equals derived ground truth -> red."
+    },
+    "package-restructure": {
+      "kind": "work",
+      "phase": "v2-packaging",
+      "depends_on": [
+        "projection-transports",
+        "mount-plugins",
+        "error-taxonomy",
+        "naming-helpers"
+      ],
+      "guard": "npx --yes nx run-many -t build -p apigen-core apigen-naming apigen-errors apigen-schema apigen-conformance apigen-gateway",
+      "artifacts": [
+        "packages/apigen/core/project.json",
+        "packages/apigen/naming/project.json",
+        "packages/apigen/errors/project.json",
+        "packages/apigen/schema/project.json",
+        "packages/apigen/conformance/project.json",
+        "packages/apigen/gateway/project.json"
+      ],
+      "context": "contexts/package-restructure.md",
+      "notes": "SPEC §12: split COMMON (core/naming/errors/schema/conformance/gateway + neutral codegen/*) vs PER-LANGUAGE ts/* (-core,-extractor,-runtime,plugins as apigen-ts-plugin-*). Rule: descriptor-in/artifact-out=common; touches host fns/runtime=per-language."
     }
   },
   "authored_with": {
