@@ -503,6 +503,20 @@
       ],
       "context": "contexts/integration-tests-v2.md",
       "notes": "14 integration tests across 7 spec files. Drive every public behavior through its real entrypoint: schema extraction on a real fixture, dispatch round-trip against real functions, MCP stdio via @modelcontextprotocol/sdk Client, Fastify+Express HTTP via fetch, generate/run parity, run-registry multi-package routing, all three export modes."
+    },
+    "canonical-descriptor": {
+      "kind": "work",
+      "phase": "v2-core",
+      "depends_on": [
+        "core-types"
+      ],
+      "guard": "npx --yes nx build apigen-core",
+      "artifacts": [
+        "packages/apigen/core/src/lib/descriptor.ts",
+        "packages/apigen/core/src/lib/descriptor.schema.json"
+      ],
+      "context": "contexts/canonical-descriptor.md",
+      "notes": "SPEC §4: Operation{id,host,namespace,path,kind,async,streaming,input,output,envelope,typeText} + Segment{raw,words}; JSON Schema 2020-12 IR. The neutral contract every extractor emits and every plugin consumes."
     }
   },
   "authored_with": {
