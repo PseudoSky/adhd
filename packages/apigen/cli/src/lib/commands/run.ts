@@ -2,7 +2,7 @@ import { Command } from 'commander'
 import * as path from 'node:path'
 import { runPipeline } from '../pipeline'
 import { importSource } from '../import-source'
-import { resolveTsconfig } from '../resolve-tsconfig'
+import { resolveTsconfig, resolveNamespace } from '../resolve-tsconfig'
 import { buildCliLogger } from '../logging'
 import type { ExportMode, OutputPlugin, RunInput } from '@adhd/apigen-core'
 
@@ -26,8 +26,9 @@ export function registerRunCommand(
     .requiredOption('--type <plugin-id>', 'Output target')
     .option('--export <mode>', 'Export mode: "default" | "<named-object-name>" | omit for named exports')
     .option('--tsconfig <path>', 'Explicit tsconfig.json; default resolves the nearest config or a builtin one')
+    .option('--namespace <name>', 'Package namespace/id (default: tsconfig folder name, else source folder)')
     .option('--opt <key=value>', 'Plugin option (repeatable)', (val: string, prev: string[]) => [...prev, val], [] as string[])
-    .action(async (opts: { source: string; type: string; export?: string; tsconfig?: string; opt: string[] }) => {
+    .action(async (opts: { source: string; type: string; export?: string; tsconfig?: string; namespace?: string; opt: string[] }) => {
       const plugin = plugins[opts.type]
       if (!plugin?.run) throw new Error(`Plugin ${opts.type} does not support run mode`)
 
@@ -59,7 +60,7 @@ export function registerRunCommand(
       process.on('SIGINT', () => controller.abort())
       process.on('SIGTERM', () => controller.abort())
 
-      const packageId = path.basename(path.dirname(sourceFile))
+      const packageId = resolveNamespace(sourceFile, { namespace: opts.namespace, tsconfig: opts.tsconfig })
       const input: RunInput = {
         packages: [{ id: packageId, schemas, importPath: sourceFile, fns, createClient }],
         outputDir: '',

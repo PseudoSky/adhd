@@ -14,3 +14,5 @@ export type {
 export { needsEnvelopeField, dataParamNames, dispatch } from './lib/dispatch'
 export { createLogger } from './lib/logger'
 export type { Logger, LogFormat, CreateLoggerOptions } from './lib/logger'
+export { describeParams } from './lib/describe-params'
+export type { ParamInfo } from './lib/describe-params'
