@@ -627,6 +627,28 @@
       ],
       "context": "contexts/plugin-interface.md",
       "notes": "SPEC §7.1: Plugin{id,capabilities:{target,layer,mount,envelope}}; Call/Next/MountedOperation/EnvelopeCapability types; hook sugar compiles to a LayerCapability. The contract all plugins implement."
+    },
+    "projection-transports": {
+      "kind": "work",
+      "phase": "v2-projection",
+      "depends_on": [
+        "plugin-interface",
+        "layer-harness",
+        "naming-helpers",
+        "error-taxonomy"
+      ],
+      "guard": "npx --yes nx run-many -t test -p apigen-plugin-api-fastify apigen-plugin-api-express apigen-plugin-mcp apigen-plugin-cli",
+      "artifacts": [
+        "packages/apigen/plugins/api-fastify/src/lib/generate.ts",
+        "packages/apigen/plugins/api-fastify/src/lib/run.ts",
+        "packages/apigen/plugins/api-express/src/lib/generate.ts",
+        "packages/apigen/plugins/api-express/src/lib/run.ts",
+        "packages/apigen/plugins/mcp/src/lib/generate.ts",
+        "packages/apigen/plugins/mcp/src/lib/run.ts",
+        "packages/apigen/plugins/cli/src/lib/generate.ts"
+      ],
+      "context": "contexts/projection-transports.md",
+      "notes": "SPEC §5/§7/§9: re-cast http-fastify/http-express/mcp/cli as TargetCapability plugins projecting the descriptor over the Layer harness; envelope sourced from transport metadata (strict x-<id>-*/x-adhd-*), not body; canonical projection (POST action / GET query, MCP _ join, CLI nested kebab)."
     }
   },
   "authored_with": {
