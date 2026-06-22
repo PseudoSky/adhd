@@ -24,11 +24,11 @@ _No criteria yet._
 
 ```text
 read_only:  []
-mutates:    ["packages/apigen/cli/src/test/integration/canonical.spec.ts", "packages/apigen/cli/src/test/integration/export-shape-matrix.spec.ts", "packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts", "packages/apigen/cli/src/test/fixtures/shapes/named.ts", "packages/apigen/cli/src/test/fixtures/shapes/renamed.ts", "packages/apigen/cli/src/test/fixtures/shapes/default-fn.ts", "packages/apigen/cli/src/test/fixtures/shapes/default-object.ts"]
+mutates:    ["packages/apigen/cli/src/test/integration/canonical.spec.ts", "packages/apigen/cli/src/test/integration/export-shape-matrix.spec.ts", "packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts", "packages/apigen/cli/src/test/fixtures/shapes/named.ts", "packages/apigen/cli/src/test/fixtures/shapes/renamed.ts", "packages/apigen/cli/src/test/fixtures/shapes/default-fn.ts", "packages/apigen/cli/src/test/fixtures/shapes/default-object.ts", "packages/apigen/cli/src/test/fixtures/real-api.ts"]
 ```
 
 ---
 
 ## Notes for executor
 
-Re-authored against the canonical contract (SPEC §15). REAL components: extractor->descriptor->harness->each transport. Export-shape matrix (named/renamed-as/default-fn/default-object/anonymous/CJS) proves F28/F29 closed. Mixed-host gateway test (ts+second host) proves §13 routing.
+Re-authored against the canonical contract (SPEC §15). REAL components: extractor->descriptor->harness->each transport. Export-shape matrix (named/renamed-as/default-fn/default-object/anonymous/CJS) proves F28/F29 closed. Mixed-host gateway test proves §13. real-api.ts retained as the v1 behavioral-regression fixture (dod.1/2/5/cli).
