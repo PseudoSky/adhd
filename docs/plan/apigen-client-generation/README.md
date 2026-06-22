@@ -160,6 +160,14 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - observable: `With sources from two hosts behind one transport, an op tagged host A is answered by A's runtime and an op tagged host B by B's runtime; both return their in-process ground truth`
   - negative-control: `Route all ops to a single runtime -> the cross-host op errors / returns the wrong runtime's value -> this clause goes red`
   - delivered-by: `gateway, unified-cli, conformance-vectors, integration-tests-v2`
+- `[dod.13]` **One adhd-apigen orchestrator serves a target with operator-supplied Layer/mount plugins via --type/--use (behavioral)** — One adhd-apigen orchestrator serves a target with operator-supplied Layer/mount plugins via --type/--use.
+  - given: a source plus --type and --use plugin selectors
+  - when: the unified CLI runs it
+  - then: the chosen target serves with the chosen plugins composed
+  - entrypoint: `packages/apigen/cli/src/test/integration/canonical.spec.ts`
+  - observable: `adhd-apigen run --type mcp --use logger --use health presents the MCP target with the logger Layer active (per-op log) and the health mount answering _meta/health; --type selects the target, --use loads layer/mount/envelope plugins`
+  - negative-control: `Ignore --use -> logger Layer absent / health mount missing -> this clause goes red`
+  - delivered-by: `unified-cli, projection-transports, logger-layer-plugin, mount-plugins, integration-tests-v2`
 ---
 
 ## Execution model
