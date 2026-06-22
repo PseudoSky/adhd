@@ -2,6 +2,7 @@ import { Command } from 'commander'
 import * as path from 'node:path'
 import { runPipeline } from '../pipeline'
 import { importSource } from '../import-source'
+import { buildFnTable } from '@adhd/apigen-runtime'
 import { resolveTsconfig, resolveNamespace } from '../resolve-tsconfig'
 import { buildCliLogger } from '../logging'
 import type { ExportMode, OutputPlugin, RunInput } from '@adhd/apigen-core'
@@ -47,14 +48,11 @@ export function registerRunCommand(
       const tsconfig = resolveTsconfig(sourceFile, opts.tsconfig)
       const { schemas, createClient } = await runPipeline({ sourceFile, exportMode, tsconfig, logger })
 
-      // Import the source module to get live function table (tsx loader handles .ts)
+      // Import the source module to get live function table (tsx loader handles .ts).
+      // buildFnTable keys default-exported functions by their declaration name so
+      // they match the extracted schema/route names (otherwise dispatch can't find them).
       const mod = await importSource(sourceFile, tsconfig)
-      const fns: Record<string, (...args: unknown[]) => unknown> = {}
-      for (const [key, val] of Object.entries(mod)) {
-        if (typeof val === 'function') {
-          fns[key] = val as (...args: unknown[]) => unknown
-        }
-      }
+      const fns = buildFnTable(mod)
 
       const controller = new AbortController()
       process.on('SIGINT', () => controller.abort())
