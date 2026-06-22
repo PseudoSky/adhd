@@ -1,5 +1,6 @@
 import { generateSchemas, composeSchemas } from '@adhd/apigen-core'
 import type { ComposedSchemas, ExportMode, GenerateSchemasOptions } from '@adhd/apigen-core'
+import { resolveTsconfig } from './resolve-tsconfig'
 
 export interface PipelineOptions {
   sourceFile: string
@@ -7,6 +8,8 @@ export interface PipelineOptions {
   middlewares?: Array<{ id: string; envelope?: Record<string, unknown> }>
   overrides?: Record<string, Record<string, boolean>>
   namespace?: string
+  /** Explicit --tsconfig flag; when omitted, the nearest/builtin config is resolved from sourceFile. */
+  tsconfig?: string
 }
 
 export interface PipelineResult {
@@ -20,6 +23,7 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineResult
     sourceFile: opts.sourceFile,
     exportMode: opts.exportMode ?? { type: 'named' },
     namespace: opts.namespace,
+    tsconfig: resolveTsconfig(opts.sourceFile, opts.tsconfig),
   }
   const domainSchemas = await generateSchemas(genOpts)
   const schemas = composeSchemas(

@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { Command } from 'commander'
 import { registerGenerateCommand } from './lib/commands/generate'
 import { registerGenerateRegistryCommand } from './lib/commands/generate-registry'

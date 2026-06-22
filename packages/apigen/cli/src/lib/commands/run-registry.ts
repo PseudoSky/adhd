@@ -3,6 +3,8 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { discoverPackages } from '../registry'
 import { runPipeline } from '../pipeline'
+import { importSource } from '../import-source'
+import { resolveTsconfig } from '../resolve-tsconfig'
 import type { OutputPlugin, RunInput } from '@adhd/apigen-core'
 
 /** Parse --opt key=value pairs into an options record. */
@@ -35,12 +37,14 @@ export function registerRunRegistryCommand(
     .requiredOption('--type <plugin-id>', 'Output target')
     .option('--tag <tag>', 'Include only packages with this tag (repeatable)', (val: string, prev: string[]) => [...prev, val], [] as string[])
     .option('--exclude-tag <tag>', 'Exclude packages with this tag (repeatable)', (val: string, prev: string[]) => [...prev, val], [] as string[])
+    .option('--tsconfig <path>', 'Explicit tsconfig.json; default resolves the nearest config or a builtin one')
     .option('--opt <key=value>', 'Plugin option (repeatable)', (val: string, prev: string[]) => [...prev, val], [] as string[])
     .action(async (opts: {
       packagesDir: string
       type: string
       tag: string[]
       excludeTag: string[]
+      tsconfig?: string
       opt: string[]
     }) => {
       const plugin = plugins[opts.type]
@@ -60,10 +64,11 @@ export function registerRunRegistryCommand(
         const entryFile = findEntryFile(meta.dir)
         if (!entryFile) continue
 
-        const { schemas, createClient } = await runPipeline({ sourceFile: entryFile })
+        const tsconfig = resolveTsconfig(entryFile, opts.tsconfig)
+        const { schemas, createClient } = await runPipeline({ sourceFile: entryFile, tsconfig })
 
-        // Import the source module to get live function table
-        const mod = await import(entryFile) as Record<string, unknown>
+        // Import the source module to get live function table (tsx loader handles .ts)
+        const mod = await importSource(entryFile, tsconfig)
         const fns: Record<string, (...args: unknown[]) => unknown> = {}
         for (const [key, val] of Object.entries(mod)) {
           if (typeof val === 'function') {
