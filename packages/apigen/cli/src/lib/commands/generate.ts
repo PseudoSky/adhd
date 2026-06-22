@@ -2,6 +2,7 @@ import { Command } from 'commander'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { runPipeline } from '../pipeline'
+import { resolveNamespace } from '../resolve-tsconfig'
 import { buildCliLogger } from '../logging'
 import type { ExportMode, OutputPlugin, PluginInput } from '@adhd/apigen-core'
 
@@ -33,8 +34,9 @@ export function registerGenerateCommand(
     .requiredOption('--out-dir <path>', 'Output directory')
     .option('--export <mode>', 'Export mode: "default" | "<named-object-name>" | omit for named exports')
     .option('--tsconfig <path>', 'Explicit tsconfig.json; default resolves the nearest config or a builtin one')
+    .option('--namespace <name>', 'Package namespace/id (default: tsconfig folder name, else source folder)')
     .option('--opt <key=value>', 'Plugin option (repeatable)', (val: string, prev: string[]) => [...prev, val], [] as string[])
-    .action(async (opts: { source: string; type: string; outDir: string; export?: string; tsconfig?: string; opt: string[] }) => {
+    .action(async (opts: { source: string; type: string; outDir: string; export?: string; tsconfig?: string; namespace?: string; opt: string[] }) => {
       const plugin = plugins[opts.type]
       if (!plugin) {
         throw new Error(`Unknown --type: ${opts.type}. Available: ${Object.keys(plugins).join(', ')}`)
@@ -46,7 +48,7 @@ export function registerGenerateCommand(
       const sourceFile = path.resolve(opts.source)
       const { schemas } = await runPipeline({ sourceFile, exportMode, tsconfig: opts.tsconfig, logger })
 
-      const packageId = path.basename(path.dirname(sourceFile))
+      const packageId = resolveNamespace(sourceFile, { namespace: opts.namespace, tsconfig: opts.tsconfig })
       const outputDir = path.resolve(opts.outDir)
       const input: PluginInput = {
         packages: [{ id: packageId, schemas, importPath: sourceFile }],

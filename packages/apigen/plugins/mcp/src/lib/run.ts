@@ -4,7 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { dispatch, createLogger } from '@adhd/apigen-runtime'
+import { dispatch, createLogger, describeParams } from '@adhd/apigen-runtime'
 import type { Logger } from '@adhd/apigen-runtime'
 import type { RunInput } from '@adhd/apigen-core'
 
@@ -75,6 +75,13 @@ export async function run(input: RunInput): Promise<void> {
   const { server, toolMetas } = buildMcpServer(input, logger)
   const toolNames = Object.keys(toolMetas)
   logger.info({ tools: toolNames }, `${toolNames.length} tools available`)
+  for (const [name, meta] of Object.entries(toolMetas)) {
+    const { params, text } = describeParams(meta.schema as { input?: unknown })
+    logger.info(
+      { tool: name, args: { data: params } },
+      `tool: ${name}  args { data: {${text ? ` ${text} ` : ''}} }`,
+    )
+  }
 
   if (transport === 'stdio') {
     const t = new StdioServerTransport()
