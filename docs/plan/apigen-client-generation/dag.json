@@ -17,7 +17,8 @@
     "integration",
     "convergence",
     "v2-core",
-    "v2-harness"
+    "v2-harness",
+    "v2-projection"
   ],
   "terminal": "done",
   "assumed_baseline": [],
