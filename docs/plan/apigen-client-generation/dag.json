@@ -465,9 +465,7 @@
     },
     "audit-final-v2": {
       "kind": "audit",
-      "model": "opus",
-      "effort": "hard",
-      "phase": "convergence",
+      "phase": "v2-verify",
       "depends_on": [
         "integration-tests-v2"
       ],
@@ -476,7 +474,7 @@
         "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
       ],
       "context": "contexts/audit-final-v2.md",
-      "notes": "Proves every [dod.N] clause: all 8 DoD checks (behavioral tier-3 + structural). DoD.7 and DoD.8 are here. All 9 packages build. No --output flag usage anywhere (only --type). dispatch() is not duplicated. Proves PluginOutput.files language-agnostic design is documented."
+      "notes": "Final DoD audit against the v2 canonical contract. Every behavioral DoD clause proven by an audit check that drives the real entrypoint; negative controls confirmed positive. Supersedes v1 final audit."
     },
     "integration-tests-v2": {
       "kind": "work",
