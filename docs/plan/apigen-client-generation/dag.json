@@ -664,6 +664,22 @@
       ],
       "context": "contexts/logger-layer-plugin.md",
       "notes": "SPEC §7.2(a)/O13: convert v1 createLogger into a LayerCapability plugin (the dogfood Layer) reading typed ctx.get(Logger); per-request timing/ok/fail."
+    },
+    "mount-plugins": {
+      "kind": "work",
+      "phase": "v2-projection",
+      "depends_on": [
+        "plugin-interface",
+        "naming-helpers"
+      ],
+      "guard": "npx --yes nx run-many -t test -p apigen-openapi apigen-plugin-openapi apigen-plugin-health",
+      "artifacts": [
+        "packages/apigen/codegen/openapi/src/lib/to-openapi.ts",
+        "packages/apigen/plugins/openapi/src/lib/plugin.ts",
+        "packages/apigen/plugins/health/src/lib/plugin.ts"
+      ],
+      "context": "contexts/mount-plugins.md",
+      "notes": "SPEC §7.2(b,c)/§12: MountCapability plugins. @adhd/apigen-openapi = neutral descriptor->OpenAPI content (common); thin per-host openapi + health mount plugins add _meta/openapi and _meta/health operations that flow through the harness."
     }
   },
   "authored_with": {
