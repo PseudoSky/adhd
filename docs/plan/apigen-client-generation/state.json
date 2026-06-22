@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "scaffold-packages",
+  "current_state": "canonical-descriptor",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -175,10 +175,10 @@
       "end_ref": null
     },
     "canonical-descriptor": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-22T15:44:24.750Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "9a439846384dcbb4eb76a837ff8276eef1da2f38",
       "end_ref": null
     },
     "naming-helpers": {
