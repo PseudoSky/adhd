@@ -572,6 +572,19 @@
       ],
       "context": "contexts/layer-harness.md",
       "notes": "SPEC §8: createInvoker(plugins)->invoke(op,call) composes the Layer stack around dispatch; typed-extension ctx (type-keyed, insert/read); generalizes v1 dispatch->invoke. Transports become thin adapters."
+    },
+    "central-validation": {
+      "kind": "work",
+      "phase": "v2-harness",
+      "depends_on": [
+        "layer-harness"
+      ],
+      "guard": "npx --yes nx test apigen-runtime",
+      "artifacts": [
+        "packages/apigen/runtime/src/lib/validate-layer.ts"
+      ],
+      "context": "contexts/central-validation.md",
+      "notes": "SPEC §6: built-in validation Layer — validate data vs input and envelope once before dispatch (AJV); fail -> ApiError{invalid_argument}. Replaces per-plugin/route-bound validation."
     }
   },
   "authored_with": {
