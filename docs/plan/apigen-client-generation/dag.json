@@ -1,0 +1,509 @@
+{
+  "schema_version": 2,
+  "title": "apigen-client-generation",
+  "spec_sources": [
+    "~/dev/projects/reverse-apis/docs/plans/client-generation/AGENT_PROMPT.md",
+    "~/dev/projects/reverse-apis/docs/plans/client-generation/SCOPE.md",
+    "~/dev/projects/reverse-apis/docs/plans/client-generation/REFERENCES.md"
+  ],
+  "executor": "sox-active:backend-developer",
+  "plan_kind": "brownfield",
+  "phases": [
+    "scaffolding",
+    "foundation",
+    "runtime",
+    "plugins",
+    "cli",
+    "integration",
+    "convergence",
+    "v2-core"
+  ],
+  "terminal": "done",
+  "assumed_baseline": [],
+  "nodes": {
+    "scaffold-packages": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "low",
+      "phase": "scaffolding",
+      "depends_on": [],
+      "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase scaffold-packages",
+      "artifacts": [
+        "packages/apigen/core/project.json",
+        "packages/apigen/core/package.json",
+        "packages/apigen/core/vite.config.ts",
+        "packages/apigen/runtime/project.json",
+        "packages/apigen/runtime/package.json",
+        "packages/apigen/runtime/vite.config.ts",
+        "packages/apigen/nx/project.json",
+        "packages/apigen/nx/package.json",
+        "packages/apigen/cli/project.json",
+        "packages/apigen/cli/package.json",
+        "tsconfig.base.json"
+      ],
+      "context": "contexts/scaffold-packages.md",
+      "notes": "Scaffold only the 4 non-plugin packages: core, runtime, nx, cli. Plugin packages are created later by scaffold-plugins using the nx-generator. This is the correct order: build the tool (nx-generator), then use it to scaffold plugins (scaffold-plugins), then implement plugins.",
+      "changes": {
+        "adds_set_members": [
+          "apigen-core",
+          "apigen-runtime",
+          "apigen-nx",
+          "apigen-cli"
+        ]
+      }
+    },
+    "core-types": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "medium",
+      "phase": "foundation",
+      "depends_on": [
+        "scaffold-packages"
+      ],
+      "guard": "npx --yes nx build apigen-core",
+      "artifacts": [
+        "packages/apigen/core/src/lib/types.ts",
+        "packages/apigen/core/src/index.ts"
+      ],
+      "context": "contexts/core-types.md",
+      "notes": "Define GeneratedSchemas, ComposedSchemas, ExportMode, and OutputPlugin types. These are the contracts all other packages depend on. Do NOT implement logic here — types only. The composeSchemas and generateSchemas functions are stubs in index.ts that the next two states fill in.",
+      "changes": {
+        "adds_set_members": [
+          "named",
+          "default",
+          "named-object"
+        ]
+      }
+    },
+    "schema-extraction": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "medium",
+      "phase": "foundation",
+      "depends_on": [
+        "core-types"
+      ],
+      "guard": "npx --yes nx test apigen-core --testFile=packages/apigen/core/src/test/generate-schemas.spec.ts",
+      "artifacts": [
+        "packages/apigen/core/src/lib/generate-schemas.ts",
+        "packages/apigen/core/src/lib/extractors/named.ts",
+        "packages/apigen/core/src/lib/extractors/default-export.ts",
+        "packages/apigen/core/src/lib/extractors/named-object.ts",
+        "packages/apigen/core/src/lib/schema-builders/ts-json-schema.ts",
+        "packages/apigen/core/src/lib/schema-builders/morph-fallback.ts",
+        "packages/apigen/core/src/test/generate-schemas.spec.ts",
+        "packages/apigen/core/src/test/fixtures/named-exports.ts",
+        "packages/apigen/core/src/test/fixtures/default-export.ts",
+        "packages/apigen/core/src/test/fixtures/named-object.ts",
+        "packages/apigen/core/src/test/fixtures/ctx-param.ts",
+        "package.json"
+      ],
+      "context": "contexts/schema-extraction.md",
+      "notes": "Parallel with schema-composition. Uses ts-morph + ts-json-schema-generator (install as deps of apigen-core). The ctx exclusion rule is name-only. Depth-limit morph fallback to 6 levels. Test fixture must cover all extraction modes + ctx filtering + optional params + Promise<T> unwrapping.",
+      "changes": {}
+    },
+    "schema-composition": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "medium",
+      "phase": "foundation",
+      "depends_on": [
+        "core-types"
+      ],
+      "guard": "npx --yes nx test apigen-core --testFile=packages/apigen/core/src/test/compose-schemas.spec.ts",
+      "artifacts": [
+        "packages/apigen/core/src/lib/compose-schemas.ts",
+        "packages/apigen/core/src/test/compose-schemas.spec.ts"
+      ],
+      "context": "contexts/schema-composition.md",
+      "notes": "Parallel with schema-extraction. composeSchemas only reads middleware.envelope (a plain Record) — it does NOT depend on the runtime middleware system, which is convenient. The data: {} wrapper is always present even for zero-param functions. Overrides use false to suppress a middleware field.",
+      "changes": {}
+    },
+    "audit-core": {
+      "kind": "audit",
+      "model": "opus",
+      "effort": "hard",
+      "phase": "foundation",
+      "depends_on": [
+        "schema-extraction",
+        "schema-composition"
+      ],
+      "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase foundation",
+      "artifacts": [
+        "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+      ],
+      "context": "contexts/audit-core.md",
+      "notes": "Verifies: generateSchemas returns correct shape for all 3 extraction modes; ctx is excluded; data: {} wrapper is always present; ts build clean; no circular imports between core packages."
+    },
+    "runtime-middleware": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "medium",
+      "phase": "runtime",
+      "depends_on": [
+        "audit-core"
+      ],
+      "guard": "npx --yes nx test apigen-runtime --testFile=packages/apigen/runtime/src/test/api-package.spec.ts",
+      "artifacts": [
+        "packages/apigen/runtime/src/lib/types.ts",
+        "packages/apigen/runtime/src/lib/define-middleware.ts",
+        "packages/apigen/runtime/src/lib/event-bus.ts",
+        "packages/apigen/runtime/src/lib/build-context.ts",
+        "packages/apigen/runtime/src/lib/api-package.ts",
+        "packages/apigen/runtime/src/test/api-package.spec.ts",
+        "packages/apigen/runtime/src/test/build-context.spec.ts",
+        "packages/apigen/runtime/src/index.ts"
+      ],
+      "context": "contexts/runtime-middleware.md",
+      "notes": "Parallel with runtime-dispatch. No external deps — pure TypeScript. assertNoSelfSubscription must throw ConfigurationError (a new error class defined here) on self-subscription. buildContext accumulates ctx sequentially, emits events. wireObservers wires eventMapping subscribers to the bus once at createApiPackage time.",
+      "changes": {}
+    },
+    "runtime-dispatch": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "medium",
+      "phase": "runtime",
+      "depends_on": [
+        "audit-core"
+      ],
+      "guard": "npx --yes nx test apigen-runtime --testFile=packages/apigen/runtime/src/test/dispatch.spec.ts",
+      "artifacts": [
+        "packages/apigen/runtime/src/lib/dispatch.ts",
+        "packages/apigen/runtime/src/test/dispatch.spec.ts"
+      ],
+      "context": "contexts/runtime-dispatch.md",
+      "notes": "Parallel with runtime-middleware. Three pure functions: needsEnvelopeField, dataParamNames, dispatch. dispatch is the single canonical path — all plugins use it. Test: with ctx+session (createClient path); without ctx (direct call); with zero-param function.",
+      "changes": {}
+    },
+    "audit-runtime": {
+      "kind": "audit",
+      "model": "opus",
+      "effort": "hard",
+      "phase": "runtime",
+      "depends_on": [
+        "runtime-middleware",
+        "runtime-dispatch"
+      ],
+      "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase runtime",
+      "artifacts": [
+        "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+      ],
+      "context": "contexts/audit-runtime.md",
+      "notes": "Verifies: apigen-runtime builds; recursion guard throws; override validation warns; dispatch with session middleware; no imports from apigen-core in apigen-runtime (it only needs types via the type-only import path)."
+    },
+    "scaffold-plugins": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "low",
+      "phase": "plugins",
+      "depends_on": [
+        "nx-generator",
+        "audit-runtime"
+      ],
+      "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase scaffold-plugins",
+      "artifacts": [
+        "packages/apigen/plugins/jsonschema/project.json",
+        "packages/apigen/plugins/jsonschema/package.json",
+        "packages/apigen/plugins/jsonschema/src/lib/plugin.ts",
+        "packages/apigen/plugins/jsonschema/src/index.ts",
+        "packages/apigen/plugins/mcp/project.json",
+        "packages/apigen/plugins/mcp/package.json",
+        "packages/apigen/plugins/mcp/src/lib/plugin.ts",
+        "packages/apigen/plugins/mcp/src/index.ts",
+        "packages/apigen/plugins/api-fastify/project.json",
+        "packages/apigen/plugins/api-fastify/package.json",
+        "packages/apigen/plugins/api-fastify/src/lib/plugin.ts",
+        "packages/apigen/plugins/api-fastify/src/index.ts",
+        "packages/apigen/plugins/api-express/project.json",
+        "packages/apigen/plugins/api-express/package.json",
+        "packages/apigen/plugins/api-express/src/lib/plugin.ts",
+        "packages/apigen/plugins/api-express/src/index.ts",
+        "packages/apigen/plugins/cli/project.json",
+        "packages/apigen/plugins/cli/package.json",
+        "packages/apigen/plugins/cli/src/lib/plugin.ts",
+        "packages/apigen/plugins/cli/src/index.ts",
+        "tsconfig.base.json"
+      ],
+      "context": "contexts/scaffold-plugins.md",
+      "notes": "Runs `nx g @adhd/apigen-nx:plugin` × 5. Depends on audit-runtime so the runtime types are stable before any plugin file is written. Depends on nx-generator for the tool itself. Generator handles tsconfig.base.json wiring automatically. --hasRun true for mcp/api-fastify/api-express; false for jsonschema/cli-output. All 5 stubs must build before proceeding.",
+      "changes": {
+        "adds_set_members": [
+          "apigen-plugin-jsonschema",
+          "apigen-plugin-mcp",
+          "apigen-plugin-api-fastify",
+          "apigen-plugin-api-express",
+          "apigen-plugin-cli-output"
+        ]
+      }
+    },
+    "plugin-fastify-checkpoint": {
+      "kind": "audit",
+      "model": "opus",
+      "effort": "hard",
+      "phase": "plugins",
+      "depends_on": [
+        "plugin-api-fastify"
+      ],
+      "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase plugin-fastify-checkpoint",
+      "artifacts": [
+        "docs/plan/apigen-client-generation/checkpoints/fastify-approved.md"
+      ],
+      "context": "contexts/plugin-fastify-checkpoint.md",
+      "notes": "HUMAN GATE. Executor stops here after plugin-api-fastify passes and presents the implementation + integration test results to the plan owner. The approval file is created only after explicit human sign-off. Remaining 4 plugins do NOT start until this checkpoint passes. This catches structural issues in the reference implementation before they propagate."
+    },
+    "plugin-jsonschema": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "low",
+      "phase": "plugins",
+      "depends_on": [
+        "plugin-fastify-checkpoint"
+      ],
+      "guard": "npx --yes nx test apigen-plugin-jsonschema",
+      "artifacts": [
+        "packages/apigen/plugins/jsonschema/src/lib/plugin.ts",
+        "packages/apigen/plugins/jsonschema/src/index.ts",
+        "packages/apigen/plugins/jsonschema/src/test/plugin.spec.ts"
+      ],
+      "context": "contexts/plugin-jsonschema.md",
+      "notes": "Parallel with all other plugin states. Simplest plugin — no run() method. Emits one JSON file per function at outputDir/<packageId>/<fnName>.json. Validates that the OutputPlugin interface is correct and satisfied."
+    },
+    "plugin-mcp": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "medium",
+      "phase": "plugins",
+      "depends_on": [
+        "plugin-fastify-checkpoint"
+      ],
+      "guard": "npx --yes nx test apigen-plugin-mcp",
+      "artifacts": [
+        "packages/apigen/plugins/mcp/src/lib/plugin.ts",
+        "packages/apigen/plugins/mcp/src/lib/generate.ts",
+        "packages/apigen/plugins/mcp/src/lib/run.ts",
+        "packages/apigen/plugins/mcp/src/lib/templates/server-stdio.tpl.ts",
+        "packages/apigen/plugins/mcp/src/lib/templates/server-http.tpl.ts",
+        "packages/apigen/plugins/mcp/src/index.ts",
+        "packages/apigen/plugins/mcp/src/test/generate.spec.ts",
+        "packages/apigen/plugins/mcp/src/test/run.spec.ts",
+        "package.json"
+      ],
+      "context": "contexts/plugin-mcp.md",
+      "notes": "Parallel with other plugins. Dep: @modelcontextprotocol/sdk. Single package covers stdio + SSE + streaming-http transports via options.transport. For HTTP run() mode uses node:http built-in (no express/fastify dep). generate() emits index.ts + server.ts parameterised by transport.",
+      "changes": {
+        "adds_set_members": [
+          "stdio",
+          "sse",
+          "streaming-http"
+        ]
+      }
+    },
+    "plugin-api-fastify": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "medium",
+      "phase": "plugins",
+      "depends_on": [
+        "scaffold-plugins"
+      ],
+      "guard": "npx --yes nx test apigen-plugin-api-fastify",
+      "artifacts": [
+        "packages/apigen/plugins/api-fastify/src/lib/plugin.ts",
+        "packages/apigen/plugins/api-fastify/src/lib/generate.ts",
+        "packages/apigen/plugins/api-fastify/src/lib/run.ts",
+        "packages/apigen/plugins/api-fastify/src/index.ts",
+        "packages/apigen/plugins/api-fastify/src/test/plugin.spec.ts",
+        "package.json"
+      ],
+      "context": "contexts/plugin-api-fastify.md",
+      "notes": "Parallel with other plugins. Dep: fastify. generate() emits routes.ts; run() spins up Fastify in-process on options.port (default 3000). Route pattern: POST /<packageId>/<fnName> body: { data: {}, ...envelope }."
+    },
+    "plugin-api-express": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "medium",
+      "phase": "plugins",
+      "depends_on": [
+        "plugin-fastify-checkpoint"
+      ],
+      "guard": "npx --yes nx test apigen-plugin-api-express",
+      "artifacts": [
+        "packages/apigen/plugins/api-express/src/lib/plugin.ts",
+        "packages/apigen/plugins/api-express/src/lib/generate.ts",
+        "packages/apigen/plugins/api-express/src/lib/run.ts",
+        "packages/apigen/plugins/api-express/src/index.ts",
+        "packages/apigen/plugins/api-express/src/test/plugin.spec.ts",
+        "package.json"
+      ],
+      "context": "contexts/plugin-api-express.md",
+      "notes": "Parallel with other plugins. Dep: express + @types/express. Identical HTTP shape to api-fastify (POST /<id>/<fnName>, body: { data, ...envelope }), using express Router. generate() emits routes.ts."
+    },
+    "plugin-cli-output": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "medium",
+      "phase": "plugins",
+      "depends_on": [
+        "plugin-fastify-checkpoint"
+      ],
+      "guard": "npx --yes nx test apigen-plugin-cli-output",
+      "artifacts": [
+        "packages/apigen/plugins/cli/src/lib/plugin.ts",
+        "packages/apigen/plugins/cli/src/lib/generate.ts",
+        "packages/apigen/plugins/cli/src/index.ts",
+        "packages/apigen/plugins/cli/src/test/plugin.spec.ts"
+      ],
+      "context": "contexts/plugin-cli-output.md",
+      "notes": "Parallel with other plugins. Dep: commander (in the GENERATED code, not this plugin's dep). generate() emits cli.ts — Commander program with one subcommand per fn. Boolean params become flags. Optional params are not .requiredOption(). No run() method (CLI output is for generate mode only)."
+    },
+    "audit-plugins": {
+      "kind": "audit",
+      "model": "opus",
+      "effort": "hard",
+      "phase": "plugins",
+      "depends_on": [
+        "plugin-jsonschema",
+        "plugin-mcp",
+        "plugin-api-fastify",
+        "plugin-api-express",
+        "plugin-cli-output"
+      ],
+      "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase plugins",
+      "artifacts": [
+        "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+      ],
+      "context": "contexts/audit-plugins.md",
+      "notes": "All 5 plugin packages build. OutputPlugin interface is satisfied by each. dispatch() is not duplicated (grep for inline dispatch logic). REVIEWER GATE: code-reviewer agent reviews plugin implementations before CLI states proceed."
+    },
+    "cli-generate-cmd": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "medium",
+      "phase": "cli",
+      "depends_on": [
+        "audit-plugins"
+      ],
+      "guard": "npx --yes nx test apigen-cli --testFile=packages/apigen/cli/src/test/generate.spec.ts",
+      "artifacts": [
+        "packages/apigen/cli/src/lib/pipeline.ts",
+        "packages/apigen/cli/src/lib/registry.ts",
+        "packages/apigen/cli/src/lib/commands/generate.ts",
+        "packages/apigen/cli/src/lib/commands/generate-registry.ts",
+        "packages/apigen/cli/src/index.ts",
+        "packages/apigen/cli/src/test/generate.spec.ts",
+        "packages/apigen/cli/src/test/fixtures/api.ts",
+        "packages/apigen/cli/src/test/fixtures/registry/pkg-a/index.ts",
+        "packages/apigen/cli/src/test/fixtures/registry/pkg-a/package.json",
+        "packages/apigen/cli/src/test/fixtures/registry/pkg-b/index.ts",
+        "packages/apigen/cli/src/test/fixtures/registry/pkg-b/package.json"
+      ],
+      "context": "contexts/cli-generate-cmd.md",
+      "notes": "Parallel with cli-run-cmd and nx-generator. Wires pipeline: generateSchemas → createApiPackage → plugin.generate() → write files. generate-registry discovers packages via package.json tags. --type flag selects plugin. --opt key=value pairs populate PluginInput.options."
+    },
+    "cli-run-cmd": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "medium",
+      "phase": "cli",
+      "depends_on": [
+        "audit-plugins"
+      ],
+      "guard": "npx --yes nx test apigen-cli --testFile=packages/apigen/cli/src/test/run.spec.ts",
+      "artifacts": [
+        "packages/apigen/cli/src/lib/commands/run.ts",
+        "packages/apigen/cli/src/lib/commands/run-registry.ts",
+        "packages/apigen/cli/src/test/run.spec.ts"
+      ],
+      "context": "contexts/cli-run-cmd.md",
+      "notes": "Parallel with cli-generate-cmd and nx-generator. run mode: import() source file at startup, pass live fns to plugin.run(). No watch/hot-reload. AbortSignal from process SIGINT forwarded to plugin. run-registry uses same registry.ts discovery logic."
+    },
+    "nx-generator": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "medium",
+      "phase": "foundation",
+      "depends_on": [
+        "core-types"
+      ],
+      "guard": "npx --yes nx build apigen-nx",
+      "artifacts": [
+        "packages/apigen/nx/src/generators/plugin/generator.ts",
+        "packages/apigen/nx/src/generators/plugin/schema.json",
+        "packages/apigen/nx/src/generators/plugin/__files__/src/lib/plugin.ts__tmpl__",
+        "packages/apigen/nx/src/generators/plugin/__files__/src/index.ts__tmpl__",
+        "packages/apigen/nx/src/generators/plugin/__files__/src/test/plugin.spec.ts__tmpl__",
+        "packages/apigen/nx/src/generators/plugin/__files__/package.json__tmpl__",
+        "packages/apigen/nx/src/executors/generate/executor.ts",
+        "packages/apigen/nx/src/executors/generate/schema.json",
+        "packages/apigen/nx/generators.json",
+        "packages/apigen/nx/executors.json",
+        "packages/apigen/nx/src/index.ts",
+        "packages/apigen/nx/src/test/generator.spec.ts",
+        "packages/apigen/nx/src/test/executor.spec.ts"
+      ],
+      "context": "contexts/nx-generator.md",
+      "notes": "MOVED to foundation phase — parallel with schema-extraction and schema-composition. Only needs core-types (for OutputPlugin template shape). Generator: `nx g @adhd/apigen-nx:plugin --name <name> [--hasRun]` scaffolds an OutputPlugin package with correct project.json tags, tsconfig.base.json path, and conditional run() stub. Executor: shells out to npx @adhd/apigen-cli generate. Both gaps from original design fixed: (1) generator now updates tsconfig.base.json via updateJson, (2) --hasRun flag enables run() stub for server plugins."
+    },
+    "done": {
+      "kind": "terminal",
+      "model": "sonnet",
+      "effort": "low",
+      "phase": "convergence",
+      "depends_on": [
+        "audit-final-v2"
+      ],
+      "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase done",
+      "artifacts": [
+        "docs/plan/apigen-client-generation/state.json"
+      ],
+      "context": "contexts/done.md",
+      "notes": "Terminal state. All DoD clauses confirmed. Plan complete."
+    },
+    "audit-final-v2": {
+      "kind": "audit",
+      "model": "opus",
+      "effort": "hard",
+      "phase": "convergence",
+      "depends_on": [
+        "integration-tests-v2"
+      ],
+      "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase final",
+      "artifacts": [
+        "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+      ],
+      "context": "contexts/audit-final-v2.md",
+      "notes": "Proves every [dod.N] clause: all 8 DoD checks (behavioral tier-3 + structural). DoD.7 and DoD.8 are here. All 9 packages build. No --output flag usage anywhere (only --type). dispatch() is not duplicated. Proves PluginOutput.files language-agnostic design is documented."
+    },
+    "integration-tests-v2": {
+      "kind": "work",
+      "model": "sonnet",
+      "effort": "medium",
+      "phase": "integration",
+      "depends_on": [
+        "nx-generator"
+      ],
+      "guard": "npx --yes nx test apigen-cli --testPathPattern=integration",
+      "artifacts": [
+        "packages/apigen/cli/src/test/fixtures/real-api.ts",
+        "packages/apigen/cli/src/test/fixtures/default-api.ts",
+        "packages/apigen/cli/src/test/fixtures/object-api.ts",
+        "packages/apigen/cli/src/test/fixtures/registry/pkg-c/index.ts",
+        "packages/apigen/cli/src/test/fixtures/registry/pkg-c/package.json",
+        "packages/apigen/cli/src/test/integration/schema.spec.ts",
+        "packages/apigen/cli/src/test/integration/dispatch.spec.ts",
+        "packages/apigen/cli/src/test/integration/mcp.spec.ts",
+        "packages/apigen/cli/src/test/integration/http.spec.ts",
+        "packages/apigen/cli/src/test/integration/parity.spec.ts",
+        "packages/apigen/cli/src/test/integration/registry.spec.ts",
+        "packages/apigen/cli/src/test/integration/export-modes.spec.ts"
+      ],
+      "context": "contexts/integration-tests-v2.md",
+      "notes": "14 integration tests across 7 spec files. Drive every public behavior through its real entrypoint: schema extraction on a real fixture, dispatch round-trip against real functions, MCP stdio via @modelcontextprotocol/sdk Client, Fastify+Express HTTP via fetch, generate/run parity, run-registry multi-package routing, all three export modes."
+    }
+  },
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.21",
+    "hash": "1e4130a84aed"
+  }
+}

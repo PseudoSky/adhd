@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "audit-cli",
+  "current_state": "scaffold-packages",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -153,28 +153,21 @@
       "start_ref": "6d76a800e9e5d3b4429e3d3026173bbe170c747a",
       "end_ref": "8ab11fa82044d9cb86b475ee47cd65d18b2fe883"
     },
-    "audit-cli": {
-      "status": "blocked",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
-    },
-    "integration-tests": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
-    },
-    "audit-final": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
-    },
     "done": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "audit-final-v2": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "integration-tests-v2": {
       "status": "pending",
       "started_at": null,
       "done_at": null,
@@ -425,7 +418,7 @@
   ],
   "authored_with": {
     "plugin": "workflow",
-    "version": "0.8.18",
-    "hash": "768a2f7be3f6"
+    "version": "0.8.21",
+    "hash": "1e4130a84aed"
   }
 }
