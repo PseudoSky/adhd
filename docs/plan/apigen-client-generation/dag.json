@@ -16,7 +16,8 @@
     "cli",
     "integration",
     "convergence",
-    "v2-core"
+    "v2-core",
+    "v2-harness"
   ],
   "terminal": "done",
   "assumed_baseline": [],
