@@ -649,6 +649,21 @@
       ],
       "context": "contexts/projection-transports.md",
       "notes": "SPEC §5/§7/§9: re-cast http-fastify/http-express/mcp/cli as TargetCapability plugins projecting the descriptor over the Layer harness; envelope sourced from transport metadata (strict x-<id>-*/x-adhd-*), not body; canonical projection (POST action / GET query, MCP _ join, CLI nested kebab)."
+    },
+    "logger-layer-plugin": {
+      "kind": "work",
+      "phase": "v2-projection",
+      "depends_on": [
+        "plugin-interface",
+        "layer-harness"
+      ],
+      "guard": "npx --yes nx test apigen-plugin-logger",
+      "artifacts": [
+        "packages/apigen/plugins/logger/src/lib/plugin.ts",
+        "packages/apigen/plugins/logger/project.json"
+      ],
+      "context": "contexts/logger-layer-plugin.md",
+      "notes": "SPEC §7.2(a)/O13: convert v1 createLogger into a LayerCapability plugin (the dogfood Layer) reading typed ctx.get(Logger); per-request timing/ok/fail."
     }
   },
   "authored_with": {
