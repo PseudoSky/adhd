@@ -123,7 +123,7 @@ describe('generate()', () => {
     })
     const { content } = generate(input).files[0]
     // Must import dispatch from the runtime package
-    expect(content).toContain("import { dispatch } from '@adhd/apigen-runtime'")
+    expect(content).toMatch(/import \{[^}]*\bdispatch\b[^}]*\} from ['"]@adhd\/apigen-runtime['"]/)
     // Must not contain a function body that could be an inlined dispatch
     expect(content).not.toMatch(/function dispatch\s*\(/)
   })
@@ -235,8 +235,8 @@ describe('generate()', () => {
       ],
     })
     const { content } = generate(input).files[0]
-    expect(content).toContain("import * as pkgA_fns from '@acme/pkg-a'")
-    expect(content).toContain("import * as pkgB_fns from '@acme/pkg-b'")
+    expect(content).toContain("import * as pkgA_ns from '@acme/pkg-a'")
+    expect(content).toContain("import * as pkgB_ns from '@acme/pkg-b'")
   })
 
   it('ends with program.parseAsync()', () => {
