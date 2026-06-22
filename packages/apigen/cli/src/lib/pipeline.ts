@@ -1,5 +1,5 @@
 import { generateSchemas, composeSchemas } from '@adhd/apigen-core'
-import type { ComposedSchemas, ExportMode, GenerateSchemasOptions } from '@adhd/apigen-core'
+import type { ComposedSchemas, ExportMode, GenerateSchemasOptions, Logger } from '@adhd/apigen-core'
 import { resolveTsconfig } from './resolve-tsconfig'
 
 export interface PipelineOptions {
@@ -10,6 +10,8 @@ export interface PipelineOptions {
   namespace?: string
   /** Explicit --tsconfig flag; when omitted, the nearest/builtin config is resolved from sourceFile. */
   tsconfig?: string
+  /** Optional shared logger; when present the pipeline logs schema extraction. */
+  logger?: Logger
 }
 
 export interface PipelineResult {
@@ -25,7 +27,11 @@ export async function runPipeline(opts: PipelineOptions): Promise<PipelineResult
     namespace: opts.namespace,
     tsconfig: resolveTsconfig(opts.sourceFile, opts.tsconfig),
   }
+  opts.logger?.info(`compiling ${opts.sourceFile}`)
   const domainSchemas = await generateSchemas(genOpts)
+  const fnNames = Object.keys(domainSchemas.schemas)
+  opts.logger?.info(`extracted ${fnNames.length} functions`)
+  opts.logger?.debug({ functions: fnNames }, 'extracted functions')
   const schemas = composeSchemas(
     domainSchemas,
     opts.middlewares ?? [],

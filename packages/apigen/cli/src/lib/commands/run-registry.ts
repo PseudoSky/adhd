@@ -5,6 +5,7 @@ import { discoverPackages } from '../registry'
 import { runPipeline } from '../pipeline'
 import { importSource } from '../import-source'
 import { resolveTsconfig } from '../resolve-tsconfig'
+import { buildCliLogger } from '../logging'
 import type { OutputPlugin, RunInput } from '@adhd/apigen-core'
 
 /** Parse --opt key=value pairs into an options record. */
@@ -50,6 +51,7 @@ export function registerRunRegistryCommand(
       const plugin = plugins[opts.type]
       if (!plugin?.run) throw new Error(`Plugin ${opts.type} does not support run mode`)
 
+      const logger = buildCliLogger(program)
       const options = parseOptPairs(opts.opt)
       const packagesDir = path.resolve(opts.packagesDir)
 
@@ -65,7 +67,7 @@ export function registerRunRegistryCommand(
         if (!entryFile) continue
 
         const tsconfig = resolveTsconfig(entryFile, opts.tsconfig)
-        const { schemas, createClient } = await runPipeline({ sourceFile: entryFile, tsconfig })
+        const { schemas, createClient } = await runPipeline({ sourceFile: entryFile, tsconfig, logger })
 
         // Import the source module to get live function table (tsx loader handles .ts)
         const mod = await importSource(entryFile, tsconfig)
@@ -94,6 +96,7 @@ export function registerRunRegistryCommand(
         outputDir: '',
         options,
         signal: controller.signal,
+        logger,
       }
 
       await plugin.run(input)

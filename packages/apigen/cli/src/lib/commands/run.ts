@@ -3,6 +3,7 @@ import * as path from 'node:path'
 import { runPipeline } from '../pipeline'
 import { importSource } from '../import-source'
 import { resolveTsconfig } from '../resolve-tsconfig'
+import { buildCliLogger } from '../logging'
 import type { ExportMode, OutputPlugin, RunInput } from '@adhd/apigen-core'
 
 /** Parse --opt key=value pairs into an options record. */
@@ -39,10 +40,11 @@ export function registerRunCommand(
         exportMode = { type: 'named' }
       }
 
+      const logger = buildCliLogger(program)
       const options = parseOptPairs(opts.opt)
       const sourceFile = path.resolve(opts.source)
       const tsconfig = resolveTsconfig(sourceFile, opts.tsconfig)
-      const { schemas, createClient } = await runPipeline({ sourceFile, exportMode, tsconfig })
+      const { schemas, createClient } = await runPipeline({ sourceFile, exportMode, tsconfig, logger })
 
       // Import the source module to get live function table (tsx loader handles .ts)
       const mod = await importSource(sourceFile, tsconfig)
@@ -63,6 +65,7 @@ export function registerRunCommand(
         outputDir: '',
         options,
         signal: controller.signal,
+        logger,
       }
 
       await plugin.run(input)
