@@ -144,6 +144,14 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - observable: `invoke() with data violating input schema throws ApiError{code:'invalid_argument'} and the target function is NEVER called; valid data passes through and returns ground truth`
   - negative-control: `Remove the validation Layer from the harness -> bad data reaches the function -> the invalid_argument assertion goes red`
   - delivered-by: `central-validation, layer-harness, audit-v2-harness, integration-tests-v2`
+- `[dod.11]` **Request envelope is sourced from transport metadata, not the body (behavioral)** — Request envelope is sourced from transport metadata, not the body.
+  - given: a layer/envelope plugin declaring an envelope field
+  - when: the field arrives via metadata vs body
+  - then: only the metadata-sourced value reaches the envelope
+  - entrypoint: `packages/apigen/cli/src/test/integration/canonical.spec.ts`
+  - observable: `An HTTP request carrying x-adhd-<field>/x-<plugin-id>-<field> headers populates the operation envelope; the same field placed only in the JSON body does NOT populate the envelope`
+  - negative-control: `Bind the envelope from the body instead of metadata -> the header-sourced assertion goes red`
+  - delivered-by: `projection-transports, layer-harness, audit-v2-projection, integration-tests-v2`
 ---
 
 ## Execution model
