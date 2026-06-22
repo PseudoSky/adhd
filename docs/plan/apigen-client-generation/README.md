@@ -152,6 +152,14 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - observable: `An HTTP request carrying x-adhd-<field>/x-<plugin-id>-<field> headers populates the operation envelope; the same field placed only in the JSON body does NOT populate the envelope`
   - negative-control: `Bind the envelope from the body instead of metadata -> the header-sourced assertion goes red`
   - delivered-by: `projection-transports, layer-harness, audit-v2-projection, integration-tests-v2`
+- `[dod.12]` **Mixed-host run routes each operation to its owning language runtime via the gateway (behavioral)** — Mixed-host run routes each operation to its owning language runtime via the gateway.
+  - given: a merged descriptor spanning two hosts
+  - when: a client calls one op from each host
+  - then: each is served by its owning runtime behind one surface
+  - entrypoint: `packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts`
+  - observable: `With sources from two hosts behind one transport, an op tagged host A is answered by A's runtime and an op tagged host B by B's runtime; both return their in-process ground truth`
+  - negative-control: `Route all ops to a single runtime -> the cross-host op errors / returns the wrong runtime's value -> this clause goes red`
+  - delivered-by: `gateway, unified-cli, conformance-vectors, integration-tests-v2`
 ---
 
 ## Execution model
