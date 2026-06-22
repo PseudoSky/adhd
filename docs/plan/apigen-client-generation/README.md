@@ -128,6 +128,14 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - observable: Directory created with correct project.json, package.json, TypeScript boilerplate that implements `OutputPlugin`; build exits 0.
   - delivered-by: nx-generator, scaffold-plugins
 
+- `[dod.9]` **Code-first round-trip closes F28/F29: every export shape projects by exported symbol (behavioral)** — Code-first round-trip closes F28/F29: every export shape projects by exported symbol.
+  - given: source files exercising all six export shapes
+  - when: adhd-apigen extracts + projects them
+  - then: ids/routes/tool-names match the exported symbols
+  - entrypoint: `packages/apigen/cli/src/test/integration/export-shape-matrix.spec.ts`
+  - observable: `For named / renamed (export {x as y}) / default-fn / default-object / anonymous-default / CJS sources, the derived descriptor ids + per-transport projections (HTTP/MCP/CLI) deep-equal the EXPORTED-symbol names — never the declaration name`
+  - negative-control: `Revert the extractor to name by declaration symbol -> renamed/default/CJS rows no longer match exported names -> this clause goes red`
+  - delivered-by: `ts-extractor-by-symbol, naming-helpers, audit-v2-core, integration-tests-v2`
 ---
 
 ## Execution model
