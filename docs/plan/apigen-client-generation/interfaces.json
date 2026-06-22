@@ -1,0 +1,119 @@
+{
+  "ts-morph": {
+    "provenance": "vendored-source",
+    "resolved_version": "see packages/apigen/core/package.json",
+    "source": "node_modules/ts-morph/lib/ts-morph.d.ts",
+    "confidence": "vendored",
+    "interface": "new Project(opts).addSourceFileAtPath(path).getFunctions()[i].getParameters()[j].getName(): string",
+    "shape": {
+      "Project": "new Project({ tsConfigFilePath?, addFilesFromTsConfig?, useInMemoryFileSystem? })",
+      "SourceFile": "project.addSourceFileAtPath(absolutePath: string) | project.createSourceFile(path, content)",
+      "FunctionDeclaration": "sourceFile.getFunctions() → FunctionDeclaration[]",
+      "ParameterDeclaration": "fn.getParameters() → ParameterDeclaration[]; p.getName(): string; p.getType(): Type",
+      "ArrowFunction / VariableDeclaration": "sourceFile.getVariableDeclarations(); vd.getInitializerIfKindOrThrow(SyntaxKind.ArrowFunction)",
+      "key_api_note": "ts-morph is used for parameter name extraction. ts-json-schema-generator is used for JSON Schema generation from TS types. Do NOT use ts-morph to generate JSON Schema — it produces shallow shapes."
+    },
+    "cited_by": ["schema-extraction"]
+  },
+  "ts-json-schema-generator": {
+    "provenance": "vendored-source",
+    "resolved_version": "see packages/apigen/core/package.json",
+    "source": "node_modules/ts-json-schema-generator/dist/src/index.d.ts",
+    "confidence": "vendored",
+    "interface": "createGenerator({ path, type, tsconfig? }).createSchema(typeName?: string): JSONSchema",
+    "shape": {
+      "createGenerator": "createGenerator({ path: absolutePath, type: typeName, tsconfig? }) → SchemaGenerator",
+      "SchemaGenerator.createSchema": "generator.createSchema(typeName?: string) → JSONSchema",
+      "config": "{ path, type, tsconfig, skipTypeCheck?, additionalProperties?, encodeRefs? }",
+      "key_api_note": "Pass the TypeScript TYPE NAME as `type`, not the parameter name. For a param `userId: string`, the type is 'string'. For a param `data: UserInput`, the type is 'UserInput'. The morph-fallback is triggered when createGenerator throws (usually for inline/anonymous types)."
+    },
+    "cited_by": ["schema-extraction"]
+  },
+  "mcp-sdk": {
+    "provenance": "vendored-source",
+    "resolved_version": "see packages/apigen/plugins/mcp/package.json (@modelcontextprotocol/sdk)",
+    "source": "node_modules/@modelcontextprotocol/sdk/dist/index.d.ts",
+    "confidence": "vendored",
+    "interface": "new Server({name,version},{capabilities:{tools:{}}}); server.setRequestHandler(ListToolsRequestSchema|CallToolRequestSchema, handler); await server.connect(new StdioServerTransport() | new SSEServerTransport(path,res) | new StreamableHTTPServerTransport({sessionIdGenerator?}))",
+    "shape": {
+      "Server": "new Server({ name, version }, { capabilities: { tools: {} } })",
+      "StdioServerTransport": "new StdioServerTransport()",
+      "SSEServerTransport": "new SSEServerTransport(path, res) — requires raw http.ServerResponse",
+      "StreamableHTTPServerTransport": "new StreamableHTTPServerTransport({ sessionIdGenerator? })",
+      "server.setRequestHandler": "server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [...] }))",
+      "tool_shape": "{ name: string, description: string, inputSchema: JSONSchema }",
+      "CallToolRequest": "{ params: { name: string, arguments: Record<string, unknown> } }",
+      "server.connect": "await server.connect(transport: Transport)",
+      "key_api_note": "SDK ships all three transports. For stdio: server.connect(new StdioServerTransport()). For HTTP/SSE: create a node:http server, route requests to transport.handleRequest(req, res), then server.connect(transport). No express dependency needed."
+    },
+    "cited_by": ["plugin-mcp"]
+  },
+  "nx-devkit": {
+    "provenance": "vendored-source",
+    "resolved_version": "see packages/apigen/nx/package.json (@nx/devkit)",
+    "source": "node_modules/@nx/devkit/index.d.ts",
+    "confidence": "vendored",
+    "interface": "addProjectConfiguration(tree, name, config); generateFiles(tree, templateDir, targetDir, subs); updateJson(tree, path, fn); await formatFiles(tree); names(raw): {name,className,propertyName,constantName,fileName}",
+    "shape": {
+      "Tree": "Virtual file system for generators. tree.exists(path), tree.read(path, encoding), tree.write(path, content), tree.delete(path)",
+      "addProjectConfiguration": "addProjectConfiguration(tree, projectName, config: ProjectConfiguration)",
+      "generateFiles": "generateFiles(tree, templateDir, targetDir, substitutions: Record<string, string>)",
+      "formatFiles": "await formatFiles(tree) — runs prettier on all modified files",
+      "names": "names(rawName) → { name, className, propertyName, constantName, fileName }",
+      "offsetFromRoot": "offsetFromRoot(projectRoot: string) → '../../../' (relative)",
+      "ExecutorContext": "{ root: string, projectName: string, workspace: { projects: Record<string, ProjectConfig> } }",
+      "runExecutor": "for custom executor orchestration",
+      "key_api_note": "Templates in __files__/ use EJS-style <%=variable%> for substitutions. File extension __tmpl__ is stripped. formatFiles must be awaited."
+    },
+    "cited_by": ["nx-generator"]
+  },
+  "commander": {
+    "provenance": "vendored-source",
+    "resolved_version": "^12.0.0",
+    "source": "node_modules/commander/typings/index.d.ts",
+    "confidence": "vendored",
+    "interface": "new Command().name(s).version(s).command(name).requiredOption('--flag <v>',desc).option('--opt <kv>',desc,accFn,[]).action(async opts => {...}); await program.parseAsync()",
+    "shape": {
+      "Command": "new Command().name(str).version(str)",
+      "command": ".command(name) → Command",
+      "requiredOption": ".requiredOption('--flag <value>', description) — throws if missing",
+      "option_repeatable": ".option('--opt <kv>', desc, (val, prev) => [...prev, val], [] as string[]) — accumulator pattern for --opt key=value",
+      "action": ".action(async (opts) => { ... }) — opts is the parsed options object",
+      "parseAsync": "program.parseAsync() — async-safe; use instead of parse()",
+      "key_api_note": "Use .option() not .requiredOption() for optional flags. Boolean flags: .option('--flag') with no <value> placeholder."
+    },
+    "cited_by": ["cli-generate-cmd", "cli-run-cmd", "plugin-cli-output"]
+  },
+  "fastify": {
+    "provenance": "vendored-source",
+    "resolved_version": "^4.0.0",
+    "source": "node_modules/fastify/types/instance.d.ts",
+    "confidence": "vendored",
+    "interface": "const app = Fastify(); app.post<{Body:T}>(path, async (req,reply) => value); await app.listen({port,host?}); await app.close()",
+    "shape": {
+      "Fastify": "import Fastify from 'fastify'; const app = Fastify()",
+      "app.post": "app.post<{Body: T}>(path, async (req, reply) => { ... return value }) — return value is JSON-serialized",
+      "app.listen": "await app.listen({ port, host? })",
+      "app.close": "await app.close()",
+      "key_api_note": "Do NOT add { schema: { body: ... } } to route options — AJV rejects complex oneOf/anyOf from ts-json-schema-generator. Body validation is deferred to dispatch()."
+    },
+    "cited_by": ["plugin-api-fastify"]
+  },
+  "express": {
+    "provenance": "vendored-source",
+    "resolved_version": "^4.18.0",
+    "source": "node_modules/@types/express/index.d.ts",
+    "confidence": "vendored",
+    "interface": "const app = express(); app.use(express.json()); const r = Router(); r.post(path, async (req,res) => res.json(result)); const server = app.listen(port); server.close()",
+    "shape": {
+      "express": "import express from 'express'; const app = express()",
+      "express.json()": "app.use(express.json()) — must be added before routes",
+      "Router": "import { Router } from 'express'; const router = Router()",
+      "router.post": "router.post(path, async (req, res) => { const result = ...; res.json(result) })",
+      "app.listen": "app.listen(port, () => { ... })",
+      "app.close": "server.close() where server = app.listen()",
+      "key_api_note": "Unlike Fastify, Express handler must call res.json() not return the value. Use supertest for integration testing."
+    },
+    "cited_by": ["plugin-api-express"]
+  }
+}
