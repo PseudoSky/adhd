@@ -8,6 +8,7 @@ import jsonschemaPlugin from '@adhd/apigen-plugin-jsonschema'
 import fastifyPlugin from '@adhd/apigen-plugin-api-fastify'
 import expressPlugin from '@adhd/apigen-plugin-api-express'
 import cliOutputPlugin from '@adhd/apigen-plugin-cli-output'
+import { addLoggingOptions } from './lib/logging'
 import type { OutputPlugin } from '@adhd/apigen-core'
 
 const plugins: Record<string, OutputPlugin> = {
@@ -19,6 +20,7 @@ const plugins: Record<string, OutputPlugin> = {
 }
 
 const program = new Command().name('apigen-cli').version('0.1.0')
+addLoggingOptions(program)
 
 registerGenerateCommand(program, plugins)
 registerGenerateRegistryCommand(program, plugins)

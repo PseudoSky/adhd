@@ -63,6 +63,13 @@ export default defineConfig({
         'typescript',
         'tsx',
         /^tsx\//,
+        // pino uses worker-thread transports (pino-pretty) that cannot be
+        // bundled; keep the whole logging stack external + installed.
+        'pino',
+        'pino-pretty',
+        'pino-http',
+        'thread-stream',
+        'sonic-boom',
       ],
       output: {
         // Real executable: node shebang on the built entry.

@@ -9,5 +9,7 @@ export type {
   OutputPlugin,
 } from './lib/types'
 
+export type { Logger } from 'pino'
+
 export { generateSchemas } from './lib/generate-schemas'
 export { composeSchemas } from './lib/compose-schemas'

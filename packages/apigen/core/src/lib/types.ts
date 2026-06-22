@@ -1,3 +1,5 @@
+import type { Logger } from 'pino'
+
 // Output of generateSchemas() — domain schemas only, no middleware envelope
 export interface GeneratedSchemas {
   metadata: { namespace: string; phase: string }
@@ -40,6 +42,13 @@ export interface PluginInput {
   }>
   outputDir: string
   options: Record<string, unknown>
+  /**
+   * Shared structured logger (pino). Built once by the CLI and threaded through
+   * the pipeline + plugins. Always targets stderr or a file — never stdout —
+   * so the MCP stdio JSON-RPC channel stays clean. Plugins should fall back to
+   * a default stderr logger when this is absent.
+   */
+  logger?: Logger
 }
 
 export interface PluginOutput {
