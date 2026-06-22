@@ -26,6 +26,7 @@ export interface GenerateSchemasOptions {
   exportMode?: ExportMode  // default: { type: 'named' }
   namespace?: string       // written to metadata (informational)
   phase?: string           // written to metadata (informational)
+  tsconfig?: string        // absolute path to a tsconfig.json driving type resolution
 }
 
 // Plugin system — language-agnostic: files[] can contain any language

@@ -6,11 +6,12 @@ import { morphFallback } from './morph-fallback'
 export async function buildSchema(
   _project: Project,
   sf: SourceFile,
-  typeText: string
+  typeText: string,
+  tsconfig?: string
 ): Promise<Record<string, unknown>> {
   if (['void', 'undefined', 'null', 'Promise<void>'].includes(typeText)) return { type: 'null' }
   try {
-    const config: Config = { path: sf.getFilePath(), type: typeText, skipTypeCheck: true }
+    const config: Config = { path: sf.getFilePath(), type: typeText, skipTypeCheck: true, tsconfig }
     const schema = createGenerator(config).createSchema(typeText)
     return schema as Record<string, unknown>
   } catch {

@@ -26,6 +26,7 @@ export function registerGenerateRegistryCommand(
     .requiredOption('--out-dir <path>', 'Output directory')
     .option('--tag <tag>', 'Include only packages with this tag (repeatable)', (val: string, prev: string[]) => [...prev, val], [] as string[])
     .option('--exclude-tag <tag>', 'Exclude packages with this tag (repeatable)', (val: string, prev: string[]) => [...prev, val], [] as string[])
+    .option('--tsconfig <path>', 'Explicit tsconfig.json; default resolves the nearest config or a builtin one')
     .option('--opt <key=value>', 'Plugin option (repeatable)', (val: string, prev: string[]) => [...prev, val], [] as string[])
     .action(async (opts: {
       packagesDir: string
@@ -33,6 +34,7 @@ export function registerGenerateRegistryCommand(
       outDir: string
       tag: string[]
       excludeTag: string[]
+      tsconfig?: string
       opt: string[]
     }) => {
       const plugin = plugins[opts.type]
@@ -56,7 +58,7 @@ export function registerGenerateRegistryCommand(
         const entryFile = findEntryFile(meta.dir)
         if (!entryFile) continue
 
-        const { schemas } = await runPipeline({ sourceFile: entryFile })
+        const { schemas } = await runPipeline({ sourceFile: entryFile, tsconfig: opts.tsconfig })
         pkgEntries.push({ id: meta.id, schemas, importPath: meta.importPath })
       }
 
