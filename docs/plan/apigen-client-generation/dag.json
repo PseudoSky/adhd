@@ -517,6 +517,20 @@
       ],
       "context": "contexts/canonical-descriptor.md",
       "notes": "SPEC §4: Operation{id,host,namespace,path,kind,async,streaming,input,output,envelope,typeText} + Segment{raw,words}; JSON Schema 2020-12 IR. The neutral contract every extractor emits and every plugin consumes."
+    },
+    "naming-helpers": {
+      "kind": "work",
+      "phase": "v2-core",
+      "depends_on": [
+        "canonical-descriptor"
+      ],
+      "guard": "npx --yes nx test apigen-naming",
+      "artifacts": [
+        "packages/apigen/naming/src/lib/naming.ts",
+        "packages/apigen/naming/project.json"
+      ],
+      "context": "contexts/naming-helpers.md",
+      "notes": "SPEC §5: @adhd/apigen-naming — tokenizer + toKebab/toPascal/toSnake/toCamel + per-transport projection (HTTP kebab, MCP _, gRPC Pascal, CLI kebab); file-name normalize; default/default-object/index rules."
     }
   },
   "authored_with": {
