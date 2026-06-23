@@ -216,6 +216,50 @@ export const contextRulesTable = sqliteTable(
 );
 
 // ──────────────────────────────────────────────
+// registry_composed_prompts  (composed-prompt-cache state)
+//
+// Cache + audit table for assembled prompts.
+// [def:composed-prompt] (contexts/_shared.md)
+//
+// `context_hash` is the SHA-256 of the sorted-key JSON canonicalization of the
+// runtime context map used at assembly time. Same inputs in any key order →
+// identical hash. This makes (agent_slug, context_hash) an O(1) cache key.
+// Index on (agent_slug, context_hash) supports the lookup hot-path.
+//
+// `component_versions` is a JSON map `{componentSlug: version}` recording the
+// exact component version resolved during assembly — the audit trail GOAL.md
+// "Audit Trail" depends on (Decision 4, decisions.md). A cache miss (or a new
+// unpinned component advancing to a later version) triggers a new write.
+//
+// agent_slug is a LOGICAL FK only (no .references()) — cross-concern, same as
+// the pattern in registry_context_rules for cross-prefix references. The store
+// layer enforces the link at write time.
+// ──────────────────────────────────────────────
+export const composedPromptsTable = sqliteTable(
+    "registry_composed_prompts",
+    {
+        id: integer("id").primaryKey({ autoIncrement: true }),
+        agentSlug: text("agent_slug").notNull(),
+        // SHA-256 of sorted-key JSON canonicalization of the context inputs.
+        // Same map with different key orderings → same hash. [ref: contextHash helper]
+        contextHash: text("context_hash").notNull(),
+        // The final flat assembled prompt text.
+        content: text("content").notNull(),
+        // JSON object: { [componentSlug]: version } — full audit record.
+        // Proves exactly which component versions produced this composed prompt.
+        componentVersions: text("component_versions").notNull(),
+        createdAt: text("created_at").notNull(),
+    },
+    (t) => ({
+        // O(1) cache lookup: (agent_slug, context_hash) index.
+        agentHashIdx: index("registry_composed_prompts_agent_hash_idx").on(
+            t.agentSlug,
+            t.contextHash
+        ),
+    })
+);
+
+// ──────────────────────────────────────────────
 // registry_agent_components  (composition-junction state)
 //
 // Junction table binding agents to their ordered component set.
