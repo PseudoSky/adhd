@@ -710,7 +710,8 @@
         "projection-transports",
         "mount-plugins",
         "error-taxonomy",
-        "naming-helpers"
+        "naming-helpers",
+        "conformance-vectors"
       ],
       "guard": "npx --yes nx run-many -t build -p apigen-core apigen-naming apigen-errors apigen-schema apigen-conformance apigen-gateway",
       "artifacts": [
