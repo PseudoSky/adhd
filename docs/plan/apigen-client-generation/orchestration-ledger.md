@@ -238,3 +238,21 @@ WHY MISSED (meta): fixtures only covered named exports; extraction & runtime tes
 | integration-tests-v2 | test-automator | sonnet |
 | audit-v2-core / -harness / -projection | code-reviewer | opus |
 | audit-final-v2 | code-reviewer / security-auditor | opus |
+
+---
+
+## REMEDIATION AMENDMENT (2026-06-22) — folds architect reviews (plan R1–R13 + design Tenet 1/D1–D11)
+
+Recorded as `--amend --class planner --type replan` on `canonical-descriptor` (blocked, exit 2). Proposal: `replan-amendment-proposal.md`. Reviews: `replan-architect-review.md` (plan) + `docs/apigen/SPEC-design-review.md` (design). Caller decisions: **H1 real Python host** · **H2 classes static+instance-opt-in now** · **H3 defer neutral codegen**.
+
+**Applied & verified (gap-check PASSED 0-warn · integrity clean · env-pin 45/45):**
+- **+2 phases** `v2-scaffold`, `v2-host-contract`; **+6 states** `scaffold-v2-common`, `scaffold-v2-ts-plugins`, `class-exports`, `streaming-projection`, `python-host`, `audit-v2-host`.
+- **R3/R6** — 9 new packages now scaffolded in **final §12 homes** (common ×6 incl. `apigen-schema`; ts-plugins ×3); `package-restructure` becomes a verify gate. Dep edges added so each fill-state depends on its scaffold.
+- **R1** — `audit_apigen.py` now defines + registers `phase_v2_core/harness/projection/host`; the v2 audit guards run (exit 1 fail-until-built, no more argparse-2). Real-spec command stubs with negative-control TODOs for the audit executors.
+- **R5** — real DAG edge `package-restructure → conformance-vectors`. **R13** — `anonymous-default` + CJS shape fixtures added to `integration-tests-v2`. **R7** — `dod.6` → `nx run-many -t build -p apigen-*` (full v2 set), gated after restructure.
+- **Design folded into state scope** (per-state, via node notes): `safe`/live-`query`/`$defs`-IR → `canonical-descriptor`; collision + verb-from-safe + envelope-binding → `naming-helpers`; exported-symbol + shape matrix → `ts-extractor-by-symbol`; §8.1 → `layer-harness`; §9.1 → `projection-transports`; full streaming → `streaming-projection`; §13.1 failure model → `gateway`; §10 → `class-exports`; §14 real host → `python-host`.
+- **Frontier:** `current_state = scaffold-v2-common` (started). Counts: 19 complete · 1 in_progress · 24 pending · 1 blocked (`canonical-descriptor`, unblocks on `--start` once deps clear).
+
+**Decision: teeth via audit-phase checks, not per-work-state `criteria.json` (R2 mitigation).** Matches the v1 pattern (work states build; audit states verify via `audit_apigen.py` phases driving real specs). The v2 audit phases carry the acceptance checks; per-state declarative criteria can still be layered later if desired.
+
+**PENDING — needs caller confirmation before write (R4/R10, DoD-elicitation gate):** rewrite `dod.1/2/5` to the §9.1 metadata carrier + repoint `probe_mcp.mjs` to the F26 bundled bin + standalone-bin clause; **new behavioral clauses** dod.14 streaming (error-after-first-chunk), dod.15 safe/verb-override, dod.16 collision-is-hard-error, dod.17 gateway partial-availability, dod.18 class static+instance — then `state-transition.js --confirm-dod`. Presented to caller for approval.

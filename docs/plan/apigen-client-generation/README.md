@@ -113,9 +113,9 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - delivered-by: plugin-cli-output, cli-generate-cmd, integration-tests-v2
   - negative-control: drop a subcommand from the generated `cli.ts` produced by `generate --source packages/apigen/cli/src/test/fixtures/real-api.ts --type cli-output` → that subcommand errors → its stdout no longer deep-equals the derived ground truth → this clause (dod.cli) goes red.
 
-- `[dod.6]` All 9 packages build cleanly. [structural]
-  - Proven by: `npx --yes nx run-many --target=build --projects=apigen-core,apigen-runtime,apigen-plugin-mcp,apigen-plugin-jsonschema,apigen-plugin-api-fastify,apigen-plugin-api-express,apigen-plugin-cli-output,apigen-nx,apigen-cli` exits 0.
-  - delivered-by: scaffold-packages, scaffold-plugins, plugin-jsonschema, plugin-api-fastify, plugin-api-express, plugin-cli-output, nx-generator
+- `[dod.6]` All apigen packages (v1 + v2 common, TS plugins, Python host) build cleanly. [structural]
+  - Proven by: `npx --yes nx run-many --target=build --projects=apigen-*` exits 0 (covers the v2 common packages, restructured `apigen-ts-plugin-*`, and codegen — gated after `package-restructure` so the final names are in effect).
+  - delivered-by: scaffold-packages, scaffold-plugins, plugin-jsonschema, plugin-api-fastify, plugin-api-express, plugin-cli-output, nx-generator, scaffold-v2-common, scaffold-v2-ts-plugins, package-restructure
 
 - `[dod.7]` The `@adhd/apigen-nx:generate` executor runs as an Nx cache-aware target.
   - entrypoint: `npx --yes nx run apigen-cli:generate-api` (run twice)
