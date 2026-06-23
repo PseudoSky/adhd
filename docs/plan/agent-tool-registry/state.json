@@ -32,10 +32,10 @@
       "end_ref": "30cb357807a04e0c99972a8a18ff94075c94a5db"
     },
     "agent-tool-junction": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T21:59:58.523Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "bbaa71b7949055da462d4d3c14a2055639a87b45",
       "end_ref": null
     },
     "audit-schema": {
