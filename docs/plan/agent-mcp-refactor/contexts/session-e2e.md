@@ -20,6 +20,7 @@
 
 - [session-e2e.2] cache: second session with same agent+context reuses composed_prompt (no recompile; proven by reopen)
 - [session-e2e.3] negative-control: breaking the compiler call in prompt-resolver turns the e2e clause RED
+- [session-e2e.4] non-regression: full agent-mcp unit suite still passes after the refactor
 ---
 
 ## Reservations
