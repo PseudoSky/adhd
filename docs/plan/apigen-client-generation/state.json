@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "audit-v2-harness",
+  "current_state": "conformance-vectors",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -235,11 +235,11 @@
       "end_ref": "ebd30baef8707c350c1fee229432fe81e12a0fef"
     },
     "audit-v2-harness": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T03:09:28.149Z",
-      "done_at": null,
+      "done_at": "2026-06-23T03:09:39.476Z",
       "start_ref": "66aa0ae935ed61e5208810ced4cd60f4dd231383",
-      "end_ref": null
+      "end_ref": "7d418112db187e1de34d631c07a8110bee9607fc"
     },
     "plugin-interface": {
       "status": "complete",
@@ -695,6 +695,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "§9.1 envelope binding + §5 verb-from-safe across 4 transports (fastify/express/mcp/cli). All 4 plugin test suites green (orch-verified, incl. apigen-plugin-cli-output run under correct name per F39). Re-completed after F40 lost-update reverted it. Byte-proxy telemetry."
+    },
+    {
+      "ts": "2026-06-23T03:09:39.476Z",
+      "from": "audit-v2-harness",
+      "to": "audit-v2-harness",
+      "start_ref": "66aa0ae935ed61e5208810ced4cd60f4dd231383",
+      "end_ref": "7d418112db187e1de34d631c07a8110bee9607fc",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "v2-harness audit gate: 3/3 checks passed (v2-harness.invoke §8.1 layer semantics; v2-harness.validation invalid_argument short-circuit; v2-harness.errors per-transport status maps). audit_apigen.py --phase v2-harness exit 0, orchestrator-verified."
     }
   ],
   "amendment_log": [
