@@ -43,7 +43,17 @@
         "./packages/apigen/plugins/jsonschema/src/index.ts"
       ],
       "@adhd/apigen-plugin-mcp": ["./packages/apigen/plugins/mcp/src/index.ts"],
+      "@adhd/apigen-codegen-openapi": [
+        "./packages/apigen/codegen/openapi/src/index.ts"
+      ],
+      "@adhd/apigen-conformance": [
+        "./packages/apigen/conformance/src/index.ts"
+      ],
+      "@adhd/apigen-errors": ["./packages/apigen/errors/src/index.ts"],
+      "@adhd/apigen-gateway": ["./packages/apigen/gateway/src/index.ts"],
+      "@adhd/apigen-naming": ["./packages/apigen/naming/src/index.ts"],
       "@adhd/apigen-runtime": ["./packages/apigen/runtime/src/index.ts"],
+      "@adhd/apigen-schema": ["./packages/apigen/schema/src/index.ts"],
       "@adhd/data": ["./packages/data/src/index.ts"],
       "@adhd/decompile": ["./packages/decompile/src/index.ts"],
       "@adhd/query": ["./packages/query/src/index.ts"],
