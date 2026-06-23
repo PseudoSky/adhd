@@ -220,6 +220,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-cache.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-engine.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-compiler/scripts/audit_compiler.py --phase schema",
+      "expect": "exit0"
     }
   ]
 }
