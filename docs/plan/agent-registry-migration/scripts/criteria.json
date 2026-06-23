@@ -158,6 +158,14 @@
       "paths": [
         "packages/ai/agent-registry-migration/src/import/import-skill.ts"
       ]
+    },
+    {
+      "id": "roundtrip-equivalence-gate.1",
+      "phase": "verify",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts",
+      "expect": "exit0"
     }
   ]
 }
