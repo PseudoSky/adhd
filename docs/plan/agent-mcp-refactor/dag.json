@@ -149,7 +149,7 @@
       "kind": "audit",
       "phase": "audit",
       "depends_on": [
-        "policy-engine-bridge"
+        "code-review-integration"
       ],
       "guard": "python3 docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py --phase integration",
       "artifacts": [
@@ -176,7 +176,7 @@
       "kind": "audit",
       "phase": "audit",
       "depends_on": [
-        "session-e2e"
+        "code-review"
       ],
       "guard": "python3 docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py --phase final",
       "artifacts": [
