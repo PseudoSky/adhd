@@ -6,7 +6,8 @@
     "foundation",
     "schema",
     "composition",
-    "seed"
+    "seed",
+    "audit"
   ],
   "terminal": "done",
   "nodes": {},
