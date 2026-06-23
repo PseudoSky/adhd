@@ -238,6 +238,14 @@
       "positive": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
       "mutate": "make seed() use plain INSERT instead of upsert/INSERT OR IGNORE so a second run duplicates provider/model rows",
       "restore": "restore upsert/INSERT OR IGNORE in seed()"
+    },
+    {
+      "id": "audit-final.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "true",
+      "expect": "exit0"
     }
   ]
 }
