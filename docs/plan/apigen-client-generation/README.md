@@ -168,6 +168,14 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - observable: `adhd-apigen run --type mcp --use logger --use health presents the MCP target with the logger Layer active (per-op log) and the health mount answering _meta/health; --type selects the target, --use loads layer/mount/envelope plugins`
   - negative-control: `Ignore --use so packages/apigen/cli/src/test/integration/canonical.spec.ts sees the logger Layer absent / health mount missing -> its --use composition assertion goes red`
   - delivered-by: `unified-cli, projection-transports, logger-layer-plugin, mount-plugins, integration-tests-v2`
+- `[dod.14]` **Streaming delivers chunks and errors in-band after the first chunk (behavioral)** — Streaming delivers chunks and errors in-band after the first chunk.
+  - given: a streaming:true op behind a transport
+  - when: the producer throws after chunk #1
+  - then: the consumer receives an in-band ApiError, not a dropped stream
+  - entrypoint: `packages/apigen/cli/src/test/integration/streaming.spec.ts`
+  - observable: `a streaming op yields chunks; an error AFTER the first chunk arrives in-band (SSE event:error / gRPC trailing status / MCP progressive error / CLI stderr+nonzero-exit); mid-stream cancel runs the Layer end path`
+  - negative-control: `Swallow the post-first-chunk error in packages/apigen/cli/src/test/integration/streaming.spec.ts -> its in-band error assertion goes red`
+  - delivered-by: `streaming-projection, layer-harness, error-taxonomy, audit-v2-projection, integration-tests-v2`
 ---
 
 ## Execution model
