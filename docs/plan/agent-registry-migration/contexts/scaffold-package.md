@@ -19,6 +19,7 @@
 - [scaffold-package.1] project.json exists
 
 - [scaffold-package.2] tagged platform:node
+- [scaffold-package.3] tsconfig path registered
 ---
 
 ## Reservations
