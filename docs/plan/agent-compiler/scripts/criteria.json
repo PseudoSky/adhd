@@ -156,6 +156,16 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/model-policy.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "platform-markdown-emit.1",
+      "phase": "emit",
+      "tier": null,
+      "kind": "present",
+      "pattern": "compileAgent",
+      "paths": [
+        "packages/ai/agent-compiler/src/compile.ts"
+      ]
     }
   ]
 }
