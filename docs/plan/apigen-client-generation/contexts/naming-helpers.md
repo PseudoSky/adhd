@@ -1,6 +1,6 @@
 # naming-helpers — STATE_NAME
 
-**Phase:** v2-core · **Kind:** work · **Depends on:** canonical-descriptor · **Guard:** `npx --yes nx test apigen-naming`
+**Phase:** v2-core · **Kind:** work · **Depends on:** canonical-descriptor, scaffold-v2-common · **Guard:** `npx --yes nx test apigen-naming`
 
 ---
 
