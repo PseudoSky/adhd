@@ -155,6 +155,18 @@
       ],
       "context": "contexts/audit-final.md",
       "notes": ""
+    },
+    "design-and-architecture": {
+      "kind": "work",
+      "phase": "architecture",
+      "depends_on": [],
+      "guard": "true",
+      "artifacts": [
+        "docs/plan/agent-registry-schema/contexts/design-and-architecture.md",
+        "docs/plan/agent-registry-schema/decisions.md"
+      ],
+      "context": "contexts/design-and-architecture.md",
+      "notes": ""
     }
   },
   "authored_with": {
