@@ -200,6 +200,14 @@
       "kind": "command",
       "cmd": "python3 docs/plan/agent-registry-schema/scripts/audit_registry_schema.py --phase schema",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-final.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-registry-schema/scripts/audit_registry_schema.py --phase final",
+      "expect": "exit0"
     }
   ]
 }
