@@ -179,10 +179,10 @@
       "end_ref": null
     },
     "integration-tests-v2": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T05:45:24.255Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "9419c2faf13c543cda7f9bfd5028e6c9efe2e5b2",
       "end_ref": null
     },
     "canonical-descriptor": {
