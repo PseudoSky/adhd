@@ -32,10 +32,10 @@
       "end_ref": "e0fc0be470954d59a2a8fc9b927e5b71902ab0e9"
     },
     "audit-schema": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T23:36:56.852Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "1d30e81d45f27f74de2f5b22e5063ea288d7b1b3",
       "end_ref": null
     },
     "provider-adapter-contract": {
