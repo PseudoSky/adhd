@@ -186,6 +186,15 @@
       "paths": [
         "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts"
       ]
+    },
+    {
+      "id": "roundtrip-equivalence-gate.4",
+      "phase": "verify",
+      "tier": null,
+      "kind": "negative-control",
+      "positive": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts",
+      "mutate": "node docs/plan/agent-registry-migration/scripts/nc_mutate.mjs",
+      "restore": "node docs/plan/agent-registry-migration/scripts/nc_restore.mjs"
     }
   ]
 }
