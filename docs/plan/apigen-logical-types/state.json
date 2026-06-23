@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "title": "apigen logical-types — cross-language serialization",
+  "dag": "dag.json",
+  "states": {},
+  "transition_log": [],
+  "amendment_log": [],
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.23",
+    "hash": "1e4130a84aed"
+  }
+}
