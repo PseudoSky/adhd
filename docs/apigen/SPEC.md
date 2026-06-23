@@ -18,6 +18,24 @@
 > Any feature that forces the developer to stop writing plain functions and instead maintain a
 > spec or wire generated stubs **violates the objective** and must be rejected or redesigned.
 
+## Tenet 1 — Source is never modified; configuration is out-of-source  *(the corollary)*
+
+> **The developer's source — functions and their types — is the only source of truth, and it is
+> never modified, annotated, or decorated to drive generation.** This extends Tenet 0 from *basic
+> exposure* to *everything*: there is **no required source annotation, ever** — not for exposure,
+> not for exclusion, not for projection overrides. Every configuration has a **standardized
+> out-of-source mechanism**, consumed at extract / generate / run time:
+> - **Exposure / exclusion** → don't-`export`, or out-of-source `--include <glob>` / `--exclude <id>`
+>   (§3). Source-level `_`-prefix / `@internal` may exist as a convenience but are never the *only* way.
+> - **Projection overrides** (HTTP verb, route, name, casing, mount) → CLI flags / plugin `--opt` /
+>   a project config file, owned by the projection/plugin layer (§5, §7) — never a source annotation.
+> - **Descriptor metadata** (e.g. the optional `x-apigen-*` type hints, §4) is **extractor-derived**,
+>   never hand-authored.
+>
+> Acceptance test: *if achieving a behavior requires editing the source for any reason other than
+> changing what the functions actually do, the design is wrong — move it out-of-source.* This closes
+> the "just one tasteful annotation" question permanently: the answer is always the out-of-source seam.
+
 ---
 
 ## 1. Architecture — one CLI front, three stages, a neutral seam
@@ -70,10 +88,14 @@ TS/Python/Go/Java.
 
 Every **export** is exposed. Opt-out ladder (most→least Tenet-0-pure):
 1. **don't `export`** it (non-exports are private) — primary.
-2. **`--exclude <id…>` / `--include <glob>`** at run/generate (zero source change; uses §4 ids).
+2. **`--exclude <id|glob…>` / `--include <glob>`** at run/generate (zero source change).
 3. **`_`-prefixed** name, or standard **`@internal`** TSDoc — source-level.
 
 Opt-out never violates Tenet 0: exposure is the zero-ceremony default; markers only *withhold*.
+
+**Identity note:** `--exclude` accepts **either a derived `id` or a source-glob**. An `id` selector
+re-mints under refactor (§4 — `id` is deterministic, not refactor-stable); a **glob or source-level
+marker is refactor-stable**. Prefer a glob when you need a selector that survives file/export moves.
 
 ---
 
@@ -81,13 +103,14 @@ Opt-out never violates Tenet 0: exposure is the zero-ceremony default; markers o
 
 ```jsonc
 Operation = {
-  "id":        "transform/humanize/humanize-bytes",  // STABLE, globally-unique referential slug
+  "id":        "transform/humanize/humanize-bytes",  // deterministic (derivation-stable), globally-unique slug
   "host":      "ts",                                  // owning language runtime
   "namespace": Segment,            // package (from --namespace / tsconfig folder)
   "path":      Segment[],          // file → export… (hierarchical identity)
   "kind":      "action" | "query" | "constructor" | "instance-method",
   "async":     boolean,
   "streaming": boolean,            // AsyncIterable/Generator/Stream return
+  "safe":      boolean,            // idempotent/no-side-effects; default query=true,action=false; override via projection config (§5)
   "input":     JSONSchema,         // params object (ctx excluded); data-wrapper dissolved
   "output":    JSONSchema,         // Promise<T>/stream unwrapped → T
   "envelope":  JSONSchema,         // effective request side-channel (middleware-contributed)
@@ -97,13 +120,35 @@ Segment = { "raw": "humanizeBytes", "words": ["humanize","bytes"] }   // casing-
 ```
 
 - **`id`** = the canonical fully-qualified slug; the cross-plugin reference key; never re-cased.
+  **Deterministic, not refactor-stable:** `id` is a pure function of `namespace/path`, so the same
+  source always yields the same `id`, but moving/renaming a file or export re-mints it (and thus
+  breaks any pinned `--exclude` id or client). This is accepted and documented — **not** papered over
+  with a source `@id` annotation, which Tenet 1 forbids. Refactor-stability is a non-goal.
 - **`kind`**: `action` = callable export (function decl or arrow/const fn); `query` = a
   **serializable-data** const (primitive or plain serializable object/array — no functions/
   non-serializable). `constructor`/`instance-method` → §10. Non-serializable, non-callable export
-  → **skipped + warned**.
-- **Type IR = JSON Schema 2020‑12** (`input`/`output`/`envelope`). `input` is the params object
-  directly; `ctx` first-param excluded. Optional **`typeText`** carries the host's native type
-  expression for high-fidelity SDK regen (non-host targets ignore it).
+  → **skipped + warned**. A `query` is served **live** — the descriptor carries its *type* (schema),
+  **not** its value; the running runtime reads the current binding at request time, so
+  env-/compute-dependent consts are never stale-at-extract.
+- **`safe`** = idempotent / no-side-effects hint; **defaults from `kind`** (`query`→true,
+  `action`→false) and is **overridable at projection time via config**, never a source annotation
+  (Tenet 1). Drives HTTP verb + cacheability and gRPC idempotency-level (§5) — decoupling the method
+  from `kind`.
+- **Type IR = JSON Schema 2020‑12 + `$defs`/`$ref`** (`input`/`output`/`envelope`) — this **is** the
+  type IR; there is **no separate/abstract type model and no new IR**. Named types, discriminated
+  unions / enum‑with‑data / `Result`/`Option` (`oneOf` + a `const` tag + `$ref` — exactly what
+  `schemars` / `ts-json-schema-generator` already emit), nominal/branded types (a named `$def`;
+  validation correctly does not enforce nominality because on the wire it *is* the base type), and
+  recursion (`$ref`) are all represented **faithfully** — no accuracy gap. `input` is the params
+  object directly; `ctx` first‑param excluded. **Wire convention:** 64‑bit ints / decimals are
+  **string‑encoded** (`type:string, format:int64`), since they exceed JSON's `f64` (a serialization
+  convention, not a schema‑expressiveness gap). The only true residual is **codegen ergonomics**
+  (generic *factoring* — `Page<User>`/`Page<Order>` lower to two accurate concrete `$defs`; an
+  unconstrained generic *operation* isn't serializable, so it's out of scope by physics).
+  **Optional, extractor‑*derived*** `x-apigen-*` hints (`nominal`, `enum-repr`) + an **optional**
+  `fidelity:"full"|"lossy"` flag exist *only* so codegen can emit idiomatic (vs accurate‑but‑verbose)
+  clients and warn on the rare unresolved generic — never required for correctness, and never a
+  source annotation. **`typeText`** is optional same‑host sugar (non‑host targets ignore it).
 - **`async`** + **`streaming`** flags (streaming implemented in v2, §11).
 
 ---
@@ -117,17 +162,25 @@ One canonical identity projects to each target's idiom; **casing is per-plugin**
 
 | Target | Projection | Result |
 |---|---|---|
-| HTTP | `/` + kebab segments; **action→POST**, **query→GET** (query-string params) | `POST /transform/humanize/humanize-bytes` |
+| HTTP | `/` + kebab segments; **verb from `safe`**: unsafe→POST, safe→GET (query-string params, cacheable) | `POST /transform/humanize/humanize-bytes` |
 | MCP | flat name, segments joined with **`_`** | `transform_humanize_humanize_bytes` |
 | gRPC | package=lower.dotted; service=Pascal(file); method=Pascal(export) | `transform.Humanize / HumanizeBytes` |
 | CLI | nested kebab commands | `… transform humanize humanize-bytes` |
 
 **Locked rules:**
+- **Verb is a function of `safe`, not `kind`:** unsafe→POST, safe→GET; the default `safe` comes from
+  `kind` (§4) and is overridable per-op via **projection config** (`--opt http.verb.<id>=GET` or
+  `apigen.config`), never a source annotation (Tenet 1). gRPC consumes `safe` as idempotency-level.
 - **File-name normalize:** strip extension; dots/underscores→hyphens (`file.name.ts`→`file-name`).
 - **Default export:** single default fn → `path=[file]`; default **object** →
   `path=[file,"default",…keys]`, recursing nested props; named exports coexist at `[file,name]`.
 - **Multi-file:** `--source` = file(s) or dir; dir globs `**/*.{ext}` excluding
   `*.spec.*`/`*.test.*`/`*.d.ts`; `index.*` drops its file segment.
+- **Uniqueness invariant:** two distinct `id`s MUST project to **distinct** targets in *every*
+  transport (no two ops may share an MCP flat name, HTTP route, gRPC method, or CLI command path).
+  `@adhd/apigen-naming` runs a collision check **once over the merged descriptor**; a collision is a
+  **hard extract-time error**, never silent last-writer-wins. (Guards the default-object recursion +
+  multi-file glob cases.)
 
 ---
 
@@ -145,6 +198,11 @@ source → extractor → DESCRIPTOR (JSON-Schema IR, produced ONCE)
 - **Validation is a built-in Layer** (§8): validate `data` vs `input` and `envelope` vs `envelope`
   once, before dispatch, with the host's validator (AJV / pydantic / schemars). Fail →
   `ApiError{invalid_argument}`. No per-plugin validation, no route-bound AJV quirks.
+- **Validation is necessary, not sufficient:** JSON-Schema validation is a fast-fail **pre-filter**,
+  not the host's native type guarantee — it can accept values the native deserializer would coerce or
+  reject (number precision, extra properties, date strings, `Option` vs missing). The **authoritative**
+  boundary is the host's typed dispatch (for static hosts, the codegen-woven deserialize→typed-params
+  step, §2). Hosts MUST NOT treat "validated" as "safe to transmute."
 
 ---
 
@@ -258,20 +316,69 @@ manifest. Usage: `adhd-apigen run --source api.ts --type http-fastify --use logg
 - **`ctx` = typed request-extensions** (type-keyed map; insert/read), NOT a mutable bag — required
   by Rust's borrow checker, better for all hosts.
 - **Realized per host idiomatically**: TS/Python `async (call,next)` closures; **Rust = Tower
-  `Layer`+`Service`**; gRPC interceptors. The contract is abstract (Layer *semantics* + `Call`),
-  not a literal closure signature.
+  `Layer`+`Service` (for HTTP *and* gRPC — tonic is Tower-based)**. **Not gRPC *interceptors*** —
+  they are metadata-only / per-RPC and cannot wrap streamed messages; a metadata-only Layer may use
+  one as a convenience, but the primitive is the Tower layer. The contract is abstract (Layer
+  *semantics* + `Call`, see §8.1), not a literal closure signature.
 - **Composition time**: dynamic hosts compose at runtime; static hosts (Rust/Go) **weave** at
   codegen. Same semantics.
 - Middleware/plugins are **operator-supplied at run/generate** (`--use`), declare their envelope
   fields (merged into the effective descriptor), and are never inferred from the API source.
+
+### 8.1 Layer semantics *(normative — the contract every host honors)*
+
+The **logger Layer in two hosts** (proof-of-dual; both must hold before a host is "first-class"):
+
+```ts
+// TS / Python — closure over the continuation
+layer: async (call, next) => {
+  const t = Date.now(); call.ctx.get(Logger).info({ op: call.operation.id }, '→')
+  try { const r = await next(); call.ctx.get(Logger).info({ ms: Date.now()-t }, 'ok'); return r }
+  catch (e) { call.ctx.get(Logger).error({ err: e }, 'fail'); throw e }
+}
+```
+```rust
+// Rust — Tower Layer + Service (same primitive for HTTP and gRPC)
+impl<S, Req: HasOperation> Service<Req> for LoggerService<S> where S: Service<Req> {
+  type Response = S::Response; type Error = S::Error; type Future = /* wrapped */;
+  fn poll_ready(&mut self, cx: &mut Context) -> Poll<Result<(), S::Error>> { self.inner.poll_ready(cx) }
+  fn call(&mut self, req: Req) -> Self::Future {
+    let (op, t) = (req.operation_id(), Instant::now());
+    let fut = self.inner.call(req);                 // short-circuit = don't call this
+    async move { match fut.await {
+      Ok(r)  => { info!(op, ms = ?t.elapsed(), "ok"); Ok(r) }
+      Err(e) => { error!(op, "fail"); Err(e) }      // error unwinds outward == throw
+    }}
+  }
+}
+```
+
+1. **Short-circuit:** a Layer that returns a `Result` without invoking `next` skips **all** downstream
+   Layers **and** dispatch.
+2. **Error propagation:** an error unwinds **outward** through each enclosing Layer (`throw` / `Err`),
+   which may catch and map it to a §9 `ApiError`.
+3. **`ctx`:** a typed-extension map (type-keyed; insert/read) **owned by the request** and threaded
+   `mw→mw→fn` — i.e. Tower/`http::Extensions`. This is why §8 chose typed extensions over a mutable
+   bag: it is the only `ctx` shape expressible under Rust's borrow checker.
+4. **Backpressure (`poll_ready`):** a **host-optional** capability *outside* the base Layer contract.
+   Hosts that have it (Rust/Tower) expose it for load-shed/rate-limit Layers; Layers that don't need
+   it delegate to inner; dynamic hosts (TS/Python) omit it entirely.
+5. **Streaming:** a Layer wraps the **response stream** (start / each-chunk / end / error), which is
+   *why* the Rust mapping is a Tower layer over the gRPC `Service` (whose body is the stream) and
+   **not** an interceptor. Full stream-lifecycle contract: §11.
+6. **Composition time:** dynamic hosts compose at runtime; static hosts (Rust/Go) **weave** at
+   codegen — same semantics 1–5.
 
 ---
 
 ## 9. Envelope & errors
 
 - **Request envelope** = typed side-channel from transport-native **metadata** (HTTP headers, gRPC
-  metadata, CLI flags/env, MCP context), **not the body**. Field binding is **strict**:
-  `x-<plugin-id>-<field>` (plugin-contributed) / `x-adhd-<field>` (builtin).
+  metadata, CLI flags/env, MCP `_meta`), **not the body**. Canonical identity is
+  **`(pluginId, field)`** (builtin = `adhd`), declared once in the plugin's `EnvelopeCapability` and
+  carried in the descriptor `envelope` schema; each adapter re-surfaces it per the **binding table
+  (§9.1)** — every k/v carrier shares the `x-<pluginId>-<field>` key; **CLI** alone re-surfaces as a
+  flag/env because it has no metadata channel.
 - **Response envelope** = a typed wrapper (standard builtin fields + plugin-extensible) around
   results **by default**, with a **complete opt-out** → raw passthrough (inferred response types).
 - **Errors:** the harness throws `ApiError{ code, message, details }` using the **gRPC canonical
@@ -284,6 +391,24 @@ manifest. Usage: `adhd-apigen run --source api.ts --type http-fastify --use logg
 | permission_denied | 403 | PERMISSION_DENIED | error | 3 |
 | not_found | 404 | NOT_FOUND | error | 4 |
 | internal | 500 | INTERNAL | error | 1 |
+
+### 9.1 Envelope binding *(normative — mirrors the error table)*
+
+Canonical identity = **`(pluginId, field)`** (builtin → `adhd`). The logical name is transport-agnostic;
+each adapter owns the surface syntax. Example field `session` of plugin `auth`:
+
+| Transport | Request surface | Response surface |
+|---|---|---|
+| **HTTP** | header `x-auth-session: <v>` | response header `x-auth-session` |
+| **gRPC** | metadata key `x-auth-session` (ASCII; binary value → key `x-auth-session-bin`, base64) | trailer `x-auth-session` |
+| **CLI** | flag `--auth-session <v>` **+** env `APIGEN_AUTH_SESSION` (flag > env) | stderr / exit per the error table |
+| **MCP** | `_meta["x-auth-session"]` (header-shaped key in the structured `_meta`) | `_meta["x-auth-session"]` |
+
+**Rules:** (1) all **k/v carriers** (HTTP, gRPC, MCP) use the **same `x-<pluginId>-<field>` key** — one
+mental model. (2) **CLI** is the sole carrier that re-surfaces (no metadata channel): flag
+`--<pluginId>-<field>` + env `APIGEN_<PLUGINID>_<FIELD>`, flag taking precedence. (3) builtin fields
+drop the plugin segment → `x-adhd-<field>` / `--adhd-<field>` / `APIGEN_<FIELD>`. (4) the response
+envelope uses the same table in the response direction (header → trailer → `_meta` → exit/stderr).
 
 ---
 
@@ -298,12 +423,47 @@ manifest. Usage: `adhd-apigen run --source api.ts --type http-fastify --use logg
 
 ---
 
-## 11. Streaming *(in scope now)*
+## 11. Streaming *(full — in scope now)*
 
-`streaming` flag carried; harness result is value **or** async stream; Layers wrap the stream
-lifecycle (start/each/end/error). Projections: gRPC server-streaming, HTTP SSE/chunked, MCP
-progressive, CLI line-stream. Reactive operators are an **[OPT]** target-specific add-on, never the
-base.
+A `streaming:true` operation returns an async stream (`AsyncIterable`/generator · Rust `Stream` · gRPC
+server-stream) instead of a value; the harness result is **value or stream**, and the **full Layer
+stream-lifecycle is in scope now** (not deferred). Projections: gRPC server-streaming · HTTP
+SSE/chunked · MCP progressive · CLI line-stream.
+
+**Layer stream contract (extends §8.1).** A Layer wraps the response **stream** and may act at:
+- **start** — before the first chunk (may still short-circuit or fail with a normal §9 status);
+- **each chunk** — observe / transform / drop (per-chunk map·filter); may end the stream early;
+- **end** — after the last chunk (finalize, metrics);
+- **error** — see the in-band table below.
+
+```ts
+// per-chunk Layer (e.g. redact) — wraps the stream, preserves backpressure
+layer: async function* (call, next) {
+  try { for await (const chunk of next()) yield redact(chunk) }   // each-chunk
+  catch (e) { throw toApiError(e) }                               // in-band if already flushed
+}
+```
+Realized as: TS/Python `async function*` wrapping `next()`; **Rust = a Tower layer over the streaming
+`Service` body** (§8.1) — never a gRPC interceptor.
+
+**Backpressure:** streams are **consumer-pull** — `for await` (TS/Python) / `Stream`+`poll_next`
+(Rust) slow the producer to the consumer; Layers must not buffer unboundedly.
+
+**Cancellation:** `call.signal` (AbortSignal · cancellation token · gRPC cancel · Rust drop) flows
+through every Layer to the producer; a cancelled stream runs each Layer's **end** path, not **error**.
+
+**Errors — the status-already-sent problem.** Once the first chunk is flushed the status line is gone,
+so an error **after** the first chunk is delivered **in-band**. apigen **adopts Connect's
+streaming-error semantics** (do not reinvent). The `ApiError{code,message,details}` payload (§9
+taxonomy) is identical across transports; only the carrier differs:
+
+| When | HTTP (SSE/chunked) | gRPC | MCP | CLI |
+|---|---|---|---|---|
+| **before** first chunk | normal §9 status (e.g. 400) | normal §9 status | error result | nonzero exit, empty stdout |
+| **after** first chunk | terminal `event: error` frame carrying the `ApiError` (or chunked trailer) | **trailing status** (native gRPC trailers) | progressive **error notification** | flush partial stdout, write `ApiError` to **stderr**, **nonzero exit** |
+
+Reactive operators (first-class map/merge/retry stream combinators) remain an **[OPT]**
+target-specific add-on, never the base.
 
 ---
 
@@ -351,7 +511,7 @@ inherits core, naming, errors, schema, conformance, the gateway, and *all* neutr
 per-language **extractor** (subprocess → JSON), merges into one descriptor (ops tagged `host`),
 then:
 - **generate** → runs target/codegen plugins on the unified descriptor (mixed-language is free).
-- **run** → presents one API; picks the **simplest viable topology**:
+- **run** → presents one API; picks the **simplest viable topology** (cost function + failure model: §13.1):
   - **all one host** → a single in-process runtime (zero overhead; today's path).
   - **mixed hosts** → **sidecar gateway** *(general, confirmed default)*: spawn a per-language
     runtime per host + `@adhd/apigen-gateway` presenting one transport and routing each op to its
@@ -361,6 +521,24 @@ then:
 `--source humanize.ts ping.rs` → merged descriptor → gateway routes `/transform/humanize/*` to the
 TS runtime, `/…/ping` to the Rust runtime, behind one HTTP/MCP/… surface. Layers/plugins are
 host-agnostic (the `Call` carries `operation.host`).
+
+### 13.1 Gateway failure model *(normative — a mixed-host `run` is a distributed system)*
+
+- **Partial availability:** a down host fails **only its own ops** → §9 `unavailable` (HTTP 503 /
+  gRPC UNAVAILABLE) for those routes; every other host keeps serving. Never whole-surface failure.
+- **Readiness:** each sidecar exposes the §7.2c `_meta/health` mount; the gateway routes a host's ops
+  **only after** it reports ready (startup-ordering safe). The gateway's own aggregate `_meta/health`
+  reports **per-host** status (`ready | degraded | down`).
+- **Supervision:** the gateway spawns, monitors, and **restarts** sidecars with backoff; a crash is
+  isolated to that host and the gateway process stays up (the host's ops report `unavailable` until it
+  is ready again).
+- **Deadlines & cancellation:** every cross-host op carries a deadline (from `call.signal` or a
+  default); a hung sidecar → §9 `deadline_exceeded`; cancellation propagates over IPC, and streaming
+  preserves consumer-pull backpressure (§11).
+- **Cost function (drives topology selection):** single-host = **in-process, zero hop**; mixed-host =
+  **one local-IPC round-trip per op** (serialize → IPC → deserialize), paid only when sources span
+  hosts; WASM/FFI co-host **[OPT]** removes the hop. The "simplest viable topology" selector
+  minimizes this cost: prefer in-process; pay the hop only for a genuinely mixed-host run.
 
 ---
 
@@ -401,11 +579,15 @@ this contract (see the replan).
 
 ## 16. Decision log (locked)
 
-Polyglot server hosts (B) · Tenet 0 · all-exports selection + `--exclude`/`_`/`@internal` ·
-unique `id` · `kind` action/query/constructor/instance-method · JSON-Schema 2020‑12 IR + `typeText`
+Polyglot server hosts (B) · Tenet 0 · **Tenet 1 (source never modified; all config out-of-source;
+no required annotations, ever)** · all-exports selection + `--exclude`/`_`/`@internal` ·
+deterministic (not refactor-stable) unique `id` · `kind` action/query/constructor/instance-method ·
+**JSON-Schema 2020‑12 + `$defs` IR (no new IR; big-int string-encoded; optional extractor-derived
+`x-apigen-*` hints; `typeText` optional)**
 · kebab/per-plugin casing · default→`[file]`, default-object→`[file,"default",…]` · multi-file dir
 glob · MCP sep `_` · central validation Layer · **plugin** unit + **Layer** primitive +
 capabilities{target,layer,mount,envelope} · `--type`/`--use` · plugins wrap+mount+envelope ·
 request+response envelopes, metadata source, strict `x-<id>-*` · gRPC error codes · classes
-(static now, instance opt-in) · streaming now · common vs per-language packaging + neutral codegen
+(static now, instance opt-in) · **full streaming now** (Layer stream-lifecycle; Connect
+error-after-first-chunk) · common vs per-language packaging + neutral codegen
 · **one CLI orchestrator** + sidecar-gateway run topology (WASM [OPT]).
