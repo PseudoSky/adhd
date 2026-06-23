@@ -20,3 +20,12 @@ One registry-driven, codegen-first mechanism that round-trips non-JSON-native ty
   - observable: `callTool returns at as RFC3339 UTC; an input Date arrives as a real Date (d.getTime works)`
   - negative-control: `revert the date-time codec -> at becomes {} / input stays string -> red`
   - delivered-by: `lt-scalars, lt-extract-scalars, lt-generator-emit, lt-dispatch-integration`
+
+- `[dod.2]` **An int64 beyond MAX_SAFE_INTEGER round-trips without precision loss (behavioral)** — An int64 beyond MAX_SAFE_INTEGER round-trips without precision loss.
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx nx test apigen-runtime`
+  - observable: `value survives as decimal string and decodes to an exact BigInt`
+  - negative-control: `decode int64 as a JS number -> precision corrupts -> red`
+  - delivered-by: `lt-scalars, lt-dispatch-integration`
