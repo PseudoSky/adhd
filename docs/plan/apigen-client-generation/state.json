@@ -202,9 +202,9 @@
     "ts-extractor-by-symbol": {
       "status": "complete",
       "started_at": "2026-06-23T02:33:16.649Z",
-      "done_at": "2026-06-23T02:56:47.933Z",
+      "done_at": "2026-06-23T03:01:56.689Z",
       "start_ref": "4d5ea9d697133d3985f2d795f17f207486da9422",
-      "end_ref": "2e5d6f8de015f4802e74218dbcabaeece744a503"
+      "end_ref": "1fdd6f8b3107cacce19dc3b56049fe879ab07b74"
     },
     "audit-v2-core": {
       "status": "pending",
@@ -661,11 +661,11 @@
       "note": "makeValidateLayer + validateLayer + ValidateSchemasToken implemented; 9 tests prove pass/short-circuit-with-latch/necessary-not-sufficient; all 41 runtime tests green"
     },
     {
-      "ts": "2026-06-23T02:56:47.933Z",
+      "ts": "2026-06-23T03:01:56.689Z",
       "from": "audit-v2-harness",
       "to": "ts-extractor-by-symbol",
       "start_ref": "4d5ea9d697133d3985f2d795f17f207486da9422",
-      "end_ref": "2e5d6f8de015f4802e74218dbcabaeece744a503",
+      "end_ref": "1fdd6f8b3107cacce19dc3b56049fe879ab07b74",
       "audit_exit": 0,
       "audit_criteria_passed": 0,
       "audit_criteria_total": 0,
