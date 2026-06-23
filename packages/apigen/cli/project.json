@@ -39,6 +39,25 @@
         ]
       }
     },
+    "generate-api": {
+      "executor": "@adhd/apigen-nx:generate",
+      "cache": true,
+      "outputs": [
+        "{workspaceRoot}/tmp/apigen-generate-out"
+      ],
+      "inputs": [
+        "default",
+        "^production"
+      ],
+      "dependsOn": [
+        "build"
+      ],
+      "options": {
+        "source": "src/test/fixtures/real-api.ts",
+        "type": "mcp",
+        "outDir": "tmp/apigen-generate-out"
+      }
+    },
     "nx-release-publish": {
       "options": {
         "packageRoot": "dist/{projectRoot}"

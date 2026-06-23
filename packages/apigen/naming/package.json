@@ -1,0 +1,10 @@
+{
+  "name": "@adhd/apigen-naming",
+  "version": "0.0.1",
+  "dependencies": {
+    "@adhd/apigen-core": "workspace:*"
+  },
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "typings": "./index.d.ts"
+}

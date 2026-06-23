@@ -17,6 +17,9 @@ const plugins: Record<string, OutputPlugin> = {
   'api-fastify': fastifyPlugin,
   'api-express': expressPlugin,
   cli: cliOutputPlugin,
+  // Alias: the published plugin id is `cli`; `cli-output` mirrors the package
+  // name (@adhd/apigen-plugin-cli-output) so `--type cli-output` also resolves.
+  'cli-output': cliOutputPlugin,
 }
 
 const program = new Command().name('apigen-cli').version('0.1.0')

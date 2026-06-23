@@ -1,24 +1,80 @@
-import type { OutputPlugin, PluginInput, PluginOutput<% if (hasRun) { %>, RunInput<% } %> } from '@adhd/apigen-core'
+import type {
+  Plugin,
+  Descriptor,
+  Harness,
+  Server,
+  Call,
+  Next,
+  Result,
+  Chunk,
+  File,
+} from '@adhd/apigen-core'
 
-export const <%= propertyName %>Plugin: OutputPlugin = {
+// Plugin-specific options — extend as needed.
+export interface <%= className %>Options {
+  // e.g. port?: number
+}
+
+/**
+ * <%= description %>
+ *
+ * Implements the v2 Plugin interface (SPEC §7.1) with a `target` capability.
+ * The `layer` capability is included as a skeleton — remove it if this plugin
+ * only generates files and does not need to wrap operations.
+ */
+export const <%= propertyName %>Plugin: Plugin<<%= className %>Options> = {
   id: '<%= pluginName %>',
   description: '<%= description %>',
+
   optionsSchema: {
     type: 'object',
-    properties: {},
+    properties: {
+      // TODO: declare plugin-specific option schemas here
+    },
   },
-  generate(input: PluginInput): PluginOutput {
-    // TODO: read `input` (functions/packages) and emit files
-    void input
-    return { files: [] }
-  },<% if (hasRun) { %>
 
-  async run(input: RunInput): Promise<void> {
-    // TODO: start server, register handlers, listen for input.signal
-    return new Promise<void>((resolve) => {
-      if (input.signal) input.signal.addEventListener('abort', () => resolve())
-    })
-  },<% } %>
+  capabilities: {
+    // ------------------------------------------------------------------
+    // target — project the descriptor to files (generate) and/or run a
+    //          live server (serve). Remove `serve` for codegen-only plugins.
+    // ------------------------------------------------------------------
+    target: {
+      name: '<%= pluginName %>',
+
+      generate(descriptor: Descriptor, _opts: <%= className %>Options): File[] {
+        // TODO: walk `descriptor.operations` and emit files.
+        void descriptor
+        return []
+      },<% if (hasRun) { %>
+
+      async serve(
+        descriptor: Descriptor,
+        harness: Harness,
+        _opts: <%= className %>Options,
+      ): Promise<Server> {
+        // TODO: start a transport server; wire harness.invoke() per request.
+        void descriptor
+        void harness
+        return {
+          async close(): Promise<void> {
+            // TODO: graceful shutdown
+          },
+        }
+      },<% } %>
+    },
+
+    // ------------------------------------------------------------------
+    // layer — optional onion wrapping all operations (SPEC §8 / §8.1).
+    //         Remove this block if the plugin has no cross-cutting concerns.
+    // ------------------------------------------------------------------
+    layer: {
+      layer(call: Call, next: Next): Promise<Result> | AsyncIterable<Chunk> {
+        // TODO: add cross-cutting logic (auth, logging, tracing, …).
+        void call
+        return next()
+      },
+    },
+  },
 }
 
 export default <%= propertyName %>Plugin

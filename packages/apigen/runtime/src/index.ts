@@ -1,3 +1,13 @@
+export { createInvoker } from './lib/invoke'
+export type {
+  Layer,
+  LayerResult,
+  Next,
+  Call,
+  LayerContext,
+  InvokeOptions,
+  InvokeFn,
+} from './lib/invoke'
 export { defineMiddleware } from './lib/define-middleware'
 export { EventBus, wireObservers } from './lib/event-bus'
 export { buildContext } from './lib/build-context'
@@ -18,3 +28,8 @@ export { describeParams } from './lib/describe-params'
 export type { ParamInfo } from './lib/describe-params'
 export { buildFnTable } from './lib/fn-table'
 export type { AnyFn } from './lib/fn-table'
+export { validateLayer, makeValidateLayer, ValidateSchemasToken } from './lib/validate-layer'
+export { InstanceRegistry } from './lib/instance-registry'
+export type { InstanceRegistryOptions, CreateResult, AnyConstructor } from './lib/instance-registry'
+export { createStream, drainStream, collectWithPhase, isApiStream } from './lib/stream'
+export type { ApiStream, CreateStreamOptions, CollectResult } from './lib/stream'

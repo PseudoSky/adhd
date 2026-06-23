@@ -1,0 +1,9 @@
+{
+  "name": "@adhd/apigen-plugin-logger",
+  "version": "0.0.1",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "@adhd/apigen-core": "*",
+    "pino": "10.3.1"
+  }
+}

@@ -6,7 +6,10 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The 3 v2 mount/Layer plugins (logger, openapi, health) exist as buildable nx projects
+`apigen-plugin-{logger,openapi,health}` at `packages/apigen/plugins/<name>`, **scaffolded via the
+upgraded `@adhd/apigen-nx:plugin` generator** so they share the canonical v2 plugin shape. (Slug retains
+the legacy "ts-plugins" name; the real home is `packages/apigen/plugins/`, NOT `ts/plugins/` — F38 closed.)
 
 ---
 
@@ -31,4 +34,11 @@ mutates:    ["packages/apigen/plugins/logger/project.json", "packages/apigen/plu
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+DOGFOOD the generator — do NOT hand-roll these. For each of logger, openapi, health run:
+`npx --yes nx g @adhd/apigen-nx:plugin <name>` (creates `packages/apigen/plugins/<name>`, project
+`apigen-plugin-<name>`, and updates `tsconfig.base.json` automatically). The plugins.ts is a v2-shape
+stub; the FILL states (`logger-layer-plugin`, `mount-plugins`) overwrite `src/lib/plugin.ts` with real
+impl later — leave the generated stub buildable.
+DEPRECATION HYGIENE: ensure NO `packages/apigen/ts/` dir and NO `apigen-ts-plugin-*` project are ever
+created (that abandoned path is fully removed/never materialized). Guard:
+`npx --yes nx run-many -t build -p apigen-plugin-logger apigen-plugin-openapi apigen-plugin-health` → green.
