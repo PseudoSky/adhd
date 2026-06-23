@@ -86,6 +86,21 @@
       ],
       "context": "contexts/usecase-and-context-rules.md",
       "notes": ""
+    },
+    "composed-prompt-cache": {
+      "kind": "work",
+      "phase": "composition",
+      "depends_on": [
+        "usecase-and-context-rules"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-registry/src/db/schema.ts",
+        "packages/ai/agent-registry/src/store/composed-prompt-store.ts",
+        "packages/ai/agent-registry/src/index.ts"
+      ],
+      "context": "contexts/composed-prompt-cache.md",
+      "notes": ""
     }
   },
   "authored_with": {
