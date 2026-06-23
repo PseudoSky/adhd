@@ -772,8 +772,8 @@ def phase_final() -> list[CheckResult]:
     # [dod.6] All 9 packages build
     results.append(check(
         "dod.6",
-        "all 9 packages build cleanly",
-        "npx --yes nx run-many --target=build --projects=apigen-core,apigen-runtime,apigen-plugin-mcp,apigen-plugin-jsonschema,apigen-plugin-api-fastify,apigen-plugin-api-express,apigen-plugin-cli-output,apigen-nx,apigen-cli"
+        "all apigen packages (v1 + v2) build cleanly",
+        "npx --yes nx run-many --target=build --projects=apigen-*"
     ))
 
     # [dod.7] Nx executor cache-aware — run TWICE and prove caching is the feature:
@@ -924,6 +924,57 @@ def phase_final() -> list[CheckResult]:
     return results
 
 # --------------------------------------------------------------------------- #
+# v2 phase audits (R1 fix — registered so the v2 audit guards no longer argparse-exit-2).
+# STUBS: the audit-v2-* executors MUST replace each command with one that DRIVES the real
+# entrypoint, DERIVES the observable, is exit-code-gated, and proves its negative control.
+# Until the specs land these fail by design (forcing function — no silent pass).
+# --------------------------------------------------------------------------- #
+
+def phase_v2_core() -> list[CheckResult]:
+    return [
+        check("v2-core.descriptor", "descriptor: safe flag + deterministic id + JSON-Schema 2020-12 + $defs IR",
+              "npx --yes nx test apigen-core descriptor"),
+        check("v2-core.export-shape", "extractor names by EXPORTED symbol across the shape matrix (named/renamed-as/default-fn/default-object/anonymous/CJS)",
+              "npx --yes nx test apigen-cli export-shape-matrix"),
+        check("v2-core.naming-collision", "naming projections + uniqueness invariant (collision = hard extract-time error)",
+              "npx --yes nx test apigen-naming"),
+        check("v2-core.classes", "class exports: static methods -> ops; instance constructor/method + registry lifecycle (opt-in)",
+              "npx --yes nx test apigen-core classes"),
+    ]
+
+def phase_v2_harness() -> list[CheckResult]:
+    return [
+        check("v2-harness.invoke", "§8.1 Layer semantics: short-circuit skips dispatch; error unwinds outward; typed-extension ctx threaded",
+              "npx --yes nx test apigen-runtime invoke"),
+        check("v2-harness.validation", "central validation Layer rejects invalid data with ApiError{invalid_argument}; fn never called",
+              "npx --yes nx test apigen-runtime validate"),
+        check("v2-harness.errors", "ApiError gRPC code set maps to per-transport status (HTTP/gRPC/MCP/CLI)",
+              "npx --yes nx test apigen-errors"),
+    ]
+
+def phase_v2_projection() -> list[CheckResult]:
+    return [
+        check("v2-projection.envelope", "request envelope sourced from transport METADATA per §9.1 (not body)",
+              "npx --yes nx test apigen-cli canonical -t 'envelope from transport metadata'"),
+        check("v2-projection.verb", "HTTP verb derives from `safe` (override via projection config), not kind",
+              "npx --yes nx test apigen-cli canonical -t 'verb from safe with config override'"),
+        check("v2-projection.streaming", "full streaming: per-chunk Layer + error-after-first-chunk in-band (SSE/gRPC trailer/MCP/CLI) + mid-stream cancel",
+              "npx --yes nx test apigen-cli streaming"),
+        check("v2-projection.plugins", "logger Layer wraps; openapi + health mounts answer; health feeds gateway readiness",
+              "npx --yes nx run-many -t test -p apigen-ts-plugin-logger apigen-ts-plugin-openapi apigen-ts-plugin-health"),
+    ]
+
+def phase_v2_host() -> list[CheckResult]:
+    return [
+        check("v2-host.conformance", "Python host passes the @adhd/apigen-conformance cross-language vectors",
+              "python3 -m pytest packages/apigen/python -k conformance -q"),
+        check("v2-host.gateway-mixed", "mixed-host run: op host:ts -> TS runtime, host:python -> Python runtime; both return ground truth",
+              "npx --yes nx test apigen-cli gateway-mixed-host"),
+        check("v2-host.partial-availability", "kill the Python sidecar -> only its ops 503 (§13.1); TS ops keep serving",
+              "npx --yes nx test apigen-cli gateway-partial-availability"),
+    ]
+
+# --------------------------------------------------------------------------- #
 # main
 # --------------------------------------------------------------------------- #
 
@@ -939,6 +990,11 @@ PHASES = {
     "scaffold-plugins": phase_scaffold_plugins,
     "plugin-fastify-checkpoint": phase_plugin_fastify_checkpoint,
     "done": phase_done,
+    # v2 phase audits (R1)
+    "v2-core": phase_v2_core,
+    "v2-harness": phase_v2_harness,
+    "v2-projection": phase_v2_projection,
+    "v2-host": phase_v2_host,
 }
 
 def main():
