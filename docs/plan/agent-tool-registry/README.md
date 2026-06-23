@@ -27,3 +27,11 @@
   - entrypoint: `npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/roundtrip.test.ts`
   - observable: `vitest exits 0; after seed() runs twice the tool/binding row counts are identical, and a canonical tool resolves to its alias after reopen`
   - delivered-by: `seed-and-roundtrip`
+
+- `[dod.3]` **An agent_tools junction grants a tool at a permission level, queryable back through the store (behavioral)** — An agent_tools junction grants a tool at a permission level, queryable back through the store.
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/agent-tool-store.test.ts`
+  - observable: `vitest exits 0; AgentToolStore.grant(agent,tool,'read_only') then listForAgent(agent) returns the tool at permission 'read_only' after reopen`
+  - delivered-by: `agent-tool-junction`
