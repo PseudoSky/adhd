@@ -15,6 +15,13 @@
       "when": 1750780800000,
       "tag": "0001_model_platform_bindings",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1750867200000,
+      "tag": "0002_provider_tool_formats",
+      "breakpoints": true
     }
   ]
 }
