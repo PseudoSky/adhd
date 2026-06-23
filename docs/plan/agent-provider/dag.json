@@ -5,7 +5,8 @@
   "phases": [
     "foundation",
     "schema",
-    "adapter"
+    "adapter",
+    "runtime"
   ],
   "terminal": "done",
   "nodes": {},
