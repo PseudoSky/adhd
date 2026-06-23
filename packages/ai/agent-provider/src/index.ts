@@ -9,4 +9,10 @@ export { ProviderStore, ProviderStoreError } from "./store/provider-store.js";
 export type { Provider, ProviderCreateInput, ProviderErrorCode } from "./store/provider-store.js";
 
 export { ModelStore, ModelStoreError } from "./store/model-store.js";
-export type { Model, ModelCreateInput, ModelErrorCode } from "./store/model-store.js";
+export type {
+    Model,
+    ModelCreateInput,
+    ModelErrorCode,
+    ModelPlatformBinding,
+    ModelPlatformBindingCreateInput,
+} from "./store/model-store.js";
