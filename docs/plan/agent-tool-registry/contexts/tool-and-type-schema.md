@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["packages/ai/agent-tool-registry/src/db/client.ts"]
 mutates:    ["packages/ai/agent-tool-registry/src/db/schema.ts", "packages/ai/agent-tool-registry/src/store/tool-store.ts", "packages/ai/agent-tool-registry/src/index.ts", "packages/ai/agent-tool-registry/src/__tests__/tool-store.test.ts", "packages/ai/agent-tool-registry/drizzle"]
 ```
 
