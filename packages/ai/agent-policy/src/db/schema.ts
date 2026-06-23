@@ -129,6 +129,9 @@ export const agentCategoriesTable = sqliteTable(
 // agent-registry's taxonomy categories — no cross-prefix FK). [Decision 1]
 //
 // Composite PK uses a real `primaryKey({columns})`, never a non-unique index.
+// Exported as `agentPoliciesTable`; the underlying SQL table name is
+// `policy_agent_policies` (policy_ prefix per package convention).
+// @alias agentPolicy agentPolicies agent_policy_junction
 export const agentPoliciesTable = sqliteTable(
     "policy_agent_policies",
     {
