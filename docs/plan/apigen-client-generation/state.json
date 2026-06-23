@@ -347,11 +347,11 @@
       "end_ref": null
     },
     "nx-generator-v2": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T03:31:21.833Z",
-      "done_at": null,
+      "done_at": "2026-06-23T04:43:54.561Z",
       "start_ref": "4593ce914f51d23a92010bfa907d285d5a78ad1a",
-      "end_ref": null
+      "end_ref": "586bb7ef618bcdf5264820859b8166e8b492132e"
     }
   },
   "transition_log": [
@@ -750,6 +750,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "v2-core audit gate 4/4: descriptor (safe+det-id+JSON-Schema/$defs), export-shape (Fix-A: nx test apigen-core extract — full shape matrix incl anonymous-default+CJS), naming-collision, classes. Live-server tests gated behind APIGEN_LIVE=1 (Fix-B) → deterministic. orchestrator-verified."
+    },
+    {
+      "ts": "2026-06-23T04:43:54.561Z",
+      "from": "streaming-projection",
+      "to": "nx-generator-v2",
+      "start_ref": "4593ce914f51d23a92010bfa907d285d5a78ad1a",
+      "end_ref": "586bb7ef618bcdf5264820859b8166e8b492132e",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Re-complete after F40 flap (redundant class-exports --complete clobbered it). apigen-nx v2-shape generator; nx test apigen-nx green (now cached)."
     }
   ],
   "amendment_log": [
