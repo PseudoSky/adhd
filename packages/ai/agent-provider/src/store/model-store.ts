@@ -1,7 +1,7 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
-import { models } from "../db/schema.js";
+import { modelPlatformBindings, models } from "../db/schema.js";
 
 // ──────────────────────────────────────────────
 // Domain types
@@ -30,12 +30,29 @@ export interface ModelCreateInput {
 }
 
 // ──────────────────────────────────────────────
+// Domain types — bindings
+// ──────────────────────────────────────────────
+
+export interface ModelPlatformBinding {
+    modelId: string;
+    platform: string;
+    platformModelId: string;
+}
+
+export interface ModelPlatformBindingCreateInput {
+    modelId: string;
+    platform: string;
+    platformModelId: string;
+}
+
+// ──────────────────────────────────────────────
 // Error codes
 // ──────────────────────────────────────────────
 
 export type ModelErrorCode =
     | "MODEL_ALREADY_EXISTS"
-    | "MODEL_NOT_FOUND";
+    | "MODEL_NOT_FOUND"
+    | "MODEL_BINDING_NOT_FOUND";
 
 export class ModelStoreError extends Error {
     readonly code: ModelErrorCode;
@@ -139,5 +156,61 @@ export class ModelStore {
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,
         };
+    }
+
+    // ──────────────────────────────────────────────
+    // Platform binding methods
+    // ──────────────────────────────────────────────
+
+    /**
+     * Insert a model-platform binding row.
+     * model_id is a logical key (no SQL FK — seeding order flexibility).
+     */
+    createBinding(input: ModelPlatformBindingCreateInput): ModelPlatformBinding {
+        this.db
+            .insert(modelPlatformBindings)
+            .values({
+                modelId: input.modelId,
+                platform: input.platform,
+                platformModelId: input.platformModelId,
+            })
+            .run();
+
+        return {
+            modelId: input.modelId,
+            platform: input.platform,
+            platformModelId: input.platformModelId,
+        };
+    }
+
+    /**
+     * Resolve a canonical model id + platform to the provider-specific string.
+     *
+     * The `WHERE platform = ?` clause is the single gating filter that makes the
+     * negative-control test bite: removing it collapses both platforms to the
+     * first binding row — keep the filter here and nowhere else.
+     *
+     * Throws MODEL_BINDING_NOT_FOUND if no row exists for (canonicalId, platform).
+     */
+    resolveModelId(canonicalId: string, platform: string): string {
+        const row = this.db
+            .select()
+            .from(modelPlatformBindings)
+            .where(
+                and(
+                    eq(modelPlatformBindings.modelId, canonicalId),
+                    eq(modelPlatformBindings.platform, platform)
+                )
+            )
+            .get();
+
+        if (!row) {
+            throw new ModelStoreError(
+                "MODEL_BINDING_NOT_FOUND",
+                `No binding for model '${canonicalId}' on platform '${platform}'`
+            );
+        }
+
+        return row.platformModelId;
     }
 }

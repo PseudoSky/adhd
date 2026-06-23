@@ -1,6 +1,7 @@
 import {
     index,
     integer,
+    primaryKey,
     sqliteTable,
     text
 } from "drizzle-orm/sqlite-core";
@@ -42,5 +43,27 @@ export const models = sqliteTable(
     },
     (table) => [
         index("idx_provider_models_pricing_tier").on(table.pricingTier),
+    ]
+);
+
+// ──────────────────────────────────────────────
+// provider_model_platform_bindings
+// Maps a canonical model id + platform to the provider-specific string.
+// PK is composite (model_id, platform) — one row per (model, platform) pair.
+// model_id is a LOGICAL FK to provider_models.id (cross-package seeded lookup;
+// no SQL FK so seeding order and shared-DB topology stay flexible).
+// platform is a controlled-vocab text key (e.g. "claude_api", "claude_code",
+// "bedrock") — never a SQL enum ([inv:lookup-not-enum]).
+// ──────────────────────────────────────────────
+export const modelPlatformBindings = sqliteTable(
+    "provider_model_platform_bindings",
+    {
+        modelId: text("model_id").notNull(),                   // logical ref → provider_models.id
+        platform: text("platform").notNull(),                  // e.g. "claude_api", "claude_code", "bedrock"
+        platformModelId: text("platform_model_id").notNull(), // e.g. "claude-opus-4-8", "opus", ARN
+    },
+    (table) => [
+        primaryKey({ columns: [table.modelId, table.platform] }),
+        index("idx_provider_mpb_model_id").on(table.modelId),
     ]
 );
