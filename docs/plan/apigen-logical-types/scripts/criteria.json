@@ -48,6 +48,14 @@
       "kind": "command",
       "cmd": "npx nx test apigen-logical",
       "expect": "exit0"
+    },
+    {
+      "id": "lt-scalars.1",
+      "phase": "scalars",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx test apigen-logical",
+      "expect": "exit0"
     }
   ]
 }
