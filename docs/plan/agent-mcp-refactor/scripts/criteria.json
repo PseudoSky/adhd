@@ -103,6 +103,16 @@
       "paths": [
         "packages/ai/agent-mcp/src/engine/prompt-resolver.ts"
       ]
+    },
+    {
+      "id": "compiler-integration.2",
+      "phase": "integration",
+      "tier": null,
+      "kind": "present",
+      "pattern": "resolveSystemPrompt|resolveComposedPrompt|composed_prompt_id|composedPromptId",
+      "paths": [
+        "packages/ai/agent-mcp/src/engine/prompt-resolver.ts"
+      ]
     }
   ]
 }
