@@ -83,6 +83,16 @@
       "paths": [
         "packages/ai/agent-tool-registry/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "platform-and-binding-schema.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "tool_platform_bindings|toolPlatformBindings",
+      "paths": [
+        "packages/ai/agent-tool-registry/src/db/schema.ts"
+      ]
     }
   ]
 }
