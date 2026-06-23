@@ -656,7 +656,8 @@
       "phase": "v2-projection",
       "depends_on": [
         "plugin-interface",
-        "layer-harness"
+        "layer-harness",
+        "scaffold-v2-ts-plugins"
       ],
       "guard": "npx --yes nx test apigen-plugin-logger",
       "artifacts": [

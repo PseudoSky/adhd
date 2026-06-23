@@ -1,6 +1,6 @@
 # logger-layer-plugin — STATE_NAME
 
-**Phase:** v2-projection · **Kind:** work · **Depends on:** plugin-interface, layer-harness · **Guard:** `npx --yes nx test apigen-plugin-logger`
+**Phase:** v2-projection · **Kind:** work · **Depends on:** plugin-interface, layer-harness, scaffold-v2-ts-plugins · **Guard:** `npx --yes nx test apigen-plugin-logger`
 
 ---
 
