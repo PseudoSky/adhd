@@ -290,6 +290,23 @@
       ],
       "context": "contexts/lt-conformance-gate.md",
       "notes": ""
+    },
+    "lt-conformance-crosshost": {
+      "kind": "audit",
+      "phase": "gates",
+      "depends_on": [
+        "lt-host-ts",
+        "lt-host-python",
+        "lt-union-codec",
+        "lt-conformance-gate",
+        "lt-dispatch-integration"
+      ],
+      "guard": "python3 docs/plan/apigen-logical-types/scripts/audit_lt-conformance-crosshost.py",
+      "artifacts": [
+        "scripts/audit_lt-conformance-crosshost.py"
+      ],
+      "context": "contexts/lt-conformance-crosshost.md",
+      "notes": ""
     }
   },
   "authored_with": {
