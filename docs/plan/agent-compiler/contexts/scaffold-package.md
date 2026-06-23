@@ -22,6 +22,7 @@
 - [scaffold-package.3] tagged platform:node
 - [scaffold-package.4] package builds clean
 - [scaffold-package.5] no browser globals
+- [scaffold-package.6] depends on the four registry packages
 ---
 
 ## Reservations
