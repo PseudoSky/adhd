@@ -76,6 +76,19 @@
       ],
       "context": "contexts/lt-generator-emit.md",
       "notes": ""
+    },
+    "lt-runmode-closures": {
+      "kind": "work",
+      "phase": "registry",
+      "depends_on": [
+        "lt-registry"
+      ],
+      "guard": "npx nx test apigen-logical",
+      "artifacts": [
+        "packages/apigen/logical/src/lib/runmode.ts"
+      ],
+      "context": "contexts/lt-runmode-closures.md",
+      "notes": ""
     }
   },
   "authored_with": {
