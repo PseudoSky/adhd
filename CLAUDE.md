@@ -59,6 +59,16 @@ _Always verify the `project.json` after generation to ensure tags were applied c
 - **Linting:** `npx nx lint <project-name>`
 - **Graph Visualization:** `npx nx graph` (Use this to verify dependency flow).
 
+### 🚫 NEVER use `--skip-nx-cache`
+
+Do not pass `--skip-nx-cache` (or set `NX_SKIP_NX_CACHE`) to any `nx` command. The nx cache is **correct** — its inputs (`production` = `{projectRoot}/**/*` minus tests) already hash `package.json` (version), `README.md`, and all source, so a version bump, a README edit, or a source change **does** invalidate the cache and reach `dist/`. Trust it.
+
+`--skip-nx-cache` is actively harmful: it runs the task **without reading or writing the cache**, so it builds fresh output to `dist/` but leaves the cache holding an **older entry**. A later normal build then sees matching inputs, **restores that stale cached output over your fresh `dist/`**, and a publish ships the wrong artifact (e.g. an old version → `cannot publish over previously published versions`). The "stale dist" symptom is *caused by* `--skip-nx-cache`, not cured by it.
+
+- Need a clean rebuild? Change an input (you already did, if you bumped a version) and run the normal cached build, or `npx nx reset` to clear the whole cache deliberately — never `--skip-nx-cache`.
+- Prove a cache hit/miss by running the build twice and reading nx's output; don't reach for the flag.
+- Releases go through `nx release publish` (clean build + test, normal cache) — it ships the right artifact when the cache is left alone.
+
 ## 🧪 6. Testing Protocol
 
 - **Logic/Math:** Use `layer:test-logic` (Vitest/Node). Focus on edge cases and pure functions.
