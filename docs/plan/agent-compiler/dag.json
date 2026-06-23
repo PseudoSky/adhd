@@ -2,7 +2,9 @@
   "schema_version": 2,
   "title": "Agent Registry — Composition & Compile Engine (@adhd/agent-compiler)",
   "plan_kind": "greenfield",
-  "phases": [],
+  "phases": [
+    "architecture"
+  ],
   "terminal": "done",
   "nodes": {},
   "authored_with": {
