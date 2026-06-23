@@ -200,11 +200,11 @@
       "end_ref": "7f5b511b4370a6ccc68217915c8dcec0b53f3be2"
     },
     "ts-extractor-by-symbol": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T02:33:16.649Z",
-      "done_at": null,
+      "done_at": "2026-06-23T02:56:47.933Z",
       "start_ref": "4d5ea9d697133d3985f2d795f17f207486da9422",
-      "end_ref": null
+      "end_ref": "2e5d6f8de015f4802e74218dbcabaeece744a503"
     },
     "audit-v2-core": {
       "status": "pending",
@@ -249,11 +249,11 @@
       "end_ref": "e82163ea123700357116d0b54f15997539d3a1da"
     },
     "projection-transports": {
-      "status": "complete",
+      "status": "in_progress",
       "started_at": "2026-06-23T02:33:50.766Z",
-      "done_at": "2026-06-23T02:50:17.938Z",
+      "done_at": null,
       "start_ref": "4d214457ff5a339374d4494b16f26ffa5b8daa19",
-      "end_ref": "2e5d6f8de015f4802e74218dbcabaeece744a503"
+      "end_ref": null
     },
     "logger-layer-plugin": {
       "status": "pending",
@@ -661,16 +661,16 @@
       "note": "makeValidateLayer + validateLayer + ValidateSchemasToken implemented; 9 tests prove pass/short-circuit-with-latch/necessary-not-sufficient; all 41 runtime tests green"
     },
     {
-      "ts": "2026-06-23T02:50:17.938Z",
+      "ts": "2026-06-23T02:56:47.933Z",
       "from": "audit-v2-harness",
-      "to": "projection-transports",
-      "start_ref": "4d214457ff5a339374d4494b16f26ffa5b8daa19",
+      "to": "ts-extractor-by-symbol",
+      "start_ref": "4d5ea9d697133d3985f2d795f17f207486da9422",
       "end_ref": "2e5d6f8de015f4802e74218dbcabaeece744a503",
-      "audit_exit": 1,
+      "audit_exit": 0,
       "audit_criteria_passed": 0,
       "audit_criteria_total": 0,
       "by": "pseudosky",
-      "note": "Upgraded all 4 transport plugins to v2 projection: verb-from-safe (x-apigen-safe hint → GET/POST), envelope-from-headers/meta/flags per §9.1 (x-apigen-envelope field→pluginId map), error maps from @adhd/apigen-errors, projection override support. Tests prove safe→GET, unsafe→POST, override flips verb, envelope bound to correct carrier per transport (negative: wrong carrier rejected)."
+      "note": "Implemented v2 symbol-based extractor (extract.ts) handling all 6 export shapes; 36 new tests all green, 14 existing tests unbroken, exit 0"
     }
   ],
   "amendment_log": [
