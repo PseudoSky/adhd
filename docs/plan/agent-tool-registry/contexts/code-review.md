@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["packages/ai/agent-tool-registry/src"]
 mutates:    ["docs/plan/agent-tool-registry/review.md", "docs/plan/agent-tool-registry/scripts/review_gate.py"]
 ```
 
