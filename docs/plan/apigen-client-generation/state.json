@@ -202,7 +202,7 @@
     "ts-extractor-by-symbol": {
       "status": "complete",
       "started_at": "2026-06-23T02:33:16.649Z",
-      "done_at": "2026-06-23T03:01:56.689Z",
+      "done_at": "2026-06-23T03:04:53.383Z",
       "start_ref": "4d5ea9d697133d3985f2d795f17f207486da9422",
       "end_ref": "1fdd6f8b3107cacce19dc3b56049fe879ab07b74"
     },
@@ -249,11 +249,11 @@
       "end_ref": "e82163ea123700357116d0b54f15997539d3a1da"
     },
     "projection-transports": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T02:33:50.766Z",
-      "done_at": null,
+      "done_at": "2026-06-23T02:50:17.938Z",
       "start_ref": "4d214457ff5a339374d4494b16f26ffa5b8daa19",
-      "end_ref": null
+      "end_ref": "2e5d6f8de015f4802e74218dbcabaeece744a503"
     },
     "logger-layer-plugin": {
       "status": "pending",
@@ -661,7 +661,19 @@
       "note": "makeValidateLayer + validateLayer + ValidateSchemasToken implemented; 9 tests prove pass/short-circuit-with-latch/necessary-not-sufficient; all 41 runtime tests green"
     },
     {
-      "ts": "2026-06-23T03:01:56.689Z",
+      "ts": "2026-06-23T02:50:17.938Z",
+      "from": "audit-v2-harness",
+      "to": "projection-transports",
+      "start_ref": "4d214457ff5a339374d4494b16f26ffa5b8daa19",
+      "end_ref": "2e5d6f8de015f4802e74218dbcabaeece744a503",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Upgraded all 4 transport plugins to v2 projection: verb-from-safe (x-apigen-safe hint → GET/POST), envelope-from-headers/meta/flags per §9.1 (x-apigen-envelope field→pluginId map), error maps from @adhd/apigen-errors, projection override support. Tests prove safe→GET, unsafe→POST, override flips verb, envelope bound to correct carrier per transport (negative: wrong carrier rejected)."
+    },
+    {
+      "ts": "2026-06-23T03:04:53.383Z",
       "from": "audit-v2-harness",
       "to": "ts-extractor-by-symbol",
       "start_ref": "4d5ea9d697133d3985f2d795f17f207486da9422",
@@ -670,7 +682,7 @@
       "audit_criteria_passed": 0,
       "audit_criteria_total": 0,
       "by": "pseudosky",
-      "note": "Implemented v2 symbol-based extractor (extract.ts) handling all 6 export shapes; 36 new tests all green, 14 existing tests unbroken, exit 0"
+      "note": "all 6 shapes + 36 tests pass"
     }
   ],
   "amendment_log": [
