@@ -284,10 +284,10 @@
       "end_ref": "2fe5cb80209acfad334be8ad6d1fbc4dbb0c658c"
     },
     "unified-cli": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T05:06:34.499Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "36994c1e1b4080c7abef2b866c530739e0448f61",
       "end_ref": null
     },
     "gateway": {
