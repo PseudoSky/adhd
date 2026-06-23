@@ -184,6 +184,14 @@
       "paths": [
         "packages/ai/agent-provider/src/runtime/emit-tools.ts"
       ]
+    },
+    {
+      "id": "runtime-tool-forwarding.3",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
+      "expect": "exit0"
     }
   ]
 }
