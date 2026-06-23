@@ -9,7 +9,8 @@
     "emit",
     "cli",
     "cache",
-    "e2e"
+    "e2e",
+    "audit"
   ],
   "terminal": "done",
   "nodes": {},
