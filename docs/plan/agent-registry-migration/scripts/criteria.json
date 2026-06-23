@@ -176,6 +176,16 @@
       "paths": [
         "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts"
       ]
+    },
+    {
+      "id": "roundtrip-equivalence-gate.3",
+      "phase": "verify",
+      "tier": null,
+      "kind": "present",
+      "pattern": "PASS|FAIL|allPass|report",
+      "paths": [
+        "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts"
+      ]
     }
   ]
 }
