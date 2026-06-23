@@ -148,6 +148,19 @@
       ],
       "context": "contexts/removal-runbook.md",
       "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "removal-runbook"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "docs/plan/agent-registry-migration/scripts/audit_migration.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
     }
   },
   "authored_with": {
