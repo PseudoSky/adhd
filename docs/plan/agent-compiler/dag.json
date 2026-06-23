@@ -42,6 +42,21 @@
       ],
       "context": "contexts/scaffold-package.md",
       "notes": ""
+    },
+    "composition-resolve": {
+      "kind": "work",
+      "phase": "resolve",
+      "depends_on": [
+        "scaffold-package"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-compiler/src/resolve/composition.ts",
+        "packages/ai/agent-compiler/src/index.ts",
+        "packages/ai/agent-compiler/src/__tests__/composition-resolve.test.ts"
+      ],
+      "context": "contexts/composition-resolve.md",
+      "notes": ""
     }
   },
   "authored_with": {
