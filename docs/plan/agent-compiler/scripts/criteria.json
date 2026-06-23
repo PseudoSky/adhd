@@ -82,6 +82,16 @@
       "paths": [
         "packages/ai/agent-compiler/src"
       ]
+    },
+    {
+      "id": "scaffold-package.6",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-registry|@adhd/agent-tool-registry|@adhd/agent-provider|@adhd/agent-policy",
+      "paths": [
+        "packages/ai/agent-compiler/package.json"
+      ]
     }
   ]
 }
