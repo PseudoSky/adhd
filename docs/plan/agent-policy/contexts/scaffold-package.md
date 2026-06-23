@@ -21,6 +21,7 @@
 - [scaffold-package.2] tsconfig.base.json registers @adhd/agent-policy path
 - [scaffold-package.3] project.json tags it platform:node
 - [scaffold-package.4] package builds clean
+- [scaffold-package.5] no browser globals imported in source
 ---
 
 ## Reservations
