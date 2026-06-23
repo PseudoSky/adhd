@@ -219,6 +219,16 @@
       "paths": [
         "packages/ai/agent-provider/src/seed/models.ts"
       ]
+    },
+    {
+      "id": "seed-and-roundtrip.3",
+      "phase": "seed",
+      "tier": null,
+      "kind": "present",
+      "pattern": "anthropic|bedrock|lmstudio",
+      "paths": [
+        "packages/ai/agent-provider/src/seed/providers.ts"
+      ]
     }
   ]
 }
