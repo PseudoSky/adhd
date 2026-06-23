@@ -138,6 +138,14 @@
       "paths": [
         "packages/ai/agent-policy/src/store/agent-policy-store.ts"
       ]
+    },
+    {
+      "id": "policy-inheritance.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/inheritance.test.ts",
+      "expect": "exit0"
     }
   ]
 }
