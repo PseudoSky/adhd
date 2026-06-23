@@ -21,6 +21,7 @@
 - [scaffold-package.2] tsconfig path registered
 - [scaffold-package.3] tagged platform:node
 - [scaffold-package.4] package builds clean
+- [scaffold-package.5] no browser globals
 ---
 
 ## Reservations
