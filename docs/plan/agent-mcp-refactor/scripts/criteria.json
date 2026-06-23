@@ -212,6 +212,16 @@
       "paths": [
         "packages/ai/agent-mcp/package.json"
       ]
+    },
+    {
+      "id": "compiler-integration.5",
+      "phase": "integration",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-compiler",
+      "paths": [
+        "tsconfig.base.json"
+      ]
     }
   ]
 }
