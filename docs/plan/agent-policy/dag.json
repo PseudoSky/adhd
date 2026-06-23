@@ -121,6 +121,23 @@
       ],
       "context": "contexts/audit-schema.md",
       "notes": ""
+    },
+    "seed-and-roundtrip": {
+      "kind": "work",
+      "phase": "seed",
+      "depends_on": [
+        "audit-schema"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-policy/src/seed/policy-types.ts",
+        "packages/ai/agent-policy/src/seed/policy-templates.ts",
+        "packages/ai/agent-policy/src/seed/index.ts",
+        "packages/ai/agent-policy/src/__tests__/roundtrip.test.ts",
+        "packages/ai/agent-policy/src/index.ts"
+      ],
+      "context": "contexts/seed-and-roundtrip.md",
+      "notes": ""
     }
   },
   "authored_with": {
