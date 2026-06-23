@@ -18,11 +18,11 @@
       "end_ref": "40c79737c5c080b38ec25ea0ebb716a26dbe06d8"
     },
     "model-platform-bindings": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T23:21:54.207Z",
-      "done_at": null,
+      "done_at": "2026-06-23T23:26:32.271Z",
       "start_ref": "a2929398da5e7d440d5c5280b874db335d5b5b98",
-      "end_ref": null
+      "end_ref": "b629f789b89a681100f130c02353c4f358939865"
     },
     "provider-tool-formats": {
       "status": "pending",
@@ -98,6 +98,18 @@
       "audit_criteria_total": 14,
       "by": "pseudosky",
       "note": "providers + models tables (provider_providers, provider_models), ProviderStore/ModelStore, drizzle migration 0000_providers_and_models.sql; 11 tests pass incl. close+reopen bool assertion; guard exit 0; SHA 40c7973"
+    },
+    {
+      "ts": "2026-06-23T23:26:32.271Z",
+      "from": "model-platform-bindings",
+      "to": "model-platform-bindings",
+      "start_ref": "a2929398da5e7d440d5c5280b874db335d5b5b98",
+      "end_ref": "b629f789b89a681100f130c02353c4f358939865",
+      "audit_exit": 11,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 14,
+      "by": "pseudosky",
+      "note": "Added provider_model_platform_bindings table (composite PK model_id+platform), ModelStore.createBinding/resolveModelId, drizzle migration 0001. Guard: 8/8 tests pass exit 0. SHA: b629f78"
     }
   ],
   "amendment_log": [],
@@ -106,7 +118,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "model-platform-bindings",
+  "current_state": "provider-tool-formats",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:05:24.204Z",
     "by": "pseudosky",
