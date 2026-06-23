@@ -58,6 +58,23 @@
       ],
       "context": "contexts/policy-type-and-template-schema.md",
       "notes": ""
+    },
+    "agent-policy-junction": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "policy-type-and-template-schema"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-policy/src/db/schema.ts",
+        "packages/ai/agent-policy/src/store/agent-policy-store.ts",
+        "packages/ai/agent-policy/src/index.ts",
+        "packages/ai/agent-policy/src/__tests__/agent-policy-store.test.ts",
+        "packages/ai/agent-policy/drizzle"
+      ],
+      "context": "contexts/agent-policy-junction.md",
+      "notes": ""
     }
   },
   "authored_with": {
