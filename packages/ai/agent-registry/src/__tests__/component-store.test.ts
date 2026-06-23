@@ -205,6 +205,26 @@ describe("ComponentStore", () => {
         });
     });
 
+    // ── Composite PK enforcement — regression guard ───────────────────────────
+    //
+    // Proves the (slug, version) composite PRIMARY KEY has real DB-level teeth.
+    // Before the fix this was a non-unique index so duplicate rows were silently
+    // accepted; now they MUST throw a SQLite unique-constraint error.
+
+    describe("composite PK (slug, version) enforcement", () => {
+        it("throws a unique-constraint error when inserting a duplicate (slug, version) row", () => {
+            // Create the component at version 1 — this is the baseline row.
+            store.create({ slug: "pk-dup-test", type: "rule", content: "original content" });
+
+            // Attempting to insert a second row with the same (slug=pk-dup-test, version=1)
+            // must throw.  Before the fix this INSERT would silently succeed, leaving the
+            // table with two rows for the same PK — the invariant was never DB-enforced.
+            expect(() => {
+                store.create({ slug: "pk-dup-test", type: "rule", content: "duplicate content" });
+            }).toThrow();
+        });
+    });
+
     // ── [inv:reopen-proves-persistence] ──────────────────────────────────────
 
     describe("persistence across DB reopen", () => {

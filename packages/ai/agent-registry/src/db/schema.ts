@@ -1,6 +1,7 @@
 import {
     index,
     integer,
+    primaryKey,
     sqliteTable,
     text
 } from "drizzle-orm/sqlite-core";
@@ -55,7 +56,7 @@ export const promptComponentsTable = sqliteTable(
         updatedAt: text("updated_at").notNull(),
     },
     (t) => ({
-        pk: index("registry_prompt_components_pkey").on(t.slug, t.version),
+        pk: primaryKey({ columns: [t.slug, t.version] }),
         slugIdx: index("registry_prompt_components_slug_idx").on(t.slug),
         typeIdx: index("registry_prompt_components_type_idx").on(t.type),
     })
@@ -162,7 +163,7 @@ export const componentUsageTable = sqliteTable(
         weight: integer("weight"),
     },
     (t) => ({
-        pk: index("registry_component_usage_pkey").on(t.componentSlug, t.useCaseSlug),
+        pk: primaryKey({ columns: [t.componentSlug, t.useCaseSlug] }),
         useCaseIdx: index("registry_component_usage_use_case_idx").on(t.useCaseSlug),
         componentIdx: index("registry_component_usage_component_idx").on(t.componentSlug),
     })
@@ -301,11 +302,7 @@ export const agentComponentsTable = sqliteTable(
     },
     (t) => ({
         // Composite PK: (agent_slug, component_slug, position) per DATA_MODEL.md Domain 1.
-        pk: index("registry_agent_components_pkey").on(
-            t.agentSlug,
-            t.componentSlug,
-            t.position
-        ),
+        pk: primaryKey({ columns: [t.agentSlug, t.componentSlug, t.position] }),
         agentIdx: index("registry_agent_components_agent_idx").on(t.agentSlug),
         positionIdx: index("registry_agent_components_position_idx").on(
             t.agentSlug,
