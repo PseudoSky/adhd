@@ -202,7 +202,7 @@
     "ts-extractor-by-symbol": {
       "status": "complete",
       "started_at": "2026-06-23T02:33:16.649Z",
-      "done_at": "2026-06-23T03:06:36.123Z",
+      "done_at": "2026-06-23T03:05:46.573Z",
       "start_ref": "4d5ea9d697133d3985f2d795f17f207486da9422",
       "end_ref": "52bc464ed784c32a84fa3356a6dd2639a51e5968"
     },
@@ -251,9 +251,9 @@
     "projection-transports": {
       "status": "complete",
       "started_at": "2026-06-23T02:33:50.766Z",
-      "done_at": "2026-06-23T02:50:17.938Z",
+      "done_at": "2026-06-23T03:06:40.775Z",
       "start_ref": "4d214457ff5a339374d4494b16f26ffa5b8daa19",
-      "end_ref": "2e5d6f8de015f4802e74218dbcabaeece744a503"
+      "end_ref": "82dbf8e0c72d30a85c45f3aeb679df2c10fff2d5"
     },
     "logger-layer-plugin": {
       "status": "pending",
@@ -673,7 +673,7 @@
       "note": "Upgraded all 4 transport plugins to v2 projection: verb-from-safe (x-apigen-safe hint → GET/POST), envelope-from-headers/meta/flags per §9.1 (x-apigen-envelope field→pluginId map), error maps from @adhd/apigen-errors, projection override support. Tests prove safe→GET, unsafe→POST, override flips verb, envelope bound to correct carrier per transport (negative: wrong carrier rejected)."
     },
     {
-      "ts": "2026-06-23T03:06:36.123Z",
+      "ts": "2026-06-23T03:05:46.573Z",
       "from": "audit-v2-harness",
       "to": "ts-extractor-by-symbol",
       "start_ref": "4d5ea9d697133d3985f2d795f17f207486da9422",
@@ -682,7 +682,19 @@
       "audit_criteria_passed": 0,
       "audit_criteria_total": 0,
       "by": "pseudosky",
-      "note": "all 6 shapes pass; 36 new + 14 existing = 50 tests green"
+      "note": "all 6 shapes pass; 36 new tests + 14 existing = 50 green"
+    },
+    {
+      "ts": "2026-06-23T03:06:40.775Z",
+      "from": "audit-v2-harness",
+      "to": "projection-transports",
+      "start_ref": "4d214457ff5a339374d4494b16f26ffa5b8daa19",
+      "end_ref": "82dbf8e0c72d30a85c45f3aeb679df2c10fff2d5",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "§9.1 envelope binding + §5 verb-from-safe across 4 transports (fastify/express/mcp/cli). All 4 plugin test suites green (orch-verified, incl. apigen-plugin-cli-output run under correct name per F39). Re-completed after F40 lost-update reverted it. Byte-proxy telemetry."
     }
   ],
   "amendment_log": [
