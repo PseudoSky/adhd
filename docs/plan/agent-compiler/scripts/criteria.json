@@ -37,6 +37,13 @@
       "paths": [
         "docs/plan/agent-compiler/decisions.md"
       ]
+    },
+    {
+      "id": "scaffold-package.1",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/ai/agent-compiler/project.json"
     }
   ]
 }
