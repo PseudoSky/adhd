@@ -3,7 +3,8 @@
   "title": "Agent Registry — Provider Registry (@adhd/agent-provider)",
   "plan_kind": "greenfield",
   "phases": [
-    "foundation"
+    "foundation",
+    "schema"
   ],
   "terminal": "done",
   "nodes": {},
