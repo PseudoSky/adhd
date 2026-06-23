@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "streaming-projection",
+  "current_state": "scaffold-v2-ts-plugins",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -312,10 +312,10 @@
       "end_ref": "e73f3ec346e354135790a4d856e1d6831b50a1bb"
     },
     "scaffold-v2-ts-plugins": {
-      "status": "blocked",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T04:45:58.862Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "9299621c835ee61082c11dcb4c58e6a5bb6ab65a",
       "end_ref": null
     },
     "class-exports": {
