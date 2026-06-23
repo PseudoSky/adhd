@@ -18,6 +18,7 @@
 
 - [composition-junction.1] agent_components junction with position, version_pin, context_condition, is_required
 
+- [composition-junction.2] resolveComposition reads ordered components
 ---
 
 ## Reservations

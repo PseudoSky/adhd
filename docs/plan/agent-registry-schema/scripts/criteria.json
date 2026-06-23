@@ -111,6 +111,16 @@
       "paths": [
         "packages/ai/agent-registry/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "composition-junction.2",
+      "phase": "composition",
+      "tier": null,
+      "kind": "present",
+      "pattern": "resolveComposition|position",
+      "paths": [
+        "packages/ai/agent-registry/src/store/composition-store.ts"
+      ]
     }
   ]
 }
