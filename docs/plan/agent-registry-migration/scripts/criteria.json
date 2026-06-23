@@ -58,6 +58,16 @@
       "paths": [
         "packages/ai/agent-registry-migration/project.json"
       ]
+    },
+    {
+      "id": "scaffold-package.3",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-registry-migration",
+      "paths": [
+        "tsconfig.base.json"
+      ]
     }
   ]
 }
