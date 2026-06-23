@@ -7,7 +7,8 @@
     "schema",
     "composition",
     "seed",
-    "audit"
+    "audit",
+    "architecture"
   ],
   "terminal": "done",
   "nodes": {
