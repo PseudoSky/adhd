@@ -35,3 +35,5 @@
   - entrypoint: `npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts`
   - observable: `vitest exits 0 and roundtrip.test.ts proves seed() run twice yields identical provider/model/binding row counts, and a reopened store returns the seeded rows identical to what was written`
   - delivered-by: `seed-and-roundtrip`
+
+- `[dod.4]` **@adhd/agent-provider is a platform:node Nx library registered in tsconfig.base.json paths that builds clean and imports no browser code. (structural)** — @adhd/agent-provider is a platform:node Nx library registered in tsconfig.base.json paths that builds clean and imports no browser code..
