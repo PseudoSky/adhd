@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["packages/ai/agent-mcp/src/engine/prompt-resolver.ts", "packages/ai/agent-mcp/src/store/composed-prompt-store.ts", "packages/ai/agent-mcp/src/store/session-store.ts", "packages/ai/agent-mcp/src/tools/session.ts", "packages/ai/agent-mcp/src/db/schema.ts"]
 mutates:    ["packages/ai/agent-mcp/src/__tests__/session-compiler-e2e.test.ts", "packages/ai/agent-mcp/src/__tests__/cache-reuse.test.ts"]
 ```
 
