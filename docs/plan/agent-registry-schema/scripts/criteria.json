@@ -27,6 +27,14 @@
       "paths": [
         "packages/ai/agent-registry/project.json"
       ]
+    },
+    {
+      "id": "scaffold-package.4",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx build agent-registry",
+      "expect": "exit0"
     }
   ]
 }
