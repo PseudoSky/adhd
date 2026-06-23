@@ -74,5 +74,18 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "scaffold-package"
+  "current_state": "scaffold-package",
+  "dod_provenance": {
+    "confirmed_at": "2026-06-23T04:05:24.204Z",
+    "by": "pseudosky",
+    "note": "DoD derived from docs/plan/agent-registry spec + RUNTIME_GAPS; confirmed by team-lead plan-authoring task 2026-06-22",
+    "dod_ids": [
+      "dod.1",
+      "dod.2",
+      "dod.3",
+      "dod.4",
+      "dod.5",
+      "dod.6"
+    ]
+  }
 }
