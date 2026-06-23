@@ -671,7 +671,9 @@
       "phase": "v2-projection",
       "depends_on": [
         "plugin-interface",
-        "naming-helpers"
+        "naming-helpers",
+        "scaffold-v2-common",
+        "scaffold-v2-ts-plugins"
       ],
       "guard": "npx --yes nx run-many -t test -p apigen-openapi apigen-plugin-openapi apigen-plugin-health",
       "artifacts": [
