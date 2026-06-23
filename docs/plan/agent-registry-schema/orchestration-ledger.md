@@ -48,7 +48,13 @@ Worktree `/Users/nix/dev/node/adhd-agent-registry`, branch `agent-registry-execu
 - The Decision-5 repair grounded each contract against the shipped `packages/ai/agent-registry/src` code and found the *original* contracts asserted exports that do not exist: `openRegistryDb` (barrel actually exports `sqlite`/`db`), `ComponentStore.findByContentHash` (no such method), and typed `ComposedPrompt.id` as `string` when it ships `number` (integer autoincrement). All corrected; provenance upgraded to `vendored-source`/`verified`.
 - **Lesson:** an interface contract authored at `provenance: docs` before code exists is a guess; once code ships, re-grounding it to `vendored-source` is mandatory or downstream plans consume phantom signatures. (Generalizes RESUME's interface-contract concern.)
 
-### F4 — reflections (RESUME open-item 3) BLOCKED on MCP tool surface, not server liveness
+### F4 — reflections (RESUME open-item 3) — RESOLVED (logged by the human's interactive session)
+**STATUS: DONE.** The 11 reflections were written to `~/.memory/memory.db` by the user via
+`/sox-tools:reflection` in their interactive session (where `memory-server` tools are reachable),
+after this orchestration run confirmed the agent runtime could not reach them. The raw source
+`REFLECTION.md` was removed at the user's instruction once logged. Historical diagnosis retained below.
+
+#### (historical) BLOCKED on MCP tool surface, not server liveness
 - `memory_ping` returns `{ok:true}` (server live), but `memory_write` and `memory_recall` are **"No such tool available"** in this agent's tool surface — only `memory_ping` is exposed. The reflection skill forbids any file/markdown/json fallback ("no file fallback by design"), so the 11 nodes were NOT written.
 - The 11 reflections are fully authored + schema-mapped (agent_id=plan-orchestrator; subjects: self→plan-orchestrator ×4 [#1 commit-before-dispatch, #2 per-dispatch token budget, #5 steer-live-agents/SendMessage, #6 teammate reuse+GC of >40 idle agents]; delegation→workflow-planner ×3 [#3 haiku phase reviews, #7 schedule interface contracts + link multiplan deps — directly caused this run's F1 blocker, #10 stale docs/plan paths]; skill→plan-state-machine ×4 [#4 executor footgun channel triaged mid-dispatch, #8 worktrees-on-by-default, #9 multiplan build sequencing, #11 minimal-plan <30k-token variant, DERIVED_FROM #9]). Raw source: `REFLECTION.md`.
 - **Confirmed runtime-level (not a frozen-surface fluke):** after the user's `/mcp` "Reconnected to memory-server", a FRESHLY-spawned scribe still found NO `memory-server`/`memory_*` tools — its registry exposed `mcp__plugin_sox-tools_sox__*` + `mcp__agent-mcp__*` (the wrong store) but memory-server was absent. The interactive reconnect did not propagate to the agent execution surface. `mcp__memory-server__memory_ping` worked at THIS session's spawn but not after.
@@ -63,10 +69,10 @@ Worktree `/Users/nix/dev/node/adhd-agent-registry`, branch `agent-registry-execu
   2026-06-23T20:45:51, verified state-side, auto-committed.
 - **Merge `agent-registry-execution` → `main`:** ⏳ HELD — human decision; concurrent apigen session
   is live on main (tsconfig.base.json collision expected). Recommend after the foundation plans land.
-- **Reflections (11) → memory:** ⛔ BLOCKED on MCP write-tool surface (F4) — needs reconnect.
+- **Reflections (11) → memory:** ✅ DONE — logged by the human's interactive `/sox-tools:reflection`
+  session; raw `REFLECTION.md` removed (F4).
 
 ## Resume / next actions (for the caller)
-1. Reflections: reconnect memory-server write tools → `/sox-tools:reflection` → write the 11 (F4).
-2. Execute next foundation plan `agent-tool-registry` (0/8) in this worktree — interfaces now
+1. Execute next foundation plan `agent-tool-registry` (0/8) in this worktree — interfaces now
    recovered/green; re-verify F2 audit-phase membership at its preflight. (Awaiting caller go.)
-3. Merge branch → main once foundations are complete.
+2. Merge branch → main once foundations are complete.
