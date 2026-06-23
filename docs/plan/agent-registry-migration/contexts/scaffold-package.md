@@ -18,6 +18,7 @@
 
 - [scaffold-package.1] project.json exists
 
+- [scaffold-package.2] tagged platform:node
 ---
 
 ## Reservations
