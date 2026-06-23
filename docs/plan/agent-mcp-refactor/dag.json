@@ -40,6 +40,23 @@
       ],
       "context": "contexts/runtime-sink-schema.md",
       "notes": ""
+    },
+    "compiler-integration": {
+      "kind": "work",
+      "phase": "integration",
+      "depends_on": [
+        "runtime-sink-schema"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/compiler-resolve.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/engine/prompt-resolver.ts",
+        "packages/ai/agent-mcp/src/tools/session.ts",
+        "packages/ai/agent-mcp/src/store/session-store.ts",
+        "packages/ai/agent-mcp/src/index.ts",
+        "packages/ai/agent-mcp/src/__tests__/compiler-resolve.test.ts"
+      ],
+      "context": "contexts/compiler-integration.md",
+      "notes": ""
     }
   },
   "authored_with": {
