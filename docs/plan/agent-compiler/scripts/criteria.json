@@ -102,6 +102,14 @@
       "paths": [
         "packages/ai/agent-compiler/src/resolve/composition.ts"
       ]
+    },
+    {
+      "id": "composition-resolve.2",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/composition-resolve.test.ts",
+      "expect": "exit0"
     }
   ]
 }
