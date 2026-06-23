@@ -105,7 +105,9 @@
       "artifacts": [
         "packages/ai/agent-registry/src/db/schema.ts",
         "packages/ai/agent-registry/src/store/composed-prompt-store.ts",
-        "packages/ai/agent-registry/src/index.ts"
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/__tests__/composed-prompt-store.test.ts",
+        "packages/ai/agent-registry/drizzle"
       ],
       "context": "contexts/composed-prompt-cache.md",
       "notes": ""
