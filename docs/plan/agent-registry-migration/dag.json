@@ -118,6 +118,19 @@
       ],
       "context": "contexts/roundtrip-equivalence-gate.md",
       "notes": ""
+    },
+    "audit-migration": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "roundtrip-equivalence-gate"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "docs/plan/agent-registry-migration/scripts/audit_migration.py"
+      ],
+      "context": "contexts/audit-migration.md",
+      "notes": ""
     }
   },
   "authored_with": {
