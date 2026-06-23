@@ -13,7 +13,20 @@
     "audit"
   ],
   "terminal": "done",
-  "nodes": {},
+  "nodes": {
+    "compiler-design": {
+      "kind": "work",
+      "phase": "architecture",
+      "depends_on": [],
+      "guard": "true",
+      "artifacts": [
+        "docs/plan/agent-compiler/decisions.md",
+        "docs/plan/agent-compiler/contexts/compiler-design.md"
+      ],
+      "context": "contexts/compiler-design.md",
+      "notes": ""
+    }
+  },
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.22",
