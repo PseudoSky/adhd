@@ -67,10 +67,10 @@
       "end_ref": null
     },
     "design-and-architecture": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T05:22:00.455Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "0f2ff4a36a05dce7e17e618b33c5a988b3e4b156",
       "end_ref": null
     }
   },
