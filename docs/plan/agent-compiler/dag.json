@@ -18,7 +18,7 @@
       "kind": "work",
       "phase": "architecture",
       "depends_on": [],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-compiler/scripts/audit_compiler.py --phase architecture",
       "artifacts": [
         "docs/plan/agent-compiler/decisions.md",
         "docs/plan/agent-compiler/contexts/compiler-design.md"
@@ -32,7 +32,7 @@
       "depends_on": [
         "compiler-design"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx build agent-compiler",
       "artifacts": [
         "packages/ai/agent-compiler/project.json",
         "packages/ai/agent-compiler/package.json",
@@ -49,7 +49,7 @@
       "depends_on": [
         "scaffold-package"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/composition-resolve.test.ts",
       "artifacts": [
         "packages/ai/agent-compiler/src/resolve/composition.ts",
         "packages/ai/agent-compiler/src/index.ts",
@@ -64,7 +64,7 @@
       "depends_on": [
         "composition-resolve"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/tool-header.test.ts",
       "artifacts": [
         "packages/ai/agent-compiler/src/resolve/tools.ts",
         "packages/ai/agent-compiler/src/index.ts",
@@ -79,7 +79,7 @@
       "depends_on": [
         "tool-header-emit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/model-policy.test.ts",
       "artifacts": [
         "packages/ai/agent-compiler/src/resolve/model.ts",
         "packages/ai/agent-compiler/src/resolve/policy.ts",
@@ -95,7 +95,7 @@
       "depends_on": [
         "model-and-policy-emit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-agent.test.ts",
       "artifacts": [
         "packages/ai/agent-compiler/src/emit/markdown.ts",
         "packages/ai/agent-compiler/src/emit/json.ts",
@@ -112,7 +112,7 @@
       "depends_on": [
         "platform-markdown-emit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-cli.test.ts",
       "artifacts": [
         "packages/ai/agent-compiler/src/cli/compile.ts",
         "packages/ai/agent-compiler/src/index.ts",
@@ -127,7 +127,7 @@
       "depends_on": [
         "platform-markdown-emit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-cache.test.ts",
       "artifacts": [
         "packages/ai/agent-compiler/src/cache/composed-prompt-cache.ts",
         "packages/ai/agent-compiler/src/compile.ts",
@@ -144,7 +144,7 @@
         "compile-cli",
         "composed-prompt-caching"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-compiler/scripts/audit_compiler.py --phase schema",
       "artifacts": [
         "docs/plan/agent-compiler/scripts/audit_compiler.py"
       ],
@@ -157,7 +157,7 @@
       "depends_on": [
         "audit-engine"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-e2e.test.ts",
       "artifacts": [
         "packages/ai/agent-compiler/src/seed/fixtures.ts",
         "packages/ai/agent-compiler/src/__tests__/compile-e2e.test.ts",
@@ -172,7 +172,7 @@
       "depends_on": [
         "compile-fixtures-e2e"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-compiler/scripts/audit_compiler.py --phase final",
       "artifacts": [
         "docs/plan/agent-compiler/scripts/audit_compiler.py"
       ],
