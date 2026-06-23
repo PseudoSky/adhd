@@ -1,6 +1,6 @@
 # scaffold-v2-ts-plugins — STATE_NAME
 
-**Phase:** v2-scaffold · **Kind:** work · **Depends on:** scaffold-plugins · **Guard:** `npx --yes nx run-many -t build -p apigen-ts-plugin-logger apigen-ts-plugin-openapi apigen-ts-plugin-health`
+**Phase:** v2-scaffold · **Kind:** work · **Depends on:** scaffold-plugins, nx-generator-v2 · **Guard:** `npx --yes nx run-many -t build -p apigen-plugin-logger apigen-plugin-openapi apigen-plugin-health`
 
 ---
 
@@ -24,11 +24,11 @@ _No criteria yet._
 
 ```text
 read_only:  []
-mutates:    ["packages/apigen/ts/plugins/logger/project.json", "packages/apigen/ts/plugins/openapi/project.json", "packages/apigen/ts/plugins/health/project.json"]
+mutates:    ["packages/apigen/plugins/logger/project.json", "packages/apigen/plugins/openapi/project.json", "packages/apigen/plugins/health/project.json"]
 ```
 
 ---
 
 ## Notes for executor
 
-SPEC §12: scaffold the 3 new TS plugin packages (logger=layer, openapi+health=mount) in final ts/plugins/* homes with nx wiring; platform:node. Fixes R3.
+<footguns, ordering constraints, non-obvious decisions>
