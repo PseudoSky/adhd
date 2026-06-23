@@ -5,7 +5,8 @@
   "phases": [
     "contracts",
     "registry",
-    "scalars"
+    "scalars",
+    "extraction"
   ],
   "terminal": "done",
   "nodes": {
