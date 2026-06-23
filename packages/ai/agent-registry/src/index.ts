@@ -46,3 +46,10 @@ export type {
     ContextRule,
     ContextRuleCreateInput,
 } from "./store/usecase-store.js";
+
+// composed-prompt-cache state: composed_prompts table + ComposedPromptStore + contextHash helper
+export { ComposedPromptStore, ComposedPromptError, contextHash } from "./store/composed-prompt-store.js";
+export type {
+    ComposedPrompt,
+    ComposedPromptWriteInput,
+} from "./store/composed-prompt-store.js";
