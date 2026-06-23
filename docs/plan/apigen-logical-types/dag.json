@@ -320,6 +320,19 @@
       ],
       "context": "contexts/lt-architect-review.md",
       "notes": ""
+    },
+    "lt-code-review": {
+      "kind": "review",
+      "phase": "gates",
+      "depends_on": [
+        "lt-architect-review"
+      ],
+      "guard": "python3 docs/plan/apigen-logical-types/scripts/audit_lt-code-review.py",
+      "artifacts": [
+        "scripts/audit_lt-code-review.py"
+      ],
+      "context": "contexts/lt-code-review.md",
+      "notes": ""
     }
   },
   "authored_with": {
