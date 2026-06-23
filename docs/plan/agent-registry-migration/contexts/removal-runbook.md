@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts", "packages/ai/agent-registry-migration/src/import/import-agent.ts"]
 mutates:    ["packages/ai/agent-registry-migration/src/removal/retire.ts", "packages/ai/agent-registry-migration/src/index.ts", "packages/ai/agent-registry-migration/src/__tests__/removal-runbook.test.ts", "docs/plan/agent-registry-migration/RUNBOOK.md"]
 ```
 
