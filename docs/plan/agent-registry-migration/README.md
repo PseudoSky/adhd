@@ -38,3 +38,12 @@
   - observable: `vitest exits 0 and the case 'skill migrates to process/invocation component after reopen' reopens the DB and asserts the component type and content`
   - negative-control: `have import-skill write the wrong prompt_type (e.g. 'role') -> the type assertion fails -> skills-migration.test.ts goes red`
   - delivered-by: `skills-migration`
+
+- `[dod.4]` **Removal is GATED on zero data loss: with a deliberately non-equivalent migrated agent (report not all-PASS), the removal runbook refuses to remove the fixture .md. (behavioral)** — Removal is GATED on zero data loss: with a deliberately non-equivalent migrated agent (report not all-PASS), the removal runbook refuses to remove the fixture .md..
+  - given: an equivalence report containing at least one FAIL entry
+  - when: the removal runbook's retire() is invoked against that report
+  - then: retire() refuses (throws/returns blocked) and the fixture .md still exists
+  - entrypoint: `npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/removal-runbook.test.ts`
+  - observable: `vitest exits 0 and the case 'retire refuses when report is not all-PASS' asserts retire throws/aborts and the fixture path is untouched; a sibling case asserts an all-PASS report removes the fixture AND compile still produces the agent`
+  - negative-control: `remove the all-PASS guard in retire() -> retire deletes the fixture despite a FAIL entry -> removal-runbook.test.ts goes red`
+  - delivered-by: `removal-runbook, roundtrip-equivalence-gate`
