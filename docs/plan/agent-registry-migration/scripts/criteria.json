@@ -17,6 +17,16 @@
       "paths": [
         "docs/plan/agent-registry-migration/decisions.md"
       ]
+    },
+    {
+      "id": "migration-design.3",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "zero.data.loss|round-trip|claude-agents|cross-repo",
+      "paths": [
+        "docs/plan/agent-registry-migration/decisions.md"
+      ]
     }
   ]
 }
