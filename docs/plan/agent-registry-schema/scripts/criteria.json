@@ -173,6 +173,16 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/roundtrip.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "seed-and-roundtrip.2",
+      "phase": "seed",
+      "tier": null,
+      "kind": "present",
+      "pattern": "success_criteria|escalation|convergence",
+      "paths": [
+        "packages/ai/agent-registry/src/seed/prompt-types.ts"
+      ]
     }
   ]
 }
