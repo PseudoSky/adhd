@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["packages/ai/agent-mcp/src"]
 mutates:    ["docs/plan/agent-mcp-refactor/review.md", "docs/plan/agent-mcp-refactor/scripts/review_gate.py"]
 ```
 
