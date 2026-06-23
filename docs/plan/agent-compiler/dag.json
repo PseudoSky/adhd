@@ -25,6 +25,23 @@
       ],
       "context": "contexts/compiler-design.md",
       "notes": ""
+    },
+    "scaffold-package": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": [
+        "compiler-design"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-compiler/project.json",
+        "packages/ai/agent-compiler/package.json",
+        "packages/ai/agent-compiler/src/index.ts",
+        "packages/ai/agent-compiler/src/db/client.ts",
+        "tsconfig.base.json"
+      ],
+      "context": "contexts/scaffold-package.md",
+      "notes": ""
     }
   },
   "authored_with": {
