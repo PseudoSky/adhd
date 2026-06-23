@@ -637,6 +637,14 @@ def phase_done() -> list[CheckResult]:
 def phase_final() -> list[CheckResult]:
     results = []
 
+    # [v2.bin-built] R4: probes drive the F26 bundled bin (dist/index.js), NOT tsx src/index.ts
+    # (which cannot resolve @adhd/* tsconfig paths — F25/F26). Build it before any probe runs.
+    results.append(check(
+        "v2.bin-built",
+        "apigen-cli bundles to dist/index.js (the real consumer bin, F26)",
+        "npx --yes nx build apigen-cli && test -f packages/apigen/cli/dist/index.js"
+    ))
+
     # Run all sub-phases first
     results.extend(phase_foundation())
     results.extend(phase_runtime())
@@ -657,7 +665,7 @@ def phase_final() -> list[CheckResult]:
         "dod.1",
         "MCP stdio: tools/list == fixture exports; callTool deep-equals in-process ground truth",
         "node docs/plan/apigen-client-generation/scripts/probe_mcp.mjs run "
-        "--cli packages/apigen/cli/src/index.ts "
+        "--cli packages/apigen/cli/dist/index.js "
         "--source packages/apigen/cli/src/test/fixtures/real-api.ts --type mcp --transport stdio "
         "--assert deep-equal"
     ))
@@ -666,7 +674,7 @@ def phase_final() -> list[CheckResult]:
         "dod.1-sse",
         "MCP sse: tools/list + callTool parity over SSE transport (derived)",
         "node docs/plan/apigen-client-generation/scripts/probe_mcp.mjs run "
-        "--cli packages/apigen/cli/src/index.ts "
+        "--cli packages/apigen/cli/dist/index.js "
         "--source packages/apigen/cli/src/test/fixtures/real-api.ts --type mcp --transport sse "
         "--assert deep-equal"
     ))
@@ -675,7 +683,7 @@ def phase_final() -> list[CheckResult]:
         "dod.1-streaming-http",
         "MCP streaming-http: tools/list + callTool parity over streamable-HTTP transport (derived)",
         "node docs/plan/apigen-client-generation/scripts/probe_mcp.mjs run "
-        "--cli packages/apigen/cli/src/index.ts "
+        "--cli packages/apigen/cli/dist/index.js "
         "--source packages/apigen/cli/src/test/fixtures/real-api.ts --type mcp --transport streaming-http "
         "--assert deep-equal"
     ))
@@ -688,7 +696,7 @@ def phase_final() -> list[CheckResult]:
         "dod.2",
         "generate writes server.ts; both run + generated server deep-equal derived ground truth",
         "node docs/plan/apigen-client-generation/scripts/probe_mcp.mjs generate-parity "
-        "--cli packages/apigen/cli/src/index.ts "
+        "--cli packages/apigen/cli/dist/index.js "
         "--source packages/apigen/cli/src/test/fixtures/real-api.ts --type mcp "
         "--assert deep-equal"
     ))
@@ -734,7 +742,7 @@ def phase_final() -> list[CheckResult]:
         "dod.5",
         "run-registry: tagged tools derived from packages; excluded absent; routing deep-equals ground truth",
         "node docs/plan/apigen-client-generation/scripts/probe_mcp.mjs registry "
-        "--cli packages/apigen/cli/src/index.ts "
+        "--cli packages/apigen/cli/dist/index.js "
         "--packages-dir packages/apigen/cli/src/test/fixtures/registry --tag api --type mcp "
         "--assert deep-equal"
     ))
@@ -752,7 +760,7 @@ def phase_final() -> list[CheckResult]:
         "dod.cli",
         "generated CLI: each subcommand's stdout JSON deep-equals derived ground truth",
         "node docs/plan/apigen-client-generation/scripts/probe_mcp.mjs cli-output "
-        "--cli packages/apigen/cli/src/index.ts "
+        "--cli packages/apigen/cli/dist/index.js "
         "--source packages/apigen/cli/src/test/fixtures/real-api.ts --type cli-output "
         "--assert deep-equal"
     ))
@@ -764,7 +772,7 @@ def phase_final() -> list[CheckResult]:
         "dod.1-live",
         "live model end-to-end (APIGEN_LIVE=1): model lists+calls a derived tool; result deep-equals ground truth",
         "node docs/plan/apigen-client-generation/scripts/probe_mcp.mjs live "
-        "--cli packages/apigen/cli/src/index.ts "
+        "--cli packages/apigen/cli/dist/index.js "
         "--source packages/apigen/cli/src/test/fixtures/real-api.ts --type mcp "
         "--assert deep-equal"
     ))
@@ -919,6 +927,50 @@ def phase_final() -> list[CheckResult]:
         "test -f packages/apigen/cli/src/test/integration/canonical.spec.ts && "
         "npx --yes nx test apigen-cli packages/apigen/cli/src/test/integration/canonical.spec.ts "
         "-t 'asserts --type selects target and --use composes layer and mount plugins'"
+    ))
+
+    # ---- v2 behavioral DoD dod.14-19 (STUBS — audit-final-v2 executor adds real teeth) ----
+    results.append(check(
+        "dod.14",
+        "streaming: chunks delivered; error-after-first-chunk in-band; mid-stream cancel runs end path",
+        "test -f packages/apigen/cli/src/test/integration/streaming.spec.ts && "
+        "npx --yes nx test apigen-cli packages/apigen/cli/src/test/integration/streaming.spec.ts "
+        "-t 'asserts in-band error-after-first-chunk and mid-stream cancel'"
+    ))
+    results.append(check(
+        "dod.15",
+        "verb derives from safe; out-of-source projection-config override flips action->GET with no source change",
+        "test -f packages/apigen/cli/src/test/integration/canonical.spec.ts && "
+        "npx --yes nx test apigen-cli packages/apigen/cli/src/test/integration/canonical.spec.ts "
+        "-t 'asserts verb derives from safe with out-of-source override'"
+    ))
+    results.append(check(
+        "dod.16",
+        "two ids projecting to the same target is a hard extract-time error (no silent last-writer-wins)",
+        "test -f packages/apigen/cli/src/test/integration/canonical.spec.ts && "
+        "npx --yes nx test apigen-cli packages/apigen/cli/src/test/integration/canonical.spec.ts "
+        "-t 'asserts duplicate projection is a hard extract-time error'"
+    ))
+    results.append(check(
+        "dod.17",
+        "gateway partial availability: killing the Python sidecar 503s only its ops; TS ops keep serving",
+        "test -f packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts && "
+        "npx --yes nx test apigen-cli packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts "
+        "-t 'asserts only the dead host ops 503'"
+    ))
+    results.append(check(
+        "dod.18",
+        "class exports: static method dispatches; opt-in instance constructor->{instanceId}->instance-method via registry",
+        "test -f packages/apigen/cli/src/test/integration/canonical.spec.ts && "
+        "npx --yes nx test apigen-cli packages/apigen/cli/src/test/integration/canonical.spec.ts "
+        "-t 'asserts static and opt-in instance method dispatch'"
+    ))
+    results.append(check(
+        "dod.19",
+        "real consumer: built bin exposes unmodified @adhd/transform; real client deep-equals direct in-process calls",
+        "npx --yes nx build apigen-cli && "
+        "npx --yes nx test apigen-cli packages/apigen/cli/src/test/e2e/real-consumer.spec.ts "
+        "-t 'asserts real client consumes the built bin against @adhd/transform'"
     ))
 
     return results
