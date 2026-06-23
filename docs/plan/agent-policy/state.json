@@ -39,11 +39,11 @@
       "end_ref": "a031b837decebc32a524240c97b19ac8c1f265ed"
     },
     "enforcement-plugin": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T23:42:41.192Z",
-      "done_at": null,
+      "done_at": "2026-06-23T23:47:14.567Z",
       "start_ref": "9d95f98906de70f979558b8178ee69dd0761d294",
-      "end_ref": null
+      "end_ref": "9d5006aaea306654f487a7b551cc37d5c21b8676"
     },
     "audit-schema": {
       "status": "pending",
@@ -134,6 +134,18 @@
       "audit_criteria_total": 17,
       "by": "pseudosky",
       "note": "lazy resolveForAgent joins policy_category_policies × policy_agent_categories at query time; inherited_from=category slug; direct-attach override wins; 5 tests green (reopen, override, multi-category, no-membership, NC); guard exit 0; SHA a031b83"
+    },
+    {
+      "ts": "2026-06-23T23:47:14.567Z",
+      "from": "enforcement-plugin",
+      "to": "enforcement-plugin",
+      "start_ref": "9d95f98906de70f979558b8178ee69dd0761d294",
+      "end_ref": "9d5006aaea306654f487a7b551cc37d5c21b8676",
+      "audit_exit": 17,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 21,
+      "by": "pseudosky",
+      "note": "src/plugin/{index,rate-policy}.ts + enforcement-plugin.test.ts (14 tests, 14 passed). Real HookRegistry drives REAL throws propagation. Negative control nc_break_enforcement.mjs → 4 red tests (exit 1), nc_restore_enforcement.mjs → green (exit 0). Commit 9d5006aaea306654f487a7b551cc37d5c21b8676. Guard exit 0."
     }
   ],
   "amendment_log": [],
@@ -142,7 +154,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "enforcement-plugin",
+  "current_state": "audit-schema",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:06:45.453Z",
     "by": "pseudosky",
