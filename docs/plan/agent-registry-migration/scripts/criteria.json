@@ -166,6 +166,16 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "roundtrip-equivalence-gate.2",
+      "phase": "verify",
+      "tier": null,
+      "kind": "present",
+      "pattern": "compile|claude_code",
+      "paths": [
+        "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts"
+      ]
     }
   ]
 }

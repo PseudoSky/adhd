@@ -18,6 +18,7 @@
 
 - [roundtrip-equivalence-gate.1] import->compile->normalized diff == empty for the fixture agent (round-trip equivalence)
 
+- [roundtrip-equivalence-gate.2] gate drives agent-registry compile <slug> --platform claude_code
 ---
 
 ## Reservations
