@@ -224,6 +224,19 @@
       ],
       "context": "contexts/lt-dep-manifest.md",
       "notes": ""
+    },
+    "lt-fail-fast": {
+      "kind": "work",
+      "phase": "integration",
+      "depends_on": [
+        "lt-host-ts"
+      ],
+      "guard": "npx nx test apigen-cli",
+      "artifacts": [
+        "packages/apigen/cli/src/lib/commands/run.ts"
+      ],
+      "context": "contexts/lt-fail-fast.md",
+      "notes": ""
     }
   },
   "authored_with": {
