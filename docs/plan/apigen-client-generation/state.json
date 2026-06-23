@@ -277,10 +277,10 @@
       "end_ref": "1c21100e1c1adae1cd8a32a014c91e720c871a71"
     },
     "package-restructure": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T05:06:11.089Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ecf819321ff8b2b6cbdc2712040c08e82257f4aa",
       "end_ref": null
     },
     "unified-cli": {
