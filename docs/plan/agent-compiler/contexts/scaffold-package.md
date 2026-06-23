@@ -20,6 +20,7 @@
 
 - [scaffold-package.2] tsconfig path registered
 - [scaffold-package.3] tagged platform:node
+- [scaffold-package.4] package builds clean
 ---
 
 ## Reservations

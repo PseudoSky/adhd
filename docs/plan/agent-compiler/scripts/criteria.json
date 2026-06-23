@@ -64,6 +64,14 @@
       "paths": [
         "packages/ai/agent-compiler/project.json"
       ]
+    },
+    {
+      "id": "scaffold-package.4",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx build agent-compiler",
+      "expect": "exit0"
     }
   ]
 }
