@@ -156,6 +156,14 @@
       "paths": [
         "packages/ai/agent-provider/src"
       ]
+    },
+    {
+      "id": "provider-adapter-contract.3",
+      "phase": "adapter",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/adapter-resolve.test.ts",
+      "expect": "exit0"
     }
   ]
 }
