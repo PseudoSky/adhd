@@ -16,6 +16,14 @@
       "kind": "command",
       "cmd": "npx nx tsc apigen-logical",
       "expect": "exit0"
+    },
+    {
+      "id": "lt-wire-spec.1",
+      "phase": "contracts",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx test apigen-conformance",
+      "expect": "exit0"
     }
   ]
 }
