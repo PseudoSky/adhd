@@ -92,6 +92,22 @@
       ],
       "context": "contexts/policy-inheritance.md",
       "notes": ""
+    },
+    "enforcement-plugin": {
+      "kind": "work",
+      "phase": "enforcement",
+      "depends_on": [
+        "policy-inheritance"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-policy/src/plugin/index.ts",
+        "packages/ai/agent-policy/src/plugin/rate-policy.ts",
+        "packages/ai/agent-policy/src/index.ts",
+        "packages/ai/agent-policy/src/__tests__/enforcement-plugin.test.ts"
+      ],
+      "context": "contexts/enforcement-plugin.md",
+      "notes": ""
     }
   },
   "authored_with": {
