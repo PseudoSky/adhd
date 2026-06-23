@@ -46,10 +46,10 @@
       "end_ref": "dfc70e8a7269960ff7d5f6739ed3ea59400c35b2"
     },
     "seed-and-roundtrip": {
-      "status": "complete",
-      "started_at": "2026-06-23T22:17:57.079Z",
+      "status": "in_progress",
+      "started_at": "2026-06-23T22:23:25.603Z",
       "done_at": "2026-06-23T22:23:12.806Z",
-      "start_ref": "b8a7f7b893d14f6ec819ff971dcb10a84cb16b00",
+      "start_ref": "9c1f2b820e3883370a32b12dedeac3135e34ff0a",
       "end_ref": "fa97fc8db6171fc4c0017e095d701359e8ba9519"
     },
     "audit-final": {
@@ -159,7 +159,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "code-review",
+  "current_state": "seed-and-roundtrip",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:02:23.888Z",
     "by": "pseudosky",
