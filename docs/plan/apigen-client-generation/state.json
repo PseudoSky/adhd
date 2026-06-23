@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "streaming-projection",
+  "current_state": "logger-layer-plugin",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -256,11 +256,11 @@
       "end_ref": "82dbf8e0c72d30a85c45f3aeb679df2c10fff2d5"
     },
     "logger-layer-plugin": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T04:52:22.634Z",
-      "done_at": null,
+      "done_at": "2026-06-23T04:57:40.496Z",
       "start_ref": "ed5230536c1e676336c7c724dc36e44a4c609612",
-      "end_ref": null
+      "end_ref": "794ea267123968e7c28030bcf25c2c63f2ad887d"
     },
     "mount-plugins": {
       "status": "in_progress",
@@ -774,6 +774,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Dogfooded upgraded apigen-nx:plugin generator: scaffolded apigen-plugin-{logger,openapi,health} at packages/apigen/plugins/<name> with v2-shape stubs (import @adhd/apigen-core, capabilities {target,layer} §7.1). Guard nx run-many build 3 plugins exit 0. Deprecation hygiene: no ts/ dir, no apigen-ts-plugin-*. F38 fully closed. Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T04:57:40.496Z",
+      "from": "streaming-projection",
+      "to": "logger-layer-plugin",
+      "start_ref": "ed5230536c1e676336c7c724dc36e44a4c609612",
+      "end_ref": "794ea267123968e7c28030bcf25c2c63f2ad887d",
+      "audit_exit": 1,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "logger plugin as v2 Layer (typed-ctx pino Logger §8.1 rule 3; wraps op, delegates via next, error propagates outward, stream-aware). nx test apigen-plugin-logger exit 0 (orch-verified). Filled into generated v2 stub. Orchestrator-driven (F40)."
     }
   ],
   "amendment_log": [
