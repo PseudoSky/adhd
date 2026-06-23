@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [agent-and-taxonomy-schema.1] agents table with slug PK, status, model_hint, taxonomy_category
 
 ---
 
