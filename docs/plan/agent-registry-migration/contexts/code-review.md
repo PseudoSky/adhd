@@ -1,4 +1,4 @@
-# code-review — STATE_NAME
+# code-review — DIFF REVIEW: DESIGN-INTENT FIDELITY THE AUDIT CAN'T CATCH
 
 **Phase:** audit · **Kind:** review · **Depends on:** removal-runbook · **Guard:** `python3 docs/plan/agent-registry-migration/scripts/review_gate.py`
 
@@ -6,7 +6,14 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The diff of every implementation state (`migration-design` … `removal-runbook`)
+has been read by a code-reviewer (opus) and recorded an APPROVED verdict in
+`review.md` with no unresolved blocking findings. This gate catches design-intent
+violations a structural `audit_*.py` oracle cannot — e.g. an import pipeline that
+drives mocks instead of the real registry stores, a round-trip equivalence gate
+that does not actually block removal, or a removal step that is not gated on an
+all-PASS equivalence report. `audit-final` depends on this state, so the plan
+cannot reach done on a NEEDS-WORK or absent review.
 
 ---
 
