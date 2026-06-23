@@ -235,10 +235,10 @@
       "end_ref": "ebd30baef8707c350c1fee229432fe81e12a0fef"
     },
     "audit-v2-harness": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T03:09:28.149Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "66aa0ae935ed61e5208810ced4cd60f4dd231383",
       "end_ref": null
     },
     "plugin-interface": {
