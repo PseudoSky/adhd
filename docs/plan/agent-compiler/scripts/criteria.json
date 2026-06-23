@@ -17,6 +17,16 @@
       "paths": [
         "docs/plan/agent-compiler/decisions.md"
       ]
+    },
+    {
+      "id": "compiler-design.3",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "yaml_frontmatter|json_object|header builder",
+      "paths": [
+        "docs/plan/agent-compiler/decisions.md"
+      ]
     }
   ]
 }
