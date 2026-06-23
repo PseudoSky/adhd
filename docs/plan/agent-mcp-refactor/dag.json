@@ -184,6 +184,20 @@
       ],
       "context": "contexts/audit-final.md",
       "notes": ""
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "audit",
+      "depends_on": [
+        "session-e2e"
+      ],
+      "guard": "python3 docs/plan/agent-mcp-refactor/scripts/review_gate.py",
+      "artifacts": [
+        "docs/plan/agent-mcp-refactor/review.md",
+        "docs/plan/agent-mcp-refactor/scripts/review_gate.py"
+      ],
+      "context": "contexts/code-review.md",
+      "notes": "Reviewer routing: architect-reviewer (opus) — this plan is an architectural refactor (retire AgentStore, route systemPrompt through compileAgent). Diff-reading review of the full implementation (refactor-design..session-e2e) against CLAUDE.md (layer/platform isolation, @adhd/ imports, I-prefixed interfaces, JSDoc, the 'Proving features actually work' verification standard) AND decisions.md/contracts. Must check design-intent fidelity the structural audit misses: AgentStore retirement leaves NO competing source of truth; systemPrompt is a computed compat shim per the recorded policy; composed_prompt cache + sessions FK match the decided session topology; PolicyEngine reads agent-policy templates; no cross-package FK violations. Default verdict NEEDS-WORK; a PASS must be explicitly justified. On NEEDS-WORK, fixes go back to the implementation states, then re-review. Mutates only review.md + scripts/review_gate.py. (A mid-plan review, code-review-integration, gates the integration/retire core before audit-integration.)"
     }
   },
   "authored_with": {
