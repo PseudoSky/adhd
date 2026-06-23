@@ -178,6 +178,20 @@
       ],
       "context": "contexts/audit-final.md",
       "notes": ""
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "audit",
+      "depends_on": [
+        "compile-fixtures-e2e"
+      ],
+      "guard": "python3 docs/plan/agent-compiler/scripts/review_gate.py",
+      "artifacts": [
+        "docs/plan/agent-compiler/review.md",
+        "docs/plan/agent-compiler/scripts/review_gate.py"
+      ],
+      "context": "contexts/code-review.md",
+      "notes": "Reviewer routing: architect-reviewer (opus) — this plan produces an architectural artifact (the composition engine). Diff-reading review of the full implementation (compiler-design..compile-fixtures-e2e) against CLAUDE.md (layer/platform isolation, @adhd/ imports, I-prefixed interfaces, JSDoc on shared public fns, the 'Proving features actually work' verification standard) AND this plan's decisions/contracts. Must check design-intent fidelity the structural audit misses: cross-package joins honor the decided single-DB topology; composition-order resolution matches the recorded context-condition precedence; the per-platform header builder matches the decided contract; composed_prompts caching keys on the right context hash; no cross-package FK violations. Default verdict NEEDS-WORK; a PASS must be explicitly justified. On NEEDS-WORK, fixes go back to the implementation states, then re-review. Mutates only review.md + scripts/review_gate.py. (A mid-plan review, code-review-engine, gates the composition-engine core before the emit phase.)"
     }
   },
   "authored_with": {
