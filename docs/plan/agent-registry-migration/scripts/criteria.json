@@ -104,6 +104,14 @@
       "paths": [
         "packages/ai/agent-registry-migration/src/parse/frontmatter.ts"
       ]
+    },
+    {
+      "id": "body-section-splitter.1",
+      "phase": "parse",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/body-sections.test.ts",
+      "expect": "exit0"
     }
   ]
 }
