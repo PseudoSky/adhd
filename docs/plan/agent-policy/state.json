@@ -25,11 +25,11 @@
       "end_ref": "1190b44e62f47906e36b9bf2d6326790269a8f36"
     },
     "agent-policy-junction": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T23:25:55.092Z",
-      "done_at": null,
+      "done_at": "2026-06-23T23:29:40.140Z",
       "start_ref": "802032864790c6af2c0ea439b33cc1270196696c",
-      "end_ref": null
+      "end_ref": "79de1239612c12001c64ede7404aece9ba671f5e"
     },
     "policy-inheritance": {
       "status": "pending",
@@ -110,6 +110,18 @@
       "audit_criteria_total": 17,
       "by": "pseudosky",
       "note": "Added policy_policy_types + policy_policy_templates tables, generated drizzle migration 0000_sleepy_bullseye.sql, implemented PolicyTemplateStore (create/read/list) with PolicyError typed codes, exported from index.ts; 5 tests pass (reopen round-trip, enforcement array invariant, duplicate/not-found errors, list+typeFilter); guard exit 0; commit 1190b44"
+    },
+    {
+      "ts": "2026-06-23T23:29:40.140Z",
+      "from": "agent-policy-junction",
+      "to": "agent-policy-junction",
+      "start_ref": "802032864790c6af2c0ea439b33cc1270196696c",
+      "end_ref": "79de1239612c12001c64ede7404aece9ba671f5e",
+      "audit_exit": 13,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 17,
+      "by": "pseudosky",
+      "note": "policy_agent_policies junction + AgentPolicyStore.attach/listForAgent + resolveEffectiveRules; 9 tests (real on-disk SQLite, close+reopen persistence proof, phantom agent_slug no-FK proof); guard exit 0; SHA 79de1239612c12001c64ede7404aece9ba671f5e"
     }
   ],
   "amendment_log": [],
@@ -118,7 +130,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "agent-policy-junction",
+  "current_state": "policy-inheritance",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:06:45.453Z",
     "by": "pseudosky",
