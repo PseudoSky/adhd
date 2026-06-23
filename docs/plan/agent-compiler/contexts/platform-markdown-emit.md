@@ -18,6 +18,7 @@
 
 - [platform-markdown-emit.1] compileAgent entrypoint exported
 
+- [platform-markdown-emit.2] markdown emitter writes YAML frontmatter
 ---
 
 ## Reservations
