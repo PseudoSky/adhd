@@ -32,3 +32,12 @@ export type {
     CategoryPolicyRow,
     AgentCategoryInput,
 } from "./store/agent-policy-store.js";
+
+// Rate-policy enforcement plugin — mirrors @adhd/agent-mcp-budget plugin shape.
+// Registers a throws-propagating handler on "pre:model_request" to enforce
+// rate (model-call count) limits from policy template rules + override_config.
+export { createPlugin, configSchema } from "./plugin/index.js";
+export type { RatePolicyConfig } from "./plugin/index.js";
+export { evaluateRatePolicy, makeRatePolicyError } from "./plugin/rate-policy.js";
+export type { RatePolicyRules } from "./plugin/rate-policy.js";
+export { createPlugin as default } from "./plugin/index.js";
