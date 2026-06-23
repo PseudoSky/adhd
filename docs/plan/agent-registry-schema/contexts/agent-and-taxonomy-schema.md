@@ -19,6 +19,7 @@
 - [agent-and-taxonomy-schema.1] agents table with slug PK, status, model_hint, taxonomy_category
 
 - [agent-and-taxonomy-schema.2] taxonomy_categories table with ordering
+- [agent-and-taxonomy-schema.3] agent-store test passes
 ---
 
 ## Reservations
