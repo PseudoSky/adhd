@@ -27,3 +27,11 @@
   - entrypoint: `npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/composition-store.test.ts`
   - observable: `vitest exit 0 and the 'resolveComposition returns ordered, pinned, context-filtered components' test passes`
   - delivered-by: `composition-junction`
+
+- `[dod.3]` **Seeding populates every prompt_type and shared component from SEED_DATA into a fresh DB, and a second seed run is idempotent (no duplicate rows, version unchanged). (behavioral)** — Seeding populates every prompt_type and shared component from SEED_DATA into a fresh DB, and a second seed run is idempotent (no duplicate rows, version unchanged)..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/roundtrip.test.ts`
+  - observable: `vitest exit 0 and the 'seed is idempotent on re-run' test passes`
+  - delivered-by: `seed-and-roundtrip`
