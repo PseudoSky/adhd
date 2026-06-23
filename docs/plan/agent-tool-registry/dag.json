@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "title": "Agent Registry — Tool & Platform Registry (@adhd/agent-tool-registry)",
+  "plan_kind": "greenfield",
+  "phases": [],
+  "terminal": "done",
+  "nodes": {},
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.22",
+    "hash": "1e4130a84aed"
+  }
+}
