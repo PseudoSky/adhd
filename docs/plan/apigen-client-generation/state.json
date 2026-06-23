@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "naming-helpers",
+  "current_state": "layer-harness",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -214,10 +214,10 @@
       "end_ref": null
     },
     "layer-harness": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T02:23:36.382Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "5acd750907300a337746bd70e6d99d81e1a8568b",
       "end_ref": null
     },
     "central-validation": {
