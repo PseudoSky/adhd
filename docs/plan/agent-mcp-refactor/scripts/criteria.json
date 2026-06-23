@@ -37,6 +37,16 @@
       "paths": [
         "docs/plan/agent-mcp-refactor/decisions.md"
       ]
+    },
+    {
+      "id": "refactor-design.5",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "allowedBuiltinTools|systemPromptIsAgentSpec|AGENT_TOOL",
+      "paths": [
+        "docs/plan/agent-mcp-refactor/decisions.md"
+      ]
     }
   ]
 }
