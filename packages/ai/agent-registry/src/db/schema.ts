@@ -125,6 +125,97 @@ export const agentsTable = sqliteTable(
 );
 
 // ──────────────────────────────────────────────
+// registry_use_cases  (usecase-and-context-rules state)
+//
+// Seed data for the future suggestion engine (GOAL.md "Knowledge Graph").
+// Represents named scenarios components can be tagged against — e.g. code-review,
+// security-audit, data-migration. Annotation only; does NOT affect runtime composition.
+// ──────────────────────────────────────────────
+export const useCasesTable = sqliteTable("registry_use_cases", {
+    slug: text("slug").primaryKey(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+});
+
+// ──────────────────────────────────────────────
+// registry_component_usage  (usecase-and-context-rules state)
+//
+// Junction: (component_slug, use_case_slug) with an optional numeric weight.
+// Records which prompt components are valuable in which scenarios.
+// ANNOTATION ONLY — must NOT be on resolveComposition's hot path. This table
+// informs the future suggestion engine (GOAL.md "Knowledge Graph"), not runtime assembly.
+//
+// component_slug is a LOGICAL FK only (no .references()) — see the same rationale
+// applied to registry_agent_components.component_slug: the composite PK of
+// registry_prompt_components is (slug, version), not slug alone, so SQLite cannot
+// enforce an FK to a non-PK column.
+// use_case_slug is an in-package FK → registry_use_cases.slug (.references() used normally).
+// ──────────────────────────────────────────────
+export const componentUsageTable = sqliteTable(
+    "registry_component_usage",
+    {
+        componentSlug: text("component_slug").notNull(),
+        useCaseSlug: text("use_case_slug")
+            .notNull()
+            .references(() => useCasesTable.slug),
+        // Optional weight for future ranking/suggestion logic. Higher = more valuable.
+        weight: integer("weight"),
+    },
+    (t) => ({
+        pk: index("registry_component_usage_pkey").on(t.componentSlug, t.useCaseSlug),
+        useCaseIdx: index("registry_component_usage_use_case_idx").on(t.useCaseSlug),
+        componentIdx: index("registry_component_usage_component_idx").on(t.componentSlug),
+    })
+);
+
+// ──────────────────────────────────────────────
+// registry_context_rules  (usecase-and-context-rules state)
+//
+// Free-standing additive inclusion rules: "for agent X, when condition Y,
+// additionally include component Z."
+//
+// Decision 3 (decisions.md): KEEP BOTH tables. This is DISTINCT from
+// registry_agent_components.context_condition (junction-level). A junction row
+// asks "is this already-attached component included?"; a context_rules row asks
+// "does this agent gain a component it does NOT permanently own when Y holds?"
+//
+// Evaluation (Decision 3 §"Binding unification rules"):
+//   - Same JSON-predicate format as context_condition on the junction.
+//   - Same evaluator function: evaluateCondition() from composition-store.ts.
+//   - Resolution = (matching junction components) ∪ (components added by matching rules).
+//   - If the same component_slug arrives from both sources, the junction row wins for
+//     position / version_pin / is_required (the explicit attachment is authoritative).
+//   - A context_rules row can only ADD; it cannot make a junction row optional/required.
+//
+// position: an integer ordering key used when merging into Decision 2's total order.
+//   null = append at end (implementation detail for agent-compiler).
+//
+// agent_slug: logical FK → registry_agents.slug. In-package but we use .references()
+//   as it IS within the same prefix, so in-package FK rules apply (Decision 1 §3).
+// component_slug: LOGICAL FK only — same reason as component_usage above.
+// ──────────────────────────────────────────────
+export const contextRulesTable = sqliteTable(
+    "registry_context_rules",
+    {
+        id: integer("id").primaryKey({ autoIncrement: true }),
+        agentSlug: text("agent_slug")
+            .notNull()
+            .references(() => agentsTable.slug),
+        // JSON predicate in the same format as context_condition on the junction.
+        // Evaluated by evaluateCondition() (composition-store.ts) — same evaluator,
+        // never a separate one. [Decision 3: one predicate shape, one evaluator]
+        condition: text("condition").notNull(),
+        componentSlug: text("component_slug").notNull(),
+        // Position for merging into the Decision 2 total order. null = append.
+        position: integer("position"),
+    },
+    (t) => ({
+        agentIdx: index("registry_context_rules_agent_idx").on(t.agentSlug),
+        componentIdx: index("registry_context_rules_component_idx").on(t.componentSlug),
+    })
+);
+
+// ──────────────────────────────────────────────
 // registry_agent_components  (composition-junction state)
 //
 // Junction table binding agents to their ordered component set.
