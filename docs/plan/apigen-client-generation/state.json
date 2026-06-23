@@ -200,10 +200,10 @@
       "end_ref": "7f5b511b4370a6ccc68217915c8dcec0b53f3be2"
     },
     "ts-extractor-by-symbol": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T02:33:16.649Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "4d5ea9d697133d3985f2d795f17f207486da9422",
       "end_ref": null
     },
     "audit-v2-core": {
