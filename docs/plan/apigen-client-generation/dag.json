@@ -808,6 +808,23 @@
       ],
       "context": "contexts/class-exports.md",
       "notes": "SPEC §10 (H2=now): static methods -> ops at path=[file,class,method] now; instances OPT-IN now: kind:constructor (POST .../class -> {instanceId}) + kind:instance-method dispatch via instanceId + registry with TTL/dispose lifecycle. Stateful caveat documented (no horizontal scale without sticky/external store)."
+    },
+    "streaming-projection": {
+      "kind": "work",
+      "phase": "v2-projection",
+      "depends_on": [
+        "projection-transports",
+        "layer-harness",
+        "error-taxonomy"
+      ],
+      "guard": "npx --yes nx run-many -t test -p apigen-plugin-mcp apigen-plugin-api-fastify apigen-runtime",
+      "artifacts": [
+        "packages/apigen/runtime/src/lib/stream.ts",
+        "packages/apigen/plugins/mcp/src/lib/stream.ts",
+        "packages/apigen/plugins/api-fastify/src/lib/stream.ts"
+      ],
+      "context": "contexts/streaming-projection.md",
+      "notes": "SPEC §11 (D6 full streaming now): streaming:true -> async stream; Layer stream-lifecycle (start/each/end/error) per §8.1; consumer-pull backpressure; signal cancellation runs the end path; error-after-first-chunk delivered in-band per the §11 table (SSE event:error / gRPC trailing status / MCP progressive error / CLI stderr+exit) adopting Connect's semantics."
     }
   },
   "authored_with": {
