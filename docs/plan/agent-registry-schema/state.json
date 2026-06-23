@@ -25,11 +25,11 @@
       "end_ref": "a753e62352904e2ea18b8128a11bab448468b474"
     },
     "composition-junction": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T06:06:33.303Z",
-      "done_at": null,
+      "done_at": "2026-06-23T06:11:12.778Z",
       "start_ref": "054c48119f9f9b67a6e014be8473b0d2633d32f6",
-      "end_ref": null
+      "end_ref": "eefea94d58c49e9a0fc045ea63a004c55c0df8d3"
     },
     "usecase-and-context-rules": {
       "status": "pending",
@@ -122,6 +122,18 @@
       "audit_criteria_total": 11,
       "by": "pseudosky",
       "note": "Added registry_taxonomy_categories (slug PK, name, description, position integer, parent_slug self-FK) and registry_agents (slug PK, display_name, description, status text, model_hint text NOT FK, taxonomy_category in-pkg FK, default_posture, created_at, updated_at) tables to schema.ts. Generated drizzle migration 0001_agents_and_taxonomy.sql. Created AgentStore (create/read/update/delete/list with category+status filter) and TaxonomyStore (createCategory/listCategories ordered by position ASC). agent-store.test.ts: 15 tests, all green, exit 0. Proves persistence via reopen, position ordering regression guard, category/status filter correctness. Committed a753e62."
+    },
+    {
+      "ts": "2026-06-23T06:11:12.778Z",
+      "from": "composition-junction",
+      "to": "composition-junction",
+      "start_ref": "054c48119f9f9b67a6e014be8473b0d2633d32f6",
+      "end_ref": "eefea94d58c49e9a0fc045ea63a004c55c0df8d3",
+      "audit_exit": 15,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "Built registry_agent_components junction (position, version_pin, context_condition, is_required; agent_slug FK; component_slug logical-only). CompositionStore.resolveComposition: Decision-2 ALL-INCLUDED evaluator (position ASC, version DESC, slug ASC total order), Decision-4 version-pin resolution (null=latest-at-resolve, int=exact). REQUIRED_COMPONENT_EXCLUDED CompositionError for is_required+unmatched. 6 tests pass (real on-disk DB, reopen-proves-persistence, order/pin/context + throws). Migration 0002_agent_components_junction.sql generated. Committed eefea94."
     }
   ],
   "amendment_log": [],
@@ -130,7 +142,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "composition-junction",
+  "current_state": "usecase-and-context-rules",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T03:43:53.482Z",
     "by": "pseudosky",
