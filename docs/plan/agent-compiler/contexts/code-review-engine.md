@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [code-review-engine.1] review-engine.md records an APPROVED verdict with no unresolved blocking findings (architect-reviewer mid-plan review of the composition engine vs CLAUDE.md + decisions.md; single-DB join topology, composition-order precedence, binding-table resolution, no cross-package FK violations)
 
 ---
 
