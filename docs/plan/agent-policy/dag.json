@@ -11,7 +11,20 @@
     "seed"
   ],
   "terminal": "done",
-  "nodes": {},
+  "nodes": {
+    "policy-design": {
+      "kind": "work",
+      "phase": "architecture",
+      "depends_on": [],
+      "guard": "true",
+      "artifacts": [
+        "docs/plan/agent-policy/decisions.md",
+        "docs/plan/agent-policy/contexts/policy-design.md"
+      ],
+      "context": "contexts/policy-design.md",
+      "notes": ""
+    }
+  },
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.22",
