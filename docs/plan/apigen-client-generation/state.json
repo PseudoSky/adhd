@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "central-validation",
+  "current_state": "ts-extractor-by-symbol",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -193,11 +193,11 @@
       "end_ref": "b479bc7fa9c59d3cf224f83eb79723477608508a"
     },
     "naming-helpers": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T02:23:22.094Z",
-      "done_at": null,
+      "done_at": "2026-06-23T02:28:52.261Z",
       "start_ref": "377387f9859884060c0383eff648e74d1f32373b",
-      "end_ref": null
+      "end_ref": "7f5b511b4370a6ccc68217915c8dcec0b53f3be2"
     },
     "ts-extractor-by-symbol": {
       "status": "pending",
@@ -242,11 +242,11 @@
       "end_ref": null
     },
     "plugin-interface": {
-      "status": "complete",
+      "status": "in_progress",
       "started_at": "2026-06-23T02:24:01.168Z",
-      "done_at": "2026-06-23T02:28:26.936Z",
+      "done_at": null,
       "start_ref": "db5378a7d6ba71d51de8fa9a0e3996e7b549270c",
-      "end_ref": "7f5b511b4370a6ccc68217915c8dcec0b53f3be2"
+      "end_ref": null
     },
     "projection-transports": {
       "status": "pending",
@@ -613,16 +613,16 @@
       "note": "createInvoker(layers)->invoke(op,call) implemented; LayerContext (typed-extension ctx); 12 tests prove §8.1 rules 1-3; all 32 runtime tests green"
     },
     {
-      "ts": "2026-06-23T02:28:26.936Z",
+      "ts": "2026-06-23T02:28:52.261Z",
       "from": "central-validation",
-      "to": "plugin-interface",
-      "start_ref": "db5378a7d6ba71d51de8fa9a0e3996e7b549270c",
+      "to": "naming-helpers",
+      "start_ref": "377387f9859884060c0383eff648e74d1f32373b",
       "end_ref": "7f5b511b4370a6ccc68217915c8dcec0b53f3be2",
       "audit_exit": 1,
       "audit_criteria_passed": 0,
       "audit_criteria_total": 0,
       "by": "pseudosky",
-      "note": "Implemented v2 Plugin interface (SPEC §7) in plugin.ts: Plugin<Opts> with capabilities {target,layer,mount,envelope} + all supporting types (Call,Next,Result,Chunk,Transport,Extensions,Descriptor,Harness,Server,File,MountedOperation). Full JSDoc. Exported from index.ts. Build exits 0."
+      "note": "Implemented @adhd/apigen-naming: toKebab/toCamel/toPascal/toSnake projectors, normalizeFileName, project() (verb-from-safe + ProjectionConfig override), checkCollisions (CollisionDetectedError hard error), §9.1 envelope helpers. 40 tests green."
     }
   ],
   "amendment_log": [
