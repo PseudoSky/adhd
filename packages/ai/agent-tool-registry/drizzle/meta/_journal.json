@@ -8,6 +8,13 @@
       "when": 1782250713563,
       "tag": "0000_dry_roulette",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1782251442103,
+      "tag": "0001_gray_talkback",
+      "breakpoints": true
     }
   ]
 }
