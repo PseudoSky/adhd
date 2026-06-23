@@ -17,3 +17,15 @@ export type {
     PolicyTemplateCreateInput,
     PolicyErrorCode,
 } from "./store/policy-template-store.js";
+
+// Agent↔policy junction store + domain types
+export {
+    AgentPolicyStore,
+    AgentPolicyError,
+    resolveEffectiveRules,
+} from "./store/agent-policy-store.js";
+export type {
+    AgentPolicyRow,
+    AgentPolicyAttachInput,
+    AgentPolicyErrorCode,
+} from "./store/agent-policy-store.js";
