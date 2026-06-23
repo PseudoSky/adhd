@@ -24,3 +24,5 @@ export type {
     ToolFormatErrorCode,
     EmitShape,
 } from "./store/tool-format-store.js";
+
+export { ProviderAdapterImpl } from "./adapter/provider-adapter.js";
