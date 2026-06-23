@@ -56,7 +56,28 @@
         "packages/ai/agent-mcp/src/__tests__/compiler-resolve.test.ts"
       ],
       "context": "contexts/compiler-integration.md",
-      "notes": ""
+      "notes": "",
+      "changes": {
+        "resigns": [
+          {
+            "symbol": "AgentDefinition.systemPrompt",
+            "file": "packages/ai/agent-mcp-types/src/domain.ts",
+            "reason": "semantics change from user-authored source-of-truth to a computed value populated from compileAgent output; field retained as compat shim"
+          },
+          {
+            "symbol": "SessionStore.getAgentDefinition",
+            "file": "packages/ai/agent-mcp/src/store/session-store.ts",
+            "reason": "session start now resolves systemPrompt via the compiler + composed_prompt cache before/while snapshotting AgentDefinition"
+          }
+        ],
+        "adds": [
+          {
+            "symbol": "resolveComposedPrompt",
+            "file": "packages/ai/agent-mcp/src/engine/prompt-resolver.ts",
+            "reason": "new resolver: cache lookup then compileAgent, writes composed_prompt_id"
+          }
+        ]
+      }
     },
     "agent-store-retire": {
       "kind": "work",
@@ -73,7 +94,21 @@
         "packages/ai/agent-mcp/src/__tests__/agent-cache-store.test.ts"
       ],
       "context": "contexts/agent-store-retire.md",
-      "notes": ""
+      "notes": "",
+      "changes": {
+        "resigns": [
+          {
+            "symbol": "AgentStore",
+            "file": "packages/ai/agent-mcp/src/store/agent-store.ts",
+            "reason": "transitions from flat-systemPrompt source-of-truth to a thin compiled-agent cache; agent CRUD delegates definition resolution to agent-registry + agent-compiler"
+          },
+          {
+            "symbol": "agentDefinitionSchema.systemPrompt",
+            "file": "packages/ai/agent-mcp/src/validation/agent.ts",
+            "reason": "systemPrompt resigned from a required user-authored z.string() to an optional/computed compat-shim field — removes the flat-systemPrompt authoring path"
+          }
+        ]
+      }
     },
     "policy-engine-bridge": {
       "kind": "work",
@@ -89,7 +124,26 @@
         "packages/ai/agent-mcp/src/__tests__/policy-tool-reconcile.test.ts"
       ],
       "context": "contexts/policy-engine-bridge.md",
-      "notes": ""
+      "notes": "",
+      "changes": {
+        "resigns": [
+          {
+            "symbol": "PolicyEngine",
+            "file": "packages/ai/agent-mcp/src/engine/policy.ts",
+            "reason": "check() extended to read rate/permission limits from agent-policy templates rather than only hardcoded PolicyConfig"
+          },
+          {
+            "symbol": "claudecliProviderSchema.allowedBuiltinTools",
+            "file": "packages/ai/agent-mcp/src/validation/agent.ts",
+            "reason": "reconciled with registry AGENT_TOOL/compiled-tools model so it is not a competing third tool-permission model"
+          },
+          {
+            "symbol": "claudecliProviderSchema.systemPromptIsAgentSpec",
+            "file": "packages/ai/agent-mcp/src/validation/agent.ts",
+            "reason": "reconciled with compiler-emitted agent spec / AGENT_TOOL declaration model"
+          }
+        ]
+      }
     },
     "audit-integration": {
       "kind": "audit",
@@ -136,5 +190,8 @@
     "plugin": "workflow",
     "version": "0.8.22",
     "hash": "1e4130a84aed"
-  }
+  },
+  "depends_on_plans": [
+    "agent-compiler"
+  ]
 }
