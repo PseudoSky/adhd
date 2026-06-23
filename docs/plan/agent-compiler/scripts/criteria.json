@@ -212,6 +212,14 @@
       "paths": [
         "packages/ai/agent-compiler/src/cache/composed-prompt-cache.ts"
       ]
+    },
+    {
+      "id": "composed-prompt-caching.2",
+      "phase": "cache",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-cache.test.ts",
+      "expect": "exit0"
     }
   ]
 }
