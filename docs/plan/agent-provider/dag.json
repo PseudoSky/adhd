@@ -11,7 +11,24 @@
     "audit"
   ],
   "terminal": "done",
-  "nodes": {},
+  "nodes": {
+    "scaffold-package": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": [],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-provider/project.json",
+        "packages/ai/agent-provider/package.json",
+        "packages/ai/agent-provider/src/index.ts",
+        "packages/ai/agent-provider/src/db/client.ts",
+        "packages/ai/agent-provider/src/db/schema.ts",
+        "tsconfig.base.json"
+      ],
+      "context": "contexts/scaffold-package.md",
+      "notes": ""
+    }
+  },
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.22",
