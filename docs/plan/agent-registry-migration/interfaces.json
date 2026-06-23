@@ -1,14 +1,117 @@
 {
-  "$note": "Contract notes only. Updated for @adhd/agent-registry Decision 5 (head/version split) so the importer builds against the corrected component shape. Does NOT alter this plan's state.json/dag.json.",
-  "consumes": {
-    "registry-component-import": {
-      "from": "@adhd/agent-registry (docs/plan/agent-registry-schema)",
-      "how": "import-pipeline writes via ComponentStore + CompositionStore against the ONE shared SQLite handle.",
-      "component-model": {
-        "shape": "head/version split (Decision 5): each imported .md body section becomes a registry_components head row (created once per slug) plus a registry_component_versions row at its version. UNIQUE(slug, version) + the slug→head FK are enforced, so an importer that emits a version for a missing head, or a duplicate (slug, version), now THROWS instead of silently inserting.",
-        "create-vs-version": "ComponentStore.create(slug,...) inserts head + v1 atomically for a NEW slug; ComponentStore.version(slug, content) appends a new version row to an EXISTING head. Content-hash dedup (SEED_DATA §0 step 5) decides which: a new head for an unseen slug, a new version row for changed content of an existing slug, or a no-op reuse.",
-        "junction": "CompositionStore.attach writes registry_agent_components with component_slug as an enforced FK → registry_components.slug and version_pin (null on import) as an enforced nullable FK → registry_component_versions.version_id. Pin an exact version with attach({ pinVersion }) or a pre-resolved version_id with attach({ versionPin })."
-      }
-    }
+  "better-sqlite3": {
+    "provenance": "vendored-source",
+    "resolved_version": "12.10.0",
+    "source": "node_modules/better-sqlite3/lib/index.d.ts",
+    "confidence": "vendored",
+    "interface": "new Database(path); db.pragma('journal_mode = WAL'); db.pragma('foreign_keys = ON'); db.close()",
+    "shape": {
+      "key_api_note": "Migration is a CONSUMER package — it opens the shared registry DB and writes rows through the upstream stores. The import-pipeline + roundtrip tests close + reopen the handle to prove rows persisted (reopen-proves-persistence). Gate on the runner exit code."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "import-pipeline",
+      "roundtrip-equivalence-gate"
+    ]
+  },
+  "yaml": {
+    "provenance": "vendored-source",
+    "resolved_version": "see package.json (yaml)",
+    "source": "node_modules/yaml/dist/index.d.ts",
+    "confidence": "vendored",
+    "interface": "import { parse } from 'yaml'; parse(frontmatterBlock) -> object",
+    "shape": {
+      "key_api_note": "parseFrontmatter splits the file at the leading --- YAML fence and parses the block. name: -> slug; description: -> description; tools: comma list -> tokens; model: -> alias."
+    },
+    "cited_by": [
+      "frontmatter-parser"
+    ]
+  },
+  "registry-consumed": {
+    "provenance": "vendored-source",
+    "resolved_version": "0.0.1",
+    "source": "packages/ai/agent-registry/src/store/component-store.ts (ComponentStore.create, ComponentStore.version, ComponentStore.resolveVersionId — lines 130-172, 288-334, 260-280); packages/ai/agent-registry/src/store/composition-store.ts (CompositionStore.attach — lines 133-161); packages/ai/agent-registry/src/store/agent-store.ts (AgentStore.create); packages/ai/agent-registry/src/index.ts (barrel)",
+    "confidence": "verified",
+    "interface": "import { AgentStore, ComponentStore, CompositionStore } from '@adhd/agent-registry'",
+    "shape": {
+      "component_model": "Decision 5 head/version split: ComponentStore.create({slug,type,content,isShared?}) inserts head row (registry_components, slug TEXT PK) + version-1 row (registry_component_versions, version_id INTEGER PK AUTOINCREMENT) atomically in a transaction. Each imported .md body section becomes one create() call for a new slug or a version() call to append a new version row to an existing head. UNIQUE(slug,version) + the slug→head FK are DB-enforced, so emitting a version for a missing head or a duplicate (slug,version) now THROWS instead of silently inserting.",
+      "importAgent": "src/import/import-agent.ts :: importAgent(db, mdPath): parseFrontmatter -> splitBody -> AgentStore.create(AGENT row) -> ComponentStore.create (new slug) or ComponentStore.version (existing slug, changed content) -> dedup by normalized-text hash reuses shared components (no-op if content unchanged) -> CompositionStore.attach({agentSlug, componentSlug, position, versionPin: null, isRequired: true}) writes junction rows. Returns an import result including flagged tokens for human review.",
+      "version_pin_on_import": "CompositionStore.attach is called with versionPin: null on import (resolve latest at resolve-time). Pin an exact version with attach({ pinVersion: humanVersionNumber }) or attach({ versionPin: versionId }) when needed. See packages/ai/agent-registry/src/store/composition-store.ts:133-161.",
+      "resolveVersionId": "ComponentStore.resolveVersionId(slug, version): number — maps a (slug, humanVersion) pair to its stable registry_component_versions.version_id. Used when a junction version_pin needs to reference a specific version_id after import. See packages/ai/agent-registry/src/store/component-store.ts:260-280.",
+      "dependency_edge": "agent-registry-migration DEPENDS ON agent-registry-schema. References AgentStore.create + ComponentStore.create/version/resolveVersionId + CompositionStore.attach. Writes rows into agent-registry's stores (REFERENCES.md 'Agent Definition Files').",
+      "key_api_note": "Consumed by import-pipeline + skills-migration. Uses REAL stores, not mocks (real-deps-not-mocks)."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "import-pipeline",
+      "skills-migration",
+      "roundtrip-equivalence-gate"
+    ]
+  },
+  "tool-registry-consumed": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0 (see docs/plan/agent-tool-registry/interfaces.json :: agent-tool-registry-public-api)",
+    "source": "@adhd/agent-tool-registry (UPSTREAM — plan agent-tool-registry)",
+    "confidence": "documented",
+    "interface": "import { ToolBindingStore, AgentToolStore } from '@adhd/agent-tool-registry'",
+    "shape": {
+      "token_to_canonical": "the frontmatter parser resolves each `tools:` token (e.g. 'Bash','Read','Write') via ToolBindingStore.resolve / a lookup WHERE platform_tool_name = token AND platform = claude_code -> canonical tool id ('shell_exec','file_read',...). Unknown tokens land in a `flagged` list (never silently dropped — may need a new MCP_SERVER row).",
+      "agent_tool_grants": "importAgent writes AgentToolStore grants for the resolved canonical tool ids.",
+      "dependency_edge": "agent-registry-migration DEPENDS ON agent-tool-registry. References ToolBindingStore.resolve + AgentToolStore.grant. Writes AGENT_TOOL rows.",
+      "key_api_note": "Consumed by frontmatter-parser + import-pipeline."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "frontmatter-parser",
+      "import-pipeline"
+    ]
+  },
+  "provider-consumed": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0 (see docs/plan/agent-provider/interfaces.json :: agent-provider-public-api)",
+    "source": "@adhd/agent-provider (UPSTREAM — plan agent-provider)",
+    "confidence": "documented",
+    "interface": "import { ModelStore } from '@adhd/agent-provider'",
+    "shape": {
+      "model_hint_resolution": "the frontmatter parser resolves the `model:` alias (e.g. 'sonnet') via the model_platform_bindings[claude_code] (ModelStore) -> canonical modelHint (claude_sonnet_4_6); unknowns flagged. The importer writes AGENT.model_hint from this.",
+      "dependency_edge": "agent-registry-migration reads agent-provider's model bindings to map a claude_code model alias back to a canonical model id (REFERENCES.md frontmatter mapping table: model: alias -> AGENT.model_hint -> MODEL_PLATFORM_BINDING[claude_code]).",
+      "key_api_note": "Consumed by frontmatter-parser. Read-only against the seeded provider bindings."
+    },
+    "cited_by": [
+      "frontmatter-parser",
+      "import-pipeline"
+    ]
+  },
+  "policy-consumed": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0 (see docs/plan/agent-policy/interfaces.json :: agent-policy-public-api)",
+    "source": "@adhd/agent-policy (UPSTREAM — plan agent-policy)",
+    "confidence": "documented",
+    "interface": "import { AgentPolicyStore } from '@adhd/agent-policy'",
+    "shape": {
+      "policy_migration": "ad-hoc policy in agent frontmatter (allowedAgents arrays, permission lists) is superseded by AGENT_POLICY rows — the importer writes AgentPolicyStore attachments for the policies derived from frontmatter (SCOPE.md 'Ad-hoc Policy in Agent Frontmatter'). max_rework becomes a policy override_config parameter rather than a hardcoded field.",
+      "dependency_edge": "agent-registry-migration DEPENDS ON agent-policy. References AgentPolicyStore.attach. Writes AGENT_POLICY rows.",
+      "key_api_note": "Consumed by import-pipeline. This plan runs LAST (it includes the final removal phase) and writes rows into the schema, tool-registry, and policy stores."
+    },
+    "cited_by": [
+      "import-pipeline"
+    ]
+  },
+  "compiler-consumed": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0 (see docs/plan/agent-compiler/interfaces.json :: agent-compiler-public-api)",
+    "source": "@adhd/agent-compiler (UPSTREAM — plan agent-compiler)",
+    "confidence": "documented",
+    "interface": "the REAL `agent-registry compile <slug> --platform claude_code` CLI / compileAgent",
+    "shape": {
+      "equivalence_gate": "src/verify/equivalence-gate.ts :: verifyEquivalence(db, mdPath) imports a fixture agent, runs the REAL @adhd/agent-compiler `agent-registry compile <slug> --platform claude_code`, normalizes both the compiled output and the original .md, and diffs them. Empty diff = PASS. buildReport(results) -> { entries, allPass } gates the removal phase — nothing is removed until the round-trip is verified for every agent (REFERENCES.md 'Agent Definition Files'; no data loss).",
+      "dependency_edge": "agent-registry-migration DEPENDS ON agent-compiler (the round-trip gate drives the real compile). This is in addition to the schema/tool-registry/policy write dependencies — confirmed by scaffold-package.md (deps include @adhd/agent-registry + @adhd/agent-compiler).",
+      "key_api_note": "Consumed by roundtrip-equivalence-gate. Because agent-compiler already depends on schema/tool-registry/provider/policy, migration depending on the compiler transitively pulls the whole convergence — which is why migration is LAST."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "roundtrip-equivalence-gate",
+      "removal-runbook"
+    ]
   }
 }
