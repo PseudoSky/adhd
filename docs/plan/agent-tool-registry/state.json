@@ -197,9 +197,9 @@
   },
   "current_state": "audit-final",
   "dod_provenance": {
-    "confirmed_at": "2026-06-23T04:02:23.888Z",
+    "confirmed_at": "2026-06-23T23:00:51.158Z",
     "by": "pseudosky",
-    "note": "DoD derived from docs/plan/agent-registry spec; confirmed by team-lead plan-authoring task 2026-06-22",
+    "note": "DoD dod.1-5 confirmed by pseudosky 2026-06-23; all audit-proven (--phase final 28/28), code-review APPROVED. tool-registry closed.",
     "dod_ids": [
       "dod.1",
       "dod.2",
