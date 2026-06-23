@@ -81,5 +81,17 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "scaffold-package"
+  "current_state": "design-and-architecture",
+  "dod_provenance": {
+    "confirmed_at": "2026-06-23T03:43:53.482Z",
+    "by": "pseudosky",
+    "note": "DoD derived from docs/plan/agent-registry/{GOAL,SCOPE,DATA_MODEL,SEED_DATA}.md; confirmed by team-lead via plan-authoring task 2026-06-22",
+    "dod_ids": [
+      "dod.1",
+      "dod.2",
+      "dod.3",
+      "dod.4",
+      "dod.5"
+    ]
+  }
 }
