@@ -844,6 +844,19 @@
       ],
       "context": "contexts/python-host.md",
       "notes": "SPEC §14 (H1): minimal REAL second host so the §13.1 sidecar-gateway IPC + partial-availability are proven against a true foreign runtime, not a TS stub (fixes R9). Python -extractor (source->descriptor), -runtime (invoke/validate/dispatch), one echo plugin, gateway IPC adapter. Must pass apigen-conformance vectors."
+    },
+    "audit-v2-host": {
+      "kind": "audit",
+      "phase": "v2-host-contract",
+      "depends_on": [
+        "python-host"
+      ],
+      "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase v2-host",
+      "artifacts": [
+        "docs/plan/apigen-client-generation/scripts/audit_apigen.py"
+      ],
+      "context": "contexts/audit-v2-host.md",
+      "notes": "Drives the REAL mixed-host gateway: adhd-apigen run --source <ts> <py> -> op host:ts answered by TS runtime, host:python by Python runtime; kill the Python sidecar -> only its ops 503 (partial availability §13.1) while TS keeps serving; conformance vectors pass on the Python host. Negative control: route all ops to one runtime -> cross-host op red."
     }
   },
   "authored_with": {
