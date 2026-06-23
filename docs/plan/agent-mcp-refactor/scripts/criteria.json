@@ -47,6 +47,16 @@
       "paths": [
         "docs/plan/agent-mcp-refactor/decisions.md"
       ]
+    },
+    {
+      "id": "runtime-sink-schema.1",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "composed_prompts|composedPromptsTable",
+      "paths": [
+        "packages/ai/agent-mcp/src/db/schema.ts"
+      ]
     }
   ]
 }
