@@ -19,6 +19,7 @@
 - [platform-markdown-emit.1] compileAgent entrypoint exported
 
 - [platform-markdown-emit.2] markdown emitter writes YAML frontmatter
+- [platform-markdown-emit.3] compileAgent emits real markdown+json from rows
 ---
 
 ## Reservations
