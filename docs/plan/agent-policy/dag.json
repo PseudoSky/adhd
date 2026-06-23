@@ -16,7 +16,7 @@
       "kind": "work",
       "phase": "architecture",
       "depends_on": [],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-policy/scripts/audit_policy.py --phase architecture",
       "artifacts": [
         "docs/plan/agent-policy/decisions.md",
         "docs/plan/agent-policy/contexts/policy-design.md"
@@ -30,7 +30,7 @@
       "depends_on": [
         "policy-design"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx build agent-policy",
       "artifacts": [
         "packages/ai/agent-policy/project.json",
         "packages/ai/agent-policy/package.json",
@@ -48,7 +48,7 @@
       "depends_on": [
         "scaffold-package"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/policy-template-store.test.ts",
       "artifacts": [
         "packages/ai/agent-policy/src/db/schema.ts",
         "packages/ai/agent-policy/src/store/policy-template-store.ts",
@@ -65,7 +65,7 @@
       "depends_on": [
         "policy-type-and-template-schema"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/agent-policy-store.test.ts",
       "artifacts": [
         "packages/ai/agent-policy/src/db/schema.ts",
         "packages/ai/agent-policy/src/store/agent-policy-store.ts",
@@ -82,7 +82,7 @@
       "depends_on": [
         "agent-policy-junction"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/inheritance.test.ts",
       "artifacts": [
         "packages/ai/agent-policy/src/db/schema.ts",
         "packages/ai/agent-policy/src/store/agent-policy-store.ts",
@@ -99,7 +99,7 @@
       "depends_on": [
         "policy-inheritance"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/enforcement-plugin.test.ts",
       "artifacts": [
         "packages/ai/agent-policy/src/plugin/index.ts",
         "packages/ai/agent-policy/src/plugin/rate-policy.ts",
@@ -115,7 +115,7 @@
       "depends_on": [
         "enforcement-plugin"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-policy/scripts/audit_policy.py --phase schema",
       "artifacts": [
         "docs/plan/agent-policy/scripts/audit_policy.py"
       ],
@@ -128,7 +128,7 @@
       "depends_on": [
         "audit-schema"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/roundtrip.test.ts",
       "artifacts": [
         "packages/ai/agent-policy/src/seed/policy-types.ts",
         "packages/ai/agent-policy/src/seed/policy-templates.ts",
@@ -145,7 +145,7 @@
       "depends_on": [
         "seed-and-roundtrip"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-policy/scripts/audit_policy.py --phase final",
       "artifacts": [
         "docs/plan/agent-policy/scripts/audit_policy.py"
       ],
