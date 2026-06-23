@@ -172,10 +172,10 @@
       "end_ref": null
     },
     "audit-final-v2": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T18:15:17.668Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "7290e29e22ed8fd6daf23991ba4918ec75e5f337",
       "end_ref": null
     },
     "integration-tests-v2": {
