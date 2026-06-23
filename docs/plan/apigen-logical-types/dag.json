@@ -4,7 +4,8 @@
   "plan_kind": "greenfield",
   "phases": [
     "contracts",
-    "registry"
+    "registry",
+    "scalars"
   ],
   "terminal": "done",
   "nodes": {
