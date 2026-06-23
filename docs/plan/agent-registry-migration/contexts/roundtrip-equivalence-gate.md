@@ -20,6 +20,7 @@
 
 - [roundtrip-equivalence-gate.2] gate drives agent-registry compile <slug> --platform claude_code
 - [roundtrip-equivalence-gate.3] equivalence report lists per-agent PASS/FAIL; report blocks removal
+- [roundtrip-equivalence-gate.4] corrupt a migrated component -> round-trip diff fails -> gate reports FAIL
 ---
 
 ## Reservations
