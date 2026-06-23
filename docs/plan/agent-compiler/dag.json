@@ -136,6 +136,20 @@
       ],
       "context": "contexts/composed-prompt-caching.md",
       "notes": ""
+    },
+    "audit-engine": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "compile-cli",
+        "composed-prompt-caching"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "docs/plan/agent-compiler/scripts/audit_compiler.py"
+      ],
+      "context": "contexts/audit-engine.md",
+      "notes": ""
     }
   },
   "authored_with": {
