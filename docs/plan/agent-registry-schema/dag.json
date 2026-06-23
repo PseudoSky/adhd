@@ -37,7 +37,9 @@
       "artifacts": [
         "packages/ai/agent-registry/src/db/schema.ts",
         "packages/ai/agent-registry/src/store/component-store.ts",
-        "packages/ai/agent-registry/src/index.ts"
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/__tests__/component-store.test.ts",
+        "packages/ai/agent-registry/drizzle"
       ],
       "context": "contexts/lookup-and-component-schema.md",
       "notes": ""
