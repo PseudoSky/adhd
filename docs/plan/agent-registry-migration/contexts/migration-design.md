@@ -20,6 +20,7 @@
 
 - [migration-design.2] equivalence definition (byte/behavioral) recorded
 - [migration-design.3] zero-loss gate + cross-repo boundary recorded
+- [migration-design.4] fixture agent .md checked in
 ---
 
 ## Reservations
