@@ -39,11 +39,11 @@
       "end_ref": "4b608c8a37137c70daba6defdb803b4fb347a411"
     },
     "provider-adapter-contract": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T23:40:29.706Z",
-      "done_at": null,
+      "done_at": "2026-06-23T23:44:13.922Z",
       "start_ref": "c7f6e8a167cf3278af6bd42c9c857e076a203f71",
-      "end_ref": null
+      "end_ref": "e787eede11ec1f9143f5d914f925812633b63649"
     },
     "runtime-tool-forwarding": {
       "status": "pending",
@@ -134,6 +134,18 @@
       "audit_criteria_total": 17,
       "by": "pseudosky",
       "note": "audit-schema gate: audit_provider.py --phase schema PASS (exit 0), verified by orchestrator. 4 schema states green (providers/models, bindings, tool-formats)."
+    },
+    {
+      "ts": "2026-06-23T23:44:13.922Z",
+      "from": "provider-adapter-contract",
+      "to": "provider-adapter-contract",
+      "start_ref": "c7f6e8a167cf3278af6bd42c9c857e076a203f71",
+      "end_ref": "e787eede11ec1f9143f5d914f925812633b63649",
+      "audit_exit": 13,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 20,
+      "by": "pseudosky",
+      "note": "Added StreamChunk+ProviderAdapter to agent-mcp-types (additive); ProviderAdapterImpl in agent-provider resolves canonical model ids via ModelStore.resolveModelId; 4/4 guard tests pass (real SQLite + close+reopen); nx build agent-mcp exit 0; nx build agent-mcp-types exit 0; SHA e787eed"
     }
   ],
   "amendment_log": [],
@@ -142,7 +154,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "provider-adapter-contract",
+  "current_state": "runtime-tool-forwarding",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:05:24.204Z",
     "by": "pseudosky",
