@@ -101,6 +101,23 @@
       ],
       "context": "contexts/skills-migration.md",
       "notes": ""
+    },
+    "roundtrip-equivalence-gate": {
+      "kind": "work",
+      "phase": "verify",
+      "depends_on": [
+        "import-pipeline",
+        "skills-migration"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts",
+        "packages/ai/agent-registry-migration/src/verify/normalize.ts",
+        "packages/ai/agent-registry-migration/src/index.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts"
+      ],
+      "context": "contexts/roundtrip-equivalence-gate.md",
+      "notes": ""
     }
   },
   "authored_with": {
