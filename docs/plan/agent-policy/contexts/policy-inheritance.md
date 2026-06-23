@@ -18,6 +18,7 @@
 
 - [policy-inheritance.1] category-level attach propagates via inherited_from
 
+- [policy-inheritance.2] inheritance test: new agent in category inherits mandatory policy after reopen
 ---
 
 ## Reservations
