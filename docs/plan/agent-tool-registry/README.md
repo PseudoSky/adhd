@@ -37,3 +37,5 @@
   - delivered-by: `agent-tool-junction`
 
 - `[dod.4]` **@adhd/agent-tool-registry is a platform:node Nx library registered in tsconfig.base.json that builds clean and imports no browser code (structural)** — @adhd/agent-tool-registry is a platform:node Nx library registered in tsconfig.base.json that builds clean and imports no browser code.
+
+- `[dod.5]` **The Drizzle schema contains tools, platforms, tool_platform_bindings, mcp_servers, and agent_tools tables with required fields; tool_types is a seeded text-PK lookup table, not a SQL enum (structural)** — The Drizzle schema contains tools, platforms, tool_platform_bindings, mcp_servers, and agent_tools tables with required fields; tool_types is a seeded text-PK lookup table, not a SQL enum.
