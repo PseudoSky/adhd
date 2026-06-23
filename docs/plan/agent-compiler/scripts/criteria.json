@@ -72,6 +72,16 @@
       "kind": "command",
       "cmd": "npx --yes nx build agent-compiler",
       "expect": "exit0"
+    },
+    {
+      "id": "scaffold-package.5",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "absent",
+      "pattern": "from \"react\"|document\\.|window\\.",
+      "paths": [
+        "packages/ai/agent-compiler/src"
+      ]
     }
   ]
 }
