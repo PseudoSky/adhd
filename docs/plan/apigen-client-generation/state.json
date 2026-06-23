@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "layer-harness",
+  "current_state": "naming-helpers",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -305,11 +305,11 @@
       "end_ref": null
     },
     "scaffold-v2-common": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T00:37:41.953Z",
-      "done_at": null,
+      "done_at": "2026-06-23T02:19:49.492Z",
       "start_ref": "784d4aba464d4cd60df8ff9ea791a650b72ba0d0",
-      "end_ref": null
+      "end_ref": "e73f3ec346e354135790a4d856e1d6831b50a1bb"
     },
     "scaffold-v2-ts-plugins": {
       "status": "pending",
@@ -587,6 +587,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Operation descriptor (id/host/namespace/path/kind/async/streaming/safe/input/output/envelope/typeText) + Segment{raw,words} + TypeText + JSONSchema (2020-12/$defs/$ref IR, big-int string-encode convention, x-apigen-* hints + fidelity flag); deterministic-not-refactor-stable id, safe defaults-from-kind documented; descriptor.schema.json authored as valid JSON Schema 2020-12; 6 types exported from core/src/index.ts; nx build apigen-core exit 0"
+    },
+    {
+      "ts": "2026-06-23T02:19:49.492Z",
+      "from": "layer-harness",
+      "to": "scaffold-v2-common",
+      "start_ref": "784d4aba464d4cd60df8ff9ea791a650b72ba0d0",
+      "end_ref": "e73f3ec346e354135790a4d856e1d6831b50a1bb",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "6 common v2 pkgs scaffolded in final §12 homes (naming/errors/schema/conformance/gateway/codegen-openapi) with full nx wiring; tsconfig.base paths added; all 6 build green (guard exit 0, orchestrator-verified). Executor went idle pre-complete; orchestrator completed after state-side guard verification. Token telemetry unavailable → byte proxy."
     }
   ],
   "amendment_log": [
