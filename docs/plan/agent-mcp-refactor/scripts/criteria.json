@@ -67,6 +67,16 @@
       "paths": [
         "packages/ai/agent-mcp/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "runtime-sink-schema.3",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "composed_prompt_id|composedPromptId",
+      "paths": [
+        "packages/ai/agent-mcp/src/db/schema.ts"
+      ]
     }
   ]
 }

@@ -19,6 +19,7 @@
 - [runtime-sink-schema.1] composed_prompts cache table in schema
 
 - [runtime-sink-schema.2] experiment_assignments table in schema
+- [runtime-sink-schema.3] sessions.composed_prompt_id FK column in schema
 ---
 
 ## Reservations
