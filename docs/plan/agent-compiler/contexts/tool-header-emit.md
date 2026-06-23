@@ -18,6 +18,7 @@
 
 - [tool-header-emit.1] joins tool_platform_bindings to build platform tools header
 
+- [tool-header-emit.2] resolved tools header test passes
 ---
 
 ## Reservations
