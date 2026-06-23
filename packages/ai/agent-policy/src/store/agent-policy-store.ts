@@ -3,14 +3,21 @@ import { eq } from "drizzle-orm";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyBetterSQLite3Database = import("drizzle-orm/better-sqlite3").BetterSQLite3Database<any>;
 
-import { agentPoliciesTable } from "../db/schema.js";
+import {
+    agentCategoriesTable,
+    agentPoliciesTable,
+    categoryPoliciesTable,
+} from "../db/schema.js";
 import { PolicyError } from "./policy-template-store.js";
 
 // ──────────────────────────────────────────────
 // Error codes
 // ──────────────────────────────────────────────
 
-export type AgentPolicyErrorCode = "AGENT_POLICY_ALREADY_ATTACHED";
+export type AgentPolicyErrorCode =
+    | "AGENT_POLICY_ALREADY_ATTACHED"
+    | "CATEGORY_POLICY_ALREADY_ATTACHED"
+    | "AGENT_CATEGORY_ALREADY_JOINED";
 
 /**
  * Typed error thrown by {@link AgentPolicyStore} — mirrors the PolicyError
@@ -71,6 +78,46 @@ export interface AgentPolicyAttachInput {
     overrideConfig?: Record<string, unknown>;
     /** When true, this policy is mandatory. Defaults to false. */
     isMandatory?: boolean;
+}
+
+/**
+ * Input for {@link AgentPolicyStore.attachToCategory}.
+ *
+ * Attaches a policy to a taxonomy category.  All agents that belong to the
+ * category (now or in the future) will inherit this policy via the lazy
+ * resolver — no fanout rows are written. [Decision 1]
+ */
+export interface CategoryPolicyAttachInput {
+    /** Logical taxonomy category slug (cross-package ref, no FK). */
+    categorySlug: string;
+    /** Slug of the policy template to attach to the category. */
+    policySlug: string;
+    /** When true, every inheriting agent carries this as mandatory. */
+    isMandatory?: boolean;
+}
+
+/**
+ * One row returned by {@link AgentPolicyStore.attachToCategory} confirming the
+ * category-level attachment was stored.
+ */
+export interface CategoryPolicyRow {
+    categorySlug: string;
+    policySlug:   string;
+    isMandatory:  boolean;
+}
+
+/**
+ * Input for {@link AgentPolicyStore.addAgentToCategory}.
+ *
+ * Records that `agentSlug` is a member of `categorySlug`.  At the next
+ * `resolveForAgent` call the agent automatically inherits all policies
+ * attached to that category. [Decision 1 — lazy, no re-fanout needed]
+ */
+export interface AgentCategoryInput {
+    /** Logical agent slug (cross-package ref, no FK). */
+    agentSlug: string;
+    /** Logical taxonomy category slug (cross-package ref, no FK). */
+    categorySlug: string;
 }
 
 // ──────────────────────────────────────────────
@@ -145,10 +192,9 @@ export class AgentPolicyStore {
     /**
      * Return all direct `policy_agent_policies` rows for the given agent slug.
      *
-     * In the `policy-inheritance` state a `resolveForAgent` method is added that
-     * also fans in category-inherited policies (lazy join). This method returns
-     * only the rows stored directly against the agent — sufficient for the
-     * direct-attach tests (`agent-policy-junction` acceptance criteria).
+     * Returns only rows stored directly against the agent (`inherited_from IS NULL`
+     * for direct-attach rows).  Use {@link resolveForAgent} to include inherited
+     * policies from category membership.
      *
      * @param agentSlug — the slug of the agent whose policies to retrieve.
      */
@@ -160,6 +206,150 @@ export class AgentPolicyStore {
             .all();
 
         return rows.map((r: typeof agentPoliciesTable.$inferSelect) => this._toRow(r));
+    }
+
+    /**
+     * Attach a policy template to a taxonomy CATEGORY (lazy inheritance).
+     *
+     * Stores a single `policy_category_policies` row — does NOT fan out rows to
+     * individual agents.  Any agent already in or later added to the category
+     * inherits this policy at the next `resolveForAgent` call. [Decision 1]
+     *
+     * @throws {AgentPolicyError} CATEGORY_POLICY_ALREADY_ATTACHED when the
+     *   (categorySlug, policySlug) pair already exists.
+     */
+    attachToCategory(input: CategoryPolicyAttachInput): CategoryPolicyRow {
+        const existing = this.db
+            .select()
+            .from(categoryPoliciesTable)
+            .where(eq(categoryPoliciesTable.categorySlug, input.categorySlug))
+            .all()
+            .find(
+                (r: { policySlug: string }) => r.policySlug === input.policySlug
+            );
+
+        if (existing) {
+            throw new AgentPolicyError(
+                "CATEGORY_POLICY_ALREADY_ATTACHED",
+                `Policy '${input.policySlug}' is already attached to category '${input.categorySlug}'`
+            );
+        }
+
+        const row = {
+            categorySlug: input.categorySlug,
+            policySlug:   input.policySlug,
+            isMandatory:  input.isMandatory ?? false,
+        };
+
+        this.db.insert(categoryPoliciesTable).values(row).run();
+
+        return {
+            categorySlug: row.categorySlug,
+            policySlug:   row.policySlug,
+            isMandatory:  Boolean(row.isMandatory),
+        };
+    }
+
+    /**
+     * Record that an agent is a member of a taxonomy category.
+     *
+     * At the next `resolveForAgent` call the agent automatically inherits all
+     * policies attached to the category — no re-fanout or migration needed.
+     * This is the "agent added AFTER the category-attach" case from Decision 1.
+     *
+     * @throws {AgentPolicyError} AGENT_CATEGORY_ALREADY_JOINED when the
+     *   (agentSlug, categorySlug) pair already exists.
+     */
+    addAgentToCategory(input: AgentCategoryInput): void {
+        const existing = this.db
+            .select()
+            .from(agentCategoriesTable)
+            .where(eq(agentCategoriesTable.agentSlug, input.agentSlug))
+            .all()
+            .find(
+                (r: { categorySlug: string }) => r.categorySlug === input.categorySlug
+            );
+
+        if (existing) {
+            throw new AgentPolicyError(
+                "AGENT_CATEGORY_ALREADY_JOINED",
+                `Agent '${input.agentSlug}' is already in category '${input.categorySlug}'`
+            );
+        }
+
+        this.db
+            .insert(agentCategoriesTable)
+            .values({ agentSlug: input.agentSlug, categorySlug: input.categorySlug })
+            .run();
+    }
+
+    /**
+     * Resolve the complete effective policy set for an agent at query time.
+     *
+     * Returns a union of:
+     *  1. Policies attached DIRECTLY to the agent (inheritedFrom = null).
+     *  2. Policies inherited from every category the agent belongs to,
+     *     synthesised as rows with inheritedFrom = categorySlug. [Decision 1]
+     *
+     * The join is performed at call time so newly added category policies or
+     * membership changes are always reflected — there is no stale materialised
+     * cache to invalidate.
+     *
+     * If an agent has a direct-attach for a policy AND inherits the same policy
+     * from a category, the direct-attach row takes precedence (override wins).
+     *
+     * @param agentSlug — the slug of the agent to resolve policies for.
+     */
+    resolveForAgent(agentSlug: string): AgentPolicyRow[] {
+        // 1. Direct-attach policies for this agent.
+        const directRows = this.db
+            .select()
+            .from(agentPoliciesTable)
+            .where(eq(agentPoliciesTable.agentSlug, agentSlug))
+            .all() as (typeof agentPoliciesTable.$inferSelect)[];
+
+        const directPolicySlugs = new Set(directRows.map(r => r.policySlug));
+
+        // 2. Categories the agent belongs to.
+        const categoryMemberships = this.db
+            .select()
+            .from(agentCategoriesTable)
+            .where(eq(agentCategoriesTable.agentSlug, agentSlug))
+            .all() as (typeof agentCategoriesTable.$inferSelect)[];
+
+        // 3. For each category membership, fetch attached policies and synthesise
+        //    inherited rows — skipping any policy already covered by a direct-attach
+        //    (direct attachment wins per the override semantics).
+        const inheritedRows: AgentPolicyRow[] = [];
+
+        for (const membership of categoryMemberships) {
+            const catPolicies = this.db
+                .select()
+                .from(categoryPoliciesTable)
+                .where(eq(categoryPoliciesTable.categorySlug, membership.categorySlug))
+                .all() as (typeof categoryPoliciesTable.$inferSelect)[];
+
+            for (const catPolicy of catPolicies) {
+                if (directPolicySlugs.has(catPolicy.policySlug)) {
+                    // Direct-attach overrides; skip the inherited copy.
+                    continue;
+                }
+
+                inheritedRows.push({
+                    agentSlug:      agentSlug,
+                    policySlug:     catPolicy.policySlug,
+                    overrideConfig: null,
+                    isMandatory:    Boolean(catPolicy.isMandatory),
+                    // The key contract: inherited_from = the category slug. [Decision 1]
+                    inheritedFrom:  catPolicy.categorySlug,
+                });
+            }
+        }
+
+        return [
+            ...directRows.map(r => this._toRow(r)),
+            ...inheritedRows,
+        ];
     }
 
     // ── private helpers ──────────────────────────────────────────────────────
