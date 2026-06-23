@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "conformance-vectors",
+  "current_state": "class-exports",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -319,10 +319,10 @@
       "end_ref": null
     },
     "class-exports": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T03:10:59.844Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "5a88e205d37e6459878d4f82fdb64ce9f4875cca",
       "end_ref": null
     },
     "streaming-projection": {
