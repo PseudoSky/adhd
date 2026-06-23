@@ -39,11 +39,11 @@
       "end_ref": "d8d1833d84f19d6336887b03b2867b58dfdc9688"
     },
     "audit-schema": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T22:15:48.650Z",
-      "done_at": null,
+      "done_at": "2026-06-23T22:15:57.006Z",
       "start_ref": "521b42dbccf56bf85cd4311ebf82c697bdcea437",
-      "end_ref": null
+      "end_ref": "dfc70e8a7269960ff7d5f6739ed3ea59400c35b2"
     },
     "seed-and-roundtrip": {
       "status": "pending",
@@ -127,6 +127,18 @@
       "audit_criteria_total": 15,
       "by": "pseudosky",
       "note": "Added agent_tools junction table (agent_slug LOGICAL ref, no cross-pkg FK; tool_name → tools.name real FK). Implemented AgentToolStore with grant/listForAgent/revoke. Generated drizzle migration 0003_foamy_otto_octavius.sql. 10 tests: persistence close+reopen, permission verbatim, no-FK agent_slug, context_condition JSON round-trip. Guard exit 0. Commit d8d1833."
+    },
+    {
+      "ts": "2026-06-23T22:15:57.006Z",
+      "from": "audit-schema",
+      "to": "audit-schema",
+      "start_ref": "521b42dbccf56bf85cd4311ebf82c697bdcea437",
+      "end_ref": "dfc70e8a7269960ff7d5f6739ed3ea59400c35b2",
+      "audit_exit": 12,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "audit-schema gate: python3 audit_tool_registry.py --phase schema => 16/16 PASS (exit 0), verified by orchestrator. Schema phase complete: tool_types/tools/platforms/tool_platform_bindings/mcp_servers/agent_tools all present; no-cross-pkg-FK + lookup-not-enum invariants hold."
     }
   ],
   "amendment_log": [],
@@ -135,7 +147,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "audit-schema",
+  "current_state": "seed-and-roundtrip",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:02:23.888Z",
     "by": "pseudosky",
