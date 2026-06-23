@@ -131,6 +131,23 @@
       ],
       "context": "contexts/audit-migration.md",
       "notes": ""
+    },
+    "removal-runbook": {
+      "kind": "work",
+      "phase": "removal",
+      "depends_on": [
+        "roundtrip-equivalence-gate",
+        "audit-migration"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-registry-migration/src/removal/retire.ts",
+        "packages/ai/agent-registry-migration/src/index.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/removal-runbook.test.ts",
+        "docs/plan/agent-registry-migration/RUNBOOK.md"
+      ],
+      "context": "contexts/removal-runbook.md",
+      "notes": ""
     }
   },
   "authored_with": {
