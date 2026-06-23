@@ -1,1 +1,82 @@
-{}
+{
+  "drizzle-orm": {
+    "provenance": "vendored-source",
+    "resolved_version": "see packages/ai/agent-mcp/package.json (match version)",
+    "source": "node_modules/drizzle-orm/sqlite-core/index.d.ts",
+    "confidence": "vendored",
+    "interface": "sqliteTable('provider_models', { id: text().primaryKey(), context_window: integer(), vision: integer({mode:'boolean'}) }); composite PK via primaryKey({columns:[...]})",
+    "shape": {
+      "boolean_columns": "integer(name, { mode: 'boolean' }) \u2014 capability flags (vision, prompt_caching, extended_thinking) MUST read back as booleans, not 0/1, after reopen",
+      "table_prefix": "provider_* prefix (provider_providers, provider_models, provider_model_platform_bindings, provider_tool_formats) for the shared-DB-file convention",
+      "key_api_note": "Mirror packages/ai/agent-mcp/src/db/schema.ts. provider/model ids are TEXT lookup PKs (not enums)."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "provider-and-model-schema",
+      "model-platform-bindings",
+      "provider-tool-formats",
+      "audit-schema"
+    ]
+  },
+  "better-sqlite3": {
+    "provenance": "vendored-source",
+    "resolved_version": "see packages/ai/agent-mcp/package.json (match version)",
+    "source": "node_modules/better-sqlite3/lib/index.d.ts",
+    "confidence": "vendored",
+    "interface": "new Database(path); db.pragma('journal_mode = WAL'); db.close()",
+    "shape": {
+      "key_api_note": "Copy packages/ai/agent-mcp/src/db/client.ts. roundtrip / model-store / binding-store tests close + reopen the handle to prove persistence; gate on the runner exit code (better-sqlite3 can segfault on teardown \u2014 never grep -q passed)."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "provider-and-model-schema",
+      "model-platform-bindings",
+      "seed-and-roundtrip"
+    ]
+  },
+  "agent-mcp-types-shared-additions": {
+    "provenance": "docs",
+    "resolved_version": "see packages/ai/agent-mcp-types/package.json",
+    "source": "packages/ai/agent-mcp-types/src/domain.ts + src/index.ts (ADDED by this plan, additively)",
+    "confidence": "documented",
+    "interface": "ADD to @adhd/agent-mcp-types: interface ProviderAdapter { stream(messages: Message[], tools: ToolDefinition[] | undefined, model: string): AsyncIterable<StreamChunk> } and type StreamChunk",
+    "shape": {
+      "ProviderAdapter": "export interface ProviderAdapter { stream(messages: Message[], tools: ToolDefinition[] | undefined, model: string): AsyncIterable<StreamChunk> } \u2014 the minimal provider abstraction. DEFINED in @adhd/agent-mcp-types, IMPLEMENTED here. Re-declaring `interface ProviderAdapter` under agent-provider/src FAILS the audit (provider-adapter-contract.2) and would invert the dependency graph.",
+      "StreamChunk": "export type StreamChunk = { type: 'text'; text: string } | { type: 'tool_call'; id: string; name: string; input: unknown }; \u2014 a small additive discriminated union (text + tool_call deltas). Keep it minimal; do not touch ProviderConfig / ToolDefinition / LLMProvider.",
+      "shared_type_rule": "ProviderAdapter, StreamChunk are SHARED cross-package types (REFERENCES.md:197-211, DATA_MODEL Domain 2b). They live in @adhd/agent-mcp-types specifically so agent-provider, agent-compiler, and agent-mcp depend on them WITHOUT a circular dep on the orchestrator. NEW-SHARED-TYPE additions required: ProviderAdapter + StreamChunk (additive; no existing symbol renamed/removed).",
+      "ProviderConfig": "the EXISTING union { type:'anthropic'|'openai'|'lmstudio'|'claudecli'; ... } in agent-mcp-types/src/domain.ts already generalizes provider configuration \u2014 the concrete adapters here implement ProviderAdapter against it. Do NOT modify ProviderConfig.",
+      "key_api_note": "These additions to @adhd/agent-mcp-types are the ONLY cross-package edit this plan makes outside its own package. They are purely additive \u2014 no external-caller resign needed (provider-adapter-contract notes confirm). Cited by provider-adapter-contract.1/.2."
+    },
+    "cited_by": [
+      "provider-adapter-contract"
+    ]
+  },
+  "agent-provider-public-api": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0",
+    "source": "packages/ai/agent-provider/src/index.ts (barrel)",
+    "confidence": "documented",
+    "interface": "@adhd/agent-provider exports: { openProviderDb, schema, ProviderStore, ModelStore, ToolFormatStore, ProviderAdapterImpl, emitToolsForProvider, UnsupportedNativeToolError, seed }",
+    "shape": {
+      "ProviderStore": "new ProviderStore(db); create({id, transport, authPattern, baseUrl?, endpointTemplate?}) ; read(id) ; list(). id in {'anthropic','openai','bedrock','lmstudio','claudecli'}.",
+      "ModelStore": "new ModelStore(db); create({id, contextWindow, outputLimit, vision?, promptCaching?, extendedThinking?, pricingTier}) ; read(id) ; list() ; resolveModelId(canonicalId, platform) -> string (throws ToolError MODEL_BINDING_NOT_FOUND if absent). resolveModelId is the CORE value: claude_opus_4_8 -> 'claude-opus-4-8' on claude_api AND 'opus' on claude_code.",
+      "ToolFormatStore": "new ToolFormatStore(db); create({providerId, canonicalTool, emitShape, typeTag?, note?}) ; read(providerId, canonicalTool) ; getShape(providerId, canonicalTool) -> {emitShape, typeTag?, note?}. emitShape in {'custom','server_side','unsupported'}.",
+      "ProviderAdapterImpl": "class implementing ProviderAdapter (imported from @adhd/agent-mcp-types). constructor(modelStore: ModelStore, platform: string, config: ProviderConfig). stream() resolves the incoming canonical `model` arg through ModelStore.resolveModelId(model, platform) BEFORE calling the provider. agent-mcp (plan 6) receives a ProviderAdapter instance and calls adapter.stream() \u2014 it never names a concrete provider.",
+      "lmstudio_adapter_roundtrip": "The 'lmstudio' adapter path performs a LIVE provider round-trip against the OpenAI-compatible endpoint http://localhost:1234. It is GATED behind a live env flag (default/offline runs SKIP) and asserts a MODEL-INDEPENDENT invariant: the adapter streams a real completion (>=1 StreamChunk of type 'text') from the endpoint. LIVE-GUARD BOOTSTRAP (must bring the model up itself, env-pinned + offline-safe, exit-code gated, never `| grep -q passed`): LMS=/Users/nix/.lmstudio/bin/lms ; MODEL=qwen3.5-9b-claude-4.6-highiq-instruct-heretic-uncensored-mlx-mxfp8 ; [ -x \"$LMS\" ] || { echo 'SKIP: lms bin absent'; exit 0; } ; \"$LMS\" server status >/dev/null 2>&1 || \"$LMS\" server start ; \"$LMS\" ps 2>/dev/null | grep -q \"$MODEL\" || \"$LMS\" load \"$MODEL\" --yes ; then run the real round-trip. The absolute lms path is required (never bare `lms`). This live test stays offline in CI (the env flag is unset).",
+      "emitToolsForProvider": "emitToolsForProvider(tools, formats) -> ToolEmit[] \u2014 FEAT-007 runtime emitter (RUNTIME_GAPS Gap 1+2). Branches on the provider_tool_formats emit_shape: 'custom' -> {name, description, input_schema}; 'server_side' -> type-tagged {type: <typeTag>, name} with NO input_schema; 'unsupported' -> throw UnsupportedNativeToolError (never a silent no-op).",
+      "UnsupportedNativeToolError": "class UnsupportedNativeToolError extends Error { code = 'UNSUPPORTED_NATIVE_TOOL' } \u2014 message names the tool + provider + the actionable note. Scope boundary: this plan does the cheap win only (emit + gate); the full client-side execution loop for bash/computer is OUT OF SCOPE and is agent-mcp-refactor's concern (FEAT-007 tracked in agent-mcp/BACKLOG.md).",
+      "seed": "seed(db) \u2014 idempotent (INSERT OR IGNORE) seeder for the five providers, the canonical models, and the model_platform_bindings from SEED_DATA.md \u00a75/\u00a77.",
+      "key_api_note": "agent-provider DEPENDS ON @adhd/agent-mcp-types (ProviderAdapter, StreamChunk, ProviderConfig, Message, ToolDefinition) and NO other plan. It is consumed by: @adhd/agent-compiler (plan 5) which reads ModelStore.resolveModelId + ToolFormatStore to resolve model aliases + shape tool defs at COMPILE time; and @adhd/agent-mcp (plan 6) which uses ProviderAdapterImpl at RUNTIME. Dependency direction: agent-mcp-types <- agent-provider <- agent-mcp (no cycle); compiler reads from agent-provider."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "provider-and-model-schema",
+      "model-platform-bindings",
+      "provider-tool-formats",
+      "provider-adapter-contract",
+      "runtime-tool-forwarding",
+      "seed-and-roundtrip",
+      "audit-schema"
+    ]
+  }
+}
