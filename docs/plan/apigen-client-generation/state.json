@@ -18,7 +18,7 @@
       "dod.8"
     ]
   },
-  "current_state": "canonical-descriptor",
+  "current_state": "scaffold-v2-common",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -294,10 +294,10 @@
       "end_ref": null
     },
     "scaffold-v2-common": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T00:37:41.953Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "784d4aba464d4cd60df8ff9ea791a650b72ba0d0",
       "end_ref": null
     },
     "scaffold-v2-ts-plugins": {
