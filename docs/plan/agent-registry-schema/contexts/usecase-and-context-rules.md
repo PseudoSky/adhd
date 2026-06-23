@@ -18,6 +18,7 @@
 
 - [usecase-and-context-rules.1] use_cases + component_usage + context_rules tables
 
+- [usecase-and-context-rules.2] usecase-store test passes
 ---
 
 ## Reservations
