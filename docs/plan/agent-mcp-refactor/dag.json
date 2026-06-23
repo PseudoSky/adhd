@@ -117,6 +117,19 @@
       ],
       "context": "contexts/session-e2e.md",
       "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "session-e2e"
+      ],
+      "guard": "python3 docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py --phase final",
+      "artifacts": [
+        "docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
     }
   },
   "authored_with": {
