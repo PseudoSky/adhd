@@ -65,3 +65,12 @@ One registry-driven, codegen-first mechanism that round-trips non-JSON-native ty
   - observable: `2099-02-30 fails validation via ajv-formats`
   - negative-control: `disable ajv-formats -> Feb 30 passes -> red`
   - delivered-by: `lt-validate-formats, lt-scalars`
+
+- `[dod.7]` **A schema-less any position round-trips a Date via the apigen envelope (behavioral)** — A schema-less any position round-trips a Date via the apigen envelope.
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx nx test apigen-logical`
+  - observable: `the decoded any value is a real Date`
+  - negative-control: `remove envelope path -> schema-less Date flattens to {} -> red`
+  - delivered-by: `lt-generator-emit, lt-scalars`
