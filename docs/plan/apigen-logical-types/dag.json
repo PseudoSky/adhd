@@ -184,6 +184,20 @@
       ],
       "context": "contexts/lt-host-ts.md",
       "notes": ""
+    },
+    "lt-host-python": {
+      "kind": "work",
+      "phase": "hosts",
+      "depends_on": [
+        "lt-wire-spec",
+        "lt-scalars"
+      ],
+      "guard": "python3 packages/apigen/python/run_tests.py",
+      "artifacts": [
+        "packages/apigen/python/apigen_logical.py"
+      ],
+      "context": "contexts/lt-host-python.md",
+      "notes": ""
     }
   },
   "authored_with": {
