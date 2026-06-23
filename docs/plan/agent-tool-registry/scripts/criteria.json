@@ -65,6 +65,14 @@
       "paths": [
         "packages/ai/agent-tool-registry/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "tool-and-type-schema.3",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/tool-store.test.ts",
+      "expect": "exit0"
     }
   ]
 }
