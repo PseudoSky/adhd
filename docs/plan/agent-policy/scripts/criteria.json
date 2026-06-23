@@ -27,6 +27,13 @@
       "paths": [
         "docs/plan/agent-policy/decisions.md"
       ]
+    },
+    {
+      "id": "scaffold-package.1",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/ai/agent-policy/project.json"
     }
   ]
 }
