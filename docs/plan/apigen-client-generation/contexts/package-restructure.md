@@ -1,6 +1,6 @@
 # package-restructure — STATE_NAME
 
-**Phase:** v2-packaging · **Kind:** work · **Depends on:** projection-transports, mount-plugins, error-taxonomy, naming-helpers · **Guard:** `npx --yes nx run-many -t build -p apigen-core apigen-naming apigen-errors apigen-schema apigen-conformance apigen-gateway`
+**Phase:** v2-packaging · **Kind:** work · **Depends on:** projection-transports, mount-plugins, error-taxonomy, naming-helpers, conformance-vectors · **Guard:** `npx --yes nx run-many -t build -p apigen-core apigen-naming apigen-errors apigen-schema apigen-conformance apigen-gateway`
 
 ---
 
