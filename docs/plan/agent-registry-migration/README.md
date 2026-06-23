@@ -29,3 +29,12 @@
   - observable: `vitest exits 0 and the case 'import persists agent+components+tools after reopen' reopens the DB and deep-equals the read-back rows`
   - negative-control: `drop the component-insert in import-agent (or have it skip AGENT_COMPONENT rows) -> reopened read returns no/incomplete components -> import-pipeline.test.ts goes red`
   - delivered-by: `frontmatter-parser, body-section-splitter, import-pipeline`
+
+- `[dod.3]` **A fixture SKILL.md migrates to a PROMPT_COMPONENT of type process/invocation recoverable after DB reopen. (behavioral)** — A fixture SKILL.md migrates to a PROMPT_COMPONENT of type process/invocation recoverable after DB reopen..
+  - given: a fresh on-disk registry DB and the fixture ticket-creation.SKILL.md
+  - when: import-skill imports the skill then the DB is reopened from the same path
+  - then: the component is read back typed process or invocation with the skill body content preserved
+  - entrypoint: `npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/skills-migration.test.ts`
+  - observable: `vitest exits 0 and the case 'skill migrates to process/invocation component after reopen' reopens the DB and asserts the component type and content`
+  - negative-control: `have import-skill write the wrong prompt_type (e.g. 'role') -> the type assertion fails -> skills-migration.test.ts goes red`
+  - delivered-by: `skills-migration`
