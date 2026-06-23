@@ -17,6 +17,19 @@
       ],
       "context": "contexts/lt-package.md",
       "notes": ""
+    },
+    "lt-contracts": {
+      "kind": "work",
+      "phase": "contracts",
+      "depends_on": [
+        "lt-package"
+      ],
+      "guard": "npx nx tsc apigen-logical",
+      "artifacts": [
+        "packages/apigen/logical/src/lib/contracts.ts"
+      ],
+      "context": "contexts/lt-contracts.md",
+      "notes": ""
     }
   },
   "authored_with": {
