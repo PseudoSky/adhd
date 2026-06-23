@@ -2,7 +2,9 @@
   "schema_version": 2,
   "title": "Agent Policy — Types, Templates, Inheritance & Enforcement (@adhd/agent-policy)",
   "plan_kind": "greenfield",
-  "phases": [],
+  "phases": [
+    "architecture"
+  ],
   "terminal": "done",
   "nodes": {},
   "authored_with": {
