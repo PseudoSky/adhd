@@ -36,7 +36,10 @@ export async function generateSchemas(opts: GenerateSchemasOptions): Promise<Gen
   const schemas: GeneratedSchemas['schemas'] = {}
 
   for (const fn of fns) {
-    // [inv:ctx-name-only] — filter ctx by name only, no type checking
+    // [inv:ctx-name-only] — filter ctx by name only, no type checking.
+    // A first param named `ctx` is excluded from the schema but RECORDED via
+    // `hasCtx` so dispatch() can re-inject it as the first arg (BUG-APIGEN-001).
+    const hasCtx = fn.params.length > 0 && fn.params[0].name === 'ctx'
     const domainParams = fn.params.filter(p => p.name !== 'ctx')
     const required = domainParams.filter(p => !p.optional).map(p => p.name)
 
@@ -53,6 +56,7 @@ export async function generateSchemas(opts: GenerateSchemasOptions): Promise<Gen
     schemas[fn.name] = {
       input: { type: 'object', properties, required } as Record<string, unknown>,
       output: outputSchema,
+      ...(hasCtx ? { hasCtx: true } : {}),
     }
   }
 

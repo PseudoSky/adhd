@@ -14,6 +14,7 @@ export interface PluginGeneratorSchema {
   directory?: string
   description?: string
   hasRun?: boolean
+  platform?: 'node' | 'browser' | 'shared'
 }
 
 export async function pluginGenerator(tree: Tree, options: PluginGeneratorSchema) {
@@ -21,12 +22,13 @@ export async function pluginGenerator(tree: Tree, options: PluginGeneratorSchema
   const projectName = `apigen-plugin-${pluginName}`        // "apigen-plugin-api-fastify"
   const projectDir = options.directory ?? `packages/apigen/plugins/${pluginName}`
   const packageScope = '@adhd'
+  const platform = options.platform ?? 'node'
 
   // 1. Create project.json via addProjectConfiguration
   addProjectConfiguration(tree, projectName, {
     root: projectDir,
     projectType: 'library',
-    tags: ['layer:logic', 'platform:node'],
+    tags: ['layer:logic', `platform:${platform}`],
     targets: {
       build: {
         executor: '@nx/vite:build',
@@ -53,9 +55,10 @@ export async function pluginGenerator(tree: Tree, options: PluginGeneratorSchema
     pluginName,
     projectName,
     packageScope,
+    platform,
     className: n.className,                               // "ApiFastify"
     propertyName: n.propertyName,                         // "apiFastify" — valid JS identifier for exports
-    description: options.description ?? `OutputPlugin for ${pluginName}`,
+    description: options.description ?? `v2 Plugin for ${pluginName}`,
     hasRun: options.hasRun ?? false,
     offsetFromRoot: offsetFromRoot(projectDir),
     tmpl: '',

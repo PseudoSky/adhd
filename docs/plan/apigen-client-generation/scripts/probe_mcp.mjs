@@ -125,6 +125,9 @@ async function importMaybeTs(fixtureAbs) {
         .map(s=>s.replace(/[:=].*$/s,'').replace(/\\?$/,'').trim()).filter(Boolean);
     };
     const out = { toolSet: [], groundTruth: {}, samples };
+    // Wrapped in an async IIFE: 'tsx --eval' emits CJS, which forbids TOP-LEVEL await.
+    // The await on each domain fn must live inside an async function.
+    ;(async () => {
     for (const [name, val] of Object.entries(table)) {
       if (name === '__samples__' || typeof val !== 'function') continue;
       out.toolSet.push(name);
@@ -138,6 +141,7 @@ async function importMaybeTs(fixtureAbs) {
     }
     out.toolSet.sort();
     process.stdout.write('__PROBE_JSON__' + JSON.stringify(out));
+    })();
   `;
   const { stdout } = await execFileAsync('npx', ['--yes', 'tsx', '--eval', helper], {
     cwd: REPO_ROOT,
@@ -244,7 +248,7 @@ async function cmdRun(fixture, transport) {
   const fixtureAbs = path.resolve(REPO_ROOT, fixture);
   const expected = await groundTruthFor(fixtureAbs);
   if (transport === 'stdio') {
-    const client = await mcpClientStdio([CLI, 'run', '--source', fixtureAbs, '--type', 'mcp', '--transport', 'stdio']);
+    const client = await mcpClientStdio([CLI, 'run', '--source', fixtureAbs, '--type', 'mcp', '--opt', 'transport=stdio']);
     await assertListAndCall(client, expected);
     await client.close();
     return;
@@ -252,9 +256,11 @@ async function cmdRun(fixture, transport) {
   // HTTP transports: spawn the server, wait for a bound port, connect over HTTP.
   const port = 13000 + Math.floor(Math.random() * 2000);
   const child = spawn('npx', ['--yes', 'tsx', CLI, 'run', '--source', fixtureAbs, '--type', 'mcp',
-    '--transport', transport, '--port', String(port)], { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+    '--opt', `transport=${transport}`, '--opt', `port=${port}`], { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
   try {
-    await waitForPort(port, 15000);
+    // Cold `npx --yes tsx` startup + ts-morph compile of the fixture can exceed 15s on a
+    // cold cache; 60s keeps the SSE/streaming-http probes from flaking before the server binds.
+    await waitForPort(port, 60000);
     const client = await mcpClientHttp(transport, port);
     await assertListAndCall(client, expected);
     await client.close();
@@ -267,12 +273,14 @@ async function cmdGenerateParity(fixture) {
   const fixtureAbs = path.resolve(REPO_ROOT, fixture);
   const expected = await groundTruthFor(fixtureAbs);
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-probe-gen-'));
-  execFileSync('npx', ['--yes', 'tsx', CLI, 'generate', '--source', fixtureAbs, '--type', 'mcp', '--out-dir', outDir],
+  // --link-workspace: pre-publish bridge so the generated output resolves @adhd/* from the
+  // workspace (the packages are not on npm yet). Post-publish the shipped package.json suffices.
+  execFileSync('npx', ['--yes', 'tsx', CLI, 'generate', '--source', fixtureAbs, '--type', 'mcp', '--out-dir', outDir, '--link-workspace'],
     { cwd: REPO_ROOT, stdio: 'inherit' });
   const serverFile = path.join(outDir, 'server.ts');
   if (!fs.existsSync(serverFile)) fail(`generate produced no server.ts in ${outDir}`);
 
-  const runClient = await mcpClientStdio([CLI, 'run', '--source', fixtureAbs, '--type', 'mcp', '--transport', 'stdio']);
+  const runClient = await mcpClientStdio([CLI, 'run', '--source', fixtureAbs, '--type', 'mcp', '--opt', 'transport=stdio']);
   const genClient = await mcpClientStdio([serverFile]);
   // Both paths must equal the SAME derived ground truth (so they equal each other).
   await assertListAndCall(runClient, expected);
@@ -324,7 +332,8 @@ async function cmdCliOutput(fixture) {
   const fixtureAbs = path.resolve(REPO_ROOT, fixture);
   const expected = await groundTruthFor(fixtureAbs);
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-probe-cli-'));
-  execFileSync('npx', ['--yes', 'tsx', CLI, 'generate', '--source', fixtureAbs, '--type', 'cli-output', '--out-dir', outDir],
+  // --link-workspace: pre-publish bridge (see cmdGenerateParity).
+  execFileSync('npx', ['--yes', 'tsx', CLI, 'generate', '--source', fixtureAbs, '--type', 'cli-output', '--out-dir', outDir, '--link-workspace'],
     { cwd: REPO_ROOT, stdio: 'inherit' });
   const cliFile = path.join(outDir, 'cli.ts');
   if (!fs.existsSync(cliFile)) fail(`generate --type cli-output produced no cli.ts in ${outDir}`);
@@ -362,7 +371,7 @@ async function cmdLive(fixture) {
   // The model is the EXTERNAL boundary; the server/runtime/registry are all real.
   const fixtureAbs = path.resolve(REPO_ROOT, fixture);
   const expected = await groundTruthFor(fixtureAbs);
-  const client = await mcpClientStdio([CLI, 'run', '--source', fixtureAbs, '--type', 'mcp', '--transport', 'stdio']);
+  const client = await mcpClientStdio([CLI, 'run', '--source', fixtureAbs, '--type', 'mcp', '--opt', 'transport=stdio']);
   const { tools } = await client.listTools();
   const names = tools.map((t) => t.name).sort();
   if (!deepEqual(names, expected.toolSet)) {

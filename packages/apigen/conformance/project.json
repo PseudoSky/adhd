@@ -1,0 +1,52 @@
+{
+  "name": "apigen-conformance",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/apigen/conformance/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "layer:logic",
+    "platform:shared"
+  ],
+  "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/conformance"
+      ],
+      "options": {
+        "configFile": "packages/apigen/conformance/vite.config.ts"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/packages/apigen/conformance",
+        "main": "packages/apigen/conformance/src/index.ts",
+        "tsConfig": "packages/apigen/conformance/tsconfig.lib.json",
+        "assets": [
+          "packages/apigen/conformance/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": [
+        "build",
+        "test"
+      ]
+    }
+  }
+}

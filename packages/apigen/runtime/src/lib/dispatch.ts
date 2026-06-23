@@ -30,9 +30,21 @@ export async function dispatch(
   const paramNames = dataParamNames(schema)
   const args = paramNames.map(k => domainArgs[k])
 
+  // Session middleware: build ctx from the session envelope and inject it as the
+  // first arg. Preserves [dod.4] envelope behavior.
   if (needsEnvelopeField(schema, 'session') && createClient) {
     const ctx = await createClient({ session: envelope['session'] })
     return (fns[fnName] as (ctx: unknown, ...a: unknown[]) => unknown)(ctx, ...args)
   }
+
+  // ctx-param fn WITHOUT session middleware (BUG-APIGEN-001): the source fn's
+  // first param is named `ctx` ([inv:ctx-name-only]), so it must still receive a
+  // first arg or the first DOMAIN arg lands in the ctx slot. Build ctx via
+  // createClient when a client exists, else pass undefined (the fn may ignore it).
+  if (schema.hasCtx) {
+    const ctx = createClient ? await createClient(envelope) : undefined
+    return (fns[fnName] as (ctx: unknown, ...a: unknown[]) => unknown)(ctx, ...args)
+  }
+
   return fns[fnName](...args)
 }
