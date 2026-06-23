@@ -19,6 +19,7 @@
 - [compiler-integration.1] prompt-resolver imports compileAgent from @adhd/agent-compiler
 
 - [compiler-integration.2] resolver caches/looks up the composed prompt and writes composed_prompt_id
+- [compiler-integration.3] compiler-resolve test passes: systemPrompt comes from compileAgent output
 ---
 
 ## Reservations

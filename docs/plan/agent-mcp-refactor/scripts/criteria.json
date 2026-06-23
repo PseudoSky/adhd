@@ -113,6 +113,14 @@
       "paths": [
         "packages/ai/agent-mcp/src/engine/prompt-resolver.ts"
       ]
+    },
+    {
+      "id": "compiler-integration.3",
+      "phase": "integration",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/compiler-resolve.test.ts",
+      "expect": "exit0"
     }
   ]
 }
