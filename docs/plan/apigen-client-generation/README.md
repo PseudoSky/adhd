@@ -176,6 +176,14 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - observable: `a streaming op yields chunks; an error AFTER the first chunk arrives in-band (SSE event:error / gRPC trailing status / MCP progressive error / CLI stderr+nonzero-exit); mid-stream cancel runs the Layer end path`
   - negative-control: `Swallow the post-first-chunk error in packages/apigen/cli/src/test/integration/streaming.spec.ts -> its in-band error assertion goes red`
   - delivered-by: `streaming-projection, layer-harness, error-taxonomy, audit-v2-projection, integration-tests-v2`
+- `[dod.15]` **HTTP verb derives from safe, overridable out-of-source (behavioral)** — HTTP verb derives from safe, overridable out-of-source.
+  - given: an action op and a config override
+  - when: the projection runs
+  - then: the op is served as GET via config, source untouched
+  - entrypoint: `packages/apigen/cli/src/test/integration/canonical.spec.ts`
+  - observable: `verb follows safe (safe->GET, unsafe->POST); an out-of-source projection-config override flips a specific action to GET with NO source change`
+  - negative-control: `Ignore the projection-config override in packages/apigen/cli/src/test/integration/canonical.spec.ts -> the action stays POST -> the override assertion goes red`
+  - delivered-by: `naming-helpers, projection-transports, unified-cli, integration-tests-v2`
 ---
 
 ## Execution model
