@@ -1,6 +1,6 @@
 # gateway — STATE_NAME
 
-**Phase:** v2-packaging · **Kind:** work · **Depends on:** unified-cli · **Guard:** `npx --yes nx test apigen-gateway`
+**Phase:** v2-packaging · **Kind:** work · **Depends on:** unified-cli, scaffold-v2-common · **Guard:** `npx --yes nx test apigen-gateway`
 
 ---
 
