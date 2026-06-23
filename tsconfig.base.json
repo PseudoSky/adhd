@@ -30,6 +30,7 @@
       "@adhd/agent-mcp-budget": ["./packages/ai/agent-mcp-budget/src/index.ts"],
       "@adhd/agent-mcp-types": ["./packages/ai/agent-mcp-types/src/index.ts"],
       "@adhd/agent-policy": ["./packages/ai/agent-policy/src/index.ts"],
+      "@adhd/agent-provider": ["./packages/ai/agent-provider/src/index.ts"],
       "@adhd/agent-tool-registry": ["./packages/ai/agent-tool-registry/src/index.ts"],
       "@adhd/apigen-cli": ["./packages/apigen/cli/src/index.ts"],
       "@adhd/apigen-core": ["./packages/apigen/core/src/index.ts"],
