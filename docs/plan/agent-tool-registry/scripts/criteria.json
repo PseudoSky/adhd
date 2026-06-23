@@ -7,6 +7,16 @@
       "tier": null,
       "kind": "exists",
       "path": "packages/ai/agent-tool-registry/project.json"
+    },
+    {
+      "id": "scaffold-package.2",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-tool-registry",
+      "paths": [
+        "tsconfig.base.json"
+      ]
     }
   ]
 }
