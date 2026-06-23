@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "unified-cli",
+  "current_state": "gateway",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -284,11 +284,11 @@
       "end_ref": "2fe5cb80209acfad334be8ad6d1fbc4dbb0c658c"
     },
     "unified-cli": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T05:06:34.499Z",
-      "done_at": null,
+      "done_at": "2026-06-23T05:14:49.188Z",
       "start_ref": "36994c1e1b4080c7abef2b866c530739e0448f61",
-      "end_ref": null
+      "end_ref": "6cacca0ab73498953e4a58681a9d4e63d6dc6d36"
     },
     "gateway": {
       "status": "pending",
@@ -834,6 +834,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "R6 verify gate: all 6 common pkgs + 3 generated plugins already in final §12 homes (scaffold-v2-common + generator placed them correctly from the start — no move needed). Guard nx run-many build core/naming/errors/schema/conformance/gateway exit 0. Deprecation invariant: no packages/apigen/ts, 18 project.json all final homes, no orphans/dups. Verify-only — no domain code. Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:14:49.188Z",
+      "from": "unified-cli",
+      "to": "unified-cli",
+      "start_ref": "36994c1e1b4080c7abef2b866c530739e0448f61",
+      "end_ref": "6cacca0ab73498953e4a58681a9d4e63d6dc6d36",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "§13 unified orchestrator.ts: detect→extract(v2)→merge→collision-check(§5)→gen/run; Tenet-1 projection overrides (--opt http.verb.<id>=, apigen.config) applied at gen/run time, never to source; commands/run.ts+generate.ts wired (v1 preserved). nx test apigen-cli exit 0 (orch-verified). Documented limits: --use stored-not-dispatched, extension-heuristic lang detect (real cross-lang via python-host). Orchestrator-driven (F40)."
     }
   ],
   "amendment_log": [
