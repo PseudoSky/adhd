@@ -152,6 +152,14 @@
       "kind": "command",
       "cmd": "npx nx test apigen-codegen",
       "expect": "exit0"
+    },
+    {
+      "id": "lt-host-generator.1",
+      "phase": "gates",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx test apigen-nx",
+      "expect": "exit0"
     }
   ]
 }
