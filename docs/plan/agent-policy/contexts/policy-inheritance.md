@@ -19,6 +19,7 @@
 - [policy-inheritance.1] category-level attach propagates via inherited_from
 
 - [policy-inheritance.2] inheritance test: new agent in category inherits mandatory policy after reopen
+- [policy-inheritance.3] inheritance test has teeth: skipping fanout/resolution drops inherited_from and fails
 ---
 
 ## Reservations
