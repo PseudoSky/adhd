@@ -27,3 +27,11 @@
   - entrypoint: `npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts`
   - observable: `vitest exits 0 and emit-tools.test.ts asserts a server-side-bound tool emits a {type:'web_search_...'} entry (NOT a custom {name,description,input_schema}) and an unsupported native (OpenAI built-in / Anthropic client-exec) makes the emitter throw an explicit error naming the tool`
   - delivered-by: `provider-tool-formats, runtime-tool-forwarding`
+
+- `[dod.3]` **Seeding providers + models + bindings into a fresh DB is idempotent (a second run adds no duplicate rows / no version drift) and every seeded row round-trips after the store is reopened. (behavioral)** — Seeding providers + models + bindings into a fresh DB is idempotent (a second run adds no duplicate rows / no version drift) and every seeded row round-trips after the store is reopened..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts`
+  - observable: `vitest exits 0 and roundtrip.test.ts proves seed() run twice yields identical provider/model/binding row counts, and a reopened store returns the seeded rows identical to what was written`
+  - delivered-by: `seed-and-roundtrip`
