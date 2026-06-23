@@ -6,7 +6,8 @@
     "architecture",
     "schema",
     "integration",
-    "retire"
+    "retire",
+    "audit"
   ],
   "terminal": "done",
   "nodes": {},
