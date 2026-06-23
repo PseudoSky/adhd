@@ -104,6 +104,14 @@
       "kind": "command",
       "cmd": "npx nx test apigen-runtime",
       "expect": "exit0"
+    },
+    {
+      "id": "lt-host-python.1",
+      "phase": "hosts",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 packages/apigen/python/run_tests.py",
+      "expect": "exit0"
     }
   ]
 }
