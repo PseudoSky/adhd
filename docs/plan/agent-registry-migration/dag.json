@@ -161,6 +161,20 @@
       ],
       "context": "contexts/audit-final.md",
       "notes": ""
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "audit",
+      "depends_on": [
+        "removal-runbook"
+      ],
+      "guard": "python3 docs/plan/agent-registry-migration/scripts/review_gate.py",
+      "artifacts": [
+        "docs/plan/agent-registry-migration/review.md",
+        "docs/plan/agent-registry-migration/scripts/review_gate.py"
+      ],
+      "context": "contexts/code-review.md",
+      "notes": "Reviewer routing: code-reviewer (opus). Diff-reading code review of the implementation states (migration-design..removal-runbook) against CLAUDE.md (layer/platform isolation, @adhd/ imports, I-prefixed interfaces, JSDoc on shared public fns, the 'Proving features actually work' verification standard) AND this plan's decisions/contracts. Must check design-intent fidelity the structural audit misses: the import pipeline drives the REAL registry stores (not mocks); the round-trip equivalence gate actually blocks removal; the removal-runbook is gated on an all-PASS equivalence report (forcing function); cross-repo claude-agents removal is a gated step; no cross-package FK violations. Default verdict NEEDS-WORK; a PASS must be explicitly justified. On NEEDS-WORK, fixes go back to the implementation states, then re-review. Mutates only review.md + scripts/review_gate.py."
     }
   },
   "authored_with": {
