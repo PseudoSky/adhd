@@ -230,6 +230,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-mcp",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-integration.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "true",
+      "expect": "exit0"
     }
   ]
 }
