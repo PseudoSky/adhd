@@ -778,6 +778,21 @@
       ],
       "context": "contexts/scaffold-v2-common.md",
       "notes": "SPEC §12: scaffold the 6 COMMON packages in their final homes with full nx wiring (tsconfig.base paths, vite.config, tsconfig.lib/spec, layer:logic/platform:shared tags) — mirrors v1 scaffold-packages. Fixes R3 (unscaffolded pkgs) + R6 (final homes → package-restructure becomes a verify gate). apigen-schema gets its owning state here."
+    },
+    "scaffold-v2-ts-plugins": {
+      "kind": "work",
+      "phase": "v2-scaffold",
+      "depends_on": [
+        "scaffold-plugins"
+      ],
+      "guard": "npx --yes nx run-many -t build -p apigen-ts-plugin-logger apigen-ts-plugin-openapi apigen-ts-plugin-health",
+      "artifacts": [
+        "packages/apigen/ts/plugins/logger/project.json",
+        "packages/apigen/ts/plugins/openapi/project.json",
+        "packages/apigen/ts/plugins/health/project.json"
+      ],
+      "context": "contexts/scaffold-v2-ts-plugins.md",
+      "notes": "SPEC §12: scaffold the 3 new TS plugin packages (logger=layer, openapi+health=mount) in final ts/plugins/* homes with nx wiring; platform:node. Fixes R3."
     }
   },
   "authored_with": {
