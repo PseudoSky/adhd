@@ -83,6 +83,16 @@
       "paths": [
         "packages/ai/agent-registry/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "agent-and-taxonomy-schema.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "taxonomy",
+      "paths": [
+        "packages/ai/agent-registry/src/db/schema.ts"
+      ]
     }
   ]
 }
