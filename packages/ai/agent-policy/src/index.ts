@@ -33,6 +33,9 @@ export type {
     AgentCategoryInput,
 } from "./store/agent-policy-store.js";
 
+// Policy library seeder — idempotent population of policy_types + policy_templates.
+export { seed, POLICY_TYPES, POLICY_TEMPLATES } from "./seed/index.js";
+
 // Rate-policy enforcement plugin — mirrors @adhd/agent-mcp-budget plugin shape.
 // Registers a throws-propagating handler on "pre:model_request" to enforce
 // rate (model-call count) limits from policy template rules + override_config.
