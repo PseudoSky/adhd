@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "integration-tests-v2",
+  "current_state": "audit-final-v2",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -179,11 +179,11 @@
       "end_ref": null
     },
     "integration-tests-v2": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T05:45:24.255Z",
-      "done_at": null,
+      "done_at": "2026-06-23T06:14:17.870Z",
       "start_ref": "9419c2faf13c543cda7f9bfd5028e6c9efe2e5b2",
-      "end_ref": null
+      "end_ref": "df9e6163839c4516089c69be45dd0690bb88bfa1"
     },
     "canonical-descriptor": {
       "status": "complete",
@@ -882,6 +882,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "v2-host gate 2/2 real teeth: conformance (python3 run_tests.py 45/45) + gateway-contract (nx test apigen-gateway deterministic §13.1). pytest→run_tests.py fix; vacuous cli forward-refs deferred to audit-final-v2/dod.12+dod.17."
+    },
+    {
+      "ts": "2026-06-23T06:14:17.870Z",
+      "from": "integration-tests-v2",
+      "to": "integration-tests-v2",
+      "start_ref": "9419c2faf13c543cda7f9bfd5028e6c9efe2e5b2",
+      "end_ref": "df9e6163839c4516089c69be45dd0690bb88bfa1",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "CAPSTONE: 7 real-component artifacts. nx test apigen-cli exit 0 (49 passed/3 skipped=APIGEN_LIVE-gated). real-consumer.spec.ts (dod.19): built bin dist/packages/apigen/cli/index.js on UNMODIFIED @adhd/transform → tools/list==exports + callTool deep-equals in-process + live-model variant. gateway-mixed-host.spec.ts (dod.12/17): REAL python3 -m apigen_python.gateway_adapter sidecar, host:ts/host:python routing, kill→only-its-ops unavailable; deterministic (bounded latch, always-kill teardown). export-shape matrix (anon+cjs), canonical envelope/verb, streaming error-after-first-chunk+cancel. No mocks (CLAUDE.md §6). Orchestrator-driven (F40)."
     }
   ],
   "amendment_log": [
