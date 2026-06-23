@@ -12,4 +12,10 @@
 
 ## Definition of Done
 
-_No DoD clauses yet — author them with `plan-scaffold.js add-dod`._
+- `[dod.1]` **A canonical tool resolves to its platform-specific name via tool_platform_bindings after DB reopen (e.g. shell_exec to Bash on claude_code) (behavioral)** — A canonical tool resolves to its platform-specific name via tool_platform_bindings after DB reopen (e.g. shell_exec to Bash on claude_code).
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/binding-store.test.ts`
+  - observable: `vitest exits 0; BindingStore.resolve('shell_exec','claude_code') returns 'Bash' after the DB is closed and reopened from the same file path`
+  - delivered-by: `platform-and-binding-schema, seed-and-roundtrip`
