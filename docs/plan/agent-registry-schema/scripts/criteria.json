@@ -225,6 +225,16 @@
       "paths": [
         "docs/plan/agent-registry-schema/decisions.md"
       ]
+    },
+    {
+      "id": "design-and-architecture.3",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "context.condition|precedence|last wins|all included",
+      "paths": [
+        "docs/plan/agent-registry-schema/decisions.md"
+      ]
     }
   ]
 }
