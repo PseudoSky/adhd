@@ -12,7 +12,21 @@
     "audit"
   ],
   "terminal": "done",
-  "nodes": {},
+  "nodes": {
+    "migration-design": {
+      "kind": "work",
+      "phase": "architecture",
+      "depends_on": [],
+      "guard": "true",
+      "artifacts": [
+        "docs/plan/agent-registry-migration/decisions.md",
+        "packages/ai/agent-registry-migration/src/__fixtures__/code-reviewer.md",
+        "packages/ai/agent-registry-migration/src/__fixtures__/ticket-creation.SKILL.md"
+      ],
+      "context": "contexts/migration-design.md",
+      "notes": ""
+    }
+  },
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.22",
