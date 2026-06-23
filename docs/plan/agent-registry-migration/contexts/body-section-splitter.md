@@ -18,6 +18,7 @@
 
 - [body-section-splitter.1] body section typing test passes
 
+- [body-section-splitter.2] heading->prompt_type mapping per SEED_DATA table
 ---
 
 ## Reservations
