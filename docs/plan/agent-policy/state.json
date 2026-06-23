@@ -18,11 +18,11 @@
       "end_ref": "5ceb2598dcb6e3c859208a152439eb618931a3c8"
     },
     "policy-type-and-template-schema": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T23:19:01.901Z",
-      "done_at": null,
+      "done_at": "2026-06-23T23:23:55.391Z",
       "start_ref": "25caf3fe3a15125d1cb774a902a8c63e8c331f90",
-      "end_ref": null
+      "end_ref": "1190b44e62f47906e36b9bf2d6326790269a8f36"
     },
     "agent-policy-junction": {
       "status": "pending",
@@ -98,6 +98,18 @@
       "audit_criteria_total": 8,
       "by": "pseudosky",
       "note": "built clean (exit 0) + nx test --passWithNoTests exit 0 + SHA 5ceb2598dcb6e3c859208a152439eb618931a3c8"
+    },
+    {
+      "ts": "2026-06-23T23:23:55.391Z",
+      "from": "policy-type-and-template-schema",
+      "to": "policy-type-and-template-schema",
+      "start_ref": "25caf3fe3a15125d1cb774a902a8c63e8c331f90",
+      "end_ref": "1190b44e62f47906e36b9bf2d6326790269a8f36",
+      "audit_exit": 13,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 17,
+      "by": "pseudosky",
+      "note": "Added policy_policy_types + policy_policy_templates tables, generated drizzle migration 0000_sleepy_bullseye.sql, implemented PolicyTemplateStore (create/read/list) with PolicyError typed codes, exported from index.ts; 5 tests pass (reopen round-trip, enforcement array invariant, duplicate/not-found errors, list+typeFilter); guard exit 0; commit 1190b44"
     }
   ],
   "amendment_log": [],
@@ -106,7 +118,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "policy-type-and-template-schema",
+  "current_state": "agent-policy-junction",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:06:45.453Z",
     "by": "pseudosky",
