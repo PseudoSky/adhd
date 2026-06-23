@@ -72,6 +72,22 @@
       ],
       "context": "contexts/tool-header-emit.md",
       "notes": ""
+    },
+    "model-and-policy-emit": {
+      "kind": "work",
+      "phase": "resolve",
+      "depends_on": [
+        "tool-header-emit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-compiler/src/resolve/model.ts",
+        "packages/ai/agent-compiler/src/resolve/policy.ts",
+        "packages/ai/agent-compiler/src/index.ts",
+        "packages/ai/agent-compiler/src/__tests__/model-policy.test.ts"
+      ],
+      "context": "contexts/model-and-policy-emit.md",
+      "notes": ""
     }
   },
   "authored_with": {
