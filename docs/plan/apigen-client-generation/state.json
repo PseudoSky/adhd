@@ -242,11 +242,11 @@
       "end_ref": null
     },
     "plugin-interface": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T02:24:01.168Z",
-      "done_at": null,
+      "done_at": "2026-06-23T02:30:55.763Z",
       "start_ref": "db5378a7d6ba71d51de8fa9a0e3996e7b549270c",
-      "end_ref": null
+      "end_ref": "e82163ea123700357116d0b54f15997539d3a1da"
     },
     "projection-transports": {
       "status": "pending",
@@ -635,6 +635,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "apigen-errors: ERROR_CODES + HTTP_STATUS/GRPC_CODE/CLI_EXIT_CODE/MCP_ERROR_KIND maps + ApiError + StreamingErrorCarrier (before/after-first-chunk) per §9.1/§11; nx test apigen-errors exit 0 (orch-verified). Executor idle pre-complete; orchestrator drove completion. Token telemetry → byte proxy."
+    },
+    {
+      "ts": "2026-06-23T02:30:55.763Z",
+      "from": "ts-extractor-by-symbol",
+      "to": "plugin-interface",
+      "start_ref": "db5378a7d6ba71d51de8fa9a0e3996e7b549270c",
+      "end_ref": "e82163ea123700357116d0b54f15997539d3a1da",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "apigen-core plugin.ts: §7 capability interface {target,layer,mount,envelope} + Call/Next/Chunk/Result/Harness/Extensions, exported from core index; nx build apigen-core exit 0 (orch-verified content, not stub). Executor idle pre-complete; orchestrator drove completion. Token telemetry → byte proxy."
     }
   ],
   "amendment_log": [
