@@ -30,12 +30,14 @@ if (!DB_PATH) {
 const conn = new Database(DB_PATH);
 conn.pragma("journal_mode = WAL");
 
-// Corrupt the content of the 'default-skeptic' row at version 2.
+// Corrupt the content of the 'default-skeptic' version-2 row. Decision 5 moved
+// component content into registry_component_versions (keyed by (slug, version));
+// the head registry_components row carries identity only, no content.
 // The original content begins with "Default verdict: NEEDS-WORK."
 // We overwrite it with a sentinel value the deep-equals check will reject.
 const result = conn
     .prepare(
-        `UPDATE registry_prompt_components
+        `UPDATE registry_component_versions
          SET content = '__NC_MUTATED__: This content was corrupted by nc_mutate.mjs'
          WHERE slug = 'default-skeptic' AND version = 2`
     )

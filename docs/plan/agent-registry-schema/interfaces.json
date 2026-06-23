@@ -1,1 +1,82 @@
-{}
+{
+  "$note": "Contract surface @adhd/agent-registry exposes to downstream plans. Updated for Decision 5 (decisions.md): component identity (registry_components) is split from version history (registry_component_versions) so the four component references are DB-enforced FKs. This file records the corrected component/contract shape; it does NOT alter any state.json/dag.json.",
+  "provides": {
+    "tables": {
+      "registry_prompt_types": {
+        "pk": "slug",
+        "columns": ["slug TEXT PK", "description TEXT", "is_system INTEGER(bool)"],
+        "note": "Seeded lookup table, text PK, not a SQL enum [inv:lookup-not-enum]."
+      },
+      "registry_components": {
+        "role": "component IDENTITY / head (Decision 5)",
+        "pk": "slug",
+        "columns": [
+          "slug TEXT PRIMARY KEY (single-column, FK-able)",
+          "type TEXT NOT NULL → FK registry_prompt_types.slug (enforced)",
+          "is_shared INTEGER(bool) NOT NULL default false",
+          "created_at TEXT NOT NULL"
+        ],
+        "note": "type and is_shared are identity-level facts; they do not change per version."
+      },
+      "registry_component_versions": {
+        "role": "component HISTORY / audit (Decision 5)",
+        "pk": "version_id",
+        "columns": [
+          "version_id INTEGER PRIMARY KEY AUTOINCREMENT (single-column surrogate, FK-able)",
+          "slug TEXT NOT NULL → FK registry_components.slug (enforced)",
+          "version INTEGER NOT NULL default 1",
+          "content TEXT NOT NULL",
+          "created_at TEXT NOT NULL",
+          "updated_at TEXT NOT NULL"
+        ],
+        "constraints": ["UNIQUE(slug, version) — [inv:version-retained] teeth"]
+      },
+      "registry_agent_components": {
+        "pk": "(agent_slug, component_slug, position)",
+        "foreign_keys": [
+          "agent_slug → registry_agents.slug (enforced)",
+          "component_slug → registry_components.slug (enforced, Decision 5)",
+          "version_pin → registry_component_versions.version_id (nullable-enforced, Decision 5)"
+        ],
+        "note": "version_pin stores a version_id, not a human version number. component_slug + version_pin are TWO separate FKs, not one composite FK (a composite FK with a nullable column is not enforced in SQLite)."
+      },
+      "registry_component_usage": {
+        "pk": "(component_slug, use_case_slug)",
+        "foreign_keys": [
+          "component_slug → registry_components.slug (enforced, Decision 5)",
+          "use_case_slug → registry_use_cases.slug (enforced)"
+        ]
+      },
+      "registry_context_rules": {
+        "pk": "id",
+        "foreign_keys": [
+          "agent_slug → registry_agents.slug (enforced)",
+          "component_slug → registry_components.slug (enforced, Decision 5)"
+        ]
+      },
+      "registry_composed_prompts": {
+        "pk": "id",
+        "columns": ["agent_slug TEXT", "context_hash TEXT", "content TEXT", "component_versions TEXT(JSON {slug:version})", "created_at TEXT"],
+        "note": "component_versions records human version numbers (not version_id) — a human-readable audit map (Decision 5)."
+      }
+    },
+    "stores": {
+      "ComponentStore": {
+        "create({slug,type,content,isShared?})": "inserts head + version-1 atomically; returns PromptComponent (now incl. versionId)",
+        "read(slug)": "head joined to its latest version",
+        "readVersion(slug, n)": "head joined to a specific version",
+        "version(slug, newContent)": "appends a registry_component_versions row at max(version)+1; head unchanged",
+        "list({type?,shared?})": "latest version of each component (head ⋈ latest version)",
+        "resolveVersionId(slug, n)": "→ the registry_component_versions.version_id for (slug, n)"
+      },
+      "CompositionStore": {
+        "attach({agentSlug,componentSlug,position,versionPin?|pinVersion?,contextCondition?,isRequired?})": "versionPin = a version_id; pinVersion = a human version resolved to its version_id",
+        "resolvePinVersionId(componentSlug, version)": "→ version_id",
+        "resolveComposition(agentSlug, ctx)": "ordered, filtered ResolvedComponent[]; pin resolves by version_id, else latest; semantics unchanged from pre-split"
+      }
+    },
+    "types": {
+      "PromptComponent": "{ slug, type, version, versionId, content, isShared, createdAt, updatedAt } — versionId added by Decision 5"
+    }
+  }
+}

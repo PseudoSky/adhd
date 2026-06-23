@@ -40,7 +40,8 @@ if (!expected) {
 const conn = new Database(DB_PATH);
 const row = conn
     .prepare(
-        "SELECT content FROM registry_prompt_components WHERE slug = 'default-skeptic' AND version = 2"
+        // Decision 5: component content lives in registry_component_versions.
+        "SELECT content FROM registry_component_versions WHERE slug = 'default-skeptic' AND version = 2"
     )
     .get();
 conn.close();
