@@ -169,6 +169,21 @@
       ],
       "context": "contexts/lt-union-codec.md",
       "notes": ""
+    },
+    "lt-host-ts": {
+      "kind": "work",
+      "phase": "hosts",
+      "depends_on": [
+        "lt-scalars",
+        "lt-nominal-codec",
+        "lt-union-codec"
+      ],
+      "guard": "npx nx test apigen-runtime",
+      "artifacts": [
+        "packages/apigen/runtime/src/lib/logical/host-ts.ts"
+      ],
+      "context": "contexts/lt-host-ts.md",
+      "notes": ""
     }
   },
   "authored_with": {
