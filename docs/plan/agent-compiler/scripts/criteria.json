@@ -166,6 +166,16 @@
       "paths": [
         "packages/ai/agent-compiler/src/compile.ts"
       ]
+    },
+    {
+      "id": "platform-markdown-emit.2",
+      "phase": "emit",
+      "tier": null,
+      "kind": "present",
+      "pattern": "frontmatter|---",
+      "paths": [
+        "packages/ai/agent-compiler/src/emit/markdown.ts"
+      ]
     }
   ]
 }
