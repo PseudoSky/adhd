@@ -45,6 +45,16 @@
       "paths": [
         "packages/ai/agent-registry/src"
       ]
+    },
+    {
+      "id": "lookup-and-component-schema.1",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "prompt_types|promptTypes",
+      "paths": [
+        "packages/ai/agent-registry/src/db/schema.ts"
+      ]
     }
   ]
 }
