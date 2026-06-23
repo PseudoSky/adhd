@@ -208,6 +208,13 @@
       "kind": "command",
       "cmd": "python3 docs/plan/agent-registry-schema/scripts/audit_registry_schema.py --phase final",
       "expect": "exit0"
+    },
+    {
+      "id": "design-and-architecture.1",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "exists",
+      "path": "docs/plan/agent-registry-schema/decisions.md"
     }
   ]
 }
