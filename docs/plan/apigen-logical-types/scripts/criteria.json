@@ -24,6 +24,14 @@
       "kind": "command",
       "cmd": "npx nx test apigen-conformance",
       "expect": "exit0"
+    },
+    {
+      "id": "lt-registry.1",
+      "phase": "registry",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx test apigen-logical",
+      "expect": "exit0"
     }
   ]
 }
