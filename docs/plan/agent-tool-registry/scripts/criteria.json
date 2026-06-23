@@ -111,6 +111,14 @@
       "paths": [
         "packages/ai/agent-tool-registry/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "mcp-server-schema.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/mcp-server-store.test.ts",
+      "expect": "exit0"
     }
   ]
 }
