@@ -11,10 +11,10 @@
       "end_ref": "c1f59c3306408b85e14ccf72c4fe87bf4db1dba5"
     },
     "lookup-and-component-schema": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T05:39:37.520Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "f72e27c5b4fb44bf3cb6ca685f243f40f3ef4689",
       "end_ref": null
     },
     "agent-and-taxonomy-schema": {
