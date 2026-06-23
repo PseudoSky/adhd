@@ -45,6 +45,23 @@
       ],
       "context": "contexts/provider-and-model-schema.md",
       "notes": ""
+    },
+    "model-platform-bindings": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "provider-and-model-schema"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-provider/src/db/schema.ts",
+        "packages/ai/agent-provider/src/store/model-store.ts",
+        "packages/ai/agent-provider/src/index.ts",
+        "packages/ai/agent-provider/src/__tests__/binding-store.test.ts",
+        "packages/ai/agent-provider/drizzle"
+      ],
+      "context": "contexts/model-platform-bindings.md",
+      "notes": ""
     }
   },
   "authored_with": {
