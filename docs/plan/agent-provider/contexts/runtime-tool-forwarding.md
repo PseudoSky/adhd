@@ -20,6 +20,7 @@
 
 - [runtime-tool-forwarding.2] emitter throws explicit actionable error for unsupported native
 - [runtime-tool-forwarding.3] emit-tools test: server-side -> type-tagged entry; unsupported native -> explicit throw
+- [runtime-tool-forwarding.4] FEAT-007 emitter has teeth: reverting to custom-only emission re-buries the server-side tool
 ---
 
 ## Reservations
