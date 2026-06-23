@@ -1,6 +1,6 @@
 # audit-v2-core — STATE_NAME
 
-**Phase:** v2-core · **Kind:** audit · **Depends on:** ts-extractor-by-symbol, naming-helpers · **Guard:** `python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase v2-core`
+**Phase:** v2-core · **Kind:** audit · **Depends on:** ts-extractor-by-symbol, naming-helpers, class-exports · **Guard:** `python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase v2-core`
 
 ---
 
