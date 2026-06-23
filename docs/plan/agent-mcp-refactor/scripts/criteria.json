@@ -222,6 +222,14 @@
       "paths": [
         "tsconfig.base.json"
       ]
+    },
+    {
+      "id": "session-e2e.4",
+      "phase": "e2e",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp",
+      "expect": "exit0"
     }
   ]
 }
