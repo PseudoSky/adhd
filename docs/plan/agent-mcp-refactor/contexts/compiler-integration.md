@@ -21,6 +21,7 @@
 - [compiler-integration.2] resolver caches/looks up the composed prompt and writes composed_prompt_id
 - [compiler-integration.3] compiler-resolve test passes: systemPrompt comes from compileAgent output
 - [compiler-integration.4] agent-mcp package.json declares @adhd/agent-compiler dependency
+- [compiler-integration.5] tsconfig.base.json resolves @adhd/agent-compiler path
 ---
 
 ## Reservations
