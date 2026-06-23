@@ -46,11 +46,11 @@
       "end_ref": "dfc70e8a7269960ff7d5f6739ed3ea59400c35b2"
     },
     "seed-and-roundtrip": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T22:17:57.079Z",
-      "done_at": null,
+      "done_at": "2026-06-23T22:23:12.806Z",
       "start_ref": "b8a7f7b893d14f6ec819ff971dcb10a84cb16b00",
-      "end_ref": null
+      "end_ref": "fa97fc8db6171fc4c0017e095d701359e8ba9519"
     },
     "audit-final": {
       "status": "pending",
@@ -139,6 +139,18 @@
       "audit_criteria_total": 18,
       "by": "pseudosky",
       "note": "audit-schema gate: python3 audit_tool_registry.py --phase schema => 16/16 PASS (exit 0), verified by orchestrator. Schema phase complete: tool_types/tools/platforms/tool_platform_bindings/mcp_servers/agent_tools all present; no-cross-pkg-FK + lookup-not-enum invariants hold."
+    },
+    {
+      "ts": "2026-06-23T22:23:12.806Z",
+      "from": "seed-and-roundtrip",
+      "to": "seed-and-roundtrip",
+      "start_ref": "b8a7f7b893d14f6ec819ff971dcb10a84cb16b00",
+      "end_ref": "fa97fc8db6171fc4c0017e095d701359e8ba9519",
+      "audit_exit": 18,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 21,
+      "by": "pseudosky",
+      "note": "Authored src/seed/{tool-types,platforms,tools,bindings,index}.ts + src/__tests__/roundtrip.test.ts. 7/7 tests green (exit 0). Seed is idempotent (onConflictDoNothing on all 4 tables), persistence proven via close+reopen, negative-control corrupts alias then restores it. Commit: fa97fc8."
     }
   ],
   "amendment_log": [],
@@ -147,7 +159,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "seed-and-roundtrip",
+  "current_state": "code-review",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:02:23.888Z",
     "by": "pseudosky",
