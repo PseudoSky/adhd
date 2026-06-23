@@ -128,6 +128,16 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/tool-header.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "model-and-policy-emit.1",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "present",
+      "pattern": "model_platform_bindings|modelPlatformBindings|resolveModelId",
+      "paths": [
+        "packages/ai/agent-compiler/src/resolve/model.ts"
+      ]
     }
   ]
 }
