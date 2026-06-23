@@ -92,6 +92,16 @@
       "paths": [
         "packages/ai/agent-compiler/package.json"
       ]
+    },
+    {
+      "id": "composition-resolve.1",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "present",
+      "pattern": "resolveComposition|junction order|position",
+      "paths": [
+        "packages/ai/agent-compiler/src/resolve/composition.ts"
+      ]
     }
   ]
 }
