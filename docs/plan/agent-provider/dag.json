@@ -27,6 +27,24 @@
       ],
       "context": "contexts/scaffold-package.md",
       "notes": ""
+    },
+    "provider-and-model-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "scaffold-package"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-provider/src/db/schema.ts",
+        "packages/ai/agent-provider/src/store/provider-store.ts",
+        "packages/ai/agent-provider/src/store/model-store.ts",
+        "packages/ai/agent-provider/src/index.ts",
+        "packages/ai/agent-provider/src/__tests__/model-store.test.ts",
+        "packages/ai/agent-provider/drizzle"
+      ],
+      "context": "contexts/provider-and-model-schema.md",
+      "notes": ""
     }
   },
   "authored_with": {
