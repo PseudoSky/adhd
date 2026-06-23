@@ -53,3 +53,9 @@ export type {
     ComposedPrompt,
     ComposedPromptWriteInput,
 } from "./store/composed-prompt-store.js";
+
+// seed-and-roundtrip state: idempotent DB seed function + seed data arrays
+export { seed } from "./seed/index.js";
+export { PROMPT_TYPES } from "./seed/prompt-types.js";
+export { SEED_COMPONENTS } from "./seed/components.js";
+export type { SeedComponent } from "./seed/components.js";
