@@ -25,11 +25,11 @@
       "end_ref": "b629f789b89a681100f130c02353c4f358939865"
     },
     "provider-tool-formats": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T23:31:28.342Z",
-      "done_at": null,
+      "done_at": "2026-06-23T23:35:11.371Z",
       "start_ref": "69787c91ab947499117746d43ecf84668c204a55",
-      "end_ref": null
+      "end_ref": "e0fc0be470954d59a2a8fc9b927e5b71902ab0e9"
     },
     "audit-schema": {
       "status": "pending",
@@ -110,6 +110,18 @@
       "audit_criteria_total": 14,
       "by": "pseudosky",
       "note": "Added provider_model_platform_bindings table (composite PK model_id+platform), ModelStore.createBinding/resolveModelId, drizzle migration 0001. Guard: 8/8 tests pass exit 0. SHA: b629f78"
+    },
+    {
+      "ts": "2026-06-23T23:35:11.371Z",
+      "from": "provider-tool-formats",
+      "to": "provider-tool-formats",
+      "start_ref": "69787c91ab947499117746d43ecf84668c204a55",
+      "end_ref": "e0fc0be470954d59a2a8fc9b927e5b71902ab0e9",
+      "audit_exit": 10,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 14,
+      "by": "pseudosky",
+      "note": "Added provider_tool_formats table (composite PK provider_id+canonical_tool, emit_shape text, type_tag nullable, note nullable), ToolFormatStore (create/read/getShape/listByProvider), migration 0002, 0002_snapshot.json, updated _journal.json, 12 tests all pass (close+reopen persistence proven, server_side typeTag populated, unsupported note set, custom both null, cross-provider isolation). Guard exit 0. SHA e0fc0be."
     }
   ],
   "amendment_log": [],
@@ -118,7 +130,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "provider-tool-formats",
+  "current_state": "audit-schema",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:05:24.204Z",
     "by": "pseudosky",
