@@ -37,3 +37,5 @@
   - delivered-by: `seed-and-roundtrip`
 
 - `[dod.4]` **@adhd/agent-registry is a platform:node nx library with @adhd/agent-registry registered in tsconfig.base.json paths, and it builds clean (no browser imports). (structural)** — @adhd/agent-registry is a platform:node nx library with @adhd/agent-registry registered in tsconfig.base.json paths, and it builds clean (no browser imports)..
+
+- `[dod.5]` **prompt_components, prompt_types, agents, agent_components, composed_prompts tables exist in the Drizzle schema with the fields the DATA_MODEL requires (slug PK, integer version, is_shared flag, position, version_pin nullable, context_condition JSON, is_required). (structural)** — prompt_components, prompt_types, agents, agent_components, composed_prompts tables exist in the Drizzle schema with the fields the DATA_MODEL requires (slug PK, integer version, is_shared flag, position, version_pin nullable, context_condition JSON, is_required)..
