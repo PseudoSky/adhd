@@ -23,8 +23,8 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
-mutates:    ["packages/ai/agent-registry/src/seed/prompt-types.ts", "packages/ai/agent-registry/src/seed/components.ts", "packages/ai/agent-registry/src/seed/index.ts", "packages/ai/agent-registry/src/__tests__/roundtrip.test.ts"]
+read_only:  ["packages/ai/agent-registry/src/store/component-store.ts", "packages/ai/agent-registry/src/db/schema.ts"]
+mutates:    ["packages/ai/agent-registry/src/seed/prompt-types.ts", "packages/ai/agent-registry/src/seed/components.ts", "packages/ai/agent-registry/src/seed/index.ts", "packages/ai/agent-registry/src/__tests__/roundtrip.test.ts", "packages/ai/agent-registry/src/index.ts"]
 ```
 
 ---
