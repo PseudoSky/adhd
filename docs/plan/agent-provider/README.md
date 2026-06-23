@@ -37,3 +37,5 @@
   - delivered-by: `seed-and-roundtrip`
 
 - `[dod.4]` **@adhd/agent-provider is a platform:node Nx library registered in tsconfig.base.json paths that builds clean and imports no browser code. (structural)** — @adhd/agent-provider is a platform:node Nx library registered in tsconfig.base.json paths that builds clean and imports no browser code..
+
+- `[dod.5]` **The provider_* DB domain (providers, models, model_platform_bindings, provider_tool_formats) exists in the shared SQLite file via the schema. (structural)** — The provider_* DB domain (providers, models, model_platform_bindings, provider_tool_formats) exists in the shared SQLite file via the schema..
