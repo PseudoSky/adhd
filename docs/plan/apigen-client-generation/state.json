@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "nx-generator-v2",
+  "current_state": "audit-v2-core",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -319,11 +319,11 @@
       "end_ref": null
     },
     "class-exports": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T03:10:59.844Z",
-      "done_at": null,
+      "done_at": "2026-06-23T03:43:45.815Z",
       "start_ref": "5a88e205d37e6459878d4f82fdb64ce9f4875cca",
-      "end_ref": null
+      "end_ref": "679140407007345d4439a089b6d9806f5a7afcfc"
     },
     "streaming-projection": {
       "status": "pending",
@@ -726,6 +726,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "apigen-conformance vectors.ts: cross-language vectors A(round-trip)/B(naming+collision)/C(envelope binding)/D(error mapping)/E(necessary-not-sufficient) per §4/§5/§6/§9.1. nx test apigen-conformance exit 0 (orch-verified). These are the contract the Python host re-runs. Byte-proxy telemetry."
+    },
+    {
+      "ts": "2026-06-23T03:43:45.815Z",
+      "from": "nx-generator-v2",
+      "to": "class-exports",
+      "start_ref": "5a88e205d37e6459878d4f82fdb64ce9f4875cca",
+      "end_ref": "679140407007345d4439a089b6d9806f5a7afcfc",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "extract-classes.ts (static methods → action ops always; instances opt-in via includeInstances → constructor + instance-method ops, §10/H2) + instance-registry.ts (TTL sweeper, dispose/disposeAll lifecycle). nx test apigen-core exit 0 + nx build apigen-runtime green (F41 self-check). Orchestrator-driven completion (F40). Byte-proxy telemetry."
     }
   ],
   "amendment_log": [
