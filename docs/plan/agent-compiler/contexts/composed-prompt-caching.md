@@ -18,6 +18,7 @@
 
 - [composed-prompt-caching.1] writes composed_prompts row keyed by context hash
 
+- [composed-prompt-caching.2] recompile hits cache; persistence proven by reopen
 ---
 
 ## Reservations
