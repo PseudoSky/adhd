@@ -1,0 +1,656 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "3a8f5146-5db0-4c18-98a8-1761ac94267a",
+  "prevId": "ba87ba0f-422e-4f06-bcc4-5cd8eac2edfd",
+  "tables": {
+    "registry_agent_components": {
+      "name": "registry_agent_components",
+      "columns": {
+        "agent_slug": {
+          "name": "agent_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "component_slug": {
+          "name": "component_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version_pin": {
+          "name": "version_pin",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "context_condition": {
+          "name": "context_condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "is_required": {
+          "name": "is_required",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        }
+      },
+      "indexes": {
+        "registry_agent_components_agent_idx": {
+          "name": "registry_agent_components_agent_idx",
+          "columns": [
+            "agent_slug"
+          ],
+          "isUnique": false
+        },
+        "registry_agent_components_position_idx": {
+          "name": "registry_agent_components_position_idx",
+          "columns": [
+            "agent_slug",
+            "position"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "registry_agent_components_agent_slug_registry_agents_slug_fk": {
+          "name": "registry_agent_components_agent_slug_registry_agents_slug_fk",
+          "tableFrom": "registry_agent_components",
+          "tableTo": "registry_agents",
+          "columnsFrom": [
+            "agent_slug"
+          ],
+          "columnsTo": [
+            "slug"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "registry_agent_components_agent_slug_component_slug_position_pk": {
+          "columns": [
+            "agent_slug",
+            "component_slug",
+            "position"
+          ],
+          "name": "registry_agent_components_agent_slug_component_slug_position_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "registry_agents": {
+      "name": "registry_agents",
+      "columns": {
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "model_hint": {
+          "name": "model_hint",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "taxonomy_category": {
+          "name": "taxonomy_category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "default_posture": {
+          "name": "default_posture",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'needs_work'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "registry_agents_status_idx": {
+          "name": "registry_agents_status_idx",
+          "columns": [
+            "status"
+          ],
+          "isUnique": false
+        },
+        "registry_agents_category_idx": {
+          "name": "registry_agents_category_idx",
+          "columns": [
+            "taxonomy_category"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "registry_agents_taxonomy_category_registry_taxonomy_categories_slug_fk": {
+          "name": "registry_agents_taxonomy_category_registry_taxonomy_categories_slug_fk",
+          "tableFrom": "registry_agents",
+          "tableTo": "registry_taxonomy_categories",
+          "columnsFrom": [
+            "taxonomy_category"
+          ],
+          "columnsTo": [
+            "slug"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "registry_component_usage": {
+      "name": "registry_component_usage",
+      "columns": {
+        "component_slug": {
+          "name": "component_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "use_case_slug": {
+          "name": "use_case_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "weight": {
+          "name": "weight",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "registry_component_usage_use_case_idx": {
+          "name": "registry_component_usage_use_case_idx",
+          "columns": [
+            "use_case_slug"
+          ],
+          "isUnique": false
+        },
+        "registry_component_usage_component_idx": {
+          "name": "registry_component_usage_component_idx",
+          "columns": [
+            "component_slug"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "registry_component_usage_use_case_slug_registry_use_cases_slug_fk": {
+          "name": "registry_component_usage_use_case_slug_registry_use_cases_slug_fk",
+          "tableFrom": "registry_component_usage",
+          "tableTo": "registry_use_cases",
+          "columnsFrom": [
+            "use_case_slug"
+          ],
+          "columnsTo": [
+            "slug"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "registry_component_usage_component_slug_use_case_slug_pk": {
+          "columns": [
+            "component_slug",
+            "use_case_slug"
+          ],
+          "name": "registry_component_usage_component_slug_use_case_slug_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "registry_composed_prompts": {
+      "name": "registry_composed_prompts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "agent_slug": {
+          "name": "agent_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "context_hash": {
+          "name": "context_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "component_versions": {
+          "name": "component_versions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "registry_composed_prompts_agent_hash_idx": {
+          "name": "registry_composed_prompts_agent_hash_idx",
+          "columns": [
+            "agent_slug",
+            "context_hash"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "registry_context_rules": {
+      "name": "registry_context_rules",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "agent_slug": {
+          "name": "agent_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "condition": {
+          "name": "condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "component_slug": {
+          "name": "component_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "registry_context_rules_agent_idx": {
+          "name": "registry_context_rules_agent_idx",
+          "columns": [
+            "agent_slug"
+          ],
+          "isUnique": false
+        },
+        "registry_context_rules_component_idx": {
+          "name": "registry_context_rules_component_idx",
+          "columns": [
+            "component_slug"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "registry_context_rules_agent_slug_registry_agents_slug_fk": {
+          "name": "registry_context_rules_agent_slug_registry_agents_slug_fk",
+          "tableFrom": "registry_context_rules",
+          "tableTo": "registry_agents",
+          "columnsFrom": [
+            "agent_slug"
+          ],
+          "columnsTo": [
+            "slug"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "registry_prompt_components": {
+      "name": "registry_prompt_components",
+      "columns": {
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "content": {
+          "name": "content",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_shared": {
+          "name": "is_shared",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "registry_prompt_components_slug_idx": {
+          "name": "registry_prompt_components_slug_idx",
+          "columns": [
+            "slug"
+          ],
+          "isUnique": false
+        },
+        "registry_prompt_components_type_idx": {
+          "name": "registry_prompt_components_type_idx",
+          "columns": [
+            "type"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "registry_prompt_components_type_registry_prompt_types_slug_fk": {
+          "name": "registry_prompt_components_type_registry_prompt_types_slug_fk",
+          "tableFrom": "registry_prompt_components",
+          "tableTo": "registry_prompt_types",
+          "columnsFrom": [
+            "type"
+          ],
+          "columnsTo": [
+            "slug"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "registry_prompt_components_slug_version_pk": {
+          "columns": [
+            "slug",
+            "version"
+          ],
+          "name": "registry_prompt_components_slug_version_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "registry_prompt_types": {
+      "name": "registry_prompt_types",
+      "columns": {
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "is_system": {
+          "name": "is_system",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "registry_taxonomy_categories": {
+      "name": "registry_taxonomy_categories",
+      "columns": {
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "parent_slug": {
+          "name": "parent_slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "registry_taxonomy_categories_position_idx": {
+          "name": "registry_taxonomy_categories_position_idx",
+          "columns": [
+            "position"
+          ],
+          "isUnique": false
+        },
+        "registry_taxonomy_categories_parent_idx": {
+          "name": "registry_taxonomy_categories_parent_idx",
+          "columns": [
+            "parent_slug"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "registry_taxonomy_categories_parent_slug_registry_taxonomy_categories_slug_fk": {
+          "name": "registry_taxonomy_categories_parent_slug_registry_taxonomy_categories_slug_fk",
+          "tableFrom": "registry_taxonomy_categories",
+          "tableTo": "registry_taxonomy_categories",
+          "columnsFrom": [
+            "parent_slug"
+          ],
+          "columnsTo": [
+            "slug"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "registry_use_cases": {
+      "name": "registry_use_cases",
+      "columns": {
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "''"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}
