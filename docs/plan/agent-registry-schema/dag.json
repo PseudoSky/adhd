@@ -71,7 +71,9 @@
       "artifacts": [
         "packages/ai/agent-registry/src/db/schema.ts",
         "packages/ai/agent-registry/src/store/composition-store.ts",
-        "packages/ai/agent-registry/src/index.ts"
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/__tests__/composition-store.test.ts",
+        "packages/ai/agent-registry/drizzle"
       ],
       "context": "contexts/composition-junction.md",
       "notes": ""
