@@ -27,6 +27,16 @@
       "paths": [
         "docs/plan/agent-mcp-refactor/decisions.md"
       ]
+    },
+    {
+      "id": "refactor-design.4",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "compat|shim|populated from compiler",
+      "paths": [
+        "docs/plan/agent-mcp-refactor/decisions.md"
+      ]
     }
   ]
 }

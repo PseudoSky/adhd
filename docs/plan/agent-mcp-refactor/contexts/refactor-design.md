@@ -20,6 +20,7 @@
 
 - [refactor-design.2] AgentStore removal-vs-thin-cache decision recorded
 - [refactor-design.3] session-start composed_prompt cache flow recorded
+- [refactor-design.4] systemPrompt compat-shim policy recorded
 ---
 
 ## Reservations
