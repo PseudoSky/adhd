@@ -18,7 +18,7 @@ export type {
     PolicyErrorCode,
 } from "./store/policy-template-store.js";
 
-// Agent↔policy junction store + domain types
+// Agent↔policy junction store + domain types (including category inheritance)
 export {
     AgentPolicyStore,
     AgentPolicyError,
@@ -28,4 +28,7 @@ export type {
     AgentPolicyRow,
     AgentPolicyAttachInput,
     AgentPolicyErrorCode,
+    CategoryPolicyAttachInput,
+    CategoryPolicyRow,
+    AgentCategoryInput,
 } from "./store/agent-policy-store.js";
