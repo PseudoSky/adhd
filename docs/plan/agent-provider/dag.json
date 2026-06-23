@@ -79,6 +79,19 @@
       ],
       "context": "contexts/provider-tool-formats.md",
       "notes": ""
+    },
+    "audit-schema": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "provider-tool-formats"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "docs/plan/agent-provider/scripts/audit_provider.py"
+      ],
+      "context": "contexts/audit-schema.md",
+      "notes": ""
     }
   },
   "authored_with": {
