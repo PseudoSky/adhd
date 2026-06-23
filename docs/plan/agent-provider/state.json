@@ -11,10 +11,10 @@
       "end_ref": "c0b7d13636f43e5c193edc1115421684929e89fd"
     },
     "provider-and-model-schema": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T23:13:31.480Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "3d7a90b6d883c344ee138bedc11c0de256f97395",
       "end_ref": null
     },
     "model-platform-bindings": {
