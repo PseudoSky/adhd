@@ -3,7 +3,8 @@
   "title": "apigen logical-types — cross-language serialization",
   "plan_kind": "greenfield",
   "phases": [
-    "contracts"
+    "contracts",
+    "registry"
   ],
   "terminal": "done",
   "nodes": {
