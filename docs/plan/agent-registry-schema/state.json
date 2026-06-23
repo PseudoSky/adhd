@@ -32,10 +32,10 @@
       "end_ref": "eefea94d58c49e9a0fc045ea63a004c55c0df8d3"
     },
     "usecase-and-context-rules": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T06:13:08.359Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "9305c59c86d71c926d04f1f7b5867e6784840eee",
       "end_ref": null
     },
     "composed-prompt-cache": {
