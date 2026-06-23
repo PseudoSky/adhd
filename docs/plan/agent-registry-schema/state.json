@@ -25,10 +25,10 @@
       "end_ref": "a753e62352904e2ea18b8128a11bab448468b474"
     },
     "composition-junction": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T06:06:33.303Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "054c48119f9f9b67a6e014be8473b0d2633d32f6",
       "end_ref": null
     },
     "usecase-and-context-rules": {
