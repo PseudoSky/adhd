@@ -11,11 +11,11 @@
       "end_ref": "c1f59c3306408b85e14ccf72c4fe87bf4db1dba5"
     },
     "lookup-and-component-schema": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T05:39:37.520Z",
-      "done_at": null,
+      "done_at": "2026-06-23T05:49:56.689Z",
       "start_ref": "f72e27c5b4fb44bf3cb6ca685f243f40f3ef4689",
-      "end_ref": null
+      "end_ref": "3d14ca7cf939afff0a29e73a3c0a1ab67ea7da5d"
     },
     "agent-and-taxonomy-schema": {
       "status": "pending",
@@ -98,6 +98,18 @@
       "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "Created @adhd/agent-registry package skeleton at packages/ai/agent-registry/. Files: project.json (Nx name agent-registry, tags layer:ai+platform:node, @nx/js:tsc build with drizzle asset glob, release block), package.json (name @adhd/agent-registry, deps drizzle-orm@0.45.2, better-sqlite3@12.10.0, zod@4.4.3 matching agent-mcp versions), tsconfig.json + tsconfig.lib.json (mirroring agent-mcp, ESNext/ES2022/Bundler moduleResolution), src/db/client.ts (better-sqlite3 WAL, reads REGISTRY_DATABASE_PATH|DATABASE_PATH, Decision 1 shared-file comment), src/db/schema.ts (drizzle-orm/sqlite-core imports, no tables yet, per-state comments), src/index.ts (barrel: client + schema re-exports). tsconfig.base.json: added single @adhd/agent-registry line only. nx build agent-registry passed exit 0."
+    },
+    {
+      "ts": "2026-06-23T05:49:56.689Z",
+      "from": "lookup-and-component-schema",
+      "to": "lookup-and-component-schema",
+      "start_ref": "f72e27c5b4fb44bf3cb6ca685f243f40f3ef4689",
+      "end_ref": "3d14ca7cf939afff0a29e73a3c0a1ab67ea7da5d",
+      "audit_exit": 8,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 11,
+      "by": "pseudosky",
+      "note": "Added registry_prompt_types (text PK slug, description, is_system integer) and registry_prompt_components (composite PK slug+version via index, type FK to prompt_types, integer version default 1, content, is_shared integer, created_at/updated_at) to schema.ts. Created ComponentStore with create, read(slug), readVersion(slug,n), version(slug,newContent), list({type?,shared?}) methods plus upsertType/readType. Added migrate-runner.ts and migrate.ts (FK-safe migration runner mirroring agent-mcp pattern). Generated drizzle migration 0000_third_nitro.sql into packages/ai/agent-registry/drizzle/. Added vite.config.ts with pool:forks+fileParallelism:false for better-sqlite3 stability. Updated project.json with @nx/vite:test executor (needed for --testFile flag pass-through). component-store.test.ts drives a real on-disk SQLite file (never :memory:), closes and reopens the handle to prove persistence [inv:reopen-proves-persistence], asserts old version rows survive after version() bump [inv:version-retained], and covers create/read/readVersion/version/list. All 15 tests passed (exit 0). Deliverables committed at 3d14ca7."
     }
   ],
   "amendment_log": [],
@@ -106,7 +118,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lookup-and-component-schema",
+  "current_state": "agent-and-taxonomy-schema",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T03:43:53.482Z",
     "by": "pseudosky",
