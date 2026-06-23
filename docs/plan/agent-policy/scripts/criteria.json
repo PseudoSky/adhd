@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "policy-design.1",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "exists",
+      "path": "docs/plan/agent-policy/decisions.md"
+    }
+  ]
+}
