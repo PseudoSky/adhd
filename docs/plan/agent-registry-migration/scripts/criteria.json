@@ -41,6 +41,13 @@
       "tier": null,
       "kind": "exists",
       "path": "packages/ai/agent-registry-migration/src/__fixtures__/ticket-creation.SKILL.md"
+    },
+    {
+      "id": "scaffold-package.1",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/ai/agent-registry-migration/project.json"
     }
   ]
 }
