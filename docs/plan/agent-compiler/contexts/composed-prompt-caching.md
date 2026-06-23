@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["packages/ai/agent-compiler/src/emit/markdown.ts"]
 mutates:    ["packages/ai/agent-compiler/src/cache/composed-prompt-cache.ts", "packages/ai/agent-compiler/src/compile.ts", "packages/ai/agent-compiler/src/index.ts", "packages/ai/agent-compiler/src/__tests__/compile-cache.test.ts"]
 ```
 
