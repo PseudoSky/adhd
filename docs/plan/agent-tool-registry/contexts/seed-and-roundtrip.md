@@ -18,6 +18,7 @@
 
 - [seed-and-roundtrip.1] seed + reopen + idempotency + binding-resolution round-trip suite passes
 
+- [seed-and-roundtrip.2] tool seed lists canonical tools from SEED_DATA
 ---
 
 ## Reservations
