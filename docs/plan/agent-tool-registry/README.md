@@ -35,3 +35,5 @@
   - entrypoint: `npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/agent-tool-store.test.ts`
   - observable: `vitest exits 0; AgentToolStore.grant(agent,tool,'read_only') then listForAgent(agent) returns the tool at permission 'read_only' after reopen`
   - delivered-by: `agent-tool-junction`
+
+- `[dod.4]` **@adhd/agent-tool-registry is a platform:node Nx library registered in tsconfig.base.json that builds clean and imports no browser code (structural)** — @adhd/agent-tool-registry is a platform:node Nx library registered in tsconfig.base.json that builds clean and imports no browser code.
