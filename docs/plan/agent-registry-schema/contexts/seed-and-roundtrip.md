@@ -19,6 +19,7 @@
 - [seed-and-roundtrip.1] seed + reopen + idempotency round-trip suite passes
 
 - [seed-and-roundtrip.2] prompt-types seed lists every DATA_MODEL seed type
+- [seed-and-roundtrip.3] round-trip test has teeth: corrupting persisted content fails the reopen assertion
 ---
 
 ## Reservations
