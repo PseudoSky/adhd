@@ -140,13 +140,10 @@ def phase_schema() -> list:
     r.append(grep_present("composed-prompt-cache.1", "composed_prompts table", "composed_prompts|composedPrompts", SCHEMA))
     r.append(check("composed-prompt-cache.2", "composed-prompt-store cache test passes",
                    f"npx --yes nx test agent-registry --testFile={TESTS}/composed-prompt-store.test.ts"))
-    # seed-and-roundtrip
-    r.append(check("seed-and-roundtrip.1", "seed/reopen/idempotency suite passes",
-                   f"npx --yes nx test agent-registry --testFile={TESTS}/roundtrip.test.ts"))
-    r.append(grep_present("seed-and-roundtrip.2", "seed lists DATA_MODEL types",
-                          "success_criteria|escalation|convergence", f"{PKG}/src/seed/prompt-types.ts"))
-    r.append(check("seed-and-roundtrip.3", "negative-control: roundtrip has teeth (positive probe)",
-                   f"npx --yes nx test agent-registry --testFile={TESTS}/roundtrip.test.ts"))
+    # NOTE: seed-and-roundtrip.* criteria are NOT evaluated here. The seed-and-roundtrip
+    # work-state runs in a LATER wave (depends_on: ["audit-schema"]), so audit-schema must
+    # gate only the schema-TABLE criteria above. The seed criteria are enforced at the true
+    # final gate in phase_final() (audit-final, the last wave) where the work is complete.
     r.append(check("audit-schema.1", "schema-phase audit self-consistent", "true"))
     return r
 
@@ -158,6 +155,15 @@ def phase_schema() -> list:
 
 def phase_final() -> list:
     r = phase_schema()
+    # seed-and-roundtrip — gated HERE (audit-final), not in phase_schema. By the final
+    # wave the seed-and-roundtrip work-state has run, so these criteria are enforceable
+    # with full teeth at the true final gate.
+    r.append(check("seed-and-roundtrip.1", "seed/reopen/idempotency suite passes",
+                   f"npx --yes nx test agent-registry --testFile={TESTS}/roundtrip.test.ts"))
+    r.append(grep_present("seed-and-roundtrip.2", "seed lists DATA_MODEL types",
+                          "success_criteria|escalation|convergence", f"{PKG}/src/seed/prompt-types.ts"))
+    r.append(check("seed-and-roundtrip.3", "negative-control: roundtrip has teeth (positive probe)",
+                   f"npx --yes nx test agent-registry --testFile={TESTS}/roundtrip.test.ts"))
     # [dod.1] component round-trips after reopen
     r.append(check("dod.1", "component round-trips through real store after reopen",
                    f"npx --yes nx test agent-registry --testFile={TESTS}/roundtrip.test.ts"))
