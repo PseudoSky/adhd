@@ -57,6 +57,21 @@
       ],
       "context": "contexts/composition-resolve.md",
       "notes": ""
+    },
+    "tool-header-emit": {
+      "kind": "work",
+      "phase": "resolve",
+      "depends_on": [
+        "composition-resolve"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-compiler/src/resolve/tools.ts",
+        "packages/ai/agent-compiler/src/index.ts",
+        "packages/ai/agent-compiler/src/__tests__/tool-header.test.ts"
+      ],
+      "context": "contexts/tool-header-emit.md",
+      "notes": ""
     }
   },
   "authored_with": {
