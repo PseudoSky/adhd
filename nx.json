@@ -118,12 +118,17 @@
     },
     "test": {
       "cache": true,
+      "dependsOn": [
+        "^build"
+      ],
       "inputs": [
         "default",
         "^production",
         {
           "externalDependencies": [
-            "vitest"
+            "vitest",
+            "better-sqlite3",
+            "drizzle-orm"
           ]
         }
       ]
