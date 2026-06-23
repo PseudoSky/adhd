@@ -521,7 +521,8 @@
       "kind": "work",
       "phase": "v2-core",
       "depends_on": [
-        "canonical-descriptor"
+        "canonical-descriptor",
+        "scaffold-v2-common"
       ],
       "guard": "npx --yes nx test apigen-naming",
       "artifacts": [
