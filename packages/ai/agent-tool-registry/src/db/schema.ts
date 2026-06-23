@@ -1,6 +1,7 @@
 import {
     index,
     integer,
+    primaryKey,
     sqliteTable,
     text
 } from "drizzle-orm/sqlite-core";
@@ -49,5 +50,53 @@ export const toolsTable = sqliteTable(
     },
     (table) => [
         index("idx_tools_type").on(table.type),
+    ]
+);
+
+// ──────────────────────────────────────────────
+// platforms — runtime environments an agent deploys to
+//
+// [def:platform]: keyed by id (e.g. claude_code, claude_api, openai, bedrock,
+// cursor, vscode). header_format is a plain text column seeded with one of:
+// yaml_frontmatter | json_object | none  — [inv:lookup-not-enum] applies here
+// too: never a SQL enum. supports_tool_selection stored as SQLite integer
+// with mode:'boolean'.
+// ──────────────────────────────────────────────
+export const platformsTable = sqliteTable("platforms", {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    // plain text column: yaml_frontmatter | json_object | none
+    headerFormat: text("header_format").notNull(),
+    supportsToolSelection: integer("supports_tool_selection", { mode: "boolean" }).notNull().default(false),
+});
+
+// ──────────────────────────────────────────────
+// tool_platform_bindings — per-platform alias for each canonical tool
+//
+// [def:binding]: PK is (tool_name, platform_id). Both FKs are within-package
+// ([inv:no-cross-pkg-fk]). availability is a plain text column:
+// available | restricted | unavailable | requires_permission.
+// invocation_note is nullable (e.g. "requires --chrome").
+// ──────────────────────────────────────────────
+export const toolPlatformBindingsTable = sqliteTable(
+    "tool_platform_bindings",
+    {
+        toolName: text("tool_name")
+            .notNull()
+            .references(() => toolsTable.name),
+        platformId: text("platform_id")
+            .notNull()
+            .references(() => platformsTable.id),
+        // The name this tool is known by on this platform (e.g. "Bash", "bash_tool")
+        platformToolName: text("platform_tool_name").notNull(),
+        // plain text column: available | restricted | unavailable | requires_permission
+        availability: text("availability").notNull(),
+        requiresMcp: integer("requires_mcp", { mode: "boolean" }).notNull().default(false),
+        // nullable: e.g. "requires --chrome"
+        invocationNote: text("invocation_note"),
+    },
+    (table) => [
+        primaryKey({ columns: [table.toolName, table.platformId] }),
+        index("idx_bindings_platform").on(table.platformId),
     ]
 );
