@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["packages/ai/agent-compiler/src/resolve/composition.ts", "packages/ai/agent-compiler/src/resolve/tools.ts", "packages/ai/agent-compiler/src/resolve/model.ts", "packages/ai/agent-compiler/src/resolve/policy.ts"]
 mutates:    ["packages/ai/agent-compiler/src/emit/markdown.ts", "packages/ai/agent-compiler/src/emit/json.ts", "packages/ai/agent-compiler/src/compile.ts", "packages/ai/agent-compiler/src/index.ts", "packages/ai/agent-compiler/src/__tests__/compile-agent.test.ts"]
 ```
 
