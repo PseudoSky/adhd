@@ -6,7 +6,8 @@
     "contracts",
     "registry",
     "scalars",
-    "extraction"
+    "extraction",
+    "codecs"
   ],
   "terminal": "done",
   "nodes": {
