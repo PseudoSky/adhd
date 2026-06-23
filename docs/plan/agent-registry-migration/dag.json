@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "title": "Agent Registry — Migration & Removal (@adhd/agent-registry-migration)",
+  "plan_kind": "brownfield",
+  "phases": [],
+  "terminal": "done",
+  "nodes": {},
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.22",
+    "hash": "1e4130a84aed"
+  }
+}
