@@ -88,6 +88,23 @@
       ],
       "context": "contexts/model-and-policy-emit.md",
       "notes": ""
+    },
+    "platform-markdown-emit": {
+      "kind": "work",
+      "phase": "emit",
+      "depends_on": [
+        "model-and-policy-emit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-compiler/src/emit/markdown.ts",
+        "packages/ai/agent-compiler/src/emit/json.ts",
+        "packages/ai/agent-compiler/src/compile.ts",
+        "packages/ai/agent-compiler/src/index.ts",
+        "packages/ai/agent-compiler/src/__tests__/compile-agent.test.ts"
+      ],
+      "context": "contexts/platform-markdown-emit.md",
+      "notes": ""
     }
   },
   "authored_with": {
