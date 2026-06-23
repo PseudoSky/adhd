@@ -19,6 +19,7 @@
 - [agent-store-retire.1] user-authored flat systemPrompt is no longer a required authoring field (source-of-truth path gone)
 
 - [agent-store-retire.2] systemPrompt retained only as a documented computed compat shim
+- [agent-store-retire.3] agent CRUD delegates / agent row is a compiled cache (test passes)
 ---
 
 ## Reservations
