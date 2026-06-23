@@ -165,6 +165,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/composed-prompt-store.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "seed-and-roundtrip.1",
+      "phase": "seed",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/roundtrip.test.ts",
+      "expect": "exit0"
     }
   ]
 }
