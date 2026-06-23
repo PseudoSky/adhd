@@ -120,6 +120,14 @@
       "paths": [
         "packages/ai/agent-compiler/src/resolve/tools.ts"
       ]
+    },
+    {
+      "id": "tool-header-emit.2",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/tool-header.test.ts",
+      "expect": "exit0"
     }
   ]
 }
