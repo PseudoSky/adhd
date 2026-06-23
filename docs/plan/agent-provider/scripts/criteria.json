@@ -201,6 +201,14 @@
       "positive": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
       "mutate": "in emit-tools.ts, delete the server-side branch so every tool (incl. an Anthropic web_search binding) is emitted as a custom {name,description,input_schema}",
       "restore": "restore the server-side type-tagged branch in emit-tools.ts"
+    },
+    {
+      "id": "seed-and-roundtrip.1",
+      "phase": "seed",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+      "expect": "exit0"
     }
   ]
 }
