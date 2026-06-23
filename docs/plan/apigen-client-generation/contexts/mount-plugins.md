@@ -1,6 +1,6 @@
 # mount-plugins — STATE_NAME
 
-**Phase:** v2-projection · **Kind:** work · **Depends on:** plugin-interface, naming-helpers, scaffold-v2-common, scaffold-v2-ts-plugins · **Guard:** `npx --yes nx run-many -t test -p apigen-openapi apigen-plugin-openapi apigen-plugin-health`
+**Phase:** v2-projection · **Kind:** work · **Depends on:** plugin-interface, naming-helpers, scaffold-v2-common, scaffold-v2-ts-plugins · **Guard:** `npx --yes nx run-many -t test -p apigen-codegen-openapi apigen-plugin-openapi apigen-plugin-health`
 
 ---
 
@@ -31,4 +31,4 @@ mutates:    ["packages/apigen/codegen/openapi/src/lib/to-openapi.ts", "packages/
 
 ## Notes for executor
 
-SPEC §7.2(b,c)/§12: MountCapability plugins. @adhd/apigen-openapi = neutral descriptor->OpenAPI content (common); thin per-host openapi + health mount plugins add _meta/openapi and _meta/health operations that flow through the harness.
+<footguns, ordering constraints, non-obvious decisions>
