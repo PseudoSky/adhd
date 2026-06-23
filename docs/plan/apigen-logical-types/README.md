@@ -12,4 +12,11 @@ One registry-driven, codegen-first mechanism that round-trips non-JSON-native ty
 
 ## Definition of Done
 
-_No DoD clauses yet — author them with `plan-scaffold.js add-dod`._
+- `[dod.1]` **A Date param/return round-trips through the built bin over MCP/HTTP (behavioral)** — A Date param/return round-trips through the built bin over MCP/HTTP.
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `node dist/packages/apigen/cli/index.js run --source <date-fixture>.ts --type mcp`
+  - observable: `callTool returns at as RFC3339 UTC; an input Date arrives as a real Date (d.getTime works)`
+  - negative-control: `revert the date-time codec -> at becomes {} / input stays string -> red`
+  - delivered-by: `lt-scalars, lt-extract-scalars, lt-generator-emit, lt-dispatch-integration`
