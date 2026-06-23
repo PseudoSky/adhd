@@ -92,3 +92,12 @@ One registry-driven, codegen-first mechanism that round-trips non-JSON-native ty
   - observable: `decimal.js absent -> actionable startup error; 0-function source -> wrong-source error`
   - negative-control: `remove guard -> cryptic ERR_MODULE_NOT_FOUND / 0-function crash -> red`
   - delivered-by: `lt-fail-fast`
+
+- `[dod.10]` **A generated surface using Decimal declares decimal.js and runs after clean install (BUG-002) (behavioral)** — A generated surface using Decimal declares decimal.js and runs after clean install (BUG-002).
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `node dist/packages/apigen/cli/index.js generate --source <decimal-fixture>.ts --type mcp --out-dir <out>`
+  - observable: `generated package.json has decimal.js; server runs without --link-workspace`
+  - negative-control: `omit dep from manifest -> generated server import fails -> red`
+  - delivered-by: `lt-dep-manifest`
