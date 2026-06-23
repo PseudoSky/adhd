@@ -124,6 +124,24 @@
       ],
       "context": "contexts/runtime-tool-forwarding.md",
       "notes": ""
+    },
+    "seed-and-roundtrip": {
+      "kind": "work",
+      "phase": "seed",
+      "depends_on": [
+        "runtime-tool-forwarding"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-provider/src/seed/providers.ts",
+        "packages/ai/agent-provider/src/seed/models.ts",
+        "packages/ai/agent-provider/src/seed/bindings.ts",
+        "packages/ai/agent-provider/src/seed/index.ts",
+        "packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+        "packages/ai/agent-provider/src/index.ts"
+      ],
+      "context": "contexts/seed-and-roundtrip.md",
+      "notes": ""
     }
   },
   "authored_with": {
