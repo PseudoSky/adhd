@@ -17,6 +17,16 @@
       "paths": [
         "docs/plan/agent-policy/decisions.md"
       ]
+    },
+    {
+      "id": "policy-design.3",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "EnforcementEvent|pre:model_request",
+      "paths": [
+        "docs/plan/agent-policy/decisions.md"
+      ]
     }
   ]
 }
