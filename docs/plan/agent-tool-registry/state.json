@@ -39,10 +39,10 @@
       "end_ref": "d8d1833d84f19d6336887b03b2867b58dfdc9688"
     },
     "audit-schema": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T22:15:48.650Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "521b42dbccf56bf85cd4311ebf82c697bdcea437",
       "end_ref": null
     },
     "seed-and-roundtrip": {
