@@ -29,3 +29,12 @@ One registry-driven, codegen-first mechanism that round-trips non-JSON-native ty
   - observable: `value survives as decimal string and decodes to an exact BigInt`
   - negative-control: `decode int64 as a JS number -> precision corrupts -> red`
   - delivered-by: `lt-scalars, lt-dispatch-integration`
+
+- `[dod.3]` **A user class round-trips TS->wire->Python->wire->TS as a real instance on both hosts (behavioral)** — A user class round-trips TS->wire->Python->wire->TS as a real instance on both hosts.
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `python3 docs/plan/apigen-logical-types/scripts/audit_lt-conformance-crosshost.py`
+  - observable: `instanceof holds both hosts; fields deep-equal the seed`
+  - negative-control: `remove constructor binding -> prototype-stripped object -> instanceof false -> red`
+  - delivered-by: `lt-nominal-codec, lt-extract-nominal, lt-host-ts, lt-host-python`
