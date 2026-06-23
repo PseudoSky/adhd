@@ -74,6 +74,22 @@
       ],
       "context": "contexts/agent-store-retire.md",
       "notes": ""
+    },
+    "policy-engine-bridge": {
+      "kind": "work",
+      "phase": "integration",
+      "depends_on": [
+        "agent-store-retire"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/policy-tool-reconcile.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/engine/policy.ts",
+        "packages/ai/agent-mcp/src/providers/claudecli.ts",
+        "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-mcp/src/__tests__/policy-tool-reconcile.test.ts"
+      ],
+      "context": "contexts/policy-engine-bridge.md",
+      "notes": ""
     }
   },
   "authored_with": {
