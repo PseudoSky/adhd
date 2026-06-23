@@ -92,6 +92,23 @@
       ],
       "context": "contexts/audit-schema.md",
       "notes": ""
+    },
+    "provider-adapter-contract": {
+      "kind": "work",
+      "phase": "adapter",
+      "depends_on": [
+        "audit-schema"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp-types/src/index.ts",
+        "packages/ai/agent-provider/src/adapter/provider-adapter.ts",
+        "packages/ai/agent-provider/src/index.ts",
+        "packages/ai/agent-provider/src/__tests__/adapter-resolve.test.ts"
+      ],
+      "context": "contexts/provider-adapter-contract.md",
+      "notes": ""
     }
   },
   "authored_with": {
