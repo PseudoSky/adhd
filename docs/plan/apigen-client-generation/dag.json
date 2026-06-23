@@ -21,7 +21,8 @@
     "v2-projection",
     "v2-packaging",
     "v2-verify",
-    "v2-scaffold"
+    "v2-scaffold",
+    "v2-host-contract"
   ],
   "terminal": "done",
   "assumed_baseline": [],
