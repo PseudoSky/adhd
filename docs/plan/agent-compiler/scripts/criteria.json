@@ -138,6 +138,16 @@
       "paths": [
         "packages/ai/agent-compiler/src/resolve/model.ts"
       ]
+    },
+    {
+      "id": "model-and-policy-emit.2",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "present",
+      "pattern": "agent_policy|agentPolicy|constraint|permission",
+      "paths": [
+        "packages/ai/agent-compiler/src/resolve/policy.ts"
+      ]
     }
   ]
 }
