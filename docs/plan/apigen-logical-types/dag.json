@@ -141,6 +141,20 @@
       ],
       "context": "contexts/lt-extract-union.md",
       "notes": ""
+    },
+    "lt-nominal-codec": {
+      "kind": "work",
+      "phase": "codecs",
+      "depends_on": [
+        "lt-generator-emit",
+        "lt-extract-nominal"
+      ],
+      "guard": "npx nx test apigen-runtime",
+      "artifacts": [
+        "packages/apigen/runtime/src/lib/logical/nominal-codec.ts"
+      ],
+      "context": "contexts/lt-nominal-codec.md",
+      "notes": ""
     }
   },
   "authored_with": {
