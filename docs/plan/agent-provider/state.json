@@ -18,10 +18,10 @@
       "end_ref": "40c79737c5c080b38ec25ea0ebb716a26dbe06d8"
     },
     "model-platform-bindings": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T23:21:54.207Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "a2929398da5e7d440d5c5280b874db335d5b5b98",
       "end_ref": null
     },
     "provider-tool-formats": {
