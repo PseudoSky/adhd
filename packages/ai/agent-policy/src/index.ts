@@ -6,3 +6,14 @@
 export { db, sqlite } from "./db/client.js";
 export { runMigrations } from "./db/migrate.js";
 export * from "./db/schema.js";
+
+// Policy template store + domain types
+export {
+    PolicyTemplateStore,
+    PolicyError,
+} from "./store/policy-template-store.js";
+export type {
+    PolicyTemplate,
+    PolicyTemplateCreateInput,
+    PolicyErrorCode,
+} from "./store/policy-template-store.js";
