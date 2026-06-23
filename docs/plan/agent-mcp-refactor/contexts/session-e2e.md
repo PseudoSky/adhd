@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [session-e2e.1] e2e: real session start resolves systemPrompt == compileAgent(...) output (real DB, LLM boundary mocked)
 
 ---
 
