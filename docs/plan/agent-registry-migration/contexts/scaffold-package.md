@@ -20,6 +20,7 @@
 
 - [scaffold-package.2] tagged platform:node
 - [scaffold-package.3] tsconfig path registered
+- [scaffold-package.4] depends on registry + compiler
 ---
 
 ## Reservations

@@ -68,6 +68,16 @@
       "paths": [
         "tsconfig.base.json"
       ]
+    },
+    {
+      "id": "scaffold-package.4",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-registry|@adhd/agent-compiler",
+      "paths": [
+        "packages/ai/agent-registry-migration/package.json"
+      ]
     }
   ]
 }
