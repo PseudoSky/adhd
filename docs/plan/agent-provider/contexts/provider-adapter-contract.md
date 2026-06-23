@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [provider-adapter-contract.1] ProviderAdapter interface defined in agent-mcp-types (not agent-provider)
 
 ---
 
