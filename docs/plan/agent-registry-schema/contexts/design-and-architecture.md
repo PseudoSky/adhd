@@ -18,6 +18,7 @@
 
 - [design-and-architecture.1] decisions.md records the resolved topology + context-eval semantics
 
+- [design-and-architecture.2] DB topology decision recorded
 ---
 
 ## Reservations
