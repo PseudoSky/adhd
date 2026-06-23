@@ -3,7 +3,7 @@
 
 export { db, sqlite } from "./db/client.js";
 export { runMigrations } from "./db/migrate.js";
-export { mcpServersTable, platformsTable, toolPlatformBindingsTable, toolTypesTable, toolsTable } from "./db/schema.js";
+export { agentToolsTable, mcpServersTable, platformsTable, toolPlatformBindingsTable, toolTypesTable, toolsTable } from "./db/schema.js";
 export {
     ToolStore,
     ToolStoreError,
@@ -34,3 +34,13 @@ export type {
     McpServerCreateInput,
     McpServerStoreErrorCode,
 } from "./store/mcp-server-store.js";
+export {
+    AgentToolStore,
+    AgentToolStoreError,
+} from "./store/agent-tool-store.js";
+export type {
+    AgentToolGrant,
+    AgentToolGrantInput,
+    AgentToolStoreErrorCode,
+    PermissionLevel,
+} from "./store/agent-tool-store.js";
