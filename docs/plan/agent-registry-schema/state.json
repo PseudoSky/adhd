@@ -60,11 +60,11 @@
       "end_ref": "60aea137012ae334b2e2971fd47af33aef4597b7"
     },
     "audit-final": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T15:16:45.981Z",
-      "done_at": null,
+      "done_at": "2026-06-23T15:16:58.015Z",
       "start_ref": "f0f1be50f8e0357b68d5f5f85a27916fd1821e76",
-      "end_ref": null
+      "end_ref": "048d67b13c97c5168417b29a3a53412c73f53b04"
     },
     "design-and-architecture": {
       "status": "complete",
@@ -194,6 +194,18 @@
       "audit_criteria_total": 21,
       "by": "pseudosky",
       "note": "built + roundtrip suite passed (4/4, exit 0) + nc scripts authored + PROVED teeth (test went RED after nc_mutate, GREEN after nc_restore) + committed 60aea13"
+    },
+    {
+      "ts": "2026-06-23T15:16:58.015Z",
+      "from": "audit-final",
+      "to": "audit-final",
+      "start_ref": "f0f1be50f8e0357b68d5f5f85a27916fd1821e76",
+      "end_ref": "048d67b13c97c5168417b29a3a53412c73f53b04",
+      "audit_exit": 15,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 23,
+      "by": "pseudosky",
+      "note": "Final-phase audit 31/31 green incl. all DoD clauses dod.1-5 and the seed-and-roundtrip negative-control teeth. Package builds + all suites pass."
     }
   ],
   "amendment_log": [],
