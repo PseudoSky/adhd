@@ -41,6 +41,23 @@
       ],
       "context": "contexts/scaffold-package.md",
       "notes": ""
+    },
+    "policy-type-and-template-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "scaffold-package"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-policy/src/db/schema.ts",
+        "packages/ai/agent-policy/src/store/policy-template-store.ts",
+        "packages/ai/agent-policy/src/index.ts",
+        "packages/ai/agent-policy/src/__tests__/policy-template-store.test.ts",
+        "packages/ai/agent-policy/drizzle"
+      ],
+      "context": "contexts/policy-type-and-template-schema.md",
+      "notes": ""
     }
   },
   "authored_with": {
