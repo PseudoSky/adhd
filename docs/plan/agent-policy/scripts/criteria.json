@@ -54,6 +54,14 @@
       "paths": [
         "packages/ai/agent-policy/project.json"
       ]
+    },
+    {
+      "id": "scaffold-package.4",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx build agent-policy",
+      "expect": "exit0"
     }
   ]
 }
