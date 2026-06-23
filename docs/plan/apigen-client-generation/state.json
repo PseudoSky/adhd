@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "streaming-projection",
+  "current_state": "audit-v2-projection",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -263,11 +263,11 @@
       "end_ref": "794ea267123968e7c28030bcf25c2c63f2ad887d"
     },
     "mount-plugins": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T04:52:22.764Z",
-      "done_at": null,
+      "done_at": "2026-06-23T05:01:13.436Z",
       "start_ref": "ee2879629dcfe198a43ecdec0f0edbd8d8b80eae",
-      "end_ref": null
+      "end_ref": "a198d872f56bd5aafab6bbb6a72688315dcaceb2"
     },
     "audit-v2-projection": {
       "status": "pending",
@@ -798,6 +798,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "§11 full streaming: runtime/stream.ts (per-chunk async gen, consumer-pull backpressure, AbortSignal cancel, error-after-first-chunk via @adhd/apigen-errors carriers) + mcp/stream.ts + api-fastify/stream.ts (SSE event:error after data, mid-stream cancel). nx run-many test mcp/fastify/runtime exit 0 (orch-verified). Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:01:13.436Z",
+      "from": "streaming-projection",
+      "to": "mount-plugins",
+      "start_ref": "ee2879629dcfe198a43ecdec0f0edbd8d8b80eae",
+      "end_ref": "a198d872f56bd5aafab6bbb6a72688315dcaceb2",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "to-openapi.ts (pure Descriptor→OpenAPI 3.1, verb-from-safe §5, JSON-Schema passthrough) + openapi mount plugin + health mount plugin (_meta/health readiness feeds gateway routing §13.1). nx run-many test codegen-openapi/plugin-openapi/plugin-health exit 0 (orch-verified). Filled v2 generator stubs. Orchestrator-driven (F40)."
     }
   ],
   "amendment_log": [
