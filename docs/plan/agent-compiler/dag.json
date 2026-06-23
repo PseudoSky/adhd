@@ -105,6 +105,21 @@
       ],
       "context": "contexts/platform-markdown-emit.md",
       "notes": ""
+    },
+    "compile-cli": {
+      "kind": "work",
+      "phase": "cli",
+      "depends_on": [
+        "platform-markdown-emit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-compiler/src/cli/compile.ts",
+        "packages/ai/agent-compiler/src/index.ts",
+        "packages/ai/agent-compiler/src/__tests__/compile-cli.test.ts"
+      ],
+      "context": "contexts/compile-cli.md",
+      "notes": ""
     }
   },
   "authored_with": {
