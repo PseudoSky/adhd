@@ -35,9 +35,11 @@ const ORIGINAL_CONTENT =
 const conn = new Database(DB_PATH);
 conn.pragma("journal_mode = WAL");
 
+// Decision 5: component content lives in registry_component_versions, keyed by
+// (slug, version) — not on the head registry_components identity row.
 const result = conn
     .prepare(
-        `UPDATE registry_prompt_components
+        `UPDATE registry_component_versions
          SET content = ?
          WHERE slug = 'default-skeptic' AND version = 2`
     )

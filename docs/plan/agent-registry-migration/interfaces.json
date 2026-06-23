@@ -1,1 +1,14 @@
-{}
+{
+  "$note": "Contract notes only. Updated for @adhd/agent-registry Decision 5 (head/version split) so the importer builds against the corrected component shape. Does NOT alter this plan's state.json/dag.json.",
+  "consumes": {
+    "registry-component-import": {
+      "from": "@adhd/agent-registry (docs/plan/agent-registry-schema)",
+      "how": "import-pipeline writes via ComponentStore + CompositionStore against the ONE shared SQLite handle.",
+      "component-model": {
+        "shape": "head/version split (Decision 5): each imported .md body section becomes a registry_components head row (created once per slug) plus a registry_component_versions row at its version. UNIQUE(slug, version) + the slug→head FK are enforced, so an importer that emits a version for a missing head, or a duplicate (slug, version), now THROWS instead of silently inserting.",
+        "create-vs-version": "ComponentStore.create(slug,...) inserts head + v1 atomically for a NEW slug; ComponentStore.version(slug, content) appends a new version row to an EXISTING head. Content-hash dedup (SEED_DATA §0 step 5) decides which: a new head for an unseen slug, a new version row for changed content of an existing slug, or a no-op reuse.",
+        "junction": "CompositionStore.attach writes registry_agent_components with component_slug as an enforced FK → registry_components.slug and version_pin (null on import) as an enforced nullable FK → registry_component_versions.version_id. Pin an exact version with attach({ pinVersion }) or a pre-resolved version_id with attach({ versionPin })."
+      }
+    }
+  }
+}

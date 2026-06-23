@@ -117,7 +117,12 @@ def phase_schema() -> list:
     r.append(grep_absent("scaffold-package.5", "no browser globals", r'from "react"|document\.|window\.', f"{PKG}/src"))
     # lookup-and-component-schema
     r.append(grep_present("lookup-and-component-schema.1", "prompt_types table", "prompt_types|promptTypes", SCHEMA))
-    r.append(grep_present("lookup-and-component-schema.2", "prompt_components table", "prompt_components|promptComponents", SCHEMA))
+    # Decision 5: the single (slug, version) registry_prompt_components table was split
+    # into registry_components (identity/head) + registry_component_versions (history).
+    # The version table is the one carrying the integer `version` column this criterion
+    # is about, so grep for it (the old `prompt_components` token no longer exists).
+    r.append(grep_present("lookup-and-component-schema.2", "registry_component_versions table",
+                          "registry_component_versions|componentVersionsTable", SCHEMA))
     r.append(check("lookup-and-component-schema.3", "component-store test passes",
                    f"npx --yes nx test agent-registry --testFile={TESTS}/component-store.test.ts"))
     # agent-and-taxonomy-schema
