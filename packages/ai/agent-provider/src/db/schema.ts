@@ -67,3 +67,32 @@ export const modelPlatformBindings = sqliteTable(
         index("idx_provider_mpb_model_id").on(table.modelId),
     ]
 );
+
+// ──────────────────────────────────────────────
+// provider_tool_formats
+// Captures the per-provider tool schema shape for each canonical tool name.
+// PK is composite (provider_id, canonical_tool).
+// provider_id is a LOGICAL FK to provider_providers.id ([inv:lookup-not-enum]).
+// emit_shape is a seeded controlled-vocab lookup:
+//   "custom"      — emitted as {name, description, input_schema} function def
+//   "server_side" — emitted as a versioned type-tagged entry with NO input_schema
+//                   (e.g. Anthropic web_search_20250305); type_tag is set
+//   "unsupported" — provider-native tool that requires a local execution loop;
+//                   emitter must throw an explicit error; note is set
+// ([inv:lookup-not-enum], [def:server-side-tool], [def:unsupported-native])
+// ──────────────────────────────────────────────
+export const providerToolFormats = sqliteTable(
+    "provider_tool_formats",
+    {
+        providerId: text("provider_id").notNull(),              // logical ref → provider_providers.id
+        canonicalTool: text("canonical_tool").notNull(),        // e.g. "web_search", "bash", "shell_exec"
+        emitShape: text("emit_shape").notNull(),                // "custom" | "server_side" | "unsupported"
+        typeTag: text("type_tag"),                              // nullable — versioned type string for server_side rows
+                                                                // e.g. "web_search_20250305"; null for custom/unsupported
+        note: text("note"),                                     // nullable — actionable message for unsupported rows
+    },
+    (table) => [
+        primaryKey({ columns: [table.providerId, table.canonicalTool] }),
+        index("idx_provider_tool_formats_provider_id").on(table.providerId),
+    ]
+);
