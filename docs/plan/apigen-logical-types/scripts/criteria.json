@@ -8,6 +8,14 @@
       "kind": "command",
       "cmd": "npx nx build apigen-logical",
       "expect": "exit0"
+    },
+    {
+      "id": "lt-contracts.1",
+      "phase": "contracts",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx tsc apigen-logical",
+      "expect": "exit0"
     }
   ]
 }
