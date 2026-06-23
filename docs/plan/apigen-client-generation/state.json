@@ -270,10 +270,10 @@
       "end_ref": "a198d872f56bd5aafab6bbb6a72688315dcaceb2"
     },
     "audit-v2-projection": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T05:04:52.825Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "425c92303ae5150408f32500499d9601158c9bf4",
       "end_ref": null
     },
     "package-restructure": {
