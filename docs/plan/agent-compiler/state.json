@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "title": "Agent Registry — Composition & Compile Engine (@adhd/agent-compiler)",
+  "dag": "dag.json",
+  "states": {},
+  "transition_log": [],
+  "amendment_log": [],
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.22",
+    "hash": "1e4130a84aed"
+  }
+}
