@@ -19,3 +19,11 @@
   - entrypoint: `npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/roundtrip.test.ts`
   - observable: `vitest exit 0 and reporter shows the 'component round-trips after reopen' test passing`
   - delivered-by: `seed-and-roundtrip, lookup-and-component-schema`
+
+- `[dod.2]` **An agent composed from ordered component rows yields its components in assembly order with version pins and context conditions honored, queried back through CompositionStore against a real DB. (behavioral)** — An agent composed from ordered component rows yields its components in assembly order with version pins and context conditions honored, queried back through CompositionStore against a real DB..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/composition-store.test.ts`
+  - observable: `vitest exit 0 and the 'resolveComposition returns ordered, pinned, context-filtered components' test passes`
+  - delivered-by: `composition-junction`
