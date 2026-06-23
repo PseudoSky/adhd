@@ -43,6 +43,23 @@
       ],
       "context": "contexts/tool-and-type-schema.md",
       "notes": ""
+    },
+    "platform-and-binding-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "tool-and-type-schema"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-tool-registry/src/db/schema.ts",
+        "packages/ai/agent-tool-registry/src/store/binding-store.ts",
+        "packages/ai/agent-tool-registry/src/index.ts",
+        "packages/ai/agent-tool-registry/src/__tests__/binding-store.test.ts",
+        "packages/ai/agent-tool-registry/drizzle"
+      ],
+      "context": "contexts/platform-and-binding-schema.md",
+      "notes": ""
     }
   },
   "authored_with": {
