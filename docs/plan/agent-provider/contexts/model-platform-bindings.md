@@ -18,6 +18,7 @@
 
 - [model-platform-bindings.1] model_platform_bindings table
 
+- [model-platform-bindings.2] resolveModelId reads binding by platform
 ---
 
 ## Reservations
