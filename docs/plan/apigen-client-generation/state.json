@@ -347,11 +347,11 @@
       "end_ref": null
     },
     "nx-generator-v2": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T03:31:21.833Z",
-      "done_at": null,
+      "done_at": "2026-06-23T03:45:02.721Z",
       "start_ref": "4593ce914f51d23a92010bfa907d285d5a78ad1a",
-      "end_ref": null
+      "end_ref": "7c51fcc09a79aaefbdbebfa365f5feab7ff4a177"
     }
   },
   "transition_log": [
@@ -738,6 +738,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "extract-classes.ts (static methods → action ops always; instances opt-in via includeInstances → constructor + instance-method ops, §10/H2) + instance-registry.ts (TTL sweeper, dispose/disposeAll lifecycle). nx test apigen-core exit 0 + nx build apigen-runtime green (F41 self-check). Orchestrator-driven completion (F40). Byte-proxy telemetry."
+    },
+    {
+      "ts": "2026-06-23T03:45:02.721Z",
+      "from": "audit-v2-core",
+      "to": "nx-generator-v2",
+      "start_ref": "4593ce914f51d23a92010bfa907d285d5a78ad1a",
+      "end_ref": "7c51fcc09a79aaefbdbebfa365f5feab7ff4a177",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "apigen-nx:plugin generator upgraded to v2 shape: plugin.ts template implements v2 Plugin interface from @adhd/apigen-core (capabilities {target,layer,mount,envelope}, Layer-aware Call/Next/Chunk per §7.1/§8.1); test template asserts capabilities (teeth); generator.ts keeps home packages/apigen/plugins/<name> + name apigen-plugin-<name> (no ts/plugins, no apigen-ts-plugin) + adds --platform option. nx test apigen-nx exit 0 (orch-verified). Byte-proxy telemetry."
     }
   ],
   "amendment_log": [
