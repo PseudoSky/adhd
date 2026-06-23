@@ -291,10 +291,10 @@
       "end_ref": "6cacca0ab73498953e4a58681a9d4e63d6dc6d36"
     },
     "gateway": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T05:15:07.086Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "f92b1b2dc297c0ee1a0332e28b03d39997b640e6",
       "end_ref": null
     },
     "conformance-vectors": {
