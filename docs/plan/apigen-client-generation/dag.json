@@ -760,6 +760,24 @@
       ],
       "context": "contexts/conformance-vectors.md",
       "notes": "SPEC §12/§14: @adhd/apigen-conformance — cross-language conformance vectors every host runtime must pass (descriptor round-trip, naming projection, validation, error mapping); codifies the host-SDK/extractor contract."
+    },
+    "scaffold-v2-common": {
+      "kind": "work",
+      "phase": "v2-scaffold",
+      "depends_on": [
+        "core-types"
+      ],
+      "guard": "npx --yes nx run-many -t build -p apigen-naming apigen-errors apigen-schema apigen-conformance apigen-gateway apigen-codegen-openapi",
+      "artifacts": [
+        "packages/apigen/naming/project.json",
+        "packages/apigen/errors/project.json",
+        "packages/apigen/schema/project.json",
+        "packages/apigen/conformance/project.json",
+        "packages/apigen/gateway/project.json",
+        "packages/apigen/codegen/openapi/project.json"
+      ],
+      "context": "contexts/scaffold-v2-common.md",
+      "notes": "SPEC §12: scaffold the 6 COMMON packages in their final homes with full nx wiring (tsconfig.base paths, vite.config, tsconfig.lib/spec, layer:logic/platform:shared tags) — mirrors v1 scaffold-packages. Fixes R3 (unscaffolded pkgs) + R6 (final homes → package-restructure becomes a verify gate). apigen-schema gets its owning state here."
     }
   },
   "authored_with": {
