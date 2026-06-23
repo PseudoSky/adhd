@@ -37,3 +37,5 @@
   - delivered-by: `policy-type-and-template-schema, seed-and-roundtrip`
 
 - `[dod.4]` **@adhd/agent-policy is a platform:node Nx library registered in tsconfig.base.json paths that builds clean and imports no browser code. (structural)** — @adhd/agent-policy is a platform:node Nx library registered in tsconfig.base.json paths that builds clean and imports no browser code..
+
+- `[dod.5]` **The schema contains policy_types (a lookup table, not a SQL enum), policy_templates, and agent_policy tables; the enforcement plugin follows the agent-mcp-budget contract (exports configSchema + createPlugin). (structural)** — The schema contains policy_types (a lookup table, not a SQL enum), policy_templates, and agent_policy tables; the enforcement plugin follows the agent-mcp-budget contract (exports configSchema + createPlugin)..
