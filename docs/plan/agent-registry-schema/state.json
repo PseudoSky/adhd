@@ -67,21 +67,34 @@
       "end_ref": null
     },
     "design-and-architecture": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T05:22:00.455Z",
-      "done_at": null,
+      "done_at": "2026-06-23T05:25:00.499Z",
       "start_ref": "0f2ff4a36a05dce7e17e618b33c5a988b3e4b156",
-      "end_ref": null
+      "end_ref": "dd59be40ea4e16642c1bf12c9004310a199d6da1"
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-06-23T05:25:00.499Z",
+      "from": "design-and-architecture",
+      "to": "design-and-architecture",
+      "start_ref": "0f2ff4a36a05dce7e17e618b33c5a988b3e4b156",
+      "end_ref": "dd59be40ea4e16642c1bf12c9004310a199d6da1",
+      "audit_exit": 24,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 26,
+      "by": "pseudosky",
+      "note": "Resolved 4 open cross-domain decisions in decisions.md: (1) DB topology = one shared SQLite file with registry_/tool_/provider_/policy_ prefixes, one handle, no ATTACH, no cross-package FK (DAG-neutral baseline that agent-compiler already assumes); (2) context-condition eval = ALL matching included with deterministic total order (position, version, slug), is_required unmatched => error; (3) keep both context_condition + context_rules with a single shared predicate evaluator + additive union (junction wins dedup); (4) version pin is per-reference (slug, version_pin?), null=latest-at-resolve, identical at junction/policy/experiment sites. Architecture guard passes 3/3 (exit 0). No decision changes the DAG."
+    }
+  ],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "design-and-architecture",
+  "current_state": "scaffold-package",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T03:43:53.482Z",
     "by": "pseudosky",
