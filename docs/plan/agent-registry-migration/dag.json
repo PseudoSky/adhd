@@ -17,7 +17,7 @@
       "kind": "work",
       "phase": "architecture",
       "depends_on": [],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-registry-migration/scripts/audit_migration.py --phase architecture",
       "artifacts": [
         "docs/plan/agent-registry-migration/decisions.md",
         "packages/ai/agent-registry-migration/src/__fixtures__/code-reviewer.md",
@@ -32,7 +32,7 @@
       "depends_on": [
         "migration-design"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx build agent-registry-migration",
       "artifacts": [
         "packages/ai/agent-registry-migration/project.json",
         "packages/ai/agent-registry-migration/package.json",
@@ -48,7 +48,7 @@
       "depends_on": [
         "scaffold-package"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/frontmatter.test.ts",
       "artifacts": [
         "packages/ai/agent-registry-migration/src/parse/frontmatter.ts",
         "packages/ai/agent-registry-migration/src/index.ts",
@@ -63,7 +63,7 @@
       "depends_on": [
         "frontmatter-parser"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/body-sections.test.ts",
       "artifacts": [
         "packages/ai/agent-registry-migration/src/parse/body-sections.ts",
         "packages/ai/agent-registry-migration/src/index.ts",
@@ -78,7 +78,7 @@
       "depends_on": [
         "body-section-splitter"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/import-pipeline.test.ts",
       "artifacts": [
         "packages/ai/agent-registry-migration/src/import/import-agent.ts",
         "packages/ai/agent-registry-migration/src/index.ts",
@@ -93,7 +93,7 @@
       "depends_on": [
         "import-pipeline"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/skills-migration.test.ts",
       "artifacts": [
         "packages/ai/agent-registry-migration/src/import/import-skill.ts",
         "packages/ai/agent-registry-migration/src/index.ts",
@@ -109,7 +109,7 @@
         "import-pipeline",
         "skills-migration"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts",
       "artifacts": [
         "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts",
         "packages/ai/agent-registry-migration/src/verify/normalize.ts",
@@ -125,7 +125,7 @@
       "depends_on": [
         "roundtrip-equivalence-gate"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-registry-migration/scripts/audit_migration.py --phase migration",
       "artifacts": [
         "docs/plan/agent-registry-migration/scripts/audit_migration.py"
       ],
@@ -139,7 +139,7 @@
         "roundtrip-equivalence-gate",
         "audit-migration"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/removal-runbook.test.ts",
       "artifacts": [
         "packages/ai/agent-registry-migration/src/removal/retire.ts",
         "packages/ai/agent-registry-migration/src/index.ts",
@@ -155,7 +155,7 @@
       "depends_on": [
         "removal-runbook"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-registry-migration/scripts/audit_migration.py --phase final",
       "artifacts": [
         "docs/plan/agent-registry-migration/scripts/audit_migration.py"
       ],
