@@ -6,7 +6,19 @@
     "contracts"
   ],
   "terminal": "done",
-  "nodes": {},
+  "nodes": {
+    "lt-package": {
+      "kind": "work",
+      "phase": "contracts",
+      "depends_on": [],
+      "guard": "npx nx build apigen-logical",
+      "artifacts": [
+        "packages/apigen/logical/project.json"
+      ],
+      "context": "contexts/lt-package.md",
+      "notes": ""
+    }
+  },
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.23",
