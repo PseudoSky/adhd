@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "audit-v2-projection",
+  "current_state": "package-restructure",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -270,11 +270,11 @@
       "end_ref": "a198d872f56bd5aafab6bbb6a72688315dcaceb2"
     },
     "audit-v2-projection": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T05:04:52.825Z",
-      "done_at": null,
+      "done_at": "2026-06-23T05:04:59.521Z",
       "start_ref": "425c92303ae5150408f32500499d9601158c9bf4",
-      "end_ref": null
+      "end_ref": "1c21100e1c1adae1cd8a32a014c91e720c871a71"
     },
     "package-restructure": {
       "status": "pending",
@@ -810,6 +810,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "to-openapi.ts (pure Descriptor→OpenAPI 3.1, verb-from-safe §5, JSON-Schema passthrough) + openapi mount plugin + health mount plugin (_meta/health readiness feeds gateway routing §13.1). nx run-many test codegen-openapi/plugin-openapi/plugin-health exit 0 (orch-verified). Filled v2 generator stubs. Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:04:59.521Z",
+      "from": "audit-v2-projection",
+      "to": "audit-v2-projection",
+      "start_ref": "425c92303ae5150408f32500499d9601158c9bf4",
+      "end_ref": "1c21100e1c1adae1cd8a32a014c91e720c871a71",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "v2-projection gate 6/6 real teeth: envelope (mcp generated §9.1 binding), verb (fastify safe→GET/unsafe→POST routes), streaming (runtime+mcp+fastify deterministic), plugins (logger/openapi/health), generator-v2-shape (apigen-nx), deprecation-hygiene (no ts/, no apigen-ts-plugin). Vacuous cli-canonical checks repointed to deterministic tests (F43/F42a); cli e2e deferred to audit-final-v2 dod.14/15."
     }
   ],
   "amendment_log": [
