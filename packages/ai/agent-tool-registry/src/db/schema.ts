@@ -130,3 +130,38 @@ export const mcpServersTable = sqliteTable("mcp_servers", {
         .notNull()
         .default({}),
 });
+
+// ──────────────────────────────────────────────
+// agent_tools — agent↔tool permission junction
+//
+// [def:agent-tool-grant]: PK is (agent_slug, tool_name). agent_slug is a
+// LOGICAL key into the agent-registry package's `agents` table — it MUST NOT
+// be a SQLite FK ([inv:no-cross-pkg-fk]: there is no `agents` table in this
+// package; the linkage is resolved at compile time by @adhd/agent-compiler).
+// tool_name → tools.name IS a real within-package FK.
+//
+// permission is a plain text column: full | read_only | restricted.
+// ([inv:lookup-not-enum]: seeded text value, never a SQL enum.)
+// context_condition is a nullable JSON value (null = always applies).
+// ──────────────────────────────────────────────
+export const agentToolsTable = sqliteTable(
+    "agent_tools",
+    {
+        // LOGICAL reference — NOT a SQLite FK ([inv:no-cross-pkg-fk])
+        agentSlug: text("agent_slug").notNull(),
+        // Within-package FK to tools.name — real SQLite FK is fine here
+        toolName: text("tool_name")
+            .notNull()
+            .references(() => toolsTable.name),
+        // Plain text column: full | read_only | restricted
+        permission: text("permission").notNull(),
+        // Nullable JSON — null means the grant always applies
+        contextCondition: text("context_condition", { mode: "json" })
+            .$type<Record<string, unknown> | null>()
+            .default(null),
+    },
+    (table) => [
+        primaryKey({ columns: [table.agentSlug, table.toolName] }),
+        index("idx_agent_tools_agent_slug").on(table.agentSlug),
+    ]
+);
