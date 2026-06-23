@@ -19,6 +19,7 @@
 - [compiler-design.1] decisions.md exists
 
 - [compiler-design.2] context-condition precedence consumption recorded (matches agent-registry)
+- [compiler-design.3] per-platform header builder contract recorded
 ---
 
 ## Reservations
