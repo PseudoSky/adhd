@@ -46,11 +46,11 @@
       "end_ref": "13c2d395bd2f397ba47c832a869b77d87d133d3d"
     },
     "audit-schema": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T14:59:43.964Z",
-      "done_at": null,
+      "done_at": "2026-06-23T14:59:52.933Z",
       "start_ref": "0d92141213f8b39af81342bbc5b8fd975fdf1e0d",
-      "end_ref": null
+      "end_ref": "ca81e5287acd2284c239e2315c136a1779821ccd"
     },
     "seed-and-roundtrip": {
       "status": "pending",
@@ -170,6 +170,18 @@
       "audit_criteria_total": 18,
       "by": "pseudosky",
       "note": "built + test passed (9/9, exit 0) + committed daf9b02"
+    },
+    {
+      "ts": "2026-06-23T14:59:52.933Z",
+      "from": "audit-schema",
+      "to": "audit-schema",
+      "start_ref": "0d92141213f8b39af81342bbc5b8fd975fdf1e0d",
+      "end_ref": "ca81e5287acd2284c239e2315c136a1779821ccd",
+      "audit_exit": 15,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 23,
+      "by": "pseudosky",
+      "note": "Schema-phase audit green (22/22 schema-table criteria). Resolved F1 build regression (tsconfig lib ES2022, 6a91d04) and F2 plan-ordering defect via planner-repair (seed criteria recategorized to final phase, 0d92141). Guard exit 0."
     }
   ],
   "amendment_log": [],
@@ -178,7 +190,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "audit-schema",
+  "current_state": "seed-and-roundtrip",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T03:43:53.482Z",
     "by": "pseudosky",
