@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { copyReadme } from '../../tools/vite-copy-readme.mjs';
 import { builtinModules } from 'node:module';
 
 export default defineConfig({
@@ -10,6 +11,7 @@ export default defineConfig({
   cacheDir: '../../../../node_modules/.vite/packages/apigen/plugins/mcp',
 
   plugins: [
+    copyReadme(__dirname),
     nxViteTsPaths(),
     dts({
       entryRoot: 'src',

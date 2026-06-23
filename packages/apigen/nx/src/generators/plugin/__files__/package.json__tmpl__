@@ -1,7 +1,12 @@
 {
   "name": "<%= packageScope %>/<%= projectName %>",
   "version": "0.0.1",
-  "main": "./src/index.ts",
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "types": "./index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@adhd/apigen-core": "*"
   }

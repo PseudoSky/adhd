@@ -1,9 +1,14 @@
 {
   "name": "@adhd/apigen-plugin-logger",
-  "version": "0.0.1",
-  "main": "./src/index.ts",
+  "version": "0.1.1",
+  "main": "./index.js",
   "dependencies": {
-    "@adhd/apigen-core": "*",
+    "@adhd/apigen-core": "^0.1.0",
     "pino": "10.3.1"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "module": "./index.mjs",
+  "types": "./index.d.ts"
 }

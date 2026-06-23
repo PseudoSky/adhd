@@ -41,6 +41,7 @@ export async function pluginGenerator(tree: Tree, options: PluginGeneratorSchema
       'nx-release-publish': {
         dependsOn: ['build', 'test'],
         executor: '@nx/js:release-publish',
+        options: { packageRoot: 'dist/{projectRoot}' },
       },
     },
     release: {

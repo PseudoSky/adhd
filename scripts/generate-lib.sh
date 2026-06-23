@@ -108,5 +108,55 @@ if (pub && !pub.dependsOn) {
 JSEOF
 fi
 
+# 3. README.md — scaffold a starter README so the package ships one on npm.
+README_FILE="$PACKAGE_DIR/README.md"
+if [[ ! -f "$README_FILE" ]]; then
+  cat > "$README_FILE" <<RMEOF
+# $SCOPE/$NAME
+
+> TODO: one-line description of \`$NAME\` (layer:$LAYER, platform:$PLATFORM).
+
+\`\`\`bash
+npm install $SCOPE/$NAME
+\`\`\`
+RMEOF
+  echo "  ✅ scaffolded $README_FILE"
+fi
+
+# 4. vite.config.ts — ship README.md into dist.
+#    @nx/vite:build ignores the project.json 'assets' option, and packages are published
+#    from dist/{projectRoot}, so without this the README never reaches npm. This inline
+#    plugin copies <root>/README.md into the build outDir on every clean build.
+if [[ -f "$VITE_CONFIG" ]]; then
+  node - "$VITE_CONFIG" <<'JSEOF'
+const fs = require('fs');
+const path = process.argv[2];
+let s = fs.readFileSync(path, 'utf8');
+if (!s.includes('apigen-copy-readme')) {
+  const m = s.match(/outDir:\s*['"]([^'"]+)['"]/);
+  const outDir = m ? m[1] : 'dist';
+  const plugin =
+    "    {\n" +
+    "      // ship README.md into dist (npm page) — @nx/vite:build ignores project.json assets\n" +
+    "      name: 'apigen-copy-readme',\n" +
+    "      apply: 'build',\n" +
+    "      closeBundle() {\n" +
+    "        const fs = require('node:fs'), p = require('node:path');\n" +
+    "        const src = p.resolve(__dirname, 'README.md');\n" +
+    "        if (!fs.existsSync(src)) return;\n" +
+    "        const out = p.resolve(__dirname, '" + outDir + "');\n" +
+    "        fs.mkdirSync(out, { recursive: true });\n" +
+    "        fs.copyFileSync(src, p.join(out, 'README.md'));\n" +
+    "      },\n" +
+    "    },\n";
+  s = s.replace(/(plugins:\s*\[\n)/, `$1${plugin}`);
+  fs.writeFileSync(path, s);
+  console.log(`  ✅ patched ${path}: copy-readme plugin (outDir=${outDir})`);
+} else {
+  console.log(`  ℹ️  ${path}: copy-readme plugin already present, skipped`);
+}
+JSEOF
+fi
+
 echo ""
 echo "✅ Done — verify $PACKAGE_DIR/project.json tags and vite.config.ts before committing."

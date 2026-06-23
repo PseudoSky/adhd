@@ -35,7 +35,12 @@
         "main": "packages/apigen/core/src/index.ts",
         "tsConfig": "packages/apigen/core/tsconfig.lib.json",
         "assets": [
-          "packages/apigen/core/*.md"
+          "packages/apigen/core/*.md",
+          {
+            "input": "packages/apigen/core/src/lib",
+            "glob": "*.json",
+            "output": "lib"
+          }
         ]
       }
     },

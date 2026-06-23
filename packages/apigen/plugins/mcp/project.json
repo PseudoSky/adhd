@@ -2,7 +2,10 @@
   "name": "apigen-plugin-mcp",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "projectType": "library",
-  "tags": ["layer:logic", "platform:node"],
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
@@ -13,14 +16,22 @@
     },
     "test": {
       "executor": "@nx/vite:test",
-      "outputs": ["{workspaceRoot}/coverage/packages/apigen/plugins/mcp"],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/plugins/mcp"
+      ],
       "options": {
         "configFile": "packages/apigen/plugins/mcp/vite.config.ts"
       }
     },
     "nx-release-publish": {
-      "dependsOn": ["build", "test"],
-      "executor": "@nx/js:release-publish"
+      "dependsOn": [
+        "build",
+        "test"
+      ],
+      "executor": "@nx/js:release-publish",
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
     }
   },
   "release": {

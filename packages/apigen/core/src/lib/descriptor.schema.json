@@ -137,6 +137,27 @@
           "type": "string",
           "description": "Extractor-derived hint: how an enum-like type should be represented in idiomatic codegen (e.g. 'enum' | 'union'). Advisory."
         },
+        "x-apigen-logical": {
+          "type": "string",
+          "enum": ["scalar", "nominal", "union", "map", "set"],
+          "description": "Optional logical-type kind hint (@adhd/apigen-logical §4.1). Advisory dispatch accelerator only; structure (format/$ref/oneOf) is authoritative. Invariant [inv:hints-advisory]: correctness never depends on this key being present."
+        },
+        "x-apigen-codec": {
+          "type": "string",
+          "description": "Optional stable LogicalTypeId of the codec owning this node (@adhd/apigen-logical §4.1). Scalars: the JSON-Schema format; nominal/union: a namespace-qualified id (e.g. 'cli.User'). Advisory only."
+        },
+        "x-apigen-ctor": {
+          "type": "string",
+          "description": "Optional decode hint (@adhd/apigen-logical §4.1): the static/instance constructor used to rebuild a nominal instance from the decoded field bag (e.g. 'fromJSON'). Absent => schema-projected construction. Advisory only."
+        },
+        "x-apigen-tojson": {
+          "type": "string",
+          "description": "Optional encode hint (@adhd/apigen-logical §4.1): the method projecting a nominal instance to its field bag (e.g. 'toJSON'). Absent => structural field projection. Advisory only."
+        },
+        "logicalTypeVersion": {
+          "type": "string",
+          "description": "Optional version stamp of the logical-type wire table / extension vocabulary this fragment was produced against (@adhd/apigen-logical LOGICAL_TYPE_VERSION). Bumped on any wire-table or pinned-lib-version change; advisory."
+        },
         "fidelity": {
           "description": "Optional fidelity of this schema fragment vs the source type. 'full' = lossless (absence implies full); 'lossy' = source could not be fully represented (the only true residual is generic factoring). Codegen may warn on 'lossy'.",
           "enum": ["full", "lossy"]
