@@ -157,6 +157,14 @@
       "paths": [
         "packages/ai/agent-registry/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "composed-prompt-cache.2",
+      "phase": "composition",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/composed-prompt-store.test.ts",
+      "expect": "exit0"
     }
   ]
 }
