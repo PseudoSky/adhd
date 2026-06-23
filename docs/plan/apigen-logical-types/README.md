@@ -56,3 +56,12 @@ One registry-driven, codegen-first mechanism that round-trips non-JSON-native ty
   - observable: `every host encodes each seed to identical wire bytes`
   - negative-control: `change one Python codec encoding -> byte mismatch -> red`
   - delivered-by: `lt-host-ts, lt-host-python, lt-conformance-gate`
+
+- `[dod.6]` **The validate-Layer rejects a malformed date-time (behavioral)** — The validate-Layer rejects a malformed date-time.
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx nx test apigen-runtime`
+  - observable: `2099-02-30 fails validation via ajv-formats`
+  - negative-control: `disable ajv-formats -> Feb 30 passes -> red`
+  - delivered-by: `lt-validate-formats, lt-scalars`
