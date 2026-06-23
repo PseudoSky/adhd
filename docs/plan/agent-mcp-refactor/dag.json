@@ -23,6 +23,23 @@
       ],
       "context": "contexts/refactor-design.md",
       "notes": ""
+    },
+    "runtime-sink-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "refactor-design"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/composed-prompt-schema.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/store/composed-prompt-store.ts",
+        "packages/ai/agent-mcp/src/index.ts",
+        "packages/ai/agent-mcp/drizzle",
+        "packages/ai/agent-mcp/src/__tests__/composed-prompt-schema.test.ts"
+      ],
+      "context": "contexts/runtime-sink-schema.md",
+      "notes": ""
     }
   },
   "authored_with": {
