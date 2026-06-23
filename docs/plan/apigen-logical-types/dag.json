@@ -128,6 +128,19 @@
       ],
       "context": "contexts/lt-extract-nominal.md",
       "notes": ""
+    },
+    "lt-extract-union": {
+      "kind": "work",
+      "phase": "extraction",
+      "depends_on": [
+        "lt-extract-nominal"
+      ],
+      "guard": "npx nx test apigen-core",
+      "artifacts": [
+        "packages/apigen/core/src/lib/schema-builders/union.ts"
+      ],
+      "context": "contexts/lt-extract-union.md",
+      "notes": ""
     }
   },
   "authored_with": {
