@@ -18,6 +18,7 @@
 
 - [compile-fixtures-e2e.1] seeds a real agent from shared components across four domains
 
+- [compile-fixtures-e2e.2] e2e: compile across two platforms + two contexts from real rows
 ---
 
 ## Reservations

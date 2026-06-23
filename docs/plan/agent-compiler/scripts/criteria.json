@@ -238,6 +238,14 @@
       "paths": [
         "packages/ai/agent-compiler/src/seed/fixtures.ts"
       ]
+    },
+    {
+      "id": "compile-fixtures-e2e.2",
+      "phase": "e2e",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-e2e.test.ts",
+      "expect": "exit0"
     }
   ]
 }
