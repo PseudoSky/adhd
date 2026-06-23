@@ -9,7 +9,8 @@
     "extraction",
     "codecs",
     "hosts",
-    "integration"
+    "integration",
+    "gates"
   ],
   "terminal": "done",
   "nodes": {
