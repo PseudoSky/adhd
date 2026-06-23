@@ -20,7 +20,8 @@
     "v2-harness",
     "v2-projection",
     "v2-packaging",
-    "v2-verify"
+    "v2-verify",
+    "v2-scaffold"
   ],
   "terminal": "done",
   "assumed_baseline": [],
