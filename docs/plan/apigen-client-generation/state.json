@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "package-restructure",
+  "current_state": "unified-cli",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -277,11 +277,11 @@
       "end_ref": "1c21100e1c1adae1cd8a32a014c91e720c871a71"
     },
     "package-restructure": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T05:06:11.089Z",
-      "done_at": null,
+      "done_at": "2026-06-23T05:06:12.905Z",
       "start_ref": "ecf819321ff8b2b6cbdc2712040c08e82257f4aa",
-      "end_ref": null
+      "end_ref": "2fe5cb80209acfad334be8ad6d1fbc4dbb0c658c"
     },
     "unified-cli": {
       "status": "pending",
@@ -822,6 +822,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "v2-projection gate 6/6 real teeth: envelope (mcp generated §9.1 binding), verb (fastify safe→GET/unsafe→POST routes), streaming (runtime+mcp+fastify deterministic), plugins (logger/openapi/health), generator-v2-shape (apigen-nx), deprecation-hygiene (no ts/, no apigen-ts-plugin). Vacuous cli-canonical checks repointed to deterministic tests (F43/F42a); cli e2e deferred to audit-final-v2 dod.14/15."
+    },
+    {
+      "ts": "2026-06-23T05:06:12.905Z",
+      "from": "package-restructure",
+      "to": "package-restructure",
+      "start_ref": "ecf819321ff8b2b6cbdc2712040c08e82257f4aa",
+      "end_ref": "2fe5cb80209acfad334be8ad6d1fbc4dbb0c658c",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "R6 verify gate: all 6 common pkgs + 3 generated plugins already in final §12 homes (scaffold-v2-common + generator placed them correctly from the start — no move needed). Guard nx run-many build core/naming/errors/schema/conformance/gateway exit 0. Deprecation invariant: no packages/apigen/ts, 18 project.json all final homes, no orphans/dups. Verify-only — no domain code. Orchestrator-driven (F40)."
     }
   ],
   "amendment_log": [
