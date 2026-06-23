@@ -176,6 +176,14 @@
         "packages/ai/agent-policy/src/plugin/index.ts",
         "packages/ai/agent-policy/src/plugin/rate-policy.ts"
       ]
+    },
+    {
+      "id": "enforcement-plugin.3",
+      "phase": "enforcement",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/enforcement-plugin.test.ts",
+      "expect": "exit0"
     }
   ]
 }
