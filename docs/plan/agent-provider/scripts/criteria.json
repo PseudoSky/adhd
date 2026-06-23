@@ -146,6 +146,16 @@
       "paths": [
         "packages/ai/agent-mcp-types/src/domain.ts"
       ]
+    },
+    {
+      "id": "provider-adapter-contract.2",
+      "phase": "adapter",
+      "tier": null,
+      "kind": "absent",
+      "pattern": "interface ProviderAdapter",
+      "paths": [
+        "packages/ai/agent-provider/src"
+      ]
     }
   ]
 }
