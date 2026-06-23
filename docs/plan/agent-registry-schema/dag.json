@@ -56,6 +56,21 @@
       ],
       "context": "contexts/agent-and-taxonomy-schema.md",
       "notes": ""
+    },
+    "composition-junction": {
+      "kind": "work",
+      "phase": "composition",
+      "depends_on": [
+        "agent-and-taxonomy-schema"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-registry/src/db/schema.ts",
+        "packages/ai/agent-registry/src/store/composition-store.ts",
+        "packages/ai/agent-registry/src/index.ts"
+      ],
+      "context": "contexts/composition-junction.md",
+      "notes": ""
     }
   },
   "authored_with": {
