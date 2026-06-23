@@ -31,6 +31,20 @@
       }
     },
 
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        { "externalDependencies": ["vitest"] }
+      ],
+      "outputs": ["{workspaceRoot}/coverage/packages/ai/agent-registry"],
+      "options": {
+        "vitestConfig": "packages/ai/agent-registry/vite.config.ts"
+      }
+    },
+
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
