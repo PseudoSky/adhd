@@ -793,6 +793,21 @@
       ],
       "context": "contexts/scaffold-v2-ts-plugins.md",
       "notes": "SPEC §12: scaffold the 3 new TS plugin packages (logger=layer, openapi+health=mount) in final ts/plugins/* homes with nx wiring; platform:node. Fixes R3."
+    },
+    "class-exports": {
+      "kind": "work",
+      "phase": "v2-core",
+      "depends_on": [
+        "canonical-descriptor",
+        "ts-extractor-by-symbol"
+      ],
+      "guard": "npx --yes nx test apigen-core",
+      "artifacts": [
+        "packages/apigen/core/src/lib/extract-classes.ts",
+        "packages/apigen/runtime/src/lib/instance-registry.ts"
+      ],
+      "context": "contexts/class-exports.md",
+      "notes": "SPEC §10 (H2=now): static methods -> ops at path=[file,class,method] now; instances OPT-IN now: kind:constructor (POST .../class -> {instanceId}) + kind:instance-method dispatch via instanceId + registry with TTL/dispose lifecycle. Stateful caveat documented (no horizontal scale without sticky/external store)."
     }
   },
   "authored_with": {
