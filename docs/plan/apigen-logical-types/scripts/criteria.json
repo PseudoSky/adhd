@@ -160,6 +160,14 @@
       "kind": "command",
       "cmd": "npx nx test apigen-nx",
       "expect": "exit0"
+    },
+    {
+      "id": "lt-conformance-gate.1",
+      "phase": "gates",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx run apigen-conformance:conformance",
+      "expect": "exit0"
     }
   ]
 }
