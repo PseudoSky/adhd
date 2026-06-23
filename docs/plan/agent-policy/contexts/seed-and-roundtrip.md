@@ -18,6 +18,7 @@
 
 - [seed-and-roundtrip.1] seed + reopen + idempotency round-trip suite passes
 
+- [seed-and-roundtrip.2] seed lists the SEED_DATA policy templates incl. multi-value enforcement
 ---
 
 ## Reservations
