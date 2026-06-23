@@ -26,3 +26,16 @@ export type {
 } from "./store/tool-format-store.js";
 
 export { ProviderAdapterImpl } from "./adapter/provider-adapter.js";
+
+export {
+    emitTool,
+    emitToolsForProvider,
+    UnsupportedNativeToolError,
+} from "./runtime/emit-tools.js";
+export type {
+    EmittedCustomTool,
+    EmittedServerSideTool,
+    EmittedTool,
+    ToolFormatLookup,
+    UnsupportedNativeToolErrorCode,
+} from "./runtime/emit-tools.js";
