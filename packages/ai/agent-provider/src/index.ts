@@ -1,7 +1,12 @@
 // @adhd/agent-provider — barrel export
-// Each subsequent plan state (define-schema, seed-data, provider-store,
-// runtime-tool-forwarding) will add exports here as new modules are created.
+// Each subsequent plan state adds exports here as new modules are created.
 
 export { db, sqlite } from "./db/client.js";
 export { runMigrations } from "./db/migrate.js";
 export * from "./db/schema.js";
+
+export { ProviderStore, ProviderStoreError } from "./store/provider-store.js";
+export type { Provider, ProviderCreateInput, ProviderErrorCode } from "./store/provider-store.js";
+
+export { ModelStore, ModelStoreError } from "./store/model-store.js";
+export type { Model, ModelCreateInput, ModelErrorCode } from "./store/model-store.js";
