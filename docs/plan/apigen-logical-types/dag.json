@@ -198,6 +198,19 @@
       ],
       "context": "contexts/lt-host-python.md",
       "notes": ""
+    },
+    "lt-dispatch-integration": {
+      "kind": "work",
+      "phase": "integration",
+      "depends_on": [
+        "lt-host-ts"
+      ],
+      "guard": "npx nx test apigen-runtime",
+      "artifacts": [
+        "packages/apigen/runtime/src/lib/dispatch.ts"
+      ],
+      "context": "contexts/lt-dispatch-integration.md",
+      "notes": ""
     }
   },
   "authored_with": {
