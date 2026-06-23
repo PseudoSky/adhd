@@ -29,3 +29,10 @@ export type {
     TaxonomyCategoryCreateInput,
 } from "./store/agent-store.js";
 export { AgentError } from "./store/agent-store.js";
+
+// composition-junction state: agent_components junction + CompositionStore
+export { CompositionStore, CompositionError, evaluateCondition } from "./store/composition-store.js";
+export type {
+    CompositionContext,
+    ResolvedComponent,
+} from "./store/composition-store.js";
