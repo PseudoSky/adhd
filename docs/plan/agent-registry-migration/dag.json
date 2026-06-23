@@ -3,7 +3,8 @@
   "title": "Agent Registry — Migration & Removal (@adhd/agent-registry-migration)",
   "plan_kind": "brownfield",
   "phases": [
-    "architecture"
+    "architecture",
+    "foundation"
   ],
   "terminal": "done",
   "nodes": {},
