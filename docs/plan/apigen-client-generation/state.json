@@ -193,10 +193,10 @@
       "end_ref": "b479bc7fa9c59d3cf224f83eb79723477608508a"
     },
     "naming-helpers": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T02:23:22.094Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "377387f9859884060c0383eff648e74d1f32373b",
       "end_ref": null
     },
     "ts-extractor-by-symbol": {
