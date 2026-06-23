@@ -57,6 +57,23 @@
       ],
       "context": "contexts/compiler-integration.md",
       "notes": ""
+    },
+    "agent-store-retire": {
+      "kind": "work",
+      "phase": "retire",
+      "depends_on": [
+        "compiler-integration"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/agent-cache-store.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/store/agent-store.ts",
+        "packages/ai/agent-mcp/src/tools/agent-crud.ts",
+        "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-mcp/src/store/index.ts",
+        "packages/ai/agent-mcp/src/__tests__/agent-cache-store.test.ts"
+      ],
+      "context": "contexts/agent-store-retire.md",
+      "notes": ""
     }
   },
   "authored_with": {
