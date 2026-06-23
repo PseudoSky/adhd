@@ -6,7 +6,8 @@
     "architecture",
     "foundation",
     "resolve",
-    "emit"
+    "emit",
+    "cli"
   ],
   "terminal": "done",
   "nodes": {},
