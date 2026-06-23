@@ -47,3 +47,12 @@ One registry-driven, codegen-first mechanism that round-trips non-JSON-native ty
   - observable: `decoded value is the correct variant type`
   - negative-control: `drop discriminator tag -> wrong variant -> red`
   - delivered-by: `lt-union-codec, lt-extract-union`
+
+- `[dod.5]` **The full conformance vector set encodes byte-equal across TS and Python (behavioral)** — The full conformance vector set encodes byte-equal across TS and Python.
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx nx run apigen-conformance:conformance`
+  - observable: `every host encodes each seed to identical wire bytes`
+  - negative-control: `change one Python codec encoding -> byte mismatch -> red`
+  - delivered-by: `lt-host-ts, lt-host-python, lt-conformance-gate`
