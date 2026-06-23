@@ -207,10 +207,10 @@
       "end_ref": "52bc464ed784c32a84fa3356a6dd2639a51e5968"
     },
     "audit-v2-core": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T04:18:00.384Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "a97f4f1ca3786c71daadeea515eb948f289a2067",
       "end_ref": null
     },
     "layer-harness": {
