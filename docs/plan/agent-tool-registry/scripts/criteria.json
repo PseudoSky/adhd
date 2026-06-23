@@ -45,6 +45,16 @@
       "paths": [
         "packages/ai/agent-tool-registry/src"
       ]
+    },
+    {
+      "id": "tool-and-type-schema.1",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "tool_types|toolTypes",
+      "paths": [
+        "packages/ai/agent-tool-registry/src/db/schema.ts"
+      ]
     }
   ]
 }
