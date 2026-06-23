@@ -39,11 +39,11 @@
       "end_ref": "1c500b4f30aa29bc986e0a6cdc67aede6773ae03"
     },
     "composed-prompt-cache": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T06:20:05.331Z",
-      "done_at": null,
+      "done_at": "2026-06-23T06:25:16.891Z",
       "start_ref": "56f003385d5bf675c07ea77b33591bc8a6c5538f",
-      "end_ref": null
+      "end_ref": "daf9b0216f44e6aad90f2a6f0497d3e57c28ed06"
     },
     "audit-schema": {
       "status": "pending",
@@ -146,6 +146,18 @@
       "audit_criteria_total": 18,
       "by": "pseudosky",
       "note": "built + test passed (5/5) + committed (1c500b4)"
+    },
+    {
+      "ts": "2026-06-23T06:25:16.891Z",
+      "from": "composed-prompt-cache",
+      "to": "composed-prompt-cache",
+      "start_ref": "56f003385d5bf675c07ea77b33591bc8a6c5538f",
+      "end_ref": "daf9b0216f44e6aad90f2a6f0497d3e57c28ed06",
+      "audit_exit": 16,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "built + test passed (9/9, exit 0) + committed daf9b02"
     }
   ],
   "amendment_log": [],
@@ -154,7 +166,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "composed-prompt-cache",
+  "current_state": "audit-schema",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T03:43:53.482Z",
     "by": "pseudosky",
