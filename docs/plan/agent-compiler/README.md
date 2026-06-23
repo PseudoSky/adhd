@@ -53,3 +53,5 @@
   - delivered-by: `compile-cli, compile-fixtures-e2e`
 
 - `[dod.6]` **@adhd/agent-compiler is a platform:node Nx library registered in tsconfig.base.json that builds clean, imports no browser code, and depends on the four registry packages (agent-registry, agent-tool-registry, agent-provider, agent-policy). (structural)** — @adhd/agent-compiler is a platform:node Nx library registered in tsconfig.base.json that builds clean, imports no browser code, and depends on the four registry packages (agent-registry, agent-tool-registry, agent-provider, agent-policy)..
+
+- `[dod.7]` **The compiler WRITES composed_prompts rows and EMITS both yaml_frontmatter (claude_code) and json_object (claude_api) header formats. (structural)** — The compiler WRITES composed_prompts rows and EMITS both yaml_frontmatter (claude_code) and json_object (claude_api) header formats..
