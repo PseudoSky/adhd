@@ -25,10 +25,10 @@
       "end_ref": "b629f789b89a681100f130c02353c4f358939865"
     },
     "provider-tool-formats": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T23:31:28.342Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "69787c91ab947499117746d43ecf84668c204a55",
       "end_ref": null
     },
     "audit-schema": {
