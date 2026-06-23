@@ -229,6 +229,15 @@
       "paths": [
         "packages/ai/agent-provider/src/seed/providers.ts"
       ]
+    },
+    {
+      "id": "seed-and-roundtrip.4",
+      "phase": "seed",
+      "tier": null,
+      "kind": "negative-control",
+      "positive": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+      "mutate": "make seed() use plain INSERT instead of upsert/INSERT OR IGNORE so a second run duplicates provider/model rows",
+      "restore": "restore upsert/INSERT OR IGNORE in seed()"
     }
   ]
 }

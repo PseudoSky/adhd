@@ -20,6 +20,7 @@
 
 - [seed-and-roundtrip.2] seed lists canonical models from SEED_DATA
 - [seed-and-roundtrip.3] seed lists providers from SEED_DATA
+- [seed-and-roundtrip.4] seed idempotency has teeth: plain INSERT duplicates rows on re-run
 ---
 
 ## Reservations
