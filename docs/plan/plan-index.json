@@ -33,7 +33,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T03:27:39.486Z"
+      "updated_at": "2026-06-23T20:11:43.990Z"
     },
     {
       "plan": "agent-compiler",
@@ -42,7 +42,11 @@
       "mutate_set": [
         "docs/plan/agent-compiler/contexts/compiler-design.md",
         "docs/plan/agent-compiler/decisions.md",
+        "docs/plan/agent-compiler/review-engine.md",
+        "docs/plan/agent-compiler/review.md",
         "docs/plan/agent-compiler/scripts/audit_compiler.py",
+        "docs/plan/agent-compiler/scripts/review_gate.py",
+        "docs/plan/agent-compiler/scripts/review_gate_engine.py",
         "packages/ai/agent-compiler/package.json",
         "packages/ai/agent-compiler/project.json",
         "packages/ai/agent-compiler/src/__tests__/compile-agent.test.ts",
@@ -69,7 +73,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T04:11:11.106Z"
+      "updated_at": "2026-06-23T20:11:43.991Z"
     },
     {
       "plan": "agent-mcp-refactor",
@@ -78,7 +82,11 @@
       "mutate_set": [
         "docs/plan/agent-mcp-refactor/contexts/refactor-design.md",
         "docs/plan/agent-mcp-refactor/decisions.md",
+        "docs/plan/agent-mcp-refactor/review-integration.md",
+        "docs/plan/agent-mcp-refactor/review.md",
         "docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py",
+        "docs/plan/agent-mcp-refactor/scripts/review_gate.py",
+        "docs/plan/agent-mcp-refactor/scripts/review_gate_integration.py",
         "packages/ai/agent-mcp/drizzle",
         "packages/ai/agent-mcp/src/__tests__/agent-cache-store.test.ts",
         "packages/ai/agent-mcp/src/__tests__/cache-reuse.test.ts",
@@ -102,7 +110,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T04:11:53.438Z"
+      "updated_at": "2026-06-23T20:11:43.991Z"
     },
     {
       "plan": "agent-policy",
@@ -111,7 +119,9 @@
       "mutate_set": [
         "docs/plan/agent-policy/contexts/policy-design.md",
         "docs/plan/agent-policy/decisions.md",
+        "docs/plan/agent-policy/review.md",
         "docs/plan/agent-policy/scripts/audit_policy.py",
+        "docs/plan/agent-policy/scripts/review_gate.py",
         "packages/ai/agent-policy/drizzle",
         "packages/ai/agent-policy/package.json",
         "packages/ai/agent-policy/project.json",
@@ -135,14 +145,16 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T03:55:30.900Z"
+      "updated_at": "2026-06-23T20:11:43.992Z"
     },
     {
       "plan": "agent-provider",
       "dir": "agent-provider",
       "status": "published",
       "mutate_set": [
+        "docs/plan/agent-provider/review.md",
         "docs/plan/agent-provider/scripts/audit_provider.py",
+        "docs/plan/agent-provider/scripts/review_gate.py",
         "packages/ai/agent-mcp-types/src/domain.ts",
         "packages/ai/agent-mcp-types/src/index.ts",
         "packages/ai/agent-provider/drizzle",
@@ -171,7 +183,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T03:55:10.202Z"
+      "updated_at": "2026-06-23T20:11:43.992Z"
     },
     {
       "plan": "agent-registry-migration",
@@ -180,7 +192,9 @@
       "mutate_set": [
         "docs/plan/agent-registry-migration/RUNBOOK.md",
         "docs/plan/agent-registry-migration/decisions.md",
+        "docs/plan/agent-registry-migration/review.md",
         "docs/plan/agent-registry-migration/scripts/audit_migration.py",
+        "docs/plan/agent-registry-migration/scripts/review_gate.py",
         "packages/ai/agent-registry-migration/package.json",
         "packages/ai/agent-registry-migration/project.json",
         "packages/ai/agent-registry-migration/src/__fixtures__/code-reviewer.md",
@@ -204,12 +218,12 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T04:24:17.487Z"
+      "updated_at": "2026-06-23T20:11:43.992Z"
     },
     {
       "plan": "agent-registry-schema",
       "dir": "agent-registry-schema",
-      "status": "published",
+      "status": "complete",
       "mutate_set": [
         "docs/plan/agent-registry-schema/contexts/design-and-architecture.md",
         "docs/plan/agent-registry-schema/decisions.md",
@@ -239,14 +253,16 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T03:43:10.626Z"
+      "updated_at": "2026-06-23T20:11:43.993Z"
     },
     {
       "plan": "agent-tool-registry",
       "dir": "agent-tool-registry",
       "status": "published",
       "mutate_set": [
+        "docs/plan/agent-tool-registry/review.md",
         "docs/plan/agent-tool-registry/scripts/audit_tool_registry.py",
+        "docs/plan/agent-tool-registry/scripts/review_gate.py",
         "packages/ai/agent-tool-registry/drizzle",
         "packages/ai/agent-tool-registry/package.json",
         "packages/ai/agent-tool-registry/project.json",
@@ -273,7 +289,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T03:54:01.922Z"
+      "updated_at": "2026-06-23T20:11:43.993Z"
     },
     {
       "plan": "apigen-client-generation",
@@ -433,7 +449,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T03:27:39.488Z"
+      "updated_at": "2026-06-23T20:11:43.995Z"
     },
     {
       "plan": "hitl-interrupts",
@@ -453,7 +469,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T03:27:39.489Z"
+      "updated_at": "2026-06-23T20:11:43.995Z"
     },
     {
       "plan": "parallel-tool-execution",
@@ -471,7 +487,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T03:27:39.489Z"
+      "updated_at": "2026-06-23T20:11:43.996Z"
     },
     {
       "plan": "task-dependency-dag",
@@ -491,7 +507,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T03:27:39.490Z"
+      "updated_at": "2026-06-23T20:11:43.996Z"
     },
     {
       "plan": "task-schema-foundation",
@@ -512,7 +528,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T03:27:39.490Z"
+      "updated_at": "2026-06-23T20:11:43.996Z"
     },
     {
       "plan": "task-streaming-sse",
@@ -535,7 +551,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T03:27:39.490Z"
+      "updated_at": "2026-06-23T20:11:43.997Z"
     },
     {
       "plan": "usage-tracking",
@@ -571,8 +587,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T03:27:39.491Z"
+      "updated_at": "2026-06-23T20:11:43.997Z"
     }
   ],
-  "updated_at": "2026-06-23T04:24:17.499Z"
+  "updated_at": "2026-06-23T20:11:44.004Z"
 }
