@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [composed-prompt-cache.1] composed_prompts table: agent slug, context hash, content, component versions JSON
 
 ---
 

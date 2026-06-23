@@ -147,6 +147,16 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/usecase-store.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "composed-prompt-cache.1",
+      "phase": "composition",
+      "tier": null,
+      "kind": "present",
+      "pattern": "composed_prompts|composedPrompts",
+      "paths": [
+        "packages/ai/agent-registry/src/db/schema.ts"
+      ]
     }
   ]
 }
