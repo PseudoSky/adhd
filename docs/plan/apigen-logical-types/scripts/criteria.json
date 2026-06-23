@@ -64,6 +64,14 @@
       "kind": "command",
       "cmd": "npx nx test apigen-core",
       "expect": "exit0"
+    },
+    {
+      "id": "lt-extract-nominal.1",
+      "phase": "extraction",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx test apigen-core",
+      "expect": "exit0"
     }
   ]
 }
