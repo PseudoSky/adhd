@@ -184,6 +184,15 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/enforcement-plugin.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "enforcement-plugin.4",
+      "phase": "enforcement",
+      "tier": null,
+      "kind": "negative-control",
+      "positive": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/enforcement-plugin.test.ts",
+      "mutate": "scripts/nc_break_enforcement.mjs",
+      "restore": "scripts/nc_restore_enforcement.mjs"
     }
   ]
 }
