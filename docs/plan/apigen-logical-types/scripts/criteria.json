@@ -96,6 +96,14 @@
       "kind": "command",
       "cmd": "npx nx test apigen-runtime",
       "expect": "exit0"
+    },
+    {
+      "id": "lt-host-ts.1",
+      "phase": "hosts",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx test apigen-runtime",
+      "expect": "exit0"
     }
   ]
 }
