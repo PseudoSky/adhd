@@ -5,7 +5,8 @@
   "phases": [
     "architecture",
     "foundation",
-    "resolve"
+    "resolve",
+    "emit"
   ],
   "terminal": "done",
   "nodes": {},
