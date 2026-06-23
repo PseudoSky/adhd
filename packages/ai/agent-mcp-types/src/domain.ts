@@ -175,3 +175,32 @@ export interface ToolDefinition {
   description: string;
   inputSchema: Record<string, unknown>;
 }
+
+// ── Provider Adapter contract (agent-registry plan: agent-provider) ────────────
+// Defined here (not in agent-provider) so that agent-mcp can depend on the
+// interface without creating a circular dependency.  Dependency direction:
+//   agent-mcp-types ← agent-provider ← agent-mcp
+
+/**
+ * A streaming chunk emitted by a ProviderAdapter.stream() call.
+ * Discriminated union — add variants as new delta kinds are needed.
+ */
+export type StreamChunk =
+  | { type: "text";      text: string }
+  | { type: "tool_call"; id: string; name: string; arguments: string };
+
+/**
+ * Adapter interface that wraps a single AI provider.
+ * Implemented in @adhd/agent-provider; consumed by @adhd/agent-mcp.
+ *
+ * `model` is the **canonical** model id (e.g. `claude_opus_4_8`); the
+ * implementation resolves it to a per-platform string via ModelStore before
+ * calling the upstream API.
+ */
+export interface ProviderAdapter {
+  stream(
+    messages: Message[],
+    tools: ToolDefinition[] | undefined,
+    model: string
+  ): AsyncIterable<StreamChunk>;
+}
