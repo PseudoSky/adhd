@@ -18,6 +18,7 @@
 
 - [migration-design.1] decisions.md exists
 
+- [migration-design.2] equivalence definition (byte/behavioral) recorded
 ---
 
 ## Reservations
