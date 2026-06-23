@@ -99,7 +99,7 @@ describe("ComponentStore", () => {
         });
     });
 
-    // ── [lookup-and-component-schema.2] prompt_components with integer version + is_shared ─
+    // ── [lookup-and-component-schema.2] registry_components + registry_component_versions (integer version + is_shared) ─
 
     describe("create → read round-trip", () => {
         it("creates a component and reads it back at version 1", () => {
@@ -205,23 +205,82 @@ describe("ComponentStore", () => {
         });
     });
 
-    // ── Composite PK enforcement — regression guard ───────────────────────────
+    // ── versionId surrogate is exposed ────────────────────────────────────────
     //
-    // Proves the (slug, version) composite PRIMARY KEY has real DB-level teeth.
-    // Before the fix this was a non-unique index so duplicate rows were silently
-    // accepted; now they MUST throw a SQLite unique-constraint error.
+    // Decision 5: every PromptComponent carries the registry_component_versions
+    // .version_id surrogate, and resolveVersionId maps a (slug, version) to it.
 
-    describe("composite PK (slug, version) enforcement", () => {
-        it("throws a unique-constraint error when inserting a duplicate (slug, version) row", () => {
-            // Create the component at version 1 — this is the baseline row.
+    describe("versionId surrogate (Decision 5)", () => {
+        it("exposes a positive versionId on create and each version bump, resolvable via resolveVersionId", () => {
+            const v1 = store.create({ slug: "vid-test", type: "rule", content: "v1" });
+            expect(v1.versionId).toBeGreaterThan(0);
+            expect(store.resolveVersionId("vid-test", 1)).toBe(v1.versionId);
+
+            const v2 = store.version("vid-test", "v2");
+            expect(v2.versionId).toBeGreaterThan(0);
+            expect(v2.versionId).not.toBe(v1.versionId); // distinct surrogate per version row
+            expect(store.resolveVersionId("vid-test", 2)).toBe(v2.versionId);
+        });
+
+        it("resolveVersionId throws COMPONENT_VERSION_NOT_FOUND for a missing version", () => {
+            store.create({ slug: "vid-missing", type: "rule", content: "only v1" });
+            expect(() => store.resolveVersionId("vid-missing", 99)).toThrowError(ComponentError);
+        });
+    });
+
+    // ── UNIQUE(slug, version) enforcement — Decision 5 teeth ───────────────────
+    //
+    // [inv:version-retained] now has DB teeth: registry_component_versions has a
+    // REAL uniqueIndex on (slug, version). A duplicate (slug, version) write MUST
+    // throw a SQLite unique-constraint error. create() re-using a slug throws on the
+    // head PK; a direct duplicate version row throws on the unique index.
+
+    describe("UNIQUE(slug, version) enforcement (Decision 5)", () => {
+        it("throws when create() re-uses an existing slug (head PRIMARY KEY)", () => {
             store.create({ slug: "pk-dup-test", type: "rule", content: "original content" });
 
-            // Attempting to insert a second row with the same (slug=pk-dup-test, version=1)
-            // must throw.  Before the fix this INSERT would silently succeed, leaving the
-            // table with two rows for the same PK — the invariant was never DB-enforced.
+            // Second create() with the same slug attempts to re-insert the head identity
+            // row → registry_components.slug PRIMARY KEY violation → throws.
             expect(() => {
                 store.create({ slug: "pk-dup-test", type: "rule", content: "duplicate content" });
             }).toThrow();
+        });
+
+        it("throws a unique-constraint error on a duplicate (slug, version) version row", () => {
+            store.create({ slug: "ver-dup-test", type: "rule", content: "v1" });
+
+            // Insert a SECOND registry_component_versions row at the same (slug, version=1)
+            // directly. Before the split this was a non-unique index and silently
+            // succeeded; the real UNIQUE(slug, version) index now rejects it.
+            expect(() => {
+                conn
+                    .prepare(
+                        `INSERT INTO registry_component_versions
+                           (slug, version, content, created_at, updated_at)
+                         VALUES ('ver-dup-test', 1, 'dup', 'now', 'now')`
+                    )
+                    .run();
+            }).toThrow();
+        });
+    });
+
+    // ── Enforced FK: version row requires a head identity row (Decision 5) ─────
+    //
+    // registry_component_versions.slug is an ENFORCED FK → registry_components.slug.
+    // Inserting a version row for a slug with no head MUST throw a FK error. Before
+    // the split there was no such constraint — orphan version rows were possible.
+
+    describe("enforced FK: registry_component_versions.slug → registry_components.slug", () => {
+        it("throws a FK constraint error inserting a version row for a nonexistent head slug", () => {
+            expect(() => {
+                conn
+                    .prepare(
+                        `INSERT INTO registry_component_versions
+                           (slug, version, content, created_at, updated_at)
+                         VALUES ('no-such-head', 1, 'orphan', 'now', 'now')`
+                    )
+                    .run();
+            }).toThrow(/FOREIGN KEY/i);
         });
     });
 

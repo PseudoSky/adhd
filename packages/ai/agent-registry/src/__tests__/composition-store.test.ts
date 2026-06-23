@@ -162,12 +162,14 @@ describe("CompositionStore", () => {
                 content: "comp-c v1 content",
             });
 
-            // Attach junction rows
+            // Attach junction rows.
+            // Decision 5: version_pin is a version_id. Pin comp-a to its v1 using the
+            // ergonomic `pinVersion` form, which resolves (comp-a, 1) → its version_id.
             compositionStore.attach({
                 agentSlug: "test-agent",
                 componentSlug: "comp-a",
                 position: 10,
-                versionPin: 1, // pin to v1, even though v2 exists
+                pinVersion: 1, // pin to v1, even though v2 exists
             });
             compositionStore.attach({
                 agentSlug: "test-agent",
@@ -329,6 +331,61 @@ describe("CompositionStore", () => {
             const slugs = result.map((r) => r.componentSlug).sort();
             expect(slugs).toContain("always-required");
             expect(slugs).toContain("required-comp");
+        });
+    });
+
+    // ── Enforced-FK teeth (Decision 5) ────────────────────────────────────────
+    //
+    // These are the whole point of the head/version split: the references on
+    // registry_agent_components are now DB-ENFORCED, so orphan / dangling refs
+    // THROW instead of silently inserting. Each test fails (the bad row inserts)
+    // if its FK is removed — proving the constraint, not just the store guard.
+    // These insert directly so they exercise the DB constraint, not store logic.
+
+    describe("enforced-FK teeth on registry_agent_components", () => {
+        it("throws a FK error attaching a component_slug that has no registry_components head", () => {
+            // component_slug → registry_components.slug is enforced. 'ghost-component'
+            // was never created, so this junction insert MUST be rejected by the DB.
+            expect(() => {
+                conn
+                    .prepare(
+                        `INSERT INTO registry_agent_components
+                           (agent_slug, component_slug, position, version_pin, context_condition, is_required)
+                         VALUES ('test-agent', 'ghost-component', 99, NULL, NULL, 0)`
+                    )
+                    .run();
+            }).toThrow(/FOREIGN KEY/i);
+        });
+
+        it("throws a FK error when version_pin names a version_id that does not exist", () => {
+            // comp-b exists (created earlier in this suite), so component_slug is valid.
+            // version_pin → registry_component_versions.version_id is enforced; a wildly
+            // out-of-range id has no version row, so the insert MUST be rejected.
+            const bogusVersionId = 9_999_999;
+            expect(() => {
+                conn
+                    .prepare(
+                        `INSERT INTO registry_agent_components
+                           (agent_slug, component_slug, position, version_pin, context_condition, is_required)
+                         VALUES ('test-agent', 'comp-b', 98, ${bogusVersionId}, NULL, 0)`
+                    )
+                    .run();
+            }).toThrow(/FOREIGN KEY/i);
+        });
+
+        it("accepts version_pin that names an existing version_id (positive control)", () => {
+            // Resolve comp-b v1 to its real version_id and confirm the SAME insert path
+            // succeeds — proving the FK rejects only DANGLING pins, not valid ones.
+            const realVersionId = compositionStore.resolvePinVersionId("comp-b", 1);
+            expect(() => {
+                conn
+                    .prepare(
+                        `INSERT INTO registry_agent_components
+                           (agent_slug, component_slug, position, version_pin, context_condition, is_required)
+                         VALUES ('test-agent', 'comp-b', 97, ${realVersionId}, NULL, 0)`
+                    )
+                    .run();
+            }).not.toThrow();
         });
     });
 });

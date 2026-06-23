@@ -2,7 +2,8 @@
  * seed/components.ts
  *
  * Shared prompt components with REAL content from SEED_DATA.md §8 (§8.1–§8.11).
- * Each entry becomes one row in registry_prompt_components at version 1,
+ * Each entry becomes a registry_components head identity row plus a
+ * registry_component_versions history row at its canonical version (Decision 5),
  * is_shared = true (unless noted otherwise).
  *
  * Source: docs/plan/agent-registry/SEED_DATA.md §8

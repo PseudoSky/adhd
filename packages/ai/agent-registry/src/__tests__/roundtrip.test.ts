@@ -39,7 +39,7 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { count } from "drizzle-orm";
 
 import * as schema from "../db/schema.js";
-import { promptComponentsTable, promptTypesTable } from "../db/schema.js";
+import { componentsTable, componentVersionsTable, promptTypesTable } from "../db/schema.js";
 import { ComponentStore } from "../store/component-store.js";
 import { AgentStore } from "../store/agent-store.js";
 import { CompositionStore } from "../store/composition-store.js";
@@ -176,9 +176,16 @@ describe("seed round-trip", () => {
                 .from(promptTypesTable)
                 .get()!.n;
 
+            // Head identity rows (one per slug) and version history rows (one per
+            // seeded entry) — both must be invariant across a re-seed.
+            const headsBefore = db
+                .select({ n: count() })
+                .from(componentsTable)
+                .get()!.n;
+
             const componentsBefore = db
                 .select({ n: count() })
-                .from(promptComponentsTable)
+                .from(componentVersionsTable)
                 .get()!.n;
 
             // Read a reference row to compare version afterward.
@@ -193,12 +200,18 @@ describe("seed round-trip", () => {
                 .from(promptTypesTable)
                 .get()!.n;
 
+            const headsAfter = db
+                .select({ n: count() })
+                .from(componentsTable)
+                .get()!.n;
+
             const componentsAfter = db
                 .select({ n: count() })
-                .from(promptComponentsTable)
+                .from(componentVersionsTable)
                 .get()!.n;
 
             expect(typesAfter).toBe(typesBefore);
+            expect(headsAfter).toBe(headsBefore);
             expect(componentsAfter).toBe(componentsBefore);
 
             // Version of an existing row must not change.

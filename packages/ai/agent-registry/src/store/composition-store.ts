@@ -1,8 +1,12 @@
-import { asc, desc, eq, max } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
-import { agentComponentsTable, promptComponentsTable } from "../db/schema.js";
+import {
+    agentComponentsTable,
+    componentsTable,
+    componentVersionsTable,
+} from "../db/schema.js";
 import type { PromptComponent } from "./component-store.js";
 
 // ──────────────────────────────────────────────
@@ -115,26 +119,100 @@ export class CompositionStore {
      * Inserts one row into registry_agent_components. No conflict handling —
      * callers must ensure the (agent_slug, component_slug, position) triple
      * is unique or use separate positions for multiple rows at the same position.
+     *
+     * Pinning ergonomics (Decision 5): the stored `version_pin` is a
+     * registry_component_versions.version_id (an ENFORCED nullable FK). Callers may
+     * pin either way:
+     *   - `versionPin`     — a version_id directly (already resolved).
+     *   - `pinVersion`     — a human `version` number; this store resolves it to the
+     *                        matching version_id for `componentSlug` via
+     *                        {@link resolvePinVersionId}.
+     * Supplying both, or a `pinVersion` for a (slug, version) that does not exist,
+     * throws. Omitting both leaves the pin null = resolve latest at resolve-time.
      */
     attach(input: {
         agentSlug: string;
         componentSlug: string;
         position: number;
+        /** A registry_component_versions.version_id to pin to (already resolved). */
         versionPin?: number | null;
+        /** A human version number to pin to; resolved to a version_id for componentSlug. */
+        pinVersion?: number | null;
         contextCondition?: string | null;
         isRequired?: boolean;
     }): void {
+        const versionId = this._resolvePinInput(
+            input.componentSlug,
+            input.versionPin,
+            input.pinVersion
+        );
+
         this.db
             .insert(agentComponentsTable)
             .values({
                 agentSlug: input.agentSlug,
                 componentSlug: input.componentSlug,
                 position: input.position,
-                versionPin: input.versionPin ?? null,
+                versionPin: versionId,
                 contextCondition: input.contextCondition ?? null,
                 isRequired: input.isRequired ?? false,
             })
             .run();
+    }
+
+    /**
+     * Resolve a `(slug, version)` pair to its registry_component_versions.version_id
+     * — the value stored as a junction `version_pin` when pinning an exact version.
+     *
+     * Throws COMPONENT_VERSION_NOT_FOUND if that exact version row is absent.
+     */
+    resolvePinVersionId(componentSlug: string, version: number): number {
+        const row = this.db
+            .select({ versionId: componentVersionsTable.versionId })
+            .from(componentVersionsTable)
+            .where(
+                and(
+                    eq(componentVersionsTable.slug, componentSlug),
+                    eq(componentVersionsTable.version, version)
+                )
+            )
+            .get();
+
+        if (!row) {
+            throw new CompositionError(
+                "COMPONENT_VERSION_NOT_FOUND",
+                `Component '${componentSlug}' version ${version} not found`
+            );
+        }
+
+        return row.versionId;
+    }
+
+    /**
+     * Normalize the two pinning inputs into a single nullable version_id.
+     * Rejects supplying both forms at once.
+     */
+    private _resolvePinInput(
+        componentSlug: string,
+        versionPin: number | null | undefined,
+        pinVersion: number | null | undefined
+    ): number | null {
+        const hasVersionId = versionPin !== undefined && versionPin !== null;
+        const hasPinVersion = pinVersion !== undefined && pinVersion !== null;
+
+        if (hasVersionId && hasPinVersion) {
+            throw new CompositionError(
+                "COMPONENT_VERSION_NOT_FOUND",
+                `attach: supply either versionPin (version_id) or pinVersion (version number) for ` +
+                    `'${componentSlug}', not both`
+            );
+        }
+
+        if (hasPinVersion) {
+            return this.resolvePinVersionId(componentSlug, pinVersion);
+        }
+
+        return hasVersionId ? versionPin : null;
     }
 
     /**
@@ -221,90 +299,100 @@ export class CompositionStore {
     // ── Private helpers ───────────────────────
 
     /**
-     * Resolve a component to a specific version row.
+     * Resolve a junction row to a specific component version.
      *
-     * Decision 4 (decisions.md):
-     *   - pin IS NULL  → max(version) for the slug at resolution time ("latest").
-     *   - pin IS INT   → exactly that version row.
+     * Decision 4 + Decision 5 (decisions.md):
+     *   - pin IS NULL  → max(version) for `slug` at resolution time ("latest").
+     *   - pin IS INT   → the registry_component_versions row whose version_id = pin.
+     *                    That row's `slug` MUST equal the junction's component_slug —
+     *                    a mismatch is an integrity violation and throws.
      *
-     * Throws COMPONENT_VERSION_NOT_FOUND if the row does not exist.
+     * Throws COMPONENT_VERSION_NOT_FOUND if the row does not exist (the DB FK makes
+     * this unreachable for a pinned id, but we still guard defensively).
      */
     private _resolveComponentVersion(slug: string, pin: number | null): PromptComponent {
-        if (pin !== null) {
-            // Pinned: exact (slug, version) lookup.
-            const row = this.db
-                .select()
-                .from(promptComponentsTable)
-                .where(
-                    eq(promptComponentsTable.slug, slug)
-                )
-                .orderBy(desc(promptComponentsTable.version))
-                .all()
-                .find((r) => r.version === pin);
+        const head = this.db
+            .select()
+            .from(componentsTable)
+            .where(eq(componentsTable.slug, slug))
+            .get();
 
-            if (!row) {
+        if (!head) {
+            throw new CompositionError(
+                "COMPONENT_VERSION_NOT_FOUND",
+                `Component '${slug}' not found (no head row)`
+            );
+        }
+
+        if (pin !== null) {
+            // Pinned: load the exact version row by its surrogate version_id.
+            const ver = this.db
+                .select()
+                .from(componentVersionsTable)
+                .where(eq(componentVersionsTable.versionId, pin))
+                .get();
+
+            if (!ver) {
                 throw new CompositionError(
                     "COMPONENT_VERSION_NOT_FOUND",
-                    `Component '${slug}' version ${pin} not found`
+                    `version_id ${pin} (pinned by '${slug}') not found`
                 );
             }
 
-            return this._rowToComponent(row);
+            // The pinned version row must belong to the junction's component_slug.
+            if (ver.slug !== slug) {
+                throw new CompositionError(
+                    "COMPONENT_VERSION_NOT_FOUND",
+                    `version_id ${pin} belongs to '${ver.slug}', not the junction's '${slug}'`
+                );
+            }
+
+            return this._join(head, ver);
         }
 
         // Latest: highest version for the slug.
-        const latestRow = this.db
-            .select({
-                slug: promptComponentsTable.slug,
-                maxVersion: max(promptComponentsTable.version).as("max_version"),
-            })
-            .from(promptComponentsTable)
-            .where(eq(promptComponentsTable.slug, slug))
-            .groupBy(promptComponentsTable.slug)
-            .get();
-
-        if (!latestRow || latestRow.maxVersion === null) {
-            throw new CompositionError(
-                "COMPONENT_VERSION_NOT_FOUND",
-                `Component '${slug}' not found (no rows)`
-            );
-        }
-
-        const fullRow = this.db
+        const latest = this.db
             .select()
-            .from(promptComponentsTable)
-            .where(eq(promptComponentsTable.slug, slug))
-            .orderBy(desc(promptComponentsTable.version))
+            .from(componentVersionsTable)
+            .where(eq(componentVersionsTable.slug, slug))
+            .orderBy(desc(componentVersionsTable.version))
             .limit(1)
             .get();
 
-        if (!fullRow) {
+        if (!latest) {
             throw new CompositionError(
                 "COMPONENT_VERSION_NOT_FOUND",
-                `Component '${slug}' not found`
+                `Component '${slug}' has no versions`
             );
         }
 
-        return this._rowToComponent(fullRow);
+        return this._join(head, latest);
     }
 
-    private _rowToComponent(row: {
-        slug: string;
-        type: string;
-        version: number;
-        content: string;
-        isShared: boolean | number | null;
-        createdAt: string;
-        updatedAt: string;
-    }): PromptComponent {
+    /** Join a head identity row to one version row into a PromptComponent. */
+    private _join(
+        head: {
+            slug: string;
+            type: string;
+            isShared: boolean | number | null;
+            createdAt: string;
+        },
+        ver: {
+            versionId: number;
+            version: number;
+            content: string;
+            updatedAt: string;
+        }
+    ): PromptComponent {
         return {
-            slug: row.slug,
-            type: row.type,
-            version: row.version,
-            content: row.content,
-            isShared: Boolean(row.isShared),
-            createdAt: row.createdAt,
-            updatedAt: row.updatedAt,
+            slug: head.slug,
+            type: head.type,
+            version: ver.version,
+            versionId: ver.versionId,
+            content: ver.content,
+            isShared: Boolean(head.isShared),
+            createdAt: head.createdAt,
+            updatedAt: ver.updatedAt,
         };
     }
 }

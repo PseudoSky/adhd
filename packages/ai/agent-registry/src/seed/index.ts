@@ -23,7 +23,7 @@ import { ComponentStore } from "../store/component-store.js";
 import { PROMPT_TYPES } from "./prompt-types.js";
 import { SEED_COMPONENTS } from "./components.js";
 
-import { promptComponentsTable } from "../db/schema.js";
+import { componentsTable, componentVersionsTable } from "../db/schema.js";
 
 /**
  * Seed all system prompt types and shared components.
@@ -45,44 +45,64 @@ export function seed(db: BetterSQLite3Database<any>): void {
         store.upsertType(type);
     }
 
-    // ── 2. Prompt components ───────────────────────────────────────────────────
+    // ── 2. Prompt components (head/version split, Decision 5) ───────────────────
     //
-    // registry_prompt_components has no UNIQUE constraint on (slug, version) —
-    // only a regular index — so ON CONFLICT DO NOTHING would not fire.  Instead
-    // we read-before-write: if a row with (slug, version) already exists we skip
-    // the insert entirely.  This is safe for the seed use-case: seed data carries
-    // the exact canonical version from SEED_DATA.md, so we only need to check
-    // whether that precise row is already present.
+    // Each seed entry materializes as a registry_components head identity row plus a
+    // registry_component_versions history row at the canonical seed version.
+    //
+    // Idempotency without overwriting (read-before-write per table):
+    //   - head row: insert only if the slug has no registry_components row yet.
+    //   - version row: insert only if that exact (slug, version) is absent. The real
+    //     UNIQUE(slug, version) index would otherwise reject a duplicate, but we skip
+    //     proactively so re-seed is a clean no-op (never bumps version).
     //
     // [inv:version-retained] — seed never calls ComponentStore.version(); it only
-    // inserts if the (slug, version) pair is absent.
+    // inserts rows that are absent.
     const now = new Date().toISOString();
 
     for (const component of SEED_COMPONENTS) {
-        const existing = db
-            .select({ slug: promptComponentsTable.slug })
-            .from(promptComponentsTable)
+        // Head identity row — insert once per slug.
+        const head = db
+            .select({ slug: componentsTable.slug })
+            .from(componentsTable)
+            .where(eq(componentsTable.slug, component.slug))
+            .get();
+
+        if (!head) {
+            db
+                .insert(componentsTable)
+                .values({
+                    slug: component.slug,
+                    type: component.type,
+                    isShared: component.isShared,
+                    createdAt: now,
+                })
+                .run();
+        }
+
+        // Version history row — insert only if this exact (slug, version) is absent.
+        const existingVersion = db
+            .select({ versionId: componentVersionsTable.versionId })
+            .from(componentVersionsTable)
             .where(
                 and(
-                    eq(promptComponentsTable.slug, component.slug),
-                    eq(promptComponentsTable.version, component.version)
+                    eq(componentVersionsTable.slug, component.slug),
+                    eq(componentVersionsTable.version, component.version)
                 )
             )
             .get();
 
-        if (existing) {
+        if (existingVersion) {
             // Row already seeded — skip; never overwrite content on re-seed.
             continue;
         }
 
         db
-            .insert(promptComponentsTable)
+            .insert(componentVersionsTable)
             .values({
                 slug: component.slug,
-                type: component.type,
                 version: component.version,
                 content: component.content,
-                isShared: component.isShared,
                 createdAt: now,
                 updatedAt: now,
             })

@@ -3,7 +3,8 @@ import {
     integer,
     primaryKey,
     sqliteTable,
-    text
+    text,
+    uniqueIndex
 } from "drizzle-orm/sqlite-core";
 
 // ──────────────────────────────────────────────
@@ -14,11 +15,20 @@ import {
 // .references() across prefixes). In-package FKs use .references() normally.
 //
 // Tables are added by later plan states:
-//   - lookup-and-component-schema  → registry_prompt_types, registry_prompt_components
+//   - lookup-and-component-schema  → registry_prompt_types,
+//                                    registry_components (head) +
+//                                    registry_component_versions (history)
 //   - agents-table                 → registry_agents
 //   - composition-junction         → registry_agent_components
 //   - usecase-and-context-rules    → registry_context_rules
 //   - composed-prompts             → registry_composed_prompts
+//
+// Decision 5 (decisions.md): component IDENTITY (registry_components, keyed by a
+// single-column text PK `slug`) is split from component HISTORY
+// (registry_component_versions, keyed by a single-column surrogate `version_id`).
+// This makes `slug` and `version_id` real single-column PKs that downstream tables
+// can target with ENFORCED Drizzle .references() FKs — the integrity the old
+// (slug, version) composite-PK table could not provide.
 // ──────────────────────────────────────────────
 
 // ──────────────────────────────────────────────
@@ -35,30 +45,70 @@ export const promptTypesTable = sqliteTable("registry_prompt_types", {
 });
 
 // ──────────────────────────────────────────────
-// registry_prompt_components
+// registry_components  (component IDENTITY / head)
 //
-// Versioned prompt component table. PK is (slug, version) so old versions are
-// retained for audit/rollback — bumping version writes a new row, never mutates
-// the prior one. [inv:version-retained] (decisions.md)
-// FK to registry_prompt_types.slug is an in-package reference (.references()).
+// Decision 5 (decisions.md): the IDENTITY half of the head/version split. One row
+// per component slug. `slug` is a single-column TEXT PRIMARY KEY — this is the
+// stable identity every other table FKs onto (which the old (slug, version)
+// composite-PK table made impossible).
+//
+// `type` and `is_shared` are IDENTITY-level facts: they describe what the
+// component IS, not what any particular revision says, so they live on the head
+// row and do not change per version.
+//
+// `type` is an in-package FK → registry_prompt_types.slug (.references(), enforced).
 // ──────────────────────────────────────────────
-export const promptComponentsTable = sqliteTable(
-    "registry_prompt_components",
+export const componentsTable = sqliteTable(
+    "registry_components",
     {
-        slug: text("slug").notNull(),
+        slug: text("slug").primaryKey(),
         type: text("type")
             .notNull()
             .references(() => promptTypesTable.slug),
+        isShared: integer("is_shared", { mode: "boolean" }).notNull().default(false),
+        createdAt: text("created_at").notNull(),
+    },
+    (t) => ({
+        typeIdx: index("registry_components_type_idx").on(t.type),
+    })
+);
+
+// ──────────────────────────────────────────────
+// registry_component_versions  (component HISTORY / audit)
+//
+// Decision 5 (decisions.md): the HISTORY half of the head/version split. One row
+// per (slug, version). `version_id` is a single-column autoincrement SURROGATE
+// PRIMARY KEY so a junction row's version_pin can be an ENFORCED FK to exactly one
+// version row (a composite (slug, version) target could not be FK'd).
+//
+// Old versions are retained for audit/rollback — bumping a component writes a NEW
+// row at max(version)+1 for the slug; it never mutates a prior row.
+// [inv:version-retained] (decisions.md)
+//
+// `slug` is an in-package FK → registry_components.slug (.references(), enforced):
+// a version row cannot exist without its head identity row.
+// UNIQUE(slug, version) is a REAL unique index — it gives [inv:version-retained]
+// its teeth (a duplicate (slug, version) write THROWS) and guarantees version_pin
+// resolution is unambiguous.
+// ──────────────────────────────────────────────
+export const componentVersionsTable = sqliteTable(
+    "registry_component_versions",
+    {
+        versionId: integer("version_id").primaryKey({ autoIncrement: true }),
+        slug: text("slug")
+            .notNull()
+            .references(() => componentsTable.slug),
         version: integer("version").notNull().default(1),
         content: text("content").notNull(),
-        isShared: integer("is_shared", { mode: "boolean" }).notNull().default(false),
         createdAt: text("created_at").notNull(),
         updatedAt: text("updated_at").notNull(),
     },
     (t) => ({
-        pk: primaryKey({ columns: [t.slug, t.version] }),
-        slugIdx: index("registry_prompt_components_slug_idx").on(t.slug),
-        typeIdx: index("registry_prompt_components_type_idx").on(t.type),
+        slugVersionUq: uniqueIndex("registry_component_versions_slug_version_uq").on(
+            t.slug,
+            t.version
+        ),
+        slugIdx: index("registry_component_versions_slug_idx").on(t.slug),
     })
 );
 
@@ -146,16 +196,18 @@ export const useCasesTable = sqliteTable("registry_use_cases", {
 // ANNOTATION ONLY — must NOT be on resolveComposition's hot path. This table
 // informs the future suggestion engine (GOAL.md "Knowledge Graph"), not runtime assembly.
 //
-// component_slug is a LOGICAL FK only (no .references()) — see the same rationale
-// applied to registry_agent_components.component_slug: the composite PK of
-// registry_prompt_components is (slug, version), not slug alone, so SQLite cannot
-// enforce an FK to a non-PK column.
+// component_slug is now an ENFORCED in-package FK → registry_components.slug
+// (.references()). Decision 5's head/version split made registry_components.slug a
+// single-column PK, so SQLite can enforce this — annotating a component that has no
+// head identity row now THROWS instead of silently inserting an orphan.
 // use_case_slug is an in-package FK → registry_use_cases.slug (.references() used normally).
 // ──────────────────────────────────────────────
 export const componentUsageTable = sqliteTable(
     "registry_component_usage",
     {
-        componentSlug: text("component_slug").notNull(),
+        componentSlug: text("component_slug")
+            .notNull()
+            .references(() => componentsTable.slug),
         useCaseSlug: text("use_case_slug")
             .notNull()
             .references(() => useCasesTable.slug),
@@ -193,7 +245,9 @@ export const componentUsageTable = sqliteTable(
 //
 // agent_slug: logical FK → registry_agents.slug. In-package but we use .references()
 //   as it IS within the same prefix, so in-package FK rules apply (Decision 1 §3).
-// component_slug: LOGICAL FK only — same reason as component_usage above.
+// component_slug: now an ENFORCED FK → registry_components.slug (Decision 5). A rule
+//   that adds a nonexistent component now THROWS at insert instead of silently
+//   creating an orphan additive rule.
 // ──────────────────────────────────────────────
 export const contextRulesTable = sqliteTable(
     "registry_context_rules",
@@ -206,7 +260,9 @@ export const contextRulesTable = sqliteTable(
         // Evaluated by evaluateCondition() (composition-store.ts) — same evaluator,
         // never a separate one. [Decision 3: one predicate shape, one evaluator]
         condition: text("condition").notNull(),
-        componentSlug: text("component_slug").notNull(),
+        componentSlug: text("component_slug")
+            .notNull()
+            .references(() => componentsTable.slug),
         // Position for merging into the Decision 2 total order. null = append.
         position: integer("position"),
     },
@@ -269,18 +325,28 @@ export const composedPromptsTable = sqliteTable(
 // PK: (agent_slug, component_slug, position)
 //   - position is an ORDERING key, not a unique slot — multiple components MAY
 //     share the same position value (Decision 2: all-included, total order).
-//   - version_pin: null → resolve to latest-at-resolve-time (Decision 4).
-//                  int  → pin to exactly that version (Decision 4).
+//   - version_pin: null → resolve latest-at-resolve-time (Decision 4).
+//                  int  → a registry_component_versions.version_id — pin to exactly
+//                         that version row (Decision 4 + Decision 5).
 //   - context_condition: nullable JSON predicate; null = always include.
 //     Evaluated by CompositionStore.resolveComposition per Decision 2:
 //     every key in the predicate must equal the corresponding context value.
 //   - is_required: true AND condition does not match → CompositionError thrown.
 //
-// agent_slug is an in-package FK → registry_agents.slug (Decision 1).
-// component_slug is a LOGICAL FK only (no .references()) because SQLite does
-// not enforce FKs against non-PK columns; the composite PK of
-// registry_prompt_components is (slug, version), not slug alone.
-// CompositionStore enforces the logical link at resolve time.
+// THREE FKs, all DB-enforced (Decision 5):
+//   - agent_slug   → registry_agents.slug (always-enforced).
+//   - component_slug → registry_components.slug (always-enforced): a junction row
+//       cannot reference a component that has no head identity row.
+//   - version_pin  → registry_component_versions.version_id (NULLABLE-enforced):
+//       null = resolve latest at resolve-time; a non-null value MUST name an
+//       existing version row.
+//
+// Two SEPARATE FKs are used (component_slug always-enforced + version_pin
+// nullable-enforced), NOT one composite FK: in SQLite a composite FK whose set of
+// columns includes a NULL column is treated as satisfied (not enforced), so a
+// composite (component_slug, version_pin) FK would lose enforcement for the common
+// null-pin case. Splitting them keeps component_slug strictly enforced while
+// letting version_pin be null-or-valid.
 // ──────────────────────────────────────────────
 export const agentComponentsTable = sqliteTable(
     "registry_agent_components",
@@ -288,12 +354,17 @@ export const agentComponentsTable = sqliteTable(
         agentSlug: text("agent_slug")
             .notNull()
             .references(() => agentsTable.slug),
-        componentSlug: text("component_slug").notNull(),
+        componentSlug: text("component_slug")
+            .notNull()
+            .references(() => componentsTable.slug),
         // Assembly ordering key — NOT a unique slot. Decision 2: position ASC
         // is the primary sort; ties broken by (version DESC, component_slug ASC).
         position: integer("position").notNull(),
-        // null = latest-at-resolve; integer = pin to that exact version. [Decision 4]
-        versionPin: integer("version_pin"),
+        // null = latest-at-resolve; integer = a registry_component_versions.version_id
+        // pinning that exact version row. [Decision 4 + Decision 5]
+        versionPin: integer("version_pin").references(
+            () => componentVersionsTable.versionId
+        ),
         // JSON predicate object as text, e.g. '{"ticket_type":"security"}'.
         // null means always include. [def:context-condition]
         contextCondition: text("context_condition"),
