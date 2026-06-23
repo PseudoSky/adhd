@@ -183,6 +183,15 @@
       "paths": [
         "packages/ai/agent-registry/src/seed/prompt-types.ts"
       ]
+    },
+    {
+      "id": "seed-and-roundtrip.3",
+      "phase": "seed",
+      "tier": null,
+      "kind": "negative-control",
+      "positive": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/roundtrip.test.ts",
+      "mutate": "node docs/plan/agent-registry-schema/scripts/nc_mutate.mjs",
+      "restore": "node docs/plan/agent-registry-schema/scripts/nc_restore.mjs"
     }
   ]
 }
