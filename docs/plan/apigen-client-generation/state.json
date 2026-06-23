@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "gateway",
+  "current_state": "python-host",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -291,11 +291,11 @@
       "end_ref": "6cacca0ab73498953e4a58681a9d4e63d6dc6d36"
     },
     "gateway": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T05:15:07.086Z",
-      "done_at": null,
+      "done_at": "2026-06-23T05:24:54.516Z",
       "start_ref": "f92b1b2dc297c0ee1a0332e28b03d39997b640e6",
-      "end_ref": null
+      "end_ref": "566d415db77efc1a17e27d382638ccd1b08bbc48"
     },
     "conformance-vectors": {
       "status": "complete",
@@ -846,6 +846,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "§13 unified orchestrator.ts: detect→extract(v2)→merge→collision-check(§5)→gen/run; Tenet-1 projection overrides (--opt http.verb.<id>=, apigen.config) applied at gen/run time, never to source; commands/run.ts+generate.ts wired (v1 preserved). nx test apigen-cli exit 0 (orch-verified). Documented limits: --use stored-not-dispatched, extension-heuristic lang detect (real cross-lang via python-host). Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:24:54.516Z",
+      "from": "gateway",
+      "to": "gateway",
+      "start_ref": "f92b1b2dc297c0ee1a0332e28b03d39997b640e6",
+      "end_ref": "566d415db77efc1a17e27d382638ccd1b08bbc48",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "§13.1 sidecar gateway (opus): partial availability (down host → unavailable/503, others serve), readiness gating (+neg control), supervision/restart w/ backoff, deadlines→deadline_exceeded, cost-based topology (zero-hop vs IPC). HostAdapter seam defined for python-host. Tests deterministic (latches + injected timer, no wall clock, negative controls — CLAUDE.md §6). nx test apigen-gateway exit 0 (orch-verified). Orchestrator-driven (F40)."
     }
   ],
   "amendment_log": [
