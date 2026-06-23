@@ -202,6 +202,16 @@
       "positive": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/session-compiler-e2e.test.ts",
       "mutate": "sed -i '' 's/compileAgent/__noCompile/' packages/ai/agent-mcp/src/engine/prompt-resolver.ts",
       "restore": "git checkout -- packages/ai/agent-mcp/src/engine/prompt-resolver.ts"
+    },
+    {
+      "id": "compiler-integration.4",
+      "phase": "integration",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-compiler",
+      "paths": [
+        "packages/ai/agent-mcp/package.json"
+      ]
     }
   ]
 }
