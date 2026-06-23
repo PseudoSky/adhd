@@ -8,5 +8,8 @@
   "module": "./index.mjs",
   "typings": "./index.d.ts",
   "generators": "./generators.json",
-  "executors": "./executors.json"
+  "executors": "./executors.json",
+  "publishConfig": {
+    "access": "public"
+  }
 }

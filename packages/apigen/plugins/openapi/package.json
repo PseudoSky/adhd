@@ -1,9 +1,14 @@
 {
   "name": "@adhd/apigen-plugin-openapi",
-  "version": "0.0.1",
-  "main": "./src/index.ts",
+  "version": "0.1.1",
+  "main": "./index.js",
   "dependencies": {
-    "@adhd/apigen-core": "*",
-    "@adhd/apigen-codegen-openapi": "*"
-  }
+    "@adhd/apigen-core": "^0.1.0",
+    "@adhd/apigen-codegen-openapi": "^0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "module": "./index.mjs",
+  "types": "./index.d.ts"
 }

@@ -1,11 +1,14 @@
 {
   "name": "@adhd/apigen-runtime",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "dependencies": {
-    "@adhd/apigen-core": "0.0.1",
+    "@adhd/apigen-core": "^0.1.0",
     "pino": "10.3.1"
   },
   "main": "./index.js",
   "module": "./index.mjs",
-  "typings": "./index.d.ts"
+  "typings": "./index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  }
 }
