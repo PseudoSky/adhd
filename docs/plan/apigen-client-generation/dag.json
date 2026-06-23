@@ -825,6 +825,25 @@
       ],
       "context": "contexts/streaming-projection.md",
       "notes": "SPEC §11 (D6 full streaming now): streaming:true -> async stream; Layer stream-lifecycle (start/each/end/error) per §8.1; consumer-pull backpressure; signal cancellation runs the end path; error-after-first-chunk delivered in-band per the §11 table (SSE event:error / gRPC trailing status / MCP progressive error / CLI stderr+exit) adopting Connect's semantics."
+    },
+    "python-host": {
+      "kind": "work",
+      "phase": "v2-host-contract",
+      "depends_on": [
+        "canonical-descriptor",
+        "conformance-vectors",
+        "gateway"
+      ],
+      "guard": "python3 -m pytest packages/apigen/python -q",
+      "artifacts": [
+        "packages/apigen/python/apigen_python/extractor.py",
+        "packages/apigen/python/apigen_python/runtime.py",
+        "packages/apigen/python/apigen_python/plugin_echo.py",
+        "packages/apigen/python/apigen_python/gateway_adapter.py",
+        "packages/apigen/python/pyproject.toml"
+      ],
+      "context": "contexts/python-host.md",
+      "notes": "SPEC §14 (H1): minimal REAL second host so the §13.1 sidecar-gateway IPC + partial-availability are proven against a true foreign runtime, not a TS stub (fixes R9). Python -extractor (source->descriptor), -runtime (invoke/validate/dispatch), one echo plugin, gateway IPC adapter. Must pass apigen-conformance vectors."
     }
   },
   "authored_with": {
