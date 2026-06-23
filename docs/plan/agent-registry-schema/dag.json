@@ -41,6 +41,21 @@
       ],
       "context": "contexts/lookup-and-component-schema.md",
       "notes": ""
+    },
+    "agent-and-taxonomy-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "lookup-and-component-schema"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-registry/src/db/schema.ts",
+        "packages/ai/agent-registry/src/store/agent-store.ts",
+        "packages/ai/agent-registry/src/index.ts"
+      ],
+      "context": "contexts/agent-and-taxonomy-schema.md",
+      "notes": ""
     }
   },
   "authored_with": {
