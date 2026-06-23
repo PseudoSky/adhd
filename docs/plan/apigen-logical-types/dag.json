@@ -155,6 +155,20 @@
       ],
       "context": "contexts/lt-nominal-codec.md",
       "notes": ""
+    },
+    "lt-union-codec": {
+      "kind": "work",
+      "phase": "codecs",
+      "depends_on": [
+        "lt-nominal-codec",
+        "lt-extract-union"
+      ],
+      "guard": "npx nx test apigen-runtime",
+      "artifacts": [
+        "packages/apigen/runtime/src/lib/logical/union-codec.ts"
+      ],
+      "context": "contexts/lt-union-codec.md",
+      "notes": ""
     }
   },
   "authored_with": {
