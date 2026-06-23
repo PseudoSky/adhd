@@ -72,6 +72,16 @@
       "paths": [
         "packages/ai/agent-policy/src"
       ]
+    },
+    {
+      "id": "policy-type-and-template-schema.1",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "policy_types|policyTypes",
+      "paths": [
+        "packages/ai/agent-policy/src/db/schema.ts"
+      ]
     }
   ]
 }
