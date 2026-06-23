@@ -90,6 +90,19 @@
       ],
       "context": "contexts/policy-engine-bridge.md",
       "notes": ""
+    },
+    "audit-integration": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "policy-engine-bridge"
+      ],
+      "guard": "python3 docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py --phase integration",
+      "artifacts": [
+        "docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py"
+      ],
+      "context": "contexts/audit-integration.md",
+      "notes": ""
     }
   },
   "authored_with": {
