@@ -4,11 +4,11 @@
   "dag": "dag.json",
   "states": {
     "scaffold-package": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T21:24:24.361Z",
-      "done_at": null,
+      "done_at": "2026-06-23T21:28:46.954Z",
       "start_ref": "3fcbb2379c15b5e987e88a919a7d2d1788740aac",
-      "end_ref": null
+      "end_ref": "3a39b1ca6ed9e822e522cb00986c9ea43bd83fa6"
     },
     "tool-and-type-schema": {
       "status": "pending",
@@ -67,14 +67,27 @@
       "end_ref": null
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-06-23T21:28:46.954Z",
+      "from": "scaffold-package",
+      "to": "scaffold-package",
+      "start_ref": "3fcbb2379c15b5e987e88a919a7d2d1788740aac",
+      "end_ref": "3a39b1ca6ed9e822e522cb00986c9ea43bd83fa6",
+      "audit_exit": 3,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "Created @adhd/agent-tool-registry: project.json (tags:[\"layer:ai\",\"platform:node\"], @nx/js:tsc build + drizzle asset glob), tsconfig.json+tsconfig.lib.json, package.json (better-sqlite3@12.10.0, drizzle-orm@0.45.2, zod@4.4.3), src/db/client.ts (WAL), src/db/migrate-runner.ts (FK-safe), src/db/migrate.ts, src/db/schema.ts (type import only, no tables), src/index.ts (barrel), drizzle/meta/_journal.json (empty). tsconfig.base.json path already registered. nx build agent-tool-registry exit 0. commit 3a39b1c."
+    }
+  ],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "scaffold-package",
+  "current_state": "tool-and-type-schema",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:02:23.888Z",
     "by": "pseudosky",
