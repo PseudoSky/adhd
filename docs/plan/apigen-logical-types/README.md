@@ -38,3 +38,12 @@ One registry-driven, codegen-first mechanism that round-trips non-JSON-native ty
   - observable: `instanceof holds both hosts; fields deep-equal the seed`
   - negative-control: `remove constructor binding -> prototype-stripped object -> instanceof false -> red`
   - delivered-by: `lt-nominal-codec, lt-extract-nominal, lt-host-ts, lt-host-python`
+
+- `[dod.4]` **A Dog|Cat position dispatches to the correct variant by wire discriminator (behavioral)** — A Dog|Cat position dispatches to the correct variant by wire discriminator.
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx nx test apigen-runtime`
+  - observable: `decoded value is the correct variant type`
+  - negative-control: `drop discriminator tag -> wrong variant -> red`
+  - delivered-by: `lt-union-codec, lt-extract-union`
