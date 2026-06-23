@@ -18,6 +18,7 @@
 
 - [session-e2e.1] e2e: real session start resolves systemPrompt == compileAgent(...) output (real DB, LLM boundary mocked)
 
+- [session-e2e.2] cache: second session with same agent+context reuses composed_prompt (no recompile; proven by reopen)
 ---
 
 ## Reservations
