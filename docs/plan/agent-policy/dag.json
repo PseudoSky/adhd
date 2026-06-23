@@ -143,7 +143,7 @@
       "kind": "audit",
       "phase": "audit",
       "depends_on": [
-        "seed-and-roundtrip"
+        "code-review"
       ],
       "guard": "python3 docs/plan/agent-policy/scripts/audit_policy.py --phase final",
       "artifacts": [
