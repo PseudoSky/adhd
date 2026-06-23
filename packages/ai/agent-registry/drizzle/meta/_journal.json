@@ -43,6 +43,13 @@
       "when": 1782235784302,
       "tag": "0005_warm_norman_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1782239097742,
+      "tag": "0006_component_head_version_split",
+      "breakpoints": true
     }
   ]
 }
