@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["packages/ai/agent-provider/src/store/provider-store.ts", "packages/ai/agent-provider/src/store/model-store.ts", "packages/ai/agent-provider/src/store/tool-format-store.ts"]
 mutates:    ["packages/ai/agent-provider/src/seed/providers.ts", "packages/ai/agent-provider/src/seed/models.ts", "packages/ai/agent-provider/src/seed/bindings.ts", "packages/ai/agent-provider/src/seed/index.ts", "packages/ai/agent-provider/src/__tests__/roundtrip.test.ts", "packages/ai/agent-provider/src/index.ts"]
 ```
 
