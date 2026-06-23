@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "lt-package.1",
+      "phase": "contracts",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx build apigen-logical",
+      "expect": "exit0"
+    }
+  ]
+}
