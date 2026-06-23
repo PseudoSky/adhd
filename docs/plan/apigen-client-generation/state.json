@@ -298,10 +298,10 @@
       "end_ref": null
     },
     "conformance-vectors": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T03:10:59.657Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ffdc83cc5f27dfaf75cfa63416eb88d795170caa",
       "end_ref": null
     },
     "scaffold-v2-common": {
