@@ -18,10 +18,10 @@
       "end_ref": "3d14ca7cf939afff0a29e73a3c0a1ab67ea7da5d"
     },
     "agent-and-taxonomy-schema": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T05:58:24.434Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "8b3e047f0aa5d88b5a7acc8bb8c662ac8514dc0a",
       "end_ref": null
     },
     "composition-junction": {
