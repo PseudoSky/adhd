@@ -693,7 +693,8 @@
         "projection-transports",
         "logger-layer-plugin",
         "mount-plugins",
-        "central-validation"
+        "central-validation",
+        "streaming-projection"
       ],
       "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase v2-projection",
       "artifacts": [
