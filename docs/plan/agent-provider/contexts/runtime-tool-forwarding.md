@@ -19,6 +19,7 @@
 - [runtime-tool-forwarding.1] emitter branches on server-side type-tagged shape
 
 - [runtime-tool-forwarding.2] emitter throws explicit actionable error for unsupported native
+- [runtime-tool-forwarding.3] emit-tools test: server-side -> type-tagged entry; unsupported native -> explicit throw
 ---
 
 ## Reservations
