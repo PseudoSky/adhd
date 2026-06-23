@@ -18,6 +18,7 @@
 
 - [refactor-design.1] decisions.md exists
 
+- [refactor-design.2] AgentStore removal-vs-thin-cache decision recorded
 ---
 
 ## Reservations
