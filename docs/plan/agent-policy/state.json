@@ -4,10 +4,10 @@
   "dag": "dag.json",
   "states": {
     "policy-design": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T23:08:22.704Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "3da241bda300d3e1a6be5fd1ec27b4660dd65aec",
       "end_ref": null
     },
     "scaffold-package": {
