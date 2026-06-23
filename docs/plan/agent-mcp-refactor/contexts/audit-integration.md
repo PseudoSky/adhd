@@ -1,4 +1,4 @@
-# audit-integration — STATE_NAME
+# audit-integration — integration-phase hold point
 
 **Phase:** audit · **Kind:** audit · **Depends on:** policy-engine-bridge · **Guard:** `python3 docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py --phase integration`
 
@@ -6,7 +6,13 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+A hold point that proves the schema + compiler-integration + retire +
+policy-bridge work landed coherently BEFORE the e2e state runs: every
+`architecture`, `schema`, and `integration` criterion (including the structural
+"old system is gone" `grep_absent` and the `@adhd/agent-compiler` dependency
+wiring) accumulates green under `--phase integration`.
+
+This is an audit state — it carries NO deferrable items and makes NO code change.
 
 ---
 
@@ -31,4 +37,8 @@ mutates:    ["docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py"]
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+- Run `python3 docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py --phase
+  integration`; it must exit 0. Any FAIL is a hard block — fix the underlying
+  state, do not edit the audit to pass.
+- Gate on EXIT CODE (`[inv:exit-code-gate]`); the `.py` exits non-zero on any
+  failing check.
