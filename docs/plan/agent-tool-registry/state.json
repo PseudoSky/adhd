@@ -60,11 +60,11 @@
       "end_ref": null
     },
     "code-review": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T22:51:07.749Z",
-      "done_at": null,
+      "done_at": "2026-06-23T22:54:36.670Z",
       "start_ref": "82bb98e81a658a63c5edfde4dc9ffea30e7c2fa2",
-      "end_ref": null
+      "end_ref": "9828aeaa285f98d4dbce3db06eb522ae005ce7e0"
     }
   },
   "transition_log": [
@@ -163,6 +163,18 @@
       "audit_criteria_total": 21,
       "by": "pseudosky",
       "note": "Re-complete after executor double-start (--start ran twice): deliverable fa97fc8 already committed, guard roundtrip.test.ts exit 0 (7/7, idempotent double-seed + reopen-resolve + negative-control teeth), verified by orchestrator. Advancing to code-review."
+    },
+    {
+      "ts": "2026-06-23T22:54:36.670Z",
+      "from": "code-review",
+      "to": "code-review",
+      "start_ref": "82bb98e81a658a63c5edfde4dc9ffea30e7c2fa2",
+      "end_ref": "9828aeaa285f98d4dbce3db06eb522ae005ce7e0",
+      "audit_exit": 16,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "APPROVED — review.md commit 9828aea; guard exit 0; real-DB test run exit 0 (57/57)"
     }
   ],
   "amendment_log": [],
@@ -171,7 +183,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "code-review",
+  "current_state": "audit-final",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:02:23.888Z",
     "by": "pseudosky",
