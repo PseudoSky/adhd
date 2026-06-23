@@ -18,11 +18,11 @@
       "end_ref": "3d14ca7cf939afff0a29e73a3c0a1ab67ea7da5d"
     },
     "agent-and-taxonomy-schema": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T05:58:24.434Z",
-      "done_at": null,
+      "done_at": "2026-06-23T06:02:35.713Z",
       "start_ref": "8b3e047f0aa5d88b5a7acc8bb8c662ac8514dc0a",
-      "end_ref": null
+      "end_ref": "a753e62352904e2ea18b8128a11bab448468b474"
     },
     "composition-junction": {
       "status": "pending",
@@ -110,6 +110,18 @@
       "audit_criteria_total": 11,
       "by": "pseudosky",
       "note": "Added registry_prompt_types (text PK slug, description, is_system integer) and registry_prompt_components (composite PK slug+version via index, type FK to prompt_types, integer version default 1, content, is_shared integer, created_at/updated_at) to schema.ts. Created ComponentStore with create, read(slug), readVersion(slug,n), version(slug,newContent), list({type?,shared?}) methods plus upsertType/readType. Added migrate-runner.ts and migrate.ts (FK-safe migration runner mirroring agent-mcp pattern). Generated drizzle migration 0000_third_nitro.sql into packages/ai/agent-registry/drizzle/. Added vite.config.ts with pool:forks+fileParallelism:false for better-sqlite3 stability. Updated project.json with @nx/vite:test executor (needed for --testFile flag pass-through). component-store.test.ts drives a real on-disk SQLite file (never :memory:), closes and reopens the handle to prove persistence [inv:reopen-proves-persistence], asserts old version rows survive after version() bump [inv:version-retained], and covers create/read/readVersion/version/list. All 15 tests passed (exit 0). Deliverables committed at 3d14ca7."
+    },
+    {
+      "ts": "2026-06-23T06:02:35.713Z",
+      "from": "agent-and-taxonomy-schema",
+      "to": "agent-and-taxonomy-schema",
+      "start_ref": "8b3e047f0aa5d88b5a7acc8bb8c662ac8514dc0a",
+      "end_ref": "a753e62352904e2ea18b8128a11bab448468b474",
+      "audit_exit": 8,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 11,
+      "by": "pseudosky",
+      "note": "Added registry_taxonomy_categories (slug PK, name, description, position integer, parent_slug self-FK) and registry_agents (slug PK, display_name, description, status text, model_hint text NOT FK, taxonomy_category in-pkg FK, default_posture, created_at, updated_at) tables to schema.ts. Generated drizzle migration 0001_agents_and_taxonomy.sql. Created AgentStore (create/read/update/delete/list with category+status filter) and TaxonomyStore (createCategory/listCategories ordered by position ASC). agent-store.test.ts: 15 tests, all green, exit 0. Proves persistence via reopen, position ordering regression guard, category/status filter correctness. Committed a753e62."
     }
   ],
   "amendment_log": [],
@@ -118,7 +130,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "agent-and-taxonomy-schema",
+  "current_state": "composition-junction",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T03:43:53.482Z",
     "by": "pseudosky",
