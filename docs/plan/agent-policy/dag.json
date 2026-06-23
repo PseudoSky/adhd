@@ -75,6 +75,23 @@
       ],
       "context": "contexts/agent-policy-junction.md",
       "notes": ""
+    },
+    "policy-inheritance": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "agent-policy-junction"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-policy/src/db/schema.ts",
+        "packages/ai/agent-policy/src/store/agent-policy-store.ts",
+        "packages/ai/agent-policy/src/index.ts",
+        "packages/ai/agent-policy/src/__tests__/inheritance.test.ts",
+        "packages/ai/agent-policy/drizzle"
+      ],
+      "context": "contexts/policy-inheritance.md",
+      "notes": ""
     }
   },
   "authored_with": {
