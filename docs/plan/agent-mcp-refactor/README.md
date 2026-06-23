@@ -29,3 +29,12 @@
   - observable: `vitest exits 0 and case 'second session reuses cached composed_prompt without recompile' passes: it counts compileAgent invocations (1 across two session starts), reopens the DB from the same file path, and asserts both sessions' composed_prompt_id reference the same composed_prompts row.`
   - negative-control: `make prompt-resolver skip the cache lookup and always call compileAgent → the invocation count becomes 2 / a second composed_prompts row appears → cache-reuse.test.ts goes red.`
   - delivered-by: `runtime-sink-schema, compiler-integration, session-e2e`
+
+- `[dod.3]` **All existing agent-mcp unit tests still pass after the refactor (non-regression across the full suite). (behavioral)** — All existing agent-mcp unit tests still pass after the refactor (non-regression across the full suite)..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx --yes nx test agent-mcp`
+  - observable: `vitest exits 0 for the entire agent-mcp suite (gate on exit code, never stdout grep — better-sqlite3 can segfault on teardown); no pre-existing test is deleted to make it green.`
+  - negative-control: `revert the compiler-integration resolver wiring so task.ts reads a now-absent flat systemPrompt → the existing session/task tests throw and the suite exits non-zero.`
+  - delivered-by: `compiler-integration, agent-store-retire, policy-engine-bridge, session-e2e`
