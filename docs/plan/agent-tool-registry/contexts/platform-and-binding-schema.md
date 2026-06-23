@@ -19,6 +19,7 @@
 - [platform-and-binding-schema.1] platforms table with header_format
 
 - [platform-and-binding-schema.2] tool_platform_bindings table
+- [platform-and-binding-schema.3] binding-store resolves canonical to platform name test passes
 ---
 
 ## Reservations
