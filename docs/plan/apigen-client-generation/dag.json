@@ -741,7 +741,8 @@
       "kind": "work",
       "phase": "v2-packaging",
       "depends_on": [
-        "unified-cli"
+        "unified-cli",
+        "scaffold-v2-common"
       ],
       "guard": "npx --yes nx test apigen-gateway",
       "artifacts": [
