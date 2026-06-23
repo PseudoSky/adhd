@@ -60,6 +60,23 @@
       ],
       "context": "contexts/platform-and-binding-schema.md",
       "notes": ""
+    },
+    "mcp-server-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "platform-and-binding-schema"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-tool-registry/src/db/schema.ts",
+        "packages/ai/agent-tool-registry/src/store/mcp-server-store.ts",
+        "packages/ai/agent-tool-registry/src/index.ts",
+        "packages/ai/agent-tool-registry/src/__tests__/mcp-server-store.test.ts",
+        "packages/ai/agent-tool-registry/drizzle"
+      ],
+      "context": "contexts/mcp-server-schema.md",
+      "notes": ""
     }
   },
   "authored_with": {
