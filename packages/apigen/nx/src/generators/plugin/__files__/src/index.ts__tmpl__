@@ -1,2 +1,3 @@
+export type { <%= className %>Options } from './lib/plugin'
 export { <%= propertyName %>Plugin } from './lib/plugin'
 export { default } from './lib/plugin'

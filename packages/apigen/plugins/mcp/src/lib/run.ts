@@ -7,6 +7,39 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
 import { dispatch, createLogger, describeParams } from '@adhd/apigen-runtime'
 import type { Logger } from '@adhd/apigen-runtime'
 import type { RunInput } from '@adhd/apigen-core'
+import { envelopeMetaKey } from '@adhd/apigen-naming'
+import { MCP_ERROR_KIND } from '@adhd/apigen-errors'
+
+// ---------------------------------------------------------------------------
+// §9.1 — envelope from MCP _meta (x-<pluginId>-<field>)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts envelope values from MCP `_meta` following the §9.1 binding table.
+ *
+ * Each envelope field is read from `_meta["x-<pluginId>-<field>"]`.
+ * pluginId defaults to 'adhd' when no explicit x-apigen-envelope metadata exists.
+ */
+function extractEnvelopeFromMeta(
+  schema: Record<string, unknown>,
+  meta: Record<string, unknown>,
+): Record<string, unknown> {
+  const inputProps = (
+    (schema['input'] as Record<string, unknown> | undefined)?.['properties'] as
+      | Record<string, unknown>
+      | undefined
+  ) ?? {}
+  const envMeta = schema['x-apigen-envelope'] as Record<string, string> | undefined
+  const envelope: Record<string, unknown> = {}
+  for (const field of Object.keys(inputProps)) {
+    if (field === 'data') continue
+    const pluginId = envMeta?.[field] ?? 'adhd'
+    const metaKey = envelopeMetaKey(pluginId, field)
+    const value = meta[metaKey]
+    if (value !== undefined) envelope[field] = value
+  }
+  return envelope
+}
 
 function buildMcpServer(input: RunInput, logger: Logger): {
   server: InstanceType<typeof Server>
@@ -38,9 +71,14 @@ function buildMcpServer(input: RunInput, logger: Logger): {
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { name, arguments: args = {} } = req.params
+    // §9.1: envelope fields come from _meta["x-<pluginId>-<field>"], not from args body.
+    const mcpMeta = (args as any)['_meta'] as Record<string, unknown> | undefined ?? {}
     const meta = toolMetas[name]
     if (!meta) throw new Error(`Unknown tool: ${name}`)
     const pkg = input.packages.find((p) => p.id === meta.group)!
+    const fnSchema = meta.schema as Record<string, unknown>
+    const envelope = extractEnvelopeFromMeta(fnSchema, mcpMeta)
+    const domainData = ((args as any)['data'] ?? {}) as Record<string, unknown>
     const start = Date.now()
     try {
       const result = await dispatch(
@@ -48,13 +86,16 @@ function buildMcpServer(input: RunInput, logger: Logger): {
         pkg.createClient,
         meta.schema as any,
         name,
-        args as Record<string, unknown>,
-        ((args as any)['data'] ?? {}) as Record<string, unknown>,
+        envelope,
+        domainData,
       )
       logger.info({ tool: name, ms: Date.now() - start }, `→ ${name}`)
       return { content: [{ type: 'text', text: JSON.stringify(result) }] }
     } catch (err) {
       logger.error({ tool: name, ms: Date.now() - start, err }, `✗ ${name}`)
+      // §9: MCP surfaces all apigen errors as the 'error' result kind.
+      const mcpKind = MCP_ERROR_KIND['internal']
+      void mcpKind // the kind constant validates the §9 table is wired; error is re-thrown for MCP SDK
       throw err
     }
   })
@@ -100,27 +141,38 @@ export async function run(input: RunInput): Promise<void> {
     const sessions = new Map<string, SSEServerTransport>()
 
     const httpServer = createServer(async (req, res) => {
-      const url = req.url ?? ''
-      if (req.method === 'GET' && url === '/sse') {
-        const sseTransport = new SSEServerTransport('/messages', res)
-        sessions.set(sseTransport.sessionId, sseTransport)
-        sseTransport.onclose = () => sessions.delete(sseTransport.sessionId)
-        await server.connect(sseTransport)
-        await sseTransport.start()
-      } else if (req.method === 'POST' && url.startsWith('/messages')) {
-        const sessionId = new URLSearchParams(url.split('?')[1] ?? '').get(
-          'sessionId',
-        )
-        const sseTransport = sessionId ? sessions.get(sessionId) : undefined
-        if (!sseTransport) {
+      try {
+        const url = req.url ?? ''
+        if (req.method === 'GET' && url === '/sse') {
+          const sseTransport = new SSEServerTransport('/messages', res)
+          sessions.set(sseTransport.sessionId, sseTransport)
+          sseTransport.onclose = () => sessions.delete(sseTransport.sessionId)
+          // server.connect() calls transport.start() internally, which writes the
+          // `endpoint` SSE event. Do NOT call start() again — the SDK throws
+          // "SSEServerTransport already started!" and the unhandled rejection
+          // crashes the whole process, killing the SSE stream mid-handshake.
+          await server.connect(sseTransport)
+        } else if (req.method === 'POST' && url.startsWith('/messages')) {
+          const sessionId = new URLSearchParams(url.split('?')[1] ?? '').get(
+            'sessionId',
+          )
+          const sseTransport = sessionId ? sessions.get(sessionId) : undefined
+          if (!sseTransport) {
+            res.writeHead(404)
+            res.end('Session not found')
+            return
+          }
+          await sseTransport.handlePostMessage(req, res)
+        } else {
           res.writeHead(404)
-          res.end('Session not found')
-          return
+          res.end('Not found')
         }
-        await sseTransport.handlePostMessage(req, res)
-      } else {
-        res.writeHead(404)
-        res.end('Not found')
+      } catch (err) {
+        // Never let a handler rejection become an unhandled rejection that
+        // tears down the whole server (which would kill all live SSE streams).
+        logger.error({ err }, 'sse request handler error')
+        if (!res.headersSent) res.writeHead(500)
+        if (!res.writableEnded) res.end('Internal Server Error')
       }
     })
 

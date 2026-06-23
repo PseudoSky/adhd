@@ -1,0 +1,11 @@
+{
+  "name": "@adhd/apigen-gateway",
+  "version": "0.0.1",
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "typings": "./index.d.ts",
+  "dependencies": {
+    "@adhd/apigen-core": "*",
+    "@adhd/apigen-errors": "*"
+  }
+}

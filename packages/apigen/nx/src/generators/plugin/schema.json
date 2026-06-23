@@ -20,7 +20,13 @@
     "hasRun": {
       "type": "boolean",
       "default": false,
-      "description": "Include a run() stub. Set true for server plugins (mcp, api-fastify, api-express) that start a long-running process."
+      "description": "Include a serve() stub in target capability. Set true for server plugins (mcp, api-fastify, api-express) that start a long-running process."
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["node", "browser", "shared"],
+      "default": "node",
+      "description": "Nx platform tag for the generated plugin (default: node)."
     }
   },
   "required": ["name"]

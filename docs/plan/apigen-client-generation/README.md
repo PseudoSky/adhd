@@ -80,13 +80,13 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
 > **Behavioral clauses are proven by `scripts/probe_mcp.mjs`, which DERIVES every expected observable from the fixture at runtime (no hard-coded values — see `[conv:fixture-samples]`).** Each behavioral clause names its `delivered-by:` work states and a `negative-control:` that MUST turn the clause red if the bug is reintroduced.
 
 - `[dod.1]` A user runs the CLI with a TypeScript source file and gets a working MCP stdio server — `generate` + `run` commands work end-to-end.
-  - entrypoint: `node packages/apigen/cli/dist/index.js run --source packages/apigen/cli/src/test/fixtures/real-api.ts --type mcp`
+  - entrypoint: `node dist/packages/apigen/cli/index.js run --source packages/apigen/cli/src/test/fixtures/real-api.ts --type mcp`
   - observable: MCP `tools/list` equals the fixture's exported function names (derived in-process); `callTool(fn,{data:<sample>})` deep-equals the value of calling that export directly in-process; process exits 0 when transport closes. The same invariants hold over the `sse` and `streaming-http` transports.
   - delivered-by: cli-run-cmd, plugin-mcp, runtime-dispatch, schema-extraction, runtime-middleware, integration-tests-v2
   - negative-control: rename a fixture export (e.g. `getUser`→`getUserX`) → the derived tool set changes → `tools/list` no longer matches → this clause (dod.1, and dod.1-sse / dod.1-streaming-http) goes red.
 
 - `[dod.2]` Running `generate` writes files to disk that run as an equivalent MCP server.
-  - entrypoint: `node packages/apigen/cli/dist/index.js generate --source packages/apigen/cli/src/test/fixtures/real-api.ts --type mcp --out-dir /tmp/apigen-test-out && npx tsx /tmp/apigen-test-out/server.ts`
+  - entrypoint: `node dist/packages/apigen/cli/index.js generate --source packages/apigen/cli/src/test/fixtures/real-api.ts --type mcp --out-dir /tmp/apigen-test-out && npx tsx /tmp/apigen-test-out/server.ts`
   - observable: Generated `server.ts` starts; both the run-mode server and the generated server deep-equal the SAME derived ground truth (hence each other) for `tools/list` and every `callTool`.
   - delivered-by: cli-generate-cmd, plugin-mcp, schema-extraction, schema-composition, integration-tests-v2
   - negative-control: corrupt the generated `server.ts` template so one tool is dropped → the generated server's `tools/list` no longer deep-equals the run-mode/derived ground truth → this clause (dod.2) goes red.
@@ -102,13 +102,13 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - negative-control: ignore the `false` override → `session` reappears in `ping` → spec assertion fails → this clause (dod.4) goes red.
 
 - `[dod.5]` `run-registry` discovers packages by tag and wires a multi-package MCP server.
-  - entrypoint: `node packages/apigen/cli/dist/index.js run-registry --packages-dir packages/apigen/cli/src/test/fixtures/registry --tag api --type mcp`
+  - entrypoint: `node dist/packages/apigen/cli/index.js run-registry --packages-dir packages/apigen/cli/src/test/fixtures/registry --tag api --type mcp`
   - observable: `tools/list` equals the union of exports from the `api`-tagged packages (derived from each package); untagged exports (e.g. `internal` from `pkg-c`) are absent; each `callTool` deep-equals the originating package's in-process ground truth (so `hello`→`'a'`, routed to pkg-a not pkg-b).
   - delivered-by: cli-run-cmd, cli-generate-cmd, integration-tests-v2
   - negative-control: remove the `internal` tag filter in run-registry → `internal` appears in `tools/list` → the `internal`-absent assertion goes red → this clause (dod.5) goes red.
 
 - `[dod.cli]` `--type cli-output` emits a runnable CLI whose subcommands return the same values as the source functions.
-  - entrypoint: `node packages/apigen/cli/dist/index.js generate --source packages/apigen/cli/src/test/fixtures/real-api.ts --type cli-output --out-dir /tmp/apigen-cli-out && npx tsx /tmp/apigen-cli-out/cli.ts getUser --user-id abc`
+  - entrypoint: `node dist/packages/apigen/cli/index.js generate --source packages/apigen/cli/src/test/fixtures/real-api.ts --type cli-output --out-dir /tmp/apigen-cli-out && npx tsx /tmp/apigen-cli-out/cli.ts getUser --user-id abc`
   - observable: For every fixture export, running the generated subcommand as a real subprocess prints JSON to stdout that deep-equals the value of calling that export directly in-process (derived).
   - delivered-by: plugin-cli-output, cli-generate-cmd, integration-tests-v2
   - negative-control: drop a subcommand from the generated `cli.ts` produced by `generate --source packages/apigen/cli/src/test/fixtures/real-api.ts --type cli-output` → that subcommand errors → its stdout no longer deep-equals the derived ground truth → this clause (dod.cli) goes red.

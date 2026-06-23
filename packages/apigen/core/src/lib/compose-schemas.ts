@@ -54,6 +54,8 @@ export function composeSchemas(
         required: [...envelopeRequired, 'data'],
       },
       output: fnSchema.output,
+      // Carry the ctx-param flag through to dispatch (BUG-APIGEN-001).
+      ...(fnSchema.hasCtx ? { hasCtx: true } : {}),
     }
   }
 

@@ -1,5 +1,6 @@
 import { ExecutorContext } from '@nx/devkit'
 import { execFileSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import * as path from 'node:path'
 
 export interface GenerateExecutorSchema {
@@ -18,22 +19,27 @@ export default async function generateExecutor(
   const sourceFile = path.resolve(context.root, projectRoot, schema.source)
   const outDir = path.resolve(context.root, schema.outDir)
 
-  // 'npx @adhd/apigen-cli' resolves via workspace node_modules/.bin in the monorepo,
-  // and via the published binary when used as a standalone consumer.
-  const args = [
-    '@adhd/apigen-cli', 'generate',
+  const cliArgs = [
+    'generate',
     '--source', sourceFile,
     '--type', schema.type,
     '--out-dir', outDir,
   ]
 
-  if (schema.exportMode) args.push('--export', schema.exportMode)
+  if (schema.exportMode) cliArgs.push('--export', schema.exportMode)
   for (const [k, v] of Object.entries(schema.options ?? {})) {
-    args.push('--opt', `${k}=${v}`)
+    cliArgs.push('--opt', `${k}=${v}`)
   }
 
+  // Prefer the locally-built bin inside the monorepo (no publish/link required); fall back to
+  // 'npx @adhd/apigen-cli' for standalone consumers using the published binary.
+  const localBin = path.join(context.root, 'dist/packages/apigen/cli/index.js')
+  const [cmd, args] = existsSync(localBin)
+    ? ['node', [localBin, ...cliArgs]]
+    : ['npx', ['@adhd/apigen-cli', ...cliArgs]]
+
   try {
-    execFileSync('npx', args, { stdio: 'inherit', cwd: context.root })
+    execFileSync(cmd as string, args as string[], { stdio: 'inherit', cwd: context.root })
     return { success: true }
   } catch {
     return { success: false }

@@ -18,6 +18,21 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
 import { dispatch } from '@adhd/apigen-runtime'
 import { toolMetas, groupFns, groupCreateClient } from './index.js'
 
+// §9.1 — extract envelope from MCP _meta["x-<pluginId>-<field>"].
+// x-apigen-envelope (field→pluginId map) is carried on each schema entry.
+function extractEnvelope(schema: Record<string, unknown>, meta: Record<string, unknown>): Record<string, unknown> {
+  const inputProps = ((schema['input'] as any)?.['properties'] as Record<string, unknown>) ?? {}
+  const envMeta = schema['x-apigen-envelope'] as Record<string, string> | undefined
+  const envelope: Record<string, unknown> = {}
+  for (const field of Object.keys(inputProps)) {
+    if (field === 'data') continue
+    const pluginId = envMeta?.[field] ?? 'adhd'
+    const key = \`x-\${pluginId}-\${field}\`
+    if (meta[key] !== undefined) envelope[field] = meta[key]
+  }
+  return envelope
+}
+
 const mcpServer = new Server({ name: 'apigen-mcp', version: '1.0.0' }, { capabilities: { tools: {} } })
 
 mcpServer.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -32,12 +47,15 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: args = {} } = req.params
   const meta = toolMetas[name]
   if (!meta) throw new Error(\`Unknown tool: \${name}\`)
+  // §9.1: envelope from _meta, domain args from data
+  const mcpMeta = (args as any)['_meta'] as Record<string, unknown> | undefined ?? {}
+  const envelope = extractEnvelope(meta.schema as Record<string, unknown>, mcpMeta)
   const result = await dispatch(
     groupFns[meta.group],
     groupCreateClient[meta.group],
     meta.schema as any,
     name,
-    args as Record<string, unknown>,
+    envelope,
     ((args as any)['data'] ?? {}) as Record<string, unknown>,
   )
   return { content: [{ type: 'text', text: JSON.stringify(result) }] }

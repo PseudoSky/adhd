@@ -1,0 +1,52 @@
+{
+  "name": "apigen-errors",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/apigen/errors/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "layer:logic",
+    "platform:shared"
+  ],
+  "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/errors"
+      ],
+      "options": {
+        "configFile": "packages/apigen/errors/vite.config.ts"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/packages/apigen/errors",
+        "main": "packages/apigen/errors/src/index.ts",
+        "tsConfig": "packages/apigen/errors/tsconfig.lib.json",
+        "assets": [
+          "packages/apigen/errors/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": [
+        "build",
+        "test"
+      ]
+    }
+  }
+}

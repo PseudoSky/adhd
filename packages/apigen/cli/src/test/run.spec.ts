@@ -180,12 +180,13 @@ describe('[cli-run-cmd.4] run-registry command — passes multiple packages at o
 
 // ───────────────────────────────────────────────────────────────────────────
 // Live MCP server: run command starts a real streaming-http server
+// Gated behind APIGEN_LIVE=1 — skipped in default CI/audit runs.
 // ───────────────────────────────────────────────────────────────────────────
 
-describe('[cli-run-cmd.1 live] run command starts a live MCP server via plugin.run()', () => {
+describe.skipIf(!process.env['APIGEN_LIVE'])('[cli-run-cmd.1 live] run command starts a live MCP server via plugin.run()', () => {
   const port = 47431 // deterministic high port, different from plugin-mcp tests
 
-  it('serves tools/list with fixture tools over streaming-http', async () => {
+  it('serves tools/list with fixture tools over streaming-http', { timeout: 20000 }, async () => {
     const program = makeProgram()
     registerRunCommand(program, { mcp: mcpPlugin })
 

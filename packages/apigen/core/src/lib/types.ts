@@ -6,6 +6,9 @@ export interface GeneratedSchemas {
   schemas: Record<string, {
     input:  Record<string, unknown>
     output: Record<string, unknown>
+    // True when the source fn's first param is named `ctx` (filtered from
+    // `input.properties` by [inv:ctx-name-only], but still injected at dispatch).
+    hasCtx?: boolean
   }>
 }
 
@@ -14,6 +17,9 @@ export interface GeneratedSchemas {
 export type ComposedSchemas = Record<string, {
   input:  Record<string, unknown>
   output: Record<string, unknown>
+  // Carried through from GeneratedSchemas — see above. dispatch() injects ctx
+  // as the first arg whenever this is true, independent of session middleware.
+  hasCtx?: boolean
 }>
 
 // Three mutually exclusive extraction modes

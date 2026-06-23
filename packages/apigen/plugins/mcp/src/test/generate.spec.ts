@@ -32,6 +32,26 @@ const testSchema = {
   },
 }
 
+/** Schema with session envelope field + x-apigen-envelope metadata (§9.1). */
+const envelopeSchema = {
+  getUser: {
+    input: {
+      type: 'object',
+      properties: {
+        session: { type: 'string' },
+        data: {
+          type: 'object',
+          properties: { userId: { type: 'string' } },
+          required: ['userId'],
+        },
+      },
+      required: ['session', 'data'],
+    },
+    output: { type: 'object' },
+    'x-apigen-envelope': { session: 'auth' },
+  },
+}
+
 const baseInput: PluginInput = {
   packages: [
     {
@@ -149,5 +169,51 @@ describe('[plugin-mcp.5] no inline dispatch logic in generate output', () => {
     const idx = out.files.find((f) => f.path === 'index.ts')!
     // index.ts is a data file — it must not contain any dispatch call
     expect(idx.content).not.toContain('dispatch(')
+  })
+})
+
+// ---------- [v2-proj-transport] MCP envelope binding in generated server.ts ----------
+
+describe('[v2-proj-transport] §9.1 MCP envelope binding in generated server.ts', () => {
+  it('[v2-mcp.gen.env.1] generated server.ts reads envelope from _meta["x-<pluginId>-<field>"]', () => {
+    const input: PluginInput = {
+      packages: [{ id: 'svc', schemas: envelopeSchema, importPath: '@acme/svc' }],
+      outputDir: '/tmp/out',
+      options: { transport: 'stdio' },
+    }
+    const out = generate(input)
+    const server = out.files.find((f) => f.path === 'server.ts')!
+    // §9.1: MCP envelope uses _meta key convention
+    expect(server.content).toContain('_meta')
+    // The generated extractEnvelope function must build 'x-auth-session' key
+    expect(server.content).toContain('x-apigen-envelope')
+  })
+
+  it('[v2-mcp.gen.env.2] (negative) generated server.ts does NOT spread args as envelope', () => {
+    const input: PluginInput = {
+      packages: [{ id: 'svc', schemas: envelopeSchema, importPath: '@acme/svc' }],
+      outputDir: '/tmp/out',
+      options: { transport: 'stdio' },
+    }
+    const out = generate(input)
+    const server = out.files.find((f) => f.path === 'server.ts')!
+    // Old v1 pattern: dispatch(... args as Record ..., ((args as any)['data'] ...))
+    // where args (the full args including envelope fields) is passed as the envelope arg.
+    // In v2, envelope is extracted from _meta separately and passed as its own arg.
+    // The args object must NOT be used directly as the envelope argument.
+    expect(server.content).not.toMatch(/dispatch\([^,]+,[^,]+,[^,]+,[^,]+,\s*args as/)
+  })
+
+  it('[v2-mcp.gen.env.3] generated server.ts contains extractEnvelope helper for all transports', () => {
+    for (const transport of ['stdio', 'sse', 'streaming-http'] as const) {
+      const input: PluginInput = {
+        packages: [{ id: 'svc', schemas: envelopeSchema, importPath: '@acme/svc' }],
+        outputDir: '/tmp/out',
+        options: { transport },
+      }
+      const out = generate(input)
+      const server = out.files.find((f) => f.path === 'server.ts')!
+      expect(server.content).toContain('extractEnvelope')
+    }
   })
 })

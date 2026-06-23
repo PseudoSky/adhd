@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "apigen-python"
+version = "0.0.1"
+description = "Python host for @adhd/apigen — extractor, runtime, gateway adapter (SPEC §14)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+keywords = ["apigen", "polyglot", "api", "code-generation"]
+
+dependencies = [
+    # jsonschema is optional: the runtime falls back to a minimal stdlib validator
+    # when it is not installed, so the package works offline/in CI without pip.
+    # Add it here for completeness; run_tests.py works either way.
+]
+
+[project.optional-dependencies]
+jsonschema = [
+    "jsonschema>=4.0",
+]
+dev = [
+    "jsonschema>=4.0",
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+]
+
+[project.scripts]
+apigen-python-extractor = "apigen_python.extractor:_main"
+apigen-python-adapter   = "apigen_python.gateway_adapter:_main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["apigen_python*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

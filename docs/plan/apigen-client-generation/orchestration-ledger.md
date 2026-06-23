@@ -258,3 +258,211 @@ Recorded as `--amend --class planner --type replan` on `canonical-descriptor` (b
 **DoD CLOSED (caller-confirmed 2026-06-23, `--confirm-dod`):** `dod.1/2/5` repointed to the **F26 built bin** (`node packages/apigen/cli/dist/index.js`; `tsx src/index.ts` can't resolve `@adhd/*` paths — F25/F26) with a `[v2.bin-built]` build gate at the top of `phase_final`; **new behavioral clauses** dod.14 streaming (in-band error-after-first-chunk + mid-stream cancel), dod.15 safe/verb out-of-source override, dod.16 collision-is-hard-error, dod.17 gateway partial-availability, dod.18 class static+instance, **dod.19 real-consumer capstone** (built bin exposes **unmodified `@adhd/transform`** → a real MCP/HTTP client deep-equals direct in-process calls; `APIGEN_LIVE=1` runs a real model). All bound to `phase_final` checks with entrypoint fidelity + distinctive negative-controls. **`dod_provenance.dod_ids` = dod.1–19 + dod.cli (20 clauses).** Final reconcile: gap-check PASSED (0 warn) · integrity clean · env-pin 45/45.
 
 **Amendment fully closed.** Plan is dispatch-ready from `scaffold-v2-common`.
+
+---
+
+## EXECUTION (2026-06-22) — driving the v2 plan wave-by-wave
+
+**Preflight (re-run at execution start):** board compiles (no cycle, critical-path cost 26) · gap-check PASSED (0 warn) · env-pin 45/45 PINNED · cross-plan clean · **human-blockers: none** (`[]`). $SKILL pinned to **0.8.21** (the version this plan was amended on; 0.8.22 exists but switching mid-flight risks a behavior shift).
+
+**Live ready-frontier (from `dag.json` deps + `state.json` status, NOT the board's whole-DAG waves):** 3 states — `scaffold-v2-common` (in_progress), `canonical-descriptor` (blocked, deps met), `scaffold-v2-ts-plugins` (pending, deps met). All `unrated` (added via `add-state`, no `--model/--effort` — F31); orchestrator-assigned tiers below, divergence noted.
+
+**F35 (NEW — reservation/guard gap):** the two scaffold states declare only `project.json` reservations, but their guards run `nx build` over the new projects — which requires full nx wiring (`package.json`, `tsconfig.json`, `tsconfig.lib.json`, `vite.config.ts`, `src/index.ts`) **plus `tsconfig.base.json` path entries**. Both scaffold states must edit the **shared `tsconfig.base.json`** → latent same-wave write-collision invisible to the board (under-declared reservation). *Proposed planner fix:* widen each scaffold state's `mutates` to the full wiring set incl. `tsconfig.base.json`. *Orchestrator mitigation now:* **serialize the two scaffolds**; run `canonical-descriptor` (core/ only) in parallel with the first.
+
+**F36 (NEW — weak work-state guards):** `canonical-descriptor`'s guard `nx build apigen-core` passes even with a stub descriptor (core already builds); real teeth are deferred to `audit-v2-core`. Orchestrator must **verify the descriptor's content state-side** (read `descriptor.ts`), not trust guard-green. Same pattern for other v2 work states.
+
+### Wave 0 routing (recorded pre-dispatch)
+
+| slug | wave/batch | executor | tier | guard | reduction_ratio |
+|---|---|---|---|---|---|
+| scaffold-v2-common | w0·b1 | typescript-pro | sonnet/low | `nx run-many -t build -p apigen-naming…codegen-openapi` (6 pkgs) | 0.9961 |
+| canonical-descriptor | w0·b1 | typescript-pro | **opus** (load-bearing; plan unrated — divergence) | `nx build apigen-core` | 0.9970 |
+| scaffold-v2-ts-plugins | w0·b2 | typescript-pro | sonnet/low | `nx run-many -t build -p apigen-ts-plugin-{logger,openapi,health}` | 0.9965 |
+
+### Wave 0 outcomes
+
+| slug | executor | tier | guard-exit | retries | outcome | notes |
+|---|---|---|---|---|---|---|
+| scaffold-v2-common | typescript-pro | sonnet | 0 (orch-verified) | 0 | ✅ complete | 6 pkgs build green. Executor went idle pre-`--complete`; orchestrator drove `--complete` after state-side guard verify. `audit_exit:2`/`audit_pass:false` = benign 0-criteria quirk (Track-B: work states carry no per-state criteria), state advanced normally. Token telemetry → byte proxy (SendMessage unavailable to re-engage idle executor). |
+| canonical-descriptor | typescript-pro | **opus** | 0 | 0 | ✅ complete | State-side content verified (F36): all 12 §4 Operation fields, JSON-Schema-2020-12+`$defs` IR, `x-apigen-*`+`fidelity`, `Segment{raw,words}`, deterministic-not-refactor-stable `id` w/ Tenet-1 JSDoc, `safe` kind-defaults+verb-decouple. `descriptor.schema.json` valid draft/2020-12 (12 props). Exported from core index. Executor self-completed. High fidelity. |
+
+**F37 (NEW — executors stop before `--complete`):** both batch-1 executors did the work + passed guards but one (scaffold-v2-common) went idle without the `--complete` transition. Orchestrator must always verify state-side and drive `--complete` when an executor idles pre-transition. Because `SendMessage` is not enabled in this orchestrator context, idle executors cannot be re-engaged for their token counts → telemetry degrades to byte-proxy. *Mitigation for future dispatches:* make the `--complete` step the FIRST instruction the executor cannot skip, or accept orchestrator-driven completion as the norm.
+
+### Wave 1 routing (recorded pre-dispatch) — Batch A (4 logic states, parallel; no write-conflicts)
+
+| slug | executor | tier | guard | SPEC ref | reduction_ratio |
+|---|---|---|---|---|---|
+| naming-helpers | typescript-pro | sonnet | `nx test apigen-naming` | §5 verb-from-safe + override + collision invariant; §9.1 envelope binding | 0.9971 |
+| layer-harness | typescript-pro | sonnet | `nx test apigen-runtime` | §8.1 Layer semantics | 0.9972 |
+| error-taxonomy | typescript-pro | sonnet | `nx test apigen-errors` | §9.1 gRPC codes + streaming error carriers | 0.9971 |
+| plugin-interface | typescript-pro | sonnet | `nx build apigen-core` (weak → verify content) | §7 capabilities {target,layer,mount,envelope} | 0.9972 |
+
+`scaffold-v2-ts-plugins` held to Batch B (sole `tsconfig.base.json` writer; avoid read-during-write race; nothing in next waves needs it yet).
+
+### Wave 1 outcomes — Batch A
+
+| slug | executor | tier | guard-exit | retries | outcome | notes |
+|---|---|---|---|---|---|---|
+| naming-helpers | typescript-pro | sonnet | 0 | 0 | ✅ complete | `nx test apigen-naming` exit 0 (orch-verified). Self-completed. |
+| layer-harness | typescript-pro | sonnet | 0 | 0 | ✅ complete | `nx test apigen-runtime` exit 0 (full suite incl. v1). Self-completed. |
+| error-taxonomy | typescript-pro | sonnet | 0 | 0 | ✅ complete | §9.1/§11: ERROR_CODES + 4 transport maps + ApiError + StreamingErrorCarrier verified. Idle pre-complete → orchestrator drove `--complete`. Byte-proxy telemetry. |
+| plugin-interface | typescript-pro | sonnet | 0 | 0 | ✅ complete | §7 capability interface {target,layer,mount,envelope} + Call/Next/Chunk/Harness verified state-side (not stub). Idle pre-complete → orchestrator drove `--complete`. Byte-proxy telemetry. |
+
+F37 recurring: 3 of 6 executors so far idle before `--complete`; orchestrator drives it post state-side verify. Normal operating mode for this run.
+
+**F38 (NEW — ts-plugin path/name mismatch):** `scaffold-v2-ts-plugins` scaffolds `packages/apigen/ts/plugins/{logger,openapi,health}` (projects `apigen-ts-plugin-*`), but its consumer fill-states write the interim home `packages/apigen/plugins/{logger,openapi,health}`, and `package-restructure` later moves interim→final — colliding with the scaffold's skeletons. *Orchestrator action:* **defer `scaffold-v2-ts-plugins`** (only consumers are wave-8 `logger-layer-plugin`/`mount-plugins`); reconcile via a proposed planner amendment (canonicalize the ts-plugin home + nx project names across scaffold/fill/restructure) before dispatching those waves.
+
+### Wave 2 routing (recorded pre-dispatch) — 3 disjoint logic states, parallel
+
+| slug | executor | tier | guard | SPEC ref |
+|---|---|---|---|---|
+| ts-extractor-by-symbol | typescript-pro | sonnet | `nx test apigen-core` | name-by-exported-symbol (F28/F29); safe-default-from-kind; query=live; x-apigen hints; export-shape matrix incl anonymous-default + CJS (R13) |
+| central-validation | typescript-pro | sonnet | `nx test apigen-runtime` | §6 validation Layer + necessary-but-not-sufficient |
+| projection-transports | typescript-pro | sonnet (escalate→opus on guard fail) | `nx run-many test api-fastify/api-express/mcp/cli` | §9.1 envelope-from-metadata + §5 verb-from-safe across 4 transports |
+
+### Wave 2 outcomes (partial — ts-extractor-by-symbol still running)
+
+| slug | executor | tier | guard-exit | retries | outcome | notes |
+|---|---|---|---|---|---|---|
+| central-validation | typescript-pro | sonnet | 0 | 0 | ✅ complete | §6 validateLayer short-circuits invalid_argument; necessary-not-sufficient documented + tested. Self-completed. |
+| projection-transports | typescript-pro | sonnet | 0 (⚠ under-tested — see F39) | 0 | ✅ complete | §9.1 envelope binding + §5 verb-from-safe across 4 transports. cli generate.ts uses `envelopeCliFlag/envelopeEnvVar` from apigen-naming. Self-completed. Guard ran only 3/4 (F39); orchestrator independently ran `nx test apigen-plugin-cli-output` → exit 0, confirming the cli transport too. Work sound. |
+
+**F39 (NEW — guard names a non-existent project → false-green):** `projection-transports` guard (`dag.json:649`) lists `apigen-plugin-cli`, but the real nx project is `apigen-plugin-cli-output` (renamed in v1, see transition log). `nx run-many` silently skips unknown projects → guard ran 3/4 and passed without testing the cli transport. *Proposed planner fix (amendment, can't hand-edit dag.json):* change the guard's `apigen-plugin-cli` → `apigen-plugin-cli-output`. *Orchestrator mitigation:* always verify cli-plugin states under the correct project name (done here; cli tests green). No halt — work verified sound by direct test.
+
+| ts-extractor-by-symbol | typescript-pro | sonnet | 0 | 0 | ✅ complete | extract.ts covers all 6 export shapes (named fn/const/object, default-fn, **anonymous-default**, **CJS** per R13); names by exported symbol (fixes v1 F28/F29); extract.spec.ts. `nx test apigen-core` exit 0. Self-completed. |
+
+**F40 (CRITICAL — concurrent `--complete` lost-update / status flapping):** `state-transition.js` read-modify-writes `state.json` without a lock. When parallel executors self-`--complete` (and re-read at `--start` time vs write at `--complete` time across overlapping windows), a later write can clobber an earlier completion. Observed: `projection-transports` completed @02:50 then **flapped in_progress↔complete** across orchestrator reads as `ts-extractor`'s @02:57 write interleaved; settled to `complete`. Full status audit confirms no PERMANENT loss (9/9 expected-complete are complete), but the hazard is real. **Protocol change adopted from wave 3 on:** *all `state.json` mutations are serialized through the orchestrator* — executors do **work + pass guard + STOP** (no `--start`/`--complete`); the orchestrator runs `--start` before dispatch and `--complete` sequentially after state-side verify. Eliminates the race while preserving work-parallelism. *Proposed tooling fix:* `state-transition.js` should take an flock on `state.json` (or use atomic CAS on a version field).
+
+**Waves 0–2 COMPLETE: 9/9 v2 work states done & verified (gap-check-clean packages, all guards green).** Frontier → first audit gate `audit-v2-harness` (mandatory-halt-on-fail).
+
+### Wave 3 — AUDIT GATE cleared
+
+| slug | executor | tier | guard-exit | outcome | notes |
+|---|---|---|---|---|---|
+| audit-v2-harness | orchestrator (deterministic Track-B) | n/a | 0 | ✅ GATE PASSED | `audit_apigen.py --phase v2-harness` 3/3 checks (invoke §8.1 / validation invalid_argument short-circuit / errors per-transport maps). All 3 filters verified to hit real specs (invoke.spec.ts, validate-layer.spec.ts, errors.spec.ts) before trusting. `--complete` audit_pass=True → conformance-vectors. Mandatory-halt-on-fail gate: did NOT fail, cleanly advanced. |
+
+### Wave 3 Batch A outcomes (F40 protocol: orchestrator-driven transitions)
+
+| slug | executor | tier | guard-exit | outcome | notes |
+|---|---|---|---|---|---|
+| conformance-vectors | typescript-pro | sonnet | 0 | ✅ complete | vectors.ts categories A round-trip / B naming+collision / C envelope / D error-map / E necessary-not-sufficient. `nx test apigen-conformance` exit 0. Orchestrator `--start`+`--complete` (executor did work+guard only — no state.json race). `audit_failed`=benign 0-criteria quirk; state complete. |
+
+**USER QUESTION (wave 3, mid-flight): "Are we utilizing the previously built nx generator and plugins?"** Investigated against code:
+- **v1 plugins REUSED** — `projection-transports` upgraded mcp/fastify/express/cli in place (not rebuilt); core/runtime/schema extended.
+- **`apigen-nx:plugin` generator NOT yet used** but dry-run confirms it scaffolds a full plugin at `packages/apigen/plugins/<name>` (project `apigen-plugin-<name>`, auto-updates tsconfig.base.json). This is the right tool for the deferred `scaffold-v2-ts-plugins` (logger/openapi/health ARE plugins).
+- **F38 ROOT CAUSE (upgraded):** generator + fill-states (`logger-layer-plugin`, `mount-plugins`) already agree on `packages/apigen/plugins/<name>` + `apigen-plugin-<name>`. Only `scaffold-v2-ts-plugins`'s `ts/plugins/<name>` + `apigen-ts-plugin-<name>` (BOTH artifacts and guard) are the outliers. *Fix:* dispatch that state via `nx g @adhd/apigen-nx:plugin` + propose planner amendment to repoint its guard/artifacts to the `apigen-plugin-*` @ `plugins/` convention (dogfoods generator, closes F38).
+- **Minor:** `scaffold-v2-common`'s 6 libs hand-copied core's wiring instead of `./generate-lib.sh` (libs, not plugins — apigen-nx N/A). Builds green; logged.
+
+## AMENDMENT (2026-06-23, user-directed) — dogfood apigen-nx generator (v2 shape) + deprecation hygiene
+
+User directives: (1) "it should be upgraded to support the new system and utilized in the plan to ensure consistent shape"; (2) "make sure any packages we're deprecating are fully removed from the nx workspace". Recorded via `--amend --class planner --type fix-guard` on `scaffold-v2-ts-plugins` (→ blocked, exit 2 marker; approved by caller directive).
+
+**Applied (gap-check PASSED 0-warn · env-pin 46/46 · integrity clean · deprecation check passes live):**
+- **+1 state `nx-generator-v2`** (phase v2-scaffold; deps plugin-interface, layer-harness; guard `nx test apigen-nx`; artifacts = generator.ts + 3 `__files__` templates + schema.json). Upgrades `@adhd/apigen-nx:plugin` to emit the **v2 plugin shape** (§7 capabilities `{target,layer,mount,envelope}` + Layer-aware), so every plugin shares ONE generator-produced shape.
+- **Repointed `scaffold-v2-ts-plugins`** (closes F38): now depends on `nx-generator-v2`; guard `nx run-many -t build -p apigen-plugin-{logger,openapi,health}`; artifacts `packages/apigen/plugins/{logger,openapi,health}/project.json`; context = DOGFOOD via `nx g @adhd/apigen-nx:plugin <name>`. The `ts/plugins/` + `apigen-ts-plugin-*` outliers are gone.
+- **Fixed stale guards:** `mount-plugins` `apigen-openapi`→`apigen-codegen-openapi`; `phase_v2_projection` plugin check `apigen-ts-plugin-*`→`apigen-plugin-*`.
+- **Deprecation hygiene (directive 2):** added `v2-projection.deprecation-hygiene` audit check — asserts NO `packages/apigen/ts/` dir and NO `apigen-ts-plugin-*` project ever remain. Added `v2-projection.generator-v2-shape` check (`nx test apigen-nx`) so the gate proves the generator emits v2 shape. **Current workspace verified clean: 15 apigen projects, all final §12 homes, no orphans, no `ts/` dir.**
+- Generator default home (`packages/apigen/plugins/<name>`, project `apigen-plugin-<name>`) already matched the fill-states — so dogfooding is drop-in.
+
+### Wave 3 Batch B + amendment outcomes
+
+| slug | executor | tier | guard-exit | outcome | notes |
+|---|---|---|---|---|---|
+| class-exports | typescript-pro | sonnet | 0 | ✅ complete | §10/H2: extract-classes.ts (static→action ops always; instances opt-in via includeInstances → constructor+instance-method ops); instance-registry.ts (TTL sweeper + dispose/disposeAll). nx test apigen-core exit 0 + nx build apigen-runtime green (F41 self-check). Orchestrator-driven --complete. |
+| nx-generator-v2 | typescript-pro | sonnet | 0 | ✅ complete | apigen-nx:plugin emits v2 shape (capabilities {target,layer,mount,envelope}, Layer-aware Call/Next/Chunk per §7.1/§8.1); test template asserts capabilities; home/name unchanged (packages/apigen/plugins/<name>, apigen-plugin-<name>); +--platform option; NO ts/plugins or apigen-ts-plugin introduced. nx test apigen-nx exit 0. Content verified by reading templates. |
+
+**13/27 v2 states complete.** `scaffold-v2-ts-plugins` deps now met (scaffold-plugins ✓, nx-generator-v2 ✓) → ready to dispatch (will dogfood the upgraded generator).
+
+### ⛔ HALT — audit gate `audit-v2-core` FAILED (3/4), mandatory halt (not crossed)
+
+`audit_apigen.py --phase v2-core`: ✅ v2-core.descriptor, ✅ v2-core.naming-collision, ✅ v2-core.classes; ✗ **v2-core.export-shape**. Did NOT mark complete. Two root causes (evidence-based):
+
+- **F42a (audit mis-wiring/ordering):** `v2-core.export-shape` runs `nx test apigen-cli export-shape-matrix`, but `export-shape-matrix.spec.ts` is owned by `integration-tests-v2` (wave 14, not yet built). With no file match the runner **degrades to the whole apigen-cli suite**. The extractor's shape-matrix was actually proven by `ts-extractor-by-symbol` in `apigen-core/extract.spec.ts`. *Fix-A (verified):* repoint the check to `nx test apigen-core extract` (→ passes); keep the cli `export-shape-matrix` assertion for `phase_integration`/`audit-final-v2` where that test exists.
+- **F42b (real flaky live test):** the whole-suite fallback hits `cli/run.spec.ts` `[cli-run-cmd.1 live]` MCP streaming-http test which **times out at 5000ms** (setTimeout-polled live server — the timing hazard CLAUDE.md §6 bans). *Fix-B:* gate it behind `APIGEN_LIVE=1` (matches dod.19 + CLAUDE.md live-test standard; CI/audits stay offline/deterministic) OR make it deterministic (readiness latch + bounded deadline + raised timeout). Bites later regardless (audit-final-v2 runs full cli suite).
+
+Proposed: apply Fix-A (audit-correctness) + dispatch Fix-B (real bug, debugger/test-automator), then re-run the gate. Awaiting caller steer.
+
+### ✅ HALT RESOLVED — audit-v2-core cleared 4/4 (caller approved Fix-A + Fix-B)
+
+- **Fix-A applied:** `v2-core.export-shape` → `npx --yes nx test apigen-core extract` (real shape-matrix proof). 4/4 pass.
+- **Fix-B applied** (debugger `fix-live-tests`): gated 5 live-server test blocks behind `APIGEN_LIVE=1` (default-skip): cli `run.spec.ts [cli-run-cmd.1 live]`; api-fastify `run() — real Fastify server` + `[v2-proj-transport] safe→GET/envelope`; api-express `run() — real Express server` + `[v2-proj-transport] safe→GET/envelope`. Default `nx test` now deterministic/offline; live runnable via `APIGEN_LIVE=1`.
+- **F43 (watch):** gating the `[v2-proj-transport]` live tests means part of projection-transports' §9.1/§5 proof is now behind APIGEN_LIVE. Re-verify default projection coverage at `audit-v2-projection` (its verb/envelope checks run `nx test apigen-cli canonical`, owned by integration-tests-v2 — likely needs the same forward-ref handling as F42a, and/or an APIGEN_LIVE run).
+
+## PERF FIX (2026-06-23, user-directed) — enable nx `test` caching
+
+User noticed audit/test re-runs crawling. Diagnosed: `nx.json` `targetDefaults` had `cache:true` for `@nx/vite:build`/`@nx/rollup:rollup`/`@nx/js:tsc` but **NO `test` default** → test never cached (never enabled, not disabled). Evidence: identical `nx test apigen-core` repeat took 113s (no reuse). apigen-core tests are ~2min (ts-morph + ts-json-schema-generator compile TS at runtime).
+
+**Fix:** added `targetDefaults.test = {cache:true, inputs:[default, ^production, {externalDependencies:[vitest]}]}` to `nx.json`. **PROVEN:** run1=108.9s → run2=**0.43s** ("existing outputs match the cache"). ~250× on repeats; orchestrator `--complete` guard re-runs now sub-second on unchanged code. Global memory written (`~/.claude/projects/.../memory/nx_cache_usage.md` + index). NOT committed (caller controls commits).
+
+**Cache-correctness PROVEN (caller-requested):** edit `apigen-errors/errors.spec.ts` → cache MISS (50 tests ran); revert → cache HIT + git diff clean. `inputs:[default,...]` (default = {projectRoot}/**/*) correctly captures test files → no stale-hit risk. Probe fully reverted.
+
+**F40 recurrence:** my redundant `class-exports --complete` (launched out of caution) clobbered `nx-generator-v2`'s completion (flapped complete→in_progress). Re-completed. REINFORCED RULE: issue exactly ONE state-transition at a time; never launch redundant/concurrent --complete calls; verify each lands before the next.
+
+| scaffold-v2-ts-plugins | typescript-pro | sonnet | 0 | ✅ complete | DOGFOODED upgraded generator: apigen-plugin-{logger,openapi,health} at packages/apigen/plugins/<name>, v2-shape stubs (capabilities {target,layer} §7.1). Deprecation hygiene verified (no ts/, no apigen-ts-plugin-*). **F38 closed & validated.** Both user directives (generator dogfooding + deprecation removal) proven end-to-end. |
+
+### Wave (v2-projection fills) outcomes — parallel, F40-safe, all verified state-side
+
+| slug | tier | guard-exit | outcome | notes |
+|---|---|---|---|---|
+| logger-layer-plugin | sonnet | 0 | ✅ complete | logger as v2 Layer (typed-ctx pino §8.1 r3, error propagates, stream-aware). |
+| streaming-projection | sonnet | 0 | ✅ complete | §11: runtime/mcp/fastify stream.ts — per-chunk async gen, consumer-pull backpressure, AbortSignal cancel, error-after-first-chunk via apigen-errors carriers. |
+| mount-plugins | sonnet | 0 | ✅ complete | to-openapi (Descriptor→OpenAPI 3.1, verb-from-safe) + openapi/health mounts (health _meta feeds gateway readiness §13.1). |
+
+All three filled the v2 generator-produced stubs (consistent shape). nx test cache now makes guard re-runs sub-second.
+
+### ✅ audit-v2-projection — false-green caught, fixed to real teeth, then cleared
+
+Initial run: 6/6 "pass" but envelope/verb/streaming were VACUOUS (ran `nx test apigen-cli canonical/streaming` — specs owned by integration-tests-v2, don't exist → filter degraded to whole-cli-suite pass without asserting behavior). Per CLAUDE.md "no proxy evidence," did NOT clear on that.
+
+**F43 resolved:** gating live tests did NOT drop deterministic projection coverage — generate-level tests exist: apigen-naming (verb-from-safe + envelope keys), api-fastify/express (safeSchema→GET/unsafe→POST in routes), mcp/generate.spec (§9.1 envelope in generated server), runtime/mcp/fastify stream tests.
+
+**Fix (same approved pattern as Fix-A):** repointed the 3 checks to deterministic existing tests — envelope→`nx test apigen-plugin-mcp`, verb→`nx test apigen-plugin-api-fastify`, streaming→`nx run-many test apigen-runtime+mcp+fastify`. cli end-to-end proof stays in phase_final/audit-final-v2 via dod.14/15 (when integration-tests-v2 builds canonical.spec.ts). Re-run: **6/6 with real teeth.** Gate cleared.
+
+### ✅ audit-v2-host — fixed (pytest→run_tests.py + forward-ref deferral), cleared 2/2
+
+Initial: 2/3 with all 3 wrong — v2-host.conformance FAILED (pytest found "no tests"; host ships env-pinned run_tests.py), gateway-mixed + partial-availability VACUOUS (apigen-cli specs owned by integration-tests-v2). Fix: conformance→`python3 packages/apigen/python/run_tests.py` (real, 45/45); collapsed the two vacuous cli checks into `v2-host.gateway-contract`→`nx test apigen-gateway` (deterministic §13.1 routing/partial/deadline via HostAdapter). **Real TS↔Python e2e (mixed-host + kill-sidecar) DEFERRED to audit-final-v2 via dod.12 + dod.17 — integration-tests-v2 MUST build those cross-host apigen-cli specs driving the real Python sidecar.** Re-run: 2/2 real teeth. Cleared.
+
+### F44 (built-bin path wrong) — fixed before integration-tests-v2
+
+`dod.1/2/5/cli/19` + `[v2.bin-built]` gate + 7 audit `--cli` probes referenced `packages/apigen/cli/dist/index.js`, but nx outputs to `dist/packages/apigen/cli/index.js` (outputPath/vite outDir = workspace-root dist). 12 refs (4 README dod entrypoints + 8 audit) repointed `packages/apigen/cli/dist/index.js` → `dist/packages/apigen/cli/index.js` (consistent in both so Check-8 token-match holds). Verified: bin builds+exists at correct path, gap-check PASSED 0-warn, env-pin 46/46. Would have failed audit-final-v2 (phase_final [v2.bin-built]) + dod.19 real-consumer.
+
+### Wave: integration-tests-v2 (capstone) dispatched — opus
+
+Builds the consumer-outcome proofs the DoD rests on: canonical (envelope/verb), export-shape-matrix (named/renamed/default-fn/default-object/anonymous/cjs), **gateway-mixed-host (REAL TS↔Python sidecar, deferred from audit-v2-host — dod.12)**, **gateway partial-availability (dod.17)**, streaming (dod.14), **real-consumer capstone (dod.19 — built bin dist/packages/apigen/cli/index.js on UNMODIFIED @adhd/transform, real client deep-equals in-process, APIGEN_LIVE real model)**. REAL components, no mocks (CLAUDE.md §6).
+
+### ⛔ HALT — audit-final-v2 (final DoD gate) 107/117, 10 failures — NOT crossed
+
+**ALL v2 feature clauses PASS** (dod.9–19: export-shape, validation, envelope, mixed-host, unified-CLI, streaming, verb-override, collision, partial-availability, classes, real-consumer; + dod.1-live, dod.6). The v2 system is proven. The 10 failures are v1-regression / wiring / probe / one dropped spec — root-caused with evidence:
+
+| failures | root cause | fix | owner |
+|---|---|---|---|
+| dod.1, dod.1-sse, dod.1-streaming-http, dod.2, dod.5, dod.cli (6) | **`probe_mcp.mjs` bug**: ground-truth via `tsx --eval` uses TOP-LEVEL `await` → "not supported with cjs output". Bin itself works (verified). | wrap eval await in async IIFE / emit ESM | dispatch (debugger/js-pro) |
+| audit-final-v2.schema-teeth (+ dod.3/4 secretly vacuous) | `integration-tests-v2` **dropped `integration/schema.spec.ts`** → filter degrades to whole-suite vacuous pass; schema-teeth correctly flags missing spec | restore `schema.spec.ts` (ctx-exclusion + middleware-override teeth) | dispatch |
+| audit-cli.5 / inv-type-flag-only | **false positive**: `--output` grep matches `expect(optionNames).not.toContain('--output')` test assertion | exclude `*.spec.ts` from the grep | orchestrator |
+| dod.7 | references **non-existent nx target `apigen-cli:generate-api`** (cli targets: test/build only) | add a real `generate-api` target using the apigen-nx `generate` executor (dogfood) | orchestrator |
+| dod.8 | **leftover orphan `test-plugin`** (fixed) + non-idempotent check + stale "OutputPlugin" desc | rm test-plugin before/after; desc→v2 capabilities | orchestrator |
+
+Housekeeping: removed orphan `packages/apigen/plugins/test-plugin` (dir + nx project) + its `tsconfig.base.json` path (deprecation directive).
+
+### audit-final-v2 remediation — 5 wiring fixes done; capstone probe caught a REAL v2 bug
+
+Fixed & verified: #3 audit-cli.5 grep excludes *.spec.ts; #4 dod.7 (added apigen-cli:generate-api target dogfooding the executor + executor now prefers local built bin `dist/packages/apigen/cli/index.js` falling back to npx + node:fs added to apigen-nx vite externals; executor spec green, generate-api writes output); #5 dod.8 idempotent (pre/post-clean test-plugin dir + tsconfig path) + v2-capabilities description; #2 restored integration/schema.spec.ts (authored: 'excludes ctx' + 'suppresses session' with literal teeth not.toContain('ctx')/toContain('session')/not.toHaveProperty('session') — both tests green); #1 probe_mcp.mjs top-level-await wrapped in async IIFE + `--transport`/`--port` → `--opt transport=`/`--opt port=` (dod.5 registry PROBE OK).
+
+**BUG-APIGEN-001 (real v2 runtime defect, caught by capstone dod.1):** functions with a `ctx` first param (getUser/listUsers) return WRONG results through the generated MCP server — `callTool(getUser,{data:{userId:'abc'}})` → `{}` but direct `getUser(ctx,'abc')` → `{id:'abc'}`. The domain arg is dropped when ctx is present. Non-ctx functions (createUser/ping/sendEmail, dod.5 registry tools) work. Persists after fresh no-cache rebuild → genuine dispatch/mcp-run defect, not stale bundle. Blocks dod.1/1-sse/1-streaming-http/2/cli. Dispatching debugger to fix the ctx+data arg mapping.
+
+### audit-final-v2 now 114/117 (was 107). BUG-001 FIXED.
+
+BUG-APIGEN-001 fixed (hasCtx threaded core→runtime; dod.1 stdio + dod.1-streaming-http now PASS; core/runtime/cli green). 5 wiring fixes confirmed. **3 remaining failures = 2 real defects:**
+- dod.2 + dod.cli → **BUG-APIGEN-002** (generate emits no resolution scaffolding → generated server.ts/cli.ts can't resolve @modelcontextprotocol/sdk outside the repo tree). Fix in apigen-cli generate.
+- dod.1-sse → **BUG-APIGEN-003** (v2 MCP SSE transport unreachable — /sse fetch failed; stdio + streaming-http work). Fix in mcp plugin SSE mode.
+Both are genuine consumer-outcome gaps caught by the capstone. All v2 FEATURE clauses (dod.9–19) pass.
+
+### ✅ audit-final-v2 CLEARED — 117/117, all DoD clauses proven
+
+3 fixes landed: BUG-001 (ctx-dispatch, hasCtx threaded), BUG-003 (MCP SSE transport via fix-sse), BUG-002 (generate portability — **Option A "publish" model**: `generate` emits a clean publishable package.json with real `^<version>` deps `@modelcontextprotocol/sdk`/`@adhd/apigen-runtime`/-core + tsconfig; the workspace node_modules+paths bridge demoted to default-off `--link-workspace`, used only by the pre-publish probe). Default output is a clean, npm-installable artifact. gap-check PASSED 0-warn, phase_final 117/117.
+
+## ✅✅ PLAN COMPLETE — 46/46 states done (2026-06-23)
+
+Final DoD gate 117/117 · gap-check PASSED 0-warn · env-pin 46/46 · integrity clean. `done` is terminal; DoD (dod.1-19 + dod.cli, 20 clauses) confirmed + proven against REAL consumers (built bin, real MCP/HTTP clients, real Python sidecar mixed-host + partial-availability, unmodified @adhd/transform capstone). The capstone DoD caught **3 real bugs**, all fixed: BUG-001 (ctx-param dispatch), BUG-002 (generate output portability → Option-A publishable package.json), BUG-003 (MCP SSE transport). NOT committed (caller controls commits). Findings F25-F44 + BUG-001/002/003 logged. Orchestration: 46 states driven wave-by-wave, every outcome verified state-side (not agent prose), F40 serialized transitions, nx test-cache enabled+proven.
+
+**F45 (skill-tooling quirk, NOT a bypass):** integrity-check reports `BYPASS_SUSPECTED done: complete in state.json, no completion event`. Root cause: the terminal `done` node has `kind:"terminal"`, but the installed (0.8.21) `emit-event` validator only accepts `work|audit|review` → it rejects the done completion event, so events.ndjson lacks the mirror line. The completion IS legitimate — `transition_log` has a proper `done` entry (start_ref/end_ref) written by `state-transition.js --complete`. So the false-positive is a skill defect (emit-event should accept `terminal`, or state-transition should map terminal→a valid event kind), not an actual hand-edit/bypass. Plan completion stands: state.json 46/46 complete + transition_log + phase_final 117/117 all agree.

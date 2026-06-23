@@ -1,0 +1,52 @@
+{
+  "name": "apigen-codegen-openapi",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/apigen/codegen/openapi/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "layer:logic",
+    "platform:shared"
+  ],
+  "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/codegen/openapi"
+      ],
+      "options": {
+        "configFile": "packages/apigen/codegen/openapi/vite.config.ts"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/packages/apigen/codegen/openapi",
+        "main": "packages/apigen/codegen/openapi/src/index.ts",
+        "tsConfig": "packages/apigen/codegen/openapi/tsconfig.lib.json",
+        "assets": [
+          "packages/apigen/codegen/openapi/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": [
+        "build",
+        "test"
+      ]
+    }
+  }
+}

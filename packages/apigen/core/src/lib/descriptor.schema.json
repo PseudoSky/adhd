@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adhd.dev/apigen/descriptor.schema.json",
+  "title": "Operation",
+  "description": "The canonical apigen operation descriptor (SPEC §4). The neutral contract every extractor emits and every plugin consumes. One Operation = one selected export (action, live query, or class member per §10).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "host",
+    "namespace",
+    "path",
+    "kind",
+    "async",
+    "streaming",
+    "safe",
+    "input",
+    "output",
+    "envelope",
+    "typeText"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Canonical fully-qualified slug and cross-plugin reference key, derived purely from namespace/path (e.g. 'transform/humanize/humanize-bytes'). Globally unique within a merged descriptor; never re-cased. Deterministic (derivation-stable) but NOT refactor-stable: moving/renaming a file or export re-mints it. Refactor-stability is a non-goal; never papered over with a source @id annotation (Tenet 1).",
+      "minLength": 1
+    },
+    "host": {
+      "type": "string",
+      "description": "Owning language runtime / host that produced and can serve this operation (e.g. 'ts', 'py', 'rust'). Polyglot descriptors mix hosts.",
+      "minLength": 1
+    },
+    "namespace": {
+      "$ref": "#/$defs/Segment",
+      "description": "Package segment, sourced from --namespace or the tsconfig folder (§4/§5). Casing-neutral."
+    },
+    "path": {
+      "type": "array",
+      "description": "Hierarchical identity path: file → export… (§4/§5). Named export -> [file, name]; single default fn -> [file]; default object -> [file, 'default', ...keys] recursing nested props; index.* drops its file segment.",
+      "items": { "$ref": "#/$defs/Segment" }
+    },
+    "kind": {
+      "description": "Classification of the underlying export. 'action' = callable export; 'query' = serializable-data const served live (carries type, not value); 'constructor'/'instance-method' per §10. Non-serializable, non-callable exports are skipped + warned (never emitted).",
+      "enum": ["action", "query", "constructor", "instance-method"]
+    },
+    "async": {
+      "type": "boolean",
+      "description": "True if the export is async (returns a Promise)."
+    },
+    "streaming": {
+      "type": "boolean",
+      "description": "True if the export returns an AsyncIterable/Generator/Stream (streaming implemented in v2, §11). 'output' describes the per-chunk element type, unwrapped."
+    },
+    "safe": {
+      "type": "boolean",
+      "description": "Idempotent / no-side-effects hint (§4/§5). Defaults from kind (query->true, action->false); overridable at projection time via config, never a source annotation (Tenet 1). Drives HTTP verb + cacheability (safe->GET, unsafe->POST) and gRPC idempotency-level."
+    },
+    "input": {
+      "$ref": "#/$defs/JSONSchema",
+      "description": "Params object as JSON Schema 2020-12. The ctx first param is excluded (name match only) and the middleware data-wrapper is dissolved — this is the bare domain params object."
+    },
+    "output": {
+      "$ref": "#/$defs/JSONSchema",
+      "description": "Return type as JSON Schema 2020-12 with Promise<T>/stream wrappers unwrapped to T (per-chunk element type when streaming)."
+    },
+    "envelope": {
+      "$ref": "#/$defs/JSONSchema",
+      "description": "Effective request-side envelope as JSON Schema 2020-12 — the middleware-contributed side-channel for this operation, merged with overrides applied. Empty when no middleware contributes."
+    },
+    "typeText": {
+      "description": "Optional language-tagged textual type rendering (same-host sugar). null when unavailable; non-host targets ignore it.",
+      "oneOf": [
+        { "$ref": "#/$defs/TypeText" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "$defs": {
+    "Segment": {
+      "title": "Segment",
+      "description": "A casing-neutral name segment (§4/§5). Identity is the tokenized 'words'; 'raw' preserves the original spelling. Transports derive their own casing from 'words' via @adhd/apigen-naming.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raw", "words"],
+      "properties": {
+        "raw": {
+          "type": "string",
+          "description": "Original spelling as it appeared in source, e.g. 'humanizeBytes'."
+        },
+        "words": {
+          "type": "array",
+          "description": "Tokenized, lower-cased words, e.g. ['humanize', 'bytes'].",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "TypeText": {
+      "title": "TypeText",
+      "description": "Language-tagged textual rendering of a type — optional same-host sugar (§4).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lang", "input", "output"],
+      "properties": {
+        "lang": {
+          "type": "string",
+          "description": "Language tag for input/output text, e.g. 'ts'."
+        },
+        "input": {
+          "type": "string",
+          "description": "Textual rendering of the input/params type."
+        },
+        "output": {
+          "type": "string",
+          "description": "Textual rendering of the output/return type (unwrapped)."
+        }
+      }
+    },
+    "JSONSchema": {
+      "title": "JSONSchema",
+      "description": "A JSON Schema 2020-12 document fragment — the apigen type IR (§4/§16). No separate IR: named types, discriminated unions / enum-with-data / Result/Option (oneOf + const tag + $ref), nominal/branded types (named $def), and recursion ($ref) are represented faithfully. Wire convention: 64-bit ints/decimals are string-encoded ({ type: 'string', format: 'int64' }). Optional extractor-derived x-apigen-* hints + a fidelity flag are advisory codegen aids only, never required for correctness, never a source annotation. Modeled as an open object because a JSON Schema is structurally an arbitrary keyword object.",
+      "type": "object",
+      "properties": {
+        "$defs": {
+          "type": "object",
+          "description": "Reusable type definitions referenced via $ref (#/$defs/Name).",
+          "additionalProperties": { "$ref": "#/$defs/JSONSchema" }
+        },
+        "$ref": {
+          "type": "string",
+          "description": "Reference to a definition, e.g. '#/$defs/User' (enables recursion)."
+        },
+        "x-apigen-nominal": {
+          "type": "boolean",
+          "description": "Extractor-derived hint: this $def originated from a nominal/branded type. Validation does NOT enforce nominality (on the wire it is the base type); codegen may re-introduce the brand."
+        },
+        "x-apigen-enum-repr": {
+          "type": "string",
+          "description": "Extractor-derived hint: how an enum-like type should be represented in idiomatic codegen (e.g. 'enum' | 'union'). Advisory."
+        },
+        "fidelity": {
+          "description": "Optional fidelity of this schema fragment vs the source type. 'full' = lossless (absence implies full); 'lossy' = source could not be fully represented (the only true residual is generic factoring). Codegen may warn on 'lossy'.",
+          "enum": ["full", "lossy"]
+        }
+      }
+    }
+  }
+}

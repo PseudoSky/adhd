@@ -116,6 +116,18 @@
         "^production"
       ]
     },
+    "test": {
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ]
+    },
     "version": {
       "executor": "@nrwl/workspace:run-commands",
       "options": {

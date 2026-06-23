@@ -1,19 +1,53 @@
 import { describe, it, expect } from 'vitest'
 import { <%= propertyName %>Plugin } from '../lib/plugin'
 
-describe('<%= pluginName %> plugin', () => {
-  it('satisfies OutputPlugin interface', () => {
+describe('<%= pluginName %> plugin — v2 shape', () => {
+  it('has a string id', () => {
     expect(typeof <%= propertyName %>Plugin.id).toBe('string')
     expect(<%= propertyName %>Plugin.id).toBe('<%= pluginName %>')
-    expect(typeof <%= propertyName %>Plugin.generate).toBe('function')
+  })
+
+  it('declares a capabilities object', () => {
+    // capabilities must be a non-null object — the v2 contract requires it
+    expect(<%= propertyName %>Plugin.capabilities).toBeDefined()
+    expect(typeof <%= propertyName %>Plugin.capabilities).toBe('object')
+    expect(<%= propertyName %>Plugin.capabilities).not.toBeNull()
+  })
+
+  it('capabilities.target declares the correct name and generate function', () => {
+    const { target } = <%= propertyName %>Plugin.capabilities
+    // target capability is required for a code-generating / server plugin
+    expect(target).toBeDefined()
+    expect(target!.name).toBe('<%= pluginName %>')
+    expect(typeof target!.generate).toBe('function')
+  })
+
+  it('capabilities.target.generate returns a File array', () => {
+    const { target } = <%= propertyName %>Plugin.capabilities
+    // drive the real generate() — it must return an array (may be empty stub)
+    const result = target!.generate(
+      { operations: [], host: 'ts', namespace: 'test' },
+      {},
+    )
+    expect(Array.isArray(result)).toBe(true)
+  })
+
+  it('capabilities.layer declares a layer function', () => {
+    const { layer } = <%= propertyName %>Plugin.capabilities
+    // layer capability skeleton must exist and expose a layer() function
+    expect(layer).toBeDefined()
+    expect(typeof layer!.layer).toBe('function')
   })
 <% if (hasRun) { %>
-  it('has run() method', () => {
-    expect(typeof <%= propertyName %>Plugin.run).toBe('function')
+  it('capabilities.target.serve is a function (server plugin)', () => {
+    const { target } = <%= propertyName %>Plugin.capabilities
+    expect(typeof target!.serve).toBe('function')
   })
 <% } else { %>
-  it('has no run() method (generate-only plugin)', () => {
-    expect(<%= propertyName %>Plugin.run).toBeUndefined()
+  it('capabilities.target has no serve (generate-only plugin)', () => {
+    // generate-only plugins omit serve; this test fails if serve is added
+    // accidentally, keeping the shape honest
+    expect(<%= propertyName %>Plugin.capabilities.target!.serve).toBeUndefined()
   })
 <% } %>
 })

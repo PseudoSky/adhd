@@ -1,0 +1,699 @@
+{
+  "DESCRIPTOR_VECTORS": [
+    {
+      "id": "descriptor.roundtrip.1",
+      "description": "A complete Operation round-trips through JSON serialization losslessly",
+      "input": {
+        "host": "ts",
+        "kind": "action",
+        "async": true,
+        "streaming": false,
+        "safe": false,
+        "input": {
+          "type": "object",
+          "properties": {
+            "bytes": {
+              "type": "number"
+            },
+            "precision": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "bytes"
+          ]
+        },
+        "output": {
+          "type": "string"
+        },
+        "envelope": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "session"
+          ]
+        },
+        "typeText": {
+          "lang": "ts",
+          "input": "{ bytes: number; precision?: number }",
+          "output": "string"
+        },
+        "id": "transform/humanize/humanize-bytes",
+        "namespace": {
+          "raw": "transform",
+          "words": [
+            "transform"
+          ]
+        },
+        "path": [
+          {
+            "raw": "humanize",
+            "words": [
+              "humanize"
+            ]
+          },
+          {
+            "raw": "humanizeBytes",
+            "words": [
+              "humanize",
+              "bytes"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "descriptor.roundtrip.2",
+      "description": "typeText: null is preserved (not dropped or coerced)",
+      "input": {
+        "host": "ts",
+        "kind": "action",
+        "async": false,
+        "streaming": false,
+        "safe": false,
+        "input": {
+          "type": "object",
+          "properties": {}
+        },
+        "output": {
+          "type": "object"
+        },
+        "envelope": {},
+        "typeText": null,
+        "id": "transform/ping",
+        "namespace": {
+          "raw": "transform",
+          "words": [
+            "transform"
+          ]
+        },
+        "path": [
+          {
+            "raw": "ping",
+            "words": [
+              "ping"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "descriptor.roundtrip.3",
+      "description": "Empty $defs in input schema is preserved",
+      "input": {
+        "host": "ts",
+        "kind": "action",
+        "async": false,
+        "streaming": false,
+        "safe": false,
+        "input": {
+          "type": "object",
+          "$defs": {},
+          "properties": {}
+        },
+        "output": {
+          "type": "object"
+        },
+        "envelope": {},
+        "typeText": null,
+        "id": "transform/noop",
+        "namespace": {
+          "raw": "transform",
+          "words": [
+            "transform"
+          ]
+        },
+        "path": [
+          {
+            "raw": "noop",
+            "words": [
+              "noop"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "NAMING_VECTORS": [
+    {
+      "id": "naming.verb.1",
+      "description": "safe=false → HTTP verb is POST",
+      "op": {
+        "host": "ts",
+        "kind": "action",
+        "async": false,
+        "streaming": false,
+        "safe": false,
+        "input": {
+          "type": "object",
+          "properties": {}
+        },
+        "output": {
+          "type": "object"
+        },
+        "envelope": {},
+        "typeText": null,
+        "id": "transform/humanize/humanize-bytes",
+        "namespace": {
+          "raw": "transform",
+          "words": [
+            "transform"
+          ]
+        },
+        "path": [
+          {
+            "raw": "humanize",
+            "words": [
+              "humanize"
+            ]
+          },
+          {
+            "raw": "humanizeBytes",
+            "words": [
+              "humanize",
+              "bytes"
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "httpVerb": "POST"
+      }
+    },
+    {
+      "id": "naming.verb.2",
+      "description": "safe=true → HTTP verb is GET",
+      "op": {
+        "host": "ts",
+        "kind": "action",
+        "async": false,
+        "streaming": false,
+        "safe": true,
+        "input": {
+          "type": "object",
+          "properties": {}
+        },
+        "output": {
+          "type": "object"
+        },
+        "envelope": {},
+        "typeText": null,
+        "id": "transform/humanize/humanize-bytes-safe",
+        "namespace": {
+          "raw": "transform",
+          "words": [
+            "transform"
+          ]
+        },
+        "path": [
+          {
+            "raw": "humanize",
+            "words": [
+              "humanize"
+            ]
+          },
+          {
+            "raw": "humanizeBytes",
+            "words": [
+              "humanize",
+              "bytes"
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "httpVerb": "GET"
+      }
+    },
+    {
+      "id": "naming.verb.NEGATIVE",
+      "description": "safe=false does NOT produce GET (negative control)",
+      "op": {
+        "host": "ts",
+        "kind": "action",
+        "async": false,
+        "streaming": false,
+        "safe": false,
+        "input": {
+          "type": "object",
+          "properties": {}
+        },
+        "output": {
+          "type": "object"
+        },
+        "envelope": {},
+        "typeText": null,
+        "id": "transform/humanize/humanize-bytes",
+        "namespace": {
+          "raw": "transform",
+          "words": [
+            "transform"
+          ]
+        },
+        "path": [
+          {
+            "raw": "humanize",
+            "words": [
+              "humanize"
+            ]
+          },
+          {
+            "raw": "humanizeBytes",
+            "words": [
+              "humanize",
+              "bytes"
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "httpVerbIsNot": "GET"
+      }
+    },
+    {
+      "id": "naming.collision.1",
+      "description": "Two ids with identical path tokenization → CollisionDetectedError",
+      "ops": [
+        {
+          "host": "ts",
+          "kind": "action",
+          "async": false,
+          "streaming": false,
+          "safe": false,
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": {
+            "type": "object"
+          },
+          "envelope": {},
+          "typeText": null,
+          "id": "auth/session",
+          "namespace": {
+            "raw": "auth",
+            "words": [
+              "auth"
+            ]
+          },
+          "path": [
+            {
+              "raw": "session",
+              "words": [
+                "session"
+              ]
+            }
+          ]
+        },
+        {
+          "host": "ts",
+          "kind": "action",
+          "async": false,
+          "streaming": false,
+          "safe": false,
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": {
+            "type": "object"
+          },
+          "envelope": {},
+          "typeText": null,
+          "id": "auth/login",
+          "namespace": {
+            "raw": "auth",
+            "words": [
+              "auth"
+            ]
+          },
+          "path": [
+            {
+              "raw": "session",
+              "words": [
+                "session"
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "collision": true
+      }
+    },
+    {
+      "id": "naming.collision.2",
+      "description": "Distinct ops do NOT trigger collision",
+      "ops": [
+        {
+          "host": "ts",
+          "kind": "action",
+          "async": false,
+          "streaming": false,
+          "safe": false,
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": {
+            "type": "object"
+          },
+          "envelope": {},
+          "typeText": null,
+          "id": "auth/session",
+          "namespace": {
+            "raw": "auth",
+            "words": [
+              "auth"
+            ]
+          },
+          "path": [
+            {
+              "raw": "session",
+              "words": [
+                "session"
+              ]
+            }
+          ]
+        },
+        {
+          "host": "ts",
+          "kind": "action",
+          "async": false,
+          "streaming": false,
+          "safe": false,
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": {
+            "type": "object"
+          },
+          "envelope": {},
+          "typeText": null,
+          "id": "auth/login",
+          "namespace": {
+            "raw": "auth",
+            "words": [
+              "auth"
+            ]
+          },
+          "path": [
+            {
+              "raw": "login",
+              "words": [
+                "login"
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "collision": false
+      }
+    },
+    {
+      "id": "naming.collision.NEGATIVE",
+      "description": "Non-colliding set must NOT throw (negative control)",
+      "ops": [
+        {
+          "host": "ts",
+          "kind": "action",
+          "async": false,
+          "streaming": false,
+          "safe": false,
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": {
+            "type": "object"
+          },
+          "envelope": {},
+          "typeText": null,
+          "id": "auth/session",
+          "namespace": {
+            "raw": "auth",
+            "words": [
+              "auth"
+            ]
+          },
+          "path": [
+            {
+              "raw": "session",
+              "words": [
+                "session"
+              ]
+            }
+          ]
+        },
+        {
+          "host": "ts",
+          "kind": "action",
+          "async": false,
+          "streaming": false,
+          "safe": false,
+          "input": {
+            "type": "object",
+            "properties": {}
+          },
+          "output": {
+            "type": "object"
+          },
+          "envelope": {},
+          "typeText": null,
+          "id": "auth/login",
+          "namespace": {
+            "raw": "auth",
+            "words": [
+              "auth"
+            ]
+          },
+          "path": [
+            {
+              "raw": "login",
+              "words": [
+                "login"
+              ]
+            }
+          ]
+        }
+      ],
+      "expected": {
+        "collision": false
+      }
+    }
+  ],
+  "ENVELOPE_VECTORS": [
+    {
+      "id": "envelope.binding.auth.session",
+      "description": "(auth, session) → correct carrier key for all transports",
+      "pluginId": "auth",
+      "field": "session",
+      "expected": {
+        "httpHeader": "x-auth-session",
+        "grpcMeta": "x-auth-session",
+        "mcpMetaKey": "x-auth-session",
+        "cliFlag": "--auth-session",
+        "cliEnvVar": "APIGEN_AUTH_SESSION"
+      }
+    },
+    {
+      "id": "envelope.binding.adhd.trace_id",
+      "description": "(adhd, trace-id) → correct carrier key for all transports",
+      "pluginId": "adhd",
+      "field": "trace-id",
+      "expected": {
+        "httpHeader": "x-adhd-trace-id",
+        "grpcMeta": "x-adhd-trace-id",
+        "mcpMetaKey": "x-adhd-trace-id",
+        "cliFlag": "--adhd-trace-id",
+        "cliEnvVar": "APIGEN_TRACE_ID"
+      }
+    },
+    {
+      "id": "envelope.binding.rate.limit",
+      "description": "(rate, limit) → correct carrier key for all transports",
+      "pluginId": "rate",
+      "field": "limit",
+      "expected": {
+        "httpHeader": "x-rate-limit",
+        "grpcMeta": "x-rate-limit",
+        "mcpMetaKey": "x-rate-limit",
+        "cliFlag": "--rate-limit",
+        "cliEnvVar": "APIGEN_RATE_LIMIT"
+      }
+    }
+  ],
+  "ERROR_MAPPING_VECTORS": [
+    {
+      "id": "error.map.invalid_argument",
+      "code": "invalid_argument",
+      "expected": {
+        "http": 400,
+        "grpc": "INVALID_ARGUMENT",
+        "cli": 2,
+        "mcp": "error"
+      }
+    },
+    {
+      "id": "error.map.unauthenticated",
+      "code": "unauthenticated",
+      "expected": {
+        "http": 401,
+        "grpc": "UNAUTHENTICATED",
+        "cli": 3,
+        "mcp": "error"
+      }
+    },
+    {
+      "id": "error.map.permission_denied",
+      "code": "permission_denied",
+      "expected": {
+        "http": 403,
+        "grpc": "PERMISSION_DENIED",
+        "cli": 3,
+        "mcp": "error"
+      }
+    },
+    {
+      "id": "error.map.not_found",
+      "code": "not_found",
+      "expected": {
+        "http": 404,
+        "grpc": "NOT_FOUND",
+        "cli": 4,
+        "mcp": "error"
+      }
+    },
+    {
+      "id": "error.map.internal",
+      "code": "internal",
+      "expected": {
+        "http": 500,
+        "grpc": "INTERNAL",
+        "cli": 1,
+        "mcp": "error"
+      }
+    }
+  ],
+  "VALIDATION_VECTORS": [
+    {
+      "id": "validation.extra-properties",
+      "description": "additionalProperties not restricted — extra keys pass schema but may cause dispatch errors",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId"
+        ]
+      },
+      "schemaValidValue": {
+        "userId": "abc",
+        "unexpectedField": "injection"
+      },
+      "domainNote": "An unexpected field passes the schema but may be ignored or cause a typed dispatch error in strict hosts (Rust/Go)."
+    },
+    {
+      "id": "validation.number-precision",
+      "description": "A JSON number within the schema range but beyond JS safe integer boundary",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "amount"
+        ]
+      },
+      "schemaValidValue": {
+        "amount": 9007199254740992
+      },
+      "domainNote": "Exceeds Number.MAX_SAFE_INTEGER; JSON.parse silently rounds it. SPEC §4 mandates int64 as string-encoded for 64-bit integers; this proves the validator alone cannot catch the precision loss."
+    },
+    {
+      "id": "validation.date-string",
+      "description": "A date-format string is schema-valid but semantically wrong",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "at"
+        ]
+      },
+      "schemaValidValue": {
+        "at": "2099-02-30T00:00:00Z"
+      },
+      "domainNote": "Standard AJV does not validate date-time values by default; Feb 30 passes schema validation but is a semantically invalid date."
+    },
+    {
+      "id": "validation.option-vs-missing",
+      "description": "An Option/nullable field being null passes where a domain function expects presence",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "user"
+        ]
+      },
+      "schemaValidValue": {
+        "user": null
+      },
+      "domainNote": "null satisfies the oneOf schema, but a domain function that destructures user.id will throw at runtime — validation passed, dispatch fails."
+    }
+  ],
+  "ENVELOPE_CASES": [
+    {
+      "pluginId": "auth",
+      "field": "session",
+      "expectedKey": "x-auth-session",
+      "expectedFlag": "--auth-session",
+      "expectedEnv": "APIGEN_AUTH_SESSION"
+    },
+    {
+      "pluginId": "adhd",
+      "field": "trace-id",
+      "expectedKey": "x-adhd-trace-id",
+      "expectedFlag": "--adhd-trace-id",
+      "expectedEnv": "APIGEN_TRACE_ID"
+    },
+    {
+      "pluginId": "rate",
+      "field": "limit",
+      "expectedKey": "x-rate-limit",
+      "expectedFlag": "--rate-limit",
+      "expectedEnv": "APIGEN_RATE_LIMIT"
+    }
+  ]
+}
