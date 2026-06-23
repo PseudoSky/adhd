@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["packages/ai/agent-mcp/src/store/agent-store.ts", "packages/ai/agent-mcp/src/store/session-store.ts", "packages/ai/agent-mcp/src/db/schema.ts", "packages/ai/agent-mcp/src/tools/task.ts", "packages/ai/agent-mcp/src/providers/claudecli.ts", "packages/ai/agent-mcp-types/src/domain.ts"]
 mutates:    ["docs/plan/agent-mcp-refactor/decisions.md", "docs/plan/agent-mcp-refactor/contexts/refactor-design.md"]
 ```
 
