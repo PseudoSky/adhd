@@ -237,6 +237,19 @@
       ],
       "context": "contexts/lt-fail-fast.md",
       "notes": ""
+    },
+    "lt-validate-formats": {
+      "kind": "work",
+      "phase": "integration",
+      "depends_on": [
+        "lt-scalars"
+      ],
+      "guard": "npx nx test apigen-runtime",
+      "artifacts": [
+        "packages/apigen/runtime/src/lib/validate-layer.ts"
+      ],
+      "context": "contexts/lt-validate-formats.md",
+      "notes": ""
     }
   },
   "authored_with": {
