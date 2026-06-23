@@ -32,11 +32,11 @@
       "end_ref": "79de1239612c12001c64ede7404aece9ba671f5e"
     },
     "policy-inheritance": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T23:31:42.608Z",
-      "done_at": null,
+      "done_at": "2026-06-23T23:38:30.149Z",
       "start_ref": "832620efde56b10d7af52bddbf9ff852fc7cb977",
-      "end_ref": null
+      "end_ref": "a031b837decebc32a524240c97b19ac8c1f265ed"
     },
     "enforcement-plugin": {
       "status": "pending",
@@ -122,6 +122,18 @@
       "audit_criteria_total": 17,
       "by": "pseudosky",
       "note": "policy_agent_policies junction + AgentPolicyStore.attach/listForAgent + resolveEffectiveRules; 9 tests (real on-disk SQLite, close+reopen persistence proof, phantom agent_slug no-FK proof); guard exit 0; SHA 79de1239612c12001c64ede7404aece9ba671f5e"
+    },
+    {
+      "ts": "2026-06-23T23:38:30.149Z",
+      "from": "policy-inheritance",
+      "to": "policy-inheritance",
+      "start_ref": "832620efde56b10d7af52bddbf9ff852fc7cb977",
+      "end_ref": "a031b837decebc32a524240c97b19ac8c1f265ed",
+      "audit_exit": 14,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 17,
+      "by": "pseudosky",
+      "note": "lazy resolveForAgent joins policy_category_policies × policy_agent_categories at query time; inherited_from=category slug; direct-attach override wins; 5 tests green (reopen, override, multi-category, no-membership, NC); guard exit 0; SHA a031b83"
     }
   ],
   "amendment_log": [],
@@ -130,7 +142,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "policy-inheritance",
+  "current_state": "enforcement-plugin",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:06:45.453Z",
     "by": "pseudosky",
