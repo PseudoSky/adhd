@@ -120,6 +120,14 @@
       "paths": [
         "packages/ai/agent-provider/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "provider-tool-formats.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/tool-format-store.test.ts",
+      "expect": "exit0"
     }
   ]
 }
