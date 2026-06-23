@@ -18,6 +18,7 @@
 
 - [seed-and-roundtrip.1] seed/reopen/idempotency suite passes
 
+- [seed-and-roundtrip.2] seed lists canonical models from SEED_DATA
 ---
 
 ## Reservations
