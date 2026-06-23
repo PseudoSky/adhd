@@ -108,6 +108,19 @@
       ],
       "context": "contexts/enforcement-plugin.md",
       "notes": ""
+    },
+    "audit-schema": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "enforcement-plugin"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "docs/plan/agent-policy/scripts/audit_policy.py"
+      ],
+      "context": "contexts/audit-schema.md",
+      "notes": ""
     }
   },
   "authored_with": {
