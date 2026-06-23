@@ -24,7 +24,7 @@ _No criteria yet._
 
 ```text
 read_only:  []
-mutates:    ["packages/apigen/cli/src/test/integration/canonical.spec.ts", "packages/apigen/cli/src/test/integration/export-shape-matrix.spec.ts", "packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts", "packages/apigen/cli/src/test/fixtures/shapes/named.ts", "packages/apigen/cli/src/test/fixtures/shapes/renamed.ts", "packages/apigen/cli/src/test/fixtures/shapes/default-fn.ts", "packages/apigen/cli/src/test/fixtures/shapes/default-object.ts", "packages/apigen/cli/src/test/fixtures/real-api.ts"]
+mutates:    ["packages/apigen/cli/src/test/integration/canonical.spec.ts", "packages/apigen/cli/src/test/integration/export-shape-matrix.spec.ts", "packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts", "packages/apigen/cli/src/test/fixtures/shapes/named.ts", "packages/apigen/cli/src/test/fixtures/shapes/renamed.ts", "packages/apigen/cli/src/test/fixtures/shapes/default-fn.ts", "packages/apigen/cli/src/test/fixtures/shapes/default-object.ts", "packages/apigen/cli/src/test/fixtures/real-api.ts", "packages/apigen/cli/src/test/fixtures/shapes/anonymous-default.ts", "packages/apigen/cli/src/test/fixtures/shapes/cjs-source.cts"]
 ```
 
 ---
