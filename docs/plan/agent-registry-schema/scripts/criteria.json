@@ -215,6 +215,16 @@
       "tier": null,
       "kind": "exists",
       "path": "docs/plan/agent-registry-schema/decisions.md"
+    },
+    {
+      "id": "design-and-architecture.2",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "DB topology|ATTACH DATABASE|table-name prefix",
+      "paths": [
+        "docs/plan/agent-registry-schema/decisions.md"
+      ]
     }
   ]
 }
