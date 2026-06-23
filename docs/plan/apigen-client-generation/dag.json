@@ -551,7 +551,8 @@
       "phase": "v2-core",
       "depends_on": [
         "ts-extractor-by-symbol",
-        "naming-helpers"
+        "naming-helpers",
+        "class-exports"
       ],
       "guard": "python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase v2-core",
       "artifacts": [
