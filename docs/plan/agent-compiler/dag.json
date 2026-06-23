@@ -120,6 +120,22 @@
       ],
       "context": "contexts/compile-cli.md",
       "notes": ""
+    },
+    "composed-prompt-caching": {
+      "kind": "work",
+      "phase": "cache",
+      "depends_on": [
+        "platform-markdown-emit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-compiler/src/cache/composed-prompt-cache.ts",
+        "packages/ai/agent-compiler/src/compile.ts",
+        "packages/ai/agent-compiler/src/index.ts",
+        "packages/ai/agent-compiler/src/__tests__/compile-cache.test.ts"
+      ],
+      "context": "contexts/composed-prompt-caching.md",
+      "notes": ""
     }
   },
   "authored_with": {
