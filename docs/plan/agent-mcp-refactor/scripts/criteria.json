@@ -17,6 +17,16 @@
       "paths": [
         "docs/plan/agent-mcp-refactor/decisions.md"
       ]
+    },
+    {
+      "id": "refactor-design.3",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "composed_prompt_id|cache lookup|context hash",
+      "paths": [
+        "docs/plan/agent-mcp-refactor/decisions.md"
+      ]
     }
   ]
 }
