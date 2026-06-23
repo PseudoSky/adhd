@@ -6,7 +6,8 @@
     "foundation",
     "schema",
     "adapter",
-    "runtime"
+    "runtime",
+    "seed"
   ],
   "terminal": "done",
   "nodes": {},
