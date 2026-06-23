@@ -18,6 +18,7 @@
 
 - [tool-and-type-schema.1] tool_types lookup table (text PK, not enum)
 
+- [tool-and-type-schema.2] tools table
 ---
 
 ## Reservations
