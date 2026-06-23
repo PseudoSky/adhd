@@ -2,7 +2,9 @@
   "schema_version": 2,
   "title": "agent-mcp Refactor — Consume @adhd/agent-compiler + @adhd/agent-registry",
   "plan_kind": "brownfield",
-  "phases": [],
+  "phases": [
+    "architecture"
+  ],
   "terminal": "done",
   "nodes": {},
   "authored_with": {
