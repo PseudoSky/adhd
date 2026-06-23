@@ -121,6 +121,14 @@
       "paths": [
         "packages/ai/agent-registry/src/store/composition-store.ts"
       ]
+    },
+    {
+      "id": "composition-junction.3",
+      "phase": "composition",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/composition-store.test.ts",
+      "expect": "exit0"
     }
   ]
 }
