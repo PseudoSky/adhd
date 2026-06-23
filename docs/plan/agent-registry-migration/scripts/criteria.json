@@ -34,6 +34,13 @@
       "tier": null,
       "kind": "exists",
       "path": "packages/ai/agent-registry-migration/src/__fixtures__/code-reviewer.md"
+    },
+    {
+      "id": "migration-design.5",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/ai/agent-registry-migration/src/__fixtures__/ticket-creation.SKILL.md"
     }
   ]
 }
