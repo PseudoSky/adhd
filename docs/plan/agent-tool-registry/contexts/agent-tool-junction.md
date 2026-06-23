@@ -18,6 +18,7 @@
 
 - [agent-tool-junction.1] agent_tools junction with permission level
 
+- [agent-tool-junction.2] agent-tool-store permission-level test passes
 ---
 
 ## Reservations
