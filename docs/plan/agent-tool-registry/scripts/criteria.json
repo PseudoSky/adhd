@@ -137,6 +137,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/agent-tool-store.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-schema.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-tool-registry/scripts/audit_tool_registry.py --phase schema",
+      "expect": "exit0"
     }
   ]
 }
