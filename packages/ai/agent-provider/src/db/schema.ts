@@ -1,21 +1,46 @@
 import {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     index,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     integer,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     sqliteTable,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     text
 } from "drizzle-orm/sqlite-core";
 
 // ──────────────────────────────────────────────
-// provider_* tables (seeded by define-schema state)
+// provider_providers
+// Text PK (lookup-not-enum) — new providers are seeded rows, not migrations.
+// transport: "HTTP" | "stdio"  (controlled-vocabulary seeded values, plain text)
+// auth_pattern: e.g. "bearer", "x-api-key", "none"
 // ──────────────────────────────────────────────
-// No tables yet — this file is the empty skeleton for the provider_* table
-// group. Subsequent plan states (define-schema, seed-data) will add:
-//   - providers
-//   - models
-//   - model_platform_bindings
-//   - provider_tool_formats
-// Each table will use the `provider_` prefix per [inv:shared-db-prefix].
+export const providers = sqliteTable("provider_providers", {
+    id: text("id").primaryKey(),                     // e.g. "anthropic", "openai", "lmstudio", "claudecli"
+    transport: text("transport").notNull(),           // "HTTP" | "stdio"
+    authPattern: text("auth_pattern").notNull(),      // e.g. "bearer", "x-api-key", "none"
+    baseUrl: text("base_url"),                        // nullable — absent for stdio providers
+    endpointTemplate: text("endpoint_template"),      // nullable — provider-specific template
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+});
+
+// ──────────────────────────────────────────────
+// provider_models
+// Canonical model catalog independent of any provider naming.
+// Capability flags stored as SQLite integers (mode:"boolean") so Drizzle
+// converts 0/1 ↔ false/true on read — asserted in tests ([inv:reopen-proves-persistence]).
+// ──────────────────────────────────────────────
+export const models = sqliteTable(
+    "provider_models",
+    {
+        id: text("id").primaryKey(),                           // e.g. "claude_opus_4_8", "gpt_4o_mini"
+        contextWindow: integer("context_window").notNull(),
+        outputLimit: integer("output_limit").notNull(),
+        vision: integer("vision", { mode: "boolean" }).notNull().default(false),
+        promptCaching: integer("prompt_caching", { mode: "boolean" }).notNull().default(false),
+        extendedThinking: integer("extended_thinking", { mode: "boolean" }).notNull().default(false),
+        pricingTier: text("pricing_tier").notNull(),           // e.g. "premium", "standard", "economy"
+        createdAt: text("created_at").notNull(),
+        updatedAt: text("updated_at").notNull(),
+    },
+    (table) => [
+        index("idx_provider_models_pricing_tier").on(table.pricingTier),
+    ]
+);
