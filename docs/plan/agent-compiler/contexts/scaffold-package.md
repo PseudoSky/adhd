@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["docs/plan/agent-compiler/decisions.md"]
 mutates:    ["packages/ai/agent-compiler/project.json", "packages/ai/agent-compiler/package.json", "packages/ai/agent-compiler/src/index.ts", "packages/ai/agent-compiler/src/db/client.ts", "tsconfig.base.json"]
 ```
 
