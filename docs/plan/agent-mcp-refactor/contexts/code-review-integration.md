@@ -1,4 +1,4 @@
-# code-review-integration — STATE_NAME
+# code-review-integration — MID-PLAN DIFF REVIEW: INTEGRATION/RETIRE CORE
 
 **Phase:** integration · **Kind:** review · **Depends on:** policy-engine-bridge · **Guard:** `python3 docs/plan/agent-mcp-refactor/scripts/review_gate_integration.py`
 
@@ -6,7 +6,19 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The integration/retire core diff (`compiler-integration`, `agent-store-retire`,
+`policy-engine-bridge`) has been read by an architect-reviewer (opus) just before
+`audit-integration` and recorded an APPROVED verdict in `review-integration.md`
+with no unresolved blocking findings — BEFORE `session-e2e` and the final gate
+build on it. Reviewing the refactor core here catches a source-of-truth or
+topology defect early. It checks design-intent fidelity the structural audit
+misses: the prompt-resolver imports `compileAgent` and writes `composed_prompt_id`;
+AgentStore CRUD is retired/delegated with NO leftover writable agent store;
+`systemPrompt` is retained only as a computed compat shim; `PolicyEngine` reads
+`agent-policy` templates; claudecli reconciles tactical flags with compiled tools
+(no competing third model); no cross-package FK violations. `audit-integration`
+depends on this state, so the integration gate cannot pass on a NEEDS-WORK or
+absent review.
 
 ---
 

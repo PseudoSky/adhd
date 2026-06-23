@@ -1,4 +1,4 @@
-# code-review — STATE_NAME
+# code-review — FINAL DIFF REVIEW: DESIGN-INTENT FIDELITY THE AUDIT CAN'T CATCH
 
 **Phase:** audit · **Kind:** review · **Depends on:** session-e2e · **Guard:** `python3 docs/plan/agent-mcp-refactor/scripts/review_gate.py`
 
@@ -6,7 +6,16 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The full refactor diff (`refactor-design` … `session-e2e`) has been read by an
+architect-reviewer (opus) and recorded an APPROVED verdict in `review.md` with no
+unresolved blocking findings. This is the second of two review gates (the first,
+`code-review-integration`, gated the integration/retire core before
+`audit-integration`). It catches design-intent violations a structural
+`audit_*.py` oracle cannot — e.g. an AgentStore retirement that leaves a competing
+source of truth, a `systemPrompt` compat-shim that diverges from the recorded
+policy, or a `composed_prompt`/`sessions` FK that does not match the decided
+session topology. `audit-final` depends on this state, so the plan cannot reach
+done on a NEEDS-WORK or absent review.
 
 ---
 
