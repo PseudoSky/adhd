@@ -21,6 +21,7 @@
 - [scaffold-package.2] tsconfig.base.json registers the @adhd/agent-provider path
 - [scaffold-package.3] project.json tags it platform:node
 - [scaffold-package.4] the package builds clean
+- [scaffold-package.5] no browser globals imported in source
 ---
 
 ## Reservations
