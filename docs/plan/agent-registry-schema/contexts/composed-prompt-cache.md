@@ -18,6 +18,7 @@
 
 - [composed-prompt-cache.1] composed_prompts table: agent slug, context hash, content, component versions JSON
 
+- [composed-prompt-cache.2] composed-prompt-store cache lookup test passes
 ---
 
 ## Reservations
