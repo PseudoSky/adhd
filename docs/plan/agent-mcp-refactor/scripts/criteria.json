@@ -193,6 +193,15 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/cache-reuse.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "session-e2e.3",
+      "phase": "e2e",
+      "tier": null,
+      "kind": "negative-control",
+      "positive": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/session-compiler-e2e.test.ts",
+      "mutate": "sed -i '' 's/compileAgent/__noCompile/' packages/ai/agent-mcp/src/engine/prompt-resolver.ts",
+      "restore": "git checkout -- packages/ai/agent-mcp/src/engine/prompt-resolver.ts"
     }
   ]
 }
