@@ -6,7 +6,8 @@
     "architecture",
     "foundation",
     "schema",
-    "enforcement"
+    "enforcement",
+    "audit"
   ],
   "terminal": "done",
   "nodes": {},
