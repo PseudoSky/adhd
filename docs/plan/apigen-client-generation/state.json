@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "audit-v2-core",
+  "current_state": "streaming-projection",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -207,11 +207,11 @@
       "end_ref": "52bc464ed784c32a84fa3356a6dd2639a51e5968"
     },
     "audit-v2-core": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T04:18:00.384Z",
-      "done_at": null,
+      "done_at": "2026-06-23T04:29:30.726Z",
       "start_ref": "a97f4f1ca3786c71daadeea515eb948f289a2067",
-      "end_ref": null
+      "end_ref": "6b2b9912956ee2646f2e6a5fbd07de8bc0fe3ace"
     },
     "layer-harness": {
       "status": "complete",
@@ -738,6 +738,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "extract-classes.ts (static→action ops always; instances opt-in via includeInstances → constructor + instance-method ops, §10/H2) + instance-registry.ts (TTL sweeper, dispose/disposeAll). Guards verified: nx test apigen-core exit 0 + nx build apigen-runtime green (F41). Orchestrator-driven (F40). Byte-proxy telemetry."
+    },
+    {
+      "ts": "2026-06-23T04:29:30.726Z",
+      "from": "audit-v2-core",
+      "to": "audit-v2-core",
+      "start_ref": "a97f4f1ca3786c71daadeea515eb948f289a2067",
+      "end_ref": "6b2b9912956ee2646f2e6a5fbd07de8bc0fe3ace",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "v2-core audit gate 4/4: descriptor (safe+det-id+JSON-Schema/$defs), export-shape (Fix-A: nx test apigen-core extract — full shape matrix incl anonymous-default+CJS), naming-collision, classes. Live-server tests gated behind APIGEN_LIVE=1 (Fix-B) → deterministic. orchestrator-verified."
     }
   ],
   "amendment_log": [
