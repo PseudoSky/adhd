@@ -20,6 +20,7 @@
 
 - [enforcement-plugin.2] plugin exports createPlugin + registers via hooks.registerEnforcement(pre:model_request)
 - [enforcement-plugin.3] enforcement test: rate policy throws through real IHookRegistry.enforce(pre:model_request)
+- [enforcement-plugin.4] enforcement test has teeth: removing the throw lets the over-limit call pass and fails the test
 ---
 
 ## Reservations
