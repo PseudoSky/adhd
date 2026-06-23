@@ -109,6 +109,21 @@
       ],
       "context": "contexts/provider-adapter-contract.md",
       "notes": ""
+    },
+    "runtime-tool-forwarding": {
+      "kind": "work",
+      "phase": "runtime",
+      "depends_on": [
+        "provider-adapter-contract"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-provider/src/runtime/emit-tools.ts",
+        "packages/ai/agent-provider/src/index.ts",
+        "packages/ai/agent-provider/src/__tests__/emit-tools.test.ts"
+      ],
+      "context": "contexts/runtime-tool-forwarding.md",
+      "notes": ""
     }
   },
   "authored_with": {
