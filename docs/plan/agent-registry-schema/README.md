@@ -35,3 +35,5 @@
   - entrypoint: `npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/roundtrip.test.ts`
   - observable: `vitest exit 0 and the 'seed is idempotent on re-run' test passes`
   - delivered-by: `seed-and-roundtrip`
+
+- `[dod.4]` **@adhd/agent-registry is a platform:node nx library with @adhd/agent-registry registered in tsconfig.base.json paths, and it builds clean (no browser imports). (structural)** — @adhd/agent-registry is a platform:node nx library with @adhd/agent-registry registered in tsconfig.base.json paths, and it builds clean (no browser imports)..
