@@ -35,3 +35,5 @@
   - entrypoint: `npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/roundtrip.test.ts`
   - observable: `vitest exits 0 and the cases 'policy template round-trips after reopen' and 'seed is idempotent on re-run' pass`
   - delivered-by: `policy-type-and-template-schema, seed-and-roundtrip`
+
+- `[dod.4]` **@adhd/agent-policy is a platform:node Nx library registered in tsconfig.base.json paths that builds clean and imports no browser code. (structural)** — @adhd/agent-policy is a platform:node Nx library registered in tsconfig.base.json paths that builds clean and imports no browser code..
