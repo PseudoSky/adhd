@@ -3,9 +3,9 @@
   "title": "apigen-client-generation",
   "dag": "dag.json",
   "dod_provenance": {
-    "confirmed_at": "2026-06-21T07:42:58.724Z",
+    "confirmed_at": "2026-06-23T00:57:38.536Z",
     "by": "pseudosky",
-    "note": "Caller confirmed DoD 2026-06-21: generalized fixture-derived observables (no hard-coded values), execute generated CLI, all 3 MCP transports, +7 integration checks, real-component + APIGEN_LIVE e2e. Approved apply-all.",
+    "note": "Caller confirmed the v2 DoD: dod.1/2/5 repointed to the F26 built bin + §9.1 metadata carrier; dod.14 streaming, dod.15 safe/verb-override, dod.16 collision-hard-error, dod.17 gateway partial-availability, dod.18 classes static+instance, dod.19 real-consumer capstone (built bin + unmodified @adhd/transform + real client + APIGEN_LIVE model).",
     "dod_ids": [
       "dod.1",
       "dod.2",
@@ -15,7 +15,18 @@
       "dod.cli",
       "dod.6",
       "dod.7",
-      "dod.8"
+      "dod.8",
+      "dod.9",
+      "dod.10",
+      "dod.11",
+      "dod.12",
+      "dod.13",
+      "dod.14",
+      "dod.15",
+      "dod.16",
+      "dod.17",
+      "dod.18",
+      "dod.19"
     ]
   },
   "current_state": "scaffold-v2-common",
