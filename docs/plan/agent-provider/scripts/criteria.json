@@ -65,6 +65,14 @@
       "paths": [
         "packages/ai/agent-provider/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "provider-and-model-schema.3",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/model-store.test.ts",
+      "expect": "exit0"
     }
   ]
 }
