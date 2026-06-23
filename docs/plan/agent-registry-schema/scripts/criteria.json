@@ -192,6 +192,14 @@
       "positive": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/roundtrip.test.ts",
       "mutate": "node docs/plan/agent-registry-schema/scripts/nc_mutate.mjs",
       "restore": "node docs/plan/agent-registry-schema/scripts/nc_restore.mjs"
+    },
+    {
+      "id": "audit-schema.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-registry-schema/scripts/audit_registry_schema.py --phase schema",
+      "expect": "exit0"
     }
   ]
 }
