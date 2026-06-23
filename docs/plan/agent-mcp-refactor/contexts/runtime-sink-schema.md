@@ -18,6 +18,7 @@
 
 - [runtime-sink-schema.1] composed_prompts cache table in schema
 
+- [runtime-sink-schema.2] experiment_assignments table in schema
 ---
 
 ## Reservations
