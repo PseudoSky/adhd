@@ -18,6 +18,7 @@
 
 - [frontmatter-parser.1] frontmatter parse test passes (name/desc/tools/model -> rows)
 
+- [frontmatter-parser.2] maps tools: via TOOL_PLATFORM_BINDING[claude_code]
 ---
 
 ## Reservations
