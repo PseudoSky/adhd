@@ -110,6 +110,16 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/composition-resolve.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "tool-header-emit.1",
+      "phase": "resolve",
+      "tier": null,
+      "kind": "present",
+      "pattern": "tool_platform_bindings|toolPlatformBindings|resolve.*alias",
+      "paths": [
+        "packages/ai/agent-compiler/src/resolve/tools.ts"
+      ]
     }
   ]
 }
