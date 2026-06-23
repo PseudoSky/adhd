@@ -47,3 +47,5 @@
   - observable: `vitest exits 0 and the case 'retire refuses when report is not all-PASS' asserts retire throws/aborts and the fixture path is untouched; a sibling case asserts an all-PASS report removes the fixture AND compile still produces the agent`
   - negative-control: `remove the all-PASS guard in retire() -> retire deletes the fixture despite a FAIL entry -> removal-runbook.test.ts goes red`
   - delivered-by: `removal-runbook, roundtrip-equivalence-gate`
+
+- `[dod.5]` **@adhd/agent-registry-migration is a platform:node Nx library, registered in tsconfig.base.json, that depends on @adhd/agent-registry + @adhd/agent-compiler and builds clean. (structural)** — @adhd/agent-registry-migration is a platform:node Nx library, registered in tsconfig.base.json, that depends on @adhd/agent-registry + @adhd/agent-compiler and builds clean..
