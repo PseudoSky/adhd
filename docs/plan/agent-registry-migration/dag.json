@@ -71,6 +71,21 @@
       ],
       "context": "contexts/body-section-splitter.md",
       "notes": ""
+    },
+    "import-pipeline": {
+      "kind": "work",
+      "phase": "import",
+      "depends_on": [
+        "body-section-splitter"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-registry-migration/src/import/import-agent.ts",
+        "packages/ai/agent-registry-migration/src/index.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/import-pipeline.test.ts"
+      ],
+      "context": "contexts/import-pipeline.md",
+      "notes": ""
     }
   },
   "authored_with": {
