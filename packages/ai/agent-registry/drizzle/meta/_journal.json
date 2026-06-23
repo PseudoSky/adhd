@@ -29,6 +29,13 @@
       "when": 1782196800000,
       "tag": "0003_usecase_context_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1782195766328,
+      "tag": "0004_composed_prompts",
+      "breakpoints": true
     }
   ]
 }
