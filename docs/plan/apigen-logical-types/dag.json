@@ -211,6 +211,19 @@
       ],
       "context": "contexts/lt-dispatch-integration.md",
       "notes": ""
+    },
+    "lt-dep-manifest": {
+      "kind": "work",
+      "phase": "integration",
+      "depends_on": [
+        "lt-host-ts"
+      ],
+      "guard": "npx nx test apigen-cli",
+      "artifacts": [
+        "packages/apigen/cli/src/lib/commands/generate.ts"
+      ],
+      "context": "contexts/lt-dep-manifest.md",
+      "notes": ""
     }
   },
   "authored_with": {
