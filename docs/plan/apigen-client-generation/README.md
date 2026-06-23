@@ -184,6 +184,14 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - observable: `verb follows safe (safe->GET, unsafe->POST); an out-of-source projection-config override flips a specific action to GET with NO source change`
   - negative-control: `Ignore the projection-config override in packages/apigen/cli/src/test/integration/canonical.spec.ts -> the action stays POST -> the override assertion goes red`
   - delivered-by: `naming-helpers, projection-transports, unified-cli, integration-tests-v2`
+- `[dod.16]` **Projection collision is a hard extract-time error (behavioral)** — Projection collision is a hard extract-time error.
+  - given: two exports that project to the same target
+  - when: the merged descriptor is built
+  - then: extraction fails loudly with a collision error
+  - entrypoint: `packages/apigen/cli/src/test/integration/canonical.spec.ts`
+  - observable: `two distinct ids projecting to the same MCP name / HTTP route / CLI path is a HARD extract-time error, never silent last-writer-wins`
+  - negative-control: `Remove the collision check so packages/apigen/cli/src/test/integration/canonical.spec.ts sees a duplicate projection succeed -> the hard-error assertion goes red`
+  - delivered-by: `naming-helpers, ts-extractor-by-symbol, audit-v2-core, integration-tests-v2`
 ---
 
 ## Execution model
