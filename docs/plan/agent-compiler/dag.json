@@ -165,6 +165,19 @@
       ],
       "context": "contexts/compile-fixtures-e2e.md",
       "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "compile-fixtures-e2e"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "docs/plan/agent-compiler/scripts/audit_compiler.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
     }
   },
   "authored_with": {
