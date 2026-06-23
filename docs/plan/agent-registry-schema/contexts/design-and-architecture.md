@@ -24,7 +24,7 @@ _No criteria yet._
 
 ```text
 read_only:  []
-mutates:    ["docs/plan/agent-registry-schema/contexts/design-and-architecture.md", "docs/plan/agent-registry-schema/decisions.md"]
+mutates:    ["docs/plan/agent-registry-schema/decisions.md", "docs/plan/agent-registry-schema/contexts/design-and-architecture.md"]
 ```
 
 ---
