@@ -19,6 +19,7 @@
 - [removal-runbook.1] removal aborts when equivalence report is not all-PASS (gated); fixture removed + compile still produces the agent when all-PASS
 
 - [removal-runbook.2] retire requires all-PASS report as forcing function
+- [removal-runbook.3] RUNBOOK documents cross-repo claude-agents removal as gated step
 ---
 
 ## Reservations

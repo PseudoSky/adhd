@@ -213,6 +213,16 @@
       "paths": [
         "packages/ai/agent-registry-migration/src/removal/retire.ts"
       ]
+    },
+    {
+      "id": "removal-runbook.3",
+      "phase": "removal",
+      "tier": null,
+      "kind": "present",
+      "pattern": "claude-agents|cross-repo|gated",
+      "paths": [
+        "docs/plan/agent-registry-migration/RUNBOOK.md"
+      ]
     }
   ]
 }
