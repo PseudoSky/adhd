@@ -150,6 +150,21 @@
       ],
       "context": "contexts/audit-engine.md",
       "notes": ""
+    },
+    "compile-fixtures-e2e": {
+      "kind": "work",
+      "phase": "e2e",
+      "depends_on": [
+        "audit-engine"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-compiler/src/seed/fixtures.ts",
+        "packages/ai/agent-compiler/src/__tests__/compile-e2e.test.ts",
+        "packages/ai/agent-compiler/src/index.ts"
+      ],
+      "context": "contexts/compile-fixtures-e2e.md",
+      "notes": ""
     }
   },
   "authored_with": {
