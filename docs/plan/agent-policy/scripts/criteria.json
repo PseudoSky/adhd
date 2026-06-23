@@ -92,6 +92,14 @@
       "paths": [
         "packages/ai/agent-policy/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "policy-type-and-template-schema.3",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/policy-template-store.test.ts",
+      "expect": "exit0"
     }
   ]
 }
