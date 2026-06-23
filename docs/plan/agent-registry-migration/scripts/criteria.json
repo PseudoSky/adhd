@@ -223,6 +223,14 @@
       "paths": [
         "docs/plan/agent-registry-migration/RUNBOOK.md"
       ]
+    },
+    {
+      "id": "audit-migration.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "true",
+      "expect": "exit0"
     }
   ]
 }
