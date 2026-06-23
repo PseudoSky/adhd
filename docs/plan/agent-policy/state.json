@@ -53,10 +53,10 @@
       "end_ref": "8c5f7a2249e50c5ab638b203c963953238e6df49"
     },
     "seed-and-roundtrip": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T23:55:03.252Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "fc9aaac0b7d1e84671a5bdfe24382f0f34355a2b",
       "end_ref": null
     },
     "audit-final": {
