@@ -875,6 +875,24 @@
       ],
       "context": "contexts/audit-v2-host.md",
       "notes": "Drives the REAL mixed-host gateway: adhd-apigen run --source <ts> <py> -> op host:ts answered by TS runtime, host:python by Python runtime; kill the Python sidecar -> only its ops 503 (partial availability §13.1) while TS keeps serving; conformance vectors pass on the Python host. Negative control: route all ops to one runtime -> cross-host op red."
+    },
+    "nx-generator-v2": {
+      "kind": "work",
+      "phase": "v2-scaffold",
+      "depends_on": [
+        "plugin-interface",
+        "layer-harness"
+      ],
+      "guard": "npx --yes nx test apigen-nx",
+      "artifacts": [
+        "packages/apigen/nx/src/generators/plugin/generator.ts",
+        "packages/apigen/nx/src/generators/plugin/__files__/src/lib/plugin.ts__tmpl__",
+        "packages/apigen/nx/src/generators/plugin/__files__/src/index.ts__tmpl__",
+        "packages/apigen/nx/src/generators/plugin/__files__/src/test/plugin.spec.ts__tmpl__",
+        "packages/apigen/nx/src/generators/plugin/schema.json"
+      ],
+      "context": "contexts/nx-generator-v2.md",
+      "notes": ""
     }
   },
   "authored_with": {
