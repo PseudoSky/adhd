@@ -39,10 +39,10 @@
       "end_ref": "a031b837decebc32a524240c97b19ac8c1f265ed"
     },
     "enforcement-plugin": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T23:42:41.192Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "9d95f98906de70f979558b8178ee69dd0761d294",
       "end_ref": null
     },
     "audit-schema": {
