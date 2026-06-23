@@ -140,6 +140,14 @@
       "paths": [
         "packages/ai/agent-registry-migration/src/import/import-agent.ts"
       ]
+    },
+    {
+      "id": "skills-migration.1",
+      "phase": "import",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/skills-migration.test.ts",
+      "expect": "exit0"
     }
   ]
 }
