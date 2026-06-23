@@ -18,10 +18,10 @@
       "end_ref": "f7fec214fe4f1e19655fd70fb0d2390ae308b14e"
     },
     "platform-and-binding-schema": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T21:48:19.032Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "2fdc34b5996b9fed6c55603819f203863a295c31",
       "end_ref": null
     },
     "mcp-server-schema": {
