@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "layer-harness",
+  "current_state": "error-taxonomy",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -228,10 +228,10 @@
       "end_ref": null
     },
     "error-taxonomy": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T02:23:47.732Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "389f0156b1fe0545d3ee73a3031aab53730a398d",
       "end_ref": null
     },
     "audit-v2-harness": {
