@@ -487,7 +487,10 @@
         "conformance-vectors",
         "audit-v2-projection",
         "audit-v2-harness",
-        "audit-v2-core"
+        "audit-v2-core",
+        "streaming-projection",
+        "class-exports",
+        "audit-v2-host"
       ],
       "guard": "npx --yes nx test apigen-cli",
       "artifacts": [

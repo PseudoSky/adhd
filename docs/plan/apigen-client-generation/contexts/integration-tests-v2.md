@@ -1,6 +1,6 @@
 # integration-tests-v2 — STATE_NAME
 
-**Phase:** v2-verify · **Kind:** work · **Depends on:** unified-cli, gateway, conformance-vectors, audit-v2-projection, audit-v2-harness, audit-v2-core · **Guard:** `npx --yes nx test apigen-cli`
+**Phase:** v2-verify · **Kind:** work · **Depends on:** unified-cli, gateway, conformance-vectors, audit-v2-projection, audit-v2-harness, audit-v2-core, streaming-projection, class-exports, audit-v2-host · **Guard:** `npx --yes nx test apigen-cli`
 
 ---
 
