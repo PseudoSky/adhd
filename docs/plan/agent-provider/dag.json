@@ -62,6 +62,23 @@
       ],
       "context": "contexts/model-platform-bindings.md",
       "notes": ""
+    },
+    "provider-tool-formats": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "model-platform-bindings"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-provider/src/db/schema.ts",
+        "packages/ai/agent-provider/src/store/tool-format-store.ts",
+        "packages/ai/agent-provider/src/index.ts",
+        "packages/ai/agent-provider/src/__tests__/tool-format-store.test.ts",
+        "packages/ai/agent-provider/drizzle"
+      ],
+      "context": "contexts/provider-tool-formats.md",
+      "notes": ""
     }
   },
   "authored_with": {
