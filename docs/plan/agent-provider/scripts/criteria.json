@@ -83,6 +83,16 @@
       "paths": [
         "packages/ai/agent-provider/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "model-platform-bindings.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "resolveModelId|platform_model_id|platformModelId",
+      "paths": [
+        "packages/ai/agent-provider/src/store/model-store.ts"
+      ]
     }
   ]
 }
