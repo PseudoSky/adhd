@@ -14,7 +14,7 @@
       "kind": "work",
       "phase": "foundation",
       "depends_on": [],
-      "guard": "true",
+      "guard": "npx --yes nx build agent-tool-registry",
       "artifacts": [
         "packages/ai/agent-tool-registry/project.json",
         "packages/ai/agent-tool-registry/package.json",
@@ -33,7 +33,7 @@
       "depends_on": [
         "scaffold-package"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/tool-store.test.ts",
       "artifacts": [
         "packages/ai/agent-tool-registry/src/db/schema.ts",
         "packages/ai/agent-tool-registry/src/store/tool-store.ts",
@@ -50,7 +50,7 @@
       "depends_on": [
         "tool-and-type-schema"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/binding-store.test.ts",
       "artifacts": [
         "packages/ai/agent-tool-registry/src/db/schema.ts",
         "packages/ai/agent-tool-registry/src/store/binding-store.ts",
@@ -67,7 +67,7 @@
       "depends_on": [
         "platform-and-binding-schema"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/mcp-server-store.test.ts",
       "artifacts": [
         "packages/ai/agent-tool-registry/src/db/schema.ts",
         "packages/ai/agent-tool-registry/src/store/mcp-server-store.ts",
@@ -84,7 +84,7 @@
       "depends_on": [
         "mcp-server-schema"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/agent-tool-store.test.ts",
       "artifacts": [
         "packages/ai/agent-tool-registry/src/db/schema.ts",
         "packages/ai/agent-tool-registry/src/store/agent-tool-store.ts",
@@ -101,7 +101,7 @@
       "depends_on": [
         "agent-tool-junction"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-tool-registry/scripts/audit_tool_registry.py --phase schema",
       "artifacts": [
         "docs/plan/agent-tool-registry/scripts/audit_tool_registry.py"
       ],
@@ -114,7 +114,7 @@
       "depends_on": [
         "audit-schema"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/roundtrip.test.ts",
       "artifacts": [
         "packages/ai/agent-tool-registry/src/seed/tool-types.ts",
         "packages/ai/agent-tool-registry/src/seed/platforms.ts",
@@ -133,7 +133,7 @@
       "depends_on": [
         "seed-and-roundtrip"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-tool-registry/scripts/audit_tool_registry.py --phase final",
       "artifacts": [
         "docs/plan/agent-tool-registry/scripts/audit_tool_registry.py"
       ],
