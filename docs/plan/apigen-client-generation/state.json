@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "error-taxonomy",
+  "current_state": "plugin-interface",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -242,10 +242,10 @@
       "end_ref": null
     },
     "plugin-interface": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T02:24:01.168Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "db5378a7d6ba71d51de8fa9a0e3996e7b549270c",
       "end_ref": null
     },
     "projection-transports": {
