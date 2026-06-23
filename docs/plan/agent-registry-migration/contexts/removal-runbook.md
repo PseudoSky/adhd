@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [removal-runbook.1] removal aborts when equivalence report is not all-PASS (gated); fixture removed + compile still produces the agent when all-PASS
 
 ---
 
