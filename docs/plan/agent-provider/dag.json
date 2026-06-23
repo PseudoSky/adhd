@@ -7,7 +7,8 @@
     "schema",
     "adapter",
     "runtime",
-    "seed"
+    "seed",
+    "audit"
   ],
   "terminal": "done",
   "nodes": {},
