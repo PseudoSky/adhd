@@ -18,11 +18,11 @@
       "end_ref": "f7fec214fe4f1e19655fd70fb0d2390ae308b14e"
     },
     "platform-and-binding-schema": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T21:48:19.032Z",
-      "done_at": null,
+      "done_at": "2026-06-23T21:52:46.569Z",
       "start_ref": "2fdc34b5996b9fed6c55603819f203863a295c31",
-      "end_ref": null
+      "end_ref": "6e7c0771b10e131a27a108958a85f064eb49ed27"
     },
     "mcp-server-schema": {
       "status": "pending",
@@ -91,6 +91,18 @@
       "audit_criteria_total": 15,
       "by": "pseudosky",
       "note": "Added tool_types text-PK lookup table + tools table + ToolStore with create/read/list. Generated drizzle migration 0000_dry_roulette.sql. 13 tests pass on real on-disk SQLite including 3x [inv:reopen-proves-persistence] close+reopen assertions. Added vite.config.ts + explicit @nx/vite:test target to handle --testFile routing (vitest 1.6.0 requires executor, not plugin passthrough). Guard: npx nx test agent-tool-registry --testFile=... exit 0. Commit: f7fec21"
+    },
+    {
+      "ts": "2026-06-23T21:52:46.569Z",
+      "from": "platform-and-binding-schema",
+      "to": "platform-and-binding-schema",
+      "start_ref": "2fdc34b5996b9fed6c55603819f203863a295c31",
+      "end_ref": "6e7c0771b10e131a27a108958a85f064eb49ed27",
+      "audit_exit": 13,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 15,
+      "by": "pseudosky",
+      "note": "Added platforms + tool_platform_bindings tables to schema.ts; generated migration 0001_gray_talkback.sql via drizzle-kit; implemented BindingStore with seedPlatform, readPlatform, listPlatforms, createBinding, listForPlatform, resolve; exported all from index.ts; 15 tests pass including [inv:reopen-proves-persistence] close+reopen and [dod.1] negative-control; guard exit 0; commit 6e7c0771b10e131a27a108958a85f064eb49ed27"
     }
   ],
   "amendment_log": [],
@@ -99,7 +111,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "platform-and-binding-schema",
+  "current_state": "mcp-server-schema",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:02:23.888Z",
     "by": "pseudosky",
