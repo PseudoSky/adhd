@@ -228,6 +228,16 @@
       "kind": "command",
       "cmd": "python3 docs/plan/agent-compiler/scripts/audit_compiler.py --phase schema",
       "expect": "exit0"
+    },
+    {
+      "id": "compile-fixtures-e2e.1",
+      "phase": "e2e",
+      "tier": null,
+      "kind": "present",
+      "pattern": "api-design-reviewer|fixtures|seed",
+      "paths": [
+        "packages/ai/agent-compiler/src/seed/fixtures.ts"
+      ]
     }
   ]
 }
