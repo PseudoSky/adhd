@@ -18,6 +18,7 @@
 
 - [provider-adapter-contract.1] ProviderAdapter interface defined in agent-mcp-types (not agent-provider)
 
+- [provider-adapter-contract.2] ProviderAdapter interface NOT (re)declared inside agent-provider source
 ---
 
 ## Reservations
