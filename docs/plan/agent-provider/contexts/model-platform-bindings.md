@@ -20,6 +20,7 @@
 
 - [model-platform-bindings.2] resolveModelId reads binding by platform
 - [model-platform-bindings.3] binding resolution test passes (canonical->per-platform after reopen)
+- [model-platform-bindings.4] binding resolution has teeth: ignoring the platform filter leaks the wrong id
 ---
 
 ## Reservations
