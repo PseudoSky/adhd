@@ -3,7 +3,8 @@
   "title": "agent-mcp Refactor — Consume @adhd/agent-compiler + @adhd/agent-registry",
   "plan_kind": "brownfield",
   "phases": [
-    "architecture"
+    "architecture",
+    "schema"
   ],
   "terminal": "done",
   "nodes": {},
