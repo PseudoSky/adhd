@@ -19,6 +19,7 @@
 - [model-platform-bindings.1] model_platform_bindings table
 
 - [model-platform-bindings.2] resolveModelId reads binding by platform
+- [model-platform-bindings.3] binding resolution test passes (canonical->per-platform after reopen)
 ---
 
 ## Reservations
