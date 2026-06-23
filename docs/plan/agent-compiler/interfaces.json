@@ -1,1 +1,15 @@
-{}
+{
+  "$note": "Contract notes only. Updated for @adhd/agent-registry Decision 5 (head/version split) so the compiler builds against the corrected component shape. Does NOT alter this plan's state.json/dag.json.",
+  "consumes": {
+    "registry-consumed": {
+      "from": "@adhd/agent-registry (docs/plan/agent-registry-schema)",
+      "how": "ONE shared SQLite handle ([inv:one-db-handle]); delegates ordering/pin/context to CompositionStore.resolveComposition rather than re-evaluating.",
+      "component-model": {
+        "shape": "head/version split (Decision 5): registry_components (identity, slug PK) + registry_component_versions (history, version_id PK, UNIQUE(slug, version)). The old single registry_prompt_components (slug, version) table no longer exists.",
+        "resolveComposition": "returns ResolvedComponent[] whose component.version is the human version and component.versionId is the registry_component_versions.version_id surrogate. Ordering/pin/context semantics are unchanged by the split.",
+        "version_pin": "on registry_agent_components is a registry_component_versions.version_id (enforced nullable FK), not a human version number; null = latest-at-resolve.",
+        "composed_prompts.component_versions": "remains a JSON map {componentSlug: version} of human version numbers — the audit map the compiler writes. Use ComponentStore.resolveVersionId(slug, version) if a stable version_id is needed."
+      }
+    }
+  }
+}

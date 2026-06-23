@@ -14,14 +14,19 @@
 
 ## Glossary
 
-- **[def:component]** — an atomic unit of prompt content: a row in
-  `prompt_components` with `slug` (human ref), `type` (FK to `prompt_types`),
-  integer `version` (increments on content change; old versions retained for
-  audit/rollback), text `content`, and an `is_shared` flag.
+- **[def:component]** — an atomic unit of prompt content. Per Decision 5
+  (decisions.md) a component is modeled as a head/version pair: a
+  `registry_components` head row (`slug` human ref + single-column PK, `type` FK to
+  `prompt_types`, `is_shared` flag) plus one-or-more `registry_component_versions`
+  rows (`version_id` PK, `slug` FK, integer `version` incrementing on content change
+  with old versions retained for audit/rollback, text `content`).
 - **[def:composition]** — the ordered, filtered set of components attached to an
   agent through the `agent_components` junction, resolved for a given context.
 - **[def:junction-row]** — one `agent_components` row: `(agent_slug,
-  component_slug, position, version_pin?, context_condition?, is_required)`.
+  component_slug, position, version_pin?, context_condition?, is_required)`. Per
+  Decision 5, `component_slug` is an enforced FK → `registry_components.slug` and
+  `version_pin` (when set) is an enforced FK → `registry_component_versions.version_id`
+  (a `version_id`, not a human `version` number; null = latest-at-resolve).
 - **[def:context-condition]** — a JSON predicate on the junction row (or a
   `context_rules` row) that decides whether the component is included for a given
   runtime context (e.g. `{"ticket_type":"security"}`). `null` = always include.

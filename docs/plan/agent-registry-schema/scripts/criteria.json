@@ -61,7 +61,7 @@
       "phase": "schema",
       "tier": null,
       "kind": "present",
-      "pattern": "prompt_components|promptComponents",
+      "pattern": "registry_component_versions|componentVersionsTable",
       "paths": [
         "packages/ai/agent-registry/src/db/schema.ts"
       ]
