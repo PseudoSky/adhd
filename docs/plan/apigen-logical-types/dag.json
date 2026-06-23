@@ -37,6 +37,19 @@
       ],
       "context": "contexts/lt-contracts.md",
       "notes": ""
+    },
+    "lt-wire-spec": {
+      "kind": "work",
+      "phase": "contracts",
+      "depends_on": [
+        "lt-contracts"
+      ],
+      "guard": "npx nx test apigen-conformance",
+      "artifacts": [
+        "packages/apigen/conformance/src/lib/vectors.ts"
+      ],
+      "context": "contexts/lt-wire-spec.md",
+      "notes": ""
     }
   },
   "authored_with": {
