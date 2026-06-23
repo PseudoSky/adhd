@@ -5,7 +5,8 @@
   "phases": [
     "foundation",
     "schema",
-    "composition"
+    "composition",
+    "seed"
   ],
   "terminal": "done",
   "nodes": {},
