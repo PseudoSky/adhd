@@ -18,6 +18,7 @@
 
 - [agent-store-retire.1] user-authored flat systemPrompt is no longer a required authoring field (source-of-truth path gone)
 
+- [agent-store-retire.2] systemPrompt retained only as a documented computed compat shim
 ---
 
 ## Reservations
