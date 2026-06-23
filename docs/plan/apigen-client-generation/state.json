@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "ts-extractor-by-symbol",
+  "current_state": "central-validation",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -221,10 +221,10 @@
       "end_ref": "665a475a8a7c8435e3ed50f79aaa00e86cbc5355"
     },
     "central-validation": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T02:33:31.334Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "13879377ddd408ed2b6b74703a308dbd9d6b7db2",
       "end_ref": null
     },
     "error-taxonomy": {
