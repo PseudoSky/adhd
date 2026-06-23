@@ -50,6 +50,19 @@
       ],
       "context": "contexts/lt-wire-spec.md",
       "notes": ""
+    },
+    "lt-registry": {
+      "kind": "work",
+      "phase": "registry",
+      "depends_on": [
+        "lt-contracts"
+      ],
+      "guard": "npx nx test apigen-logical",
+      "artifacts": [
+        "packages/apigen/logical/src/lib/registry.ts"
+      ],
+      "context": "contexts/lt-registry.md",
+      "notes": ""
     }
   },
   "authored_with": {
