@@ -194,6 +194,14 @@
       "paths": [
         "packages/ai/agent-compiler/src/cli/compile.ts"
       ]
+    },
+    {
+      "id": "compile-cli.2",
+      "phase": "cli",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-cli.test.ts",
+      "expect": "exit0"
     }
   ]
 }

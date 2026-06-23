@@ -18,6 +18,7 @@
 
 - [compile-cli.1] CLI parses --platform/--context/--out-dir/--all
 
+- [compile-cli.2] CLI drives compile and asserts stdout markdown
 ---
 
 ## Reservations
