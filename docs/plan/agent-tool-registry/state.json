@@ -53,10 +53,10 @@
       "end_ref": "79c5979f52117b1e72ead1e3df54048404c326d7"
     },
     "audit-final": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T22:56:49.373Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "56bbe0144320ecf2ba5f34f00c21708d73be1b76",
       "end_ref": null
     },
     "code-review": {
