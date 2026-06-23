@@ -15,7 +15,7 @@
       "kind": "work",
       "phase": "foundation",
       "depends_on": [],
-      "guard": "true",
+      "guard": "npx --yes nx build agent-registry",
       "artifacts": [
         "packages/ai/agent-registry/project.json",
         "packages/ai/agent-registry/package.json",
@@ -33,7 +33,7 @@
       "depends_on": [
         "scaffold-package"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/component-store.test.ts",
       "artifacts": [
         "packages/ai/agent-registry/src/db/schema.ts",
         "packages/ai/agent-registry/src/store/component-store.ts",
@@ -48,7 +48,7 @@
       "depends_on": [
         "lookup-and-component-schema"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/agent-store.test.ts",
       "artifacts": [
         "packages/ai/agent-registry/src/db/schema.ts",
         "packages/ai/agent-registry/src/store/agent-store.ts",
@@ -63,7 +63,7 @@
       "depends_on": [
         "agent-and-taxonomy-schema"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/composition-store.test.ts",
       "artifacts": [
         "packages/ai/agent-registry/src/db/schema.ts",
         "packages/ai/agent-registry/src/store/composition-store.ts",
@@ -78,7 +78,7 @@
       "depends_on": [
         "composition-junction"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/usecase-store.test.ts",
       "artifacts": [
         "packages/ai/agent-registry/src/db/schema.ts",
         "packages/ai/agent-registry/src/store/usecase-store.ts",
@@ -93,7 +93,7 @@
       "depends_on": [
         "usecase-and-context-rules"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/composed-prompt-store.test.ts",
       "artifacts": [
         "packages/ai/agent-registry/src/db/schema.ts",
         "packages/ai/agent-registry/src/store/composed-prompt-store.ts",
@@ -108,7 +108,7 @@
       "depends_on": [
         "composed-prompt-cache"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-registry-schema/scripts/audit_registry_schema.py --phase schema",
       "artifacts": [
         "docs/plan/agent-registry-schema/scripts/audit_registry_schema.py"
       ],
@@ -121,7 +121,7 @@
       "depends_on": [
         "audit-schema"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/roundtrip.test.ts",
       "artifacts": [
         "packages/ai/agent-registry/src/seed/prompt-types.ts",
         "packages/ai/agent-registry/src/seed/components.ts",
@@ -137,7 +137,7 @@
       "depends_on": [
         "seed-and-roundtrip"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-registry-schema/scripts/audit_registry_schema.py --phase final",
       "artifacts": [
         "docs/plan/agent-registry-schema/scripts/audit_registry_schema.py"
       ],
