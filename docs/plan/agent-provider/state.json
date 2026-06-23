@@ -46,10 +46,10 @@
       "end_ref": "02ec01b4a664787692f400aba6609809fac3c61a"
     },
     "runtime-tool-forwarding": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T23:52:29.922Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "e7d8d4a91ad8b6f1829d3490d1298db1d9eafa13",
       "end_ref": null
     },
     "seed-and-roundtrip": {
