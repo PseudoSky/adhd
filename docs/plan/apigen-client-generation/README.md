@@ -192,6 +192,14 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - observable: `two distinct ids projecting to the same MCP name / HTTP route / CLI path is a HARD extract-time error, never silent last-writer-wins`
   - negative-control: `Remove the collision check so packages/apigen/cli/src/test/integration/canonical.spec.ts sees a duplicate projection succeed -> the hard-error assertion goes red`
   - delivered-by: `naming-helpers, ts-extractor-by-symbol, audit-v2-core, integration-tests-v2`
+- `[dod.17]` **Gateway partial availability — a dead host fails only its own ops (behavioral)** — Gateway partial availability — a dead host fails only its own ops.
+  - given: a mixed-host run with both sidecars up
+  - when: the Python sidecar is killed
+  - then: only Python ops 503; TS ops still return ground truth
+  - entrypoint: `packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts`
+  - observable: `with TS+Python hosts behind one surface, killing the Python sidecar returns 503/unavailable for ONLY its ops while TS ops keep serving (§13.1)`
+  - negative-control: `Make one host crash whole-surface in packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts -> TS ops also fail -> the partial-availability assertion goes red`
+  - delivered-by: `gateway, python-host, audit-v2-host, integration-tests-v2`
 ---
 
 ## Execution model
