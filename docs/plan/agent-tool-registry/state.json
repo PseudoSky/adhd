@@ -25,11 +25,11 @@
       "end_ref": "6e7c0771b10e131a27a108958a85f064eb49ed27"
     },
     "mcp-server-schema": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T21:54:36.817Z",
-      "done_at": null,
+      "done_at": "2026-06-23T21:58:18.602Z",
       "start_ref": "f2dd0f155a4c7ae50f070f5f0f2c27820fa6468e",
-      "end_ref": null
+      "end_ref": "30cb357807a04e0c99972a8a18ff94075c94a5db"
     },
     "agent-tool-junction": {
       "status": "pending",
@@ -103,6 +103,18 @@
       "audit_criteria_total": 15,
       "by": "pseudosky",
       "note": "Added platforms + tool_platform_bindings tables to schema.ts; generated migration 0001_gray_talkback.sql via drizzle-kit; implemented BindingStore with seedPlatform, readPlatform, listPlatforms, createBinding, listForPlatform, resolve; exported all from index.ts; 15 tests pass including [inv:reopen-proves-persistence] close+reopen and [dod.1] negative-control; guard exit 0; commit 6e7c0771b10e131a27a108958a85f064eb49ed27"
+    },
+    {
+      "ts": "2026-06-23T21:58:18.602Z",
+      "from": "mcp-server-schema",
+      "to": "mcp-server-schema",
+      "start_ref": "f2dd0f155a4c7ae50f070f5f0f2c27820fa6468e",
+      "end_ref": "30cb357807a04e0c99972a8a18ff94075c94a5db",
+      "audit_exit": 13,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 15,
+      "by": "pseudosky",
+      "note": "Added mcp_servers table to schema.ts (transport text, providedToolIds json, configSchema json), McpServerStore with create/read/list + typed errors, drizzle migration 0002_aberrant_blink.sql generated, 12-test suite including 3 inv:reopen-proves-persistence tests proving JSON column round-trip after close+reopen. Guard exit code: 0."
     }
   ],
   "amendment_log": [],
@@ -111,7 +123,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "mcp-server-schema",
+  "current_state": "agent-tool-junction",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:02:23.888Z",
     "by": "pseudosky",
