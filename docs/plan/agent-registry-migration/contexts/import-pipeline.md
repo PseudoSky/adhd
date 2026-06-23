@@ -18,6 +18,7 @@
 
 - [import-pipeline.1] import persists agent+component+tool rows recoverable after reopen
 
+- [import-pipeline.2] import drives real registry stores (not mocks)
 ---
 
 ## Reservations
