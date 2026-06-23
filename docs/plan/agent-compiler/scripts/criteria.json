@@ -254,6 +254,14 @@
       "kind": "command",
       "cmd": "python3 docs/plan/agent-compiler/scripts/audit_compiler.py --phase final",
       "expect": "exit0"
+    },
+    {
+      "id": "code-review.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-compiler/scripts/review_gate.py",
+      "expect": "exit0"
     }
   ]
 }
