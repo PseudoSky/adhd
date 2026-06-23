@@ -115,6 +115,19 @@
       ],
       "context": "contexts/lt-extract-scalars.md",
       "notes": ""
+    },
+    "lt-extract-nominal": {
+      "kind": "work",
+      "phase": "extraction",
+      "depends_on": [
+        "lt-contracts"
+      ],
+      "guard": "npx nx test apigen-core",
+      "artifacts": [
+        "packages/apigen/core/src/lib/schema-builders/nominal.ts"
+      ],
+      "context": "contexts/lt-extract-nominal.md",
+      "notes": ""
     }
   },
   "authored_with": {
