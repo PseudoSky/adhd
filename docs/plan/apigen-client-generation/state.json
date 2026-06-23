@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "scaffold-v2-ts-plugins",
+  "current_state": "nx-generator-v2",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -347,10 +347,10 @@
       "end_ref": null
     },
     "nx-generator-v2": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T03:31:21.833Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "4593ce914f51d23a92010bfa907d285d5a78ad1a",
       "end_ref": null
     }
   },
