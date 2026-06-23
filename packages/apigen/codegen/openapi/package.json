@@ -1,7 +1,10 @@
 {
   "name": "@adhd/apigen-codegen-openapi",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "main": "./index.js",
   "module": "./index.mjs",
-  "typings": "./index.d.ts"
+  "typings": "./index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  }
 }
