@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["packages/ai/agent-registry-migration/src/__fixtures__/code-reviewer.md", "packages/ai/agent-registry-migration/src/parse/frontmatter.ts"]
 mutates:    ["packages/ai/agent-registry-migration/src/parse/body-sections.ts", "packages/ai/agent-registry-migration/src/index.ts", "packages/ai/agent-registry-migration/src/__tests__/body-sections.test.ts"]
 ```
 
