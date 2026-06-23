@@ -220,6 +220,14 @@
       "positive": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/roundtrip.test.ts",
       "mutate": "scripts/nc_break_seed.mjs",
       "restore": "scripts/nc_restore_seed.mjs"
+    },
+    {
+      "id": "audit-schema.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-policy/scripts/audit_policy.py --phase schema",
+      "expect": "exit0"
     }
   ]
 }
