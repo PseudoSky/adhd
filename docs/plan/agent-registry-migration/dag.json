@@ -6,7 +6,8 @@
     "architecture",
     "foundation",
     "parse",
-    "import"
+    "import",
+    "verify"
   ],
   "terminal": "done",
   "nodes": {},
