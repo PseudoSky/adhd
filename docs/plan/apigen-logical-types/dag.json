@@ -333,6 +333,19 @@
       ],
       "context": "contexts/lt-code-review.md",
       "notes": ""
+    },
+    "lt-final-audit": {
+      "kind": "audit",
+      "phase": "gates",
+      "depends_on": [
+        "lt-code-review"
+      ],
+      "guard": "python3 docs/plan/apigen-logical-types/scripts/audit_lt-final-audit.py",
+      "artifacts": [
+        "scripts/audit_lt-final-audit.py"
+      ],
+      "context": "contexts/lt-final-audit.md",
+      "notes": ""
     }
   },
   "authored_with": {
