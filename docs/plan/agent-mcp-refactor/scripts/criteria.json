@@ -57,6 +57,16 @@
       "paths": [
         "packages/ai/agent-mcp/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "runtime-sink-schema.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "experiment_assignments|experimentAssignmentsTable",
+      "paths": [
+        "packages/ai/agent-mcp/src/db/schema.ts"
+      ]
     }
   ]
 }
