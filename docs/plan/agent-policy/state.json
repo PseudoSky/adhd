@@ -18,10 +18,10 @@
       "end_ref": "5ceb2598dcb6e3c859208a152439eb618931a3c8"
     },
     "policy-type-and-template-schema": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T23:19:01.901Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "25caf3fe3a15125d1cb774a902a8c63e8c331f90",
       "end_ref": null
     },
     "agent-policy-junction": {
