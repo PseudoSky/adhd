@@ -46,11 +46,11 @@
       "end_ref": "02ec01b4a664787692f400aba6609809fac3c61a"
     },
     "runtime-tool-forwarding": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T23:52:29.922Z",
-      "done_at": null,
+      "done_at": "2026-06-23T23:55:29.686Z",
       "start_ref": "e7d8d4a91ad8b6f1829d3490d1298db1d9eafa13",
-      "end_ref": null
+      "end_ref": "7e614e1f9ac52e5600f9a80516558d483a6ec833"
     },
     "seed-and-roundtrip": {
       "status": "pending",
@@ -158,6 +158,18 @@
       "audit_criteria_total": 20,
       "by": "pseudosky",
       "note": "Added StreamChunk+ProviderAdapter to agent-mcp-types (additive); ProviderAdapterImpl in agent-provider resolves canonical model ids via ModelStore.resolveModelId; 4/4 guard tests pass (real SQLite + close+reopen); nx build agent-mcp exit 0; nx build agent-mcp-types exit 0; SHA e787eed"
+    },
+    {
+      "ts": "2026-06-23T23:55:29.686Z",
+      "from": "runtime-tool-forwarding",
+      "to": "runtime-tool-forwarding",
+      "start_ref": "e7d8d4a91ad8b6f1829d3490d1298db1d9eafa13",
+      "end_ref": "7e614e1f9ac52e5600f9a80516558d483a6ec833",
+      "audit_exit": 17,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 24,
+      "by": "pseudosky",
+      "note": "FEAT-007 emit-tools.ts: emitTool+emitToolsForProvider branch on emit_shape (server_side→type-tagged, unsupported→throw, custom→std def). UnsupportedNativeToolError exported. 12 tests all pass (teeth on both paths + negative-control). Guard exit 0. SHA fc9aaac0b7d1e84671a5bdfe24382f0f34355a2b."
     }
   ],
   "amendment_log": [],
@@ -166,7 +178,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "runtime-tool-forwarding",
+  "current_state": "seed-and-roundtrip",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:05:24.204Z",
     "by": "pseudosky",
