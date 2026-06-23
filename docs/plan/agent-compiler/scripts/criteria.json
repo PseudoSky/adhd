@@ -246,6 +246,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-e2e.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-final.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-compiler/scripts/audit_compiler.py --phase final",
+      "expect": "exit0"
     }
   ]
 }
