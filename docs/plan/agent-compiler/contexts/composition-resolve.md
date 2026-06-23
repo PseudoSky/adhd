@@ -18,6 +18,7 @@
 
 - [composition-resolve.1] assembles body from resolveComposition in junction order
 
+- [composition-resolve.2] body-ordering test passes
 ---
 
 ## Reservations
