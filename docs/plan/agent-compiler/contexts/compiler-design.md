@@ -20,6 +20,7 @@
 
 - [compiler-design.2] context-condition precedence consumption recorded (matches agent-registry)
 - [compiler-design.3] per-platform header builder contract recorded
+- [compiler-design.4] single-DB cross-package join topology cited
 ---
 
 ## Reservations

@@ -27,6 +27,16 @@
       "paths": [
         "docs/plan/agent-compiler/decisions.md"
       ]
+    },
+    {
+      "id": "compiler-design.4",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "table-name prefix|registry_|tool_|provider_|policy_|single SQLite|one DB",
+      "paths": [
+        "docs/plan/agent-compiler/decisions.md"
+      ]
     }
   ]
 }
