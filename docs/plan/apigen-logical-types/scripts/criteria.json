@@ -112,6 +112,14 @@
       "kind": "command",
       "cmd": "python3 packages/apigen/python/run_tests.py",
       "expect": "exit0"
+    },
+    {
+      "id": "lt-dispatch-integration.1",
+      "phase": "integration",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx test apigen-runtime",
+      "expect": "exit0"
     }
   ]
 }
