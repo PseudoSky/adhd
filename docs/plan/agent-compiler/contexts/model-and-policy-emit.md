@@ -19,6 +19,7 @@
 - [model-and-policy-emit.1] resolves model_hint via model_platform_bindings
 
 - [model-and-policy-emit.2] folds agent_policy rows into header/body block
+- [model-and-policy-emit.3] model+policy resolution test passes
 ---
 
 ## Reservations
