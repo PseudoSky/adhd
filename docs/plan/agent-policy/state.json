@@ -4,11 +4,11 @@
   "dag": "dag.json",
   "states": {
     "policy-design": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T23:08:22.704Z",
-      "done_at": null,
+      "done_at": "2026-06-23T23:10:09.980Z",
       "start_ref": "3da241bda300d3e1a6be5fd1ec27b4660dd65aec",
-      "end_ref": null
+      "end_ref": "6b81009bfb2b41d586d3537a580f42f4326b8b6c"
     },
     "scaffold-package": {
       "status": "pending",
@@ -74,14 +74,27 @@
       "end_ref": null
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-06-23T23:10:09.980Z",
+      "from": "policy-design",
+      "to": "policy-design",
+      "start_ref": "3da241bda300d3e1a6be5fd1ec27b4660dd65aec",
+      "end_ref": "6b81009bfb2b41d586d3537a580f42f4326b8b6c",
+      "audit_exit": 3,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 3,
+      "by": "pseudosky",
+      "note": "Decisions frozen: (1) LAZY inheritance resolution at query time, inherited_from=category slug; (2) EnforcementEvent stays pre:model_request-only, non-pre:model_request hook policies seed observational-only, forcing-function = first blocking hook policy at another point; (3) override_config shallow-merge at top level of rules. Guard exit 0 (3/3). SHA 6b81009."
+    }
+  ],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "policy-design",
+  "current_state": "scaffold-package",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:06:45.453Z",
     "by": "pseudosky",
