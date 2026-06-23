@@ -340,10 +340,10 @@
       "end_ref": "34ed69a0c9cdf65daeb31b51654583b56ea09d79"
     },
     "audit-v2-host": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T05:39:31.680Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "8d1346c1f9535f65b7fbd5fefb5d3d0d8cd08c57",
       "end_ref": null
     },
     "nx-generator-v2": {
