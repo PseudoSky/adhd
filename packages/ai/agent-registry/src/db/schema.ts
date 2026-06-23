@@ -123,3 +123,58 @@ export const agentsTable = sqliteTable(
         categoryIdx: index("registry_agents_category_idx").on(t.taxonomyCategory),
     })
 );
+
+// ──────────────────────────────────────────────
+// registry_agent_components  (composition-junction state)
+//
+// Junction table binding agents to their ordered component set.
+// [def:junction-row] (contexts/_shared.md)
+//
+// PK: (agent_slug, component_slug, position)
+//   - position is an ORDERING key, not a unique slot — multiple components MAY
+//     share the same position value (Decision 2: all-included, total order).
+//   - version_pin: null → resolve to latest-at-resolve-time (Decision 4).
+//                  int  → pin to exactly that version (Decision 4).
+//   - context_condition: nullable JSON predicate; null = always include.
+//     Evaluated by CompositionStore.resolveComposition per Decision 2:
+//     every key in the predicate must equal the corresponding context value.
+//   - is_required: true AND condition does not match → CompositionError thrown.
+//
+// agent_slug is an in-package FK → registry_agents.slug (Decision 1).
+// component_slug is a LOGICAL FK only (no .references()) because SQLite does
+// not enforce FKs against non-PK columns; the composite PK of
+// registry_prompt_components is (slug, version), not slug alone.
+// CompositionStore enforces the logical link at resolve time.
+// ──────────────────────────────────────────────
+export const agentComponentsTable = sqliteTable(
+    "registry_agent_components",
+    {
+        agentSlug: text("agent_slug")
+            .notNull()
+            .references(() => agentsTable.slug),
+        componentSlug: text("component_slug").notNull(),
+        // Assembly ordering key — NOT a unique slot. Decision 2: position ASC
+        // is the primary sort; ties broken by (version DESC, component_slug ASC).
+        position: integer("position").notNull(),
+        // null = latest-at-resolve; integer = pin to that exact version. [Decision 4]
+        versionPin: integer("version_pin"),
+        // JSON predicate object as text, e.g. '{"ticket_type":"security"}'.
+        // null means always include. [def:context-condition]
+        contextCondition: text("context_condition"),
+        // 1 = required; if condition filters this row out → CompositionError.
+        isRequired: integer("is_required", { mode: "boolean" }).notNull().default(false),
+    },
+    (t) => ({
+        // Composite PK: (agent_slug, component_slug, position) per DATA_MODEL.md Domain 1.
+        pk: index("registry_agent_components_pkey").on(
+            t.agentSlug,
+            t.componentSlug,
+            t.position
+        ),
+        agentIdx: index("registry_agent_components_agent_idx").on(t.agentSlug),
+        positionIdx: index("registry_agent_components_position_idx").on(
+            t.agentSlug,
+            t.position
+        ),
+    })
+);
