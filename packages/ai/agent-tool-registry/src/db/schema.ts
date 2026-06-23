@@ -100,3 +100,33 @@ export const toolPlatformBindingsTable = sqliteTable(
         index("idx_bindings_platform").on(table.platformId),
     ]
 );
+
+// ──────────────────────────────────────────────
+// mcp_servers — MCP server registrations
+//
+// [def:mcp-server]: keyed by server package identifier (id). transport is a
+// plain text column seeded with one of: stdio | SSE | HTTP — NOT a SQL enum
+// ([inv:lookup-not-enum] principle applies: seeded text value, never enum).
+// provided_tool_ids is a JSON array of canonical tool NAMES (logical references
+// to tools.name — [inv:no-cross-pkg-fk]: no FK on a JSON column; resolution is
+// a compile-time join in @adhd/agent-compiler).
+// config_schema is a JSON-Schema object stored as text with mode:'json'.
+// Read by the compiler to build the mcpServers block when a binding has
+// requires_mcp = true.
+// ──────────────────────────────────────────────
+export const mcpServersTable = sqliteTable("mcp_servers", {
+    id: text("id").primaryKey(),
+    // plain text column: stdio | SSE | HTTP
+    transport: text("transport").notNull(),
+    name: text("name").notNull(),
+    // JSON array of canonical tool names (logical refs; no FK — [inv:no-cross-pkg-fk])
+    providedToolIds: text("provided_tool_ids", { mode: "json" })
+        .$type<string[]>()
+        .notNull()
+        .default([]),
+    // JSON-Schema object for this server's configuration
+    configSchema: text("config_schema", { mode: "json" })
+        .$type<Record<string, unknown>>()
+        .notNull()
+        .default({}),
+});
