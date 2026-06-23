@@ -19,6 +19,7 @@
 - [scaffold-package.1] project.json exists for agent-tool-registry
 
 - [scaffold-package.2] tsconfig.base.json registers the @adhd/agent-tool-registry path
+- [scaffold-package.3] project.json tags it platform:node
 ---
 
 ## Reservations
