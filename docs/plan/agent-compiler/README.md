@@ -51,3 +51,5 @@
   - entrypoint: `npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-cli.test.ts`
   - observable: `vitest exits 0; spawning the CLI bin (node .../cli/compile.js compile <slug> --platform claude_code) exits 0 and its stdout begins with --- YAML frontmatter and contains the resolved tools: line`
   - delivered-by: `compile-cli, compile-fixtures-e2e`
+
+- `[dod.6]` **@adhd/agent-compiler is a platform:node Nx library registered in tsconfig.base.json that builds clean, imports no browser code, and depends on the four registry packages (agent-registry, agent-tool-registry, agent-provider, agent-policy). (structural)** — @adhd/agent-compiler is a platform:node Nx library registered in tsconfig.base.json that builds clean, imports no browser code, and depends on the four registry packages (agent-registry, agent-tool-registry, agent-provider, agent-policy)..
