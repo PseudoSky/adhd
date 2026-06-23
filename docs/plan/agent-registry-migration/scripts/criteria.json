@@ -94,6 +94,16 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/frontmatter.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "frontmatter-parser.2",
+      "phase": "parse",
+      "tier": null,
+      "kind": "present",
+      "pattern": "claude_code|TOOL_PLATFORM_BINDING|platform_tool_name",
+      "paths": [
+        "packages/ai/agent-registry-migration/src/parse/frontmatter.ts"
+      ]
     }
   ]
 }
