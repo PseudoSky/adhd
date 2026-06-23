@@ -60,10 +60,10 @@
       "end_ref": "60aea137012ae334b2e2971fd47af33aef4597b7"
     },
     "audit-final": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T15:16:45.981Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "f0f1be50f8e0357b68d5f5f85a27916fd1821e76",
       "end_ref": null
     },
     "design-and-architecture": {
