@@ -11,7 +11,20 @@
     "e2e"
   ],
   "terminal": "done",
-  "nodes": {},
+  "nodes": {
+    "refactor-design": {
+      "kind": "work",
+      "phase": "architecture",
+      "depends_on": [],
+      "guard": "python3 docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py --phase architecture",
+      "artifacts": [
+        "docs/plan/agent-mcp-refactor/decisions.md",
+        "docs/plan/agent-mcp-refactor/contexts/refactor-design.md"
+      ],
+      "context": "contexts/refactor-design.md",
+      "notes": ""
+    }
+  },
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.22",
