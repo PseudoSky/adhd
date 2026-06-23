@@ -1,6 +1,6 @@
 # mount-plugins — STATE_NAME
 
-**Phase:** v2-projection · **Kind:** work · **Depends on:** plugin-interface, naming-helpers · **Guard:** `npx --yes nx run-many -t test -p apigen-openapi apigen-plugin-openapi apigen-plugin-health`
+**Phase:** v2-projection · **Kind:** work · **Depends on:** plugin-interface, naming-helpers, scaffold-v2-common, scaffold-v2-ts-plugins · **Guard:** `npx --yes nx run-many -t test -p apigen-openapi apigen-plugin-openapi apigen-plugin-health`
 
 ---
 
