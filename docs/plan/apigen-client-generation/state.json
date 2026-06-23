@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "class-exports",
+  "current_state": "scaffold-v2-ts-plugins",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -298,11 +298,11 @@
       "end_ref": null
     },
     "conformance-vectors": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T03:10:59.657Z",
-      "done_at": null,
+      "done_at": "2026-06-23T03:20:40.781Z",
       "start_ref": "ffdc83cc5f27dfaf75cfa63416eb88d795170caa",
-      "end_ref": null
+      "end_ref": "3ba1ccc7dd73894ef5c4889a1e99d1b96b46cbae"
     },
     "scaffold-v2-common": {
       "status": "complete",
@@ -707,6 +707,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "v2-harness audit gate: 3/3 checks passed (v2-harness.invoke §8.1 layer semantics; v2-harness.validation invalid_argument short-circuit; v2-harness.errors per-transport status maps). audit_apigen.py --phase v2-harness exit 0, orchestrator-verified."
+    },
+    {
+      "ts": "2026-06-23T03:20:40.781Z",
+      "from": "class-exports",
+      "to": "conformance-vectors",
+      "start_ref": "ffdc83cc5f27dfaf75cfa63416eb88d795170caa",
+      "end_ref": "3ba1ccc7dd73894ef5c4889a1e99d1b96b46cbae",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "apigen-conformance vectors.ts: cross-language vectors A(round-trip)/B(naming+collision)/C(envelope binding)/D(error mapping)/E(necessary-not-sufficient) per §4/§5/§6/§9.1. nx test apigen-conformance exit 0 (orch-verified). These are the contract the Python host re-runs. Byte-proxy telemetry."
     }
   ],
   "amendment_log": [
