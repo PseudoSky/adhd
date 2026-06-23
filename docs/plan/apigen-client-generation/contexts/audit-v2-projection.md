@@ -1,6 +1,6 @@
 # audit-v2-projection — STATE_NAME
 
-**Phase:** v2-projection · **Kind:** audit · **Depends on:** projection-transports, logger-layer-plugin, mount-plugins, central-validation · **Guard:** `python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase v2-projection`
+**Phase:** v2-projection · **Kind:** audit · **Depends on:** projection-transports, logger-layer-plugin, mount-plugins, central-validation, streaming-projection · **Guard:** `python3 docs/plan/apigen-client-generation/scripts/audit_apigen.py --phase v2-projection`
 
 ---
 
