@@ -7,6 +7,16 @@
       "tier": null,
       "kind": "exists",
       "path": "docs/plan/agent-registry-migration/decisions.md"
+    },
+    {
+      "id": "migration-design.2",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "byte-equivalent|behaviorally.equivalent|normaliz",
+      "paths": [
+        "docs/plan/agent-registry-migration/decisions.md"
+      ]
     }
   ]
 }
