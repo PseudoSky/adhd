@@ -110,6 +110,16 @@
       "positive": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/binding-store.test.ts",
       "mutate": "in model-store.ts resolveModelId, drop the WHERE platform = ? filter so it returns the first binding regardless of platform",
       "restore": "restore the platform filter in resolveModelId"
+    },
+    {
+      "id": "provider-tool-formats.1",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "provider_tool_formats|providerToolFormats",
+      "paths": [
+        "packages/ai/agent-provider/src/db/schema.ts"
+      ]
     }
   ]
 }
