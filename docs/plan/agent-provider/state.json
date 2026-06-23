@@ -39,10 +39,10 @@
       "end_ref": "4b608c8a37137c70daba6defdb803b4fb347a411"
     },
     "provider-adapter-contract": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T23:40:29.706Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "c7f6e8a167cf3278af6bd42c9c857e076a203f71",
       "end_ref": null
     },
     "runtime-tool-forwarding": {
