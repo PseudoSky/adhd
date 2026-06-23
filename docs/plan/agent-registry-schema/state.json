@@ -41,9 +41,9 @@
     "composed-prompt-cache": {
       "status": "complete",
       "started_at": "2026-06-23T06:20:05.331Z",
-      "done_at": "2026-06-23T06:25:16.891Z",
+      "done_at": "2026-06-23T06:25:33.916Z",
       "start_ref": "56f003385d5bf675c07ea77b33591bc8a6c5538f",
-      "end_ref": "daf9b0216f44e6aad90f2a6f0497d3e57c28ed06"
+      "end_ref": "13c2d395bd2f397ba47c832a869b77d87d133d3d"
     },
     "audit-schema": {
       "status": "pending",
@@ -153,6 +153,18 @@
       "to": "composed-prompt-cache",
       "start_ref": "56f003385d5bf675c07ea77b33591bc8a6c5538f",
       "end_ref": "daf9b0216f44e6aad90f2a6f0497d3e57c28ed06",
+      "audit_exit": 16,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "built + test passed (9/9, exit 0) + committed daf9b02"
+    },
+    {
+      "ts": "2026-06-23T06:25:33.916Z",
+      "from": "audit-schema",
+      "to": "composed-prompt-cache",
+      "start_ref": "56f003385d5bf675c07ea77b33591bc8a6c5538f",
+      "end_ref": "13c2d395bd2f397ba47c832a869b77d87d133d3d",
       "audit_exit": 16,
       "audit_criteria_passed": 2,
       "audit_criteria_total": 18,
