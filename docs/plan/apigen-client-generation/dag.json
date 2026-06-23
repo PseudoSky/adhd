@@ -847,13 +847,14 @@
         "conformance-vectors",
         "gateway"
       ],
-      "guard": "python3 -m pytest packages/apigen/python -q",
+      "guard": "python3 packages/apigen/python/run_tests.py",
       "artifacts": [
         "packages/apigen/python/apigen_python/extractor.py",
         "packages/apigen/python/apigen_python/runtime.py",
         "packages/apigen/python/apigen_python/plugin_echo.py",
         "packages/apigen/python/apigen_python/gateway_adapter.py",
-        "packages/apigen/python/pyproject.toml"
+        "packages/apigen/python/pyproject.toml",
+        "packages/apigen/python/run_tests.py"
       ],
       "context": "contexts/python-host.md",
       "notes": "SPEC §14 (H1): minimal REAL second host so the §13.1 sidecar-gateway IPC + partial-availability are proven against a true foreign runtime, not a TS stub (fixes R9). Python -extractor (source->descriptor), -runtime (invoke/validate/dispatch), one echo plugin, gateway IPC adapter. Must pass apigen-conformance vectors."
