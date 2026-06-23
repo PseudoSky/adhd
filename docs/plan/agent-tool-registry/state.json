@@ -25,10 +25,10 @@
       "end_ref": "6e7c0771b10e131a27a108958a85f064eb49ed27"
     },
     "mcp-server-schema": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T21:54:36.817Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "f2dd0f155a4c7ae50f070f5f0f2c27820fa6468e",
       "end_ref": null
     },
     "agent-tool-junction": {
