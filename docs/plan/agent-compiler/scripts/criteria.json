@@ -54,6 +54,16 @@
       "paths": [
         "tsconfig.base.json"
       ]
+    },
+    {
+      "id": "scaffold-package.3",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "platform:node",
+      "paths": [
+        "packages/ai/agent-compiler/project.json"
+      ]
     }
   ]
 }
