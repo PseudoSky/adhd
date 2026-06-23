@@ -3,7 +3,7 @@
 
 export { db, sqlite } from "./db/client.js";
 export { runMigrations } from "./db/migrate.js";
-export { toolTypesTable, toolsTable } from "./db/schema.js";
+export { platformsTable, toolPlatformBindingsTable, toolTypesTable, toolsTable } from "./db/schema.js";
 export {
     ToolStore,
     ToolStoreError,
@@ -14,3 +14,14 @@ export type {
     ToolType,
     ToolStoreErrorCode,
 } from "./store/tool-store.js";
+export {
+    BindingStore,
+    BindingStoreError,
+} from "./store/binding-store.js";
+export type {
+    BindingCreateInput,
+    BindingStoreErrorCode,
+    Platform,
+    PlatformSeedInput,
+    ToolPlatformBinding,
+} from "./store/binding-store.js";
