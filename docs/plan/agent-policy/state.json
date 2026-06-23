@@ -32,10 +32,10 @@
       "end_ref": "79de1239612c12001c64ede7404aece9ba671f5e"
     },
     "policy-inheritance": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T23:31:42.608Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "832620efde56b10d7af52bddbf9ff852fc7cb977",
       "end_ref": null
     },
     "enforcement-plugin": {
