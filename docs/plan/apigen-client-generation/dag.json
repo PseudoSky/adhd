@@ -800,16 +800,17 @@
       "kind": "work",
       "phase": "v2-scaffold",
       "depends_on": [
-        "scaffold-plugins"
+        "scaffold-plugins",
+        "nx-generator-v2"
       ],
-      "guard": "npx --yes nx run-many -t build -p apigen-ts-plugin-logger apigen-ts-plugin-openapi apigen-ts-plugin-health",
+      "guard": "npx --yes nx run-many -t build -p apigen-plugin-logger apigen-plugin-openapi apigen-plugin-health",
       "artifacts": [
-        "packages/apigen/ts/plugins/logger/project.json",
-        "packages/apigen/ts/plugins/openapi/project.json",
-        "packages/apigen/ts/plugins/health/project.json"
+        "packages/apigen/plugins/logger/project.json",
+        "packages/apigen/plugins/openapi/project.json",
+        "packages/apigen/plugins/health/project.json"
       ],
       "context": "contexts/scaffold-v2-ts-plugins.md",
-      "notes": "SPEC §12: scaffold the 3 new TS plugin packages (logger=layer, openapi+health=mount) in final ts/plugins/* homes with nx wiring; platform:node. Fixes R3."
+      "notes": ""
     },
     "class-exports": {
       "kind": "work",
