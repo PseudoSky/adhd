@@ -101,6 +101,16 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/binding-store.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "mcp-server-schema.1",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "mcp_servers|mcpServers",
+      "paths": [
+        "packages/ai/agent-tool-registry/src/db/schema.ts"
+      ]
     }
   ]
 }
