@@ -165,11 +165,11 @@
       "end_ref": "8ab11fa82044d9cb86b475ee47cd65d18b2fe883"
     },
     "done": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T18:23:58.110Z",
-      "done_at": null,
+      "done_at": "2026-06-23T18:23:58.480Z",
       "start_ref": "27ab496b799aca5d5fa4683d5257fdf1416513b4",
-      "end_ref": null
+      "end_ref": "d25e58ebd489889f9a19d181710d3c643dea5f22"
     },
     "audit-final-v2": {
       "status": "complete",
@@ -906,6 +906,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "FINAL DoD gate 117/117 all green. dod.1-19+dod.cli proven against REAL consumers: built bin, real MCP/HTTP clients, real Python sidecar (mixed-host + partial-availability), unmodified @adhd/transform capstone (dod.19). 3 real bugs caught+fixed (BUG-001 ctx-dispatch, BUG-002 generate-portability Option-A publishable package.json, BUG-003 MCP SSE). gap-check PASSED 0-warn, env-pin 46/46."
+    },
+    {
+      "ts": "2026-06-23T18:23:58.480Z",
+      "from": "done",
+      "to": "done",
+      "start_ref": "27ab496b799aca5d5fa4683d5257fdf1416513b4",
+      "end_ref": "d25e58ebd489889f9a19d181710d3c643dea5f22",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "apigen v2 plan COMPLETE. All 46 states done; final DoD gate 117/117; dod.1-19+dod.cli proven against real consumers. 18 nx packages (TS core/runtime/naming/errors/schema/conformance/gateway/codegen-openapi + 5 transport plugins + logger/openapi/health mount plugins + nx generator + cli + real Python host). 3 real bugs caught by the DoD and fixed."
     }
   ],
   "amendment_log": [
