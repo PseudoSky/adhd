@@ -128,6 +128,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/tool-format-store.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-schema.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "true",
+      "expect": "exit0"
     }
   ]
 }
