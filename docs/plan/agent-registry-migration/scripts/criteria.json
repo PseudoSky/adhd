@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "migration-design.1",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "exists",
+      "path": "docs/plan/agent-registry-migration/decisions.md"
+    }
+  ]
+}
