@@ -46,11 +46,11 @@
       "end_ref": "9d5006aaea306654f487a7b551cc37d5c21b8676"
     },
     "audit-schema": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T23:53:55.213Z",
-      "done_at": null,
+      "done_at": "2026-06-23T23:54:04.250Z",
       "start_ref": "4889977f4f4cfd4d09c7ffabec004718a192de4a",
-      "end_ref": null
+      "end_ref": "8c5f7a2249e50c5ab638b203c963953238e6df49"
     },
     "seed-and-roundtrip": {
       "status": "pending",
@@ -146,6 +146,18 @@
       "audit_criteria_total": 21,
       "by": "pseudosky",
       "note": "src/plugin/{index,rate-policy}.ts + enforcement-plugin.test.ts (14 tests, 14 passed). Real HookRegistry drives REAL throws propagation. Negative control nc_break_enforcement.mjs → 4 red tests (exit 1), nc_restore_enforcement.mjs → green (exit 0). Commit 9d5006aaea306654f487a7b551cc37d5c21b8676. Guard exit 0."
+    },
+    {
+      "ts": "2026-06-23T23:54:04.250Z",
+      "from": "audit-schema",
+      "to": "audit-schema",
+      "start_ref": "4889977f4f4cfd4d09c7ffabec004718a192de4a",
+      "end_ref": "8c5f7a2249e50c5ab638b203c963953238e6df49",
+      "audit_exit": 20,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 27,
+      "by": "pseudosky",
+      "note": "audit-schema gate: audit_policy.py --phase schema 22/22 PASS (exit 0), verified by orchestrator. Schema+enforcement states green."
     }
   ],
   "amendment_log": [],
@@ -154,7 +166,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "audit-schema",
+  "current_state": "seed-and-roundtrip",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:06:45.453Z",
     "by": "pseudosky",
