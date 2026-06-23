@@ -250,6 +250,20 @@
       ],
       "context": "contexts/lt-validate-formats.md",
       "notes": ""
+    },
+    "lt-codegen-hints": {
+      "kind": "work",
+      "phase": "integration",
+      "depends_on": [
+        "lt-host-ts",
+        "lt-host-python"
+      ],
+      "guard": "npx nx test apigen-codegen",
+      "artifacts": [
+        "packages/apigen/codegen/src/lib/hints.ts"
+      ],
+      "context": "contexts/lt-codegen-hints.md",
+      "notes": ""
     }
   },
   "authored_with": {
