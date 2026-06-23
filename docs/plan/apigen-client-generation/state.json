@@ -256,10 +256,10 @@
       "end_ref": "82dbf8e0c72d30a85c45f3aeb679df2c10fff2d5"
     },
     "logger-layer-plugin": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T04:52:22.634Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ed5230536c1e676336c7c724dc36e44a4c609612",
       "end_ref": null
     },
     "mount-plugins": {
