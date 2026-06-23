@@ -35,3 +35,11 @@
   - entrypoint: `npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-e2e.test.ts`
   - observable: `vitest exits 0; the compiled output contains the constraint text derived from the agent_policy row attached to the seeded agent (e.g. no-credentials)`
   - delivered-by: `model-and-policy-emit, platform-markdown-emit, compile-fixtures-e2e`
+
+- `[dod.4]` **Re-compiling the same agent+context returns the cached composed_prompts row (persisted; proven by reopening the DB). (behavioral)** — Re-compiling the same agent+context returns the cached composed_prompts row (persisted; proven by reopening the DB)..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-cache.test.ts`
+  - observable: `vitest exits 0; first compile writes a composed_prompts row, the DB handle is closed and reopened from the same file path, and the second compileAgent of the same agent+context returns the SAME composed_prompts id without re-running assembly`
+  - delivered-by: `composed-prompt-caching`
