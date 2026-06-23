@@ -1,6 +1,6 @@
 # audit-final — FINAL ACCEPTANCE GATE
 
-**Phase:** audit · **Kind:** audit · **Depends on:** seed-and-roundtrip · **Guard:** `python3 docs/plan/agent-provider/scripts/audit_provider.py --phase final`
+**Phase:** audit · **Kind:** audit · **Depends on:** code-review · **Guard:** `python3 docs/plan/agent-provider/scripts/audit_provider.py --phase final`
 
 ---
 
