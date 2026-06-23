@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "logger-layer-plugin",
+  "current_state": "mount-plugins",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -263,10 +263,10 @@
       "end_ref": null
     },
     "mount-plugins": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T04:52:22.764Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ee2879629dcfe198a43ecdec0f0edbd8d8b80eae",
       "end_ref": null
     },
     "audit-v2-projection": {
