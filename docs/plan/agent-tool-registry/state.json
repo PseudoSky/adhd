@@ -53,11 +53,11 @@
       "end_ref": "79c5979f52117b1e72ead1e3df54048404c326d7"
     },
     "audit-final": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T22:56:49.373Z",
-      "done_at": null,
+      "done_at": "2026-06-23T22:57:03.272Z",
       "start_ref": "56bbe0144320ecf2ba5f34f00c21708d73be1b76",
-      "end_ref": null
+      "end_ref": "d5146a0a3c47c456daa88301c088b25d373ff106"
     },
     "code-review": {
       "status": "complete",
@@ -175,6 +175,18 @@
       "audit_criteria_total": 18,
       "by": "pseudosky",
       "note": "APPROVED — review.md commit 9828aea; guard exit 0; real-DB test run exit 0 (57/57)"
+    },
+    {
+      "ts": "2026-06-23T22:57:03.272Z",
+      "from": "audit-final",
+      "to": "audit-final",
+      "start_ref": "56bbe0144320ecf2ba5f34f00c21708d73be1b76",
+      "end_ref": "d5146a0a3c47c456daa88301c088b25d373ff106",
+      "audit_exit": 12,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "audit-final DoD gate: audit_tool_registry.py --phase final => 28/28 PASS (exit 0), incl dod.1-5, verified by orchestrator. code-review APPROVED (review_gate exit 0). Plan complete."
     }
   ],
   "amendment_log": [],
