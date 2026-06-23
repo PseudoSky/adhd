@@ -162,7 +162,7 @@
       "kind": "work",
       "phase": "architecture",
       "depends_on": [],
-      "guard": "test -f docs/plan/agent-registry-schema/decisions.md && python3 docs/plan/agent-registry-schema/scripts/check_decisions.py",
+      "guard": "python3 docs/plan/agent-registry-schema/scripts/audit_registry_schema.py --phase architecture",
       "artifacts": [
         "docs/plan/agent-registry-schema/decisions.md",
         "docs/plan/agent-registry-schema/contexts/design-and-architecture.md"
