@@ -155,6 +155,16 @@
       "positive": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/inheritance.test.ts",
       "mutate": "scripts/nc_break_inheritance.mjs",
       "restore": "scripts/nc_restore_inheritance.mjs"
+    },
+    {
+      "id": "enforcement-plugin.1",
+      "phase": "enforcement",
+      "tier": null,
+      "kind": "present",
+      "pattern": "configSchema",
+      "paths": [
+        "packages/ai/agent-policy/src/plugin/index.ts"
+      ]
     }
   ]
 }
