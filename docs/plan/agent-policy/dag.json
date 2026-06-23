@@ -23,6 +23,24 @@
       ],
       "context": "contexts/policy-design.md",
       "notes": ""
+    },
+    "scaffold-package": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": [
+        "policy-design"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-policy/project.json",
+        "packages/ai/agent-policy/package.json",
+        "packages/ai/agent-policy/src/index.ts",
+        "packages/ai/agent-policy/src/db/client.ts",
+        "packages/ai/agent-policy/src/db/schema.ts",
+        "tsconfig.base.json"
+      ],
+      "context": "contexts/scaffold-package.md",
+      "notes": ""
     }
   },
   "authored_with": {
