@@ -136,6 +136,14 @@
       "kind": "command",
       "cmd": "npx nx test apigen-cli",
       "expect": "exit0"
+    },
+    {
+      "id": "lt-validate-formats.1",
+      "phase": "integration",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx test apigen-runtime",
+      "expect": "exit0"
     }
   ]
 }
