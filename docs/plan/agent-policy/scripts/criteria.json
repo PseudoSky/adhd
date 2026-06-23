@@ -165,6 +165,17 @@
       "paths": [
         "packages/ai/agent-policy/src/plugin/index.ts"
       ]
+    },
+    {
+      "id": "enforcement-plugin.2",
+      "phase": "enforcement",
+      "tier": null,
+      "kind": "present",
+      "pattern": "createPlugin|registerEnforcement",
+      "paths": [
+        "packages/ai/agent-policy/src/plugin/index.ts",
+        "packages/ai/agent-policy/src/plugin/rate-policy.ts"
+      ]
     }
   ]
 }

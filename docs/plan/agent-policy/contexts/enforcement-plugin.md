@@ -18,6 +18,7 @@
 
 - [enforcement-plugin.1] plugin exports configSchema (zod)
 
+- [enforcement-plugin.2] plugin exports createPlugin + registers via hooks.registerEnforcement(pre:model_request)
 ---
 
 ## Reservations
