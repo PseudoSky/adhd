@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "canonical-descriptor",
+  "current_state": "scaffold-v2-ts-plugins",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -305,11 +305,11 @@
       "end_ref": null
     },
     "scaffold-v2-common": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T00:37:41.953Z",
-      "done_at": null,
+      "done_at": "2026-06-23T02:16:40.613Z",
       "start_ref": "784d4aba464d4cd60df8ff9ea791a650b72ba0d0",
-      "end_ref": null
+      "end_ref": "b479bc7fa9c59d3cf224f83eb79723477608508a"
     },
     "scaffold-v2-ts-plugins": {
       "status": "pending",
@@ -575,6 +575,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Implemented run.ts + run-registry.ts commands. run: dynamic import() of source module, filters non-function exports (excl __samples__), wires AbortController to SIGINT/SIGTERM, calls plugin.run(). run-registry: discoverPackages() multi-pkg, imports live fns per pkg, single plugin.run() call with full packages array. index.ts updated to register both. Test: 5/5 pass (rc=0) — covers no-run-method error, live fns import, __samples__ exclusion, abort resolution, --output flag absent, multi-pkg registry dispatch, live streaming-http MCP server round-trip via process.emit(SIGINT). Lint: rc=0. Build: rc=0. Commit: 6571b98."
+    },
+    {
+      "ts": "2026-06-23T02:16:40.613Z",
+      "from": "canonical-descriptor",
+      "to": "scaffold-v2-common",
+      "start_ref": "784d4aba464d4cd60df8ff9ea791a650b72ba0d0",
+      "end_ref": "b479bc7fa9c59d3cf224f83eb79723477608508a",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "6 common pkgs scaffolded in final homes (naming/errors/schema/conformance/gateway/codegen/openapi), all build green, tsconfig.base paths added"
     }
   ],
   "amendment_log": [
