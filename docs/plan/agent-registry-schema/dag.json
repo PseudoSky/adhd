@@ -2,7 +2,9 @@
   "schema_version": 2,
   "title": "Agent Registry — Prompt Component Schema (@adhd/agent-registry)",
   "plan_kind": "greenfield",
-  "phases": [],
+  "phases": [
+    "foundation"
+  ],
   "terminal": "done",
   "nodes": {},
   "authored_with": {
