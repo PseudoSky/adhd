@@ -19,6 +19,7 @@
 - [enforcement-plugin.1] plugin exports configSchema (zod)
 
 - [enforcement-plugin.2] plugin exports createPlugin + registers via hooks.registerEnforcement(pre:model_request)
+- [enforcement-plugin.3] enforcement test: rate policy throws through real IHookRegistry.enforce(pre:model_request)
 ---
 
 ## Reservations
