@@ -3,7 +3,7 @@
 
 export { db, sqlite } from "./db/client.js";
 export { runMigrations } from "./db/migrate.js";
-export { platformsTable, toolPlatformBindingsTable, toolTypesTable, toolsTable } from "./db/schema.js";
+export { mcpServersTable, platformsTable, toolPlatformBindingsTable, toolTypesTable, toolsTable } from "./db/schema.js";
 export {
     ToolStore,
     ToolStoreError,
@@ -25,3 +25,12 @@ export type {
     PlatformSeedInput,
     ToolPlatformBinding,
 } from "./store/binding-store.js";
+export {
+    McpServerStore,
+    McpServerStoreError,
+} from "./store/mcp-server-store.js";
+export type {
+    McpServer,
+    McpServerCreateInput,
+    McpServerStoreErrorCode,
+} from "./store/mcp-server-store.js";
