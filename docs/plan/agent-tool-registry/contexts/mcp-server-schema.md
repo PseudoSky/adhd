@@ -18,6 +18,7 @@
 
 - [mcp-server-schema.1] mcp_servers table with transport
 
+- [mcp-server-schema.2] mcp-server-store test passes
 ---
 
 ## Reservations
