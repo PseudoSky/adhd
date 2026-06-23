@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "python-host",
+  "current_state": "audit-v2-host",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -333,11 +333,11 @@
       "end_ref": "7d23d7b68dfd01a8084ea0edc289adb7b7fee736"
     },
     "python-host": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T05:26:14.230Z",
-      "done_at": null,
+      "done_at": "2026-06-23T05:35:56.870Z",
       "start_ref": "b71b334b434f8dd9081adac5d7eb27590864ee28",
-      "end_ref": null
+      "end_ref": "34ed69a0c9cdf65daeb31b51654583b56ea09d79"
     },
     "audit-v2-host": {
       "status": "pending",
@@ -858,6 +858,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "§13.1 sidecar gateway (opus): partial availability (down host → unavailable/503, others serve), readiness gating (+neg control), supervision/restart w/ backoff, deadlines→deadline_exceeded, cost-based topology (zero-hop vs IPC). HostAdapter seam defined for python-host. Tests deterministic (latches + injected timer, no wall clock, negative controls — CLAUDE.md §6). nx test apigen-gateway exit 0 (orch-verified). Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:35:56.870Z",
+      "from": "python-host",
+      "to": "python-host",
+      "start_ref": "b71b334b434f8dd9081adac5d7eb27590864ee28",
+      "end_ref": "34ed69a0c9cdf65daeb31b51654583b56ea09d79",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "REAL Python host (H1/§14): extractor/runtime/plugin_echo/gateway_adapter + pyproject + run_tests.py. Conformance vectors consumed from canonical @adhd/apigen-conformance via generated conformance_vectors.json (no drift, never hand-authored). run_tests.py exit 0, 45/45 passed incl negative control + echo roundtrip. Implements HostAdapter/IPC seam for gateway-mixed-host. Orchestrator-driven (F40)."
     }
   ],
   "amendment_log": [
