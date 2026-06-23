@@ -1,6 +1,6 @@
 # conformance-vectors — STATE_NAME
 
-**Phase:** v2-packaging · **Kind:** work · **Depends on:** central-validation, layer-harness, canonical-descriptor · **Guard:** `npx --yes nx test apigen-conformance`
+**Phase:** v2-packaging · **Kind:** work · **Depends on:** central-validation, layer-harness, canonical-descriptor, scaffold-v2-common · **Guard:** `npx --yes nx test apigen-conformance`
 
 ---
 

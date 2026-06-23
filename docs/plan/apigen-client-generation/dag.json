@@ -753,7 +753,8 @@
       "depends_on": [
         "central-validation",
         "layer-harness",
-        "canonical-descriptor"
+        "canonical-descriptor",
+        "scaffold-v2-common"
       ],
       "guard": "npx --yes nx test apigen-conformance",
       "artifacts": [
