@@ -19,3 +19,11 @@
   - entrypoint: `npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/binding-store.test.ts`
   - observable: `vitest exits 0; BindingStore.resolve('shell_exec','claude_code') returns 'Bash' after the DB is closed and reopened from the same file path`
   - delivered-by: `platform-and-binding-schema, seed-and-roundtrip`
+
+- `[dod.2]` **Seeding the tool catalog + platform bindings is idempotent and round-trips after reopen (behavioral)** — Seeding the tool catalog + platform bindings is idempotent and round-trips after reopen.
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/roundtrip.test.ts`
+  - observable: `vitest exits 0; after seed() runs twice the tool/binding row counts are identical, and a canonical tool resolves to its alias after reopen`
+  - delivered-by: `seed-and-roundtrip`
