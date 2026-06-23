@@ -3,7 +3,8 @@
   "title": "Agent Registry — Tool & Platform Registry (@adhd/agent-tool-registry)",
   "plan_kind": "greenfield",
   "phases": [
-    "foundation"
+    "foundation",
+    "schema"
   ],
   "terminal": "done",
   "nodes": {},
