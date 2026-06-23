@@ -200,6 +200,14 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - observable: `with TS+Python hosts behind one surface, killing the Python sidecar returns 503/unavailable for ONLY its ops while TS ops keep serving (§13.1)`
   - negative-control: `Make one host crash whole-surface in packages/apigen/cli/src/test/integration/gateway-mixed-host.spec.ts -> TS ops also fail -> the partial-availability assertion goes red`
   - delivered-by: `gateway, python-host, audit-v2-host, integration-tests-v2`
+- `[dod.18]` **Class exports — static methods and opt-in instances dispatch (behavioral)** — Class exports — static methods and opt-in instances dispatch.
+  - given: a class with a static and an instance method (instances opted in)
+  - when: the client calls each
+  - then: static dispatches directly; instance dispatches via {instanceId}
+  - entrypoint: `packages/apigen/cli/src/test/integration/canonical.spec.ts`
+  - observable: `a class static method dispatches as an op; opt-in instance: constructor returns {instanceId} and an instance-method dispatches against it via the registry`
+  - negative-control: `Drop the instance-method route in packages/apigen/cli/src/test/integration/canonical.spec.ts -> the instance dispatch assertion goes red`
+  - delivered-by: `class-exports, ts-extractor-by-symbol, audit-v2-core, integration-tests-v2`
 ---
 
 ## Execution model
