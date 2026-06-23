@@ -55,6 +55,16 @@
       "paths": [
         "packages/ai/agent-provider/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "provider-and-model-schema.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "models|modelsTable",
+      "paths": [
+        "packages/ai/agent-provider/src/db/schema.ts"
+      ]
     }
   ]
 }
