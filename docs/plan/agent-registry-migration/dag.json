@@ -8,7 +8,8 @@
     "parse",
     "import",
     "verify",
-    "removal"
+    "removal",
+    "audit"
   ],
   "terminal": "done",
   "nodes": {},
