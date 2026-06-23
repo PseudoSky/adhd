@@ -20,3 +20,12 @@
   - observable: `vitest exits 0 and case 'session systemPrompt equals compileAgent output' passes: it wires the REAL SessionStore + prompt-resolver + composed-prompt-store against an on-disk SQLite file, starts a session via the agent tool with the LLM provider mocked, and deep-equals the session's resolved systemPrompt to compileAgent({agentSlug,platform,context}).content.`
   - negative-control: `in prompt-resolver.ts replace the compileAgent call token with a stub returning a fixed string → the resolved systemPrompt no longer equals compileAgent output → the session-compiler-e2e.test.ts clause goes red.`
   - delivered-by: `runtime-sink-schema, compiler-integration, session-e2e`
+
+- `[dod.2]` **A second session for the same agent+context HITS the composed_prompt cache: the compiler is not re-invoked and sessions.composed_prompt_id points at the cached row, proven by reopening the DB. (behavioral)** — A second session for the same agent+context HITS the composed_prompt cache: the compiler is not re-invoked and sessions.composed_prompt_id points at the cached row, proven by reopening the DB..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/cache-reuse.test.ts`
+  - observable: `vitest exits 0 and case 'second session reuses cached composed_prompt without recompile' passes: it counts compileAgent invocations (1 across two session starts), reopens the DB from the same file path, and asserts both sessions' composed_prompt_id reference the same composed_prompts row.`
+  - negative-control: `make prompt-resolver skip the cache lookup and always call compileAgent → the invocation count becomes 2 / a second composed_prompts row appears → cache-reuse.test.ts goes red.`
+  - delivered-by: `runtime-sink-schema, compiler-integration, session-e2e`
