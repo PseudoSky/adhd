@@ -169,6 +169,14 @@
       "paths": [
         "packages/ai/agent-mcp/src/providers/claudecli.ts"
       ]
+    },
+    {
+      "id": "policy-engine-bridge.3",
+      "phase": "integration",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/policy-tool-reconcile.test.ts",
+      "expect": "exit0"
     }
   ]
 }

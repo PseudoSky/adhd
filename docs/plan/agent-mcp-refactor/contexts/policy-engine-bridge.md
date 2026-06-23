@@ -19,6 +19,7 @@
 - [policy-engine-bridge.1] PolicyEngine can read limits from agent-policy templates (not only hardcoded PolicyConfig)
 
 - [policy-engine-bridge.2] claudecli reconciles allowedBuiltinTools/systemPromptIsAgentSpec with the registry AGENT_TOOL/compiled-tools model
+- [policy-engine-bridge.3] policy/tool reconciliation test passes (no competing third tool-permission model)
 ---
 
 ## Reservations
