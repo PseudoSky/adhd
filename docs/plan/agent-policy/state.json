@@ -11,10 +11,10 @@
       "end_ref": "6b81009bfb2b41d586d3537a580f42f4326b8b6c"
     },
     "scaffold-package": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T23:12:19.527Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "4b60560aa2e44ec9bd448e4bdf2e11ca2ede2e6a",
       "end_ref": null
     },
     "policy-type-and-template-schema": {
