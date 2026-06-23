@@ -78,6 +78,14 @@
       "paths": [
         "packages/ai/agent-registry-migration/package.json"
       ]
+    },
+    {
+      "id": "scaffold-package.5",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx build agent-registry-migration",
+      "expect": "exit0"
     }
   ]
 }
