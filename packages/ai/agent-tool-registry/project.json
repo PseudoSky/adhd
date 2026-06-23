@@ -44,6 +44,15 @@
         "command": "rm -rf dist/packages/ai/agent-tool-registry"
       }
     },
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": ["{workspaceRoot}/coverage/packages/ai/agent-tool-registry"],
+      "options": {
+        "configFile": "packages/ai/agent-tool-registry/vite.config.ts",
+        "passWithNoTests": true
+      }
+    },
+
     "nx-release-publish": {
       "dependsOn": ["build", "test"],
       "options": {
