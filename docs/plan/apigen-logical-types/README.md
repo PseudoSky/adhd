@@ -74,3 +74,12 @@ One registry-driven, codegen-first mechanism that round-trips non-JSON-native ty
   - observable: `the decoded any value is a real Date`
   - negative-control: `remove envelope path -> schema-less Date flattens to {} -> red`
   - delivered-by: `lt-generator-emit, lt-scalars`
+
+- `[dod.8]` **An unannotated source class transcodes via schema projection (Tenet 1) (behavioral)** — An unannotated source class transcodes via schema projection (Tenet 1).
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx nx test apigen-runtime`
+  - observable: `an unannotated class round-trips correctly`
+  - negative-control: `require x-apigen-ctor -> unannotated class fails -> red`
+  - delivered-by: `lt-nominal-codec, lt-extract-nominal`
