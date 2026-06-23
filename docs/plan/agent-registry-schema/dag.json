@@ -26,6 +26,21 @@
       ],
       "context": "contexts/scaffold-package.md",
       "notes": ""
+    },
+    "lookup-and-component-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "scaffold-package"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-registry/src/db/schema.ts",
+        "packages/ai/agent-registry/src/store/component-store.ts",
+        "packages/ai/agent-registry/src/index.ts"
+      ],
+      "context": "contexts/lookup-and-component-schema.md",
+      "notes": ""
     }
   },
   "authored_with": {
