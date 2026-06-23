@@ -216,9 +216,9 @@
   },
   "current_state": "audit-final",
   "dod_provenance": {
-    "confirmed_at": "2026-06-23T03:43:53.482Z",
+    "confirmed_at": "2026-06-23T20:45:51.107Z",
     "by": "pseudosky",
-    "note": "DoD derived from docs/plan/agent-registry/{GOAL,SCOPE,DATA_MODEL,SEED_DATA}.md; confirmed by team-lead via plan-authoring task 2026-06-22",
+    "note": "Completion-time DoD confirmation: human (pseudosky) confirmed all 5 clauses (dod.1-5) verbatim via plan-orchestrator after the orchestrator surfaced them; all proven MET and re-verified state-side this session — final-phase audit 31/31 PASS exit 0 (incl. behavioral dod.1-3 driving real vitest suites + neg-control teeth), nx build clean exit 0, nx test 62/62 pass exit 0.",
     "dod_ids": [
       "dod.1",
       "dod.2",
