@@ -94,6 +94,19 @@
       ],
       "context": "contexts/agent-tool-junction.md",
       "notes": ""
+    },
+    "audit-schema": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "agent-tool-junction"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "docs/plan/agent-tool-registry/scripts/audit_tool_registry.py"
+      ],
+      "context": "contexts/audit-schema.md",
+      "notes": ""
     }
   },
   "authored_with": {
