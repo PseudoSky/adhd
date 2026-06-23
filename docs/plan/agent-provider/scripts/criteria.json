@@ -174,6 +174,16 @@
       "paths": [
         "packages/ai/agent-provider/src/runtime/emit-tools.ts"
       ]
+    },
+    {
+      "id": "runtime-tool-forwarding.2",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "present",
+      "pattern": "throw|UnsupportedNativeToolError|UNSUPPORTED_NATIVE_TOOL",
+      "paths": [
+        "packages/ai/agent-provider/src/runtime/emit-tools.ts"
+      ]
     }
   ]
 }

@@ -18,6 +18,7 @@
 
 - [runtime-tool-forwarding.1] emitter branches on server-side type-tagged shape
 
+- [runtime-tool-forwarding.2] emitter throws explicit actionable error for unsupported native
 ---
 
 ## Reservations
