@@ -503,7 +503,9 @@
         "packages/apigen/cli/src/test/fixtures/shapes/default-object.ts",
         "packages/apigen/cli/src/test/fixtures/real-api.ts",
         "packages/apigen/cli/src/test/fixtures/shapes/anonymous-default.ts",
-        "packages/apigen/cli/src/test/fixtures/shapes/cjs-source.cts"
+        "packages/apigen/cli/src/test/fixtures/shapes/cjs-source.cts",
+        "packages/apigen/cli/src/test/integration/streaming.spec.ts",
+        "packages/apigen/cli/src/test/e2e/real-consumer.spec.ts"
       ],
       "context": "contexts/integration-tests-v2.md",
       "notes": "Re-authored against the canonical contract (SPEC §15). REAL components: extractor->descriptor->harness->each transport. Export-shape matrix (named/renamed-as/default-fn/default-object/anonymous/CJS) proves F28/F29 closed. Mixed-host gateway test proves §13. real-api.ts retained as the v1 behavioral-regression fixture (dod.1/2/5/cli)."
