@@ -27,6 +27,13 @@
       "paths": [
         "docs/plan/agent-registry-migration/decisions.md"
       ]
+    },
+    {
+      "id": "migration-design.4",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/ai/agent-registry-migration/src/__fixtures__/code-reviewer.md"
     }
   ]
 }
