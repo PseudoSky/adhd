@@ -27,3 +27,11 @@
   - entrypoint: `npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/enforcement-plugin.test.ts`
   - observable: `vitest exits 0 and the case 'rate policy throws through real IHookRegistry.enforce(pre:model_request) when the limit is crossed' passes`
   - delivered-by: `scaffold-package, policy-type-and-template-schema, enforcement-plugin`
+
+- `[dod.3]` **Seeding the policy templates (with multi-value enforcement JSON arrays) is idempotent and round-trips after reopen. (behavioral)** — Seeding the policy templates (with multi-value enforcement JSON arrays) is idempotent and round-trips after reopen..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/roundtrip.test.ts`
+  - observable: `vitest exits 0 and the cases 'policy template round-trips after reopen' and 'seed is idempotent on re-run' pass`
+  - delivered-by: `policy-type-and-template-schema, seed-and-roundtrip`
