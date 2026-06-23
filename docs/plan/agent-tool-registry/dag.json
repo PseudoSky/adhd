@@ -26,6 +26,23 @@
       ],
       "context": "contexts/scaffold-package.md",
       "notes": ""
+    },
+    "tool-and-type-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "scaffold-package"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-tool-registry/src/db/schema.ts",
+        "packages/ai/agent-tool-registry/src/store/tool-store.ts",
+        "packages/ai/agent-tool-registry/src/index.ts",
+        "packages/ai/agent-tool-registry/src/__tests__/tool-store.test.ts",
+        "packages/ai/agent-tool-registry/drizzle"
+      ],
+      "context": "contexts/tool-and-type-schema.md",
+      "notes": ""
     }
   },
   "authored_with": {
