@@ -88,6 +88,14 @@
       "kind": "command",
       "cmd": "npx nx test apigen-runtime",
       "expect": "exit0"
+    },
+    {
+      "id": "lt-union-codec.1",
+      "phase": "codecs",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx test apigen-runtime",
+      "expect": "exit0"
     }
   ]
 }
