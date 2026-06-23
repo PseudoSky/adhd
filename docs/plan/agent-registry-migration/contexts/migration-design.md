@@ -19,6 +19,7 @@
 - [migration-design.1] decisions.md exists
 
 - [migration-design.2] equivalence definition (byte/behavioral) recorded
+- [migration-design.3] zero-loss gate + cross-repo boundary recorded
 ---
 
 ## Reservations
