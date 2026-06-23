@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "central-validation",
+  "current_state": "projection-transports",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -249,10 +249,10 @@
       "end_ref": "e82163ea123700357116d0b54f15997539d3a1da"
     },
     "projection-transports": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T02:33:50.766Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "4d214457ff5a339374d4494b16f26ffa5b8daa19",
       "end_ref": null
     },
     "logger-layer-plugin": {
