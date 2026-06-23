@@ -246,6 +246,14 @@
       "kind": "command",
       "cmd": "true",
       "expect": "exit0"
+    },
+    {
+      "id": "code-review.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-mcp-refactor/scripts/review_gate.py",
+      "expect": "exit0"
     }
   ]
 }
