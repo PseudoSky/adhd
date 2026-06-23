@@ -18,6 +18,7 @@
 
 - [agent-policy-junction.1] agent_policy junction (agent, policy, override_config, is_mandatory, inherited_from)
 
+- [agent-policy-junction.2] AgentPolicyStore attaches a direct policy
 ---
 
 ## Reservations
