@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "scaffold-package.1",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/ai/agent-registry/project.json"
+    }
+  ]
+}
