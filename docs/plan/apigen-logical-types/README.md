@@ -83,3 +83,12 @@ One registry-driven, codegen-first mechanism that round-trips non-JSON-native ty
   - observable: `an unannotated class round-trips correctly`
   - negative-control: `require x-apigen-ctor -> unannotated class fails -> red`
   - delivered-by: `lt-nominal-codec, lt-extract-nominal`
+
+- `[dod.9]` **run/generate fail fast on 0 functions and on a missing optional rich-type dep (BUG-004) (behavioral)** — run/generate fail fast on 0 functions and on a missing optional rich-type dep (BUG-004).
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `node dist/packages/apigen/cli/index.js run --source <decimal-fixture>.ts --type api-fastify`
+  - observable: `decimal.js absent -> actionable startup error; 0-function source -> wrong-source error`
+  - negative-control: `remove guard -> cryptic ERR_MODULE_NOT_FOUND / 0-function crash -> red`
+  - delivered-by: `lt-fail-fast`
