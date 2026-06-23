@@ -25,10 +25,10 @@
       "end_ref": "1190b44e62f47906e36b9bf2d6326790269a8f36"
     },
     "agent-policy-junction": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T23:25:55.092Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "802032864790c6af2c0ea439b33cc1270196696c",
       "end_ref": null
     },
     "policy-inheritance": {
