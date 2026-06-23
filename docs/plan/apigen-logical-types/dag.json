@@ -89,6 +89,19 @@
       ],
       "context": "contexts/lt-runmode-closures.md",
       "notes": ""
+    },
+    "lt-scalars": {
+      "kind": "work",
+      "phase": "scalars",
+      "depends_on": [
+        "lt-generator-emit"
+      ],
+      "guard": "npx nx test apigen-logical",
+      "artifacts": [
+        "packages/apigen/logical/src/lib/codecs"
+      ],
+      "context": "contexts/lt-scalars.md",
+      "notes": ""
     }
   },
   "authored_with": {
