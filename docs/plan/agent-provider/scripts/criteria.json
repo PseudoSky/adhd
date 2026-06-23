@@ -164,6 +164,16 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/adapter-resolve.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "runtime-tool-forwarding.1",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "present",
+      "pattern": "web_search|type-tagged|serverSide|server_side",
+      "paths": [
+        "packages/ai/agent-provider/src/runtime/emit-tools.ts"
+      ]
     }
   ]
 }
