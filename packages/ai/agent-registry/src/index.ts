@@ -36,3 +36,13 @@ export type {
     CompositionContext,
     ResolvedComponent,
 } from "./store/composition-store.js";
+
+// usecase-and-context-rules state: use_cases, component_usage, context_rules + UseCaseStore
+export { UseCaseStore, UseCaseError } from "./store/usecase-store.js";
+export type {
+    UseCase,
+    UseCaseCreateInput,
+    ComponentUsageRow,
+    ContextRule,
+    ContextRuleCreateInput,
+} from "./store/usecase-store.js";
