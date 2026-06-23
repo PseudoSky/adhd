@@ -16,7 +16,7 @@
       "kind": "work",
       "phase": "foundation",
       "depends_on": [],
-      "guard": "true",
+      "guard": "npx --yes nx build agent-provider",
       "artifacts": [
         "packages/ai/agent-provider/project.json",
         "packages/ai/agent-provider/package.json",
@@ -34,7 +34,7 @@
       "depends_on": [
         "scaffold-package"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/model-store.test.ts",
       "artifacts": [
         "packages/ai/agent-provider/src/db/schema.ts",
         "packages/ai/agent-provider/src/store/provider-store.ts",
@@ -52,7 +52,7 @@
       "depends_on": [
         "provider-and-model-schema"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/binding-store.test.ts",
       "artifacts": [
         "packages/ai/agent-provider/src/db/schema.ts",
         "packages/ai/agent-provider/src/store/model-store.ts",
@@ -69,7 +69,7 @@
       "depends_on": [
         "model-platform-bindings"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/tool-format-store.test.ts",
       "artifacts": [
         "packages/ai/agent-provider/src/db/schema.ts",
         "packages/ai/agent-provider/src/store/tool-format-store.ts",
@@ -86,7 +86,7 @@
       "depends_on": [
         "provider-tool-formats"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-provider/scripts/audit_provider.py --phase schema",
       "artifacts": [
         "docs/plan/agent-provider/scripts/audit_provider.py"
       ],
@@ -99,7 +99,7 @@
       "depends_on": [
         "audit-schema"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/adapter-resolve.test.ts",
       "artifacts": [
         "packages/ai/agent-mcp-types/src/domain.ts",
         "packages/ai/agent-mcp-types/src/index.ts",
@@ -116,7 +116,7 @@
       "depends_on": [
         "provider-adapter-contract"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
       "artifacts": [
         "packages/ai/agent-provider/src/runtime/emit-tools.ts",
         "packages/ai/agent-provider/src/index.ts",
@@ -131,7 +131,7 @@
       "depends_on": [
         "runtime-tool-forwarding"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
       "artifacts": [
         "packages/ai/agent-provider/src/seed/providers.ts",
         "packages/ai/agent-provider/src/seed/models.ts",
@@ -149,7 +149,7 @@
       "depends_on": [
         "seed-and-roundtrip"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/agent-provider/scripts/audit_provider.py --phase final",
       "artifacts": [
         "docs/plan/agent-provider/scripts/audit_provider.py"
       ],
