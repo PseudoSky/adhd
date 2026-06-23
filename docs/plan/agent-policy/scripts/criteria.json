@@ -120,6 +120,14 @@
       "paths": [
         "packages/ai/agent-policy/src/store/agent-policy-store.ts"
       ]
+    },
+    {
+      "id": "agent-policy-junction.3",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/agent-policy-store.test.ts",
+      "expect": "exit0"
     }
   ]
 }

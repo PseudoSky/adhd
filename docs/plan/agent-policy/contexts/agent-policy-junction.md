@@ -19,6 +19,7 @@
 - [agent-policy-junction.1] agent_policy junction (agent, policy, override_config, is_mandatory, inherited_from)
 
 - [agent-policy-junction.2] AgentPolicyStore attaches a direct policy
+- [agent-policy-junction.3] agent-policy-store direct-attach round-trip after reopen test passes
 ---
 
 ## Reservations
