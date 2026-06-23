@@ -65,6 +65,14 @@
       "paths": [
         "packages/ai/agent-registry/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "lookup-and-component-schema.3",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/component-store.test.ts",
+      "expect": "exit0"
     }
   ]
 }

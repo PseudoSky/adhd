@@ -19,6 +19,7 @@
 - [lookup-and-component-schema.1] prompt_types lookup table defined
 
 - [lookup-and-component-schema.2] prompt_components table with integer version + is_shared
+- [lookup-and-component-schema.3] component-store round-trip test passes
 ---
 
 ## Reservations
