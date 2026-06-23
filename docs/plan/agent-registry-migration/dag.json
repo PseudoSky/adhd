@@ -5,7 +5,8 @@
   "phases": [
     "architecture",
     "foundation",
-    "parse"
+    "parse",
+    "import"
   ],
   "terminal": "done",
   "nodes": {},
