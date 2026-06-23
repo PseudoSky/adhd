@@ -146,6 +146,15 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/inheritance.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "policy-inheritance.3",
+      "phase": "schema",
+      "tier": null,
+      "kind": "negative-control",
+      "positive": "npx --yes nx test agent-policy --testFile=packages/ai/agent-policy/src/__tests__/inheritance.test.ts",
+      "mutate": "scripts/nc_break_inheritance.mjs",
+      "restore": "scripts/nc_restore_inheritance.mjs"
     }
   ]
 }
