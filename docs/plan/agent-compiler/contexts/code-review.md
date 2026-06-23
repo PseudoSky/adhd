@@ -1,4 +1,4 @@
-# code-review — STATE_NAME
+# code-review — FINAL DIFF REVIEW: DESIGN-INTENT FIDELITY THE AUDIT CAN'T CATCH
 
 **Phase:** audit · **Kind:** review · **Depends on:** compile-fixtures-e2e · **Guard:** `python3 docs/plan/agent-compiler/scripts/review_gate.py`
 
@@ -6,7 +6,16 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The full implementation diff (`compiler-design` … `compile-fixtures-e2e`) has been
+read by an architect-reviewer (opus) and recorded an APPROVED verdict in
+`review.md` with no unresolved blocking findings. This is the second of two review
+gates (the first, `code-review-engine`, gated the composition-engine core at the
+resolve→emit boundary). It catches design-intent violations a structural
+`audit_*.py` oracle cannot — e.g. a cross-package join that violates the decided
+single-DB topology, a `composed_prompts` cache keyed on the wrong context hash, or
+a per-platform header builder that diverges from the decided contract. `audit-final`
+depends on this state, so the plan cannot reach done on a NEEDS-WORK or absent
+review.
 
 ---
 

@@ -93,7 +93,7 @@
       "kind": "work",
       "phase": "emit",
       "depends_on": [
-        "model-and-policy-emit"
+        "code-review-engine"
       ],
       "guard": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-agent.test.ts",
       "artifacts": [
@@ -170,7 +170,7 @@
       "kind": "audit",
       "phase": "audit",
       "depends_on": [
-        "compile-fixtures-e2e"
+        "code-review"
       ],
       "guard": "python3 docs/plan/agent-compiler/scripts/audit_compiler.py --phase final",
       "artifacts": [
