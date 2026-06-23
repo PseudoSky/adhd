@@ -264,6 +264,19 @@
       ],
       "context": "contexts/lt-codegen-hints.md",
       "notes": ""
+    },
+    "lt-host-generator": {
+      "kind": "work",
+      "phase": "gates",
+      "depends_on": [
+        "lt-host-python"
+      ],
+      "guard": "npx nx test apigen-nx",
+      "artifacts": [
+        "packages/apigen/nx/src/generators/host"
+      ],
+      "context": "contexts/lt-host-generator.md",
+      "notes": ""
     }
   },
   "authored_with": {
