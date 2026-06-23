@@ -4,7 +4,8 @@
   "plan_kind": "greenfield",
   "phases": [
     "architecture",
-    "foundation"
+    "foundation",
+    "schema"
   ],
   "terminal": "done",
   "nodes": {},
