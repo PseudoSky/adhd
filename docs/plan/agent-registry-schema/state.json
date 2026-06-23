@@ -53,11 +53,11 @@
       "end_ref": "ca81e5287acd2284c239e2315c136a1779821ccd"
     },
     "seed-and-roundtrip": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T15:01:47.008Z",
-      "done_at": null,
+      "done_at": "2026-06-23T15:15:06.341Z",
       "start_ref": "9f6c0b2af456f3159d1cb2cedb64bc52f0719348",
-      "end_ref": null
+      "end_ref": "60aea137012ae334b2e2971fd47af33aef4597b7"
     },
     "audit-final": {
       "status": "pending",
@@ -182,6 +182,18 @@
       "audit_criteria_total": 23,
       "by": "pseudosky",
       "note": "Schema-phase audit green (22/22 schema-table criteria). Resolved F1 build regression (tsconfig lib ES2022, 6a91d04) and F2 plan-ordering defect via planner-repair (seed criteria recategorized to final phase, 0d92141). Guard exit 0."
+    },
+    {
+      "ts": "2026-06-23T15:15:06.341Z",
+      "from": "seed-and-roundtrip",
+      "to": "seed-and-roundtrip",
+      "start_ref": "9f6c0b2af456f3159d1cb2cedb64bc52f0719348",
+      "end_ref": "60aea137012ae334b2e2971fd47af33aef4597b7",
+      "audit_exit": 18,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 21,
+      "by": "pseudosky",
+      "note": "built + roundtrip suite passed (4/4, exit 0) + nc scripts authored + PROVED teeth (test went RED after nc_mutate, GREEN after nc_restore) + committed 60aea13"
     }
   ],
   "amendment_log": [],
@@ -190,7 +202,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "seed-and-roundtrip",
+  "current_state": "audit-final",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T03:43:53.482Z",
     "by": "pseudosky",
