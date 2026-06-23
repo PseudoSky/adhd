@@ -63,6 +63,19 @@
       ],
       "context": "contexts/lt-registry.md",
       "notes": ""
+    },
+    "lt-generator-emit": {
+      "kind": "work",
+      "phase": "registry",
+      "depends_on": [
+        "lt-registry"
+      ],
+      "guard": "npx nx test apigen-logical",
+      "artifacts": [
+        "packages/apigen/logical/src/lib/emit.ts"
+      ],
+      "context": "contexts/lt-generator-emit.md",
+      "notes": ""
     }
   },
   "authored_with": {
