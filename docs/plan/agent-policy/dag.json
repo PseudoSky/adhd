@@ -3,7 +3,8 @@
   "title": "Agent Policy — Types, Templates, Inheritance & Enforcement (@adhd/agent-policy)",
   "plan_kind": "greenfield",
   "phases": [
-    "architecture"
+    "architecture",
+    "foundation"
   ],
   "terminal": "done",
   "nodes": {},
