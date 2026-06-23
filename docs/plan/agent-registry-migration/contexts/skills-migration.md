@@ -18,6 +18,7 @@
 
 - [skills-migration.1] skill imports to process/invocation component recoverable after reopen
 
+- [skills-migration.2] skill body typed as process/invocation component
 ---
 
 ## Reservations
