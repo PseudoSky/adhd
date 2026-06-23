@@ -19,6 +19,7 @@
 - [provider-and-model-schema.1] providers table
 
 - [provider-and-model-schema.2] models table with capability flags
+- [provider-and-model-schema.3] model-store round-trip+reopen test passes
 ---
 
 ## Reservations
