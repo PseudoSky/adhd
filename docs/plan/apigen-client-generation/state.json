@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "logger-layer-plugin",
+  "current_state": "streaming-projection",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -326,11 +326,11 @@
       "end_ref": "7c51fcc09a79aaefbdbebfa365f5feab7ff4a177"
     },
     "streaming-projection": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T04:52:22.892Z",
-      "done_at": null,
+      "done_at": "2026-06-23T05:00:15.739Z",
       "start_ref": "f04717c2f8a0fea1b91a32150b6fecb5efa76804",
-      "end_ref": null
+      "end_ref": "7d23d7b68dfd01a8084ea0edc289adb7b7fee736"
     },
     "python-host": {
       "status": "pending",
@@ -786,6 +786,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "logger plugin as v2 Layer (typed-ctx pino Logger §8.1 rule 3; wraps op, delegates via next, error propagates outward, stream-aware). nx test apigen-plugin-logger exit 0 (orch-verified). Filled into generated v2 stub. Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:00:15.739Z",
+      "from": "logger-layer-plugin",
+      "to": "streaming-projection",
+      "start_ref": "f04717c2f8a0fea1b91a32150b6fecb5efa76804",
+      "end_ref": "7d23d7b68dfd01a8084ea0edc289adb7b7fee736",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "§11 full streaming: runtime/stream.ts (per-chunk async gen, consumer-pull backpressure, AbortSignal cancel, error-after-first-chunk via @adhd/apigen-errors carriers) + mcp/stream.ts + api-fastify/stream.ts (SSE event:error after data, mid-stream cancel). nx run-many test mcp/fastify/runtime exit 0 (orch-verified). Orchestrator-driven (F40)."
     }
   ],
   "amendment_log": [
