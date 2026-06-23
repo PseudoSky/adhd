@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "audit-v2-host",
+  "current_state": "integration-tests-v2",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -340,11 +340,11 @@
       "end_ref": "34ed69a0c9cdf65daeb31b51654583b56ea09d79"
     },
     "audit-v2-host": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T05:39:31.680Z",
-      "done_at": null,
+      "done_at": "2026-06-23T05:39:32.786Z",
       "start_ref": "8d1346c1f9535f65b7fbd5fefb5d3d0d8cd08c57",
-      "end_ref": null
+      "end_ref": "529bf7a10d45f497718c53f112578d2355203027"
     },
     "nx-generator-v2": {
       "status": "complete",
@@ -870,6 +870,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "REAL Python host (H1/§14): extractor/runtime/plugin_echo/gateway_adapter + pyproject + run_tests.py. Conformance vectors consumed from canonical @adhd/apigen-conformance via generated conformance_vectors.json (no drift, never hand-authored). run_tests.py exit 0, 45/45 passed incl negative control + echo roundtrip. Implements HostAdapter/IPC seam for gateway-mixed-host. Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T05:39:32.786Z",
+      "from": "audit-v2-host",
+      "to": "audit-v2-host",
+      "start_ref": "8d1346c1f9535f65b7fbd5fefb5d3d0d8cd08c57",
+      "end_ref": "529bf7a10d45f497718c53f112578d2355203027",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "v2-host gate 2/2 real teeth: conformance (python3 run_tests.py 45/45) + gateway-contract (nx test apigen-gateway deterministic §13.1). pytest→run_tests.py fix; vacuous cli forward-refs deferred to audit-final-v2/dod.12+dod.17."
     }
   ],
   "amendment_log": [
