@@ -159,6 +159,16 @@
       "paths": [
         "packages/ai/agent-mcp/src/engine/policy.ts"
       ]
+    },
+    {
+      "id": "policy-engine-bridge.2",
+      "phase": "integration",
+      "tier": null,
+      "kind": "present",
+      "pattern": "AGENT_TOOL|compiled tools|composed\\.tools|allowedBuiltinTools",
+      "paths": [
+        "packages/ai/agent-mcp/src/providers/claudecli.ts"
+      ]
     }
   ]
 }
