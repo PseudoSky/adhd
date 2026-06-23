@@ -20,6 +20,7 @@
 
 - [runtime-sink-schema.2] experiment_assignments table in schema
 - [runtime-sink-schema.3] sessions.composed_prompt_id FK column in schema
+- [runtime-sink-schema.4] a drizzle migration file exists for the new tables/column
 ---
 
 ## Reservations
