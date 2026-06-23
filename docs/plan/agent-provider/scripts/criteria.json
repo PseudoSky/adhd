@@ -136,6 +136,16 @@
       "kind": "command",
       "cmd": "true",
       "expect": "exit0"
+    },
+    {
+      "id": "provider-adapter-contract.1",
+      "phase": "adapter",
+      "tier": null,
+      "kind": "present",
+      "pattern": "ProviderAdapter",
+      "paths": [
+        "packages/ai/agent-mcp-types/src/domain.ts"
+      ]
     }
   ]
 }
