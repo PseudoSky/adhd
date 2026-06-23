@@ -307,6 +307,19 @@
       ],
       "context": "contexts/lt-conformance-crosshost.md",
       "notes": ""
+    },
+    "lt-architect-review": {
+      "kind": "review",
+      "phase": "gates",
+      "depends_on": [
+        "lt-conformance-crosshost"
+      ],
+      "guard": "python3 docs/plan/apigen-logical-types/scripts/audit_lt-architect-review.py",
+      "artifacts": [
+        "scripts/audit_lt-architect-review.py"
+      ],
+      "context": "contexts/lt-architect-review.md",
+      "notes": ""
     }
   },
   "authored_with": {
