@@ -5,7 +5,8 @@
   "phases": [
     "foundation",
     "schema",
-    "seed"
+    "seed",
+    "audit"
   ],
   "terminal": "done",
   "nodes": {},
