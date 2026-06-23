@@ -77,6 +77,23 @@
       ],
       "context": "contexts/mcp-server-schema.md",
       "notes": ""
+    },
+    "agent-tool-junction": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "mcp-server-schema"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-tool-registry/src/db/schema.ts",
+        "packages/ai/agent-tool-registry/src/store/agent-tool-store.ts",
+        "packages/ai/agent-tool-registry/src/index.ts",
+        "packages/ai/agent-tool-registry/src/__tests__/agent-tool-store.test.ts",
+        "packages/ai/agent-tool-registry/drizzle"
+      ],
+      "context": "contexts/agent-tool-junction.md",
+      "notes": ""
     }
   },
   "authored_with": {
