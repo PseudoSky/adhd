@@ -25,6 +25,22 @@
       ],
       "context": "contexts/migration-design.md",
       "notes": ""
+    },
+    "scaffold-package": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": [
+        "migration-design"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/ai/agent-registry-migration/project.json",
+        "packages/ai/agent-registry-migration/package.json",
+        "packages/ai/agent-registry-migration/src/index.ts",
+        "tsconfig.base.json"
+      ],
+      "context": "contexts/scaffold-package.md",
+      "notes": ""
     }
   },
   "authored_with": {
