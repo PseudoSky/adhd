@@ -27,3 +27,11 @@
   - entrypoint: `npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-e2e.test.ts`
   - observable: `vitest exits 0; with context security the compiled body contains the security-criteria component text and NOT the general review-criteria text; with the default context the inclusion flips`
   - delivered-by: `composition-resolve, platform-markdown-emit, compile-fixtures-e2e`
+
+- `[dod.3]` **An attached policy's constraint appears in the compiled header/body of the emitted output. (behavioral)** — An attached policy's constraint appears in the compiled header/body of the emitted output..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-e2e.test.ts`
+  - observable: `vitest exits 0; the compiled output contains the constraint text derived from the agent_policy row attached to the seeded agent (e.g. no-credentials)`
+  - delivered-by: `model-and-policy-emit, platform-markdown-emit, compile-fixtures-e2e`
