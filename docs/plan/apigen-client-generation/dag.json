@@ -590,7 +590,8 @@
       "kind": "work",
       "phase": "v2-harness",
       "depends_on": [
-        "canonical-descriptor"
+        "canonical-descriptor",
+        "scaffold-v2-common"
       ],
       "guard": "npx --yes nx test apigen-errors",
       "artifacts": [

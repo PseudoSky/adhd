@@ -1,6 +1,6 @@
 # error-taxonomy — STATE_NAME
 
-**Phase:** v2-harness · **Kind:** work · **Depends on:** canonical-descriptor · **Guard:** `npx --yes nx test apigen-errors`
+**Phase:** v2-harness · **Kind:** work · **Depends on:** canonical-descriptor, scaffold-v2-common · **Guard:** `npx --yes nx test apigen-errors`
 
 ---
 
