@@ -85,6 +85,14 @@
       "kind": "command",
       "cmd": "ls packages/ai/agent-mcp/drizzle | grep -E '\\.sql$'",
       "expect": "exit0"
+    },
+    {
+      "id": "runtime-sink-schema.5",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/composed-prompt-schema.test.ts",
+      "expect": "exit0"
     }
   ]
 }
