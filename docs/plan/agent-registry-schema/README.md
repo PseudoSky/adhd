@@ -12,4 +12,10 @@
 
 ## Definition of Done
 
-_No DoD clauses yet — author them with `plan-scaffold.js add-dod`._
+- `[dod.1]` **A prompt component round-trips through the real store: created via ComponentStore against a real SQLite DB, it is read back byte-identical after the store is reopened (persistence proven by reopen, not in-memory state). (behavioral)** — A prompt component round-trips through the real store: created via ComponentStore against a real SQLite DB, it is read back byte-identical after the store is reopened (persistence proven by reopen, not in-memory state)..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/roundtrip.test.ts`
+  - observable: `vitest exit 0 and reporter shows the 'component round-trips after reopen' test passing`
+  - delivered-by: `seed-and-roundtrip, lookup-and-component-schema`
