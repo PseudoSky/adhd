@@ -228,11 +228,11 @@
       "end_ref": null
     },
     "error-taxonomy": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T02:23:47.732Z",
-      "done_at": null,
+      "done_at": "2026-06-23T02:30:25.119Z",
       "start_ref": "389f0156b1fe0545d3ee73a3031aab53730a398d",
-      "end_ref": null
+      "end_ref": "ebd30baef8707c350c1fee229432fe81e12a0fef"
     },
     "audit-v2-harness": {
       "status": "pending",
@@ -623,6 +623,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "Implemented @adhd/apigen-naming: toKebab/toCamel/toPascal/toSnake projectors, normalizeFileName, project() (verb-from-safe + ProjectionConfig override), checkCollisions (CollisionDetectedError hard error), §9.1 envelope helpers. 40 tests green."
+    },
+    {
+      "ts": "2026-06-23T02:30:25.119Z",
+      "from": "ts-extractor-by-symbol",
+      "to": "error-taxonomy",
+      "start_ref": "389f0156b1fe0545d3ee73a3031aab53730a398d",
+      "end_ref": "ebd30baef8707c350c1fee229432fe81e12a0fef",
+      "audit_exit": 0,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "apigen-errors: ERROR_CODES + HTTP_STATUS/GRPC_CODE/CLI_EXIT_CODE/MCP_ERROR_KIND maps + ApiError + StreamingErrorCarrier (before/after-first-chunk) per §9.1/§11; nx test apigen-errors exit 0 (orch-verified). Executor idle pre-complete; orchestrator drove completion. Token telemetry → byte proxy."
     }
   ],
   "amendment_log": [
