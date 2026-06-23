@@ -321,9 +321,9 @@
     "class-exports": {
       "status": "complete",
       "started_at": "2026-06-23T03:10:59.844Z",
-      "done_at": "2026-06-23T03:43:45.815Z",
+      "done_at": "2026-06-23T03:52:39.303Z",
       "start_ref": "5a88e205d37e6459878d4f82fdb64ce9f4875cca",
-      "end_ref": "679140407007345d4439a089b6d9806f5a7afcfc"
+      "end_ref": "7c51fcc09a79aaefbdbebfa365f5feab7ff4a177"
     },
     "streaming-projection": {
       "status": "pending",
@@ -347,11 +347,11 @@
       "end_ref": null
     },
     "nx-generator-v2": {
-      "status": "complete",
+      "status": "in_progress",
       "started_at": "2026-06-23T03:31:21.833Z",
-      "done_at": "2026-06-23T03:45:02.721Z",
+      "done_at": null,
       "start_ref": "4593ce914f51d23a92010bfa907d285d5a78ad1a",
-      "end_ref": "7c51fcc09a79aaefbdbebfa365f5feab7ff4a177"
+      "end_ref": null
     }
   },
   "transition_log": [
@@ -728,28 +728,16 @@
       "note": "apigen-conformance vectors.ts: cross-language vectors A(round-trip)/B(naming+collision)/C(envelope binding)/D(error mapping)/E(necessary-not-sufficient) per §4/§5/§6/§9.1. nx test apigen-conformance exit 0 (orch-verified). These are the contract the Python host re-runs. Byte-proxy telemetry."
     },
     {
-      "ts": "2026-06-23T03:43:45.815Z",
+      "ts": "2026-06-23T03:52:39.303Z",
       "from": "nx-generator-v2",
       "to": "class-exports",
       "start_ref": "5a88e205d37e6459878d4f82fdb64ce9f4875cca",
-      "end_ref": "679140407007345d4439a089b6d9806f5a7afcfc",
-      "audit_exit": 0,
-      "audit_criteria_passed": 0,
-      "audit_criteria_total": 0,
-      "by": "pseudosky",
-      "note": "extract-classes.ts (static methods → action ops always; instances opt-in via includeInstances → constructor + instance-method ops, §10/H2) + instance-registry.ts (TTL sweeper, dispose/disposeAll lifecycle). nx test apigen-core exit 0 + nx build apigen-runtime green (F41 self-check). Orchestrator-driven completion (F40). Byte-proxy telemetry."
-    },
-    {
-      "ts": "2026-06-23T03:45:02.721Z",
-      "from": "audit-v2-core",
-      "to": "nx-generator-v2",
-      "start_ref": "4593ce914f51d23a92010bfa907d285d5a78ad1a",
       "end_ref": "7c51fcc09a79aaefbdbebfa365f5feab7ff4a177",
-      "audit_exit": 2,
+      "audit_exit": 1,
       "audit_criteria_passed": 0,
       "audit_criteria_total": 0,
       "by": "pseudosky",
-      "note": "apigen-nx:plugin generator upgraded to v2 shape: plugin.ts template implements v2 Plugin interface from @adhd/apigen-core (capabilities {target,layer,mount,envelope}, Layer-aware Call/Next/Chunk per §7.1/§8.1); test template asserts capabilities (teeth); generator.ts keeps home packages/apigen/plugins/<name> + name apigen-plugin-<name> (no ts/plugins, no apigen-ts-plugin) + adds --platform option. nx test apigen-nx exit 0 (orch-verified). Byte-proxy telemetry."
+      "note": "extract-classes.ts (static→action ops always; instances opt-in via includeInstances → constructor + instance-method ops, §10/H2) + instance-registry.ts (TTL sweeper, dispose/disposeAll). Guards verified: nx test apigen-core exit 0 + nx build apigen-runtime green (F41). Orchestrator-driven (F40). Byte-proxy telemetry."
     }
   ],
   "amendment_log": [
