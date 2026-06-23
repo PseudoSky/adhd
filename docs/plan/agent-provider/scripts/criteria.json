@@ -192,6 +192,15 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "runtime-tool-forwarding.4",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "negative-control",
+      "positive": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
+      "mutate": "in emit-tools.ts, delete the server-side branch so every tool (incl. an Anthropic web_search binding) is emitted as a custom {name,description,input_schema}",
+      "restore": "restore the server-side type-tagged branch in emit-tools.ts"
     }
   ]
 }
