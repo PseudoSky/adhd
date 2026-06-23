@@ -231,6 +231,14 @@
       "kind": "command",
       "cmd": "true",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-final.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "true",
+      "expect": "exit0"
     }
   ]
 }
