@@ -43,3 +43,11 @@
   - entrypoint: `npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-cache.test.ts`
   - observable: `vitest exits 0; first compile writes a composed_prompts row, the DB handle is closed and reopened from the same file path, and the second compileAgent of the same agent+context returns the SAME composed_prompts id without re-running assembly`
   - delivered-by: `composed-prompt-caching`
+
+- `[dod.5]` **The real compile CLI bin drives compileAgent end-to-end: agent-registry compile <slug> --platform claude_code prints platform-shaped markdown to stdout from seeded rows. (behavioral)** — The real compile CLI bin drives compileAgent end-to-end: agent-registry compile <slug> --platform claude_code prints platform-shaped markdown to stdout from seeded rows..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-cli.test.ts`
+  - observable: `vitest exits 0; spawning the CLI bin (node .../cli/compile.js compile <slug> --platform claude_code) exits 0 and its stdout begins with --- YAML frontmatter and contains the resolved tools: line`
+  - delivered-by: `compile-cli, compile-fixtures-e2e`
