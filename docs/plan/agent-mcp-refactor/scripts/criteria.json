@@ -77,6 +77,14 @@
       "paths": [
         "packages/ai/agent-mcp/src/db/schema.ts"
       ]
+    },
+    {
+      "id": "runtime-sink-schema.4",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "ls packages/ai/agent-mcp/drizzle | grep -E '\\.sql$'",
+      "expect": "exit0"
     }
   ]
 }
