@@ -1,6 +1,6 @@
 # python-host — STATE_NAME
 
-**Phase:** v2-host-contract · **Kind:** work · **Depends on:** canonical-descriptor, conformance-vectors, gateway · **Guard:** `python3 -m pytest packages/apigen/python -q`
+**Phase:** v2-host-contract · **Kind:** work · **Depends on:** canonical-descriptor, conformance-vectors, gateway · **Guard:** `python3 packages/apigen/python/run_tests.py`
 
 ---
 
@@ -24,7 +24,7 @@ _No criteria yet._
 
 ```text
 read_only:  []
-mutates:    ["packages/apigen/python/apigen_python/extractor.py", "packages/apigen/python/apigen_python/runtime.py", "packages/apigen/python/apigen_python/plugin_echo.py", "packages/apigen/python/apigen_python/gateway_adapter.py", "packages/apigen/python/pyproject.toml"]
+mutates:    ["packages/apigen/python/apigen_python/extractor.py", "packages/apigen/python/apigen_python/runtime.py", "packages/apigen/python/apigen_python/plugin_echo.py", "packages/apigen/python/apigen_python/gateway_adapter.py", "packages/apigen/python/pyproject.toml", "packages/apigen/python/run_tests.py"]
 ```
 
 ---
