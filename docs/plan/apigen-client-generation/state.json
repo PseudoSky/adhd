@@ -312,7 +312,7 @@
       "end_ref": "e73f3ec346e354135790a4d856e1d6831b50a1bb"
     },
     "scaffold-v2-ts-plugins": {
-      "status": "pending",
+      "status": "blocked",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
@@ -737,6 +737,15 @@
       "class": "planner",
       "type": "replan",
       "reason": "Remediation folding both architect reviews: plan-structure R1-R13 (scaffold 9 missing pkgs in final homes, real v2 audit phases, per-state criteria, DoD vs metadata-envelope, DAG edges) + design Tenet 1 + D1-D11 (safe flag, live query, JSON-Schema+$defs IR, §8.1 Layer semantics, §9.1 envelope binding, full streaming, §13.1 gateway failure model). Adds Python host (H1), classes static+instance-opt-in (H2); defers neutral codegen (H3).",
+      "files_synced": [],
+      "by": "pseudosky"
+    },
+    {
+      "ts": "2026-06-23T03:26:44.165Z",
+      "state": "scaffold-v2-ts-plugins",
+      "class": "planner",
+      "type": "fix-guard",
+      "reason": "User-directed: upgrade apigen-nx:plugin generator to emit v2 capabilities/Layer plugin shape; dogfood it to scaffold logger/openapi/health at packages/apigen/plugins/<name> (apigen-plugin-*); close F38 (ts/plugins+apigen-ts-plugin outliers); enforce deprecation hygiene (no orphan projects).",
       "files_synced": [],
       "by": "pseudosky"
     }
