@@ -277,6 +277,19 @@
       ],
       "context": "contexts/lt-host-generator.md",
       "notes": ""
+    },
+    "lt-conformance-gate": {
+      "kind": "work",
+      "phase": "gates",
+      "depends_on": [
+        "lt-host-generator"
+      ],
+      "guard": "npx nx run apigen-conformance:conformance",
+      "artifacts": [
+        "packages/apigen/conformance/src/lib/gate.ts"
+      ],
+      "context": "contexts/lt-conformance-gate.md",
+      "notes": ""
     }
   },
   "authored_with": {
