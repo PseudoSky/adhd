@@ -142,6 +142,19 @@
       ],
       "context": "contexts/seed-and-roundtrip.md",
       "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "seed-and-roundtrip"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "docs/plan/agent-provider/scripts/audit_provider.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
     }
   },
   "authored_with": {
