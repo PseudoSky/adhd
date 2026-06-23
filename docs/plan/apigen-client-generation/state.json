@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "mount-plugins",
+  "current_state": "streaming-projection",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -326,10 +326,10 @@
       "end_ref": "7c51fcc09a79aaefbdbebfa365f5feab7ff4a177"
     },
     "streaming-projection": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-23T04:52:22.892Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "f04717c2f8a0fea1b91a32150b6fecb5efa76804",
       "end_ref": null
     },
     "python-host": {
