@@ -7,6 +7,16 @@
       "tier": null,
       "kind": "exists",
       "path": "docs/plan/agent-compiler/decisions.md"
+    },
+    {
+      "id": "compiler-design.2",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "context.condition|precedence|last wins|all included",
+      "paths": [
+        "docs/plan/agent-compiler/decisions.md"
+      ]
     }
   ]
 }
