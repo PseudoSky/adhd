@@ -131,6 +131,16 @@
       "paths": [
         "packages/ai/agent-mcp/src/validation/agent.ts"
       ]
+    },
+    {
+      "id": "agent-store-retire.2",
+      "phase": "retire",
+      "tier": null,
+      "kind": "present",
+      "pattern": "compat|computed|populated from compiler|composed",
+      "paths": [
+        "packages/ai/agent-mcp/src/validation/agent.ts"
+      ]
     }
   ]
 }
