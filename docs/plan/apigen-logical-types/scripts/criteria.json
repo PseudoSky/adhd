@@ -56,6 +56,14 @@
       "kind": "command",
       "cmd": "npx nx test apigen-logical",
       "expect": "exit0"
+    },
+    {
+      "id": "lt-extract-scalars.1",
+      "phase": "extraction",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx test apigen-core",
+      "expect": "exit0"
     }
   ]
 }
