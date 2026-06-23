@@ -18,6 +18,7 @@
 
 - [policy-design.1] decisions.md exists
 
+- [policy-design.2] eager-vs-lazy inheritance decision recorded
 ---
 
 ## Reservations
