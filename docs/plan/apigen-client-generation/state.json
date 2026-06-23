@@ -202,9 +202,9 @@
     "ts-extractor-by-symbol": {
       "status": "complete",
       "started_at": "2026-06-23T02:33:16.649Z",
-      "done_at": "2026-06-23T03:04:53.383Z",
+      "done_at": "2026-06-23T03:05:46.573Z",
       "start_ref": "4d5ea9d697133d3985f2d795f17f207486da9422",
-      "end_ref": "1fdd6f8b3107cacce19dc3b56049fe879ab07b74"
+      "end_ref": "52bc464ed784c32a84fa3356a6dd2639a51e5968"
     },
     "audit-v2-core": {
       "status": "pending",
@@ -673,16 +673,16 @@
       "note": "Upgraded all 4 transport plugins to v2 projection: verb-from-safe (x-apigen-safe hint → GET/POST), envelope-from-headers/meta/flags per §9.1 (x-apigen-envelope field→pluginId map), error maps from @adhd/apigen-errors, projection override support. Tests prove safe→GET, unsafe→POST, override flips verb, envelope bound to correct carrier per transport (negative: wrong carrier rejected)."
     },
     {
-      "ts": "2026-06-23T03:04:53.383Z",
+      "ts": "2026-06-23T03:05:46.573Z",
       "from": "audit-v2-harness",
       "to": "ts-extractor-by-symbol",
       "start_ref": "4d5ea9d697133d3985f2d795f17f207486da9422",
-      "end_ref": "1fdd6f8b3107cacce19dc3b56049fe879ab07b74",
+      "end_ref": "52bc464ed784c32a84fa3356a6dd2639a51e5968",
       "audit_exit": 0,
       "audit_criteria_passed": 0,
       "audit_criteria_total": 0,
       "by": "pseudosky",
-      "note": "all 6 shapes + 36 tests pass"
+      "note": "all 6 shapes pass; 36 new tests + 14 existing = 50 green"
     }
   ],
   "amendment_log": [
