@@ -34,6 +34,16 @@
       "tier": null,
       "kind": "exists",
       "path": "packages/ai/agent-policy/project.json"
+    },
+    {
+      "id": "scaffold-package.2",
+      "phase": "foundation",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-policy",
+      "paths": [
+        "tsconfig.base.json"
+      ]
     }
   ]
 }
