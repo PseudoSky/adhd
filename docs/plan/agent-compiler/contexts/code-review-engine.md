@@ -1,4 +1,4 @@
-# code-review-engine — STATE_NAME
+# code-review-engine — MID-PLAN DIFF REVIEW: COMPOSITION ENGINE CORE
 
 **Phase:** resolve · **Kind:** review · **Depends on:** model-and-policy-emit · **Guard:** `python3 docs/plan/agent-compiler/scripts/review_gate_engine.py`
 
@@ -6,7 +6,18 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The composition-engine core diff (`composition-resolve`, `tool-header-emit`,
+`model-and-policy-emit`) has been read by an architect-reviewer (opus) at the
+resolve→emit boundary and recorded an APPROVED verdict in `review-engine.md` with
+no unresolved blocking findings — BEFORE the platform emitters / CLI / cache
+(`platform-markdown-emit` onward) build on top of it. Reviewing the engine here
+catches a topology or precedence defect early instead of after the e2e fixtures.
+It checks design-intent fidelity the structural audit misses: cross-package joins
+honor the decided single-DB topology; composition body-ordering follows the
+junction order plus the recorded context-condition precedence; tool/model/policy
+resolution reads the binding tables rather than hard-coding; no cross-package FK
+violations. `platform-markdown-emit` depends on this state, so the emit phase
+cannot start on a NEEDS-WORK or absent review.
 
 ---
 

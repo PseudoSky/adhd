@@ -173,11 +173,11 @@ def phase_schema() -> list:
                           "composed_prompts|composedPrompts|context_hash|contextHash", f"{CACHE}/composed-prompt-cache.ts"))
     r.append(check("composed-prompt-caching.2", "recompile hits cache; persistence proven by reopen",
                    f"npx --yes nx test agent-compiler --testFile={TESTS}/compile-cache.test.ts"))
-    # compile-fixtures-e2e
-    r.append(grep_present("compile-fixtures-e2e.1", "seeds a real agent from shared components across four domains",
-                          "api-design-reviewer|fixtures|seed", f"{SEED}/fixtures.ts"))
-    r.append(check("compile-fixtures-e2e.2", "e2e: compile across two platforms + two contexts from real rows",
-                   f"npx --yes nx test agent-compiler --testFile={TESTS}/compile-e2e.test.ts"))
+    # NOTE: compile-fixtures-e2e.* criteria are NOT evaluated here. The
+    # compile-fixtures-e2e work-state runs in a LATER wave than audit-engine (this
+    # engine-phase gate), so evaluating its criteria here would fail before the
+    # work has run. They are enforced at the true final gate in phase_final()
+    # (audit-final) where the e2e fixtures exist. (F2 phase-membership fix.)
     r.append(check("audit-engine.1", "schema-phase audit self-consistent", "true"))
     return r
 
@@ -189,6 +189,13 @@ def phase_schema() -> list:
 
 def phase_final() -> list:
     r = phase_schema()
+    # compile-fixtures-e2e — gated HERE (audit-final), not in phase_schema. By the
+    # final wave the compile-fixtures-e2e work-state has run, so these criteria are
+    # enforceable with full teeth at the true final gate. (F2 phase-membership fix.)
+    r.append(grep_present("compile-fixtures-e2e.1", "seeds a real agent from shared components across four domains",
+                          "api-design-reviewer|fixtures|seed", f"{SEED}/fixtures.ts"))
+    r.append(check("compile-fixtures-e2e.2", "e2e: compile across two platforms + two contexts from real rows",
+                   f"npx --yes nx test agent-compiler --testFile={TESTS}/compile-e2e.test.ts"))
     # [dod.1] HEADLINE: compiler emits REAL platform output from REAL rows —
     # claude_code frontmatter tools: resolved from tool_platform_bindings; body
     # components in junction order.
