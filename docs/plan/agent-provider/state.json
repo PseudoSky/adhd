@@ -4,11 +4,11 @@
   "dag": "dag.json",
   "states": {
     "scaffold-package": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T23:06:16.610Z",
-      "done_at": null,
+      "done_at": "2026-06-23T23:11:05.618Z",
       "start_ref": "ed332b2d31ed585fc45d05f21b8477bdb1391927",
-      "end_ref": null
+      "end_ref": "c0b7d13636f43e5c193edc1115421684929e89fd"
     },
     "provider-and-model-schema": {
       "status": "pending",
@@ -74,14 +74,27 @@
       "end_ref": null
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-06-23T23:11:05.618Z",
+      "from": "scaffold-package",
+      "to": "scaffold-package",
+      "start_ref": "ed332b2d31ed585fc45d05f21b8477bdb1391927",
+      "end_ref": "c0b7d13636f43e5c193edc1115421684929e89fd",
+      "audit_exit": 3,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "build exit 0 + test --passWithNoTests exit 0 + SHA c0b7d13"
+    }
+  ],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "scaffold-package",
+  "current_state": "provider-and-model-schema",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:05:24.204Z",
     "by": "pseudosky",
