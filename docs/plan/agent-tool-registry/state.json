@@ -46,11 +46,11 @@
       "end_ref": "dfc70e8a7269960ff7d5f6739ed3ea59400c35b2"
     },
     "seed-and-roundtrip": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T22:23:25.603Z",
-      "done_at": "2026-06-23T22:23:12.806Z",
+      "done_at": "2026-06-23T22:25:32.854Z",
       "start_ref": "9c1f2b820e3883370a32b12dedeac3135e34ff0a",
-      "end_ref": "fa97fc8db6171fc4c0017e095d701359e8ba9519"
+      "end_ref": "79c5979f52117b1e72ead1e3df54048404c326d7"
     },
     "audit-final": {
       "status": "pending",
@@ -151,6 +151,18 @@
       "audit_criteria_total": 21,
       "by": "pseudosky",
       "note": "Authored src/seed/{tool-types,platforms,tools,bindings,index}.ts + src/__tests__/roundtrip.test.ts. 7/7 tests green (exit 0). Seed is idempotent (onConflictDoNothing on all 4 tables), persistence proven via close+reopen, negative-control corrupts alias then restores it. Commit: fa97fc8."
+    },
+    {
+      "ts": "2026-06-23T22:25:32.854Z",
+      "from": "seed-and-roundtrip",
+      "to": "seed-and-roundtrip",
+      "start_ref": "9c1f2b820e3883370a32b12dedeac3135e34ff0a",
+      "end_ref": "79c5979f52117b1e72ead1e3df54048404c326d7",
+      "audit_exit": 18,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 21,
+      "by": "pseudosky",
+      "note": "Re-complete after executor double-start (--start ran twice): deliverable fa97fc8 already committed, guard roundtrip.test.ts exit 0 (7/7, idempotent double-seed + reopen-resolve + negative-control teeth), verified by orchestrator. Advancing to code-review."
     }
   ],
   "amendment_log": [],
@@ -159,7 +171,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "seed-and-roundtrip",
+  "current_state": "code-review",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:02:23.888Z",
     "by": "pseudosky",
