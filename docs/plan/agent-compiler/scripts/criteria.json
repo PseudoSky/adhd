@@ -176,6 +176,14 @@
       "paths": [
         "packages/ai/agent-compiler/src/emit/markdown.ts"
       ]
+    },
+    {
+      "id": "platform-markdown-emit.3",
+      "phase": "emit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-agent.test.ts",
+      "expect": "exit0"
     }
   ]
 }
