@@ -131,7 +131,7 @@
       "kind": "audit",
       "phase": "audit",
       "depends_on": [
-        "seed-and-roundtrip"
+        "code-review"
       ],
       "guard": "python3 docs/plan/agent-tool-registry/scripts/audit_tool_registry.py --phase final",
       "artifacts": [

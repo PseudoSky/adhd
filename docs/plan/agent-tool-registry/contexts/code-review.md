@@ -1,4 +1,4 @@
-# code-review — STATE_NAME
+# code-review — DIFF REVIEW: DESIGN-INTENT FIDELITY THE AUDIT CAN'T CATCH
 
 **Phase:** audit · **Kind:** review · **Depends on:** seed-and-roundtrip · **Guard:** `python3 docs/plan/agent-tool-registry/scripts/review_gate.py`
 
@@ -6,7 +6,15 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The diff of every implementation state (`scaffold-package` … `seed-and-roundtrip`)
+has been read by a human/agent reviewer (routing below) and recorded an APPROVED
+verdict in `review.md` with no unresolved blocking findings. This gate catches
+design-intent violations a structural `audit_*.py` oracle cannot — e.g. a stated
+composite primary key implemented as a non-unique `index()` instead of
+`primaryKey()`/`uniqueIndex()`, an FK that does not match the decided topology, or
+a cross-package FK violation. The build/grep/test audits answer "does it run"; this
+state answers "is it built the way we decided." `audit-final` depends on this state,
+so the plan cannot reach done on a NEEDS-WORK or absent review.
 
 ---
 
