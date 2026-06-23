@@ -4,7 +4,8 @@
   "plan_kind": "brownfield",
   "phases": [
     "architecture",
-    "schema"
+    "schema",
+    "integration"
   ],
   "terminal": "done",
   "nodes": {},
