@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [composition-junction.1] agent_components junction with position, version_pin, context_condition, is_required
 
 ---
 
