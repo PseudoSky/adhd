@@ -208,6 +208,14 @@ Before → after, framed as a consumer-observable change. (Canonical heading req
   - observable: `a class static method dispatches as an op; opt-in instance: constructor returns {instanceId} and an instance-method dispatches against it via the registry`
   - negative-control: `Drop the instance-method route in packages/apigen/cli/src/test/integration/canonical.spec.ts -> the instance dispatch assertion goes red`
   - delivered-by: `class-exports, ts-extractor-by-symbol, audit-v2-core, integration-tests-v2`
+- `[dod.19]` **Real consumer — built bin exposes an unmodified real package, a real client consumes it end-to-end (behavioral)** — Real consumer — built bin exposes an unmodified real package, a real client consumes it end-to-end.
+  - given: an unmodified @adhd/transform and the built apigen-cli bin
+  - when: a developer runs the bin and a real client connects
+  - then: the client gets results that deep-equal calling transform's exports directly — zero source change
+  - entrypoint: `packages/apigen/cli/src/test/e2e/real-consumer.spec.ts`
+  - observable: `the BUILT apigen-cli bin run against the UNMODIFIED @adhd/transform package exposes its exports; a real MCP client's tools/list == transform's exported names and callTool deep-equals calling the export directly in-process; the api-fastify variant returns the same over real HTTP; (APIGEN_LIVE=1) a real model lists+calls a real tool`
+  - negative-control: `Rename a @adhd/transform export (or wrong-map it) in packages/apigen/cli/src/test/e2e/real-consumer.spec.ts -> the derived tool/route set diverges from the package's exports -> red`
+  - delivered-by: `unified-cli, projection-transports, ts-extractor-by-symbol, integration-tests-v2`
 ---
 
 ## Execution model
