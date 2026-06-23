@@ -49,3 +49,5 @@
   - delivered-by: `removal-runbook, roundtrip-equivalence-gate`
 
 - `[dod.5]` **@adhd/agent-registry-migration is a platform:node Nx library, registered in tsconfig.base.json, that depends on @adhd/agent-registry + @adhd/agent-compiler and builds clean. (structural)** — @adhd/agent-registry-migration is a platform:node Nx library, registered in tsconfig.base.json, that depends on @adhd/agent-registry + @adhd/agent-compiler and builds clean..
+
+- `[dod.6]` **After an all-PASS removal, the fixture .md is gone (grep_absent / ! test -e) AND agent-registry compile still produces the agent (removal didn't break the agent). (structural)** — After an all-PASS removal, the fixture .md is gone (grep_absent / ! test -e) AND agent-registry compile still produces the agent (removal didn't break the agent)..
