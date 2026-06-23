@@ -18,6 +18,7 @@
 
 - [provider-tool-formats.1] provider_tool_formats table
 
+- [provider-tool-formats.2] tool-format store test passes
 ---
 
 ## Reservations
