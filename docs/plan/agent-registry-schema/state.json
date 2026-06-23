@@ -32,11 +32,11 @@
       "end_ref": "eefea94d58c49e9a0fc045ea63a004c55c0df8d3"
     },
     "usecase-and-context-rules": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T06:13:08.359Z",
-      "done_at": null,
+      "done_at": "2026-06-23T06:16:55.059Z",
       "start_ref": "9305c59c86d71c926d04f1f7b5867e6784840eee",
-      "end_ref": null
+      "end_ref": "1c500b4f30aa29bc986e0a6cdc67aede6773ae03"
     },
     "composed-prompt-cache": {
       "status": "pending",
@@ -134,6 +134,18 @@
       "audit_criteria_total": 18,
       "by": "pseudosky",
       "note": "Built registry_agent_components junction (position, version_pin, context_condition, is_required; agent_slug FK; component_slug logical-only). CompositionStore.resolveComposition: Decision-2 ALL-INCLUDED evaluator (position ASC, version DESC, slug ASC total order), Decision-4 version-pin resolution (null=latest-at-resolve, int=exact). REQUIRED_COMPONENT_EXCLUDED CompositionError for is_required+unmatched. 6 tests pass (real on-disk DB, reopen-proves-persistence, order/pin/context + throws). Migration 0002_agent_components_junction.sql generated. Committed eefea94."
+    },
+    {
+      "ts": "2026-06-23T06:16:55.059Z",
+      "from": "usecase-and-context-rules",
+      "to": "usecase-and-context-rules",
+      "start_ref": "9305c59c86d71c926d04f1f7b5867e6784840eee",
+      "end_ref": "1c500b4f30aa29bc986e0a6cdc67aede6773ae03",
+      "audit_exit": 15,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "built + test passed (5/5) + committed (1c500b4)"
     }
   ],
   "amendment_log": [],
@@ -142,7 +154,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "usecase-and-context-rules",
+  "current_state": "composed-prompt-cache",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T03:43:53.482Z",
     "by": "pseudosky",
