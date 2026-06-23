@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [code-review-integration.1] review-integration.md records an APPROVED verdict with no unresolved blocking findings (architect-reviewer mid-plan review of the integration/retire core vs CLAUDE.md + decisions.md; AgentStore retired with no competing source of truth, systemPrompt compat shim, session/cache FK topology, no cross-package FK violations)
 
 ---
 
