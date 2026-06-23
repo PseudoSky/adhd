@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "title": "agent-mcp Refactor — Consume @adhd/agent-compiler + @adhd/agent-registry",
+  "plan_kind": "brownfield",
+  "phases": [],
+  "terminal": "done",
+  "nodes": {},
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.22",
+    "hash": "1e4130a84aed"
+  }
+}
