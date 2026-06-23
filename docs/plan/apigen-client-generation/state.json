@@ -29,7 +29,7 @@
       "dod.19"
     ]
   },
-  "current_state": "audit-final-v2",
+  "current_state": "done",
   "states": {
     "scaffold-packages": {
       "status": "complete",
@@ -172,11 +172,11 @@
       "end_ref": null
     },
     "audit-final-v2": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T18:15:17.668Z",
-      "done_at": null,
+      "done_at": "2026-06-23T18:22:59.251Z",
       "start_ref": "7290e29e22ed8fd6daf23991ba4918ec75e5f337",
-      "end_ref": null
+      "end_ref": "5be29466be87b002e27617c1a1f13abd8b24f9ac"
     },
     "integration-tests-v2": {
       "status": "complete",
@@ -894,6 +894,18 @@
       "audit_criteria_total": 0,
       "by": "pseudosky",
       "note": "CAPSTONE: 7 real-component artifacts. nx test apigen-cli exit 0 (49 passed/3 skipped=APIGEN_LIVE-gated). real-consumer.spec.ts (dod.19): built bin dist/packages/apigen/cli/index.js on UNMODIFIED @adhd/transform → tools/list==exports + callTool deep-equals in-process + live-model variant. gateway-mixed-host.spec.ts (dod.12/17): REAL python3 -m apigen_python.gateway_adapter sidecar, host:ts/host:python routing, kill→only-its-ops unavailable; deterministic (bounded latch, always-kill teardown). export-shape matrix (anon+cjs), canonical envelope/verb, streaming error-after-first-chunk+cancel. No mocks (CLAUDE.md §6). Orchestrator-driven (F40)."
+    },
+    {
+      "ts": "2026-06-23T18:22:59.251Z",
+      "from": "audit-final-v2",
+      "to": "audit-final-v2",
+      "start_ref": "7290e29e22ed8fd6daf23991ba4918ec75e5f337",
+      "end_ref": "5be29466be87b002e27617c1a1f13abd8b24f9ac",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "FINAL DoD gate 117/117 all green. dod.1-19+dod.cli proven against REAL consumers: built bin, real MCP/HTTP clients, real Python sidecar (mixed-host + partial-availability), unmodified @adhd/transform capstone (dod.19). 3 real bugs caught+fixed (BUG-001 ctx-dispatch, BUG-002 generate-portability Option-A publishable package.json, BUG-003 MCP SSE). gap-check PASSED 0-warn, env-pin 46/46."
     }
   ],
   "amendment_log": [
