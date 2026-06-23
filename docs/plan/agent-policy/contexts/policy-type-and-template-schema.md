@@ -19,6 +19,7 @@
 - [policy-type-and-template-schema.1] policy_types lookup table (text PK, not enum)
 
 - [policy-type-and-template-schema.2] policy_templates table with rules + enforcement JSON + version + is_system
+- [policy-type-and-template-schema.3] policy-template-store round-trip+reopen test passes
 ---
 
 ## Reservations
