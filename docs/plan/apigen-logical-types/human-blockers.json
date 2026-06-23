@@ -1,1 +1,13 @@
-{}
+{
+  "publish-apigen-v2": {
+    "type": "manual-approval",
+    "description": "Publish @adhd/apigen-* v2 to npm (PUBLISHING.md) before executing this plan — generated dep-manifests reference real published versions.",
+    "required_by": [
+      "lt-package"
+    ],
+    "verification": "npm view @adhd/apigen-runtime version",
+    "status": "needed",
+    "owner": "pseudosky",
+    "blocks_at": "execution-start"
+  }
+}
