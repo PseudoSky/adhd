@@ -53,11 +53,11 @@
       "end_ref": null
     },
     "lt-extract-scalars": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-24T00:44:14.886Z",
-      "done_at": null,
+      "done_at": "2026-06-24T00:54:34.994Z",
       "start_ref": "a73f3e17f0e02b1865cdcacd30b68cc57b55adf7",
-      "end_ref": null
+      "end_ref": "2ba8a4e7b37a86eeb7a0f53aea5ca92bc1a9d1ed"
     },
     "lt-extract-nominal": {
       "status": "in_progress",
@@ -227,6 +227,18 @@
       "audit_criteria_total": 3,
       "by": "pseudosky",
       "note": "LogicalTypeVector + seeded scalar conformance vectors (date-time/int64/decimal/byte/uuid/number-special) with canonical wire + negative-controls; guard nx test apigen-conformance exit 0 (orchestrator-verified)"
+    },
+    {
+      "ts": "2026-06-24T00:54:34.994Z",
+      "from": "lt-generator-emit",
+      "to": "lt-extract-scalars",
+      "start_ref": "a73f3e17f0e02b1865cdcacd30b68cc57b55adf7",
+      "end_ref": "2ba8a4e7b37a86eeb7a0f53aea5ca92bc1a9d1ed",
+      "audit_exit": 0,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "built-in TS types (Date/bigint/Uint8Array/Buffer/URL/RegExp) map to {type,format} before the {} fallthrough — BUG-005 schema half; guard nx test apigen-core exit 0 (orchestrator-verified)"
     }
   ],
   "amendment_log": [],
