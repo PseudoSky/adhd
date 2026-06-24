@@ -60,10 +60,10 @@
       "end_ref": null
     },
     "lt-extract-nominal": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-24T00:44:15.045Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "a1809157bd1200e0abe3c42afba2dfc98563a52a",
       "end_ref": null
     },
     "lt-extract-union": {
@@ -211,7 +211,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-extract-scalars",
+  "current_state": "lt-extract-nominal",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
