@@ -46,10 +46,10 @@
       "end_ref": "36ad1c83fa1f4d33f90d89ce084d70c007a9eef9"
     },
     "lt-scalars": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-24T01:04:29.673Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "565f158f008b08701ada5c57575ccf3d0e9b3d0e",
       "end_ref": null
     },
     "lt-extract-scalars": {
