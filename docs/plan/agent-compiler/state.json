@@ -4,10 +4,10 @@
   "dag": "dag.json",
   "states": {
     "compiler-design": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-24T00:57:15.164Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "7ae0c856fcea713d9c717640c5cc9f345283f9d3",
       "end_ref": null
     },
     "scaffold-package": {
