@@ -60,11 +60,11 @@
       "end_ref": "2ba8a4e7b37a86eeb7a0f53aea5ca92bc1a9d1ed"
     },
     "lt-extract-nominal": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-24T00:44:15.045Z",
-      "done_at": null,
+      "done_at": "2026-06-24T00:55:00.416Z",
       "start_ref": "a1809157bd1200e0abe3c42afba2dfc98563a52a",
-      "end_ref": null
+      "end_ref": "e49b93b88a7f8cd4141f7c062545495804580203"
     },
     "lt-extract-union": {
       "status": "pending",
@@ -239,6 +239,18 @@
       "audit_criteria_total": 10,
       "by": "pseudosky",
       "note": "built-in TS types (Date/bigint/Uint8Array/Buffer/URL/RegExp) map to {type,format} before the {} fallthrough — BUG-005 schema half; guard nx test apigen-core exit 0 (orchestrator-verified)"
+    },
+    {
+      "ts": "2026-06-24T00:55:00.416Z",
+      "from": "lt-generator-emit",
+      "to": "lt-extract-nominal",
+      "start_ref": "a1809157bd1200e0abe3c42afba2dfc98563a52a",
+      "end_ref": "e49b93b88a7f8cd4141f7c062545495804580203",
+      "audit_exit": 0,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "class -> $def+$ref+x-apigen-* (reuses extract-classes); [inv:hints-advisory] proven; guard nx test apigen-core exit 0 (orchestrator-verified)"
     }
   ],
   "amendment_log": [],
