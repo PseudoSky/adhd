@@ -53,11 +53,11 @@
       "end_ref": "eca2e20ede94e6f9fb089e98e36902d8d2171d17"
     },
     "seed-and-roundtrip": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-24T00:05:00.574Z",
-      "done_at": null,
+      "done_at": "2026-06-24T00:10:05.806Z",
       "start_ref": "5d3952e77f3816b29b59bd3839fda741721b4dd4",
-      "end_ref": null
+      "end_ref": "9eb7405abb9e8000f7ad56085e3dcc2f77f36f29"
     },
     "audit-final": {
       "status": "pending",
@@ -182,6 +182,18 @@
       "audit_criteria_total": 24,
       "by": "pseudosky",
       "note": "FEAT-007 emit-tools.ts: emitTool+emitToolsForProvider branch on emit_shape (server_side→type-tagged, unsupported→throw, custom→std def). UnsupportedNativeToolError exported. 12 tests pass. Real negative-control mutation scripts added (nc_break_emitter/nc_restore_emitter + nc_break_binding/nc_restore_binding) fixing NL-description criteria. review.md APPROVED. All 24 audit criteria PASS (audit exit 0). SHAs fc9aaac + eca2e20."
+    },
+    {
+      "ts": "2026-06-24T00:10:05.806Z",
+      "from": "runtime-tool-forwarding",
+      "to": "seed-and-roundtrip",
+      "start_ref": "5d3952e77f3816b29b59bd3839fda741721b4dd4",
+      "end_ref": "9eb7405abb9e8000f7ad56085e3dcc2f77f36f29",
+      "audit_exit": 20,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 28,
+      "by": "pseudosky",
+      "note": "seed/providers.ts (5 providers) + seed/models.ts (4 models) + seed/bindings.ts (8 bindings) + seed/index.ts (unified idempotent seeder) + __tests__/roundtrip.test.ts (20 tests, all 4 acceptance criteria). Guard exit 0. SHA 9eb7405."
     }
   ],
   "amendment_log": [],
@@ -190,7 +202,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "runtime-tool-forwarding",
+  "current_state": "code-review",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:05:24.204Z",
     "by": "pseudosky",
