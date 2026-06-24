@@ -60,11 +60,11 @@
       "end_ref": "9eb7405abb9e8000f7ad56085e3dcc2f77f36f29"
     },
     "audit-final": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-24T00:23:14.200Z",
-      "done_at": null,
+      "done_at": "2026-06-24T00:23:36.730Z",
       "start_ref": "3c2a8025f81ebb6d979a8fdfe944c945fc2112b7",
-      "end_ref": null
+      "end_ref": "8aa02ae44999da3c82c488700c5576f4a1ea283e"
     },
     "code-review": {
       "status": "complete",
@@ -230,6 +230,18 @@
       "audit_criteria_total": 30,
       "by": "pseudosky",
       "note": "FEAT-007 emit-tools.ts: emitTool+emitToolsForProvider (server_side→type-tagged, unsupported→throw). 12 tests pass. All 30 audit criteria PASS (24 structural + dod.1-6) from plan dir, exit 0. Real NC mutation scripts. review.md APPROVED. SHAs fc9aaac+eca2e20+65ccce1+1d9027f."
+    },
+    {
+      "ts": "2026-06-24T00:23:36.730Z",
+      "from": "audit-final",
+      "to": "audit-final",
+      "start_ref": "3c2a8025f81ebb6d979a8fdfe944c945fc2112b7",
+      "end_ref": "8aa02ae44999da3c82c488700c5576f4a1ea283e",
+      "audit_exit": 0,
+      "audit_criteria_passed": 23,
+      "audit_criteria_total": 23,
+      "by": "pseudosky",
+      "note": "audit-final DoD gate: audit_provider.py --phase final 33/33 PASS incl dod.1-6 (+agent-mcp build exit 0). code-review APPROVED. Plan body complete."
     }
   ],
   "amendment_log": [],
@@ -238,7 +250,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "audit-final",
+  "current_state": "done",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:05:24.204Z",
     "by": "pseudosky",
