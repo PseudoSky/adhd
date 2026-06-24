@@ -107,9 +107,9 @@
       "phase": "schema",
       "tier": null,
       "kind": "negative-control",
-      "positive": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/binding-store.test.ts",
-      "mutate": "in model-store.ts resolveModelId, drop the WHERE platform = ? filter so it returns the first binding regardless of platform",
-      "restore": "restore the platform filter in resolveModelId"
+      "positive": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/binding-store.test.ts --skip-nx-cache",
+      "mutate": "node docs/plan/agent-provider/scripts/nc_break_binding.mjs",
+      "restore": "node docs/plan/agent-provider/scripts/nc_restore_binding.mjs"
     },
     {
       "id": "provider-tool-formats.1",
@@ -198,9 +198,9 @@
       "phase": "runtime",
       "tier": null,
       "kind": "negative-control",
-      "positive": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
-      "mutate": "in emit-tools.ts, delete the server-side branch so every tool (incl. an Anthropic web_search binding) is emitted as a custom {name,description,input_schema}",
-      "restore": "restore the server-side type-tagged branch in emit-tools.ts"
+      "positive": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts --skip-nx-cache",
+      "mutate": "node docs/plan/agent-provider/scripts/nc_break_emitter.mjs",
+      "restore": "node docs/plan/agent-provider/scripts/nc_restore_emitter.mjs"
     },
     {
       "id": "seed-and-roundtrip.1",
