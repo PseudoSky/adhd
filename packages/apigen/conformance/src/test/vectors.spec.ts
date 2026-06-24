@@ -44,6 +44,13 @@ import {
   VALIDATION_VECTORS,
   minimalSchemaValidate,
 
+  // F. logical type wire spec
+  logicalTypeVectors,
+  assertLogicalTypeVectorWellFormed,
+  assertLogicalTypeVectorIdsUnique,
+  assertLogicalTypeVectorCoverage,
+  assertWireMatchesFormat,
+
   // runner
   runAllVectors,
 } from '../lib/vectors'
@@ -300,6 +307,155 @@ describe('E — Validation necessary-not-sufficient', () => {
       required: ['userId'],
     }
     expect(minimalSchemaValidate(schema, { userId: 'abc' })).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// F. Logical type wire spec (DESIGN §3 / §4.7)
+// ---------------------------------------------------------------------------
+
+describe('F — Logical type wire spec', () => {
+  // --- meta: set integrity ---
+
+  it('[logical.meta.ids-unique] all vector ids are unique', () => {
+    const err = assertLogicalTypeVectorIdsUnique(logicalTypeVectors)
+    expect(err).toBeNull()
+  })
+
+  it('[logical.meta.coverage] all required §3 scalar types have at least one vector', () => {
+    const err = assertLogicalTypeVectorCoverage(logicalTypeVectors)
+    expect(err).toBeNull()
+  })
+
+  it('[logical.meta.NEGATIVE.duplicate-id] duplicate id is detected (negative control)', () => {
+    // Inject a duplicate and confirm the checker catches it.
+    const [first] = logicalTypeVectors
+    const withDupe = [...logicalTypeVectors, { ...first }]
+    const err = assertLogicalTypeVectorIdsUnique(withDupe)
+    expect(err).not.toBeNull()
+    expect(err).toContain(first.id)
+  })
+
+  it('[logical.meta.NEGATIVE.missing-coverage] a missing type is detected (negative control)', () => {
+    // Remove a vector and confirm the coverage check catches it.
+    const withoutFirst = logicalTypeVectors.slice(1)
+    const err = assertLogicalTypeVectorCoverage(withoutFirst)
+    // The first vector's logicalType is now missing, so coverage must fail.
+    expect(err).not.toBeNull()
+  })
+
+  // --- per-vector shape checks ---
+
+  for (const v of logicalTypeVectors) {
+    it(`[${v.id}.shape] vector is structurally well-formed`, () => {
+      const err = assertLogicalTypeVectorWellFormed(v)
+      expect(err, err ?? undefined).toBeNull()
+    })
+  }
+
+  // --- per-vector wire-format pattern checks ---
+
+  for (const v of logicalTypeVectors) {
+    it(`[${v.id}.wire-format] wire matches canonical pattern for format "${String(v.schema['format'] ?? v.logicalType)}"`, () => {
+      const err = assertWireMatchesFormat(v)
+      expect(err, err ?? undefined).toBeNull()
+    })
+  }
+
+  // --- per-vector negative-control teeth checks ---
+
+  for (const v of logicalTypeVectors) {
+    if (v.negativeControl.mutate !== 'wire') continue
+    it(`[${v.id}.negative-control] negativeControl.to mutates wire to a non-conformant value`, () => {
+      // The mutated wire must FAIL the format check — that is what makes the teeth real.
+      const mutatedV = { ...v, wire: v.negativeControl.to as ReturnType<typeof v['wire']['valueOf']> }
+      const err = assertWireMatchesFormat(mutatedV as Parameters<typeof assertWireMatchesFormat>[0])
+      // A non-null error means the format check went RED — the negative control has teeth.
+      expect(err, `negativeControl.to "${JSON.stringify(v.negativeControl.to)}" still passes the format check — it is vacuous`).not.toBeNull()
+    })
+  }
+
+  // --- spot checks for individual well-known scalars ---
+
+  it('[logical.date-time] schema is {type:"string",format:"date-time"}', () => {
+    const v = logicalTypeVectors.find((x) => x.logicalType === 'date-time')
+    expect(v).toBeDefined()
+    expect(v!.schema).toEqual({ type: 'string', format: 'date-time' })
+  })
+
+  it('[logical.date-time] wire ends with Z (UTC-normalized)', () => {
+    const v = logicalTypeVectors.find((x) => x.logicalType === 'date-time')
+    expect(typeof v!.wire).toBe('string')
+    expect((v!.wire as string).endsWith('Z')).toBe(true)
+  })
+
+  it('[logical.int64] wire is a string exceeding Number.MAX_SAFE_INTEGER', () => {
+    const v = logicalTypeVectors.find((x) => x.logicalType === 'int64')
+    expect(v).toBeDefined()
+    expect(typeof v!.wire).toBe('string')
+    // parseInt gives an approximation, but BigInt must be exact; wire must be > MAX_SAFE_INTEGER
+    expect(BigInt(v!.wire as string) > BigInt(Number.MAX_SAFE_INTEGER)).toBe(true)
+  })
+
+  it('[logical.decimal] wire is a decimal string (not a JS float)', () => {
+    const v = logicalTypeVectors.find((x) => x.logicalType === 'decimal')
+    expect(v).toBeDefined()
+    expect(typeof v!.wire).toBe('string')
+    expect(/^-?\d+(\.\d+)?$/.test(v!.wire as string)).toBe(true)
+  })
+
+  it('[logical.byte] wire uses standard base64 alphabet (no URL-safe - or _ chars)', () => {
+    const v = logicalTypeVectors.find((x) => x.logicalType === 'byte')
+    expect(v).toBeDefined()
+    expect(typeof v!.wire).toBe('string')
+    // Standard base64 (RFC 4648 §4) must not contain URL-safe characters (- or _)
+    expect((v!.wire as string).includes('-')).toBe(false)
+    expect((v!.wire as string).includes('_')).toBe(false)
+  })
+
+  it('[logical.byte] wire "SGVsbG8=" decodes to "Hello" in base64', () => {
+    const v = logicalTypeVectors.find((x) => x.logicalType === 'byte')
+    expect(v!.wire).toBe('SGVsbG8=')
+    // Verify the value is correct base64 for "Hello"
+    expect(Buffer.from(v!.wire as string, 'base64').toString('utf-8')).toBe('Hello')
+  })
+
+  it('[logical.uuid] wire is lowercase hyphenated (RFC 4122)', () => {
+    const v = logicalTypeVectors.find((x) => x.logicalType === 'uuid')
+    expect(v).toBeDefined()
+    expect(typeof v!.wire).toBe('string')
+    expect(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v!.wire as string)).toBe(true)
+  })
+
+  it('[logical.number-special] NaN vector wire is "NaN"', () => {
+    const v = logicalTypeVectors.find((x) => x.id === 'logical.number-special.nan')
+    expect(v).toBeDefined()
+    expect(v!.wire).toBe('NaN')
+  })
+
+  it('[logical.number-special] Infinity vector wire is "Infinity"', () => {
+    const v = logicalTypeVectors.find((x) => x.id === 'logical.number-special.infinity')
+    expect(v).toBeDefined()
+    expect(v!.wire).toBe('Infinity')
+  })
+
+  it('[logical.NEGATIVE.date-time] non-UTC offset wire fails RFC 3339 UTC pattern check', () => {
+    const v = logicalTypeVectors.find((x) => x.logicalType === 'date-time')!
+    // The negativeControl wire has an offset (+05:30) — must fail the UTC check.
+    const negWire = v.negativeControl.to as string
+    const mutated = { ...v, wire: negWire }
+    const err = assertWireMatchesFormat(mutated)
+    expect(err).not.toBeNull()
+    expect(err).toContain('RFC 3339 UTC')
+  })
+
+  it('[logical.NEGATIVE.uuid] uppercase UUID wire fails the lowercase check', () => {
+    const v = logicalTypeVectors.find((x) => x.logicalType === 'uuid')!
+    const negWire = v.negativeControl.to as string
+    const mutated = { ...v, wire: negWire }
+    const err = assertWireMatchesFormat(mutated)
+    expect(err).not.toBeNull()
+    expect(err).toContain('lowercase')
   })
 })
 

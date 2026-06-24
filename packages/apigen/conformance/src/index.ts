@@ -42,8 +42,15 @@ export {
   VALIDATION_VECTORS,
   minimalSchemaValidate,
 
+  // F. Logical type wire spec
+  logicalTypeVectors,
+  assertLogicalTypeVectorWellFormed,
+  assertLogicalTypeVectorIdsUnique,
+  assertLogicalTypeVectorCoverage,
+  assertWireMatchesFormat,
+
   // Runner
   runAllVectors,
 } from './lib/vectors'
 
-export type { ValidationCase, VectorResult } from './lib/vectors'
+export type { ValidationCase, VectorResult, LogicalTypeVector } from './lib/vectors'

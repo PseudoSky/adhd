@@ -11,6 +11,7 @@
 //   C. Envelope binding        — field binds to correct carrier key per transport (SPEC §9.1)
 //   D. Error mapping           — each ApiErrorCode → correct HTTP/gRPC/CLI/MCP status (SPEC §9.1)
 //   E. Validation necessary-not-sufficient — schema-valid-but-domain-wrong passes the validator (SPEC §6)
+//   F. Logical type wire spec  — canonical wire encodings for well-known scalar types (DESIGN §3/§4.7)
 
 import type { Operation, Segment } from '@adhd/apigen-core'
 import {
@@ -551,6 +552,340 @@ export function minimalSchemaValidate(
 }
 
 // ---------------------------------------------------------------------------
+// F. Logical type wire spec (DESIGN §3 / §4.7)
+//
+// The cross-language wire contract for well-known scalar types. Every host
+// runtime MUST:
+//   1. Encode its native `seed` to byte-equal `wire`.
+//   2. Decode `wire` and satisfy `invariants` (if any).
+//   3. Confirm that `negativeControl` makes the vector fail (proves non-vacuity).
+//
+// This category covers the six required scalars (DESIGN §3):
+//   date-time   — RFC 3339 UTC string, ≥ms precision
+//   int64       — decimal string, value > Number.MAX_SAFE_INTEGER
+//   decimal     — decimal string (never a JS float)
+//   byte        — base64 standard variant + padding
+//   uuid        — lowercase hyphenated (RFC 4122)
+//   number-special — NaN / ±Infinity → string sentinel
+// ---------------------------------------------------------------------------
+
+import type { LogicalTypeId, Wire } from '@adhd/apigen-logical'
+
+/**
+ * @stable The cross-language wire contract. Each host harness MUST:
+ *   - encode its native `seed` to byte-equal `wire`;
+ *   - decode `wire` and satisfy `invariants`;
+ *   - confirm `negativeControl` turns the vector RED.
+ *
+ * (DESIGN §4.7 — verbatim interface)
+ */
+export interface LogicalTypeVector {
+  /** Stable, unique id for this vector (e.g. "logical.date-time.roundtrip"). */
+  readonly id: string
+  /** The LogicalTypeId this vector exercises (e.g. "date-time"). */
+  readonly logicalType: LogicalTypeId
+  /**
+   * Canonical JSON-Schema fragment the codec owns.
+   * Scalars: {type, format}. Nominal: object $def.
+   */
+  readonly schema: Record<string, unknown>
+  /**
+   * Host-neutral construction recipe so each host builds its native instance.
+   * A plain Wire value means the host uses it directly as the native seed.
+   * The $construct variant means the host calls its codec factory for the given
+   * LogicalTypeId with the provided args.
+   */
+  readonly seed: Wire | { $construct: LogicalTypeId; args: Wire[] }
+  /** REQUIRED canonical wire bytes — every host MUST encode `seed` to exactly this. */
+  readonly wire: Wire
+  /** Post-decode assertions (host-neutral, JSON-Pointer → expected value). */
+  readonly invariants?: ReadonlyArray<{ pointer: string; equals: Wire }>
+  /** The teeth: a mutation that MUST make the vector fail (proves non-vacuity). */
+  readonly negativeControl: { mutate: 'wire' | 'schema' | 'codec'; to: unknown }
+}
+
+/**
+ * The canonical well-known scalar conformance vectors (DESIGN §3).
+ *
+ * These are the authoritative, cross-language wire-encoding fixtures. Any host
+ * that encodes its native seed to a value other than `wire` is non-conformant
+ * by construction.
+ *
+ * @stable
+ */
+export const logicalTypeVectors: LogicalTypeVector[] = [
+  // ---- date-time: RFC 3339 UTC string, ≥ms precision (DESIGN §3 row 1) ----
+  // `Date.prototype.toJSON` already emits RFC 3339 UTC — the canonical win.
+  // seed: the $construct recipe lets each host build its native Date/datetime
+  // from the ISO string arg; TS does `new Date("2024-01-15T12:34:56.789Z")`.
+  {
+    id: 'logical.date-time.roundtrip',
+    logicalType: 'date-time',
+    schema: { type: 'string', format: 'date-time' },
+    seed: { $construct: 'date-time', args: ['2024-01-15T12:34:56.789Z'] },
+    wire: '2024-01-15T12:34:56.789Z',
+    invariants: [
+      // The decoded value must represent the same instant: 1705322096789 ms since epoch.
+      { pointer: '/epochMs', equals: 1705322096789 },
+    ],
+    // Mutating wire to a non-UTC offset must make the check fail.
+    negativeControl: { mutate: 'wire', to: '2024-01-15T12:34:56.789+05:30' },
+  },
+
+  // ---- int64: decimal string, value beyond Number.MAX_SAFE_INTEGER (DESIGN §3 row 5) ----
+  // avoids JS f64 precision loss; wire is always a decimal string, never a number.
+  {
+    id: 'logical.int64.roundtrip',
+    logicalType: 'int64',
+    schema: { type: 'string', format: 'int64' },
+    seed: '9007199254740993',
+    wire: '9007199254740993',
+    invariants: [
+      // The decoded BigInt must exactly equal the seed value (no precision loss).
+      { pointer: '/bigintStr', equals: '9007199254740993' },
+    ],
+    // Mutating wire to a plain JSON number (f64) must break int64 precision guarantee.
+    negativeControl: { mutate: 'wire', to: 9007199254740993 },
+  },
+
+  // ---- decimal: decimal string (never a float) (DESIGN §3 row 6) ----
+  // Preserves full decimal precision; TS uses decimal.js or branded string.
+  {
+    id: 'logical.decimal.roundtrip',
+    logicalType: 'decimal',
+    schema: { type: 'string', format: 'decimal' },
+    seed: '123.456',
+    wire: '123.456',
+    invariants: [
+      // The decoded value when coerced to string must equal the original decimal.
+      { pointer: '/str', equals: '123.456' },
+    ],
+    // Mutating wire to a float representation breaks the "never float" invariant.
+    negativeControl: { mutate: 'wire', to: 123.456 },
+  },
+
+  // ---- byte: base64 standard variant + padding (DESIGN §3 row 7) ----
+  // RFC 4648 §4 — standard alphabet (+ and /), not URL-safe (- and _).
+  // Padding (=) is mandatory.
+  {
+    id: 'logical.byte.roundtrip',
+    logicalType: 'byte',
+    schema: { type: 'string', format: 'byte' },
+    // seed: the 3-byte sequence [0x48, 0x65, 0x6c, 0x6c, 0x6f] — "Hello"
+    seed: { $construct: 'byte', args: [[72, 101, 108, 108, 111]] },
+    // btoa("Hello") = "SGVsbG8=" — standard base64 with padding
+    wire: 'SGVsbG8=',
+    invariants: [
+      // Decoded bytes as a UTF-8 string must equal "Hello".
+      { pointer: '/utf8', equals: 'Hello' },
+    ],
+    // URL-safe variant (contains _ instead of / — RFC 4648 §5) is NOT conformant
+    // as the canonical byte encoding. Standard base64 (RFC 4648 §4) uses + and /
+    // only; any _ or - character makes the wire non-conformant.
+    negativeControl: { mutate: 'wire', to: 'SGVs_G8=' },
+  },
+
+  // ---- uuid: lowercase hyphenated RFC 4122 (DESIGN §3 row 8) ----
+  {
+    id: 'logical.uuid.roundtrip',
+    logicalType: 'uuid',
+    schema: { type: 'string', format: 'uuid' },
+    seed: '550e8400-e29b-41d4-a716-446655440000',
+    wire: '550e8400-e29b-41d4-a716-446655440000',
+    invariants: [
+      // Decoded value must be the canonical lowercase-hyphenated form.
+      { pointer: '/value', equals: '550e8400-e29b-41d4-a716-446655440000' },
+    ],
+    // Uppercase UUID is NOT conformant wire (canonical is lowercase-hyphenated).
+    negativeControl: { mutate: 'wire', to: '550E8400-E29B-41D4-A716-446655440000' },
+  },
+
+  // ---- number-special: NaN / ±Infinity → string sentinels (DESIGN §3 row 13) ----
+  // JSON.stringify produces `null` for these; apigen instead emits a string sentinel.
+  {
+    id: 'logical.number-special.nan',
+    logicalType: 'number-special',
+    schema: { type: 'number' },
+    // seed is the host-level NaN; the $construct recipe makes it host-neutral.
+    seed: { $construct: 'number-special', args: ['NaN'] },
+    wire: 'NaN',
+    invariants: [
+      // Host decode must restore a value where isNaN() is true.
+      { pointer: '/isNaN', equals: true },
+    ],
+    // Mutating wire to null (JSON.stringify default) must break the invariant.
+    negativeControl: { mutate: 'wire', to: null },
+  },
+
+  {
+    id: 'logical.number-special.infinity',
+    logicalType: 'number-special',
+    schema: { type: 'number' },
+    seed: { $construct: 'number-special', args: ['Infinity'] },
+    wire: 'Infinity',
+    invariants: [
+      // Host decode must restore Infinity (not a finite number).
+      { pointer: '/isFinite', equals: false },
+    ],
+    // Mutating wire to null (JSON.stringify default) must break the invariant.
+    negativeControl: { mutate: 'wire', to: null },
+  },
+]
+
+// ---------------------------------------------------------------------------
+// F helper — shape-level assertions (host-neutral, no codec execution needed)
+//
+// Full round-trip (encode/decode) is validated in later states (lt-scalars,
+// lt-conformance-crosshost). This state's guard (`nx test apigen-conformance`)
+// only proves the vector DATA is well-formed and non-vacuous.
+// ---------------------------------------------------------------------------
+
+/**
+ * Assert that a `LogicalTypeVector` is structurally well-formed.
+ *
+ * Checks:
+ *  - `id` is a non-empty string
+ *  - `logicalType` is a non-empty string
+ *  - `schema` is a plain object with at least a `type` key
+ *  - `wire` is present (any Wire value, including null)
+ *  - `negativeControl` is present with a valid `mutate` discriminant
+ *  - `negativeControl.to` is NOT identical to `wire` (the mutation must change something)
+ *
+ * Returns `null` on success; a diagnostic string on the first failure.
+ */
+export function assertLogicalTypeVectorWellFormed(v: LogicalTypeVector): null | string {
+  if (typeof v.id !== 'string' || v.id.length === 0) {
+    return `${String(v.id)}: id must be a non-empty string`
+  }
+  if (typeof v.logicalType !== 'string' || v.logicalType.length === 0) {
+    return `${v.id}: logicalType must be a non-empty string`
+  }
+  if (typeof v.schema !== 'object' || v.schema === null || Array.isArray(v.schema)) {
+    return `${v.id}: schema must be a plain object`
+  }
+  if (!('type' in v.schema)) {
+    return `${v.id}: schema must have a "type" key`
+  }
+  // wire is allowed to be any Wire value (null, string, number, boolean, array, object)
+  if (v.wire === undefined) {
+    return `${v.id}: wire must be present`
+  }
+  if (!v.negativeControl || typeof v.negativeControl !== 'object') {
+    return `${v.id}: negativeControl must be present`
+  }
+  const validMutates: ReadonlyArray<string> = ['wire', 'schema', 'codec']
+  if (!validMutates.includes(v.negativeControl.mutate)) {
+    return `${v.id}: negativeControl.mutate must be one of ${validMutates.join(', ')}, got "${String(v.negativeControl.mutate)}"`
+  }
+  // The negative control's mutation must differ from the canonical wire (otherwise vacuous).
+  if (v.negativeControl.mutate === 'wire' && JSON.stringify(v.negativeControl.to) === JSON.stringify(v.wire)) {
+    return `${v.id}: negativeControl.to must differ from wire (mutation is vacuous)`
+  }
+  return null
+}
+
+/**
+ * Assert that all ids in `logicalTypeVectors` are unique.
+ *
+ * Returns `null` on success; a diagnostic string listing any duplicates.
+ */
+export function assertLogicalTypeVectorIdsUnique(vectors: LogicalTypeVector[]): null | string {
+  const seen = new Set<string>()
+  const dupes: string[] = []
+  for (const v of vectors) {
+    if (seen.has(v.id)) {
+      dupes.push(v.id)
+    }
+    seen.add(v.id)
+  }
+  if (dupes.length > 0) {
+    return `duplicate logical type vector ids: ${dupes.join(', ')}`
+  }
+  return null
+}
+
+/**
+ * Assert that every well-known scalar format named in DESIGN §3 has at least
+ * one vector in the provided set.
+ *
+ * Returns `null` if all are covered; a diagnostic string listing missing formats.
+ */
+export function assertLogicalTypeVectorCoverage(vectors: LogicalTypeVector[]): null | string {
+  const requiredTypes: ReadonlyArray<string> = [
+    'date-time',
+    'int64',
+    'decimal',
+    'byte',
+    'uuid',
+    'number-special',
+  ]
+  const covered = new Set(vectors.map((v) => v.logicalType))
+  const missing = requiredTypes.filter((t) => !covered.has(t))
+  if (missing.length > 0) {
+    return `missing conformance vectors for logical types: ${missing.join(', ')}`
+  }
+  return null
+}
+
+/**
+ * Assert that a wire value matches the expected canonical pattern for a given
+ * schema format. Used as a quick sanity check without executing a full codec.
+ *
+ * Returns `null` on success; a diagnostic string on mismatch.
+ */
+export function assertWireMatchesFormat(v: LogicalTypeVector): null | string {
+  const fmt = v.schema['format']
+  const wire = v.wire
+  if (typeof wire !== 'string') {
+    // All well-known scalar canonical wires are strings (the "decimal string",
+    // "base64 string", etc. requirement). Numeric wire is only valid as a
+    // negativeControl mutation (e.g. int64 mutated to a JS number).
+    return `${v.id}: expected wire to be a string for format "${String(fmt)}", got ${typeof wire}`
+  }
+  switch (fmt) {
+    case 'date-time': {
+      // RFC 3339 UTC: ends with Z, contains T separator
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(wire)) {
+        return `${v.id}: wire "${wire}" does not match RFC 3339 UTC pattern`
+      }
+      break
+    }
+    case 'int64': {
+      // Decimal string, optionally negative
+      if (!/^-?\d+$/.test(wire)) {
+        return `${v.id}: wire "${wire}" is not a decimal string (int64)`
+      }
+      break
+    }
+    case 'decimal': {
+      // Decimal string: digits, optional leading minus, optional fractional part
+      if (!/^-?\d+(\.\d+)?$/.test(wire)) {
+        return `${v.id}: wire "${wire}" is not a decimal string`
+      }
+      break
+    }
+    case 'byte': {
+      // Standard base64 (not URL-safe): A-Z a-z 0-9 + / with = padding
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(wire)) {
+        return `${v.id}: wire "${wire}" is not standard base64 (format:byte)`
+      }
+      break
+    }
+    case 'uuid': {
+      // Lowercase hyphenated RFC 4122
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(wire)) {
+        return `${v.id}: wire "${wire}" is not a lowercase-hyphenated UUID`
+      }
+      break
+    }
+    default:
+      // number-special and future types: no format key; wire is validated by negativeControl
+      break
+  }
+  return null
+}
+
+// ---------------------------------------------------------------------------
 // Runner — execute all vectors and collect results
 // ---------------------------------------------------------------------------
 
@@ -641,6 +976,60 @@ export function runAllVectors(): VectorResult[] {
       id: negId,
       pass: rejectedInvalid,
       error: rejectedInvalid ? undefined : `schema validator accepted "not-an-object" as valid for an object schema`,
+    })
+  }
+
+  // ---- F. Logical type wire spec (shape-level only at this state) ----
+
+  // All ids must be unique.
+  const uniqueErr = assertLogicalTypeVectorIdsUnique(logicalTypeVectors)
+  results.push({
+    id: 'logical.meta.ids-unique',
+    pass: uniqueErr === null,
+    error: uniqueErr ?? undefined,
+  })
+
+  // All required scalar types must be covered.
+  const coverageErr = assertLogicalTypeVectorCoverage(logicalTypeVectors)
+  results.push({
+    id: 'logical.meta.coverage',
+    pass: coverageErr === null,
+    error: coverageErr ?? undefined,
+  })
+
+  // Each vector must be structurally well-formed.
+  for (const v of logicalTypeVectors) {
+    const shapeErr = assertLogicalTypeVectorWellFormed(v)
+    results.push({
+      id: `${v.id}.shape`,
+      pass: shapeErr === null,
+      error: shapeErr ?? undefined,
+    })
+  }
+
+  // Each vector's wire must match the canonical pattern for its schema format.
+  for (const v of logicalTypeVectors) {
+    const fmtErr = assertWireMatchesFormat(v)
+    results.push({
+      id: `${v.id}.wire-format`,
+      pass: fmtErr === null,
+      error: fmtErr ?? undefined,
+    })
+  }
+
+  // Each vector's negativeControl.to (when mutate==='wire') must NOT match the canonical pattern.
+  // This is the "teeth" check: proves the negative control would actually turn the vector RED.
+  for (const v of logicalTypeVectors) {
+    if (v.negativeControl.mutate !== 'wire') continue
+    const mutatedV: LogicalTypeVector = { ...v, wire: v.negativeControl.to as Wire }
+    // We expect assertWireMatchesFormat to FAIL on the mutated wire (i.e. return a non-null error).
+    // If it passes, the negative control is vacuous.
+    const mutatedFmtErr = assertWireMatchesFormat(mutatedV)
+    const isRed = mutatedFmtErr !== null
+    results.push({
+      id: `${v.id}.negative-control`,
+      pass: isRed,
+      error: isRed ? undefined : `negativeControl.to "${JSON.stringify(v.negativeControl.to)}" still matches the canonical pattern — negative control is vacuous`,
     })
   }
 
