@@ -28,3 +28,5 @@ export {
   logicalKindOf,
   codecIdOf,
 } from './lib/descriptor-ext';
+
+export { buildTranscoder, tryRegister } from './lib/runmode';
