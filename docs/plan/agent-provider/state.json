@@ -67,11 +67,11 @@
       "end_ref": null
     },
     "code-review": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-24T00:15:50.946Z",
-      "done_at": null,
+      "done_at": "2026-06-24T00:19:57.044Z",
       "start_ref": "02ce0cd662afedb9b89feb0d216c7bb1561e89fb",
-      "end_ref": null
+      "end_ref": "456851d80352ee9d2b0155325e7a635784a0594a"
     }
   },
   "transition_log": [
@@ -206,6 +206,18 @@
       "audit_criteria_total": 24,
       "by": "pseudosky",
       "note": "FEAT-007 emit-tools.ts: emitTool+emitToolsForProvider branch on emit_shape (server_side→type-tagged, unsupported→throw, custom→std def). 12 tests pass. Real negative-control mutation scripts + fixed criteria.json paths (plan-dir-relative) + review.md APPROVED. All 24 audit criteria PASS from plan-dir cwd (audit exit 0). SHAs fc9aaac + eca2e20 + 65ccce1."
+    },
+    {
+      "ts": "2026-06-24T00:19:57.044Z",
+      "from": "runtime-tool-forwarding",
+      "to": "code-review",
+      "start_ref": "02ce0cd662afedb9b89feb0d216c7bb1561e89fb",
+      "end_ref": "456851d80352ee9d2b0155325e7a635784a0594a",
+      "audit_exit": 0,
+      "audit_criteria_passed": 17,
+      "audit_criteria_total": 17,
+      "by": "pseudosky",
+      "note": "APPROVED — 456851d80352ee9d2b0155325e7a635784a0594a; agent-mcp-types change additive, nx build agent-mcp exit 0, 67 tests pass"
     }
   ],
   "amendment_log": [],
@@ -214,7 +226,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "runtime-tool-forwarding",
+  "current_state": "audit-final",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:05:24.204Z",
     "by": "pseudosky",
