@@ -204,9 +204,9 @@
   },
   "current_state": "audit-final",
   "dod_provenance": {
-    "confirmed_at": "2026-06-23T04:06:45.453Z",
+    "confirmed_at": "2026-06-24T00:52:44.754Z",
     "by": "pseudosky",
-    "note": "DoD derived from docs/plan/agent-registry spec; confirmed by team-lead plan-authoring task 2026-06-22",
+    "note": "DoD dod.1-5 confirmed by user 2026-06-24 after full consumer-framed grounding + honest scope-vs-goal assessment (accepted as scoped foundation: 1 enforced event pre:model_request, maxModelCalls limit, single-level inheritance; gaps logged to backlog). audit --phase final 36/36, code-review APPROVED.",
     "dod_ids": [
       "dod.1",
       "dod.2",
