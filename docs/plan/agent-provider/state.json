@@ -252,9 +252,9 @@
   },
   "current_state": "done",
   "dod_provenance": {
-    "confirmed_at": "2026-06-23T04:05:24.204Z",
+    "confirmed_at": "2026-06-24T00:59:57.907Z",
     "by": "pseudosky",
-    "note": "DoD derived from docs/plan/agent-registry spec + RUNTIME_GAPS; confirmed by team-lead plan-authoring task 2026-06-22",
+    "note": "DoD dod.1-6 re-confirmed by user 2026-06-24 with FRESH consumer-framed grounding (replaces authoring-stamp, NB-6 parity). Accepted as scoped foundation: dod.6 ProviderAdapter is contract+impl ONLY, not yet consumed by agent-mcp (wiring deferred to mcp-refactor); no live-model e2e test (deferred). Gaps -> agent-provider/BACKLOG.md. Initiative NOT complete until gaps covered (per user directive).",
     "dod_ids": [
       "dod.1",
       "dod.2",
