@@ -48,9 +48,9 @@
     "runtime-tool-forwarding": {
       "status": "complete",
       "started_at": "2026-06-23T23:52:29.922Z",
-      "done_at": "2026-06-24T00:06:39.738Z",
+      "done_at": "2026-06-24T00:17:23.912Z",
       "start_ref": "e7d8d4a91ad8b6f1829d3490d1298db1d9eafa13",
-      "end_ref": "eca2e20ede94e6f9fb089e98e36902d8d2171d17"
+      "end_ref": "65ccce1d9b94ee68dc49016d272a04c0b4de220a"
     },
     "seed-and-roundtrip": {
       "status": "complete",
@@ -194,6 +194,18 @@
       "audit_criteria_total": 28,
       "by": "pseudosky",
       "note": "seed/providers.ts (5 providers) + seed/models.ts (4 models) + seed/bindings.ts (8 bindings) + seed/index.ts (unified idempotent seeder) + __tests__/roundtrip.test.ts (20 tests, all 4 acceptance criteria). Guard exit 0. SHA 9eb7405."
+    },
+    {
+      "ts": "2026-06-24T00:17:23.912Z",
+      "from": "code-review",
+      "to": "runtime-tool-forwarding",
+      "start_ref": "e7d8d4a91ad8b6f1829d3490d1298db1d9eafa13",
+      "end_ref": "65ccce1d9b94ee68dc49016d272a04c0b4de220a",
+      "audit_exit": 0,
+      "audit_criteria_passed": 24,
+      "audit_criteria_total": 24,
+      "by": "pseudosky",
+      "note": "FEAT-007 emit-tools.ts: emitTool+emitToolsForProvider branch on emit_shape (server_side→type-tagged, unsupported→throw, custom→std def). 12 tests pass. Real negative-control mutation scripts + fixed criteria.json paths (plan-dir-relative) + review.md APPROVED. All 24 audit criteria PASS from plan-dir cwd (audit exit 0). SHAs fc9aaac + eca2e20 + 65ccce1."
     }
   ],
   "amendment_log": [],
@@ -202,7 +214,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "code-review",
+  "current_state": "runtime-tool-forwarding",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:05:24.204Z",
     "by": "pseudosky",
