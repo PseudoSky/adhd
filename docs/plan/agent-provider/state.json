@@ -48,9 +48,9 @@
     "runtime-tool-forwarding": {
       "status": "complete",
       "started_at": "2026-06-23T23:52:29.922Z",
-      "done_at": "2026-06-24T00:17:23.912Z",
+      "done_at": "2026-06-24T00:22:10.114Z",
       "start_ref": "e7d8d4a91ad8b6f1829d3490d1298db1d9eafa13",
-      "end_ref": "65ccce1d9b94ee68dc49016d272a04c0b4de220a"
+      "end_ref": "1d9027f6fc331d169c74c0aa2bc64c73bfe1f0e8"
     },
     "seed-and-roundtrip": {
       "status": "complete",
@@ -218,6 +218,18 @@
       "audit_criteria_total": 17,
       "by": "pseudosky",
       "note": "APPROVED — 456851d80352ee9d2b0155325e7a635784a0594a; agent-mcp-types change additive, nx build agent-mcp exit 0, 67 tests pass"
+    },
+    {
+      "ts": "2026-06-24T00:22:10.114Z",
+      "from": "audit-final",
+      "to": "runtime-tool-forwarding",
+      "start_ref": "e7d8d4a91ad8b6f1829d3490d1298db1d9eafa13",
+      "end_ref": "1d9027f6fc331d169c74c0aa2bc64c73bfe1f0e8",
+      "audit_exit": 0,
+      "audit_criteria_passed": 30,
+      "audit_criteria_total": 30,
+      "by": "pseudosky",
+      "note": "FEAT-007 emit-tools.ts: emitTool+emitToolsForProvider (server_side→type-tagged, unsupported→throw). 12 tests pass. All 30 audit criteria PASS (24 structural + dod.1-6) from plan dir, exit 0. Real NC mutation scripts. review.md APPROVED. SHAs fc9aaac+eca2e20+65ccce1+1d9027f."
     }
   ],
   "amendment_log": [],
