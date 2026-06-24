@@ -74,10 +74,10 @@
       "end_ref": "43109ec406362ae5184c4df1a7e58090cdd0418e"
     },
     "lt-nominal-codec": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-24T01:04:29.814Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "d8101392f88de48838e66fc511033e3e8d257ba1",
       "end_ref": null
     },
     "lt-union-codec": {
@@ -295,7 +295,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-scalars",
+  "current_state": "lt-nominal-codec",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
