@@ -1,0 +1,12 @@
+{
+  "name": "@adhd/agent-nx",
+  "version": "0.0.1",
+  "description": "Nx generator for golden-path @adhd/agent-* registry packages (lint + cache + ^build inherited, README + rules doc)",
+  "dependencies": {
+    "@nx/devkit": "*"
+  },
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "typings": "./index.d.ts",
+  "generators": "./generators.json"
+}
