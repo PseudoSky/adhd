@@ -25,10 +25,10 @@
       "end_ref": null
     },
     "lt-registry": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-24T00:44:15.199Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "be4bd8d84a8164bcd4a4e25567c0ad6d1ee78bc2",
       "end_ref": null
     },
     "lt-generator-emit": {
@@ -211,7 +211,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-extract-nominal",
+  "current_state": "lt-registry",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
