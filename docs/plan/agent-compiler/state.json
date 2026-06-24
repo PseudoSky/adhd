@@ -4,11 +4,11 @@
   "dag": "dag.json",
   "states": {
     "compiler-design": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-24T00:57:15.164Z",
-      "done_at": null,
+      "done_at": "2026-06-24T01:00:46.060Z",
       "start_ref": "7ae0c856fcea713d9c717640c5cc9f345283f9d3",
-      "end_ref": null
+      "end_ref": "b2b24f6f995c0e7c1501d2afd96e9e7784354724"
     },
     "scaffold-package": {
       "status": "pending",
@@ -95,14 +95,27 @@
       "end_ref": null
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-06-24T01:00:46.060Z",
+      "from": "compiler-design",
+      "to": "compiler-design",
+      "start_ref": "7ae0c856fcea713d9c717640c5cc9f345283f9d3",
+      "end_ref": "b2b24f6f995c0e7c1501d2afd96e9e7784354724",
+      "audit_exit": 4,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "decisions.md: A=consume resolveComposition precedence (all-included), B=header builder per header_format (yaml_frontmatter/json_object/none), C=one-handle prefix join (inherited), D=context_hash over (context,componentVersions); architecture guard exit 0; SHA b2b24f6"
+    }
+  ],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "compiler-design",
+  "current_state": "scaffold-package",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:26:44.237Z",
     "by": "pseudosky",
