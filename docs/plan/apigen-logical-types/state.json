@@ -32,11 +32,11 @@
       "end_ref": "14f748eba9451a1786e1232b3f9608fd05907028"
     },
     "lt-generator-emit": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-24T00:56:01.682Z",
-      "done_at": null,
+      "done_at": "2026-06-24T01:01:42.780Z",
       "start_ref": "64d9410e2cb83e754b16e0e25972839e9b38b1f7",
-      "end_ref": null
+      "end_ref": "ebc1429ac71196ea49487c9f808b81e167a3170b"
     },
     "lt-runmode-closures": {
       "status": "in_progress",
@@ -251,6 +251,18 @@
       "audit_criteria_total": 10,
       "by": "pseudosky",
       "note": "class -> $def+$ref+x-apigen-* (reuses extract-classes); [inv:hints-advisory] proven; guard nx test apigen-core exit 0 (orchestrator-verified)"
+    },
+    {
+      "ts": "2026-06-24T01:01:42.780Z",
+      "from": "lt-extract-union",
+      "to": "lt-generator-emit",
+      "start_ref": "64d9410e2cb83e754b16e0e25972839e9b38b1f7",
+      "end_ref": "ebc1429ac71196ea49487c9f808b81e167a3170b",
+      "audit_exit": 1,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "generate-time schema-walk emitter (emitEncode/emitDecode; recurse object/array/$ref/oneOf; envelope fallback) per §4.4; guard nx test apigen-logical exit 0 (orchestrator-verified)"
     }
   ],
   "amendment_log": [],
@@ -259,7 +271,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-extract-union",
+  "current_state": "lt-scalars",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
