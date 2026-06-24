@@ -53,10 +53,10 @@
       "end_ref": null
     },
     "lt-extract-scalars": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-24T00:44:14.886Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "a73f3e17f0e02b1865cdcacd30b68cc57b55adf7",
       "end_ref": null
     },
     "lt-extract-nominal": {
@@ -211,7 +211,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-wire-spec",
+  "current_state": "lt-extract-scalars",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
