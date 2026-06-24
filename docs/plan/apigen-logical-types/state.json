@@ -32,10 +32,10 @@
       "end_ref": "14f748eba9451a1786e1232b3f9608fd05907028"
     },
     "lt-generator-emit": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-24T00:56:01.682Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "64d9410e2cb83e754b16e0e25972839e9b38b1f7",
       "end_ref": null
     },
     "lt-runmode-closures": {
