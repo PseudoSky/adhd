@@ -67,10 +67,10 @@
       "end_ref": "e49b93b88a7f8cd4141f7c062545495804580203"
     },
     "lt-extract-union": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-24T00:56:01.975Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "3183f43966832b75a8096424447faf52060b8095",
       "end_ref": null
     },
     "lt-nominal-codec": {
@@ -259,7 +259,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-runmode-closures",
+  "current_state": "lt-extract-union",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
