@@ -39,11 +39,11 @@
       "end_ref": "ebc1429ac71196ea49487c9f808b81e167a3170b"
     },
     "lt-runmode-closures": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-24T00:56:01.829Z",
-      "done_at": null,
+      "done_at": "2026-06-24T01:02:11.902Z",
       "start_ref": "070cc9be28405375ae55a8d9e0a2420cd57bd213",
-      "end_ref": null
+      "end_ref": "36ad1c83fa1f4d33f90d89ce084d70c007a9eef9"
     },
     "lt-scalars": {
       "status": "pending",
@@ -263,6 +263,18 @@
       "audit_criteria_total": 6,
       "by": "pseudosky",
       "note": "generate-time schema-walk emitter (emitEncode/emitDecode; recurse object/array/$ref/oneOf; envelope fallback) per §4.4; guard nx test apigen-logical exit 0 (orchestrator-verified)"
+    },
+    {
+      "ts": "2026-06-24T01:02:11.902Z",
+      "from": "lt-scalars",
+      "to": "lt-runmode-closures",
+      "start_ref": "070cc9be28405375ae55a8d9e0a2420cd57bd213",
+      "end_ref": "36ad1c83fa1f4d33f90d89ce084d70c007a9eef9",
+      "audit_exit": 1,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "run-mode buildTranscoder (compile-once) + lazy optional-peer-dep registration per §14.2; guard nx test apigen-logical exit 0 (orchestrator-verified)"
     }
   ],
   "amendment_log": [],
