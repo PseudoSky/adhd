@@ -6,7 +6,7 @@
       "phase": "foundation",
       "tier": null,
       "kind": "exists",
-      "path": "packages/ai/agent-provider/project.json"
+      "path": "../../../packages/ai/agent-provider/project.json"
     },
     {
       "id": "scaffold-package.2",
@@ -15,7 +15,7 @@
       "kind": "present",
       "pattern": "@adhd/agent-provider",
       "paths": [
-        "tsconfig.base.json"
+        "../../../tsconfig.base.json"
       ]
     },
     {
@@ -25,7 +25,7 @@
       "kind": "present",
       "pattern": "platform:node",
       "paths": [
-        "packages/ai/agent-provider/project.json"
+        "../../../packages/ai/agent-provider/project.json"
       ]
     },
     {
@@ -33,7 +33,7 @@
       "phase": "foundation",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx build agent-provider",
+      "cmd": "cd ../../.. && npx --yes nx build agent-provider",
       "expect": "exit0"
     },
     {
@@ -43,7 +43,7 @@
       "kind": "absent",
       "pattern": "from \"react\"|document\\.|window\\.",
       "paths": [
-        "packages/ai/agent-provider/src"
+        "../../../packages/ai/agent-provider/src"
       ]
     },
     {
@@ -53,7 +53,7 @@
       "kind": "present",
       "pattern": "providers|providersTable",
       "paths": [
-        "packages/ai/agent-provider/src/db/schema.ts"
+        "../../../packages/ai/agent-provider/src/db/schema.ts"
       ]
     },
     {
@@ -63,7 +63,7 @@
       "kind": "present",
       "pattern": "models|modelsTable",
       "paths": [
-        "packages/ai/agent-provider/src/db/schema.ts"
+        "../../../packages/ai/agent-provider/src/db/schema.ts"
       ]
     },
     {
@@ -71,7 +71,7 @@
       "phase": "schema",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/model-store.test.ts",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/model-store.test.ts",
       "expect": "exit0"
     },
     {
@@ -81,7 +81,7 @@
       "kind": "present",
       "pattern": "model_platform_bindings|modelPlatformBindings",
       "paths": [
-        "packages/ai/agent-provider/src/db/schema.ts"
+        "../../../packages/ai/agent-provider/src/db/schema.ts"
       ]
     },
     {
@@ -91,7 +91,7 @@
       "kind": "present",
       "pattern": "resolveModelId|platform_model_id|platformModelId",
       "paths": [
-        "packages/ai/agent-provider/src/store/model-store.ts"
+        "../../../packages/ai/agent-provider/src/store/model-store.ts"
       ]
     },
     {
@@ -99,7 +99,7 @@
       "phase": "schema",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/binding-store.test.ts",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/binding-store.test.ts",
       "expect": "exit0"
     },
     {
@@ -107,9 +107,9 @@
       "phase": "schema",
       "tier": null,
       "kind": "negative-control",
-      "positive": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/binding-store.test.ts --skip-nx-cache",
-      "mutate": "node docs/plan/agent-provider/scripts/nc_break_binding.mjs",
-      "restore": "node docs/plan/agent-provider/scripts/nc_restore_binding.mjs"
+      "positive": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/binding-store.test.ts --skip-nx-cache",
+      "mutate": "node scripts/nc_break_binding.mjs",
+      "restore": "node scripts/nc_restore_binding.mjs"
     },
     {
       "id": "provider-tool-formats.1",
@@ -118,7 +118,7 @@
       "kind": "present",
       "pattern": "provider_tool_formats|providerToolFormats",
       "paths": [
-        "packages/ai/agent-provider/src/db/schema.ts"
+        "../../../packages/ai/agent-provider/src/db/schema.ts"
       ]
     },
     {
@@ -126,7 +126,7 @@
       "phase": "schema",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/tool-format-store.test.ts",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/tool-format-store.test.ts",
       "expect": "exit0"
     },
     {
@@ -144,7 +144,7 @@
       "kind": "present",
       "pattern": "ProviderAdapter",
       "paths": [
-        "packages/ai/agent-mcp-types/src/domain.ts"
+        "../../../packages/ai/agent-mcp-types/src/domain.ts"
       ]
     },
     {
@@ -154,7 +154,7 @@
       "kind": "absent",
       "pattern": "interface ProviderAdapter",
       "paths": [
-        "packages/ai/agent-provider/src"
+        "../../../packages/ai/agent-provider/src"
       ]
     },
     {
@@ -162,7 +162,7 @@
       "phase": "adapter",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/adapter-resolve.test.ts",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/adapter-resolve.test.ts",
       "expect": "exit0"
     },
     {
@@ -172,7 +172,7 @@
       "kind": "present",
       "pattern": "web_search|type-tagged|serverSide|server_side",
       "paths": [
-        "packages/ai/agent-provider/src/runtime/emit-tools.ts"
+        "../../../packages/ai/agent-provider/src/runtime/emit-tools.ts"
       ]
     },
     {
@@ -182,7 +182,7 @@
       "kind": "present",
       "pattern": "throw|UnsupportedNativeToolError|UNSUPPORTED_NATIVE_TOOL",
       "paths": [
-        "packages/ai/agent-provider/src/runtime/emit-tools.ts"
+        "../../../packages/ai/agent-provider/src/runtime/emit-tools.ts"
       ]
     },
     {
@@ -190,7 +190,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
       "expect": "exit0"
     },
     {
@@ -198,16 +198,16 @@
       "phase": "runtime",
       "tier": null,
       "kind": "negative-control",
-      "positive": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts --skip-nx-cache",
-      "mutate": "node docs/plan/agent-provider/scripts/nc_break_emitter.mjs",
-      "restore": "node docs/plan/agent-provider/scripts/nc_restore_emitter.mjs"
+      "positive": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts --skip-nx-cache",
+      "mutate": "node scripts/nc_break_emitter.mjs",
+      "restore": "node scripts/nc_restore_emitter.mjs"
     },
     {
       "id": "seed-and-roundtrip.1",
       "phase": "seed",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
       "expect": "exit0"
     },
     {
@@ -217,7 +217,7 @@
       "kind": "present",
       "pattern": "claude_opus_4_8|claude_sonnet_4_6",
       "paths": [
-        "packages/ai/agent-provider/src/seed/models.ts"
+        "../../../packages/ai/agent-provider/src/seed/models.ts"
       ]
     },
     {
@@ -227,7 +227,7 @@
       "kind": "present",
       "pattern": "anthropic|bedrock|lmstudio",
       "paths": [
-        "packages/ai/agent-provider/src/seed/providers.ts"
+        "../../../packages/ai/agent-provider/src/seed/providers.ts"
       ]
     },
     {
@@ -235,9 +235,9 @@
       "phase": "seed",
       "tier": null,
       "kind": "negative-control",
-      "positive": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
-      "mutate": "make seed() use plain INSERT instead of upsert/INSERT OR IGNORE so a second run duplicates provider/model rows",
-      "restore": "restore upsert/INSERT OR IGNORE in seed()"
+      "positive": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts --skip-nx-cache",
+      "mutate": "node scripts/nc_break_seed.mjs",
+      "restore": "node scripts/nc_restore_seed.mjs"
     },
     {
       "id": "audit-final.1",
@@ -252,7 +252,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
-      "cmd": "python3 docs/plan/agent-provider/scripts/review_gate.py",
+      "cmd": "python3 scripts/review_gate.py",
       "expect": "exit0"
     }
   ]

@@ -29,6 +29,7 @@
       "@adhd/agent-compiler": ["./packages/ai/agent-compiler/src/index.ts"],
       "@adhd/agent-registry": ["./packages/ai/agent-registry/src/index.ts"],
       "@adhd/agent-mcp": ["./packages/ai/agent-mcp/src/index.ts"],
+      "@adhd/agent-nx": ["./packages/ai/agent-nx/src/index.ts"],
       "@adhd/agent-mcp-budget": ["./packages/ai/agent-mcp-budget/src/index.ts"],
       "@adhd/agent-mcp-types": ["./packages/ai/agent-mcp-types/src/index.ts"],
       "@adhd/agent-policy": ["./packages/ai/agent-policy/src/index.ts"],
