@@ -18,7 +18,7 @@
       "kind": "work",
       "phase": "contracts",
       "depends_on": [],
-      "guard": "npx nx build apigen-logical",
+      "guard": "./node_modules/.bin/nx build apigen-logical",
       "artifacts": [
         "packages/apigen/logical/project.json"
       ],
@@ -31,7 +31,7 @@
       "depends_on": [
         "lt-package"
       ],
-      "guard": "npx nx tsc apigen-logical",
+      "guard": "./node_modules/.bin/nx tsc apigen-logical",
       "artifacts": [
         "packages/apigen/logical/src/lib/contracts.ts"
       ],
@@ -44,7 +44,7 @@
       "depends_on": [
         "lt-contracts"
       ],
-      "guard": "npx nx test apigen-conformance",
+      "guard": "./node_modules/.bin/nx test apigen-conformance",
       "artifacts": [
         "packages/apigen/conformance/src/lib/vectors.ts"
       ],
@@ -57,7 +57,7 @@
       "depends_on": [
         "lt-contracts"
       ],
-      "guard": "npx nx test apigen-logical",
+      "guard": "./node_modules/.bin/nx test apigen-logical",
       "artifacts": [
         "packages/apigen/logical/src/lib/registry.ts"
       ],
@@ -70,7 +70,7 @@
       "depends_on": [
         "lt-registry"
       ],
-      "guard": "npx nx test apigen-logical",
+      "guard": "./node_modules/.bin/nx test apigen-logical",
       "artifacts": [
         "packages/apigen/logical/src/lib/emit.ts"
       ],
@@ -83,7 +83,7 @@
       "depends_on": [
         "lt-registry"
       ],
-      "guard": "npx nx test apigen-logical",
+      "guard": "./node_modules/.bin/nx test apigen-logical",
       "artifacts": [
         "packages/apigen/logical/src/lib/runmode.ts"
       ],
@@ -96,7 +96,7 @@
       "depends_on": [
         "lt-generator-emit"
       ],
-      "guard": "npx nx test apigen-logical",
+      "guard": "./node_modules/.bin/nx test apigen-logical",
       "artifacts": [
         "packages/apigen/logical/src/lib/codecs"
       ],
@@ -109,7 +109,7 @@
       "depends_on": [
         "lt-contracts"
       ],
-      "guard": "npx nx test apigen-core",
+      "guard": "./node_modules/.bin/nx test apigen-core",
       "artifacts": [
         "packages/apigen/core/src/lib/schema-builders/ts-json-schema.ts"
       ],
@@ -122,7 +122,7 @@
       "depends_on": [
         "lt-contracts"
       ],
-      "guard": "npx nx test apigen-core",
+      "guard": "./node_modules/.bin/nx test apigen-core",
       "artifacts": [
         "packages/apigen/core/src/lib/schema-builders/nominal.ts"
       ],
@@ -135,7 +135,7 @@
       "depends_on": [
         "lt-extract-nominal"
       ],
-      "guard": "npx nx test apigen-core",
+      "guard": "./node_modules/.bin/nx test apigen-core",
       "artifacts": [
         "packages/apigen/core/src/lib/schema-builders/union.ts"
       ],
@@ -149,7 +149,7 @@
         "lt-generator-emit",
         "lt-extract-nominal"
       ],
-      "guard": "npx nx test apigen-runtime",
+      "guard": "./node_modules/.bin/nx test apigen-runtime",
       "artifacts": [
         "packages/apigen/runtime/src/lib/logical/nominal-codec.ts"
       ],
@@ -163,7 +163,7 @@
         "lt-nominal-codec",
         "lt-extract-union"
       ],
-      "guard": "npx nx test apigen-runtime",
+      "guard": "./node_modules/.bin/nx test apigen-runtime",
       "artifacts": [
         "packages/apigen/runtime/src/lib/logical/union-codec.ts"
       ],
@@ -178,7 +178,7 @@
         "lt-nominal-codec",
         "lt-union-codec"
       ],
-      "guard": "npx nx test apigen-runtime",
+      "guard": "./node_modules/.bin/nx test apigen-runtime",
       "artifacts": [
         "packages/apigen/runtime/src/lib/logical/host-ts.ts"
       ],
@@ -205,7 +205,7 @@
       "depends_on": [
         "lt-host-ts"
       ],
-      "guard": "npx nx test apigen-runtime",
+      "guard": "./node_modules/.bin/nx test apigen-runtime",
       "artifacts": [
         "packages/apigen/runtime/src/lib/dispatch.ts"
       ],
@@ -218,7 +218,7 @@
       "depends_on": [
         "lt-host-ts"
       ],
-      "guard": "npx nx test apigen-cli",
+      "guard": "./node_modules/.bin/nx test apigen-cli",
       "artifacts": [
         "packages/apigen/cli/src/lib/commands/generate.ts"
       ],
@@ -231,7 +231,7 @@
       "depends_on": [
         "lt-host-ts"
       ],
-      "guard": "npx nx test apigen-cli",
+      "guard": "./node_modules/.bin/nx test apigen-cli",
       "artifacts": [
         "packages/apigen/cli/src/lib/commands/run.ts"
       ],
@@ -244,7 +244,7 @@
       "depends_on": [
         "lt-scalars"
       ],
-      "guard": "npx nx test apigen-runtime",
+      "guard": "./node_modules/.bin/nx test apigen-runtime",
       "artifacts": [
         "packages/apigen/runtime/src/lib/validate-layer.ts"
       ],
@@ -258,7 +258,7 @@
         "lt-host-ts",
         "lt-host-python"
       ],
-      "guard": "npx nx test apigen-codegen",
+      "guard": "./node_modules/.bin/nx test apigen-codegen",
       "artifacts": [
         "packages/apigen/codegen/src/lib/hints.ts"
       ],
@@ -271,7 +271,7 @@
       "depends_on": [
         "lt-host-python"
       ],
-      "guard": "npx nx test apigen-nx",
+      "guard": "./node_modules/.bin/nx test apigen-nx",
       "artifacts": [
         "packages/apigen/nx/src/generators/host"
       ],
@@ -284,7 +284,7 @@
       "depends_on": [
         "lt-host-generator"
       ],
-      "guard": "npx nx run apigen-conformance:conformance",
+      "guard": "./node_modules/.bin/nx run apigen-conformance:conformance",
       "artifacts": [
         "packages/apigen/conformance/src/lib/gate.ts"
       ],
