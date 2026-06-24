@@ -11,11 +11,11 @@
       "end_ref": "b2b24f6f995c0e7c1501d2afd96e9e7784354724"
     },
     "scaffold-package": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-24T01:03:21.702Z",
-      "done_at": null,
+      "done_at": "2026-06-24T01:09:58.943Z",
       "start_ref": "26bace5a23fbfbd6c1f5f8b5b1d23fdd27d1fdde",
-      "end_ref": null
+      "end_ref": "38f2e25a08467fd19440e0510b641b4dafdd02b5"
     },
     "composition-resolve": {
       "status": "pending",
@@ -107,6 +107,18 @@
       "audit_criteria_total": 4,
       "by": "pseudosky",
       "note": "decisions.md: A=consume resolveComposition precedence (all-included), B=header builder per header_format (yaml_frontmatter/json_object/none), C=one-handle prefix join (inherited), D=context_hash over (context,componentVersions); architecture guard exit 0; SHA b2b24f6"
+    },
+    {
+      "ts": "2026-06-24T01:09:58.943Z",
+      "from": "scaffold-package",
+      "to": "scaffold-package",
+      "start_ref": "26bace5a23fbfbd6c1f5f8b5b1d23fdd27d1fdde",
+      "end_ref": "38f2e25a08467fd19440e0510b641b4dafdd02b5",
+      "audit_exit": 8,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "built via generator + guard exit 0 + SHA 38f2e25"
     }
   ],
   "amendment_log": [],
@@ -115,7 +127,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "scaffold-package",
+  "current_state": "composition-resolve",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:26:44.237Z",
     "by": "pseudosky",
