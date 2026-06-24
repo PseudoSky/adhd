@@ -11,10 +11,10 @@
       "end_ref": "c4fbe143367080c98838a4ba5d0f315e165f4c81"
     },
     "lt-contracts": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-24T00:20:44.997Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "20765aa2c4af1f8abe4698deabb0d10d26ff6dad",
       "end_ref": null
     },
     "lt-wire-spec": {
