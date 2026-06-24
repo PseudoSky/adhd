@@ -39,10 +39,10 @@
       "end_ref": null
     },
     "lt-runmode-closures": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-24T00:56:01.829Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "070cc9be28405375ae55a8d9e0a2420cd57bd213",
       "end_ref": null
     },
     "lt-scalars": {
@@ -259,7 +259,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-generator-emit",
+  "current_state": "lt-runmode-closures",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
