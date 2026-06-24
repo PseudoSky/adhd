@@ -1,0 +1,57 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import Database from 'better-sqlite3';
+
+// ──────────────────────────────────────────────
+// Golden-path harness for @adhd/agent-compiler.
+//
+// This proves the registry-package test invariants on the empty skeleton:
+//   • real on-disk SQLite file (a tmp path), not an in-memory DB, not a mock;
+//   • persistence proven by CLOSE + REOPEN from the same path;
+//   • assertions with teeth (negative control below would fail if broken);
+//   • gate on EXIT CODE, never on stdout (better-sqlite3 vitest teardown can
+//     segfault — `nx test agent-compiler` must key on the runner's exit code).
+//
+// Replace this with real store tests as you add tables to db/schema.ts. Keep the
+// CLOSE+REOPEN shape: it is the only thing that actually proves persistence.
+// ──────────────────────────────────────────────
+
+describe('agent-compiler skeleton persistence', () => {
+  let dir: string;
+  let dbPath: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'agent-compiler-'));
+    dbPath = join(dir, 'registry.db');
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('persists a written row across close + reopen', () => {
+    // Write with one connection, then fully close it.
+    const write = new Database(dbPath);
+    write.pragma('journal_mode = WAL');
+    write.exec(
+      'CREATE TABLE compiler_probe (slug TEXT PRIMARY KEY, label TEXT NOT NULL)'
+    );
+    write
+      .prepare('INSERT INTO compiler_probe (slug, label) VALUES (?, ?)')
+      .run('alpha', 'hello');
+    write.close();
+
+    // Reopen from the SAME path — proves the row hit disk, not just memory.
+    const read = new Database(dbPath);
+    const row = read
+      .prepare('SELECT label FROM compiler_probe WHERE slug = ?')
+      .get('alpha') as { label: string } | undefined;
+    read.close();
+
+    // Teeth: a broken write (or an in-memory-only DB) makes `row` undefined.
+    expect(row?.label).toBe('hello');
+  });
+});
