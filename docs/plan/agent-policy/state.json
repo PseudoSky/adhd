@@ -53,11 +53,11 @@
       "end_ref": "8c5f7a2249e50c5ab638b203c963953238e6df49"
     },
     "seed-and-roundtrip": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-23T23:55:03.252Z",
-      "done_at": null,
+      "done_at": "2026-06-24T00:00:09.731Z",
       "start_ref": "fc9aaac0b7d1e84671a5bdfe24382f0f34355a2b",
-      "end_ref": null
+      "end_ref": "d5e08420915e8fd8d52bae0e506ba02ce64c8df1"
     },
     "audit-final": {
       "status": "pending",
@@ -158,6 +158,18 @@
       "audit_criteria_total": 27,
       "by": "pseudosky",
       "note": "audit-schema gate: audit_policy.py --phase schema 22/22 PASS (exit 0), verified by orchestrator. Schema+enforcement states green."
+    },
+    {
+      "ts": "2026-06-24T00:00:09.731Z",
+      "from": "seed-and-roundtrip",
+      "to": "seed-and-roundtrip",
+      "start_ref": "fc9aaac0b7d1e84671a5bdfe24382f0f34355a2b",
+      "end_ref": "d5e08420915e8fd8d52bae0e506ba02ce64c8df1",
+      "audit_exit": 19,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 24,
+      "by": "pseudosky",
+      "note": "seed()+roundtrip.test.ts: 4 tests pass (guard exit 0); idempotent double-seed + reopen + teeth all verified; SHA d5e0842; nc_break_seed.mjs + nc_restore_seed.mjs added per [seed-and-roundtrip.3]"
     }
   ],
   "amendment_log": [],
@@ -166,7 +178,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "seed-and-roundtrip",
+  "current_state": "code-review",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:06:45.453Z",
     "by": "pseudosky",
