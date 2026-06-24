@@ -25,11 +25,11 @@
       "end_ref": null
     },
     "lt-registry": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-24T00:44:15.199Z",
-      "done_at": null,
+      "done_at": "2026-06-24T00:47:30.037Z",
       "start_ref": "be4bd8d84a8164bcd4a4e25567c0ad6d1ee78bc2",
-      "end_ref": null
+      "end_ref": "14f748eba9451a1786e1232b3f9608fd05907028"
     },
     "lt-generator-emit": {
       "status": "pending",
@@ -203,6 +203,18 @@
       "audit_criteria_total": 3,
       "by": "pseudosky",
       "note": "contract spine (LogicalTypeCodec/Registry/Transcoder/TemplateCell/envelope + descriptor x-apigen-* vocab) authored + builds green"
+    },
+    {
+      "ts": "2026-06-24T00:47:30.037Z",
+      "from": "lt-registry",
+      "to": "lt-registry",
+      "start_ref": "be4bd8d84a8164bcd4a4e25567c0ad6d1ee78bc2",
+      "end_ref": "14f748eba9451a1786e1232b3f9608fd05907028",
+      "audit_exit": 6,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 6,
+      "by": "pseudosky",
+      "note": "createRegistry implemented (register/resolve-by-format/get/ids/freeze + CodecRegistryError E_DUP); guard nx test apigen-logical exit 0 (verified orchestrator-side)"
     }
   ],
   "amendment_log": [],
@@ -211,7 +223,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-registry",
+  "current_state": "lt-generator-emit",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
