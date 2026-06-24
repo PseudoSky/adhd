@@ -254,6 +254,60 @@
       "kind": "command",
       "cmd": "python3 scripts/review_gate.py",
       "expect": "exit0"
+    },
+    {
+      "id": "dod.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/binding-store.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "dod.2",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "dod.3",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd ../../.. && npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "dod.4",
+      "phase": "audit",
+      "tier": null,
+      "kind": "present",
+      "pattern": "platform:node",
+      "paths": [
+        "../../../packages/ai/agent-provider/project.json"
+      ]
+    },
+    {
+      "id": "dod.5",
+      "phase": "audit",
+      "tier": null,
+      "kind": "present",
+      "pattern": "provider_tool_formats|providerToolFormats",
+      "paths": [
+        "../../../packages/ai/agent-provider/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "dod.6",
+      "phase": "audit",
+      "tier": null,
+      "kind": "present",
+      "pattern": "ProviderAdapter",
+      "paths": [
+        "../../../packages/ai/agent-mcp-types/src/domain.ts"
+      ]
     }
   ]
 }
