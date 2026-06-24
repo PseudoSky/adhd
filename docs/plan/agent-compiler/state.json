@@ -11,10 +11,10 @@
       "end_ref": "b2b24f6f995c0e7c1501d2afd96e9e7784354724"
     },
     "scaffold-package": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-24T01:03:21.702Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "26bace5a23fbfbd6c1f5f8b5b1d23fdd27d1fdde",
       "end_ref": null
     },
     "composition-resolve": {
