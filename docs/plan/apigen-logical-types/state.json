@@ -18,10 +18,10 @@
       "end_ref": "bd1d11bdf1102fa774d961c9c674c04d8b95c14e"
     },
     "lt-wire-spec": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-24T00:44:14.736Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "9f5ccd6886145fc5a0137b33201f9f61696580a0",
       "end_ref": null
     },
     "lt-registry": {
