@@ -67,11 +67,11 @@
       "end_ref": "e49b93b88a7f8cd4141f7c062545495804580203"
     },
     "lt-extract-union": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-24T00:56:01.975Z",
-      "done_at": null,
+      "done_at": "2026-06-24T01:03:43.868Z",
       "start_ref": "3183f43966832b75a8096424447faf52060b8095",
-      "end_ref": null
+      "end_ref": "43109ec406362ae5184c4df1a7e58090cdd0418e"
     },
     "lt-nominal-codec": {
       "status": "pending",
@@ -275,6 +275,18 @@
       "audit_criteria_total": 6,
       "by": "pseudosky",
       "note": "run-mode buildTranscoder (compile-once) + lazy optional-peer-dep registration per §14.2; guard nx test apigen-logical exit 0 (orchestrator-verified)"
+    },
+    {
+      "ts": "2026-06-24T01:03:43.868Z",
+      "from": "lt-scalars",
+      "to": "lt-extract-union",
+      "start_ref": "3183f43966832b75a8096424447faf52060b8095",
+      "end_ref": "43109ec406362ae5184c4df1a7e58090cdd0418e",
+      "audit_exit": 1,
+      "audit_criteria_passed": 9,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "discriminated union -> oneOf + discriminator + x-apigen-logical:union (reuses nominal $def); guard nx test apigen-core exit 0 (orchestrator-verified, full core trio green)"
     }
   ],
   "amendment_log": [],
