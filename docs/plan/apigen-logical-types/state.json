@@ -4,11 +4,11 @@
   "dag": "dag.json",
   "states": {
     "lt-package": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-24T00:20:26.091Z",
-      "done_at": null,
+      "done_at": "2026-06-24T00:20:44.749Z",
       "start_ref": "95a8c51138bd1ac96bc1eddd64228e71be637b03",
-      "end_ref": null
+      "end_ref": "c4fbe143367080c98838a4ba5d0f315e165f4c81"
     },
     "lt-contracts": {
       "status": "pending",
@@ -179,14 +179,27 @@
       "end_ref": null
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-06-24T00:20:44.749Z",
+      "from": "lt-package",
+      "to": "lt-package",
+      "start_ref": "95a8c51138bd1ac96bc1eddd64228e71be637b03",
+      "end_ref": "c4fbe143367080c98838a4ba5d0f315e165f4c81",
+      "audit_exit": 2,
+      "audit_criteria_passed": 1,
+      "audit_criteria_total": 3,
+      "by": "pseudosky",
+      "note": "package scaffolded + builds green (pre-built with contract spine)"
+    }
+  ],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-package",
+  "current_state": "lt-contracts",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
