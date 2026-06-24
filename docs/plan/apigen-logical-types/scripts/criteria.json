@@ -6,7 +6,7 @@
       "phase": "contracts",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx build apigen-logical",
+      "cmd": "npx --yes nx build apigen-logical",
       "expect": "exit0"
     },
     {
@@ -14,7 +14,7 @@
       "phase": "contracts",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx tsc apigen-logical",
+      "cmd": "npx --yes nx build apigen-logical",
       "expect": "exit0"
     },
     {
@@ -22,7 +22,7 @@
       "phase": "contracts",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-conformance",
+      "cmd": "npx --yes nx test apigen-conformance",
       "expect": "exit0"
     },
     {
@@ -30,7 +30,7 @@
       "phase": "registry",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-logical",
+      "cmd": "npx --yes nx test apigen-logical",
       "expect": "exit0"
     },
     {
@@ -38,7 +38,7 @@
       "phase": "registry",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-logical",
+      "cmd": "npx --yes nx test apigen-logical",
       "expect": "exit0"
     },
     {
@@ -46,7 +46,7 @@
       "phase": "registry",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-logical",
+      "cmd": "npx --yes nx test apigen-logical",
       "expect": "exit0"
     },
     {
@@ -54,7 +54,7 @@
       "phase": "scalars",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-logical",
+      "cmd": "npx --yes nx test apigen-logical",
       "expect": "exit0"
     },
     {
@@ -62,7 +62,7 @@
       "phase": "extraction",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-core",
+      "cmd": "npx --yes nx test apigen-core",
       "expect": "exit0"
     },
     {
@@ -70,7 +70,7 @@
       "phase": "extraction",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-core",
+      "cmd": "npx --yes nx test apigen-core",
       "expect": "exit0"
     },
     {
@@ -78,7 +78,7 @@
       "phase": "extraction",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-core",
+      "cmd": "npx --yes nx test apigen-core",
       "expect": "exit0"
     },
     {
@@ -86,7 +86,7 @@
       "phase": "codecs",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-runtime",
+      "cmd": "npx --yes nx test apigen-runtime",
       "expect": "exit0"
     },
     {
@@ -94,7 +94,7 @@
       "phase": "codecs",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-runtime",
+      "cmd": "npx --yes nx test apigen-runtime",
       "expect": "exit0"
     },
     {
@@ -102,7 +102,7 @@
       "phase": "hosts",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-runtime",
+      "cmd": "npx --yes nx test apigen-runtime",
       "expect": "exit0"
     },
     {
@@ -118,7 +118,7 @@
       "phase": "integration",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-runtime",
+      "cmd": "npx --yes nx test apigen-runtime",
       "expect": "exit0"
     },
     {
@@ -126,7 +126,7 @@
       "phase": "integration",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-cli",
+      "cmd": "npx --yes nx test apigen-cli",
       "expect": "exit0"
     },
     {
@@ -134,7 +134,7 @@
       "phase": "integration",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-cli",
+      "cmd": "npx --yes nx test apigen-cli",
       "expect": "exit0"
     },
     {
@@ -142,7 +142,7 @@
       "phase": "integration",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-runtime",
+      "cmd": "npx --yes nx test apigen-runtime",
       "expect": "exit0"
     },
     {
@@ -150,7 +150,7 @@
       "phase": "integration",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-codegen",
+      "cmd": "npx --yes nx test apigen-codegen",
       "expect": "exit0"
     },
     {
@@ -158,7 +158,7 @@
       "phase": "gates",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx test apigen-nx",
+      "cmd": "npx --yes nx test apigen-nx",
       "expect": "exit0"
     },
     {
@@ -166,7 +166,7 @@
       "phase": "gates",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx run apigen-conformance:conformance",
+      "cmd": "npx --yes nx run apigen-conformance:conformance",
       "expect": "exit0"
     }
   ]
