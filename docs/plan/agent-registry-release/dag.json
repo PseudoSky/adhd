@@ -11,7 +11,20 @@
     "post-publish"
   ],
   "terminal": "done",
-  "nodes": {},
+  "nodes": {
+    "closeout-design": {
+      "kind": "work",
+      "phase": "closeout-design",
+      "depends_on": [],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase design",
+      "artifacts": [
+        "docs/plan/agent-registry-release/decisions.md",
+        "docs/plan/agent-registry-release/contexts/closeout-design.md"
+      ],
+      "context": "contexts/closeout-design.md",
+      "notes": ""
+    }
+  },
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.23",
