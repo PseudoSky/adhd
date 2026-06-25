@@ -109,11 +109,11 @@
       "end_ref": "14c3219c28f631cf8adf1405aa6551fa89b14315"
     },
     "lt-dep-manifest": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T15:37:01.656Z",
-      "done_at": "2026-06-25T14:16:00.493Z",
+      "done_at": "2026-06-25T15:52:04.213Z",
       "start_ref": "58096b134ef9a6ec5009f038190d217caaa6013c",
-      "end_ref": "25037a399ec3669c9abf5d48327a13ec9b651b83"
+      "end_ref": "ae9b68a0fbf812510f1557de62c6eeff28371e17"
     },
     "lt-fail-fast": {
       "status": "complete",
@@ -479,6 +479,18 @@
       "audit_criteria_total": 10,
       "by": "pseudosky",
       "note": "REOPENED to fix final-audit defect: ts-json-schema.ts SCALAR_SCHEMAS now maps Decimal->{type:string,format:decimal} AND wires normalizeTypeText() before the lookup so default-import (import Decimal from decimal.js -> qualified path) normalizes to Decimal key; was the root cause of dod.9b/dod.10. nx test apigen-core green"
+    },
+    {
+      "ts": "2026-06-25T15:52:04.213Z",
+      "from": "lt-extract-scalars",
+      "to": "lt-dep-manifest",
+      "start_ref": "58096b134ef9a6ec5009f038190d217caaa6013c",
+      "end_ref": "ae9b68a0fbf812510f1557de62c6eeff28371e17",
+      "audit_exit": 12,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 19,
+      "by": "pseudosky",
+      "note": "REOPENED: added v1+v2 dod.10 teeth tests (generate.spec, orchestrator.spec) driving real default-import Decimal source -> format:decimal -> decimal.js dep; v2 buildDescriptor path now at dep-parity with v1 via the shared buildSchema fix. nx test apigen-cli green 86"
     }
   ],
   "amendment_log": [],
@@ -487,7 +499,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-extract-scalars",
+  "current_state": "lt-dep-manifest",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
