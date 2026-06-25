@@ -456,7 +456,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
       });
 
       const parsed = JSON.parse(result.content) as Record<string, unknown>;
-      const sp = parsed.systemPrompt as string;
+      const sp = parsed['systemPrompt'] as string;
 
       expect(sp).toContain(NO_CREDENTIALS_CONSTRAINT);
 
@@ -562,7 +562,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
       // tools is an ARRAY of structured tool objects — not a comma string.
       // NEGATIVE-CONTROL: if tools were emitted as a string, Array.isArray would
       // return false → this assertion goes RED.
-      expect(Array.isArray(parsed.tools)).toBe(true);
+      expect(Array.isArray(parsed['tools'])).toBe(true);
 
       conn.close();
     });
@@ -578,7 +578,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
       });
 
       const parsed = JSON.parse(result.content) as Record<string, unknown>;
-      const sp = parsed.systemPrompt as string;
+      const sp = parsed['systemPrompt'] as string;
 
       // Body section text from the seeded components (same rows as claude_code).
       expect(sp).toContain('senior technical reviewer');
@@ -599,7 +599,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
       });
 
       const parsed = JSON.parse(result.content) as Record<string, unknown>;
-      const sp = parsed.systemPrompt as string;
+      const sp = parsed['systemPrompt'] as string;
 
       expect(sp).toContain(SECURITY_CRITERIA_ANCHOR);
       expect(sp).toContain('All user inputs are validated at the boundary');
@@ -619,7 +619,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const parsed = JSON.parse(result.content) as Record<string, unknown>;
       // SEED_DATA.md §7: claude_sonnet_4_6 → claude_api alias = 'claude-sonnet-4-6'.
-      expect(parsed.model).toBe('claude-sonnet-4-6');
+      expect(parsed['model']).toBe('claude-sonnet-4-6');
 
       conn.close();
     });
