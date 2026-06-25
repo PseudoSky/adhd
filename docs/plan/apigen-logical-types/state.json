@@ -102,10 +102,10 @@
       "end_ref": "9c5451c11e75689fa0a89329c178fa1aa725b343"
     },
     "lt-dispatch-integration": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T13:57:39.052Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "2329b84e5af4d6dccda81f8d7eacf2d648db6b8a",
       "end_ref": null
     },
     "lt-dep-manifest": {
