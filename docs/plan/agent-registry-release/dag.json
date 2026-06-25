@@ -23,6 +23,19 @@
       ],
       "context": "contexts/closeout-design.md",
       "notes": ""
+    },
+    "worktree-clarity": {
+      "kind": "work",
+      "phase": "worktree-clarity",
+      "depends_on": [
+        "closeout-design"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase clarity",
+      "artifacts": [
+        "docs/plan/agent-registry/CLOSEOUT.md"
+      ],
+      "context": "contexts/worktree-clarity.md",
+      "notes": ""
     }
   },
   "authored_with": {
