@@ -77,6 +77,19 @@
       ],
       "context": "contexts/merge-to-main.md",
       "notes": ""
+    },
+    "publish-packages": {
+      "kind": "work",
+      "phase": "publish",
+      "depends_on": [
+        "merge-to-main"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase publish",
+      "artifacts": [
+        "docs/plan/agent-registry-release/PUBLISH_RUNBOOK.md"
+      ],
+      "context": "contexts/publish-packages.md",
+      "notes": ""
     }
   },
   "authored_with": {
