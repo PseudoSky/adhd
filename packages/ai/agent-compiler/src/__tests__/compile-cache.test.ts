@@ -155,8 +155,8 @@ describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
     const componentStore = new ComponentStore(db as any);
     componentStore.upsertType({ slug: 'system', description: 'System prompt', isSystem: true });
 
-    componentStore.create({ slug: COMP_INTRO, type: 'system', content: '# Intro\n\nYou are a cache tester.', displayName: 'Intro' });
-    componentStore.create({ slug: COMP_BODY,  type: 'system', content: '## Body\n\nDo the caching.',          displayName: 'Body'  });
+    componentStore.create({ slug: COMP_INTRO, type: 'system', content: '# Intro\n\nYou are a cache tester.' });
+    componentStore.create({ slug: COMP_BODY,  type: 'system', content: '## Body\n\nDo the caching.'          });
 
     // 7. Attach components to agent (junction order: 1, 2)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
