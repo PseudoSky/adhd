@@ -20,6 +20,14 @@
       "paths": [
         "docs/plan/agent-registry/CLOSEOUT.md"
       ]
+    },
+    {
+      "id": "artifact-cleanup.1",
+      "phase": "cleanup",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase cleanup",
+      "expect": "exit0"
     }
   ]
 }
