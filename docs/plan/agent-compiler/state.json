@@ -81,11 +81,11 @@
       "end_ref": null
     },
     "code-review": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T15:06:55.674Z",
-      "done_at": null,
+      "done_at": "2026-06-25T15:21:36.486Z",
       "start_ref": "200a794c489b762dda4dc9a68992005582ffe554",
-      "end_ref": null
+      "end_ref": "5ec0d0a0e3d25f07431cffd694d7ff950afb5ef0"
     },
     "code-review-engine": {
       "status": "complete",
@@ -227,6 +227,18 @@
       "audit_criteria_total": 30,
       "by": "pseudosky",
       "note": "Seeded api-design-reviewer-e2e fixture (all four prefixes, one DB handle): registry_* (taxonomy+agent+5 junction rows), tool_* (file_read/file_grep/web_search grants), provider_* (claude_sonnet_4_6 model_hint), policy_* (no-credentials direct attach). 18/18 tests pass, exit 0, two deterministic runs confirmed. [dod.1] tools: line = Read,Grep,WebSearch (NOT canonical names) — negative bites: removing BindingStore platform filter emits file_read instead of Read, toContain(\"Read\") fails. [dod.2] {ticket_type:security} → SECURITY_CRITERIA_ANCHOR present + \"All user inputs validated at boundary\" present; default → absent — bites: removing context_condition evaluator includes both criteria, .not.toContain(SECURITY_CRITERIA_ANCHOR) fails. [dod.3] no-credentials constraint text present with attachment; separate DB without attach → constraint absent — bites: hardcoded text would appear in no-attach DB, .not.toContain fails. claude_api: JSON.parse yields {systemPrompt,tools} (array, not string) from same rows. Commit sha: 4982b1e."
+    },
+    {
+      "ts": "2026-06-25T15:21:36.486Z",
+      "from": "code-review",
+      "to": "code-review",
+      "start_ref": "200a794c489b762dda4dc9a68992005582ffe554",
+      "end_ref": "5ec0d0a0e3d25f07431cffd694d7ff950afb5ef0",
+      "audit_exit": 25,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 28,
+      "by": "pseudosky",
+      "note": "APPROVED — BLOCKING-1 (Decision D version-drift cache-miss test teeth) resolved by abf8446; 6/6 mandatory checks pass; teeth independently re-verified to bite (drop version values → unit :371 + integration :463 go red, 7 pre-existing green)"
     }
   ],
   "amendment_log": [],
@@ -235,7 +247,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "code-review",
+  "current_state": "audit-final",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:26:44.237Z",
     "by": "pseudosky",
