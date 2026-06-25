@@ -130,11 +130,11 @@
       "end_ref": "a4e2512c6be175c351cc830c5c52a732d22c3d8d"
     },
     "lt-codegen-hints": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T14:18:26.887Z",
-      "done_at": null,
+      "done_at": "2026-06-25T14:25:28.737Z",
       "start_ref": "016d0ecc148e825363b787d06d3e25e6b0824210",
-      "end_ref": null
+      "end_ref": "c047b46b44abd793fa9cbf2e0934f16415c5e9f2"
     },
     "lt-host-generator": {
       "status": "complete",
@@ -407,6 +407,18 @@
       "audit_criteria_total": 19,
       "by": "pseudosky",
       "note": "generate.ts: collectFormats+collectLogicalTypeDeps walk surface schemas, patchPackageJsonDeps merges minimal per-surface deps (decimal->decimal.js) into generated package.json; 18 teeth tests incl no-rich-type negative control; DEBT-007 logged (e2e TS activation blocked by lt-extract-scalars ts-morph alias resolution); nx test apigen-cli green 68"
+    },
+    {
+      "ts": "2026-06-25T14:25:28.737Z",
+      "from": "lt-fail-fast",
+      "to": "lt-codegen-hints",
+      "start_ref": "016d0ecc148e825363b787d06d3e25e6b0824210",
+      "end_ref": "c047b46b44abd793fa9cbf2e0934f16415c5e9f2",
+      "audit_exit": 10,
+      "audit_criteria_passed": 9,
+      "audit_criteria_total": 19,
+      "by": "pseudosky",
+      "note": "hints.ts in apigen-logical (REPOINTED from nonexistent apigen-codegen): TemplateCell registry TEMPLATE_CELLS[lang][id], TS+Python columns filled verbatim per DESIGN 13.2, Rust/Go/Java scaffolded; tsDepMap()/cellsFor()/depsForLogicalTypes()/assertNoEmptyCells(); 56 teeth tests; nx test apigen-logical green 170"
     }
   ],
   "amendment_log": [],
@@ -415,7 +427,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-fail-fast",
+  "current_state": "lt-conformance-crosshost",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
