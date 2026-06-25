@@ -27,3 +27,6 @@ export { emitJsonObject } from './emit/json.js';
 export type { JsonObjectInput, StructuredTool } from './emit/json.js';
 export { compileAgent } from './compile.js';
 export type { CompileInput, CompiledAgent } from './compile.js';
+
+// composed-prompt-caching state: cache lookup + write for registry_composed_prompts
+export { lookup as cacheComposedPromptLookup, write as cacheComposedPromptWrite, computeContextHash } from './cache/composed-prompt-cache.js';
