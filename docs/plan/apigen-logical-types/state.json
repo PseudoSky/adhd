@@ -137,11 +137,11 @@
       "end_ref": null
     },
     "lt-host-generator": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T13:48:07.952Z",
-      "done_at": null,
+      "done_at": "2026-06-25T13:55:38.124Z",
       "start_ref": "8d62a8a1574b44326ceea94118b463b0b54e2e19",
-      "end_ref": null
+      "end_ref": "2f2054fc4d5edeedb578dc2bfa4db21221750636"
     },
     "lt-conformance-gate": {
       "status": "pending",
@@ -359,6 +359,18 @@
       "audit_criteria_total": 14,
       "by": "pseudosky",
       "note": "host-ts.ts: tsHostBinding (HostBinding §4.6) frozen codecs map covering 6 well-known scalars + nominal + union; reused LOGICAL_TYPE_VERSION 0.1.0 from @adhd/apigen-logical; 14 teeth tests (derived coverage + round-trip + negative control); nx test apigen-runtime green 111"
+    },
+    {
+      "ts": "2026-06-25T13:55:38.124Z",
+      "from": "lt-dispatch-integration",
+      "to": "lt-host-generator",
+      "start_ref": "8d62a8a1574b44326ceea94118b463b0b54e2e19",
+      "end_ref": "2f2054fc4d5edeedb578dc2bfa4db21221750636",
+      "audit_exit": 5,
+      "audit_criteria_passed": 16,
+      "audit_criteria_total": 21,
+      "by": "pseudosky",
+      "note": "nx 'host' generator scaffolds new-host conformance harness + red-by-construction host-manifest.json (supportedIds:[]); mirrors plugin generator; registered in generators.json; 21 teeth tests incl empty-manifest invariant + negative control; nx test apigen-nx green 39"
     }
   ],
   "amendment_log": [],
