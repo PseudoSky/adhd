@@ -158,10 +158,10 @@
       "end_ref": "3401d6de442dd86dbc6efa8ff7489f776d265998"
     },
     "lt-architect-review": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T14:40:41.663Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "086e2f644968a241f0d3b57cf8fb1377293dd80b",
       "end_ref": null
     },
     "lt-code-review": {
