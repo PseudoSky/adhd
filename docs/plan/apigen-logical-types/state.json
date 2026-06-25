@@ -109,10 +109,10 @@
       "end_ref": "14c3219c28f631cf8adf1405aa6551fa89b14315"
     },
     "lt-dep-manifest": {
-      "status": "complete",
-      "started_at": "2026-06-25T13:57:39.321Z",
+      "status": "in_progress",
+      "started_at": "2026-06-25T15:37:01.656Z",
       "done_at": "2026-06-25T14:16:00.493Z",
-      "start_ref": "f77968a3582fb31bc8d3426d2ff8ccf69532827a",
+      "start_ref": "58096b134ef9a6ec5009f038190d217caaa6013c",
       "end_ref": "25037a399ec3669c9abf5d48327a13ec9b651b83"
     },
     "lt-fail-fast": {
@@ -475,7 +475,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-extract-scalars",
+  "current_state": "lt-dep-manifest",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
