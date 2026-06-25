@@ -53,10 +53,10 @@
       "end_ref": "62244ef161872cb84af6ee7d3cf3d43f11000dd0"
     },
     "lt-extract-scalars": {
-      "status": "complete",
-      "started_at": "2026-06-24T00:44:14.886Z",
+      "status": "in_progress",
+      "started_at": "2026-06-25T15:25:30.645Z",
       "done_at": "2026-06-24T00:54:34.994Z",
-      "start_ref": "a73f3e17f0e02b1865cdcacd30b68cc57b55adf7",
+      "start_ref": "5da4a1064d458efb376b90e6e955976ab3617863",
       "end_ref": "2ba8a4e7b37a86eeb7a0f53aea5ca92bc1a9d1ed"
     },
     "lt-extract-nominal": {
@@ -475,7 +475,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-final-audit",
+  "current_state": "lt-extract-scalars",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
