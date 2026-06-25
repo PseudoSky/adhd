@@ -8,7 +8,8 @@
     "seam",
     "discovery",
     "authoring",
-    "compat"
+    "compat",
+    "e2e"
   ],
   "terminal": "done",
   "nodes": {},
