@@ -151,11 +151,11 @@
       "end_ref": "e3f6de5872cc55bfda7ea5d4222ed4abc94c4d86"
     },
     "lt-conformance-crosshost": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T14:30:18.585Z",
-      "done_at": null,
+      "done_at": "2026-06-25T14:40:10.530Z",
       "start_ref": "c66d49bd625176ee7ecf24131b7c65000e725475",
-      "end_ref": null
+      "end_ref": "3401d6de442dd86dbc6efa8ff7489f776d265998"
     },
     "lt-architect-review": {
       "status": "pending",
@@ -431,6 +431,18 @@
       "audit_criteria_total": 19,
       "by": "pseudosky",
       "note": "run.ts: assertFnsNonEmpty (0-functions actionable msg, replaces ERR_MODULE_NOT_FOUND) + assertDecimalLibPresent (names fn+lib, deterministic LibResolver injection) on v1 path; 13 teeth tests; DEBT: v2 orchestrateRun path not yet guarded (schemas not exposed to callback); nx test apigen-cli green 81"
+    },
+    {
+      "ts": "2026-06-25T14:40:10.530Z",
+      "from": "lt-conformance-crosshost",
+      "to": "lt-conformance-crosshost",
+      "start_ref": "c66d49bd625176ee7ecf24131b7c65000e725475",
+      "end_ref": "3401d6de442dd86dbc6efa8ff7489f776d265998",
+      "audit_exit": 1,
+      "audit_criteria_passed": 20,
+      "audit_criteria_total": 21,
+      "by": "pseudosky",
+      "note": "audit_lt-conformance-crosshost.py + crosshost_ts_shim.ts: drives REAL tsHostBinding (tsx) + apigen_logical.py (python3) over shared vectors; proves TS->wire->Py->wire->TS byte-stable both directions, 50/50, teeth verified (corrupt TS encode -> red); finding: cross-host re-encode MUST be schema-driven (encode_int64) not value-driven (Python int indistinguishable from JSON number) per 4.6"
     }
   ],
   "amendment_log": [],
@@ -439,7 +451,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-conformance-crosshost",
+  "current_state": "lt-architect-review",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
