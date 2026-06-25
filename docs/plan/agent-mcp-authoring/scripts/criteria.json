@@ -30,6 +30,16 @@
       "paths": [
         "docs/plan/agent-mcp-authoring/decisions.md"
       ]
+    },
+    {
+      "id": "authoring-design.4",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "def:agent-define-transaction",
+      "paths": [
+        "docs/plan/agent-mcp-authoring/decisions.md"
+      ]
     }
   ]
 }
