@@ -6,3 +6,7 @@ export { sqlite, db } from './db/client.js';
 export { runMigrations } from './db/migrate.js';
 export { runMigrationsOn, MIGRATIONS_FOLDER } from './db/migrate-runner.js';
 export * from './db/schema.js';
+
+// composition-resolve state: body assembly from agent-registry junction order
+export { resolveBody } from './resolve/composition.js';
+export type { ResolvedBody, ComponentVersionMap } from './resolve/composition.js';
