@@ -172,11 +172,11 @@
       "end_ref": "4945cec97a441aeb34a7b5368ba9739c29085b22"
     },
     "lt-final-audit": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T14:58:31.792Z",
-      "done_at": null,
+      "done_at": "2026-06-25T15:53:30.725Z",
       "start_ref": "80a7396bf06be97465c0411975e006f69cebc249",
-      "end_ref": null
+      "end_ref": "cbadd482f76df721d2f8e8e2389447ea68ce86c6"
     }
   },
   "transition_log": [
@@ -491,6 +491,18 @@
       "audit_criteria_total": 19,
       "by": "pseudosky",
       "note": "REOPENED: added v1+v2 dod.10 teeth tests (generate.spec, orchestrator.spec) driving real default-import Decimal source -> format:decimal -> decimal.js dep; v2 buildDescriptor path now at dep-parity with v1 via the shared buildSchema fix. nx test apigen-cli green 86"
+    },
+    {
+      "ts": "2026-06-25T15:53:30.725Z",
+      "from": "lt-dep-manifest",
+      "to": "lt-final-audit",
+      "start_ref": "80a7396bf06be97465c0411975e006f69cebc249",
+      "end_ref": "cbadd482f76df721d2f8e8e2389447ea68ce86c6",
+      "audit_exit": 12,
+      "audit_criteria_passed": 9,
+      "audit_criteria_total": 21,
+      "by": "pseudosky",
+      "note": "probe_logical.mjs authored: drives all 10 DoD clauses through REAL built entrypoints (MCP bin Date round-trip, int64 precision, union dispatch, ajv-formats reject, envelope, unannotated projection, fail-fast, decimal.js gen-deps); dod.3/dod.5 delegated to crosshost+conformance scripts. FINAL AUDIT 10/10 exit 0. Surfaced+fixed 2 real end-to-end bugs (normalizeTypeText unwired -> dod.9b/dod.10) that unit tests masked."
     }
   ],
   "amendment_log": [],
@@ -499,7 +511,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-dep-manifest",
+  "current_state": "lt-final-audit",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
