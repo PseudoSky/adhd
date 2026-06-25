@@ -58,6 +58,21 @@
       ],
       "context": "contexts/enrichment-pipeline.md",
       "notes": ""
+    },
+    "name-slug-seam": {
+      "kind": "work",
+      "phase": "seam",
+      "depends_on": [
+        "enrichment-pipeline"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/registry/name-slug.ts",
+        "packages/ai/agent-mcp/src/registry/registry-bridge.ts",
+        "packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts"
+      ],
+      "context": "contexts/name-slug-seam.md",
+      "notes": ""
     }
   },
   "authored_with": {
