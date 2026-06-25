@@ -103,6 +103,22 @@
       ],
       "context": "contexts/component-define.md",
       "notes": ""
+    },
+    "agent-define": {
+      "kind": "work",
+      "phase": "authoring",
+      "depends_on": [
+        "component-define"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/agent-define.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/tools/authoring.ts",
+        "packages/ai/agent-mcp/src/registry/composition-writer.ts",
+        "packages/ai/agent-mcp/src/server.ts",
+        "packages/ai/agent-mcp/src/__tests__/agent-define.test.ts"
+      ],
+      "context": "contexts/agent-define.md",
+      "notes": ""
     }
   },
   "authored_with": {
