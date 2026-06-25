@@ -81,10 +81,10 @@
       "end_ref": "286e53b3b6edd29dff8b53cbebffeee9e076da4d"
     },
     "lt-union-codec": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T13:32:57.483Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "10dadb6ce706258d12640e690d9e21cf65186017",
       "end_ref": null
     },
     "lt-host-ts": {
