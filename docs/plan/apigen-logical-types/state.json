@@ -123,10 +123,10 @@
       "end_ref": null
     },
     "lt-validate-formats": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T13:32:57.620Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "bf5a6fce85fc4cf07c1fef58c9ca41f23ac257ec",
       "end_ref": null
     },
     "lt-codegen-hints": {
@@ -319,7 +319,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-union-codec",
+  "current_state": "lt-validate-formats",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
