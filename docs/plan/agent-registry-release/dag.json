@@ -6,7 +6,8 @@
     "closeout-design",
     "worktree-clarity",
     "cleanup",
-    "merge-gate"
+    "merge-gate",
+    "publish"
   ],
   "terminal": "done",
   "nodes": {},
