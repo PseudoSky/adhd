@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "closeout-design.1",
+      "phase": "closeout-design",
+      "tier": null,
+      "kind": "present",
+      "pattern": "def:release-strategy",
+      "paths": [
+        "docs/plan/agent-registry-release/decisions.md"
+      ]
+    }
+  ]
+}
