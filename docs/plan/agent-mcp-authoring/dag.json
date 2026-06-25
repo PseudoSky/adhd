@@ -135,6 +135,20 @@
       ],
       "context": "contexts/compat-shim.md",
       "notes": ""
+    },
+    "versioning": {
+      "kind": "work",
+      "phase": "compat",
+      "depends_on": [
+        "compat-shim"
+      ],
+      "guard": "npx --yes nx build agent-mcp",
+      "artifacts": [
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp/CHANGELOG.md"
+      ],
+      "context": "contexts/versioning.md",
+      "notes": ""
     }
   },
   "authored_with": {
