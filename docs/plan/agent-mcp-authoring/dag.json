@@ -190,6 +190,19 @@
       ],
       "context": "contexts/code-review.md",
       "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "code-review"
+      ],
+      "guard": "python3 docs/plan/agent-mcp-authoring/scripts/audit_authoring.py --phase final",
+      "artifacts": [
+        "docs/plan/agent-mcp-authoring/scripts/audit_authoring.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
     }
   },
   "authored_with": {
