@@ -144,11 +144,11 @@
       "end_ref": "2f2054fc4d5edeedb578dc2bfa4db21221750636"
     },
     "lt-conformance-gate": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T13:57:39.185Z",
-      "done_at": null,
+      "done_at": "2026-06-25T14:15:49.299Z",
       "start_ref": "f36ca848776e2e5b18f8540b6d4d5b6f3d144c72",
-      "end_ref": null
+      "end_ref": "e3f6de5872cc55bfda7ea5d4222ed4abc94c4d86"
     },
     "lt-conformance-crosshost": {
       "status": "pending",
@@ -383,6 +383,18 @@
       "audit_criteria_total": 19,
       "by": "pseudosky",
       "note": "dispatch.ts: decode-args (wire->host per schema node via frozen transcoder) + encode-result seam; preserves session/ctx/BUG-001 paths; 3 teeth tests (Date arg instanceof, Date return->wire, passthrough negative control); nx test apigen-runtime green 114"
+    },
+    {
+      "ts": "2026-06-25T14:15:49.299Z",
+      "from": "lt-fail-fast",
+      "to": "lt-conformance-gate",
+      "start_ref": "f36ca848776e2e5b18f8540b6d4d5b6f3d144c72",
+      "end_ref": "e3f6de5872cc55bfda7ea5d4222ed4abc94c4d86",
+      "audit_exit": 2,
+      "audit_criteria_passed": 19,
+      "audit_criteria_total": 21,
+      "by": "pseudosky",
+      "note": "gate.ts + apigen-conformance:conformance target (env-pinned tsx); discovers ts(in-proc)/python(subprocess)/manifest hosts; cross-host matrix encode-byte-equal+invariants+negativeControl+supportedIds>=canonical; 45 gate.spec tests; nx run conformance green [ts,python], nx test apigen-conformance green 131"
     }
   ],
   "amendment_log": [],
