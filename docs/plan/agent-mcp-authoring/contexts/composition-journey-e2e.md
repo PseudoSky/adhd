@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [composition-journey-e2e.1] SPEC §7 journey over MCP wire + compiler CLI with static no-src-import assertion; composed agent runs a task
 
 ---
 
