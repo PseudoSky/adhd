@@ -151,10 +151,10 @@
       "end_ref": "e3f6de5872cc55bfda7ea5d4222ed4abc94c4d86"
     },
     "lt-conformance-crosshost": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T14:30:18.585Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "c66d49bd625176ee7ecf24131b7c65000e725475",
       "end_ref": null
     },
     "lt-architect-review": {
