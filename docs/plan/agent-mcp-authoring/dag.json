@@ -41,6 +41,23 @@
       ],
       "context": "contexts/embedding-substrate.md",
       "notes": ""
+    },
+    "enrichment-pipeline": {
+      "kind": "work",
+      "phase": "enrichment",
+      "depends_on": [
+        "embedding-substrate"
+      ],
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry/src/enrich/enrich-component.ts",
+        "packages/ai/agent-registry/src/enrich/summarize.ts",
+        "packages/ai/agent-registry/src/store/usecase-store.ts",
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts"
+      ],
+      "context": "contexts/enrichment-pipeline.md",
+      "notes": ""
     }
   },
   "authored_with": {
