@@ -39,10 +39,10 @@
       "end_ref": "213f40b4e18a01fe6cec2cb522406fd112f080be"
     },
     "platform-markdown-emit": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T14:03:17.902Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "7bd2905247282f75cb5730b2a9ac7c16e62ba573",
       "end_ref": null
     },
     "compile-cli": {
