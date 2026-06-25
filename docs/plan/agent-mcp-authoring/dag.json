@@ -6,7 +6,8 @@
     "architecture",
     "enrichment",
     "seam",
-    "discovery"
+    "discovery",
+    "authoring"
   ],
   "terminal": "done",
   "nodes": {},
