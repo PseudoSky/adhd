@@ -36,6 +36,16 @@
       "kind": "command",
       "cmd": "python3 docs/plan/agent-registry-release/scripts/check_agent_mcp_baseline.py",
       "expect": "exit0"
+    },
+    {
+      "id": "merge-to-main.1",
+      "phase": "merge-gate",
+      "tier": null,
+      "kind": "present",
+      "pattern": "agent-mcp",
+      "paths": [
+        "docs/plan/agent-registry-release/MERGE_RUNBOOK.md"
+      ]
     }
   ]
 }
