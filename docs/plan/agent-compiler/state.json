@@ -67,11 +67,11 @@
       "end_ref": "f269105f9d0a6f582a1c5056cce50e670d0641b2"
     },
     "compile-fixtures-e2e": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T14:51:39.888Z",
-      "done_at": null,
+      "done_at": "2026-06-25T15:03:52.994Z",
       "start_ref": "152c833bbedd37c7757d6ed76ca392124da48de1",
-      "end_ref": null
+      "end_ref": "4982b1ed5f5cf9e60d30b95fa50bfbd7d8941962"
     },
     "audit-final": {
       "status": "pending",
@@ -215,6 +215,18 @@
       "audit_criteria_total": 28,
       "by": "pseudosky",
       "note": "Schema-phase audit GREEN 25/25 (architecture + all work states scaffold→composition→tools→model+policy→emit→cli→cache) via real cwd-robust audit_compiler.py; architecture phase also exit 0. Engine internally consistent — hold point cleared, e2e convergence unblocked. No script change needed (pre-staged checks correct). Orchestrator-driven audit gate."
+    },
+    {
+      "ts": "2026-06-25T15:03:52.994Z",
+      "from": "compile-fixtures-e2e",
+      "to": "compile-fixtures-e2e",
+      "start_ref": "152c833bbedd37c7757d6ed76ca392124da48de1",
+      "end_ref": "4982b1ed5f5cf9e60d30b95fa50bfbd7d8941962",
+      "audit_exit": 27,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 30,
+      "by": "pseudosky",
+      "note": "Seeded api-design-reviewer-e2e fixture (all four prefixes, one DB handle): registry_* (taxonomy+agent+5 junction rows), tool_* (file_read/file_grep/web_search grants), provider_* (claude_sonnet_4_6 model_hint), policy_* (no-credentials direct attach). 18/18 tests pass, exit 0, two deterministic runs confirmed. [dod.1] tools: line = Read,Grep,WebSearch (NOT canonical names) — negative bites: removing BindingStore platform filter emits file_read instead of Read, toContain(\"Read\") fails. [dod.2] {ticket_type:security} → SECURITY_CRITERIA_ANCHOR present + \"All user inputs validated at boundary\" present; default → absent — bites: removing context_condition evaluator includes both criteria, .not.toContain(SECURITY_CRITERIA_ANCHOR) fails. [dod.3] no-credentials constraint text present with attachment; separate DB without attach → constraint absent — bites: hardcoded text would appear in no-attach DB, .not.toContain fails. claude_api: JSON.parse yields {systemPrompt,tools} (array, not string) from same rows. Commit sha: 4982b1e."
     }
   ],
   "amendment_log": [],
@@ -223,7 +235,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "compile-fixtures-e2e",
+  "current_state": "code-review",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:26:44.237Z",
     "by": "pseudosky",
