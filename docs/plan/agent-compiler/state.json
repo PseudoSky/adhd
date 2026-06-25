@@ -60,11 +60,11 @@
       "end_ref": "4becf5001c1ca4152cd98a6b89707f6e1e244dde"
     },
     "audit-engine": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T14:48:42.453Z",
-      "done_at": null,
+      "done_at": "2026-06-25T14:48:51.743Z",
       "start_ref": "d2b4aa73a4fe0bd6f8d85208d62f330b4bc72987",
-      "end_ref": null
+      "end_ref": "f269105f9d0a6f582a1c5056cce50e670d0641b2"
     },
     "compile-fixtures-e2e": {
       "status": "pending",
@@ -203,6 +203,18 @@
       "audit_criteria_total": 25,
       "by": "pseudosky",
       "note": "Added cache/composed-prompt-cache.ts (lookup+write, Decision D combined hash: registryContextHash(ctx)+\" \"+sortedJSON(versions)+\" \"+platform), wired into compileAgent as cache-first SELECT before assembly (dod.4 negative-control), CompiledAgent.id null→number, compile-agent.test.ts placeholder updated, compile-cache.test.ts proves persistence by CLOSE+REOPEN + resolveComposition spy confirms assembly bypassed on HIT + different context yields new row (count 1→2); guard exit 0 (57/57); commit 4becf50"
+    },
+    {
+      "ts": "2026-06-25T14:48:51.743Z",
+      "from": "audit-engine",
+      "to": "audit-engine",
+      "start_ref": "d2b4aa73a4fe0bd6f8d85208d62f330b4bc72987",
+      "end_ref": "f269105f9d0a6f582a1c5056cce50e670d0641b2",
+      "audit_exit": 20,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 28,
+      "by": "pseudosky",
+      "note": "Schema-phase audit GREEN 25/25 (architecture + all work states scaffold→composition→tools→model+policy→emit→cli→cache) via real cwd-robust audit_compiler.py; architecture phase also exit 0. Engine internally consistent — hold point cleared, e2e convergence unblocked. No script change needed (pre-staged checks correct). Orchestrator-driven audit gate."
     }
   ],
   "amendment_log": [],
@@ -211,7 +223,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "audit-engine",
+  "current_state": "compile-fixtures-e2e",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:26:44.237Z",
     "by": "pseudosky",
