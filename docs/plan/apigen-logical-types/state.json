@@ -137,10 +137,10 @@
       "end_ref": null
     },
     "lt-host-generator": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T13:48:07.952Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "8d62a8a1574b44326ceea94118b463b0b54e2e19",
       "end_ref": null
     },
     "lt-conformance-gate": {
@@ -355,7 +355,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-host-ts",
+  "current_state": "lt-host-generator",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
