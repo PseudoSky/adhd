@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [enrichment-pipeline.1] enrichComponent embeds+resolves weighted use-cases+summarizes; identical content is idempotent (no index churn)
 
 ---
 

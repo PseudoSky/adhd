@@ -48,6 +48,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "enrichment-pipeline.1",
+      "phase": "enrichment",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts",
+      "expect": "exit0"
     }
   ]
 }
