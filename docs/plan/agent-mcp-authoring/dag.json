@@ -88,6 +88,21 @@
       ],
       "context": "contexts/discovery-tools.md",
       "notes": ""
+    },
+    "component-define": {
+      "kind": "work",
+      "phase": "authoring",
+      "depends_on": [
+        "discovery-tools"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/component-define.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/tools/authoring.ts",
+        "packages/ai/agent-mcp/src/server.ts",
+        "packages/ai/agent-mcp/src/__tests__/component-define.test.ts"
+      ],
+      "context": "contexts/component-define.md",
+      "notes": ""
     }
   },
   "authored_with": {
