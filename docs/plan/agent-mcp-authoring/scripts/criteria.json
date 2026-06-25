@@ -114,6 +114,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "live-model-e2e.1",
+      "phase": "e2e",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts",
+      "expect": "exit0"
     }
   ]
 }
