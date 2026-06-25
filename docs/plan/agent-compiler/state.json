@@ -88,10 +88,10 @@
       "end_ref": null
     },
     "code-review-engine": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T13:57:42.997Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "e7d6d305f36ec49209c58ca148558ff59e77588e",
       "end_ref": null
     }
   },
