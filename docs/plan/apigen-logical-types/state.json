@@ -88,10 +88,10 @@
       "end_ref": "8333cb65e19df928f6411c0ee399ca9a5e69f931"
     },
     "lt-host-ts": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T13:48:07.820Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "f1d30a2ba365ca386634316b625ed3339e6e53a6",
       "end_ref": null
     },
     "lt-host-python": {
