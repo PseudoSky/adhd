@@ -47,3 +47,12 @@ An orchestrating agent composes a NEW agent from registry components over MCP on
   - observable: `every tool response JSON contains a name field and NO slug key anywhere (recursive scan); passing a human 'Display Name' resolves to the same row as its slug form`
   - negative-control: `leaving a raw store object (with .slug) in any tool response → the recursive no-slug scan fails`
   - delivered-by: `name-slug-seam, discovery-tools, agent-define, component-define`
+
+- `[dod.5]` **The full SPEC §7 task-packet→agent journey runs over the PUBLIC MCP surface only (zero internal/src imports), as a zero-context user would — the Cumulative Usability Gate (DEMO.md). (behavioral)** — The full SPEC §7 task-packet→agent journey runs over the PUBLIC MCP surface only (zero internal/src imports), as a zero-context user would — the Cumulative Usability Gate (DEMO.md)..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `an MCP client driving prompt_types_list → component_search → component_read → tool_list/model_list/policy_list → component_define (for a missing slot) → agent_define → agent → task → result, against a real registry+agent-mcp server`
+  - observable: `the test imports NO packages/ai/**/src/** path (only the MCP wire client + the compiler CLI bin); a freshly-composed agent runs a task and returns a result; the composed prompt contains the discovered components in order`
+  - negative-control: `reintroducing a deep src import (e.g. buildHarness / factory.ts) is caught by a static import-scan assertion that fails the test`
+  - delivered-by: `composition-journey-e2e`
