@@ -74,11 +74,11 @@
       "end_ref": "4982b1ed5f5cf9e60d30b95fa50bfbd7d8941962"
     },
     "audit-final": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T15:22:51.177Z",
-      "done_at": null,
+      "done_at": "2026-06-25T15:23:05.166Z",
       "start_ref": "f64cb2d28a594ba8bd16f1f443ae71cfda484d59",
-      "end_ref": null
+      "end_ref": "7a8f3e7d1f1b93833df5ffd6442e5b2fc49b5a0a"
     },
     "code-review": {
       "status": "complete",
@@ -239,6 +239,18 @@
       "audit_criteria_total": 28,
       "by": "pseudosky",
       "note": "APPROVED — BLOCKING-1 (Decision D version-drift cache-miss test teeth) resolved by abf8446; 6/6 mandatory checks pass; teeth independently re-verified to bite (drop version values → unit :371 + integration :463 go red, 7 pre-existing green)"
+    },
+    {
+      "ts": "2026-06-25T15:23:05.166Z",
+      "from": "audit-final",
+      "to": "audit-final",
+      "start_ref": "f64cb2d28a594ba8bd16f1f443ae71cfda484d59",
+      "end_ref": "7a8f3e7d1f1b93833df5ffd6442e5b2fc49b5a0a",
+      "audit_exit": 20,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 28,
+      "by": "pseudosky",
+      "note": "Final-phase audit GREEN 39/39 via real cwd-robust audit_compiler.py --phase final: all prior-phase (27) + every behavioral DoD [dod.1-7] driving real entrypoints (compile-e2e/compile-cache/compile-cli + structural). Acceptance gate cleared."
     }
   ],
   "amendment_log": [],
