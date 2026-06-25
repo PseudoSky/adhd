@@ -74,11 +74,11 @@
       "end_ref": "43109ec406362ae5184c4df1a7e58090cdd0418e"
     },
     "lt-nominal-codec": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-24T01:04:29.814Z",
-      "done_at": null,
+      "done_at": "2026-06-25T13:26:15.326Z",
       "start_ref": "d8101392f88de48838e66fc511033e3e8d257ba1",
-      "end_ref": null
+      "end_ref": "286e53b3b6edd29dff8b53cbebffeee9e076da4d"
     },
     "lt-union-codec": {
       "status": "pending",
@@ -299,6 +299,18 @@
       "audit_criteria_total": 7,
       "by": "pseudosky",
       "note": "codecs/ scalar LogicalTypeCodec set implemented; nx test apigen-logical green (114 tests, codecs.spec 67)"
+    },
+    {
+      "ts": "2026-06-25T13:26:15.327Z",
+      "from": "lt-host-python",
+      "to": "lt-nominal-codec",
+      "start_ref": "d8101392f88de48838e66fc511033e3e8d257ba1",
+      "end_ref": "286e53b3b6edd29dff8b53cbebffeee9e076da4d",
+      "audit_exit": 4,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 12,
+      "by": "pseudosky",
+      "note": "runtime/logical/nominal-codec.ts implemented; nx test apigen-runtime green (81 tests, nominal-codec.spec 7)"
     }
   ],
   "amendment_log": [],
@@ -307,7 +319,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-host-python",
+  "current_state": "lt-union-codec",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
