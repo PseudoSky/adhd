@@ -165,10 +165,10 @@
       "end_ref": "90f71c26fcbab227d517dce546bc77263af26e36"
     },
     "lt-code-review": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T14:46:18.784Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "287b185d468bc85c5856193e3a20b74fe1c2f60b",
       "end_ref": null
     },
     "lt-final-audit": {
