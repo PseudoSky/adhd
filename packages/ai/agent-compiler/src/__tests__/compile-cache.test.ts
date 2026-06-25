@@ -27,6 +27,7 @@
  * clean run (project memory feedback_plan_execution_pitfalls; CLAUDE.md §4).
  */
 
+import { createHash } from 'node:crypto';
 import fs   from 'node:fs';
 import os   from 'node:os';
 import path from 'node:path';
@@ -338,6 +339,150 @@ describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
     it('produces a 64-character hex string', () => {
       const h = computeContextHash({}, {}, 'claude_code');
       expect(h).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    /**
+     * [Decision D unit tooth] — version VALUE sensitivity.
+     *
+     * The existing order-independence tests only proved that swapping the VERSION
+     * KEYS (same values) produces an equal hash. This test proves that changing a
+     * version VALUE (same keys, same context, same platform) produces a DIFFERENT
+     * hash.  That is the load-bearing guarantee: an unpinned component advancing
+     * its version number must change the hash → cache miss.
+     *
+     * NEGATIVE CONTROL (inline key-only variant):
+     * A key-only hash function (drops values, keeps only sorted keys) would return
+     * the SAME hash for {c:1} and {c:2} because the sorted-key set is identical.
+     * The inline `computeKeyOnlyHash` below mimics that broken implementation:
+     * it asserts the two calls collide (collision.toEqual(true)), proving that
+     * the key-only variant cannot distinguish version drift.  `computeContextHash`
+     * (the real function) must produce DIFFERENT hashes for the same pair,
+     * confirming it folds values into the combined string.
+     */
+    it('[Decision D tooth] same context + platform, different version VALUE → different hash', () => {
+      const ctx = { mode: 'test' };
+      const platform = 'claude_code';
+
+      // Real function — version VALUE changes the hash.
+      const h1 = computeContextHash(ctx, { c: 1 }, platform);
+      const h2 = computeContextHash(ctx, { c: 2 }, platform);
+      // TOOTH: if computeContextHash hashed only the sorted keys (dropping values),
+      // h1 would equal h2 because {c:1} and {c:2} share the same key set "c".
+      expect(h1).not.toEqual(h2);
+
+      // ── NEGATIVE CONTROL (inline broken variant) ────────────────────────────
+      // Simulate a key-only hash that drops version values — the broken
+      // implementation that the tooth is designed to catch.
+      function computeKeyOnlyHash(
+        versions: Record<string, number>,
+        p: string
+      ): string {
+        // Sort keys and stringify an object with all-zero values — drops real values.
+        const keysOnly = Object.fromEntries(
+          Object.keys(versions).sort().map(k => [k, 0] as const)
+        );
+        return createHash('sha256')
+          .update(`${JSON.stringify(ctx)} ${JSON.stringify(keysOnly)} ${p}`, 'utf8')
+          .digest('hex');
+      }
+
+      const broken1 = computeKeyOnlyHash({ c: 1 }, platform);
+      const broken2 = computeKeyOnlyHash({ c: 2 }, platform);
+      // The broken key-only function COLLAPSES {c:1} and {c:2} to the same hash.
+      // If this assertion fails, the negative-control itself is wrong.
+      expect(broken1).toEqual(broken2);
+      // And: the broken variant collides on pairs where the real function does NOT.
+      // This confirms the real function's non-equality above is precisely because
+      // it folds the VALUES — exactly what the broken variant drops.
+      expect(h1).not.toEqual(broken1);
+    });
+  });
+
+  // ── [Decision D integration tooth] unpinned component version bump → MISS ──
+
+  /**
+   * [Decision D integration tooth] — headline behavioral guarantee.
+   *
+   * Drives a REAL component version bump through `compileAgent` and proves:
+   *   1. First compile → row count 1.
+   *   2. `ComponentStore.version()` bumps an UNPINNED component to a new latest
+   *      version with new content (real DB mutation, [inv:real-rows-not-mocks]).
+   *   3. Second compile (SAME agent, SAME context, SAME platform) → row count 2
+   *      (cache MISS → new INSERT), a DIFFERENT `context_hash`, and CHANGED
+   *      `content` (new component text appears in the artifact).
+   *
+   * NEGATIVE CONTROL: proved via the unit tooth above — a key-only hash produces
+   * the SAME hash for {c:1} and {c:2} (collapses on the inline broken variant).
+   * The integration test succeeds only because the real `computeContextHash`
+   * folds version VALUES; the unit tooth proves that property directly.
+   */
+  describe('[Decision D] unpinned component version bump → cache MISS → new row', () => {
+    it('bumping component to v2 via ComponentStore produces a new row, different hash, and updated content', () => {
+      // ── REOPEN (fresh handle — proves real disk state, [inv:reopen-proves-cache]) ──
+      const { conn: c1, db: db1 } = openDb(dbPath);
+      conn = c1;
+
+      // Baseline: confirm exactly one row from prior suite tests (or recompile
+      // here and confirm 1).  We compile fresh to get a known first-compile row.
+      const before = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db: db1 });
+      const baselineCount = rowCount(db1, AGENT_SLUG);
+      // Close; we'll reopen after the version bump to prevent handle reuse.
+      const baselineHash = db1
+        .select({ h: composedPromptsTable.contextHash })
+        .from(composedPromptsTable)
+        .where(eq(composedPromptsTable.agentSlug, AGENT_SLUG))
+        .orderBy(composedPromptsTable.id)
+        .limit(1)
+        .all()[0]?.h ?? '';
+      conn.close();
+
+      // ── Bump the UNPINNED component to a new version ([inv:real-rows-not-mocks]) ──
+      // COMP_INTRO is attached without a version_pin (see beforeAll seed step 7),
+      // so `resolveComposition` always resolves it to the latest version.
+      // `ComponentStore.version()` appends a new version row at v+1; old rows are
+      // NEVER deleted ([inv:version-retained]).
+      const NEW_CONTENT = '# Intro v2\n\nUpdated cache test intro.';
+      const { conn: cSeed, db: dbSeed } = openDb(dbPath);
+      conn = cSeed;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const componentStore = new ComponentStore(dbSeed as any);
+      const bumped = componentStore.version(COMP_INTRO, NEW_CONTENT);
+      expect(bumped.version).toBeGreaterThan(1); // confirms v2 was created
+      conn.close();
+
+      // ── Second compile: SAME agent, SAME context ({}), SAME platform ──────────
+      const { conn: c2, db: db2 } = openDb(dbPath);
+      conn = c2;
+
+      const after = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db: db2 });
+
+      // TOOTH 1: new row was inserted (count increased by exactly 1).
+      // If computeContextHash hashed only version keys (dropping values), the
+      // componentVersions map for v1 vs v2 has the same key set → same hash →
+      // cache HIT → NO new row → this assertion goes RED.
+      expect(rowCount(db2, AGENT_SLUG)).toEqual(baselineCount + 1);
+
+      // TOOTH 2: the new row has a DIFFERENT context_hash from the first compile.
+      // Proves that the version VALUE (1 vs 2) changed the combined hash.
+      const allRows = db2
+        .select({ h: composedPromptsTable.contextHash, content: composedPromptsTable.content })
+        .from(composedPromptsTable)
+        .where(eq(composedPromptsTable.agentSlug, AGENT_SLUG))
+        .orderBy(composedPromptsTable.id)
+        .all();
+
+      const latestRow = allRows[allRows.length - 1]!;
+      expect(latestRow.h).not.toEqual(baselineHash);
+
+      // TOOTH 3: the new content includes the bumped component's updated text.
+      // Proves the MISS triggered a real re-assembly (not a stale hit).
+      expect(after.content).toContain('Updated cache test intro');
+      expect(before.content).not.toContain('Updated cache test intro');
+
+      // TOOTH 4: the returned id is a NEW (larger) row id.
+      expect(after.id).toBeGreaterThan(before.id);
+
+      conn.close();
     });
   });
 });
