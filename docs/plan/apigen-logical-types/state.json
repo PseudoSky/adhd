@@ -102,11 +102,11 @@
       "end_ref": "9c5451c11e75689fa0a89329c178fa1aa725b343"
     },
     "lt-dispatch-integration": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T13:57:39.052Z",
-      "done_at": null,
+      "done_at": "2026-06-25T14:15:37.238Z",
       "start_ref": "2329b84e5af4d6dccda81f8d7eacf2d648db6b8a",
-      "end_ref": null
+      "end_ref": "14c3219c28f631cf8adf1405aa6551fa89b14315"
     },
     "lt-dep-manifest": {
       "status": "in_progress",
@@ -371,6 +371,18 @@
       "audit_criteria_total": 21,
       "by": "pseudosky",
       "note": "nx 'host' generator scaffolds new-host conformance harness + red-by-construction host-manifest.json (supportedIds:[]); mirrors plugin generator; registered in generators.json; 21 teeth tests incl empty-manifest invariant + negative control; nx test apigen-nx green 39"
+    },
+    {
+      "ts": "2026-06-25T14:15:37.238Z",
+      "from": "lt-dep-manifest",
+      "to": "lt-dispatch-integration",
+      "start_ref": "2329b84e5af4d6dccda81f8d7eacf2d648db6b8a",
+      "end_ref": "14c3219c28f631cf8adf1405aa6551fa89b14315",
+      "audit_exit": 2,
+      "audit_criteria_passed": 17,
+      "audit_criteria_total": 19,
+      "by": "pseudosky",
+      "note": "dispatch.ts: decode-args (wire->host per schema node via frozen transcoder) + encode-result seam; preserves session/ctx/BUG-001 paths; 3 teeth tests (Date arg instanceof, Date return->wire, passthrough negative control); nx test apigen-runtime green 114"
     }
   ],
   "amendment_log": [],
@@ -379,7 +391,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-dep-manifest",
+  "current_state": "lt-fail-fast",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
