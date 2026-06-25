@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [agent-mcp-backout-gate.1] agent-mcp{,-types} matches the recorded baseline within Plan 8's manifest (or byte-identical)
 
 ---
 
