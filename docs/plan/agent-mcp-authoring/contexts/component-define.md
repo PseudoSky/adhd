@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [component-define.1] component_define name-keyed upsert runs enrichment on write, version-bumps on content change, idempotent on identical content
 
 ---
 
