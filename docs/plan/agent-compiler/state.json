@@ -32,11 +32,11 @@
       "end_ref": "ee04f42978c76c70ca7d39773c38ce6785a36ccf"
     },
     "model-and-policy-emit": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T13:43:53.185Z",
-      "done_at": null,
+      "done_at": "2026-06-25T13:55:57.567Z",
       "start_ref": "3b715dcee34d327425ff5bf7af68dc9a23ae79fb",
-      "end_ref": null
+      "end_ref": "213f40b4e18a01fe6cec2cb522406fd112f080be"
     },
     "platform-markdown-emit": {
       "status": "pending",
@@ -143,6 +143,18 @@
       "audit_criteria_total": 18,
       "by": "pseudosky",
       "note": "Added resolveTools(db, agentSlug, platform) in resolve/tools.ts: fetches agent_tools grants via AgentToolStore.listForAgent, then BindingStore.listForPlatform (one platform-keyed query, idx_bindings_platform), builds a Map<toolName, binding>, walks grants in order and drops availability=unavailable. Exported from index.ts. Test tool-header.test.ts seeds real rows via seed() + AgentToolStore.grant(), proves claude_code returns PascalCase aliases (Read/Grep/WebSearch), claude_api returns snake_case aliases (read_file/web_search), human_input dropped on claude_api (unavailable), persistence via close+reopen, empty-agent edge case. Guard exit 0, 7/7 tests pass, deterministic on re-run. Commit ee04f42."
+    },
+    {
+      "ts": "2026-06-25T13:55:57.567Z",
+      "from": "model-and-policy-emit",
+      "to": "model-and-policy-emit",
+      "start_ref": "3b715dcee34d327425ff5bf7af68dc9a23ae79fb",
+      "end_ref": "213f40b4e18a01fe6cec2cb522406fd112f080be",
+      "audit_exit": 15,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "Added resolve/model.ts (resolveModel delegates to ModelStore.resolveModelId with platform-keyed binding; falls back to canonical id on MODEL_BINDING_NOT_FOUND, Decision E recorded) and resolve/policy.ts (resolvePolicyConstraints delegates to AgentPolicyStore.resolveForAgent for 3-query direct+inherited merge, joins PolicyTemplateStore.read per slug, produces Constraint[]). Both exported from src/index.ts. Test model-policy.test.ts seeds real rows on on-disk DB via seedProvider+seedPolicy+AgentStore+TaxonomyStore+AgentPolicyStore; asserts resolveModel claude_code=opus, claude_api=claude-opus-4-8, no-credentials constraint present, inherited reviewer-posture constraint present (inheritedFrom=category), empty constraints for no-policy agent (dod.3 negative-control), persistence via close+reopen. Fix: multi-package migrations require provider first (1750* timestamps) before registry+policy (1782* timestamps) — Drizzle skips entries with when<=last-recorded. Guard: 10/10 tests pass exit 0, deterministic on second run. Commit: 213f40b"
     }
   ],
   "amendment_log": [],
@@ -151,7 +163,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "model-and-policy-emit",
+  "current_state": "code-review-engine",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:26:44.237Z",
     "by": "pseudosky",
