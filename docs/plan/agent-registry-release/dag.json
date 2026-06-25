@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "title": "Agent Registry — Release & Closeout (worktree merge, publish, cleanup)",
+  "plan_kind": "brownfield",
+  "phases": [],
+  "terminal": "done",
+  "nodes": {},
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.23",
+    "hash": "1e4130a84aed"
+  },
+  "goal": "The agent-registry-execution worktree is merged to main (or an explicit no-merge decision recorded) with the agent-mcp byte-identical back-out guarantee verified as a gate; the 5 registry packages + agent-mcp@2.0.0 are published via nx release publish (clean cached build+test); every untracked design/demo artifact is committed/relocated/removed; and a written worktree-clarity artifact eliminates the owner's confusion about where the work lives and how to land it."
+}
