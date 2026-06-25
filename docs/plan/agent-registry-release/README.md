@@ -38,3 +38,12 @@ The agent-registry-execution worktree is merged to main (or an explicit no-merge
   - observable: `each of @adhd/agent-registry, agent-tool-registry, agent-provider, agent-policy, agent-compiler, agent-mcp@2.0.0 resolves on the registry at its bumped version; the build that produced them was a normal cached nx build (no --skip-nx-cache anywhere in the runbook)`
   - negative-control: `a --skip-nx-cache token present in PUBLISH_RUNBOOK.md makes the publish audit fail (it ships stale dist)`
   - delivered-by: `publish-packages, post-publish-smoke`
+
+- `[dod.4]` **Every untracked design/demo artifact (SPEC, DEMO, demo/, ledgers, orchestration-ledger.md, COVERAGE) is committed, relocated, or removed — no dangling threads; git status is clean of stray initiative files. (behavioral)** — Every untracked design/demo artifact (SPEC, DEMO, demo/, ledgers, orchestration-ledger.md, COVERAGE) is committed, relocated, or removed — no dangling threads; git status is clean of stray initiative files..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `git status --porcelain after artifact-cleanup, audited by audit_release.py --phase cleanup`
+  - observable: `no untracked file under docs/plan/agent-registry/ remains unaccounted for; each is either committed (tracked) or listed in a recorded disposition table in CLOSEOUT.md; .claude/ stays gitignored`
+  - negative-control: `leaving an untracked demo artifact absent from the disposition table makes the cleanup audit (git status vs disposition list) fail`
+  - delivered-by: `artifact-cleanup`
