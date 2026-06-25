@@ -88,11 +88,11 @@
       "end_ref": "8333cb65e19df928f6411c0ee399ca9a5e69f931"
     },
     "lt-host-ts": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T13:48:07.820Z",
-      "done_at": null,
+      "done_at": "2026-06-25T13:55:09.682Z",
       "start_ref": "f1d30a2ba365ca386634316b625ed3339e6e53a6",
-      "end_ref": null
+      "end_ref": "5d7f55605f41deff34719a4b12c7e850b5343d43"
     },
     "lt-host-python": {
       "status": "complete",
@@ -347,6 +347,18 @@
       "audit_criteria_total": 14,
       "by": "pseudosky",
       "note": "apigen_logical.py: 6 scalar codec pairs (date-time/int64/decimal/byte/uuid/number-special) byte-equal to TS wire + schema-walk decode + ApigenEncoder; run_tests.py category F (7 vectors, 28 cases, negative controls); python3 run_tests.py green 73/73"
+    },
+    {
+      "ts": "2026-06-25T13:55:09.682Z",
+      "from": "lt-host-generator",
+      "to": "lt-host-ts",
+      "start_ref": "f1d30a2ba365ca386634316b625ed3339e6e53a6",
+      "end_ref": "5d7f55605f41deff34719a4b12c7e850b5343d43",
+      "audit_exit": 1,
+      "audit_criteria_passed": 13,
+      "audit_criteria_total": 14,
+      "by": "pseudosky",
+      "note": "host-ts.ts: tsHostBinding (HostBinding §4.6) frozen codecs map covering 6 well-known scalars + nominal + union; reused LOGICAL_TYPE_VERSION 0.1.0 from @adhd/apigen-logical; 14 teeth tests (derived coverage + round-trip + negative control); nx test apigen-runtime green 111"
     }
   ],
   "amendment_log": [],
@@ -355,7 +367,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-host-generator",
+  "current_state": "lt-dispatch-integration",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
