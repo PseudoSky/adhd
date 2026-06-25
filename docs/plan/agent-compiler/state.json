@@ -46,11 +46,11 @@
       "end_ref": "d45490ea6f8c14cb0ed85e75695c5d38d7d08ade"
     },
     "compile-cli": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T14:18:00.492Z",
-      "done_at": null,
+      "done_at": "2026-06-25T14:36:54.097Z",
       "start_ref": "565058b596d1b90814a94ba91defe37fd6491e8c",
-      "end_ref": null
+      "end_ref": "75125d2329bd72fb6edb6e11651816a0a0e6e98c"
     },
     "composed-prompt-caching": {
       "status": "pending",
@@ -179,6 +179,18 @@
       "audit_criteria_total": 21,
       "by": "pseudosky",
       "note": "Added emit/markdown.ts (yaml_frontmatter), emit/json.ts (json_object, separate file for dod.7), compile.ts (compileAgent orchestrator), updated index.ts. The \\n\\n separator advisory was resolved at the emit layer: composition.ts:72 joins with \\n and is read-only, so compile.ts calls CompositionStore.resolveComposition directly to own the join and applies \\n\\n between sections per Decision B.1 — no composition.ts edit required, no blocker raised. Guard: npx nx test agent-compiler --testFile=...compile-agent.test.ts → 21/21 tests, exit 0, confirmed deterministic on second run. Commit: d45490ea6f8c14cb0ed85e75695c5d38d7d08ade."
+    },
+    {
+      "ts": "2026-06-25T14:36:54.097Z",
+      "from": "compile-cli",
+      "to": "compile-cli",
+      "start_ref": "565058b596d1b90814a94ba91defe37fd6491e8c",
+      "end_ref": "75125d2329bd72fb6edb6e11651816a0a0e6e98c",
+      "audit_exit": 20,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 23,
+      "by": "pseudosky",
+      "note": "Added src/cli/compile.ts (argv parser + dispatcher), bin entry in package.json, and compile-cli.test.ts spawning real child process. Guard: npx nx test agent-compiler --testFile=compile-cli.test.ts → exit 0, 8/8 passed. Bin invoked as node dist/.../src/cli/compile.js; @adhd symlinks created in dist/node_modules/@adhd by beforeAll so ESM resolution works. Fixed pre-existing TS2352 in compile.ts (double-cast via unknown) to unblock tsc build. Commit: 75125d2."
     }
   ],
   "amendment_log": [],
@@ -187,7 +199,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "compile-cli",
+  "current_state": "composed-prompt-caching",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:26:44.237Z",
     "by": "pseudosky",
