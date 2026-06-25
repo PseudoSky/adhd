@@ -73,6 +73,21 @@
       ],
       "context": "contexts/name-slug-seam.md",
       "notes": ""
+    },
+    "discovery-tools": {
+      "kind": "work",
+      "phase": "discovery",
+      "depends_on": [
+        "name-slug-seam"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/tools/discovery.ts",
+        "packages/ai/agent-mcp/src/server.ts",
+        "packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts"
+      ],
+      "context": "contexts/discovery-tools.md",
+      "notes": ""
     }
   },
   "authored_with": {
