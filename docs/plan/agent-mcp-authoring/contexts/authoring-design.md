@@ -18,6 +18,7 @@
 
 - [authoring-design.1] decisions.md records the embedding-source decision (reuse memory-server vs deterministic in-package) + determinism/idempotence requirement
 
+- [authoring-design.2] decisions.md records the name<->slug translation-seam policy (no slug on any MCP wire schema/output/guide)
 ---
 
 ## Reservations
