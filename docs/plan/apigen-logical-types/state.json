@@ -158,11 +158,11 @@
       "end_ref": "3401d6de442dd86dbc6efa8ff7489f776d265998"
     },
     "lt-architect-review": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T14:40:41.663Z",
-      "done_at": null,
+      "done_at": "2026-06-25T14:45:59.815Z",
       "start_ref": "086e2f644968a241f0d3b57cf8fb1377293dd80b",
-      "end_ref": null
+      "end_ref": "90f71c26fcbab227d517dce546bc77263af26e36"
     },
     "lt-code-review": {
       "status": "pending",
@@ -443,6 +443,18 @@
       "audit_criteria_total": 21,
       "by": "pseudosky",
       "note": "audit_lt-conformance-crosshost.py + crosshost_ts_shim.ts: drives REAL tsHostBinding (tsx) + apigen_logical.py (python3) over shared vectors; proves TS->wire->Py->wire->TS byte-stable both directions, 50/50, teeth verified (corrupt TS encode -> red); finding: cross-host re-encode MUST be schema-driven (encode_int64) not value-driven (Python int indistinguishable from JSON number) per 4.6"
+    },
+    {
+      "ts": "2026-06-25T14:45:59.815Z",
+      "from": "lt-architect-review",
+      "to": "lt-architect-review",
+      "start_ref": "086e2f644968a241f0d3b57cf8fb1377293dd80b",
+      "end_ref": "90f71c26fcbab227d517dce546bc77263af26e36",
+      "audit_exit": 1,
+      "audit_criteria_passed": 20,
+      "audit_criteria_total": 21,
+      "by": "pseudosky",
+      "note": "architect-reviewer (opus) APPROVED, 0 blocking findings; 7 non-blocking/nits (F1 HostBinding location, F5 dep-map drift, F6 v2 fail-fast gap, F7 scaffolded Rust/Go/Java) all documented deferrals; audit_lt-architect-review.py verdict-gated exit 0; review at references/architect-review.md"
     }
   ],
   "amendment_log": [],
@@ -451,7 +463,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-architect-review",
+  "current_state": "lt-code-review",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
