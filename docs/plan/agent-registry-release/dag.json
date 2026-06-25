@@ -3,7 +3,8 @@
   "title": "Agent Registry — Release & Closeout (worktree merge, publish, cleanup)",
   "plan_kind": "brownfield",
   "phases": [
-    "closeout-design"
+    "closeout-design",
+    "worktree-clarity"
   ],
   "terminal": "done",
   "nodes": {},
