@@ -14,3 +14,8 @@ export type { ResolvedBody, ComponentVersionMap } from './resolve/composition.js
 // tool-header-emit state: platform tool alias resolution from tool_platform_bindings
 export { resolveTools } from './resolve/tools.js';
 export type { ResolvedTool } from './resolve/tools.js';
+
+// model-and-policy-emit state: model alias + policy constraint resolution
+export { resolveModel } from './resolve/model.js';
+export { resolvePolicyConstraints } from './resolve/policy.js';
+export type { Constraint } from './resolve/policy.js';

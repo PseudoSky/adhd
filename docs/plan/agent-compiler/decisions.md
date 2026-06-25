@@ -328,3 +328,27 @@ a visible miss, never a silent stale hit.
 specify the compiler's own internal contract within states already scheduled
 (`platform-markdown-emit`, `composed-prompt-caching`). No planner-class amendment is
 required, and none is open.
+
+---
+
+## Decision E — Model fallback: return canonical id when no platform binding exists
+
+**State:** `model-and-policy-emit` · **Recorded by:** executor, append-only.
+
+**Situation.** `resolveModel(db, agentSlug, platform)` calls
+`ModelStore.resolveModelId(modelHint, platform)`. If no `provider_model_platform_bindings`
+row exists for the `(modelHint, platform)` pair, `ModelStore` throws
+`MODEL_BINDING_NOT_FOUND`.
+
+**Decision.** On `MODEL_BINDING_NOT_FOUND`, `resolveModel` returns the raw `model_hint`
+string (the canonical id, e.g. `claude_opus_4_8`) rather than throwing or returning `''`.
+
+**Rationale.** A missing binding is a seed/config gap, not a compile-time error. The
+compiler should produce a usable artifact with the canonical id rather than aborting the
+entire compile. The caller (`platform-markdown-emit` / `compile-cli`) may log a warning,
+but the compile continues. An agent with a well-seeded registry (the normal case) is
+never affected.
+
+**Impact.** Isolated to `resolve/model.ts` — no other state is affected. If a stricter
+policy is preferred for a specific platform (throw instead of fall back), that is a
+planner-class amendment, not a local choice.
