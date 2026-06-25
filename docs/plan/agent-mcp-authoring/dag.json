@@ -176,6 +176,20 @@
       ],
       "context": "contexts/live-model-e2e.md",
       "notes": ""
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "audit",
+      "depends_on": [
+        "live-model-e2e"
+      ],
+      "guard": "python3 docs/plan/agent-mcp-authoring/scripts/review_gate.py",
+      "artifacts": [
+        "docs/plan/agent-mcp-authoring/review.md",
+        "docs/plan/agent-mcp-authoring/scripts/review_gate.py"
+      ],
+      "context": "contexts/code-review.md",
+      "notes": ""
     }
   },
   "authored_with": {
