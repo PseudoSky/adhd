@@ -95,11 +95,11 @@
       "end_ref": null
     },
     "lt-host-python": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T13:32:57.766Z",
-      "done_at": null,
+      "done_at": "2026-06-25T13:44:22.615Z",
       "start_ref": "9867dbcb7b5b6c0ca66c37e61ab621cb7994b259",
-      "end_ref": null
+      "end_ref": "9c5451c11e75689fa0a89329c178fa1aa725b343"
     },
     "lt-dispatch-integration": {
       "status": "pending",
@@ -335,6 +335,18 @@
       "audit_criteria_total": 19,
       "by": "pseudosky",
       "note": "validate-layer.ts: addFormats(ajv) so format keywords validate; ajv+ajv-formats declared in apigen-runtime package.json; 2 new teeth tests (malformed date-time rejected invalid_argument + valid passes); nx test apigen-runtime green 97"
+    },
+    {
+      "ts": "2026-06-25T13:44:22.615Z",
+      "from": "lt-host-ts",
+      "to": "lt-host-python",
+      "start_ref": "9867dbcb7b5b6c0ca66c37e61ab621cb7994b259",
+      "end_ref": "9c5451c11e75689fa0a89329c178fa1aa725b343",
+      "audit_exit": 1,
+      "audit_criteria_passed": 13,
+      "audit_criteria_total": 14,
+      "by": "pseudosky",
+      "note": "apigen_logical.py: 6 scalar codec pairs (date-time/int64/decimal/byte/uuid/number-special) byte-equal to TS wire + schema-walk decode + ApigenEncoder; run_tests.py category F (7 vectors, 28 cases, negative controls); python3 run_tests.py green 73/73"
     }
   ],
   "amendment_log": [],
