@@ -46,6 +46,16 @@
       "paths": [
         "docs/plan/agent-registry-release/MERGE_RUNBOOK.md"
       ]
+    },
+    {
+      "id": "publish-packages.1",
+      "phase": "publish",
+      "tier": null,
+      "kind": "absent",
+      "pattern": "skip-nx-cache",
+      "paths": [
+        "docs/plan/agent-registry-release/PUBLISH_RUNBOOK.md"
+      ]
     }
   ]
 }
