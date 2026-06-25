@@ -179,21 +179,18 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       slug:        COMP_INTRO,
       type:        'system',
       content:     '# Agent Overview\n\nThis agent reviews code.',
-      displayName: 'Intro',
     });
 
     const body = componentStore.create({
       slug:        COMP_BODY,
       type:        'system',
       content:     '## Core Behaviour\n\nAlways be helpful.',
-      displayName: 'Body',
     });
 
     const secure = componentStore.create({
       slug:        COMP_SECURE,
       type:        'system',
       content:     '## Security Criteria\n\nApply security checks.',
-      displayName: 'Security Criteria',
     });
 
     // ── 7. Wire agent → components via CompositionStore.attach ─────────────
@@ -506,7 +503,7 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
 
       // NEGATIVE-CONTROL: if tools were emitted as a comma string, this assertion
       // goes red — tools must be an array, not a string.
-      expect(Array.isArray(parsed.tools)).toBe(true);
+      expect(Array.isArray(parsed['tools'])).toBe(true);
 
       conn.close();
     });
@@ -519,7 +516,7 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const parsed = JSON.parse(result.content) as Record<string, unknown>;
 
       // claude_api alias for claude_opus_4_8 is the full id (SEED_DATA.md §7).
-      expect(parsed.model).toBe('claude-opus-4-8');
+      expect(parsed['model']).toBe('claude-opus-4-8');
 
       conn.close();
     });
@@ -530,7 +527,7 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
 
       const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_api', db });
       const parsed = JSON.parse(result.content) as Record<string, unknown>;
-      const sp = parsed.systemPrompt as string;
+      const sp = parsed['systemPrompt'] as string;
 
       // Body sections present in systemPrompt.
       expect(sp).toContain('# Agent Overview');
