@@ -25,6 +25,22 @@
       ],
       "context": "contexts/authoring-design.md",
       "notes": ""
+    },
+    "embedding-substrate": {
+      "kind": "work",
+      "phase": "enrichment",
+      "depends_on": [
+        "authoring-design"
+      ],
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry/src/enrich/embedding.ts",
+        "packages/ai/agent-registry/src/enrich/usecase-anchors.ts",
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts"
+      ],
+      "context": "contexts/embedding-substrate.md",
+      "notes": ""
     }
   },
   "authored_with": {
