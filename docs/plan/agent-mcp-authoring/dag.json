@@ -13,7 +13,20 @@
     "audit"
   ],
   "terminal": "done",
-  "nodes": {},
+  "nodes": {
+    "authoring-design": {
+      "kind": "work",
+      "phase": "architecture",
+      "depends_on": [],
+      "guard": "python3 docs/plan/agent-mcp-authoring/scripts/audit_authoring.py --phase architecture",
+      "artifacts": [
+        "docs/plan/agent-mcp-authoring/decisions.md",
+        "docs/plan/agent-mcp-authoring/contexts/authoring-design.md"
+      ],
+      "context": "contexts/authoring-design.md",
+      "notes": ""
+    }
+  },
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.23",
