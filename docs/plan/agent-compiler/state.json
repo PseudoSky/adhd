@@ -53,11 +53,11 @@
       "end_ref": "75125d2329bd72fb6edb6e11651816a0a0e6e98c"
     },
     "composed-prompt-caching": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T14:38:42.807Z",
-      "done_at": null,
+      "done_at": "2026-06-25T14:46:22.243Z",
       "start_ref": "1e86e6ab72a7f9afa6e708aa09a8dfd60107a81b",
-      "end_ref": null
+      "end_ref": "4becf5001c1ca4152cd98a6b89707f6e1e244dde"
     },
     "audit-engine": {
       "status": "pending",
@@ -191,6 +191,18 @@
       "audit_criteria_total": 23,
       "by": "pseudosky",
       "note": "Added src/cli/compile.ts (argv parser + dispatcher), bin entry in package.json, and compile-cli.test.ts spawning real child process. Guard: npx nx test agent-compiler --testFile=compile-cli.test.ts → exit 0, 8/8 passed. Bin invoked as node dist/.../src/cli/compile.js; @adhd symlinks created in dist/node_modules/@adhd by beforeAll so ESM resolution works. Fixed pre-existing TS2352 in compile.ts (double-cast via unknown) to unblock tsc build. Commit: 75125d2."
+    },
+    {
+      "ts": "2026-06-25T14:46:22.243Z",
+      "from": "composed-prompt-caching",
+      "to": "composed-prompt-caching",
+      "start_ref": "1e86e6ab72a7f9afa6e708aa09a8dfd60107a81b",
+      "end_ref": "4becf5001c1ca4152cd98a6b89707f6e1e244dde",
+      "audit_exit": 22,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 25,
+      "by": "pseudosky",
+      "note": "Added cache/composed-prompt-cache.ts (lookup+write, Decision D combined hash: registryContextHash(ctx)+\" \"+sortedJSON(versions)+\" \"+platform), wired into compileAgent as cache-first SELECT before assembly (dod.4 negative-control), CompiledAgent.id null→number, compile-agent.test.ts placeholder updated, compile-cache.test.ts proves persistence by CLOSE+REOPEN + resolveComposition spy confirms assembly bypassed on HIT + different context yields new row (count 1→2); guard exit 0 (57/57); commit 4becf50"
     }
   ],
   "amendment_log": [],
@@ -199,7 +211,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "composed-prompt-caching",
+  "current_state": "audit-engine",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:26:44.237Z",
     "by": "pseudosky",
