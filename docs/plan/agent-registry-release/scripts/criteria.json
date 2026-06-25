@@ -10,6 +10,16 @@
       "paths": [
         "docs/plan/agent-registry-release/decisions.md"
       ]
+    },
+    {
+      "id": "worktree-clarity.1",
+      "phase": "worktree-clarity",
+      "tier": null,
+      "kind": "present",
+      "pattern": "agent-registry-execution",
+      "paths": [
+        "docs/plan/agent-registry/CLOSEOUT.md"
+      ]
     }
   ]
 }
