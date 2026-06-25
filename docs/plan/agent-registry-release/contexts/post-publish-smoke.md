@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [post-publish-smoke.1] smoke_test.sh imports each published package + runs the USAGE.md install->compose->compile journey
 
 ---
 

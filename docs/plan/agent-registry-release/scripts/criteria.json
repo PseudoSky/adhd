@@ -56,6 +56,16 @@
       "paths": [
         "docs/plan/agent-registry-release/PUBLISH_RUNBOOK.md"
       ]
+    },
+    {
+      "id": "post-publish-smoke.1",
+      "phase": "post-publish",
+      "tier": null,
+      "kind": "present",
+      "pattern": "nx release publish|npm view|smoke",
+      "paths": [
+        "docs/plan/agent-registry-release/POST_PUBLISH.md"
+      ]
     }
   ]
 }
