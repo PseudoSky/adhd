@@ -109,10 +109,10 @@
       "end_ref": null
     },
     "lt-dep-manifest": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T13:57:39.321Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "f77968a3582fb31bc8d3426d2ff8ccf69532827a",
       "end_ref": null
     },
     "lt-fail-fast": {
@@ -379,7 +379,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-conformance-gate",
+  "current_state": "lt-dep-manifest",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
