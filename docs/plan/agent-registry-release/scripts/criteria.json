@@ -28,6 +28,14 @@
       "kind": "command",
       "cmd": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase cleanup",
       "expect": "exit0"
+    },
+    {
+      "id": "agent-mcp-backout-gate.1",
+      "phase": "merge-gate",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-registry-release/scripts/check_agent_mcp_baseline.py",
+      "expect": "exit0"
     }
   ]
 }
