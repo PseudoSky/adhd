@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [worktree-clarity.1] CLOSEOUT.md states the worktree path, branch, base, the exact merge command, and the agent-mcp back-out gate
 
 ---
 
