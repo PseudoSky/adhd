@@ -163,6 +163,19 @@
       ],
       "context": "contexts/composition-journey-e2e.md",
       "notes": ""
+    },
+    "live-model-e2e": {
+      "kind": "work",
+      "phase": "e2e",
+      "depends_on": [
+        "composition-journey-e2e"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts"
+      ],
+      "context": "contexts/live-model-e2e.md",
+      "notes": ""
     }
   },
   "authored_with": {
