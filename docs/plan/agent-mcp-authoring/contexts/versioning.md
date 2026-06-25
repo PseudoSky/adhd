@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [versioning.1] package.json is agent-mcp@2.0.0 with CHANGELOG noting breaking required->optional systemPrompt + permanent compat-shim
 
 ---
 
