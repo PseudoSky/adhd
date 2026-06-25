@@ -20,6 +20,7 @@
 
 - [authoring-design.2] decisions.md records the name<->slug translation-seam policy (no slug on any MCP wire schema/output/guide)
 - [authoring-design.3] decisions.md records the agent-mcp modification manifest (exact src files, pre-plan baseline ref, non-regression guard) — the opt-in reversible gate
+- [authoring-design.4] decisions.md records sequencing-after-Plan-6 + agent_define transactional-upsert ownership across registry+tool+provider+policy stores
 ---
 
 ## Reservations
