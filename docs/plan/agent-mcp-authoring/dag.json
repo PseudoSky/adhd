@@ -149,6 +149,20 @@
       ],
       "context": "contexts/versioning.md",
       "notes": ""
+    },
+    "composition-journey-e2e": {
+      "kind": "work",
+      "phase": "e2e",
+      "depends_on": [
+        "versioning"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
+        "docs/plan/agent-registry/demo/compose-via-mcp.mjs"
+      ],
+      "context": "contexts/composition-journey-e2e.md",
+      "notes": ""
     }
   },
   "authored_with": {
