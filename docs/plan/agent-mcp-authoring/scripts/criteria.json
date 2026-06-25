@@ -20,6 +20,16 @@
       "paths": [
         "docs/plan/agent-mcp-authoring/decisions.md"
       ]
+    },
+    {
+      "id": "authoring-design.3",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "def:agent-mcp-modification-manifest",
+      "paths": [
+        "docs/plan/agent-mcp-authoring/decisions.md"
+      ]
     }
   ]
 }
