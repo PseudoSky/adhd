@@ -119,6 +119,22 @@
       ],
       "context": "contexts/agent-define.md",
       "notes": ""
+    },
+    "compat-shim": {
+      "kind": "work",
+      "phase": "compat",
+      "depends_on": [
+        "agent-define"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/systemprompt-compat.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/tools/agent-crud.ts",
+        "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-mcp/src/tools/guide.ts",
+        "packages/ai/agent-mcp/src/__tests__/systemprompt-compat.test.ts"
+      ],
+      "context": "contexts/compat-shim.md",
+      "notes": ""
     }
   },
   "authored_with": {
