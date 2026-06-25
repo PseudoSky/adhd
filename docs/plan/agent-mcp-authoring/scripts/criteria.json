@@ -88,6 +88,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/agent-define.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "compat-shim.1",
+      "phase": "compat",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/systemprompt-compat.test.ts",
+      "expect": "exit0"
     }
   ]
 }

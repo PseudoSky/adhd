@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [compat-shim.1] agent_create({systemPrompt}) wraps inline component identically to 1.0.1; systemPrompt+components=VALIDATION_ERROR; 11-tool runtime delegation surface unchanged
 
 ---
 
