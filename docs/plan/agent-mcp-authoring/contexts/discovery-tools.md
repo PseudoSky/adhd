@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [discovery-tools.1] all 11 discovery tools return name-keyed results over the real registry stores
 
 ---
 

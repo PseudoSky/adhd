@@ -64,6 +64,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "discovery-tools.1",
+      "phase": "discovery",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts",
+      "expect": "exit0"
     }
   ]
 }
