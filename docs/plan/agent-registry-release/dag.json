@@ -104,6 +104,19 @@
       ],
       "context": "contexts/post-publish-smoke.md",
       "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "post-publish",
+      "depends_on": [
+        "post-publish-smoke"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase final",
+      "artifacts": [
+        "docs/plan/agent-registry-release/scripts/audit_release.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
     }
   },
   "authored_with": {
