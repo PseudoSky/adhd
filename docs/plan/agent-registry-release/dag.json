@@ -5,7 +5,8 @@
   "phases": [
     "closeout-design",
     "worktree-clarity",
-    "cleanup"
+    "cleanup",
+    "merge-gate"
   ],
   "terminal": "done",
   "nodes": {},
