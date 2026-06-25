@@ -10,6 +10,9 @@
     "src",
     "drizzle"
   ],
+  "bin": {
+    "agent-compiler": "./src/cli/compile.js"
+  },
   "exports": {
     ".": {
       "types": "./src/index.d.ts",
