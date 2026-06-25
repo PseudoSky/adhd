@@ -5,7 +5,8 @@
   "phases": [
     "architecture",
     "enrichment",
-    "seam"
+    "seam",
+    "discovery"
   ],
   "terminal": "done",
   "nodes": {},
