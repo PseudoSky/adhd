@@ -29,3 +29,12 @@ An orchestrating agent composes a NEW agent from registry components over MCP on
   - observable: `returns ranked results [{name,type,summary,score,shared}] where a query semantically matching a seeded component ranks it above an unrelated one (score-ordered); restricting type fills exactly one grammar slot`
   - negative-control: `replacing the semantic ranker with insertion-order returns the unrelated component first → assertion fails`
   - delivered-by: `discovery-tools`
+
+- `[dod.3]` **An agent composes a NEW agent from components in ONE declarative idempotent upsert — GOAL §Maintainability-Onboarding (compose without reading another agent's file); SPEC §5.2/§7. (behavioral)** — An agent composes a NEW agent from components in ONE declarative idempotent upsert — GOAL §Maintainability-Onboarding (compose without reading another agent's file); SPEC §5.2/§7..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `agent_define MCP tool ({name,model,components[],tools?,policy?})`
+  - observable: `first call returns {version:1, compiled_preview (contains each component's content in position order), composed_prompt_id, changed:true}; identical re-define returns changed:false with no version bump; a changed component list bumps version and busts the composed_prompt cache`
+  - negative-control: `removing the content-hash compare makes an identical re-define report changed:true / bump version → assertion fails`
+  - delivered-by: `agent-define`
