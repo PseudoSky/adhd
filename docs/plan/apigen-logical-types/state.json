@@ -172,10 +172,10 @@
       "end_ref": "4945cec97a441aeb34a7b5368ba9739c29085b22"
     },
     "lt-final-audit": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T14:58:31.792Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "80a7396bf06be97465c0411975e006f69cebc249",
       "end_ref": null
     }
   },
