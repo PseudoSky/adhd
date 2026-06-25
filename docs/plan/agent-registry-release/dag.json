@@ -64,6 +64,19 @@
       ],
       "context": "contexts/agent-mcp-backout-gate.md",
       "notes": ""
+    },
+    "merge-to-main": {
+      "kind": "work",
+      "phase": "merge-gate",
+      "depends_on": [
+        "agent-mcp-backout-gate"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase merge",
+      "artifacts": [
+        "docs/plan/agent-registry-release/MERGE_RUNBOOK.md"
+      ],
+      "context": "contexts/merge-to-main.md",
+      "notes": ""
     }
   },
   "authored_with": {
