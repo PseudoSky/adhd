@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "title": "agent-mcp Authoring & Discovery — registry-backed composition over MCP (agent-mcp@2.0.0)",
+  "dag": "dag.json",
+  "states": {},
+  "transition_log": [],
+  "amendment_log": [],
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.23",
+    "hash": "1e4130a84aed"
+  }
+}
