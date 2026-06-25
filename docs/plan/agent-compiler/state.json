@@ -25,10 +25,10 @@
       "end_ref": "a90b2b7fcd820d787e831cfb54b4a81961f47402"
     },
     "tool-header-emit": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T13:35:46.491Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "10d1f44a3791ae998960fb7346930f99724b59cf",
       "end_ref": null
     },
     "model-and-policy-emit": {
