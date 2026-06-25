@@ -38,3 +38,12 @@ An orchestrating agent composes a NEW agent from registry components over MCP on
   - observable: `first call returns {version:1, compiled_preview (contains each component's content in position order), composed_prompt_id, changed:true}; identical re-define returns changed:false with no version bump; a changed component list bumps version and busts the composed_prompt cache`
   - negative-control: `removing the content-hash compare makes an identical re-define report changed:true / bump version → assertion fails`
   - delivered-by: `agent-define`
+
+- `[dod.4]` **name is the only identity on the wire; slug never leaks through the MCP boundary — SPEC §3 (Decision E), the translation-seam refactor. (behavioral)** — name is the only identity on the wire; slug never leaks through the MCP boundary — SPEC §3 (Decision E), the translation-seam refactor..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `any authoring/discovery tool output (component_read, agent_read, component_search, agent_define)`
+  - observable: `every tool response JSON contains a name field and NO slug key anywhere (recursive scan); passing a human 'Display Name' resolves to the same row as its slug form`
+  - negative-control: `leaving a raw store object (with .slug) in any tool response → the recursive no-slug scan fails`
+  - delivered-by: `name-slug-seam, discovery-tools, agent-define, component-define`
