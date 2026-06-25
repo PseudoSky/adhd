@@ -2,12 +2,21 @@
   "schema_version": 2,
   "title": "Agent Registry — Release & Closeout (worktree merge, publish, cleanup)",
   "dag": "dag.json",
-  "states": {},
+  "states": {
+    "closeout-design": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    }
+  },
   "transition_log": [],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.23",
     "hash": "1e4130a84aed"
-  }
+  },
+  "current_state": "closeout-design"
 }
