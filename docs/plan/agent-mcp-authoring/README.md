@@ -12,4 +12,11 @@ An orchestrating agent composes a NEW agent from registry components over MCP on
 
 ## Definition of Done
 
-_No DoD clauses yet — author them with `plan-scaffold.js add-dod`._
+- `[dod.1]` **An agent authors a component over MCP with content only; the registry auto-files it (summary, use-cases, weights) — GOAL §Shared Components/Single Authorship + §Maintainability-Authoring. (behavioral)** — An agent authors a component over MCP with content only; the registry auto-files it (summary, use-cases, weights) — GOAL §Shared Components/Single Authorship + §Maintainability-Authoring..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `component_define MCP tool ({name,type,content,shared})`
+  - observable: `returns {summary (non-empty, auto-derived), use_cases:[{name,weight>0}], version} with NO agent-supplied weights/use-cases; a second identical define returns changed:false and does NOT churn the index (deterministic enrichment)`
+  - negative-control: `stubbing the enrichment to skip embedding makes the use_cases array empty → the assertion fails`
+  - delivered-by: `enrichment-pipeline, component-define`
