@@ -67,10 +67,10 @@
       "end_ref": "f269105f9d0a6f582a1c5056cce50e670d0641b2"
     },
     "compile-fixtures-e2e": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T14:51:39.888Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "152c833bbedd37c7757d6ed76ca392124da48de1",
       "end_ref": null
     },
     "audit-final": {
