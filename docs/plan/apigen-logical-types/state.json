@@ -95,10 +95,10 @@
       "end_ref": null
     },
     "lt-host-python": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T13:32:57.766Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "9867dbcb7b5b6c0ca66c37e61ab621cb7994b259",
       "end_ref": null
     },
     "lt-dispatch-integration": {
@@ -319,7 +319,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-validate-formats",
+  "current_state": "lt-host-python",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
