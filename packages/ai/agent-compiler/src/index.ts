@@ -30,3 +30,6 @@ export type { CompileInput, CompiledAgent } from './compile.js';
 
 // composed-prompt-caching state: cache lookup + write for registry_composed_prompts
 export { lookup as cacheComposedPromptLookup, write as cacheComposedPromptWrite, computeContextHash } from './cache/composed-prompt-cache.js';
+
+// compile-fixtures-e2e state: real-row fixture seeder for e2e tests
+export { seedFixtureAgent } from './seed/fixtures.js';
