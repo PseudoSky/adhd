@@ -116,10 +116,10 @@
       "end_ref": "25037a399ec3669c9abf5d48327a13ec9b651b83"
     },
     "lt-fail-fast": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T14:18:27.020Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "08e9333b3dfc28599ae16dae22f8214eca9c413a",
       "end_ref": null
     },
     "lt-validate-formats": {
@@ -415,7 +415,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-codegen-hints",
+  "current_state": "lt-fail-fast",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
