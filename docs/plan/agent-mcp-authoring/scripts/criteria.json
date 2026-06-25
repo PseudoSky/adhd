@@ -80,6 +80,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/component-define.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "agent-define.1",
+      "phase": "authoring",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/agent-define.test.ts",
+      "expect": "exit0"
     }
   ]
 }
