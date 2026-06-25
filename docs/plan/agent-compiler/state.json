@@ -46,10 +46,10 @@
       "end_ref": "d45490ea6f8c14cb0ed85e75695c5d38d7d08ade"
     },
     "compile-cli": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T14:18:00.492Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "565058b596d1b90814a94ba91defe37fd6491e8c",
       "end_ref": null
     },
     "composed-prompt-caching": {
