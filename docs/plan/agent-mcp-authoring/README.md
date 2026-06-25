@@ -56,3 +56,12 @@ An orchestrating agent composes a NEW agent from registry components over MCP on
   - observable: `the test imports NO packages/ai/**/src/** path (only the MCP wire client + the compiler CLI bin); a freshly-composed agent runs a task and returns a result; the composed prompt contains the discovered components in order`
   - negative-control: `reintroducing a deep src import (e.g. buildHarness / factory.ts) is caught by a static import-scan assertion that fails the test`
   - delivered-by: `composition-journey-e2e`
+
+- `[dod.6]` **A real model walks the composition journey end-to-end and emits the model-independent invariants — closes COVERAGE.md §B 'No live-model e2e tests' for the authoring lane (CLAUDE.md verification standard #5). (behavioral)** — A real model walks the composition journey end-to-end and emits the model-independent invariants — closes COVERAGE.md §B 'No live-model e2e tests' for the authoring lane (CLAUDE.md verification standard #5)..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `AGENT_MCP_LIVE=1 driving a real model through component_search → agent_define → agent → task via the real ClaudeCliProvider/Orchestrator`
+  - observable: `stopReason completed; the model actually issues an agent_define call the scripted provider couldn't fake; the run is skipped (not failed) when AGENT_MCP_LIVE is unset so CI stays offline`
+  - negative-control: `an empty component registry makes agent_define raise COMPONENT_NOT_FOUND and the live run fails — proving the assertion drives real composition, not a canned reply`
+  - delivered-by: `live-model-e2e`
