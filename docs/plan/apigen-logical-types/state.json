@@ -53,11 +53,11 @@
       "end_ref": "62244ef161872cb84af6ee7d3cf3d43f11000dd0"
     },
     "lt-extract-scalars": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T15:25:30.645Z",
-      "done_at": "2026-06-24T00:54:34.994Z",
+      "done_at": "2026-06-25T15:51:50.767Z",
       "start_ref": "5da4a1064d458efb376b90e6e955976ab3617863",
-      "end_ref": "2ba8a4e7b37a86eeb7a0f53aea5ca92bc1a9d1ed"
+      "end_ref": "a92c0fefd5146aff4d775f21e8361c6339800a93"
     },
     "lt-extract-nominal": {
       "status": "complete",
@@ -467,6 +467,18 @@
       "audit_criteria_total": 21,
       "by": "pseudosky",
       "note": "code-reviewer (opus) APPROVED, 0 blocking; 8 non-blocking findings logged BACKLOG DEBT-LT-001..008 (strict date-time validation, int64 lossy SyntaxError, dead code, dep-map drift, etc.); test-teeth verified non-vacuous (computational NC checks); audit_lt-code-review.py verdict-gated exit 0; review at references/code-review.md"
+    },
+    {
+      "ts": "2026-06-25T15:51:50.767Z",
+      "from": "lt-dep-manifest",
+      "to": "lt-extract-scalars",
+      "start_ref": "5da4a1064d458efb376b90e6e955976ab3617863",
+      "end_ref": "a92c0fefd5146aff4d775f21e8361c6339800a93",
+      "audit_exit": 5,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "REOPENED to fix final-audit defect: ts-json-schema.ts SCALAR_SCHEMAS now maps Decimal->{type:string,format:decimal} AND wires normalizeTypeText() before the lookup so default-import (import Decimal from decimal.js -> qualified path) normalizes to Decimal key; was the root cause of dod.9b/dod.10. nx test apigen-core green"
     }
   ],
   "amendment_log": [],
@@ -475,7 +487,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-dep-manifest",
+  "current_state": "lt-extract-scalars",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
