@@ -4,7 +4,8 @@
   "plan_kind": "brownfield",
   "phases": [
     "architecture",
-    "enrichment"
+    "enrichment",
+    "seam"
   ],
   "terminal": "done",
   "nodes": {},
