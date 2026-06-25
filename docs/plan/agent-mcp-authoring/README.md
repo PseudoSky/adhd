@@ -65,3 +65,12 @@ An orchestrating agent composes a NEW agent from registry components over MCP on
   - observable: `stopReason completed; the model actually issues an agent_define call the scripted provider couldn't fake; the run is skipped (not failed) when AGENT_MCP_LIVE is unset so CI stays offline`
   - negative-control: `an empty component registry makes agent_define raise COMPONENT_NOT_FOUND and the live run fails — proving the assertion drives real composition, not a canned reply`
   - delivered-by: `live-model-e2e`
+
+- `[dod.7]` **The flat systemPrompt authoring path is a deprecated permanent compat shim, mutually exclusive with components; the 11-tool runtime hot path and required-arg counts are unchanged — SPEC §8/§9/§14-F (agent-mcp@2.0.0). (behavioral)** — The flat systemPrompt authoring path is a deprecated permanent compat shim, mutually exclusive with components; the 11-tool runtime hot path and required-arg counts are unchanged — SPEC §8/§9/§14-F (agent-mcp@2.0.0)..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `agent_create({name,provider,systemPrompt}) compat shim + agent({name}) runtime tool + guide`
+  - observable: `agent_create with systemPrompt wraps it as one private inline component and runs identically to 1.0.1; supplying BOTH systemPrompt and components raises VALIDATION_ERROR; agent({name}) === agent({name,platform:'claude_code',context:{}}); the delegation surface a sub-agent sees is exactly the 11 runtime tools (0 authoring/discovery tools); package.json is 2.0.0`
+  - negative-control: `a test that counts delegation-surface tools fails if any *_define/*_list/*_search tool leaks into the runtime delegation set`
+  - delivered-by: `compat-shim, versioning`
