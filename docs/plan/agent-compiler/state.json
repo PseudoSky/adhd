@@ -53,10 +53,10 @@
       "end_ref": "75125d2329bd72fb6edb6e11651816a0a0e6e98c"
     },
     "composed-prompt-caching": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T14:38:42.807Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "1e86e6ab72a7f9afa6e708aa09a8dfd60107a81b",
       "end_ref": null
     },
     "audit-engine": {
