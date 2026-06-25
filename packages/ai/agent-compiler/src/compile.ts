@@ -248,7 +248,10 @@ export function compileAgent(input: CompileInput): CompiledAgent {
     });
 
     // emitToolsForProvider shapes each tool per the provider_tool_formats row.
-    const emittedTools = emitToolsForProvider(toolDefinitions, providerId, lookup) as StructuredTool[];
+    // Double-cast via unknown: EmittedTool[] (EmittedServerSideTool lacks an
+    // index signature) → unknown[] → StructuredTool[].  Both types are
+    // compatible at runtime — all EmittedTool shapes are plain objects.
+    const emittedTools = emitToolsForProvider(toolDefinitions, providerId, lookup) as unknown as StructuredTool[];
 
     const content = emitJsonObject({
       agentSlug,
