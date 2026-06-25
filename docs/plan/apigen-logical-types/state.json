@@ -81,11 +81,11 @@
       "end_ref": "286e53b3b6edd29dff8b53cbebffeee9e076da4d"
     },
     "lt-union-codec": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T13:32:57.483Z",
-      "done_at": null,
+      "done_at": "2026-06-25T13:43:02.438Z",
       "start_ref": "10dadb6ce706258d12640e690d9e21cf65186017",
-      "end_ref": null
+      "end_ref": "8333cb65e19df928f6411c0ee399ca9a5e69f931"
     },
     "lt-host-ts": {
       "status": "pending",
@@ -311,6 +311,18 @@
       "audit_criteria_total": 12,
       "by": "pseudosky",
       "note": "runtime/logical/nominal-codec.ts implemented; nx test apigen-runtime green (81 tests, nominal-codec.spec 7)"
+    },
+    {
+      "ts": "2026-06-25T13:43:02.438Z",
+      "from": "lt-host-python",
+      "to": "lt-union-codec",
+      "start_ref": "10dadb6ce706258d12640e690d9e21cf65186017",
+      "end_ref": "8333cb65e19df928f6411c0ee399ca9a5e69f931",
+      "audit_exit": 0,
+      "audit_criteria_passed": 12,
+      "audit_criteria_total": 12,
+      "by": "pseudosky",
+      "note": "union-codec.ts: createUnionCodec (kind:union), oneOf+discriminator dispatch via x-apigen-codec direct lookup, E_UNION_* errors; 14 teeth tests incl hints-advisory negative control; nx test apigen-runtime green 97"
     }
   ],
   "amendment_log": [],
@@ -319,7 +331,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-host-python",
+  "current_state": "lt-host-ts",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
