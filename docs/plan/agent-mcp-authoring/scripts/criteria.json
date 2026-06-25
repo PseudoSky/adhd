@@ -40,6 +40,14 @@
       "paths": [
         "docs/plan/agent-mcp-authoring/decisions.md"
       ]
+    },
+    {
+      "id": "embedding-substrate.1",
+      "phase": "enrichment",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts",
+      "expect": "exit0"
     }
   ]
 }
