@@ -19,3 +19,11 @@ export type { ResolvedTool } from './resolve/tools.js';
 export { resolveModel } from './resolve/model.js';
 export { resolvePolicyConstraints } from './resolve/policy.js';
 export type { Constraint } from './resolve/policy.js';
+
+// platform-markdown-emit state: emit functions + top-level compileAgent orchestrator
+export { emitYamlFrontmatter } from './emit/markdown.js';
+export type { YamlFrontmatterInput } from './emit/markdown.js';
+export { emitJsonObject } from './emit/json.js';
+export type { JsonObjectInput, StructuredTool } from './emit/json.js';
+export { compileAgent } from './compile.js';
+export type { CompileInput, CompiledAgent } from './compile.js';
