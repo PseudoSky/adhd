@@ -18,10 +18,10 @@
       "end_ref": "38f2e25a08467fd19440e0510b641b4dafdd02b5"
     },
     "composition-resolve": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T13:27:26.687Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "4667d3bc463ebb09b89d553784f18b838c0b5949",
       "end_ref": null
     },
     "tool-header-emit": {
