@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "authoring-design.1",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "def:embedding-source",
+      "paths": [
+        "docs/plan/agent-mcp-authoring/decisions.md"
+      ]
+    }
+  ]
+}
