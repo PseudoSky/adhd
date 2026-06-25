@@ -18,11 +18,11 @@
       "end_ref": "38f2e25a08467fd19440e0510b641b4dafdd02b5"
     },
     "composition-resolve": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T13:27:26.687Z",
-      "done_at": null,
+      "done_at": "2026-06-25T13:32:34.816Z",
       "start_ref": "4667d3bc463ebb09b89d553784f18b838c0b5949",
-      "end_ref": null
+      "end_ref": "a90b2b7fcd820d787e831cfb54b4a81961f47402"
     },
     "tool-header-emit": {
       "status": "pending",
@@ -119,6 +119,18 @@
       "audit_criteria_total": 10,
       "by": "pseudosky",
       "note": "built via generator + guard exit 0 + SHA 38f2e25"
+    },
+    {
+      "ts": "2026-06-25T13:32:34.816Z",
+      "from": "composition-resolve",
+      "to": "composition-resolve",
+      "start_ref": "4667d3bc463ebb09b89d553784f18b838c0b5949",
+      "end_ref": "a90b2b7fcd820d787e831cfb54b4a81961f47402",
+      "audit_exit": 15,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "Added packages/ai/agent-compiler/src/resolve/composition.ts exporting resolveBody(db, agentSlug, context) → {body, componentVersions}. Ordering + context filtering is a SINGLE delegated call to CompositionStore.resolveComposition — not re-implemented. Exported from src/index.ts. Test seeds 3 real registry rows (one context-conditioned at position=3) into a real on-disk SQLite DB via agent-registry store APIs; asserts body is sections joined in position order, conditional component included/excluded per context, and empty-agent edge case. Guard (nx test agent-compiler --testFile=composition-resolve.test.ts) exited 0, 3/3 tests passing, deterministic on two consecutive runs. Commit a90b2b7."
     }
   ],
   "amendment_log": [],
@@ -127,7 +139,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "composition-resolve",
+  "current_state": "tool-header-emit",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:26:44.237Z",
     "by": "pseudosky",
