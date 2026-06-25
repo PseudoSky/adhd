@@ -29,3 +29,12 @@ The agent-registry-execution worktree is merged to main (or an explicit no-merge
   - observable: `the gate compares packages/ai/agent-mcp{,-types} against the recorded pre-initiative baseline ref and PASSES only if every change is within Plan 8's modification manifest (or the trees are byte-identical when no agent-mcp plan ran); a drift outside the manifest blocks the merge`
   - negative-control: `introducing an unmanifested agent-mcp src edit makes check_agent_mcp_baseline.py exit non-zero and the merge-gate stays red`
   - delivered-by: `agent-mcp-backout-gate, merge-to-main`
+
+- `[dod.3]` **The 5 registry packages + agent-mcp@2.0.0 publish via nx release publish on a clean cached build+test — never --skip-nx-cache — and the published artifacts match the worktree versions. (behavioral)** — The 5 registry packages + agent-mcp@2.0.0 publish via nx release publish on a clean cached build+test — never --skip-nx-cache — and the published artifacts match the worktree versions..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `nx release publish driven by PUBLISH_RUNBOOK.md + post-publish npm-registry check`
+  - observable: `each of @adhd/agent-registry, agent-tool-registry, agent-provider, agent-policy, agent-compiler, agent-mcp@2.0.0 resolves on the registry at its bumped version; the build that produced them was a normal cached nx build (no --skip-nx-cache anywhere in the runbook)`
+  - negative-control: `a --skip-nx-cache token present in PUBLISH_RUNBOOK.md makes the publish audit fail (it ships stale dist)`
+  - delivered-by: `publish-packages, post-publish-smoke`
