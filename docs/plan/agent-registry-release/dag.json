@@ -90,6 +90,20 @@
       ],
       "context": "contexts/publish-packages.md",
       "notes": ""
+    },
+    "post-publish-smoke": {
+      "kind": "work",
+      "phase": "post-publish",
+      "depends_on": [
+        "publish-packages"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase smoke",
+      "artifacts": [
+        "docs/plan/agent-registry-release/scripts/smoke_test.sh",
+        "docs/plan/agent-registry-release/POST_PUBLISH.md"
+      ],
+      "context": "contexts/post-publish-smoke.md",
+      "notes": ""
     }
   },
   "authored_with": {
