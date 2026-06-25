@@ -60,10 +60,10 @@
       "end_ref": "4becf5001c1ca4152cd98a6b89707f6e1e244dde"
     },
     "audit-engine": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T14:48:42.453Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "d2b4aa73a4fe0bd6f8d85208d62f330b4bc72987",
       "end_ref": null
     },
     "compile-fixtures-e2e": {
