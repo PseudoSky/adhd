@@ -47,3 +47,5 @@ The agent-registry-execution worktree is merged to main (or an explicit no-merge
   - observable: `no untracked file under docs/plan/agent-registry/ remains unaccounted for; each is either committed (tracked) or listed in a recorded disposition table in CLOSEOUT.md; .claude/ stays gitignored`
   - negative-control: `leaving an untracked demo artifact absent from the disposition table makes the cleanup audit (git status vs disposition list) fail`
   - delivered-by: `artifact-cleanup`
+
+- `[dod.5]` **agent-mcp non-modification is a guard on BOTH the merge and publish states — the owner's back-out guarantee holds through release. (structural)** — agent-mcp non-modification is a guard on BOTH the merge and publish states — the owner's back-out guarantee holds through release..
