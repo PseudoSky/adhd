@@ -36,6 +36,21 @@
       ],
       "context": "contexts/worktree-clarity.md",
       "notes": ""
+    },
+    "artifact-cleanup": {
+      "kind": "work",
+      "phase": "cleanup",
+      "depends_on": [
+        "worktree-clarity"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase cleanup",
+      "artifacts": [
+        "docs/plan/agent-registry/demo/README.md",
+        "docs/plan/plan-index.json",
+        ".gitignore"
+      ],
+      "context": "contexts/artifact-cleanup.md",
+      "notes": ""
     }
   },
   "authored_with": {
