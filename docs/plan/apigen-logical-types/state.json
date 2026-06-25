@@ -144,10 +144,10 @@
       "end_ref": "2f2054fc4d5edeedb578dc2bfa4db21221750636"
     },
     "lt-conformance-gate": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T13:57:39.185Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "f36ca848776e2e5b18f8540b6d4d5b6f3d144c72",
       "end_ref": null
     },
     "lt-conformance-crosshost": {
@@ -379,7 +379,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-dispatch-integration",
+  "current_state": "lt-conformance-gate",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
