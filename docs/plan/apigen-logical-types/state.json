@@ -130,10 +130,10 @@
       "end_ref": "a4e2512c6be175c351cc830c5c52a732d22c3d8d"
     },
     "lt-codegen-hints": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T14:18:26.887Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "016d0ecc148e825363b787d06d3e25e6b0824210",
       "end_ref": null
     },
     "lt-host-generator": {
@@ -415,7 +415,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "lt-fail-fast",
+  "current_state": "lt-codegen-hints",
   "dod_provenance": {
     "confirmed_at": "2026-06-24T00:17:39.019Z",
     "by": "pseudosky",
