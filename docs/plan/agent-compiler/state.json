@@ -32,10 +32,10 @@
       "end_ref": "ee04f42978c76c70ca7d39773c38ce6785a36ccf"
     },
     "model-and-policy-emit": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-25T13:43:53.185Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "3b715dcee34d327425ff5bf7af68dc9a23ae79fb",
       "end_ref": null
     },
     "platform-markdown-emit": {
