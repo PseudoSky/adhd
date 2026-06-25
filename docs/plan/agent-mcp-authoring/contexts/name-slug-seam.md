@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [name-slug-seam.1] bridge translates name->slug inbound, strips slug outbound; no slug field in any MCP response (recursive scan)
 
 ---
 

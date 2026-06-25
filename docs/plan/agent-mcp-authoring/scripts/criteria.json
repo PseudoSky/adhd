@@ -56,6 +56,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "name-slug-seam.1",
+      "phase": "seam",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts",
+      "expect": "exit0"
     }
   ]
 }
