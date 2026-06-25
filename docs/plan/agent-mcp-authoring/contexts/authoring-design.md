@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [authoring-design.1] decisions.md records the embedding-source decision (reuse memory-server vs deterministic in-package) + determinism/idempotence requirement
 
 ---
 
