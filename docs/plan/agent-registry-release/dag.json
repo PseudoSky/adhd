@@ -51,6 +51,19 @@
       ],
       "context": "contexts/artifact-cleanup.md",
       "notes": ""
+    },
+    "agent-mcp-backout-gate": {
+      "kind": "work",
+      "phase": "merge-gate",
+      "depends_on": [
+        "artifact-cleanup"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/check_agent_mcp_baseline.py",
+      "artifacts": [
+        "docs/plan/agent-registry-release/scripts/check_agent_mcp_baseline.py"
+      ],
+      "context": "contexts/agent-mcp-backout-gate.md",
+      "notes": ""
     }
   },
   "authored_with": {
