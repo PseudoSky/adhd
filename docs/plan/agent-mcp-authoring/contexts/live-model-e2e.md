@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [live-model-e2e.1] AGENT_MCP_LIVE=1 real model through component_search->agent_define->agent->task; skips when unset; empty registry forces COMPONENT_NOT_FOUND
 
 ---
 
