@@ -88,11 +88,11 @@
       "end_ref": null
     },
     "code-review-engine": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T13:57:42.997Z",
-      "done_at": null,
+      "done_at": "2026-06-25T14:00:50.089Z",
       "start_ref": "e7d6d305f36ec49209c58ca148558ff59e77588e",
-      "end_ref": null
+      "end_ref": "6c8a4c1270386555503357a1605a8e560291835e"
     }
   },
   "transition_log": [
@@ -155,6 +155,18 @@
       "audit_criteria_total": 18,
       "by": "pseudosky",
       "note": "Added resolve/model.ts (resolveModel delegates to ModelStore.resolveModelId with platform-keyed binding; falls back to canonical id on MODEL_BINDING_NOT_FOUND, Decision E recorded) and resolve/policy.ts (resolvePolicyConstraints delegates to AgentPolicyStore.resolveForAgent for 3-query direct+inherited merge, joins PolicyTemplateStore.read per slug, produces Constraint[]). Both exported from src/index.ts. Test model-policy.test.ts seeds real rows on on-disk DB via seedProvider+seedPolicy+AgentStore+TaxonomyStore+AgentPolicyStore; asserts resolveModel claude_code=opus, claude_api=claude-opus-4-8, no-credentials constraint present, inherited reviewer-posture constraint present (inheritedFrom=category), empty constraints for no-policy agent (dod.3 negative-control), persistence via close+reopen. Fix: multi-package migrations require provider first (1750* timestamps) before registry+policy (1782* timestamps) — Drizzle skips entries with when<=last-recorded. Guard: 10/10 tests pass exit 0, deterministic on second run. Commit: 213f40b"
+    },
+    {
+      "ts": "2026-06-25T14:00:50.089Z",
+      "from": "code-review-engine",
+      "to": "code-review-engine",
+      "start_ref": "e7d6d305f36ec49209c58ca148558ff59e77588e",
+      "end_ref": "6c8a4c1270386555503357a1605a8e560291835e",
+      "audit_exit": 15,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "APPROVED: single-DB topology confirmed (client.ts:31-40), no cross-pkg FKs (schema.ts skeleton), body-ordering fully delegated to resolveComposition (composition.ts:62), all binding reads go through store classes (tools.ts:78, model.ts:65, policy.ts:65), platform:node + @adhd/ imports + JSDoc + real-rows tests all pass. One advisory: body join uses \\n not \\n\\n — emit-phase must confirm separator ownership."
     }
   ],
   "amendment_log": [],
@@ -163,7 +175,7 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "code-review-engine",
+  "current_state": "platform-markdown-emit",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:26:44.237Z",
     "by": "pseudosky",
