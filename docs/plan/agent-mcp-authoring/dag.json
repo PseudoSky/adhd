@@ -3,7 +3,8 @@
   "title": "agent-mcp Authoring & Discovery — registry-backed composition over MCP (agent-mcp@2.0.0)",
   "plan_kind": "brownfield",
   "phases": [
-    "architecture"
+    "architecture",
+    "enrichment"
   ],
   "terminal": "done",
   "nodes": {},
