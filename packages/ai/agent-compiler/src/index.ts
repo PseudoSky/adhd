@@ -10,3 +10,7 @@ export * from './db/schema.js';
 // composition-resolve state: body assembly from agent-registry junction order
 export { resolveBody } from './resolve/composition.js';
 export type { ResolvedBody, ComponentVersionMap } from './resolve/composition.js';
+
+// tool-header-emit state: platform tool alias resolution from tool_platform_bindings
+export { resolveTools } from './resolve/tools.js';
+export type { ResolvedTool } from './resolve/tools.js';
