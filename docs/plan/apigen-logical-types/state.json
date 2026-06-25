@@ -116,11 +116,11 @@
       "end_ref": "25037a399ec3669c9abf5d48327a13ec9b651b83"
     },
     "lt-fail-fast": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T14:18:27.020Z",
-      "done_at": null,
+      "done_at": "2026-06-25T14:25:39.057Z",
       "start_ref": "08e9333b3dfc28599ae16dae22f8214eca9c413a",
-      "end_ref": null
+      "end_ref": "b61e5a3a32cc1599eaf351d28919356110ba5598"
     },
     "lt-validate-formats": {
       "status": "complete",
@@ -419,6 +419,18 @@
       "audit_criteria_total": 19,
       "by": "pseudosky",
       "note": "hints.ts in apigen-logical (REPOINTED from nonexistent apigen-codegen): TemplateCell registry TEMPLATE_CELLS[lang][id], TS+Python columns filled verbatim per DESIGN 13.2, Rust/Go/Java scaffolded; tsDepMap()/cellsFor()/depsForLogicalTypes()/assertNoEmptyCells(); 56 teeth tests; nx test apigen-logical green 170"
+    },
+    {
+      "ts": "2026-06-25T14:25:39.057Z",
+      "from": "lt-conformance-crosshost",
+      "to": "lt-fail-fast",
+      "start_ref": "08e9333b3dfc28599ae16dae22f8214eca9c413a",
+      "end_ref": "b61e5a3a32cc1599eaf351d28919356110ba5598",
+      "audit_exit": 10,
+      "audit_criteria_passed": 9,
+      "audit_criteria_total": 19,
+      "by": "pseudosky",
+      "note": "run.ts: assertFnsNonEmpty (0-functions actionable msg, replaces ERR_MODULE_NOT_FOUND) + assertDecimalLibPresent (names fn+lib, deterministic LibResolver injection) on v1 path; 13 teeth tests; DEBT: v2 orchestrateRun path not yet guarded (schemas not exposed to callback); nx test apigen-cli green 81"
     }
   ],
   "amendment_log": [],
