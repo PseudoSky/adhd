@@ -429,13 +429,15 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       conn.close();
     });
 
-    it('id is null (cache not yet wired)', () => {
+    it('id is a positive integer (composed_prompts row, cache wired)', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
       const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
-      // id stays null until composed-prompt-caching state.
-      expect(result.id).toBeNull();
+      // id is the registry_composed_prompts row id — positive integer after the
+      // composed-prompt-caching state wired the cache write ([def:composed-output]).
+      expect(typeof result.id).toBe('number');
+      expect(result.id).toBeGreaterThan(0);
 
       conn.close();
     });

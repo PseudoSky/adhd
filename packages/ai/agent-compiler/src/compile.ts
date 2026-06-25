@@ -49,6 +49,7 @@ import { emitYamlFrontmatter }      from './emit/markdown.js';
 import { emitJsonObject }           from './emit/json.js';
 import type { ComponentVersionMap } from './resolve/composition.js';
 import type { StructuredTool }      from './emit/json.js';
+import { lookup as cacheL, write as cacheW } from './cache/composed-prompt-cache.js';
 
 // ──────────────────────────────────────────────
 // Public types ([def:compile-input] / [def:composed-output])
@@ -71,9 +72,11 @@ export interface CompileInput {
 export interface CompiledAgent {
   /**
    * `composed_prompts` row id (audit/cache handle).
-   * null until the composed-prompt-caching state wires the cache write.
+   * The inserted `registry_composed_prompts` row id (on MISS, written by the
+   * cache layer) or the existing row id (on HIT, served from the cache).
+   * Wired by the composed-prompt-caching state ([def:composed-output]).
    */
-  id: null;
+  id: number;
   /** Flat platform artifact (markdown for claude_code, JSON string for claude_api/openai). */
   content: string;
   /**
@@ -178,7 +181,48 @@ export function compileAgent(input: CompileInput): CompiledAgent {
   // ── 3. Body sections in junction order with '\n\n' separator ────────────
   // Direct call to CompositionStore — bypasses resolveBody's '\n' join so
   // we can apply Decision B.1's '\n\n' between sections at the emit layer.
+  // NOTE: extractBodyParts is a cheap read; we run it before the cache check
+  // so we have `componentVersions` to fold into the combined context_hash
+  // (Decision D: the hash covers BOTH context AND resolved version set).
   const { bodySections, componentVersions } = extractBodyParts(db, agentSlug, context);
+
+  // ── 3b. Cache lookup (BEFORE assembly — [dod.4] negative-control) ────────
+  // Decision D: lookup by (agentSlug, platform, context, componentVersions).
+  // On HIT: return the persisted {id, content} WITHOUT re-running the resolve
+  // layers (steps 4-7 are bypassed).  Removing this SELECT causes a duplicate
+  // row on every compile — that is the [dod.4] negative-control.
+  const hit = cacheL(db, agentSlug, platform, context, componentVersions);
+  if (hit !== null) {
+    // Cache HIT: serve the persisted artifact.  `tools` and `componentVersions`
+    // are reconstructed from the already-resolved data (they are cheap reads
+    // and do not require re-running the full assembly).
+    const resolvedToolsForHit = resolveTools(db, agentSlug, platform);
+    if (headerFormat === 'yaml_frontmatter') {
+      return { id: hit.id, content: hit.content, tools: resolvedToolsForHit.map(t => t.platformAlias), componentVersions: hit.componentVersions };
+    }
+    if (headerFormat === 'json_object') {
+      // For JSON platforms, tools is a structured array; reconstruct from the
+      // same resolve path so the return shape is consistent.
+      const toolStore = new ToolStore(db);
+      const toolFormatStore = new ToolFormatStore(db);
+      const lookupFmt: ToolFormatLookup = (pid, ct) => toolFormatStore.getShape(pid, ct);
+      const platformToProvider: Record<string, string> = {
+        claude_api: 'anthropic',
+        openai:     'openai',
+        bedrock:    'bedrock',
+      };
+      const providerId = platformToProvider[platform] ?? platform;
+      const toolDefs = resolvedToolsForHit.map(rt => {
+        let description = '';
+        try { description = toolStore.read(rt.canonicalName).description; } catch { description = rt.canonicalName; }
+        return { name: rt.canonicalName, description, inputSchema: {} as Record<string, unknown> };
+      });
+      const emittedTools = emitToolsForProvider(toolDefs, providerId, lookupFmt) as unknown as StructuredTool[];
+      return { id: hit.id, content: hit.content, tools: emittedTools, componentVersions: hit.componentVersions };
+    }
+    // none format — no tools
+    return { id: hit.id, content: hit.content, tools: [], componentVersions: hit.componentVersions };
+  }
 
   // ── 4. Resolve tools (platform aliases) ─────────────────────────────────
   const resolvedTools = resolveTools(db, agentSlug, platform);
@@ -205,7 +249,9 @@ export function compileAgent(input: CompileInput): CompiledAgent {
     // Tools return: string[] of platform aliases for claude_code.
     const toolAliases = resolvedTools.map(t => t.platformAlias);
 
-    return { id: null, content, tools: toolAliases, componentVersions };
+    // ── 7a. Cache WRITE (MISS path) ────────────────────────────────────────
+    const written = cacheW(db, agentSlug, platform, context, componentVersions, content);
+    return { id: written.id, content, tools: toolAliases, componentVersions };
   }
 
   // json_object (claude_api / openai / bedrock) ─────────────────────────────
@@ -216,7 +262,7 @@ export function compileAgent(input: CompileInput): CompiledAgent {
     // the registry doesn't store JSON schemas for tool grants.
     const toolStore = new ToolStore(db);
     const toolFormatStore = new ToolFormatStore(db);
-    const lookup: ToolFormatLookup = (providerId, canonicalTool) =>
+    const lookupFmt: ToolFormatLookup = (providerId, canonicalTool) =>
       toolFormatStore.getShape(providerId, canonicalTool);
 
     // Map the target platform id to the provider id (Decision B.2: tools shaped
@@ -251,7 +297,7 @@ export function compileAgent(input: CompileInput): CompiledAgent {
     // Double-cast via unknown: EmittedTool[] (EmittedServerSideTool lacks an
     // index signature) → unknown[] → StructuredTool[].  Both types are
     // compatible at runtime — all EmittedTool shapes are plain objects.
-    const emittedTools = emitToolsForProvider(toolDefinitions, providerId, lookup) as unknown as StructuredTool[];
+    const emittedTools = emitToolsForProvider(toolDefinitions, providerId, lookupFmt) as unknown as StructuredTool[];
 
     const content = emitJsonObject({
       agentSlug,
@@ -262,7 +308,9 @@ export function compileAgent(input: CompileInput): CompiledAgent {
       model,
     });
 
-    return { id: null, content, tools: emittedTools, componentVersions };
+    // ── 7a. Cache WRITE (MISS path) ────────────────────────────────────────
+    const written = cacheW(db, agentSlug, platform, context, componentVersions, content);
+    return { id: written.id, content, tools: emittedTools, componentVersions };
   }
 
   // none (cursor / vscode) — body only, no tools declaration ─────────────────
@@ -278,5 +326,7 @@ export function compileAgent(input: CompileInput): CompiledAgent {
   }
   const content = bodyParts.join('\n\n') + '\n';
 
-  return { id: null, content, tools: [], componentVersions };
+  // ── 7a. Cache WRITE (MISS path) ─────────────────────────────────────────
+  const written = cacheW(db, agentSlug, platform, context, componentVersions, content);
+  return { id: written.id, content, tools: [], componentVersions };
 }
