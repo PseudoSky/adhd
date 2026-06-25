@@ -123,11 +123,11 @@
       "end_ref": null
     },
     "lt-validate-formats": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-25T13:32:57.620Z",
-      "done_at": null,
+      "done_at": "2026-06-25T13:43:44.958Z",
       "start_ref": "bf5a6fce85fc4cf07c1fef58c9ca41f23ac257ec",
-      "end_ref": null
+      "end_ref": "a4e2512c6be175c351cc830c5c52a732d22c3d8d"
     },
     "lt-codegen-hints": {
       "status": "pending",
@@ -323,6 +323,18 @@
       "audit_criteria_total": 12,
       "by": "pseudosky",
       "note": "union-codec.ts: createUnionCodec (kind:union), oneOf+discriminator dispatch via x-apigen-codec direct lookup, E_UNION_* errors; 14 teeth tests incl hints-advisory negative control; nx test apigen-runtime green 97"
+    },
+    {
+      "ts": "2026-06-25T13:43:44.958Z",
+      "from": "lt-host-ts",
+      "to": "lt-validate-formats",
+      "start_ref": "bf5a6fce85fc4cf07c1fef58c9ca41f23ac257ec",
+      "end_ref": "a4e2512c6be175c351cc830c5c52a732d22c3d8d",
+      "audit_exit": 4,
+      "audit_criteria_passed": 15,
+      "audit_criteria_total": 19,
+      "by": "pseudosky",
+      "note": "validate-layer.ts: addFormats(ajv) so format keywords validate; ajv+ajv-formats declared in apigen-runtime package.json; 2 new teeth tests (malformed date-time rejected invalid_argument + valid passes); nx test apigen-runtime green 97"
     }
   ],
   "amendment_log": [],
