@@ -67,5 +67,17 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "closeout-design"
+  "current_state": "closeout-design",
+  "dod_provenance": {
+    "confirmed_at": "2026-06-26T04:28:04.958Z",
+    "by": "pseudosky",
+    "note": "Owner sign-off 2026-06-26 (delegated to orchestrator): worktree-clarity + back-out-gated merge + nx release publish (no --skip-nx-cache) + artifact cleanup. Confirmed via plain-language DoD sheet.",
+    "dod_ids": [
+      "dod.1",
+      "dod.2",
+      "dod.3",
+      "dod.4",
+      "dod.5"
+    ]
+  }
 }
