@@ -49,9 +49,154 @@
 - **DoD additions for classes:** delivered-by + conformance vectors for (1) a user class round-tripping TS↔Python (nominal `$ref`), and (2) a discriminated union (polymorphic, wire discriminator), each with a negative control.
 **Status:** OPEN — correctness gap (never handled). Affects every plugin (mcp/http/cli) and the cross-host contract. Scope spans well-known scalar types AND the full nominal/custom-class type system. **tracked-by: `docs/plan/apigen-logical-types/DESIGN.md` (this bug IS the plan).**
 
+### DEBT-APIGEN-007 — `lt-dep-manifest` dep-collection is end-to-end blocked by missing `lt-extract-scalars`
+**Discovered:** 2026-06-25, during `lt-dep-manifest` state execution.
+**Symptom:** The dep-manifest machinery (`collectFormats` → `collectLogicalTypeDeps` → `patchPackageJsonDeps`) is implemented and works for schemas that carry `format: decimal`. However, when a TS source file uses `DecimalValue = string` (or any type alias that resolves to a primitive), `ts-morph`'s `p.getType().getText()` resolves the alias to `string` BEFORE passing the type text to `buildSchema` / `ts-json-schema-generator`. The `format` annotation on the alias is lost. The dep-collection step sees `{type: 'string'}` instead of `{type: 'string', format: 'decimal'}` and emits no dep.
+**Root cause:** `packages/apigen/core/src/lib/extractors/named.ts` calls `p.getType().getText()` which eagerly resolves type aliases. Changing it to `p.getTypeNode()?.getText()` (the alias name) would preserve alias identity, allowing `ts-json-schema-generator` to look up the `@format` annotation.
+**Fix direction:** in `lt-extract-scalars` (state in the `apigen-logical-types` plan): change `extractors/named.ts` to preserve the alias name (use `getTypeNode()?.getText()` for the type text), and add `DecimalString`/`DecimalValue` to `SCALAR_SCHEMAS` in `ts-json-schema.ts` (or rely on `ts-json-schema-generator` picking up the `@format` JSDoc from the exported type alias). Once extraction preserves format annotations, the `lt-dep-manifest` machinery activates end-to-end without further changes.
+**Status:** OPEN — `lt-dep-manifest` infrastructure is green; activation gate is `lt-extract-scalars`. **tracked-by: `docs/plan/apigen-logical-types` → state `lt-extract-scalars`.**
+
 ### BUG-APIGEN-006 — `apigen-nx` generator package is built with the vite bundler; its `__files__` templates don't ship → published generator is non-functional
 **Discovered:** 2026-06-23, during the apigen v2 npm publish (held back from publishing because of this).
 **Symptom:** `@adhd/apigen-nx`'s `build` target uses `@nx/vite:build`, which **bundles** the generator into `index.js`/`index.mjs` and drops the on-disk file tree. The generator at runtime does `generateFiles(tree, path.join(__dirname, '__files__'), ...)` — i.e. it reads its EJS templates (`packages/apigen/nx/src/generators/plugin/__files__/**/*__tmpl__`) from disk. Those templates are **not** emitted to `dist` (build `assets` is only `["*.md"]`, and vite bundling doesn't preserve `src/generators/.../__files__`). A consumer who installs `@adhd/apigen-nx` and runs the `plugin` generator would get no templates → the generator cannot scaffold anything.
 **Root cause:** wrong build executor for an nx generator/plugin package. Generator packages must preserve their directory structure + ship their template assets; they should be built with `@nx/js:tsc` (which keeps per-file output and honors `assets`), not `@nx/vite:build` (a bundler). Compounded by the missing `__files__` entry in build `assets`.
 **Fix direction:** switch `packages/apigen/nx` `build` to `@nx/js:tsc`; add `assets` entries that copy `src/generators/**/__files__/**` and `src/generators/**/schema.json` to `dist` at the paths the compiled `generator.js` resolves via `__dirname`; verify by `npm pack`-ing the tarball and confirming the `__files__` templates + `generators.json`/`executors.json` are present, then dry-running the `plugin` generator from the packed artifact.
 **Status:** OPEN — `apigen-nx` deliberately **NOT published** in the v2 `0.1.x` release until this is fixed (all 17 other packages shipped). Note: the v2 plugin-generator templates (`package.json__tmpl__` main→dist, `tsconfig.lib.json__tmpl__` test-exclude, `vite.config.ts__tmpl__` copy-readme, `README.md__tmpl__`) are already corrected in source; this bug is specifically the `apigen-nx` package's own build/packaging.
+
+---
+
+## apigen-logical-types — lt-code-review findings (2026-06-25)
+
+The following non-blocking issues were discovered during the `lt-code-review` gate review of the logical-types implementation. None blocks plan advancement.
+
+### DEBT-LT-001 — `date-time` codec accepts invalid date strings without throwing in strict mode
+**Discovered:** 2026-06-25, lt-code-review.
+**File:** `packages/apigen/logical/src/lib/codecs/date-time.ts:32-34`
+**Symptom:** `codec.decode('not-a-date', schema, {mode:'strict'})` returns an `Invalid Date` object (`.getTime()===NaN`) instead of throwing. The contract (contracts.ts:37) requires "validate-then-construct"; only the wire type (string vs non-string) is validated, not the date format.
+**Fix direction:** after the `typeof wire !== 'string'` guard, validate that `new Date(wire).getTime()` is not `NaN` (or use a regex / `Date.parse`) and throw `TypeError` in strict mode.
+
+### DEBT-LT-002 — `int64` codec lossy-decode of a non-numeric string throws uncaught SyntaxError
+**Discovered:** 2026-06-25, lt-code-review.
+**File:** `packages/apigen/logical/src/lib/codecs/int64.ts:28-34`
+**Symptom:** In strict mode a non-string wire throws `TypeError` (correct). But in lossy mode with a string wire value like `'abc'`, `BigInt('abc')` throws `SyntaxError` — not caught by the lossy handler which only wraps the non-string path. No test covers this.
+**Fix direction:** wrap `BigInt(wire)` in a try/catch in lossy mode or validate the wire is a decimal-string pattern before attempting BigInt conversion.
+
+### DEBT-LT-003 — Dead code branch in `number-special` encode
+**Discovered:** 2026-06-25, lt-code-review.
+**File:** `packages/apigen/logical/src/lib/codecs/number-special.ts:49-53`
+**Symptom:** The guard `if (ctx.mode === 'strict' && !Number.isFinite(value))` is unreachable: the three preceding checks already exhaust all non-finite cases (NaN, Infinity, -Infinity). `Number.isFinite` is always true at that point.
+**Fix direction:** remove the dead branch and its comment; the existing three guards are sufficient.
+
+### DEBT-LT-004 — `TS_TEMPLATE_TABLE` in emit.ts exposes non-canonical aliases (`bigint`, `bytes`)
+**Discovered:** 2026-06-25, lt-code-review.
+**File:** `packages/apigen/logical/src/lib/emit.ts:442-468`
+**Symptom:** `TS_TEMPLATE_TABLE` includes `bigint` and `bytes` as aliases alongside the canonical ids `int64`/`byte`. These aliases do not correspond to any registered codec id. Any iteration over `TS_TEMPLATE_TABLE` keys would see 5 keys instead of 4, diverged from `CANONICAL_LOGICAL_TYPE_IDS`.
+**Fix direction:** remove the `bigint` and `bytes` alias entries, or document them as legacy-compat aliases with a comment referencing the canonical ids.
+
+### DEBT-LT-005 — `TS_LOGICAL_TYPE_DEP_MAP` in generate.ts is a live duplicate of `tsDepMap()`
+**Discovered:** 2026-06-25, lt-code-review.
+**File:** `packages/apigen/cli/src/lib/commands/generate.ts:37-39`
+**Symptom:** The inline `TS_LOGICAL_TYPE_DEP_MAP` constant duplicates `tsDepMap()` from `@adhd/apigen-logical/hints`. A future type addition to `TEMPLATE_CELLS.typescript` would be reflected by `tsDepMap()` but not the inline copy.
+**Fix direction:** replace the inline constant with `import { tsDepMap } from '@adhd/apigen-logical'` and call `tsDepMap()` at usage sites. The JSDoc in generate.ts already identifies this as the fix.
+
+### DEBT-LT-006 — `encodeSchemaless` first-match-wins codec ordering is implicit
+**Discovered:** 2026-06-25, lt-code-review.
+**File:** `packages/apigen/logical/src/lib/runmode.ts:264-279`
+**Symptom:** At schema-less positions, `encodeSchemaless` iterates `registry.ids()` in insertion order and returns the first codec whose `encode()` does not throw. A permissive codec registered before the canonical codecs could shadow them. The behavior is correct for the standard registration order (well-known codecs registered first) but fragile if custom codecs are registered without care.
+**Fix direction:** document the registration-order sensitivity in `buildTranscoder`'s JSDoc and/or add a priority/weight field to `LogicalTypeCodec` for future disambiguation.
+
+### DEBT-LT-007 — `assertNoEmptyCells` is never tested via an actually-incomplete column
+**Discovered:** 2026-06-25, lt-code-review.
+**File:** `packages/apigen/logical/src/lib/hints.spec.ts:159-195`
+**Symptom:** The test labelled "DOES throw when a language column is missing a cell" does not call `assertNoEmptyCells` on an incomplete table; it tests a custom inline `checkTable` reimplementation. The production function's throw path has zero direct test coverage.
+**Fix direction:** add a test that monkey-patches (or temporarily adds a fake language key to) `TEMPLATE_CELLS` to simulate an incomplete column and asserts `assertNoEmptyCells('fakeLanguage')` throws with the missing id in the message.
+
+### DEBT-LT-008 — Python gate inline script uses a relative `sys.path.insert` for the Python module
+**Discovered:** 2026-06-25, lt-code-review.
+**File:** `packages/apigen/conformance/src/lib/gate.ts:466-468`
+**Symptom:** The inline Python script at line 466 hardcodes `sys.path.insert(0, 'packages/apigen/python')` as a relative path. If the gate is invoked from a CWD other than the workspace root, the Python import fails.
+**Fix direction:** pass the absolute package directory as a second `sys.argv` argument, or resolve the path relative to the vectors file path already passed as `sys.argv[1]`.
+
+## BUG-APIGEN-008 — Python extractor breaks on dataclasses under `from __future__ import annotations`
+- **Discovered:** while mounting a real Python surface (`/tmp/myapi.py`) via `python3 -m apigen_python.gateway_adapter --module <path>`.
+- **Symptom:** `AttributeError` in `dataclasses._is_type` (`sys.modules.get(cls.__module__).__dict__` → None) when the loaded module uses `@dataclass` + `from __future__ import annotations`.
+- **Root cause:** `apigen_python/extractor.py:extract_module` calls `spec.loader.exec_module(mod)` WITHOUT first registering `sys.modules[spec.name] = mod`. With stringized (future) annotations, dataclasses resolves the class namespace via `sys.modules` and finds nothing.
+- **Fix:** in `extract_module`, set `sys.modules[spec.name] = mod` before `exec_module` (canonical pattern for dynamically-exec'd modules); optionally `del` on failure. One line + robustness.
+- **Workaround:** omit `from __future__ import annotations` in the user module.
+
+## BUG-APIGEN-009 — validate-Layer not active over `apigen run` (HTTP transports) — RESOLVED 2026-06-25
+- **Discovered:** user-perspective demo, driving a live `apigen run --type api-fastify` server.
+- **Symptom:** a malformed `date-time` (`2099-02-30`) and a missing required field both return **HTTP 200** (accepted); a wrong-typed field returns 500 from a downstream codec, not a 400. The function runs on invalid input.
+- **Expected:** the central validation Layer rejects invalid input with `ApiError{code:'invalid_argument'}` (HTTP 400) BEFORE dispatch — as the in-process integration tests prove.
+- **Root cause:** the `run` path called `dispatch()` directly per route, never composing the validate-Layer; validation was exercised only in the in-process harness/tests, not the served path.
+- **Fix (landed):** the fastify/express `run.ts` now compose `makeValidateLayer(pkg.schemas)` (innermost) + any `--use` *Layer* plugins via the runtime `createInvoker`, and invoke through that stack per request. The CLI `run` command loads `--use` plugins (`loadUsePlugins`) and threads the live plugin objects through `options.usePlugins`. Verified with the real built CLI (`apigen run --type api-fastify|api-express --use health`) via curl: malformed date-time → 400 `invalid_argument`, missing required → 400, valid → 200; plus APIGEN_LIVE-gated behavioral tests that go RED when the wiring is removed (negative control confirmed).
+
+## BUG-APIGEN-010 — `--use health` mount returns 404 over `apigen run` (HTTP transports) — RESOLVED 2026-06-25
+- **Discovered:** same demo, `apigen run --type api-fastify --use health`.
+- **Symptom:** `GET /meta/health`, `/_meta/health`, `/cli/meta/health` all 404. The health mount works natively over MCP but is not mounted by the HTTP `run` path.
+- **Fix (landed):** the fastify/express `run.ts` now register `--use` *mount* plugins as real HTTP routes (`collectMountRoutes`): the health plugin's `_meta/health` op → `GET /_meta/health`. Verified with the real built CLI via curl → `200 {"status":"ok","host":"apigen-live"}`, plus an APIGEN_LIVE-gated behavioral test (RED under negative control).
+- **Note:** the canonical mounted route is `GET /_meta/health` (the op `id`). The demo's `/meta/health` and `/cli/meta/health` variants remain 404 by design.
+
+## BUG-APIGEN-011 — `readonly T[]` / `ReadonlyArray<T>` drops the element type in extraction
+- **Discovered:** user-perspective demo (after tightening loose assertions — a vacuous green hid it).
+- **Symptom:** `echoReadonlyArray(xs: readonly string[])` generates `xs.items: {}` (schema-less) instead of `{type:"string"}`; at runtime each element is wrapped in the `$apigen` envelope and mis-encoded — `["a","b"]` → `[{"$apigen":"int64","v":"a"},{"$apigen":"int64","v":"b"}]`. A plain `number[]` correctly yields `items:{type:"number"}`.
+- **Root cause (unverified):** the ts-json-schema extraction does not resolve the element type for the `readonly`-modified array type (ts-morph emits `readonly string[]`/`ReadonlyArray<string>` differently); the item schema falls through to `{}`, then the schema-less envelope path runs and defaults to the int64 codec.
+- **Fix:** normalize `readonly T[]` / `ReadonlyArray<T>` to `T[]` before item-type resolution in `packages/apigen/core/src/lib/schema-builders/ts-json-schema.ts`; add an extraction test asserting `items:{type:"string"}`, plus a live round-trip test asserting `["a","b"]` survives unchanged.
+- **Process note:** also a TEST-QUALITY bug in the demo — substring assertions (`grep -qF "a"`) are proxy evidence; tightened to exact-output matching so a wrong shape FAILs.
+
+## DEBT-APIGEN-LINT-001 — `enforce-module-boundaries` crashes + flags static `@adhd/apigen-runtime` import in api-fastify/api-express run.ts
+- **Discovered:** 2026-06-25, while linting after the BUG-APIGEN-009/010 fix (pre-existing — reproduces identically on `git show HEAD:.../api-fastify/src/lib/run.ts`).
+- **Symptom:** `nx lint apigen-plugin-api-fastify` (and api-express) errors: "Static imports of lazy-loaded libraries are forbidden — `apigen-runtime` is lazy-loaded in `stream.spec.ts`". The rule's autofix path additionally throws `ENOENT … packages/ai/agent-compiler/src/index.ts` (a separate missing-file issue in the workspace graph), aborting the lint task.
+- **Root cause:** `api-fastify/src/test/stream.spec.ts` (and similar) dynamically `import('@adhd/apigen-runtime')`, so the `@nx/enforce-module-boundaries` rule treats every *static* import of that lib in the same project as forbidden — but `run.ts` legitimately needs the static import (`dispatch`/`createInvoker`/`makeValidateLayer`/…). Not introduced by the BUG-009/010 change; the static import predates it.
+- **Fix direction:** either make the lazy import in the spec a static import (so the lib is no longer classified lazy-loaded), or scope/disable the rule for these plugin projects; separately, repair the missing `packages/ai/agent-compiler/src/index.ts` graph entry that makes the autofix throw ENOENT.
+
+## BUG-APIGEN-012 — validate-Layer rejects `decimal` format with 500 (exposed by the 009 fix)
+- **Discovered:** demo-gate re-run after wiring the validate-Layer into live `apigen run` (BUG-009 fix).
+- **Symptom:** any `Decimal` param over a live HTTP server → `{"code":"internal","message":"unknown format \"decimal\" ignored in schema …"}` (500). `date-time`/`int64`/`byte`/`uuid` are fine (ajv-formats ships them); `decimal` is apigen's own logical format and was never registered with ajv.
+- **Fix (RESOLVED):** `packages/apigen/runtime/src/lib/validate-layer.ts` — `ajv.addFormat('decimal', /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/)` after `addFormats(ajv)`, so the canonical decimal-string wire validates.
+
+## BUG-PY-FLASK-001 — `from __future__ import annotations` (PEP 563) prevents per-param JSON schema inference in Python extractor
+- **Discovered:** 2026-06-25, while building the `py-flask` target and testing the `double_decimal(amount: str)` fixture.
+- **Symptom:** when a Python module uses `from __future__ import annotations`, all type annotations are stored as strings (PEP 563 lazy evaluation). `inspect.signature()` returns `annotation='str'` (string) rather than `annotation=<class 'str'>` (type). `apigen_python.extractor._py_type_hint_to_schema` does not handle string annotations, so every param schema falls back to `{}` (empty / "any"). As a result, type-level validation (e.g. "amount must be a string") is silently skipped.
+- **Root cause:** `_py_type_hint_to_schema` checks `annotation in _primitives` (a dict keyed by type objects), which never matches a string literal like `'str'`. No `get_type_hints()` call is made to resolve the deferred annotations.
+- **Fix direction:** in `extractor.py`, use `typing.get_type_hints(fn, globalns={...}, localns={...})` instead of raw `inspect.signature().parameters[n].annotation` when the annotation is a `str`. This resolves PEP 563 string annotations back to type objects. A fallback import of module globals/locals is needed to handle forward-referenced custom types.
+- **Workaround (current):** fixtures and user modules must not use `from __future__ import annotations`. Use `from typing import Dict, List, Optional` (3.8-compat) or `dict[str, Any]` (3.10+) instead. Document this in `pyproject.toml` and `flask_server.py` docstring.
+- **Status:** OPEN — the `test_api.py` fixture avoids `from __future__ import annotations` and all tests pass. A user module that uses this import will get weak validation.
+
+### BUG-PYFLASK-003 — extractor extracted imported classes (Decimal, datetime) as constructor ops
+**Discovered:** 2026-06-25, via live CLI run `node dist/.../apigen/cli/index.js run --type py-flask --source /tmp/x.py`.
+**Symptom:** `from decimal import Decimal; from datetime import datetime` in user module → `/t/Decimal` and `/t/datetime` appeared as `POST` routes (kind=constructor) alongside the user's functions.
+**Root cause:** `extract_module` iterated `dir(mod)` (all non-`_` names) and the `isinstance(value, type)` branch in the extractor treated imported classes as constructor operations. No filter on `obj.__module__` to exclude imports.
+**Fix landed 2026-06-25:** added `__module__` filter in `extract_module` — when `__all__` is absent, skip any name whose `__module__` differs from the loaded module's `__name__`. Tests: `extractor.pollution.decimal`, `extractor.pollution.datetime`, `extractor.pollution.only_user_fns` (run_tests.py §G).
+**Status:** FIXED.
+
+### DEFER-PYGRPC-001 — gRPC-Web support (sonora/grpclib) not included in py-grpc target
+**Discovered:** 2026-06-25, while implementing the py-grpc apigen target.
+**Detail:** gRPC-Web requires an HTTP/1.1-to-gRPC proxy or a pure-Python gRPC-Web server (e.g. `sonora`). `grpcio` alone serves native gRPC (HTTP/2); browser clients need gRPC-Web. The pure-Python option `sonora` exists (pip installable) but adds a non-trivial ASGI/WSGI dependency and was not verified in this env.
+**When to address:** when browser-side gRPC-Web consumers are required. At that point: (a) verify `pip install sonora`; (b) add a `grpc_web` optional group to pyproject.toml; (c) wrap the server in a `sonora.asgi.grpcASGI` + uvicorn layer alongside the grpcio server, or use an Envoy sidecar.
+**Status:** DEFERRED.
+
+### DEFER-PYGRPC-002 — serve.ts gRPC host not wired (HTTP/2 front for the gateway)
+**Discovered:** 2026-06-25, during py-grpc implementation.
+**Detail:** `serve.ts` has a documented seam for a per-host `transport` tag and an HTTP/2 front. The standalone `--type py-grpc` target works and is fully verified. Wiring it into `serve.ts` requires: (a) an HTTP/2 server in Node (e.g. `@grpc/grpc-js` or an HTTP/2 proxy); (b) routing `/<namespace>.<Service>/<method>` to the Python subprocess; (c) forwarding gRPC metadata (x-adhd-*) to envelope. The architecture is clear from the py-grpc server design; execution is blocked on serve.ts HTTP/2 infrastructure.
+**Status:** DEFERRED.
+
+### BUG-PYFLASK-004 — Decimal/datetime params not decoded from wire; integer accepted for decimal param
+**Discovered:** 2026-06-25, via live CLI run. `add_decimal(amount: Decimal)` received a raw `str` from the wire (not decoded to `Decimal`) → `str + Decimal` → TypeError 500. Integer `999` for a decimal param returned HTTP 200 instead of 400.
+**Root cause (three layers):**
+1. `_py_type_hint_to_schema(Decimal)` and `_py_type_hint_to_schema(datetime)` returned `{}` (the open-schema fallback) — no `type` or `format` annotation. `_decode_params` calls `apigen_logical.decode(val, {})` → passthrough (no format → no decode). Amount arrived as `str`.
+2. Empty schema `{}` passes validation for any value including integers → `amount=999` was accepted.
+3. `Runtime._validate_input` re-validated decoded data (native `Decimal`) against the wire schema (`{type:string,format:decimal}`) → `Decimal` is not a `str` → HTTP 400 on valid input.
+**Fix landed 2026-06-25:**
+- `extractor._py_type_hint_to_schema`: added explicit mappings `Decimal → {type:string,format:decimal}`, `datetime → {type:string,format:date-time}`, `UUID → {type:string,format:uuid}`.
+- `runtime.HostRequest`: added `pre_validated: bool = False` field.
+- `runtime.Runtime._validate_input_if_needed`: skips re-validation when `req.pre_validated=True`.
+- `flask_server._dispatch`: passes `pre_validated=True` to `HostRequest` (wire is validated before decode; runtime must not re-validate decoded values).
+**Tests:** `extractor.schema.decimal_param`, `extractor.schema.datetime_param`, `cli_decimal.decimal.decode`, `cli_decimal.decimal.rejects_int`, `flask.validation.400` (run_tests.py §G and §H).
+**Status:** FIXED.
+
+## BUG-APIGEN-013 — rich type nested in an inline object return loses `format` → `$apigen` envelope
+- **Discovered:** gateway pass-through audit. `echoDate(d: Date): Promise<{ at: Date }>` over a live server returns `{"at":{"$apigen":"date-time","v":"…"}}` instead of `{"at":"…RFC3339…"}`. A top-level `Promise<Date>` correctly returns a plain string.
+- **Root cause (unverified):** the extractor doesn't propagate `format` to fields of an inline/anonymous object type, so the nested `Date` field gets `{}` and the schema-less envelope path runs. Same family as BUG-APIGEN-011 (readonly arrays) — nested-type extraction dropping the logical format.
+- **Impact:** correct round-trip (envelope preserves the value) but non-idiomatic wire; cross-host byte-equality for nested rich fields not guaranteed.
+- **Fix:** propagate logical `format` into inline object-type field schemas in `ts-json-schema.ts`; add a nested-Date-in-object extraction + round-trip test.
