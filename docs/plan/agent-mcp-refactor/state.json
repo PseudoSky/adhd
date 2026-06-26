@@ -39,10 +39,10 @@
       "end_ref": "cc6ddaa2407eeb3acaa690cc1512fc0ca586a2d5"
     },
     "audit-integration": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-26T06:38:06.287Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "b5d12a5dfb2c0aeafc65ed6780c37a3ffe1cb519",
       "end_ref": null
     },
     "session-e2e": {
