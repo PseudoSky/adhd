@@ -58,21 +58,6 @@
       "context": "contexts/frontmatter-parser.md",
       "notes": ""
     },
-    "body-section-splitter": {
-      "kind": "work",
-      "phase": "parse",
-      "depends_on": [
-        "frontmatter-parser"
-      ],
-      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/body-sections.test.ts",
-      "artifacts": [
-        "packages/ai/agent-registry-migration/src/parse/body-sections.ts",
-        "packages/ai/agent-registry-migration/src/index.ts",
-        "packages/ai/agent-registry-migration/src/__tests__/body-sections.test.ts"
-      ],
-      "context": "contexts/body-section-splitter.md",
-      "notes": ""
-    },
     "roundtrip-equivalence-gate": {
       "kind": "work",
       "phase": "verify",
