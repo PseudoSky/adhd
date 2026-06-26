@@ -43,21 +43,6 @@
       "context": "contexts/scaffold-package.md",
       "notes": ""
     },
-    "frontmatter-parser": {
-      "kind": "work",
-      "phase": "parse",
-      "depends_on": [
-        "scaffold-package"
-      ],
-      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/frontmatter.test.ts",
-      "artifacts": [
-        "packages/ai/agent-registry-migration/src/parse/frontmatter.ts",
-        "packages/ai/agent-registry-migration/src/index.ts",
-        "packages/ai/agent-registry-migration/src/__tests__/frontmatter.test.ts"
-      ],
-      "context": "contexts/frontmatter-parser.md",
-      "notes": ""
-    },
     "roundtrip-equivalence-gate": {
       "kind": "work",
       "phase": "verify",
