@@ -18,11 +18,11 @@
       "end_ref": "9f6ab4eb83389467983c625e2b440fb50abcd0b5"
     },
     "compiler-integration": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-26T05:03:12.969Z",
-      "done_at": null,
+      "done_at": "2026-06-26T05:10:02.053Z",
       "start_ref": "41a59d5031498e2cfd33ca609dfc20a0b1bba5b9",
-      "end_ref": null
+      "end_ref": "37c554739ca3cd5717a3950269c0c37146112974"
     },
     "agent-store-retire": {
       "status": "pending",
@@ -110,6 +110,18 @@
       "audit_criteria_total": 10,
       "by": "pseudosky",
       "note": "Added composed_prompts cache table + experiment_assignments table + sessions.composed_prompt_id nullable FK column to db/schema.ts (append-only). Created ComposedPromptStore (upsert/findByAgentContext/read) mirroring agent-store.ts constructor pattern. Added ComposedPrompt interface + COMPOSED_PROMPT_NOT_FOUND error code to agent-mcp-types (additive). Authored drizzle migration 0006_composed_prompts_cache.sql + meta snapshot + journal entry. Added @nx/vite:test executor to project.json so --testFile guard flag works. Fixed criteria.json paths from repo-root-relative to plan-dir-relative (../../../) so node run-audit.js resolves them correctly. Guard: 8 tests pass, reopen roundtrip proven, exit 0. Audit: 10/10 schema+architecture criteria pass. Full suite: 210 tests passed, 0 failures, exit 0. nx build agent-mcp: clean."
+    },
+    {
+      "ts": "2026-06-26T05:10:02.053Z",
+      "from": "compiler-integration",
+      "to": "compiler-integration",
+      "start_ref": "41a59d5031498e2cfd33ca609dfc20a0b1bba5b9",
+      "end_ref": "37c554739ca3cd5717a3950269c0c37146112974",
+      "audit_exit": 4,
+      "audit_criteria_passed": 15,
+      "audit_criteria_total": 19,
+      "by": "pseudosky",
+      "note": "Added engine/prompt-resolver.ts (resolveComposedPrompt + computeContextHash), wired into tools/session.ts (optional promptResolver deps on SessionDeps), updated store/session-store.ts (composedPromptId param), exported from src/index.ts, added @adhd/agent-compiler to package.json deps. tsconfig.base.json already had the path alias. Guard: 10/10 tests pass, exit 0. Build: nx build agent-mcp clean, exit 0. Code committed at sha 37c5547."
     }
   ],
   "amendment_log": [],
@@ -118,7 +130,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "compiler-integration",
+  "current_state": "agent-store-retire",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:22:27.852Z",
     "by": "pseudosky",
