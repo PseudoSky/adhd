@@ -192,6 +192,22 @@
       ],
       "context": "contexts/corpus-parser.md",
       "notes": ""
+    },
+    "haiku-usecase-batch": {
+      "kind": "work",
+      "phase": "ingest",
+      "depends_on": [
+        "corpus-parser"
+      ],
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/haiku-usecase-batch.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry-migration/src/ingest/haiku-batch.ts",
+        "packages/ai/agent-registry-migration/src/ingest/usecase-candidate.ts",
+        "packages/ai/agent-registry-migration/src/index.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/haiku-usecase-batch.test.ts"
+      ],
+      "context": "contexts/haiku-usecase-batch.md",
+      "notes": ""
     }
   },
   "authored_with": {
