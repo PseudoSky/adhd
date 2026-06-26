@@ -46,7 +46,9 @@
     "roundtrip-equivalence-gate": {
       "kind": "work",
       "phase": "verify",
-      "depends_on": [],
+      "depends_on": [
+        "import-script"
+      ],
       "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts",
       "artifacts": [
         "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts",

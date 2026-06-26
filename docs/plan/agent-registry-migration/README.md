@@ -1,13 +1,41 @@
-# Agent Registry — Migration & Removal (@adhd/agent-registry-migration)
+# Agent Registry — LLM-driven Corpus Ingestion, Migration & Removal (@adhd/agent-registry-migration)
 
-Builds `@adhd/agent-registry-migration`: the tooling that imports the existing
-file-based agent corpus (346 `.md` agent definitions plus `.claude/skills/*/SKILL.md`)
-into the relational Agent Registry, then **retires** the superseded file-based
-systems — but only after a round-trip equivalence gate proves the registry is a
-lossless replacement for every file. This is the **final** plan (7 of 7) of the
-Agent Registry initiative: it consumes `@adhd/agent-registry` (plan 1) through
-`@adhd/agent-compiler` (plan 5) and the refactored `@adhd/agent-mcp` (plan 6),
-and it does the migration + removal phase that the whole initiative builds toward.
+Builds `@adhd/agent-registry-migration`: an **LLM-driven ingestion pipeline** that
+does the semantic breakdown of the file-based agent corpus UP FRONT and crystallizes
+it into a **reusable public import script**, then **retires** the superseded
+file-based systems — but only after a round-trip equivalence gate proves the registry
+is a lossless replacement for every file. The pipeline is:
+
+> deterministic `corpus-parser` (maps the COMMON FORMAT onto the FULL 18-type
+> component set) → `haiku-usecase-batch` (an LLM fan-out, cheap tier, emits candidate
+> use-cases per component) → `sonnet-consolidation` (one LLM pass → canonical
+> use-case vocabulary + weighted component↔use-case links) → `dataset-build`
+> (populate the real registry) → `import-script` (crystallize into a public
+> registry-write entrypoint, **closes FEAT-007**) → `roundtrip-equivalence-gate` →
+> `removal-runbook`.
+
+**Sources ingested:** all 46 00-active agents
+(`~/dev/ai/claude-agents/categories/00-active/agents/*.md`), the workflow-plugin
+agents, and every `.md` referenced within the specs, plus `.claude/skills/*/SKILL.md`.
+
+This is the **final** plan (7 of 7) of the Agent Registry initiative: it consumes
+`@adhd/agent-registry` (plan 1) through `@adhd/agent-compiler` (plan 5), the
+refactored `@adhd/agent-mcp` (plan 6), and Plan 8's embedding/anchor substrate
+(`@adhd/agent-registry` `enrich/*`).
+
+> **Runtime framing (corrected).** agent-mcp RUNS agents at runtime TODAY (shipped
+> core). Nothing in this plan or Plan 6 newly enables runtime execution — Plan 6 only
+> changes the system-prompt SOURCE to a registry-compiled prompt resolved at session
+> start. This plan only IMPORTS the corpus and crystallizes the methodology; no clause
+> implies runtime execution is newly enabled.
+
+> **Cross-plan anchor linkage (explicit).** `sonnet-consolidation`'s canonical
+> use-case set is the **ANCHOR vocabulary** Plan 8 (`agent-mcp-authoring`)'s
+> enrichment (`component_define` auto use-case resolution, SPEC §5.3 step 2 / §10.2)
+> resolves against. Plan 8 ships SEED anchors so its discovery proves on fixtures;
+> THIS plan's `dataset-build` backfills the real corpus-derived anchors. The relation
+> is documented sequencing (CLOSEOUT.md), not a `depends_on_plans` edge — the plans do
+> not block each other.
 
 > **Plan set & ordering.** Plan 7 of 7 (source spec: `docs/plan/agent-registry/`).
 > Ordering: `agent-registry-schema` → `agent-tool-registry`, `agent-provider`,
@@ -32,29 +60,42 @@ compiled output differs from its source.
 ## Value delta
 
 - **Before:** an agent's source of truth is a flat `.md` file in a separate repo;
-  there is no programmatic path from file → registry, and "is it safe to delete
-  this file?" is answered by hand. Skills live as loose `SKILL.md` files outside
-  the registry entirely.
-- **After:** the migration tool parses each file's frontmatter + body into typed
-  `AGENT` / `PROMPT_COMPONENT` / `AGENT_TOOL` rows through the **real** registry
-  stores; a round-trip gate runs `agent-registry compile <slug> --platform
-  claude_code` and proves the emitted markdown is byte/behaviorally equivalent to
-  the original; and removal is **forced** to depend on an all-PASS equivalence
-  report so nothing is deleted until every agent round-trips. The output survives a
-  process restart (imports are re-read after the registry DB is reopened).
+  there is no programmatic path from file → registry, no use-case discovery
+  vocabulary, and "is it safe to delete this file?" is answered by hand. Skills live
+  as loose `SKILL.md` files outside the registry entirely. The registry ships with
+  no corpus-derived components or use-cases — `component_search` (Plan 8) has nothing
+  real to rank.
+- **After:** an **LLM-driven pipeline** does the semantic breakdown up front — a
+  deterministic parser maps the COMMON FORMAT onto the FULL 18-type component set; a
+  haiku fan-out generates candidate use-cases per component; a sonnet pass
+  consolidates them into a canonical use-case vocabulary with weighted
+  component↔use-case links; `dataset-build` populates the **real** registry (the
+  corpus dataset the discovery lane searches over). The pipeline crystallizes into a
+  reusable public `importCorpus(...)` entrypoint (lib + CLI bin) — **closing
+  FEAT-007**, the missing public registry-write door. A round-trip gate then proves
+  `agent-registry compile <slug> --platform claude_code` emits markdown
+  byte/behaviorally equivalent to the original, and removal is **forced** to depend
+  on an all-PASS equivalence report so nothing is deleted until every agent
+  round-trips. All output survives a process restart (rows re-read after the registry
+  DB is reopened).
 
 ## Execution model
 
-- **Parallel execution:** No — a mostly linear pipeline (parse → import → verify →
-  removal) with two audit hold points. `src/index.ts` is a shared mutable barrel
-  written by every work state in sequence, so serialization is required.
+- **Parallel execution:** No across states — a mostly linear pipeline (parse →
+  ingest → import → verify → removal) with two audit hold points. `src/index.ts` is a
+  shared mutable barrel written by every work state in sequence, so serialization is
+  required. (The `haiku-usecase-batch` fan-out IS parallel WITHIN its state.)
 - **Implementer:** one `backend-developer` / `typescript-pro`-class executor with
-  Nx + better-sqlite3 + Drizzle in the environment, and the published
-  `@adhd/agent-registry` + `@adhd/agent-compiler` packages on the workspace path.
-- **Review:** `architect-reviewer` reviews `migration-design` output (the parse
-  strategy, the equivalence definition, the zero-loss gate contract, and the
-  cross-repo removal boundary) before any code; the final audit is the acceptance
-  gate, accepted by the requesting engineer.
+  Nx + better-sqlite3 + Drizzle in the environment, the published
+  `@adhd/agent-registry` + `@adhd/agent-compiler` packages on the workspace path, and
+  — for the live LLM stages — Claude model access (`corpus-ingest-llm` blocker;
+  `AGENT_REGISTRY_INGEST_LIVE=1`). The LLM stages run a real haiku/sonnet through the
+  agent-mcp provider; CI runs the deterministic replay offline.
+- **Review:** `code-reviewer` reviews `migration-design` output (the parser + 18-type
+  mapping strategy, the LLM pipeline contract, the anchor-vocabulary linkage to Plan
+  8, the equivalence definition, the zero-loss gate, and the cross-repo removal
+  boundary) before any code; the final audit is the acceptance gate, accepted by the
+  requesting engineer.
 - **Automatic dispatch:** No — authored by the planner, executed by a separate
   executor agent across sessions.
 
@@ -86,53 +127,68 @@ Source: claude-agents") — **not** in this `adhd` monorepo. Therefore:
 > Mock only the absent external boundary (none here — even the compiler is real);
 > never mock the thing under test.
 
-- `[dod.1]` **A migrated fixture agent compiles to equivalent markdown vs. its
-  original `.md`** — import `code-reviewer.md` into a real registry DB, run
-  `agent-registry compile code-reviewer --platform claude_code`, and the normalized
-  diff against the original fixture is empty. THE headline byte/behavioral
-  equivalence gate. (behavioral)
-  - given: the fixture `code-reviewer.md` is imported into a real registry DB
-  - when: the equivalence gate runs `agent-registry compile code-reviewer --platform claude_code` and normalized-diffs the output against the original `.md`
-  - then: the normalized diff is empty and the gate reports `code-reviewer = PASS`
-  - entrypoint: `npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts`
-  - observable: `vitest exits 0 and the case 'fixture agent round-trips to equivalent markdown' asserts the normalized diff between compile output and the original .md is empty`
-  - negative-control: `nc_mutate.mjs corrupts a persisted PROMPT_COMPONENT row → the normalized diff is non-empty → the roundtrip-equivalence.test.ts case goes red (proven by the [roundtrip-equivalence-gate.4] negative-control criterion in the audit)`
-  - delivered-by: `migration-design, import-pipeline, roundtrip-equivalence-gate`
+- `[dod.1]` **The deterministic parser maps the 00-active COMMON FORMAT onto the FULL
+  18-type component set, exercising every type across the corpus or explicitly
+  flagging the unmapped residue — driven against the REAL agent files, no LLM.**
+  (behavioral)
+  - given: the real 00-active corpus (`~/dev/ai/claude-agents/categories/00-active/agents/*.md`) plus the in-repo fixtures
+  - when: `corpus-parser` parses each file's frontmatter + body sections + un-headed `You are…` paragraph deterministically
+  - then: the union of mapped `prompt_type`s across the corpus covers all 18 types, OR every section that maps to no type is recorded in an `unmapped[]` flag list — never silently dropped
+  - entrypoint: `npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/corpus-parser.test.ts`
+  - observable: `vitest exits 0 and the case 'parser exercises all 18 component types across the corpus or flags the residue' asserts the mapped-type union ∪ unmapped[] accounts for every section (no silent drop) and the 18-type set is covered`
+  - negative-control: `drop a type from the heading→type table (e.g. never emit 'evidence') without flagging it → the 18-type coverage / no-silent-drop assertion fails → corpus-parser.test.ts goes red`
+  - delivered-by: `migration-design, corpus-parser`
 
-- `[dod.2]` **Importing a fixture agent persists agent + prompt-component +
-  agent-tool rows recoverable after the registry DB is closed and reopened.**
-  Persistence is proven by reopen, not in-memory state. (behavioral)
-  - given: a fresh on-disk registry SQLite DB
-  - when: `import-agent` imports `code-reviewer.md` then the DB handle is closed and reopened from the same path
-  - then: `AgentStore`/`ComponentStore`/`AgentToolStore` read back the agent, its typed components in order, and its tools
-  - entrypoint: `npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/import-pipeline.test.ts`
-  - observable: `vitest exits 0 and the case 'import persists agent+components+tools after reopen' reopens the DB and deep-equals the read-back rows`
-  - negative-control: `drop the component-insert in import-agent (or have it skip AGENT_COMPONENT rows) → reopened read returns no/incomplete components → import-pipeline.test.ts goes red`
-  - delivered-by: `frontmatter-parser, body-section-splitter, import-pipeline`
+- `[dod.2]` **A haiku fan-out processes EVERY parsed component and returns ≥1
+  candidate use-case per component; a sonnet pass consolidates them into a canonical
+  use-case vocabulary smaller than the raw union, with weighted component↔use-case
+  links — REAL models, gated, skip-not-fail offline.** (behavioral)
+  - given: the parsed component set (and `AGENT_REGISTRY_INGEST_LIVE` controlling live vs replay)
+  - when: `haiku-usecase-batch` fans out one cheap-tier call per component, then `sonnet-consolidation` reviews the full candidate set in one pass
+  - then: every component has a non-empty candidate set; the consolidated canonical vocabulary is strictly smaller than the raw candidate union (dedup happened) and carries weighted links; the LLM stages skip (not fail) when no model is available, with a deterministic replay fixture proving the shape offline
+  - entrypoint: `npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/sonnet-consolidation.test.ts`
+  - observable: `vitest exits 0 and the case 'consolidation dedups candidates into a smaller weighted vocabulary' asserts |canonical| < |raw candidate union|, every canonical use-case traces to ≥1 candidate, links carry weights, and the stage skips cleanly when AGENT_REGISTRY_INGEST_LIVE is unset`
+  - negative-control: `make consolidation a pass-through (no dedup) → |canonical| == |raw union| → the strictly-smaller assertion in nx test agent-registry-migration --testFile=...sonnet-consolidation.test.ts fails → that test goes red`
+  - delivered-by: `haiku-usecase-batch, sonnet-consolidation`
 
-- `[dod.3]` **A fixture `SKILL.md` migrates to a `PROMPT_COMPONENT` of type
-  process/invocation recoverable after DB reopen.** (behavioral)
-  - given: a fresh on-disk registry DB and the fixture `ticket-creation.SKILL.md`
-  - when: `import-skill` imports the skill then the DB is reopened from the same path
-  - then: the component is read back typed `process` or `invocation` with the skill body content preserved
-  - entrypoint: `npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/skills-migration.test.ts`
-  - observable: `vitest exits 0 and the case 'skill migrates to process/invocation component after reopen' reopens the DB and asserts the component type and content`
-  - negative-control: `have import-skill write the wrong prompt_type (e.g. 'role') → the type assertion fails → skills-migration.test.ts goes red`
-  - delivered-by: `skills-migration`
+- `[dod.3]` **`dataset-build` populates the REAL registry — components (18-typed) +
+  canonical use-cases (with anchor embeddings) + weighted links — recoverable after
+  the DB is closed and reopened; the weights survive.** (behavioral)
+  - given: a fresh on-disk registry SQLite DB and the consolidated dataset
+  - when: `dataset-build` writes components, use-cases (with anchor embeddings via the Plan 8 substrate), and weighted `component↔use-case` links through the published stores, then the DB is reopened from the same path
+  - then: the read-back components/use-cases/links match what was written, weights included (not flattened to membership)
+  - entrypoint: `npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/dataset-build.test.ts`
+  - observable: `vitest exits 0 and the case 'dataset persists components+use-cases+weighted links after reopen' reopens the DB and deep-equals the read-back rows including link weights`
+  - negative-control: `drop the weight on the link insert (write membership only) → the read-back weight assertion fails → dataset-build.test.ts goes red`
+  - delivered-by: `dataset-build`
 
-- `[dod.4]` **Removal is GATED on zero data loss** — with a deliberately
-  non-equivalent migrated agent (the equivalence report is not all-PASS), the
-  removal runbook *refuses* to remove the fixture `.md`. Nothing is deleted until
-  the round-trip is verified for every agent. (behavioral)
-  - given: an equivalence report containing at least one `FAIL` entry
-  - when: the removal runbook's `retire()` is invoked against that report
-  - then: `retire()` refuses (throws / returns blocked) and the fixture `.md` still exists
+- `[dod.4]` **A single public `importCorpus(...)` entrypoint (lib export + CLI bin)
+  runs the whole pipeline end-to-end and persists the corpus dataset recoverable
+  after reopen, folding in `SKILL.md`→process/invocation; the LLM methodology is
+  captured as a deterministic replay — this is the FEAT-007 public registry-write
+  door.** (behavioral)
+  - given: the parsed corpus + the captured consolidation record (replay) on a fresh on-disk DB
+  - when: `importCorpus({replay})` runs parse→ingest→dataset-build through the public entrypoint, including each `SKILL.md`
+  - then: the registry holds the agents, 18-typed components, use-cases, weighted links, and skills (typed process/invocation) recoverable after reopen; a second replay run reproduces the same rows deterministically
+  - entrypoint: `npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/import-script.test.ts`
+  - observable: `vitest exits 0 and the cases 'importCorpus persists the corpus dataset after reopen' + 'replay is deterministic (twice → equal rows)' + 'skill imports as process/invocation' all assert read-back through a reopened DB`
+  - negative-control: `make importCorpus skip the SKILL.md import (or make replay non-deterministic) → the skill-typed read-back / the twice-equal assertion fails → import-script.test.ts goes red`
+  - delivered-by: `import-script`
+
+- `[dod.5]` **A migrated agent compiles to equivalent markdown vs. its original
+  `.md`, and removal is GATED on an all-PASS equivalence report** — with a
+  deliberately non-equivalent agent the removal runbook *refuses* to remove the
+  fixture `.md`; an all-PASS report removes it AND `compile` still produces the
+  agent. (behavioral)
+  - given: an imported agent on a real registry DB and an equivalence report
+  - when: the round-trip gate runs `agent-registry compile <slug> --platform claude_code` and normalized-diffs against the original; then `retire()` is invoked against a report that has ≥1 FAIL, then against an all-PASS report
+  - then: an equivalent agent reports PASS (empty normalized diff); `retire()` refuses (throws/blocked) on the not-all-PASS report leaving the `.md` intact; on the all-PASS report it removes the `.md` AND `compile` still emits the agent
   - entrypoint: `npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/removal-runbook.test.ts`
-  - observable: `vitest exits 0 and the case 'retire refuses when report is not all-PASS' asserts retire throws/aborts and the fixture path is untouched; a sibling case asserts an all-PASS report removes the fixture AND compile still produces the agent`
-  - negative-control: `remove the all-PASS guard in retire() → retire deletes the fixture despite a FAIL entry → removal-runbook.test.ts goes red`
-  - delivered-by: `removal-runbook, roundtrip-equivalence-gate`
+  - observable: `vitest exits 0 and the cases 'retire refuses when report is not all-PASS' (md untouched) + 'all-PASS retire removes the md AND compile still produces the agent' both pass; the round-trip case asserts an empty normalized diff`
+  - negative-control: `remove the all-PASS guard in retire() → it deletes the fixture despite a FAIL entry → removal-runbook.test.ts goes red; nc_mutate.mjs corrupting a persisted component makes the round-trip diff non-empty → roundtrip-equivalence.test.ts goes red`
+  - delivered-by: `roundtrip-equivalence-gate, removal-runbook`
 
-- `[dod.5]` **`@adhd/agent-registry-migration` is a `platform:node` Nx library,
+- `[dod.6]` **`@adhd/agent-registry-migration` is a `platform:node` Nx library,
   registered in `tsconfig.base.json`, that depends on `@adhd/agent-registry` +
   `@adhd/agent-compiler` and builds clean.** (structural)
   - Proven by `[scaffold-package.1..5]` in the audit: `project.json` exists and is
@@ -141,43 +197,50 @@ Source: claude-agents") — **not** in this `adhd` monorepo. Therefore:
     `nx build agent-registry-migration` exits 0.
   - delivered-by: `scaffold-package`
 
-- `[dod.6]` **After an all-PASS removal, the fixture `.md` is gone AND
-  `agent-registry compile` still produces the agent** — removal didn't break the
-  agent. (structural)
-  - Proven by the `removal-runbook.test.ts` cases (the `[dod.4]` entrypoint): after
-    an all-PASS `retire()` the fixture path no longer exists (`!existsSync` /
-    `! test -e`) AND `compile` still emits the agent. The audit `[dod.6]` /
-    `[removal-runbook.1]` checks confirm both halves are asserted.
-  - delivered-by: `removal-runbook`
-
 ---
 
 ## State graph
 
-`migration-design` → `scaffold-package` → `frontmatter-parser` →
-`body-section-splitter` → `import-pipeline` → `skills-migration` →
-`roundtrip-equivalence-gate` → `audit-migration` → `removal-runbook` →
-`audit-final` → done. See `state-machine.md` and `dag.json`.
+`migration-design` → `scaffold-package` → `corpus-parser` →
+`haiku-usecase-batch` → `sonnet-consolidation` → `dataset-build` →
+`import-script` → `roundtrip-equivalence-gate` → `audit-migration` →
+`removal-runbook` → `code-review` → `audit-final` → done. See `dag.json`.
 
-`audit-migration` is the hold point that proves the tool is correct (parse →
-import → round-trip equivalence) BEFORE the removal phase touches anything;
-`removal-runbook` depends on it, so removal cannot start until the migration tool
-is verified.
+The two LLM stages (`haiku-usecase-batch`, `sonnet-consolidation`) drive REAL
+models behind the `corpus-ingest-llm` human-blocker + `AGENT_REGISTRY_INGEST_LIVE`;
+they SKIP (not fail) offline, with deterministic replay fixtures proving shape so CI
+stays green and offline.
+
+`audit-migration` is the hold point that proves the pipeline is correct (parse →
+ingest → dataset-build → import → round-trip equivalence) BEFORE the removal phase
+touches anything; `removal-runbook` depends on it, so removal cannot start until the
+ingestion + equivalence pipeline is verified.
 
 ## Design questions handed to `migration-design`
 
 Resolved (recorded in `decisions.md`) before any code:
 
-1. **Equivalence definition** — byte-equivalent vs. behaviorally-equivalent.
-   What normalization (trailing whitespace, blank-line runs, frontmatter key
-   ordering, `tools:` list ordering) is applied before the diff, and why each
-   normalization is sound (does not hide a real content loss). SEED_DATA §0 step 7
-   calls the round-trip diff "the migration's correctness gate."
-2. **Parse strategy** — YAML frontmatter parser + markdown body section splitter;
-   the heading → `prompt_type` table (SEED_DATA §0 "Body → prompt components"); how
-   the un-headed opening `You are a…` paragraph maps to `role`.
-3. **Zero-loss gate contract** — the report shape (per-agent PASS/FAIL), and the
-   forcing function: `retire()` MUST require an all-PASS report.
-4. **Cross-repo removal boundary** — the in-repo fixtures vs. the external
-   `claude-agents` corpus; what the guards may touch (fixtures only) and what is a
+1. **Parser + 18-type mapping** — the deterministic frontmatter+body parser for the
+   00-active COMMON FORMAT; the heading → `prompt_type` table; how the un-headed
+   opening `You are a…` maps to `role`; how the heterogeneous heading long-tail is
+   handled (recognizable forms typed deterministically, ambiguous residue FLAGGED in
+   `unmapped[]` for the LLM stages — never silently dropped); the full 18-type
+   coverage proof (`[dod.1]`).
+2. **LLM pipeline contract** — the haiku fan-out (one cheap-tier call per component,
+   parallel, over-generate candidate use-cases) → the single sonnet consolidation
+   pass (dedup → canonical vocabulary + weighted links); the live vs. replay split
+   (`AGENT_REGISTRY_INGEST_LIVE`, `corpus-ingest-llm` blocker, skip-not-fail); the
+   replay-capture format that makes `importCorpus` reproducible offline.
+3. **Anchor-vocabulary linkage to Plan 8** — the sonnet-consolidated use-case set IS
+   Plan 8's enrichment anchor vocabulary; Plan 8 ships SEED anchors, this plan's
+   `dataset-build` backfills the corpus-derived ones via Plan 8's embedding
+   substrate; documented sequencing, not a `depends_on_plans` edge.
+4. **Public import entrypoint (FEAT-007)** — `importCorpus(...)` as a lib export +
+   CLI bin; skills folded in; how it closes the DEMO.md §6 / CLOSEOUT.md §5 seeding
+   gap.
+5. **Equivalence definition + zero-loss gate** — byte- vs. behaviorally-equivalent;
+   the normalization applied before the diff and why each is sound; the report shape
+   (per-agent PASS/FAIL); the forcing function (`retire()` MUST require all-PASS).
+6. **Cross-repo removal boundary** — the in-repo fixtures vs. the external
+   `claude-agents` corpus; guards touch fixtures only; cross-repo removal is a
    documented operator runbook step (`RUNBOOK.md`).

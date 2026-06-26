@@ -260,6 +260,125 @@ no per-agent concurrency cap — only a server-wide `QUEUE_CONCURRENCY`.
 
 **References** — `src/engine/queue.ts`. (Migrated from GAPS §4 Phase-1 items.)
 
+### FEAT-007 — Public registry-write entrypoint (seed/ingest over a tool/CLI)
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** registry, authoring (Plan 8 dependency)
+- **Reported:** 2026-06-25 (filed during agent-mcp-authoring plan authoring)
+
+**Problem / Description**
+There is no PUBLIC registry-write entrypoint for seeding/ingesting registry rows
+(platforms, tools, models, policies, components, agents). The registry packages
+ship no CLI bin, and `agent_define`/`component_define` (Plan 8) cover authoring an
+agent/component but not bulk seeding the substrate (tool/model/policy
+vocabularies). The Plan 8 `composition-journey-e2e` "zero-internal-import" gate is
+forced to seed the substrate via the store API in a separate fixture file the test
+does not import — an honest boundary, but a gap.
+
+**Impact**
+A zero-context user cannot stand up a registry from scratch over the public
+surface; the maintained integration test can drive every step EXCEPT the one-time
+substrate seed without a deep import.
+
+**Proposed fix / Approach**
+Add a registry seed/ingest CLI subcommand (or MCP tool) that loads the substrate
+vocabularies + ingests an agent `.md`, so the e2e journey is fully public-surface.
+
+**Acceptance criteria** The §7 journey + substrate seed both run over a public bin/tool; the e2e test imports zero `packages/ai/**/src/**`.
+
+**Planning update (2026-06-25, agent-registry-migration re-author).** Plan 7 was
+re-authored as an LLM-driven ingestion pipeline whose `import-script` state ships a
+public `importCorpus(...)` entrypoint (lib export + CLI bin) that runs
+parse→ingest→dataset-build and writes components/use-cases/weighted-links/agents/
+skills through the published registry stores. That entrypoint is the public
+registry-write door this item asks for; FEAT-007 is **owned by Plan 7
+`import-script`** (`[dod.4]` / `[import-script.1..3]`) and closes when that state
+ships. The executor files the closure note here at that point.
+
+**References** — Plan 8 `docs/plan/agent-mcp-authoring/contexts/composition-journey-e2e.md`; **Plan 7 `docs/plan/agent-registry-migration/contexts/import-script.md`**; DEMO.md §6; demo audit finding (CLI bins: `agent-compiler` exists, registry packages have none).
+
+### FEAT-008 — Model-backed embedder behind the deterministic enrichment seam
+- **Status:** backlog
+- **Priority:** P3
+- **Area:** registry enrichment (Plan 8 D1 follow-up)
+- **Reported:** 2026-06-25 (filed during agent-mcp-authoring plan authoring)
+
+**Problem / Description**
+Plan 8 D1 ships a deterministic, dependency-free in-package embedding (hashed
+lexical vector) as `component_define`'s enrichment substrate — chosen for
+determinism/idempotence and because no embedding infra exists in the workspace and
+the memory-server is not a local importable path. It is sufficient for relative
+ranking but not SOTA semantic recall.
+
+**Impact** `component_search` ranking quality is lexical, not semantic-model-grade.
+
+**Proposed fix / Approach** Swap a model-backed embedder behind the injectable
+`EmbedFn = (text)=>Float32Array` seam (default stays deterministic); re-embed
+use-case anchors. Keep idempotence (cache by content hash).
+
+**Acceptance criteria** A model-backed `EmbedFn` improves `component_search` ordering on a labeled set; `component_define` stays idempotent on identical content.
+
+**References** — `docs/plan/agent-mcp-authoring/decisions.md` D1; SCOPE.md §"Out of Scope" (embedding-based similarity was excluded from Plans 1–7).
+
+### FEAT-009 — Discovery-lane corpus dependency on Plan 7 (migration)
+- **Status:** backlog
+- **Priority:** P3
+- **Area:** discovery (Plan 8 / Plan 7 overlap)
+- **Reported:** 2026-06-25 (filed during agent-mcp-authoring plan authoring)
+
+**Problem / Description**
+Plan 8's discovery lane (`component_search`, `*_list`) is proven against demo
+fixture agents. The real 346-agent corpus it should search over is imported by
+Plan 7 (`agent-registry-migration`, unbuilt). Until Plan 7 runs, discovery returns
+only fixture components — corpus-scale sharing/discovery is NOT-YET-COVERED
+(DEMO.md §8 row N2).
+
+**Impact** Discovery is real but shallow until the corpus is migrated.
+
+**Proposed fix / Approach** Sequence Plan 7 before/with Plan 8 execution; re-run the discovery DoD against the migrated corpus.
+
+**Acceptance criteria** `component_search` ranks real corpus components; ≥1 shared component is referenced by ≥N migrated agents.
+
+**Planning update (2026-06-25, agent-registry-migration re-author).** Plan 7 now
+explicitly produces the discovery corpus: `dataset-build` writes the 18-typed
+components + the sonnet-consolidated canonical use-cases WITH anchor embeddings (via
+Plan 8's `enrich/usecase-anchors` substrate) + weighted component↔use-case links.
+That consolidated use-case set IS the ANCHOR vocabulary Plan 8 enrichment resolves
+against — Plan 8 ships SEED anchors, Plan 7 `dataset-build` backfills the
+corpus-derived ones. The relation is documented sequencing (CLOSEOUT.md), NOT a
+`depends_on_plans` edge; Plan 8 proves on seed anchors, Plan 7 backfills the real
+ones. Re-run Plan 8's discovery DoD after Plan 7's `dataset-build` to close this.
+
+**References** — DEMO.md §8 N2; CLOSEOUT.md §3 (recommended execution order); **Plan 7 `contexts/sonnet-consolidation.md` + `contexts/dataset-build.md`**; Plan 8 `contexts/embedding-substrate.md` (seed anchors).
+
+### FEAT-010 — LLM-ingestion live-vs-replay corpus determinism
+- **Status:** backlog
+- **Priority:** P3
+- **Area:** registry ingestion (Plan 7 re-author)
+- **Reported:** 2026-06-25 (filed during agent-registry-migration re-author)
+
+**Problem / Description**
+Plan 7's re-authored ingestion pipeline runs REAL LLMs (haiku fan-out + sonnet
+consolidation) on the live path (`AGENT_REGISTRY_INGEST_LIVE=1`,
+`corpus-ingest-llm` blocker). LLM output is non-deterministic, so the **CI/offline
+path is a captured replay** of one live consolidation; `importCorpus --replay`
+reproduces that dataset deterministically. The live path produces a fresh (possibly
+different) canonical use-case vocabulary each run.
+
+**Impact** The corpus dataset (and thus Plan 8's discovery anchors) depends on WHICH
+live run was captured. Re-running live ingestion can shift the vocabulary, requiring
+a re-capture + a Plan 8 discovery-DoD re-verification.
+
+**Proposed fix / Approach** Treat the captured consolidation record as the
+versioned source of truth; gate vocabulary changes behind a deliberate re-capture +
+anchor-backfill + Plan 8 discovery re-verify. Optionally add a stability metric
+(vocabulary churn between live runs) to decide when a re-capture is warranted.
+
+**Acceptance criteria** A captured replay reproduces the dataset deterministically
+(twice → equal rows); a documented re-capture procedure re-backfills Plan 8 anchors.
+
+**References** — Plan 7 `contexts/haiku-usecase-batch.md`, `contexts/sonnet-consolidation.md`, `contexts/import-script.md`; `human-blockers.json` `corpus-ingest-llm`.
+
 ---
 
 ## 🔧 Tech Debt / Improvements
