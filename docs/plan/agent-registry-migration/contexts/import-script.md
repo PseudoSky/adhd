@@ -1,12 +1,31 @@
-# import-script — STATE_NAME
+# import-script — crystallize the pipeline into a reusable public registry-write entrypoint (closes FEAT-007)
 
 **Phase:** import · **Kind:** work · **Depends on:** dataset-build · **Guard:** `npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/import-script.test.ts`
+
+See `contexts/_shared.md` for definitions and invariants.
 
 ---
 
 ## Goal
 
-<What is true after this state that was not true before?>
+Crystallize the whole ingestion pipeline (parse → haiku fan-out → sonnet
+consolidation → dataset-build) into a **single reusable public registry-write
+entrypoint** — `importCorpus(...)` exported from `src/index.ts` and exposed as a CLI
+bin — so the corpus import is a re-runnable operation, not a one-off notebook. **This
+closes FEAT-007** (`packages/ai/agent-mcp/BACKLOG.md`): "no public registry-write
+entrypoint for ingest" — the gap DEMO.md §6 / CLOSEOUT.md §5 flagged as the one
+genuine seeding blocker.
+
+`importCorpus` also folds in **skills migration**: each `.claude/skills/*/SKILL.md`
+is imported as a `PROMPT_COMPONENT` of type `process` or `invocation` (the existing
+`[def:retire]`/skills behavior), through the same entrypoint.
+
+**The first pass is LLM-driven; the script captures/replays the methodology.** The
+LLM stages run once to produce the consolidated artifact; the script persists a
+**replayable record** of that consolidation so a later `importCorpus` run reproduces
+the same dataset deterministically (and CI runs the replay offline). This is the
+"crystallize the pipeline into a reusable script" the owner asked for — the
+methodology is captured, not re-paid on every run.
 
 ---
 
@@ -16,7 +35,9 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [import-script.1] a single public importCorpus(...) entrypoint (lib export + CLI bin) runs parse->ingest->dataset-build end to end and persists components+use-cases+links recoverable after reopen — the FEAT-007 public registry-write entrypoint
+- [import-script.2] importCorpus folds in SKILL.md import: each skill -> a process/invocation PROMPT_COMPONENT recoverable after reopen
+- [import-script.3] the LLM methodology is captured as a replayable record so a re-run reproduces the dataset deterministically offline (first pass LLM-driven, replay deterministic)
 
 ---
 
@@ -29,6 +50,29 @@ mutates:    ["packages/ai/agent-registry-migration/src/import/import-corpus.ts",
 
 ---
 
+## References & interfaces
+
+- [def:import] — `importCorpus(...)`, the public registry-write entrypoint (`_shared.md`).
+- [fix:store-usage] — write rows via the published `@adhd/agent-registry` stores (`_shared.md`).
+- [def:retire] / skills behavior — SKILL.md → process/invocation component (`_shared.md`).
+- [inv:reopen-proves-persistence] — prove persistence by REOPEN (`_shared.md`).
+
+---
+
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+- **One public entrypoint closes FEAT-007.** `importCorpus` must be a real exported
+  function AND a CLI bin (`bin` in package.json) — the public registry-write door
+  CLOSEOUT.md §5 / DEMO.md §6 said was missing. File the FEAT-007 closure note in
+  `packages/ai/agent-mcp/BACKLOG.md` when this lands.
+- **Replay, not re-pay.** Capture the sonnet-consolidated artifact as a checked-in
+  record; `importCorpus --replay` reproduces the dataset deterministically with no
+  model call (this is what runs in CI). A fresh `importCorpus --live` re-runs the
+  LLM stages (gated, `corpus-ingest-llm`). Prove the replay path is deterministic by
+  running it twice and deep-equalling the read-back rows.
+- **Skills fold in here** — reuse the `process`/`invocation` typing; do not split
+  skills into a separate state (the old `skills-migration` state was merged into
+  this entrypoint).
+- **Reopen proves persistence** (`[inv:reopen-proves-persistence]`); trust exit
+  codes (project memory: better-sqlite3 vitest teardown segfault).
+- Append exports to `src/index.ts` (append-only barrel).
