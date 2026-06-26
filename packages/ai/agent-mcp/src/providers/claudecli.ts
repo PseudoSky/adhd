@@ -135,9 +135,25 @@ function buildUserMessage(messages: Message[]): string {
 
 /**
  * Complete list of Claude Code built-in tool names (as of Claude Code 1.x).
- * All of these are disallowed by default for claudecli agents; only tools
- * listed in the agent's `allowedBuiltinTools` are permitted. MCP tools
- * (loaded via --mcp-config) are unaffected by this list.
+ *
+ * All of these are disallowed by default for claudecli agents. The permitted
+ * set is resolved from one of two sources in priority order:
+ *
+ *   1. compiledTools (AGENT_TOOL model) — the platform-alias array produced by
+ *      `compileAgent({ platform: "claude_code" }).tools` via @adhd/agent-compiler.
+ *      This is the strategic source of truth: each string is a `TOOL_PLATFORM_BINDING`
+ *      alias for the `claude_code` platform, derived from AGENT_TOOL grants in the
+ *      registry. When compiledTools is supplied to the constructor, it is used as
+ *      the allowed set and config.allowedBuiltinTools is ignored.
+ *
+ *   2. config.allowedBuiltinTools — the per-agent legacy allowlist (still honoured
+ *      when no compiled tool set is available, e.g. during the transition window
+ *      before compiler-integration lands).
+ *
+ * [inv:no-third-tool-model] — claudecli must NOT maintain an independent third
+ * tool-permission list separate from AGENT_TOOL / compiled.tools.
+ *
+ * MCP tools (loaded via --mcp-config) are unaffected by this list.
  */
 const CLAUDE_CODE_BUILTIN_TOOLS = [
     "Bash",
@@ -162,10 +178,26 @@ const CLAUDE_CODE_BUILTIN_TOOLS = [
 export class ClaudeCliProvider implements LLMProvider {
     private readonly config: ClaudeCliConfig;
     private readonly mcpServers: Record<string, McpServerConfig>;
+    /**
+     * Platform-alias tool list derived from the AGENT_TOOL / compiled.tools model.
+     *
+     * When supplied (via `compileAgent({ platform: "claude_code" }).tools`), this
+     * array is the single source of truth for which Claude Code built-ins are
+     * permitted — config.allowedBuiltinTools is ignored. When absent, the provider
+     * falls back to config.allowedBuiltinTools (legacy / transition-window path).
+     *
+     * [inv:no-third-tool-model] — one tool-permission source, not two.
+     */
+    private readonly compiledTools: string[] | undefined;
 
-    constructor(config: ClaudeCliConfig, mcpServers: Record<string, McpServerConfig> = {}) {
+    constructor(
+        config: ClaudeCliConfig,
+        mcpServers: Record<string, McpServerConfig> = {},
+        compiledTools?: string[]
+    ) {
         this.config = config;
         this.mcpServers = mcpServers;
+        this.compiledTools = compiledTools;
     }
 
     /**
@@ -258,8 +290,20 @@ export class ClaudeCliProvider implements LLMProvider {
         const mcpConfigPath = await this.writeMcpConfigFile();
 
         // Compute the disallowed built-in list: everything in CLAUDE_CODE_BUILTIN_TOOLS
-        // that is NOT listed in the agent's allowedBuiltinTools allowlist.
-        const allowed = new Set(this.config.allowedBuiltinTools ?? []);
+        // that is NOT in the effective allowed set.
+        //
+        // Source of truth priority ([inv:no-third-tool-model]):
+        //   1. compiledTools (AGENT_TOOL model) — string[] from compileAgent().tools
+        //      for the claude_code platform; set at construction time.
+        //   2. config.allowedBuiltinTools — legacy per-agent allowlist (fallback).
+        //
+        // This ensures claudecli's built-in gating derives from the compiled
+        // AGENT_TOOL model, not from an independent third tool-permission list.
+        const effectiveAllowedBuiltins =
+            this.compiledTools !== undefined
+                ? this.compiledTools              // AGENT_TOOL / compiled.tools model wins
+                : (this.config.allowedBuiltinTools ?? []);
+        const allowed = new Set(effectiveAllowedBuiltins);
         const disallowed = CLAUDE_CODE_BUILTIN_TOOLS.filter(t => !allowed.has(t));
 
         const args: string[] = [

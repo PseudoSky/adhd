@@ -64,8 +64,17 @@ const claudecliProviderSchema = z.object({
   timeoutMs: z.number().int().positive().optional(),
   /**
    * Claude Code built-in tool names that are permitted in the subprocess.
-   * All built-ins not listed here are passed to --disallowedTools.
-   * MCP tools (from mcpServers) are always available regardless of this list.
+   *
+   * This is the LEGACY / transition-window allowlist. When ClaudeCliProvider is
+   * constructed with a `compiledTools` array derived from the AGENT_TOOL registry
+   * model (`compileAgent({ platform: "claude_code" }).tools`), this field is
+   * superseded — the compiled tool list is the single source of truth.
+   *
+   * [inv:no-third-tool-model]: do NOT use this field as a competing third
+   * tool-permission model alongside AGENT_TOOL / compiled.tools.
+   *
+   * All built-ins not in the effective allowed set are passed to --disallowedTools.
+   * MCP tools (from mcpServers) are always available regardless of this field.
    * Omit the field (or pass []) to block all built-ins.
    */
   allowedBuiltinTools: z.array(z.string()).optional(),

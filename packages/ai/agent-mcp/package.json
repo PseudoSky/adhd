@@ -29,6 +29,7 @@
   "dependencies": {
     "@adhd/agent-compiler": "*",
     "@adhd/agent-mcp-types": "*",
+    "@adhd/agent-policy": "*",
     "@anthropic-ai/sdk": "0.96.0",
     "@modelcontextprotocol/sdk": "1.29.0",
     "better-sqlite3": "12.10.0",
