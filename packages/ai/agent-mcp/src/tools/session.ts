@@ -72,6 +72,10 @@ export async function agentTool(
     let composedPromptId: string | undefined;
 
     if (deps.promptResolver) {
+        // resolveComposedPrompt returns null when the agent has no registry
+        // composition (flat-systemPrompt compat fallback path).  In that case
+        // resolvedSystemPrompt / composedPromptId remain undefined and the
+        // session is created from the stored agentDefinition.systemPrompt below.
         const resolved = resolveComposedPrompt(
             {
                 agentSlug: input.name,
@@ -80,8 +84,10 @@ export async function agentTool(
             },
             deps.promptResolver
         );
-        resolvedSystemPrompt = resolved.content;
-        composedPromptId = resolved.id;
+        if (resolved !== null) {
+            resolvedSystemPrompt = resolved.content;
+            composedPromptId = resolved.id;
+        }
     }
 
     // Build the agent definition snapshot: if we resolved a system-prompt via
