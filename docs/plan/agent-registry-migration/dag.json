@@ -88,27 +88,11 @@
       "context": "contexts/import-pipeline.md",
       "notes": ""
     },
-    "skills-migration": {
-      "kind": "work",
-      "phase": "import",
-      "depends_on": [
-        "import-pipeline"
-      ],
-      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/skills-migration.test.ts",
-      "artifacts": [
-        "packages/ai/agent-registry-migration/src/import/import-skill.ts",
-        "packages/ai/agent-registry-migration/src/index.ts",
-        "packages/ai/agent-registry-migration/src/__tests__/skills-migration.test.ts"
-      ],
-      "context": "contexts/skills-migration.md",
-      "notes": ""
-    },
     "roundtrip-equivalence-gate": {
       "kind": "work",
       "phase": "verify",
       "depends_on": [
-        "import-pipeline",
-        "skills-migration"
+        "import-pipeline"
       ],
       "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts",
       "artifacts": [
