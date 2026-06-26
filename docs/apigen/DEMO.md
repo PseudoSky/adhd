@@ -198,8 +198,36 @@ python3 -m apigen_python.gateway_adapter --module myapi.py --namespace py
 The Python host encodes the **same canonical wire** as TypeScript. A `Decimal("123.456")` produces the
 *identical bytes* on both — proven by a cross-language conformance suite that fails if any host drifts.
 
-> **Goal — polyglot, one wire.** A type means the same thing in every language. This is what makes a
-> mixed TS/Python (later Rust/Go/Java) API actually safe, not just superficially connected.
+#### See it for yourself — every framework at once, one command
+
+`apigen serve` mounts many sources and languages behind a single port: `.ts` → Fastify, `.py` → Flask, and
+`--mount` pins a namespace to any framework — including **gRPC over HTTP/2 on the same port**:
+
+```bash
+apigen serve \
+  --source money.ts --source orders.ts \      # TypeScript → api-fastify / api-express
+  --source billing.py --source ledger.py \    # Python     → py-flask / py-grpc
+  --port 8080 --mount orders=api-express --mount ledger=py-grpc
+```
+
+One health view across all four hosts, and the **same canonical wire off every one** — a `Decimal` is the
+JSON string `"123.456"` whether it came from Fastify, Express, Flask, or gRPC:
+
+```
+GET  /_meta/health         → {"status":"ok","hosts":{"money":"ready","orders":"ready","billing":"ready","ledger":"ready"}}
+POST /money/price    (Fastify)  "123.456"          → "123.456"
+POST /orders/big     (Express)  "9007199254740993" → "9007199254740993"    # 64-bit, exact past 2^53
+POST /billing/invoice (Flask)   "99.99"            → "99.99"
+gRPC ledger/balance  (gRPC)     "123.456"          → {"data":"\"123.456\""}  # same Decimal, over HTTP/2
+```
+
+Kill one host and the front degrades to `503` for that namespace while the rest keep serving; one `SIGINT`
+reaps every child with zero orphans. **The whole thing is a runnable, asserted demo** —
+[`demo-logical-types.sh`](./demo-logical-types.sh) (`bash docs/apigen/demo-logical-types.sh` → `PASS=11 FAIL=0`);
+every line is an exact-output check, so it fails loudly if any host ever drifts.
+
+> **Goal — polyglot, one wire.** A type means the same thing in every language *and every framework*. This is
+> what makes a mixed TS/Python (later Rust/Go/Java) API actually safe, not just superficially connected.
 
 ### Two correctness guarantees worth knowing
 
@@ -336,15 +364,21 @@ cd dist-api && npm install && npx tsx routes.ts
 | ajv-formats validation of rich values | logical-types | Malformed rich values rejected |
 | Fail-fast (0 functions / missing optional lib) | logical-types | Actionable startup errors, not crashes |
 | Host generator + "no empty cells" runbook | logical-types | Adding a language is bounded & enforced |
-| `apigen serve` (many sources/langs, one front) | multi-host-serve *(planned)* | The whole polyglot app from one command |
-| Native `py-flask` / `py-grpc` targets | multi-host-serve *(planned)* | Idiomatic per-language servers |
-| Gateway prefix-mount + pass-through | multi-host-serve *(planned)* | Compose independent services robustly |
+| `apigen serve` (many sources/langs, one front) | multi-host-serve ✅ shipped | The whole polyglot app from one command — Fastify + Express + Flask + gRPC at once |
+| Native `py-flask` / `py-grpc` targets | multi-host-serve ✅ shipped | Idiomatic per-language servers; gRPC over HTTP/2 muxed on the same port |
+| Gateway prefix-mount + pass-through | multi-host-serve ✅ shipped | Compose independent services; per-host health + partial-availability 503 |
 
 ---
 
 ## Status (honest)
 
-Most of the above runs today (Parts 1–7 core). A few items are in progress and worth knowing before you
-rely on them: validation and `--use health` enforce in-process but are **not yet wired into the live
-`apigen run` HTTP path**; `readonly T[]` currently loses its element type; and `apigen serve` /
-`py-flask` / `py-grpc` are the next milestone. These are tracked in the project backlog.
+All of the above runs today, end-to-end, against the real built CLI. Recently landed and verified by use:
+validation + `--use health` are wired into the live `apigen run` HTTP path; `readonly T[]` keeps its element
+type; logical-type fidelity holds at any nesting depth (Map/Set/tuple included); and **`apigen serve` +
+`py-flask` + `py-grpc` are shipped** — all four frameworks mount behind one port with byte-identical canonical
+wire (the api-fastify response envelope was just brought into line with py-flask, BUG-APIGEN-015). The
+runnable [`demo-logical-types.sh`](./demo-logical-types.sh) asserts the whole thing (`PASS=11 FAIL=0`).
+
+Genuinely still ahead (tracked in the backlog): **Rust / Go / Java** host languages (designed in the wire
+contract, only TS + Python implemented today); a real test for the `apigen-schema` stub; and a dedicated
+cross-host *response-envelope* conformance assertion (the guard that would have caught BUG-APIGEN-015 earlier).

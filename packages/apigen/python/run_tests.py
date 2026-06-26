@@ -901,7 +901,7 @@ def run_echo_roundtrip(results: _Results) -> None:
 
 
 # ---------------------------------------------------------------------------
-# E. Flask server live tests (gated behind APIGEN_PYFLASK_LIVE=1)
+# E. Flask server live tests (run unconditionally — gate removed 2026-06-26)
 #
 # Drives the REAL flask_server subprocess with real HTTP, proving:
 #   1. GET /_meta/health → 200 {"status":"ok","host":...}
@@ -1315,7 +1315,7 @@ def run_extractor_pollution_tests(results: _Results) -> None:
 
 
 # ---------------------------------------------------------------------------
-# H. CLI-spawned Decimal decode live tests (gated behind APIGEN_PYFLASK_LIVE=1)
+# H. CLI-spawned Decimal decode live tests (run unconditionally — gate removed 2026-06-26)
 #
 # Drives the REAL flask_server subprocess with the decimal_api.py fixture
 # (which uses native Decimal/datetime type hints).  Proves:
@@ -1785,7 +1785,7 @@ def run_future_annotations_tests(results: _Results) -> None:
 
 
 # ---------------------------------------------------------------------------
-# I. gRPC server live tests (gated behind APIGEN_PYGRPC_LIVE=1)
+# I. gRPC server live tests (run unconditionally — gate removed 2026-06-26)
 #
 # Drives the REAL grpc_server subprocess with a real gRPC client (grpcurl).
 # Proves:

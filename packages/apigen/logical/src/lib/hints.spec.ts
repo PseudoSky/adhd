@@ -156,8 +156,11 @@ describe('assertNoEmptyCells — negative control', () => {
     }
   });
 
-  it('DOES throw when a language column is missing a cell (incomplete column)', () => {
-    // Build a deliberately-incomplete column: all ids except 'decimal'.
+  it('DOES throw when a language column is missing a cell (drives the REAL assertNoEmptyCells)', () => {
+    // DEBT-LT-007: build a deliberately-incomplete column (all ids except
+    // 'decimal') and pass it as the _tableOverride to drive the PRODUCTION
+    // assertNoEmptyCells throw path. The prior test reimplemented checkTable
+    // inline and never called the production function.
     const incomplete: Partial<LanguageTable> = {};
     for (const id of CANONICAL_LOGICAL_TYPE_IDS) {
       if (id !== 'decimal') {
@@ -168,33 +171,68 @@ describe('assertNoEmptyCells — negative control', () => {
         };
       }
     }
-    // Temporarily override TEMPLATE_CELLS for the synthetic language to
-    // prove the guard fires.  We do this by calling the internal check
-    // directly with a patched table rather than monkey-patching the frozen
-    // export — extract the logic inline to keep the test deterministic.
-    //
-    // Instead, we call the exported function with a real language that we
-    // know is complete but then verify the path by verifying the thrown
-    // message contains the expected id.
-    //
-    // The direct + clean approach: build a custom assertor over the partial
-    // table and confirm the contract holds for the production columns.
 
-    // Confirm the production call succeeds — the guard is live.
-    expect(() => assertNoEmptyCells('typescript')).not.toThrow();
-
-    // Confirm the guard identifies a missing cell when we simulate a broken
-    // table by testing the underlying iteration logic.  We verify this by
-    // checking that CANONICAL_LOGICAL_TYPE_IDS covers the id that would be
-    // missing — meaning any dropped id is caught.
-    const syntheticMissing = CANONICAL_LOGICAL_TYPE_IDS.filter(
-      (id) => !(id in incomplete),
+    // The PRODUCTION assertNoEmptyCells must throw for the incomplete column.
+    expect(() => assertNoEmptyCells('typescript', incomplete)).toThrow(
+      /missing cells for:.*decimal/,
     );
-    expect(syntheticMissing).toContain('decimal');
-    expect(syntheticMissing.length).toBe(1);
+
+    // Negative control: a COMPLETE table must NOT throw — the guard only fires
+    // when a cell is genuinely absent. If this assertion fails, the guard is
+    // broken (false positives on valid columns).
+    const complete: Partial<LanguageTable> = {};
+    for (const id of CANONICAL_LOGICAL_TYPE_IDS) {
+      complete[id as keyof LanguageTable] = {
+        encode: 'dummy_encode($)',
+        decode: 'dummy_decode($)',
+        mode: 'native',
+      };
+    }
+    expect(() => assertNoEmptyCells('typescript', complete)).not.toThrow();
   });
 
-  it('thrown error message names the missing ids (proves the check has teeth)', () => {
+  it('thrown error message names EVERY missing id (multiple-missing teeth)', () => {
+    // Build a column missing 'byte' and 'uuid' — both must appear in the message.
+    const missingTwo: Partial<LanguageTable> = {};
+    for (const id of CANONICAL_LOGICAL_TYPE_IDS) {
+      if (id !== 'byte' && id !== 'uuid') {
+        missingTwo[id as keyof LanguageTable] = {
+          encode: 'x',
+          decode: 'x',
+          mode: 'native',
+        };
+      }
+    }
+
+    // Drive the PRODUCTION assertNoEmptyCells — it must name both missing ids.
+    expect(() => assertNoEmptyCells('typescript', missingTwo)).toThrowError(/byte/);
+    expect(() => assertNoEmptyCells('typescript', missingTwo)).toThrowError(/uuid/);
+
+    // Negative control: a complete table must NOT throw.
+    const complete: Partial<LanguageTable> = {};
+    for (const id of CANONICAL_LOGICAL_TYPE_IDS) {
+      complete[id as keyof LanguageTable] = {
+        encode: 'x',
+        decode: 'x',
+        mode: 'native',
+      };
+    }
+    expect(() => assertNoEmptyCells('typescript', complete)).not.toThrow();
+  });
+
+  // Legacy: old test that reimplemented checkTable inline (kept as a
+  // commented example of what NOT to do — DEBT-LT-007 fixed it above).
+  it('(backward compat) production assertNoEmptyCells succeeds for all scaffolded languages', () => {
+    // Simple smoke-test that confirms the guard passes for all real columns.
+    for (const lang of ALL_LANGUAGES) {
+      expect(
+        () => assertNoEmptyCells(lang),
+        `assertNoEmptyCells("${lang}") must not throw — column is complete`,
+      ).not.toThrow();
+    }
+  });
+
+  it('_LEGACY_thrown error message names the missing ids (proves the check has teeth)', () => {
     // Build a custom completeness check over an incomplete synthetic table
     // to verify the error message contract without monkey-patching frozen exports.
     function checkTable(table: Partial<LanguageTable>): void {

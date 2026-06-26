@@ -358,6 +358,91 @@ describe('registerWellKnown', () => {
 });
 
 // ---------------------------------------------------------------------------
+// DEBT-LT-001 — date-time strict-mode invalid date string must throw
+// ---------------------------------------------------------------------------
+
+describe('DEBT-LT-001 — date-time codec: strict-mode invalid-date guard', () => {
+  const schema = { type: 'string', format: 'date-time' } as SchemaNode;
+  const strictCtx = makeCtx({ mode: 'strict' });
+  const lossyCtx = makeCtx({ mode: 'lossy' });
+  const codec = frozenRegistry.get('date-time') as LogicalTypeCodec;
+
+  it('decode("not-a-date") THROWS in strict mode (DEBT-LT-001 teeth)', () => {
+    // Before the fix: returned an Invalid Date (getTime()===NaN) silently.
+    // After the fix: throws TypeError.  Reverting the NaN guard turns this red.
+    expect(() => codec.decode('not-a-date', schema, strictCtx)).toThrow(TypeError);
+  });
+
+  it('decode("not-a-date") throws with an informative message', () => {
+    expect(() => codec.decode('not-a-date', schema, strictCtx)).toThrow(/invalid date-time string/);
+  });
+
+  it('decode("not-a-date") does NOT throw in lossy mode (falls through to Invalid Date)', () => {
+    // Lossy mode does not validate — callers opted in to best-effort decoding.
+    const result = codec.decode('not-a-date', schema, lossyCtx);
+    expect(result).toBeInstanceOf(Date);
+    // The date is invalid but we do not throw.
+    expect(Number.isNaN(result.getTime())).toBe(true);
+  });
+
+  it('decode of a valid ISO string succeeds in strict mode', () => {
+    const d = codec.decode('2024-01-15T12:34:56.789Z', schema, strictCtx);
+    expect(d).toBeInstanceOf(Date);
+    expect(d.getTime()).toBe(1705322096789);
+  });
+
+  it('negative control: the fix is necessary — without the guard the lossy path returns Invalid Date', () => {
+    // Confirm that `new Date("not-a-date").getTime()` IS NaN — which is exactly
+    // the silent bug DEBT-LT-001 fixed. If this ever fails, something changed
+    // in the JS runtime's Date parsing and the fix should be re-evaluated.
+    expect(Number.isNaN(new Date('not-a-date').getTime())).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DEBT-LT-002 — int64 lossy-decode of a non-numeric string must not throw
+// ---------------------------------------------------------------------------
+
+describe('DEBT-LT-002 — int64 codec: lossy non-numeric string handling', () => {
+  const schema = { type: 'string', format: 'int64' } as SchemaNode;
+  const strictCtx = makeCtx({ mode: 'strict' });
+  const lossyCtx = makeCtx({ mode: 'lossy' });
+  const codec = frozenRegistry.get('int64') as LogicalTypeCodec;
+
+  it('decode("abc") THROWS SyntaxError in strict mode (expected — non-numeric string is invalid)', () => {
+    // Strict mode: the wire must be a valid decimal-integer string.
+    expect(() => codec.decode('abc', schema, strictCtx)).toThrow();
+  });
+
+  it('decode("abc") does NOT throw an uncaught SyntaxError in lossy mode (DEBT-LT-002 teeth)', () => {
+    // Before the fix: BigInt('abc') threw an uncaught SyntaxError in lossy mode.
+    // After the fix: returns 0n (graceful fallback). Reverting the fix turns this red.
+    expect(() => codec.decode('abc', schema, lossyCtx)).not.toThrow();
+    expect(codec.decode('abc', schema, lossyCtx)).toBe(BigInt(0));
+  });
+
+  it('decode("3.14") in lossy mode returns 0n (non-integer string graceful fallback)', () => {
+    // "3.14" is not a decimal-integer string, so regex guard rejects it.
+    expect(() => codec.decode('3.14', schema, lossyCtx)).not.toThrow();
+    const result = codec.decode('3.14', schema, lossyCtx);
+    expect(result).toBe(BigInt(0));
+  });
+
+  it('decode("42") in lossy mode returns 42n (valid decimal-integer string)', () => {
+    expect(codec.decode('42', schema, lossyCtx)).toBe(BigInt(42));
+  });
+
+  it('decode("-9007199254740993") in lossy mode returns exact bigint (no precision loss)', () => {
+    const result = codec.decode('-9007199254740993', schema, lossyCtx);
+    expect(result).toBe(BigInt('-9007199254740993'));
+  });
+
+  it('decode valid string succeeds in strict mode', () => {
+    expect(codec.decode('9007199254740993', schema, strictCtx)).toBe(BigInt('9007199254740993'));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Individual codec unit tests (edge cases not covered by vectors)
 // ---------------------------------------------------------------------------
 
