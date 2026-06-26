@@ -24,13 +24,6 @@
       "start_ref": null,
       "end_ref": null
     },
-    "body-section-splitter": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
-    },
     "roundtrip-equivalence-gate": {
       "status": "pending",
       "started_at": null,
