@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import "dotenv/config";
+import os from "node:os";
+import path from "node:path";
 
 /** Default max_tokens for providers that do not set maxTokens in their config. */
 export const AGENT_MCP_DEFAULT_MAX_TOKENS = parseInt(
@@ -84,10 +86,27 @@ export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolv
         return undefined;
     }
 
-    logger.info({ registryDbPath }, "Opening registry DB for compiler integration");
-    const registrySqlite = new Database(registryDbPath);
-    registrySqlite.pragma("journal_mode = WAL");
-    registrySqlite.pragma("foreign_keys = ON");
+    // Graceful degradation: the registry DB at the default path
+    // (~/.adhd/agent-mcp/registry.db) will be absent or unmigrated until Plan 7
+    // imports the corpus.  Opening a nonexistent directory throws; an empty /
+    // unmigrated DB produces empty tables that cause compileAgent to throw, which
+    // resolveComposedPrompt already catches and converts to a null (flat-prompt
+    // fallback).  We catch the open failure here so the server still starts and
+    // every flat-systemPrompt agent continues to work unchanged.
+    let registrySqlite: Database.Database;
+    try {
+        logger.info({ registryDbPath }, "Opening registry DB for compiler integration");
+        registrySqlite = new Database(registryDbPath, { fileMustExist: true });
+        registrySqlite.pragma("journal_mode = WAL");
+        registrySqlite.pragma("foreign_keys = ON");
+    } catch (err) {
+        logger.info(
+            { registryDbPath, err },
+            "Registry DB not available — falling back to flat systemPrompt for all agents"
+        );
+        return undefined;
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const registryDb = drizzle(registrySqlite) as any;
 
@@ -192,8 +211,15 @@ async function main() {
     // resolveComposedPrompt returns null and agentTool uses the flat
     // systemPrompt.  A mixed deployment (some registry-backed, some flat) works
     // without any per-agent configuration.
+    // Registry resolver is ON by default.  The default path
+    // (~/.adhd/agent-mcp/registry.db) is the coupling point that Plan 7's corpus
+    // import must write to.  buildPromptResolver degrades gracefully when the file
+    // is absent (directory not yet created) or unmigrated (empty tables) — it logs
+    // an info message and returns undefined so every flat-systemPrompt agent still
+    // runs unchanged.
     const promptResolver = buildPromptResolver({
-        registryDbPath: process.env["AGENT_MCP_REGISTRY_DB_PATH"],
+        registryDbPath: process.env["AGENT_MCP_REGISTRY_DB_PATH"]
+            ?? path.join(os.homedir(), ".adhd", "agent-mcp", "registry.db"),
         agentMcpDb: dbAny,
     });
 
