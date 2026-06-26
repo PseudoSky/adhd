@@ -30,6 +30,14 @@ export const dateTimeCodec: LogicalTypeCodec<Date> = {
       }
       return new Date(String(wire));
     }
+    // DEBT-LT-001: validate the date string before constructing. An invalid
+    // date string like "not-a-date" yields Invalid Date (NaN epochMs), which
+    // silently violates the "validate-then-construct" contract (contracts.ts:37).
+    if (ctx.mode === 'strict' && Number.isNaN(new Date(wire).getTime())) {
+      throw new TypeError(
+        `[date-time] invalid date-time string at "${ctx.path}": ${JSON.stringify(wire)}`,
+      );
+    }
     return new Date(wire);
   },
 };

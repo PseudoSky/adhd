@@ -439,6 +439,11 @@ function escapePointerToken(token: string): string {
  * Keyed by the {@link LogicalTypeId} a scalar codec registers under (its JSON
  * Schema `format`).
  */
+// DEBT-LT-004: the table previously contained `bigint` and `bytes` as
+// aliases alongside the canonical ids `int64`/`byte`. These aliases do not
+// correspond to any registered codec id — iterating the table keys would see
+// 5 entries instead of the 4 canonical ids (`CANONICAL_LOGICAL_TYPE_IDS`
+// has 4 scalar entries). Removed. Canonical keys only.
 export const TS_TEMPLATE_TABLE: TemplateTable = Object.freeze({
   'date-time': {
     encode: '$.toISOString()',
@@ -450,17 +455,7 @@ export const TS_TEMPLATE_TABLE: TemplateTable = Object.freeze({
     decode: 'BigInt($)',
     mode: 'native',
   },
-  bigint: {
-    encode: 'String($)',
-    decode: 'BigInt($)',
-    mode: 'native',
-  },
   byte: {
-    encode: "Buffer.from($).toString('base64')",
-    decode: "new Uint8Array(Buffer.from($, 'base64'))",
-    mode: 'native',
-  },
-  bytes: {
     encode: "Buffer.from($).toString('base64')",
     decode: "new Uint8Array(Buffer.from($, 'base64'))",
     mode: 'native',

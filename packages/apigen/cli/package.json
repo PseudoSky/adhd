@@ -26,6 +26,7 @@
     "@adhd/apigen-plugin-py-grpc": "^0.1.0",
     "@adhd/apigen-plugin-health": "^0.1.1",
     "@adhd/apigen-plugin-logger": "^0.1.1",
+    "@adhd/apigen-logical": "^0.0.1",
     "@adhd/apigen-naming": "^0.1.1",
     "decimal.js": "^10.4.3"
   },

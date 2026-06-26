@@ -421,10 +421,20 @@ export function tsDepMap(): Readonly<Record<string, { name: string; version: str
  * canonical id is missing — enforces: add a logical type → every declared
  * language column must fill it or this guard fires.
  *
+ * The optional `_tableOverride` parameter exists ONLY for test injection
+ * (DEBT-LT-007): it lets a test drive the production throw path against a
+ * simulated incomplete column WITHOUT monkey-patching the frozen TEMPLATE_CELLS.
+ * Production callers must never pass it — the default (reading from
+ * TEMPLATE_CELLS) is always correct for production use.
+ *
  * @throws {Error} With the missing ids listed, if any canonical id lacks a cell.
  */
-export function assertNoEmptyCells(language: HostLanguage): void {
-  const column = TEMPLATE_CELLS[language];
+export function assertNoEmptyCells(
+  language: HostLanguage,
+  _tableOverride?: Partial<LanguageTable>,
+): void {
+  const column: Partial<LanguageTable> =
+    _tableOverride ?? TEMPLATE_CELLS[language];
   const missing: string[] = [];
   for (const id of CANONICAL_LOGICAL_TYPE_IDS) {
     if (!column[id as CanonicalLogicalTypeId]) {

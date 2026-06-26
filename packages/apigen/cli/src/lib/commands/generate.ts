@@ -11,32 +11,15 @@ import {
 } from '../orchestrator'
 import type { ExportMode, OutputPlugin, PluginInput, ComposedSchemas } from '@adhd/apigen-core'
 import { emitResolutionScaffolding } from '../scaffold'
+// DEBT-LT-005: replaced the inline TS_LOGICAL_TYPE_DEP_MAP duplicate with the
+// authoritative source from @adhd/apigen-logical. tsDepMap() derives the map
+// from the same TemplateCell.dep fields that are the single source of truth
+// (hints.ts §14.1), so future type additions stay consistent automatically.
+import { tsDepMap } from '@adhd/apigen-logical'
 
 // ---------------------------------------------------------------------------
 // Per-surface minimal dependency manifest (DESIGN §14.1, BUG-APIGEN-002)
 // ---------------------------------------------------------------------------
-
-/**
- * TypeScript logical-type → npm dependency map.
- *
- * Keyed by the JSON-Schema `format` value that signals the logical type.
- * Only non-stdlib / non-branded types carry a dep entry; all others are
- * zero-dep (stdlib BigInt, Buffer, etc.) or branded strings.
- *
- * DESIGN §13.2 TS column:
- *   decimal  → decimal.js ^10  (the only non-stdlib TS scalar dep)
- *   int64    → stdlib BigInt   (no dep)
- *   date-time→ stdlib Date     (no dep)
- *   byte     → stdlib Buffer   (no dep)
- *   uuid     → stdlib (branded string, no dep)
- *
- * Note: this is an inline map. When @adhd/apigen-logical ships a
- * TS_DEP_MAP export that carries the same data from the TemplateCell
- * `dep` fields, this inline copy should be replaced by that import.
- */
-export const TS_LOGICAL_TYPE_DEP_MAP: Readonly<Record<string, { name: string; version: string }>> = {
-  decimal: { name: 'decimal.js', version: '^10' },
-} as const
 
 /**
  * Recursively walk a JSON-Schema node (any depth) and collect every
@@ -86,8 +69,8 @@ export function collectFormats(
  * required to support the logical types actually used by its operations.
  *
  * Walks every input + output schema, unions their `format` annotations,
- * looks each up in {@link TS_LOGICAL_TYPE_DEP_MAP}, and returns a
- * `Record<name, version>` suitable for merging into `package.json`
+ * looks each up in the authoritative {@link tsDepMap} from `@adhd/apigen-logical`,
+ * and returns a `Record<name, version>` suitable for merging into `package.json`
  * `dependencies`.
  *
  * A surface with NO rich types returns an empty record (no `decimal.js`,
@@ -105,9 +88,10 @@ export function collectLogicalTypeDeps(
     for (const f of collectFormats(entry.output)) formats.add(f)
   }
 
+  const depMap = tsDepMap()
   const deps: Record<string, string> = {}
   for (const fmt of formats) {
-    const dep = TS_LOGICAL_TYPE_DEP_MAP[fmt]
+    const dep = depMap[fmt]
     if (dep) deps[dep.name] = dep.version
   }
   return deps

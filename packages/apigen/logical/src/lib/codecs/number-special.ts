@@ -45,12 +45,9 @@ export const numberSpecialCodec: LogicalTypeCodec<number> = {
     if (Number.isNaN(value)) return NAN_WIRE;
     if (value === Infinity) return INF_WIRE;
     if (value === -Infinity) return NEG_INF_WIRE;
-    // Finite number — return as a plain JSON number (Wire-safe).
-    if (ctx.mode === 'strict' && !Number.isFinite(value)) {
-      throw new TypeError(
-        `[number-special] non-finite non-special number at "${ctx.path}"`,
-      );
-    }
+    // DEBT-LT-003: the three guards above exhaust all non-finite IEEE 754
+    // values (NaN, +Inf, -Inf). A `!Number.isFinite` check here is unreachable
+    // because `Number.isFinite(value)` is always true at this point. Removed.
     return value;
   },
 
