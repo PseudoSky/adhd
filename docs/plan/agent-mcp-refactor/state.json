@@ -32,11 +32,11 @@
       "end_ref": "0012697896479b218ae0bbb96f2bf88c85ce77bf"
     },
     "policy-engine-bridge": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-26T05:25:45.051Z",
-      "done_at": null,
+      "done_at": "2026-06-26T05:34:01.871Z",
       "start_ref": "0cb875ab7751f561b709b0eb490c6c2387177216",
-      "end_ref": null
+      "end_ref": "cc6ddaa2407eeb3acaa690cc1512fc0ca586a2d5"
     },
     "audit-integration": {
       "status": "pending",
@@ -134,6 +134,18 @@
       "audit_criteria_total": 22,
       "by": "pseudosky",
       "note": "validation/agent.ts: systemPrompt z.string() → z.string().optional() with compat-shim JSDoc (grep_absent satisfied). domain.ts: AgentDefinition.systemPrompt: string → systemPrompt?: string with compat-shim JSDoc. agent-store.ts: JSDoc documents thin-cache role. agent-cache-store.test.ts: 8 tests prove create-without-prompt, compat-shim persistence, reopen invariant. Guard exit 0 (8/8). Full suite exit 0 (228 passed, 3 skipped, 26 files). nx build agent-mcp exit 0. Committed at 0012697. git status clean for packages/ai/agent-mcp + packages/ai/agent-mcp-types. BACKLOG.md: DEBT-006 added for server.ts USAGE_GUIDE doc refresh."
+    },
+    {
+      "ts": "2026-06-26T05:34:01.871Z",
+      "from": "policy-engine-bridge",
+      "to": "policy-engine-bridge",
+      "start_ref": "0cb875ab7751f561b709b0eb490c6c2387177216",
+      "end_ref": "cc6ddaa2407eeb3acaa690cc1512fc0ca586a2d5",
+      "audit_exit": 3,
+      "audit_criteria_passed": 16,
+      "audit_criteria_total": 19,
+      "by": "pseudosky",
+      "note": "Implemented: PolicyEngine.check() reads rate (max_recursion_depth/max_tool_loops) and permission (allowlist) limits from @adhd/agent-policy template rules when policyTemplateRules is supplied, falling back to PolicyConfig defaults when absent. ClaudeCliProvider reconciled: compiledTools (AGENT_TOOL model string[] from compileAgent({platform:claude_code}).tools) constructor param wins over config.allowedBuiltinTools when supplied [inv:no-third-tool-model]. validation/agent.ts claudecliProviderSchema allowedBuiltinTools doc updated to reference AGENT_TOOL model. Added @adhd/agent-policy to package.json deps. New test: 9 tests across 3 describe blocks prove template-limit override + fallback + per-agent precedence + compiled-tools/allowedBuiltinTools reconciliation with negative controls. Guard test: exit 0 (9/9). Full nx test agent-mcp: exit 0 (237 passed, 4 skipped, 27 files). nx build agent-mcp: exit 0. Committed at cc6ddaa."
     }
   ],
   "amendment_log": [],
@@ -142,7 +154,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "policy-engine-bridge",
+  "current_state": "code-review-integration",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:22:27.852Z",
     "by": "pseudosky",
