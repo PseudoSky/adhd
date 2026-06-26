@@ -67,10 +67,10 @@
       "end_ref": null
     },
     "code-review-integration": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-26T05:38:03.773Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "154d33ca954cdb2a262452bf2eb93ed4a49cd991",
       "end_ref": null
     }
   },
