@@ -66,9 +66,24 @@ export interface RunInput extends PluginInput {
   signal?: AbortSignal
 }
 
+/** Source-language tags understood by apigen's routing layer. */
+export type PluginLanguage = 'ts' | 'py' | 'rust' | 'go' | 'java'
+
 export interface OutputPlugin {
   id: string
   description: string
+  /**
+   * The source language this plugin consumes.
+   *
+   * Used by the `serve` command to route each source file to the plugin(s)
+   * whose `language` matches its extension (`.ts`/`.tsx`/`.mts`/`.cts` → `'ts'`,
+   * `.py` → `'py'`, etc.).
+   *
+   * Defaults to `'ts'` when omitted for backward-compatibility with plugins
+   * authored before this field was introduced.  All first-party plugins
+   * explicitly declare `language: 'ts'`.
+   */
+  language?: PluginLanguage
   optionsSchema?: Record<string, unknown>
   generate(input: PluginInput): PluginOutput | Promise<PluginOutput>
   run?(input: RunInput): Promise<void>

@@ -42,11 +42,14 @@ class HostRequest:
         data: dict[str, Any],
         envelope: dict[str, Any],
         transport: str,
+        pre_validated: bool = False,
     ) -> None:
         self.operation = operation          # full §4 Operation dict
         self.data = data                    # bare domain params (ctx excluded)
         self.envelope = envelope            # request side-channel (session, auth, …)
         self.transport = transport          # 'http' | 'grpc' | 'mcp' | 'cli'
+        self.pre_validated = pre_validated  # True when the transport layer already
+                                           # validated wire data before logical decode;
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +97,20 @@ class Runtime:
             validate(input_schema, data)
         except ValidationError as exc:
             raise ApiError("invalid_argument", f"input validation failed: {exc}") from exc
+
+    def _validate_input_if_needed(self, req: "HostRequest") -> None:
+        """Validate request input unless the transport already pre-validated it.
+
+        When a transport layer (e.g. flask_server) validates wire data BEFORE
+        logical-type decoding and marks the request as pre_validated=True, the
+        runtime skips its own re-validation.  This prevents decoded native
+        values (e.g. decimal.Decimal, datetime) from being re-validated against
+        the wire schema ({"type":"string","format":"decimal"}) and incorrectly
+        failing.
+        """
+        if req.pre_validated:
+            return
+        self._validate_input(req.operation, req.data)
 
     def _build_kwargs(self, fn: Any, data: dict[str, Any], envelope: dict[str, Any]) -> dict[str, Any]:
         """Build keyword-argument dict for the function from data + envelope.
@@ -177,7 +194,7 @@ class Runtime:
         """
         op = req.operation
         fn = self._resolve(op["id"])
-        self._validate_input(op, req.data)
+        self._validate_input_if_needed(req)
         kwargs = self._build_kwargs(fn, req.data, req.envelope)
 
         if inspect.iscoroutinefunction(fn) or inspect.isasyncgenfunction(fn):
@@ -203,7 +220,7 @@ class Runtime:
         """
         op = req.operation
         fn = self._resolve(op["id"])
-        self._validate_input(op, req.data)
+        self._validate_input_if_needed(req)
         kwargs = self._build_kwargs(fn, req.data, req.envelope)
 
         if inspect.iscoroutinefunction(fn) or inspect.isasyncgenfunction(fn):

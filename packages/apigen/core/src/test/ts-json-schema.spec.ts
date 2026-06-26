@@ -63,3 +63,54 @@ describe('lt-extract-scalars: built-in TS scalar → {type, format}', () => {
     expect(props?.['pattern']).toEqual({ type: 'string', format: 'regex' })
   })
 })
+
+/**
+ * BUG-APIGEN-011 — readonly T[] / ReadonlyArray<T> must preserve element type.
+ *
+ * Teeth test: if the `readonly ` prefix is NOT stripped before item-type resolution,
+ * morphFallback receives "readonly string" (after slicing "[]") which matches nothing
+ * and returns {}, so items would be {} and the test would fail.
+ */
+describe('BUG-APIGEN-011: readonly array element type is preserved', () => {
+  it('[readonly-array.string] readonly string[] param schema has items:{type:string} (not {})', async () => {
+    const result = await generateSchemas({ sourceFile: fixture('scalar-types.ts') })
+    const props = result.schemas['echoReadonlyStringArray']?.input?.properties as Record<string, unknown>
+    expect(props?.['xs']).toEqual({ type: 'array', items: { type: 'string' } })
+  })
+
+  it('[readonly-array.string.output] readonly string[] return type schema has items:{type:string}', async () => {
+    const result = await generateSchemas({ sourceFile: fixture('scalar-types.ts') })
+    const output = result.schemas['echoReadonlyStringArray']?.output
+    expect(output).toEqual({ type: 'array', items: { type: 'string' } })
+  })
+
+  it('[readonly-array.number] readonly number[] param schema has items:{type:number} (not {})', async () => {
+    const result = await generateSchemas({ sourceFile: fixture('scalar-types.ts') })
+    const props = result.schemas['echoReadonlyNumberArray']?.input?.properties as Record<string, unknown>
+    expect(props?.['xs']).toEqual({ type: 'array', items: { type: 'number' } })
+  })
+
+  it('[readonly-array.generic] ReadonlyArray<string> param schema has items:{type:string}', async () => {
+    const result = await generateSchemas({ sourceFile: fixture('scalar-types.ts') })
+    const props = result.schemas['echoReadonlyArrayGeneric']?.input?.properties as Record<string, unknown>
+    expect(props?.['xs']).toEqual({ type: 'array', items: { type: 'string' } })
+  })
+
+  it('[readonly-array.nested] readonly string[][] param schema has correct nested items', async () => {
+    const result = await generateSchemas({ sourceFile: fixture('scalar-types.ts') })
+    const props = result.schemas['echoNestedReadonlyArray']?.input?.properties as Record<string, unknown>
+    // "readonly string[][]" → after stripping readonly → "string[][]"
+    // morphFallback: ends with [] → items = morphFallback("string[]") = {type:array,items:{type:string}}
+    expect(props?.['xs']).toEqual({ type: 'array', items: { type: 'array', items: { type: 'string' } } })
+  })
+
+  it('[readonly-array.negative-control] plain number[] still yields items:{type:number}', async () => {
+    // Regression guard: ensure the fix does not break non-readonly arrays
+    const { buildSchema } = await import('../lib/schema-builders/ts-json-schema')
+    const { Project } = await import('ts-morph')
+    const p = new Project({ skipAddingFilesFromTsConfig: true })
+    const sf = p.createSourceFile('__ctrl.ts', 'export function f(xs: number[]): void {}', { overwrite: true })
+    const schema = await buildSchema(p, sf, 'number[]')
+    expect(schema).toEqual({ type: 'array', items: { type: 'number' } })
+  })
+})
