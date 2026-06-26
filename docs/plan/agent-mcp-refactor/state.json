@@ -32,10 +32,10 @@
       "end_ref": "0012697896479b218ae0bbb96f2bf88c85ce77bf"
     },
     "policy-engine-bridge": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-26T05:25:45.051Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "0cb875ab7751f561b709b0eb490c6c2387177216",
       "end_ref": null
     },
     "audit-integration": {
