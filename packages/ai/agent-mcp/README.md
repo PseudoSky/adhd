@@ -274,6 +274,32 @@ The agent's `mcpServers` are written to a temp file and passed via `--mcp-config
 { "type": "claudecli", "allowedBuiltinTools": ["WebFetch"] }
 ```
 
+**Header-driven tools (`systemPromptIsAgentSpec`):** If you'd rather let an agent's own
+markdown spec govern its tools, set `systemPromptIsAgentSpec: true` and make the agent's
+`systemPrompt` a complete Claude Code agent file — YAML frontmatter (`name`, `description`,
+`tools`, …) plus body:
+
+```json
+{ "type": "claudecli", "systemPromptIsAgentSpec": true }
+```
+
+```markdown
+---
+name: my-runner
+description: runs delegated tasks
+tools: Read, Grep, mcp__agent-mcp__task
+---
+You are a careful task runner…
+```
+
+In this mode the provider writes the spec to an isolated temp project dir and passes
+`--add-dir … --setting-sources project --agent <name>` instead of `--system-prompt` /
+`--disallowedTools`, so **Claude internally parses the `tools:` header** and that header
+governs tool access — taking precedence over `allowedBuiltinTools` (which is ignored).
+`--agent` matches the frontmatter `name:` (not the filename), and the working directory is
+preserved so `Bash`/`Read`/`Write` keep their root. Omit `tools:` to inherit all tools; list
+`mcp__<server>__<tool>` entries to expose specific MCP tools.
+
 > **Limitations:**
 > - No `temperature`, `maxTokens`, or `retryConfig` — those are not exposed by the CLI
 > - Per-tool-call hooks, policy enforcement (max tool loops, delegation checks), and task event logging do not fire for tool calls that happen inside the subprocess — only the final result is surfaced to the orchestrator

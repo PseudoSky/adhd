@@ -9,6 +9,24 @@ planning in [ROADMAP.md](./ROADMAP.md).
 
 ---
 
+## [Unreleased]
+
+### Added
+- **`claudecli` header-driven tools (`systemPromptIsAgentSpec`).** New optional
+  boolean on the `claudecli` provider config. When `true`, the agent's `systemPrompt`
+  is treated as a complete Claude Code agent markdown file (YAML frontmatter + body).
+  The provider writes it to an isolated temp project dir and invokes the subprocess with
+  `--add-dir <dir> --setting-sources project --agent <frontmatterName>` instead of
+  `--system-prompt` / `--disallowedTools`, so **Claude internally parses the spec's
+  `tools:` header** and that header governs tool access — taking precedence over the
+  built-in disallow enumeration (`allowedBuiltinTools` is ignored, with a warning if set).
+  `--agent` matches the frontmatter `name:` (not the filename) and cwd is preserved so
+  file/`Bash` tools keep their working root. Empirically verified against `claude`
+  v2.1.185 via the stream-json `init` event (advertised tool set exactly matches the
+  header). New field in `@adhd/agent-mcp-types`. Exposed helpers `extractAgentSpecName`
+  and `normalizeAgentSpec`. Covered by `src/__tests__/claudecli-spec-mode.test.ts`
+  (real subprocess against a fake `claude`; proven to fail when the feature is disabled).
+
 ## [1.1.3] — 2026-06-17
 
 ### Added

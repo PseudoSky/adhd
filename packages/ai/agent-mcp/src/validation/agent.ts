@@ -76,8 +76,15 @@ const claudecliProviderSchema = z.object({
    * All built-ins not in the effective allowed set are passed to --disallowedTools.
    * MCP tools (from mcpServers) are always available regardless of this field.
    * Omit the field (or pass []) to block all built-ins.
+   * Ignored when `systemPromptIsAgentSpec` is true.
    */
   allowedBuiltinTools: z.array(z.string()).optional(),
+  /**
+   * When true, treat `systemPrompt` as a Claude Code agent markdown file
+   * (frontmatter + body) and let Claude internally parse its `tools:` header,
+   * which then takes precedence over the built-in --disallowedTools enumeration.
+   */
+  systemPromptIsAgentSpec: z.boolean().optional(),
 });
 
 export const providerConfigSchema = z.discriminatedUnion("type", [
