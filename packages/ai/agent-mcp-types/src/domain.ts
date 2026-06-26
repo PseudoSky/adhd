@@ -132,7 +132,18 @@ export interface AgentDefinition {
   description?: string;
   version: number;
   provider: ProviderConfig;
-  systemPrompt: string;
+  /**
+   * COMPUTED COMPAT SHIM — never user-authored after Plan 6 wave 3 (agent-store-retire).
+   *
+   * Populated at session start from `compileAgent().content`. The `AgentStore`
+   * is now a thin compiled-agent cache; this field holds the resolved system
+   * prompt produced by the compiler/registry, not a user-supplied blob.
+   *
+   * Callers in `tools/task.ts` and `store/session-store.ts` read this field
+   * unchanged — they receive the compiler-resolved value set by
+   * `compiler-integration`, not an authored string.
+   */
+  systemPrompt?: string;
   mcpServers: Record<string, McpServerConfig>;
   permissions: AgentPermissions;
   maxToolLoops?: number;

@@ -383,6 +383,39 @@ anchor-backfill + Plan 8 discovery re-verify. Optionally add a stability metric
 
 ## 🔧 Tech Debt / Improvements
 
+### DEBT-006 — server.ts USAGE_GUIDE doc examples still show systemPrompt as required
+- **Status:** backlog
+- **Priority:** P3
+- **Area:** docs / server
+- **Reported:** 2026-06-26
+
+**Problem / Description** — `server.ts` contains USAGE_GUIDE inline-doc strings
+that show `agent_create` examples with `systemPrompt` as a required authoring
+field (e.g. `"systemPrompt": "You are a helpful assistant"`). After Plan 6 wave 3
+(`agent-store-retire`) the field is an optional computed compat shim populated from
+`compileAgent()` output — not user-authored. The USAGE_GUIDE examples should be
+updated to reflect this: either omit `systemPrompt` from the example payload or add
+a comment clarifying it is auto-populated from compiler output.
+
+**Impact** — Documentation only; no runtime regression. Callers passing
+`systemPrompt` in `agent_create` will still have it accepted (it is now
+`.optional()`, not removed), so backward-compatibility is intact. The misleading
+examples could confuse future integrators.
+
+**Proposed fix / Approach** — In `server.ts`, locate the `agent_create` USAGE_GUIDE
+JSON snippets and either (a) remove the `systemPrompt` key, or (b) replace it with
+a comment noting it is computed. `server.ts` is outside the `agent-store-retire`
+mutate reservation; this edit is owned by a doc-refresh pass after Plan 6 completes.
+
+**Acceptance criteria** — `server.ts` USAGE_GUIDE examples do not show
+`systemPrompt` as a required user-provided field.
+
+**References** — `packages/ai/agent-mcp/src/server.ts` (USAGE_GUIDE strings),
+`docs/plan/agent-mcp-refactor/contexts/agent-store-retire.md` (reservation note),
+`decisions.md` Decision 3.
+
+---
+
 ### DEBT-001 — Audit & harden against unhandled exceptions across the server
 - **Status:** done (in source; ships in the next publish) · **Closed:** 2026-06-16
 - **Priority:** P1
