@@ -41,6 +41,7 @@ Exits 0 when all checks in the phase pass; exits 1 with a failure summary otherw
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -72,6 +73,13 @@ def run(cmd: str):
 
 def check(check_id: str, description: str, cmd: str) -> CheckResult:
     """Run cmd; pass on exit 0. Signature matches gap-check.js 3-arg pattern."""
+    # F-P6-10 hardening: project.json sets passWithNoTests:true, so a
+    # `nx test --testFile=<missing>` exits 0 ("No test files found") — a GHOST
+    # PASS that would green an audit for a proof that does not exist. Require the
+    # test file to exist first, so a missing proof FAILS the criterion honestly.
+    _m = re.search(r"--testFile=(\S+)", cmd)
+    if _m and not cmd.lstrip().startswith("test -f"):
+        cmd = f"test -f {_m.group(1)} && {cmd}"
     code, out = run(cmd)
     return CheckResult(f"[{check_id}] {description}", code == 0, out if code != 0 else "")
 

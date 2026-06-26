@@ -1,1 +1,90 @@
-{}
+{
+  "drizzle-orm": {
+    "provenance": "vendored-source",
+    "resolved_version": "0.45.2",
+    "source": "node_modules/drizzle-orm/sqlite-core/index.d.ts",
+    "confidence": "vendored",
+    "interface": "sqliteTable(name, { col: text()|integer()|integer({mode:'boolean'})|text({mode:'json'}) }, t => ({ pk: primaryKey({columns:[...]}) })); drizzle(new Database(path), { schema }) -> BetterSQLite3Database",
+    "shape": {
+      "sqliteTable": "sqliteTable('registry_components', { slug: text('slug').primaryKey(), type: text('type').notNull().references(()=>promptTypesTable.slug), isShared: integer('is_shared',{mode:'boolean'}).notNull().default(false), createdAt: text('created_at').notNull() }, (t)=>({ typeIdx: index('registry_components_type_idx').on(t.type) }))",
+      "version_table": "sqliteTable('registry_component_versions', { versionId: integer('version_id').primaryKey({autoIncrement:true}), slug: text('slug').notNull().references(()=>componentsTable.slug), version: integer('version').notNull().default(1), content: text('content').notNull(), createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull() }, (t)=>({ slugVersionUq: uniqueIndex('registry_component_versions_slug_version_uq').on(t.slug,t.version), slugIdx: index(...).on(t.slug) }))",
+      "json_columns": "text(name, { mode: 'json' }) for context_condition / component_versions — serialized/deserialized by drizzle",
+      "composite_pk": "primaryKey({ columns: [agentSlug, componentSlug, position] }) inside the third table-callback arg",
+      "key_api_note": "Mirror packages/ai/agent-registry/src/db/schema.ts exactly for table + migration style. Use text PKs for lookup tables (NOT sql enums) so seed rows extend without a migration. Decision 5: registry_components (slug PK) split from registry_component_versions (version_id PK AUTOINCREMENT) so every in-package component reference is a DB-enforced FK."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "lookup-and-component-schema",
+      "agent-and-taxonomy-schema",
+      "composition-junction",
+      "usecase-and-context-rules",
+      "composed-prompt-cache",
+      "audit-schema"
+    ]
+  },
+  "better-sqlite3": {
+    "provenance": "vendored-source",
+    "resolved_version": "12.10.0",
+    "source": "node_modules/better-sqlite3/lib/index.d.ts",
+    "confidence": "vendored",
+    "interface": "new Database(path, opts?); db.pragma('journal_mode = WAL'); db.pragma('foreign_keys = ON'); db.close()",
+    "shape": {
+      "Database": "new Database(resolvedPath); sqlite.pragma('journal_mode = WAL'); sqlite.pragma('foreign_keys = ON') — see packages/ai/agent-registry/src/db/client.ts:30-36",
+      "close_reopen": "db.close() then new Database(samePath) — the reopen that proves persistence in every *-store test",
+      "key_api_note": "Copy packages/ai/agent-registry/src/db/client.ts verbatim for the WAL + FK-enforcement connection. All store tests close + reopen the handle to prove rows persist to disk (reopen-proves-persistence)."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "composition-junction",
+      "composed-prompt-cache",
+      "seed-and-roundtrip"
+    ]
+  },
+  "agent-registry-public-api": {
+    "provenance": "vendored-source",
+    "resolved_version": "0.0.1",
+    "source": "packages/ai/agent-registry/src/index.ts (barrel); packages/ai/agent-registry/src/store/component-store.ts; packages/ai/agent-registry/src/store/composition-store.ts; packages/ai/agent-registry/src/store/composed-prompt-store.ts; packages/ai/agent-registry/src/db/client.ts",
+    "confidence": "verified",
+    "interface": "@adhd/agent-registry exports: { sqlite, db, runMigrations, runMigrationsOn, MIGRATIONS_FOLDER, schema tables, AgentStore, TaxonomyStore, ComponentStore, CompositionStore, evaluateCondition, UseCaseStore, ComposedPromptStore, contextHash, seed, PROMPT_TYPES, SEED_COMPONENTS } plus their public types",
+    "shape": {
+      "client": "export const sqlite: Database.Database (WAL + foreign_keys=ON); export const db: BetterSQLite3Database<schema>. Opened from REGISTRY_DATABASE_PATH or DATABASE_PATH env, defaulting to ./data/registry.db. ONE handle per process (Decision 1, [inv:one-db-handle]). See packages/ai/agent-registry/src/db/client.ts:30-36.",
+      "ComponentStore": "new ComponentStore(db); create({slug,type,content,isShared?}): PromptComponent — inserts head row (registry_components) + version-1 row (registry_component_versions) atomically in a transaction, returns PromptComponent including versionId (the autoincrement surrogate). read(slug): PromptComponent — head joined to its latest version row (throws ComponentError COMPONENT_NOT_FOUND if absent). readVersion(slug, version): PromptComponent — head joined to the specific version row (throws COMPONENT_VERSION_NOT_FOUND). version(slug, newContent): PromptComponent — appends a new version row at max(version)+1; head row is unchanged; old rows are never deleted [inv:version-retained]. list(filter?: {type?,shared?}): PromptComponent[] — latest version of each component, head⋈latest join. resolveVersionId(slug, version): number — returns registry_component_versions.version_id for (slug, version); throws COMPONENT_VERSION_NOT_FOUND. See packages/ai/agent-registry/src/store/component-store.ts:81-434.",
+      "PromptComponent_type": "{ slug: string; type: string; version: number; versionId: number; content: string; isShared: boolean; createdAt: string; updatedAt: string } — versionId added by Decision 5; it is the registry_component_versions.version_id surrogate stored as a junction version_pin. See packages/ai/agent-registry/src/store/component-store.ts:35-50.",
+      "CompositionStore": "new CompositionStore(db); attach({agentSlug,componentSlug,position,versionPin?,pinVersion?,contextCondition?,isRequired?}): void — versionPin is a version_id (already resolved); pinVersion is a human version number resolved to version_id via resolvePinVersionId; supplying both throws; null pin = resolve latest at resolve-time. resolvePinVersionId(componentSlug, version): number — resolves (slug, version) to its version_id (throws COMPONENT_VERSION_NOT_FOUND). resolveComposition(agentSlug, ctx?): ResolvedComponent[] — ordered, filtered; evaluates context_condition via evaluateCondition(); required+excluded throws CompositionError REQUIRED_COMPONENT_EXCLUDED; total order (position ASC, resolvedVersion DESC, componentSlug ASC) [Decision 2]. See packages/ai/agent-registry/src/store/composition-store.ts:110-398.",
+      "ResolvedComponent_type": "{ componentSlug: string; position: number; resolvedVersion: number; component: PromptComponent } — see packages/ai/agent-registry/src/store/composition-store.ts:41-50.",
+      "ComposedPromptStore": "new ComposedPromptStore(db); write(input: {agentSlug,contextHash,content,componentVersions:{[slug]:version}}): ComposedPrompt — inserts cache row, returns row with generated id. lookup(agentSlug, hash): ComposedPrompt|null — O(1) via (agent_slug,context_hash) index, returns most-recent row or null. read(id): ComposedPrompt — by PK, throws ComposedPromptError NOT_FOUND. WRITTEN by @adhd/agent-compiler, READ by @adhd/agent-mcp at session start. See packages/ai/agent-registry/src/store/composed-prompt-store.ts:99-202.",
+      "ComposedPrompt_type": "{ id: number; agentSlug: string; contextHash: string; content: string; componentVersions: Record<string,number>; createdAt: string } — id is an integer autoincrement PK. See packages/ai/agent-registry/src/store/composed-prompt-store.ts:67-75.",
+      "contextHash": "contextHash(context: Record<string,string>): string — sorted-key JSON canonicalization -> SHA-256 hex. Takes only string values (not unknown). EXPORTED so @adhd/agent-compiler and @adhd/agent-mcp compute the SAME cache key. See packages/ai/agent-registry/src/store/composed-prompt-store.ts:37-46.",
+      "AgentStore": "new AgentStore(db); create({slug,displayName?,description?,status?,modelHint?,taxonomyCategory?,defaultPosture?}): Agent; read(slug): Agent (throws AGENT_NOT_FOUND); list(filter?): Agent[]; update(slug,patch): Agent. See packages/ai/agent-registry/src/store/agent-store.ts.",
+      "UseCaseStore": "new UseCaseStore(db); create({slug,name,description?}): UseCase; tagComponent({useCaseSlug,componentSlug,weight?}): ComponentUsageRow; listForUseCase(slug): ComponentUsageRow[]. Annotation layer for the future suggestion engine; no runtime composition effect. See packages/ai/agent-registry/src/store/usecase-store.ts.",
+      "key_api_note": "This is the FOUNDATION contract. agent-registry has NO plan dependencies — it extends nothing cross-package at the SQLite FK level (Decision 1). No openRegistryDb function exists — consumers use the exported `sqlite` handle and `db` drizzle instance or construct their own. No findByContentHash method exists in ComponentStore. The compiler (plan 5) reads CompositionStore.resolveComposition + ComposedPromptStore; the migration (plan 7) writes via AgentStore/ComponentStore/CompositionStore; agent-mcp (plan 6) reads ComposedPromptStore + the exported contextHash. resolveComposition is the heart of the registry: it OWNS ordering + version-pin + context-condition evaluation — downstream consumers MUST delegate to it, never re-implement ORDER BY position."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "lookup-and-component-schema",
+      "agent-and-taxonomy-schema",
+      "composition-junction",
+      "usecase-and-context-rules",
+      "composed-prompt-cache",
+      "audit-schema",
+      "seed-and-roundtrip"
+    ]
+  },
+  "agent-mcp-types-consumed": {
+    "provenance": "docs",
+    "resolved_version": "see packages/ai/agent-mcp-types/package.json",
+    "source": "packages/ai/agent-mcp-types/src/domain.ts (consumed; ComposedPrompt/PromptComponent are ADDED additively by the compiler plan)",
+    "confidence": "documented",
+    "interface": "type ComposedPrompt — the cross-package shape of a composed prompt row; lives in @adhd/agent-mcp-types per the shared-type rule (REFERENCES.md:197-211)",
+    "shape": {
+      "ComposedPrompt": "{ id: number; agentSlug: string; contextHash: string; content: string; componentVersions: Record<string, number>; createdAt: string } — id is number (integer autoincrement PK), not string. Must match ComposedPromptStore's ComposedPrompt type in component-store.ts:67-75.",
+      "PromptComponent": "{ slug: string; type: string; content: string; version: number; versionId: number; isShared: boolean; createdAt: string; updatedAt: string } — the cross-package component shape; versionId added by Decision 5.",
+      "shared_type_note": "ComposedPrompt and PromptComponent are SHARED cross-package types. Per REFERENCES.md:197-211 they MUST live in @adhd/agent-mcp-types, NOT be duplicated here. This plan's ComposedPromptStore row shape conforms to ComposedPrompt; the compiler (plan 5) and agent-mcp (plan 6) consume the SAME type. NEW-SHARED-TYPE: ComposedPrompt and PromptComponent must be ADDED to agent-mcp-types/src/domain.ts (additive, no circular dep) — tracked in agent-compiler/interfaces.json under agent-mcp-types-shared-additions.",
+      "key_api_note": "agent-registry depends on @adhd/agent-mcp-types only (no plan deps). It does not import any other registry package."
+    },
+    "cited_by": [
+      "composed-prompt-cache",
+      "lookup-and-component-schema"
+    ]
+  }
+}

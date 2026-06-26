@@ -25,3 +25,7 @@ export type TokenUsageExtShape = {
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
 };
+
+// Provider adapter contract — additive, defined in domain.ts.
+// Re-exported here so downstream consumers import from the single barrel.
+export type { StreamChunk, ProviderAdapter } from "./domain.js";

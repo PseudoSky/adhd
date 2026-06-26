@@ -1,0 +1,74 @@
+{
+  "name": "agent-compiler",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/ai/agent-compiler/src",
+  "projectType": "library",
+  "tags": ["layer:ai", "platform:node"],
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/ai/agent-compiler",
+        "main": "packages/ai/agent-compiler/src/index.ts",
+        "tsConfig": "packages/ai/agent-compiler/tsconfig.lib.json",
+        "clean": true,
+        "assets": [
+          {
+            "input": "packages/ai/agent-compiler",
+            "glob": "drizzle/**/*",
+            "output": "."
+          }
+        ]
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": ["{options.reportsDirectory}"],
+      "options": {
+        "configFile": "packages/ai/agent-compiler/vite.config.ts",
+        "reportsDirectory": "../../../coverage/packages/ai/agent-compiler"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/ai/agent-compiler/tsconfig.json --noEmit"
+      }
+    },
+    "db:generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "drizzle-kit generate",
+        "cwd": "packages/ai/agent-compiler"
+      }
+    },
+    "db:migrate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "drizzle-kit migrate",
+        "cwd": "packages/ai/agent-compiler"
+      }
+    },
+    "clean": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "rm -rf dist/packages/ai/agent-compiler"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": ["build", "test"],
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  }
+}

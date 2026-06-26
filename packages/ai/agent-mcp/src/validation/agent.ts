@@ -64,8 +64,17 @@ const claudecliProviderSchema = z.object({
   timeoutMs: z.number().int().positive().optional(),
   /**
    * Claude Code built-in tool names that are permitted in the subprocess.
-   * All built-ins not listed here are passed to --disallowedTools.
-   * MCP tools (from mcpServers) are always available regardless of this list.
+   *
+   * This is the LEGACY / transition-window allowlist. When ClaudeCliProvider is
+   * constructed with a `compiledTools` array derived from the AGENT_TOOL registry
+   * model (`compileAgent({ platform: "claude_code" }).tools`), this field is
+   * superseded — the compiled tool list is the single source of truth.
+   *
+   * [inv:no-third-tool-model]: do NOT use this field as a competing third
+   * tool-permission model alongside AGENT_TOOL / compiled.tools.
+   *
+   * All built-ins not in the effective allowed set are passed to --disallowedTools.
+   * MCP tools (from mcpServers) are always available regardless of this field.
    * Omit the field (or pass []) to block all built-ins.
    */
   allowedBuiltinTools: z.array(z.string()).optional(),
@@ -96,7 +105,14 @@ export const agentDefinitionSchema = z.object({
   description: z.string().optional(),
   version: z.number().int().positive(),
   provider: providerConfigSchema,
-  systemPrompt: z.string(),
+  /**
+   * COMPUTED COMPAT SHIM — never user-authored after Plan 6 wave 3 (agent-store-retire).
+   *
+   * Populated at session start from `compileAgent().content`. The `AgentStore`
+   * is now a thin compiled-agent cache; this field holds the resolved system
+   * prompt populated from compiler/registry output, not a user-supplied blob.
+   */
+  systemPrompt: z.optional(z.string()),
   // Full standard MCP server configs embedded in the agent definition.
   // Keys are server names; values are standard McpServerConfig objects.
   mcpServers: z.record(z.string(), mcpServerConfigSchema).default({}),
@@ -127,7 +143,8 @@ export const agentCreateInputSchema = agentDefinitionSchema.omit({
 const agentPatchSchema = z.object({
   description: z.string().optional(),
   provider: providerConfigSchema.optional(),
-  systemPrompt: z.string().optional(),
+  // COMPUTED COMPAT SHIM — populated from compiler output, not user-authored.
+  systemPrompt: z.optional(z.string()),
   mcpServers: z.record(z.string(), mcpServerConfigSchema).optional(),
   permissions: agentPermissionsSchema.optional(),
   maxToolLoops: z.number().int().positive().optional(),

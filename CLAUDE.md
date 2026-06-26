@@ -100,6 +100,12 @@ When authoring a plan with the `plan-state-machine` skill, each behavioral DoD c
 
 **Watch for the trap.** "It spawns child processes," "it needs a built CLI," "it's slow," "it's inconvenient in CI" — every one of these *feels* like a reason and is *not* one. They are the exact rationalizations that produce the blind spot. When a test has a hard local prerequisite, make it **fail loudly** if the prerequisite is missing (a missing `python3` should turn the suite red, never make it quietly skip). The single acceptable softening is an **optional external binary** (e.g. `grpcurl`): that one assertion may self-skip *with a visible warning*, and only so long as it never masks a failure in the code under test.
 
+### Proving an MCP server works — drive the real tools, never a bypass
+
+An MCP server's consumer seam is its **tools as loaded by a host** (`.mcp.json` → `mcp__<server>__*`). So the proof it works is to **call those loaded tools the way a host does** — against real state and real dependencies — and trust the returned **payload + exit code**, not a report. This applies to every MCP server in the repo, not just agent-mcp.
+
+The trap to avoid: **if the tool isn't available, make it available — don't go around it.** When an `mcp__<server>__*` tool is missing or stale, the fix is to load it (build the server, point `.mcp.json` at the built artifact, `/mcp` reload) and call it. It is **not** license to run a shell script that spawns or — worse — *imports* the build and calls its functions directly. That is our code calling our code; it skips the exact layer that fails in real use (host wiring, dist dependency resolution, tool registration, output-size limits), so it can pass while the shipped server is broken. A standalone script is acceptable **only** when it acts as a real MCP client (real JSON-RPC over stdio/http to the unmodified built server) — never when it reaches inside the server. Ask: *am I calling it like a host, or reaching inside it?* Only the former proves anything.
+
 ## 🔄 8. Refactoring & Purity Protocol (CRITICAL)
 
 You are responsible for maintaining the health of the shared ecosystem. **Follow these rules for every code change:**

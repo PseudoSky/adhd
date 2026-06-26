@@ -122,13 +122,11 @@ def phase_schema() -> list:
     r.append(grep_present("agent-tool-junction.1", "agent_tools junction with permission level", "agent_tools|agentTools", SCHEMA))
     r.append(check("agent-tool-junction.2", "agent-tool-store permission-level test passes",
                    f"npx --yes nx test agent-tool-registry --testFile={TESTS}/agent-tool-store.test.ts"))
-    # seed-and-roundtrip
-    r.append(check("seed-and-roundtrip.1", "seed/reopen/idempotency/binding-resolution suite passes",
-                   f"npx --yes nx test agent-tool-registry --testFile={TESTS}/roundtrip.test.ts"))
-    r.append(grep_present("seed-and-roundtrip.2", "tool seed lists SEED_DATA canonical tools",
-                          "shell_exec|file_read|web_fetch", f"{PKG}/src/seed/tools.ts"))
-    r.append(check("seed-and-roundtrip.3", "negative-control: binding round-trip has teeth (positive probe)",
-                   f"npx --yes nx test agent-tool-registry --testFile={TESTS}/roundtrip.test.ts"))
+    # NOTE: seed-and-roundtrip.* criteria are NOT evaluated here. The
+    # seed-and-roundtrip work-state runs in a LATER wave than audit-schema (this
+    # schema-phase gate), so evaluating its criteria here would fail before the
+    # work has run. They are enforced at the true final gate in phase_final()
+    # (audit-final) where the seed work is complete. (F2 phase-membership fix.)
     r.append(check("audit-schema.1", "schema-phase audit self-consistent", "true"))
     return r
 
@@ -140,6 +138,15 @@ def phase_schema() -> list:
 
 def phase_final() -> list:
     r = phase_schema()
+    # seed-and-roundtrip — gated HERE (audit-final), not in phase_schema. By the
+    # final wave the seed-and-roundtrip work-state has run, so these criteria are
+    # enforceable with full teeth at the true final gate. (F2 phase-membership fix.)
+    r.append(check("seed-and-roundtrip.1", "seed/reopen/idempotency/binding-resolution suite passes",
+                   f"npx --yes nx test agent-tool-registry --testFile={TESTS}/roundtrip.test.ts"))
+    r.append(grep_present("seed-and-roundtrip.2", "tool seed lists SEED_DATA canonical tools",
+                          "shell_exec|file_read|web_fetch", f"{PKG}/src/seed/tools.ts"))
+    r.append(check("seed-and-roundtrip.3", "negative-control: binding round-trip has teeth (positive probe)",
+                   f"npx --yes nx test agent-tool-registry --testFile={TESTS}/roundtrip.test.ts"))
     # [dod.1] canonical tool resolves to platform name after reopen
     r.append(check("dod.1", "canonical tool resolves to platform-specific name after reopen",
                    f"npx --yes nx test agent-tool-registry --testFile={TESTS}/binding-store.test.ts"))

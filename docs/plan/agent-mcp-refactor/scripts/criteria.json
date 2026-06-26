@@ -246,6 +246,22 @@
       "kind": "command",
       "cmd": "true",
       "expect": "exit0"
+    },
+    {
+      "id": "code-review.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-mcp-refactor/scripts/review_gate.py",
+      "expect": "exit0"
+    },
+    {
+      "id": "code-review-integration.1",
+      "phase": "integration",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-mcp-refactor/scripts/review_gate_integration.py",
+      "expect": "exit0"
     }
   ]
 }

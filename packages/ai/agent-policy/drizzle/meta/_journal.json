@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1782256884532,
+      "tag": "0000_sleepy_bullseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1782257258414,
+      "tag": "0001_pale_marvel_zombies",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1782350000000,
+      "tag": "0002_category_policy_inheritance",
+      "breakpoints": true
+    }
+  ]
+}
