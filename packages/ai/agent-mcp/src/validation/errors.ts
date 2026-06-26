@@ -33,6 +33,9 @@ export const errorCodeSchema = z.enum([
 
   // Budget enforcement
   "BUDGET_EXCEEDED",
+
+  // Composed-prompt cache
+  "COMPOSED_PROMPT_NOT_FOUND",
 ]);
 
 import type { AgentMcpErrorCode } from "@adhd/agent-mcp-types";

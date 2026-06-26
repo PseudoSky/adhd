@@ -9,6 +9,8 @@ export const AGENT_MCP_DEFAULT_MAX_TOKENS = parseInt(
 
 // Re-export HookRegistry so plugins can import it for testing without deep internal paths
 export { HookRegistry } from "./engine/hooks.js";
+// Re-export stores so consumers (tests, plugins) can import from the package root
+export { ComposedPromptStore } from "./store/composed-prompt-store.js";
 
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
