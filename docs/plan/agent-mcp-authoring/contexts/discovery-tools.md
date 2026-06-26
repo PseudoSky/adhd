@@ -21,6 +21,18 @@ runtime tools and 0 discovery tools. Before this state the registry was reachabl
 only via the `agent-registry compile` CLI and direct store imports — invisible to
 an agent over MCP.
 
+**Every list/search tool is bounded by default (BUG-003).** `agent_list`,
+`component_search`, and every `*_list` tool (`tool_list`, `model_list`,
+`policy_list`, `usecase_list`, `prompt_types_list`) MUST apply a **default result
+limit** and return a **summary projection** — name + type + one-line summary +
+score, NEVER the full `systemPrompt`/body inline. The full body is returned ONLY by
+an explicit single-item read (`agent_read`/`component_read`) or an explicit
+`full:true`/over-limit opt-in. This is a real host constraint, not a nicety: against
+the live 46-agent store, an unbounded `agent_list` returned 464,821 chars / 692
+lines and **blew the host's tool-output token ceiling** (`packages/ai/agent-mcp/BACKLOG.md`
+BUG-003), making the whole discovery lane unusable. A bounded default keeps every
+discovery call cheap and within budget regardless of corpus size.
+
 ---
 
 ## Acceptance criteria
@@ -31,13 +43,14 @@ an agent over MCP.
 
 - [discovery-tools.1] all 11 discovery tools return name-keyed results over the real registry stores
 
+- [discovery-tools.2] agent_list/component_search/*_list are bounded by default: a store seeded N>>limit (e.g. 60) returns <=limit summary-projected items with NO full systemPrompt/body inline and total output under a KB-scale ceiling; full body only via agent_read/component_read/full:true (BUG-003)
 ---
 
 ## Reservations
 
 ```text
 read_only:  []
-mutates:    ["packages/ai/agent-mcp/src/tools/discovery.ts", "packages/ai/agent-mcp/src/server.ts", "packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts"]
+mutates:    ["packages/ai/agent-mcp/src/tools/discovery.ts", "packages/ai/agent-mcp/src/server.ts", "packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts", "packages/ai/agent-mcp/src/__tests__/discovery-bounded-output.test.ts"]
 ```
 
 ---
@@ -62,3 +75,14 @@ mutates:    ["packages/ai/agent-mcp/src/tools/discovery.ts", "packages/ai/agent-
   `assumed_baseline` and must be built before this state goes green.
 - **Read-only:** none of these tools mutate the registry. Keep them side-effect
   free so they are safe and cheap to call per slot.
+- **Bounded output is a hard requirement (BUG-003, `discovery-tools.2`).** Give every
+  list/search tool a `limit` (sane default, e.g. 20) and a summary projection;
+  `agent_list`/`*_list` must NEVER inline a full `systemPrompt`/body. Prove it in a
+  dedicated `discovery-bounded-output.test.ts` that **seeds N ≫ limit** agents (e.g.
+  60) and asserts: (a) the default response returns ≤ limit items, (b) it carries NO
+  full `systemPrompt`/body field (only summary projection), (c) total serialized
+  output stays under a bounded ceiling (a few KB, not hundreds of KB), and (d)
+  `full:true`/`agent_read` is the ONLY way to get a full body. Negative control:
+  remove the limit/projection and the size-ceiling assertion goes red (reproducing
+  the 464,821-char blowout). Drive the REAL tools over the bridge + real store — no
+  mocks.
