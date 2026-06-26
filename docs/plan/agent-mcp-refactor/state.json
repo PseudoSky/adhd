@@ -48,9 +48,9 @@
     "session-e2e": {
       "status": "complete",
       "started_at": "2026-06-26T06:43:48.862Z",
-      "done_at": "2026-06-26T06:57:22.627Z",
+      "done_at": "2026-06-26T07:02:05.388Z",
       "start_ref": "0da6b938f88ccc22c82d4a86b0ca608e9484557d",
-      "end_ref": "fb97d2e78116d41f189cc253df118e1ca4218ad9"
+      "end_ref": "fd6313a6dfeb1ebecfd09485c75332e379fa48cf"
     },
     "audit-final": {
       "status": "pending",
@@ -182,6 +182,18 @@
       "audit_criteria_total": 26,
       "by": "pseudosky",
       "note": "both e2e pass + negative controls proven + committed at fb97d2e78116d41f189cc253df118e1ca4218ad9"
+    },
+    {
+      "ts": "2026-06-26T07:02:05.388Z",
+      "from": "code-review",
+      "to": "session-e2e",
+      "start_ref": "0da6b938f88ccc22c82d4a86b0ca608e9484557d",
+      "end_ref": "fd6313a6dfeb1ebecfd09485c75332e379fa48cf",
+      "audit_exit": 0,
+      "audit_criteria_passed": 26,
+      "audit_criteria_total": 26,
+      "by": "pseudosky",
+      "note": "both e2e pass + negative controls proven (dod.1 went RED: 'expected WRONG_CONTENT to be COMPILED_CONTENT'; dod.2 went RED: 'expected 2 to be 1') + committed at fb97d2e78116d41f189cc253df118e1ca4218ad9; pre-existing criteria.json CWD bug (nx vite.config not found from planDir) fixed by warming nx cache for all --testFile guards before audit"
     }
   ],
   "amendment_log": [],
