@@ -29,8 +29,29 @@ export const int64Codec: LogicalTypeCodec<bigint> = {
           `[int64] expected a string on the wire at "${ctx.path}", got ${typeof wire}`,
         );
       }
-      return BigInt(String(wire));
+      // DEBT-LT-002 (non-string lossy path): BigInt() throws SyntaxError for
+      // values like NaN, Infinity, or fractional numbers ("3.14"). Wrap in
+      // try/catch so the lossy path is consistent with other lossy handlers.
+      try {
+        return BigInt(Math.trunc(Number(wire)));
+      } catch {
+        return BigInt(0);
+      }
     }
-    return BigInt(wire);
+    // DEBT-LT-002 (string lossy path): BigInt('abc') throws an uncaught
+    // SyntaxError. Validate the wire is a decimal-integer string first;
+    // fall through to BigInt(0) in lossy mode rather than crashing.
+    if (ctx.mode === 'strict') {
+      return BigInt(wire);
+    }
+    // Lossy: only attempt BigInt if the string looks like a decimal integer.
+    if (/^-?\d+$/.test(wire)) {
+      try {
+        return BigInt(wire);
+      } catch {
+        return BigInt(0);
+      }
+    }
+    return BigInt(0);
   },
 };

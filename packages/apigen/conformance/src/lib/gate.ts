@@ -462,9 +462,14 @@ export function checkSupportedIds(manifest: HostManifest): string[] {
  * Receives vectors as JSON via stdin, returns results as JSON on stdout.
  * Each result: { vectorId, phase, pass, error? }
  */
+// DEBT-LT-008: the script previously hardcoded `sys.path.insert(0,
+// 'packages/apigen/python')` as a relative path, which silently fails when
+// the process CWD differs from the workspace root. The absolute path is now
+// passed as argv[2] by the TS caller so the script is CWD-independent.
 const PYTHON_MATRIX_SCRIPT = `
 import sys, json, math
-sys.path.insert(0, 'packages/apigen/python')
+# argv[2] is the absolute path to packages/apigen/python (CWD-independent).
+sys.path.insert(0, sys.argv[2])
 import apigen_logical as al
 
 vectors_file = sys.argv[1]
@@ -581,11 +586,15 @@ export function runPythonMatrix(
   const scriptFile = path.join(tmpDir, `apigen-gate-matrix-${process.pid}.py`)
   const vectorsFile = path.join(tmpDir, `apigen-gate-vectors-${process.pid}.json`)
 
+  // Absolute path to the Python package — passed as argv[2] so the inline
+  // script is CWD-independent (DEBT-LT-008).
+  const pythonPkgDir = path.resolve(workspaceRoot, 'packages/apigen/python')
+
   try {
     fs.writeFileSync(scriptFile, PYTHON_MATRIX_SCRIPT, 'utf-8')
     fs.writeFileSync(vectorsFile, JSON.stringify(vectors), 'utf-8')
 
-    const result = spawnSync('python3', [scriptFile, vectorsFile], {
+    const result = spawnSync('python3', [scriptFile, vectorsFile, pythonPkgDir], {
       cwd: workspaceRoot,
       timeout: 30_000,
       encoding: 'utf-8',

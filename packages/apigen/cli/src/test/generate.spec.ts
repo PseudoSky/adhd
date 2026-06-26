@@ -9,8 +9,8 @@ import {
   collectFormats,
   collectLogicalTypeDeps,
   patchPackageJsonDeps,
-  TS_LOGICAL_TYPE_DEP_MAP,
 } from '../lib/commands/generate'
+import { tsDepMap } from '@adhd/apigen-logical'
 import { registerGenerateRegistryCommand } from '../lib/commands/generate-registry'
 import { discoverPackages } from '../lib/registry'
 import jsonschemaPlugin from '@adhd/apigen-plugin-jsonschema'
@@ -355,16 +355,18 @@ describe('collectLogicalTypeDeps (unit)', () => {
   })
 })
 
-describe('TS_LOGICAL_TYPE_DEP_MAP', () => {
+// DEBT-LT-005: TS_LOGICAL_TYPE_DEP_MAP removed; tests now drive tsDepMap()
+// from @adhd/apigen-logical which is the authoritative source.
+describe('tsDepMap() (replaces inline TS_LOGICAL_TYPE_DEP_MAP — DEBT-LT-005)', () => {
   it('maps decimal format to decimal.js ^10', () => {
-    expect(TS_LOGICAL_TYPE_DEP_MAP['decimal']).toEqual({ name: 'decimal.js', version: '^10' })
+    expect(tsDepMap()['decimal']).toEqual({ name: 'decimal.js', version: '^10' })
   })
 
   it('does not carry a dep for stdlib formats', () => {
-    expect(TS_LOGICAL_TYPE_DEP_MAP['date-time']).toBeUndefined()
-    expect(TS_LOGICAL_TYPE_DEP_MAP['int64']).toBeUndefined()
-    expect(TS_LOGICAL_TYPE_DEP_MAP['byte']).toBeUndefined()
-    expect(TS_LOGICAL_TYPE_DEP_MAP['uuid']).toBeUndefined()
+    expect(tsDepMap()['date-time']).toBeUndefined()
+    expect(tsDepMap()['int64']).toBeUndefined()
+    expect(tsDepMap()['byte']).toBeUndefined()
+    expect(tsDepMap()['uuid']).toBeUndefined()
   })
 })
 

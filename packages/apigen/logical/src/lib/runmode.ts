@@ -366,6 +366,23 @@ function encodePassthrough(value: unknown): unknown {
  * Call `registry.freeze()` before passing it here to guarantee a stable,
  * immutable view across concurrent dispatch calls.
  *
+ * ## DEBT-LT-006 — registration-order sensitivity of `encodeSchemaless`
+ *
+ * For schema-less positions (nodes with no `type` or `format`), the
+ * `encodeSchemaless` function inside this module iterates `registry.ids()` in
+ * **insertion order** and returns the FIRST codec whose `encode()` succeeds.
+ * This is a first-match-wins policy.
+ *
+ * **Consequence:** a permissive custom codec registered BEFORE the canonical
+ * well-known codecs (date-time, int64, decimal, etc.) could shadow them at
+ * schema-less positions, producing incorrect envelopes.  The standard
+ * registration order (via `registerWellKnown()`) is safe because the
+ * well-known codecs are inserted first.  Custom codecs should be registered
+ * AFTER `registerWellKnown()` unless they intentionally take priority.
+ *
+ * A future `priority`/`weight` field on `LogicalTypeCodec` would make this
+ * explicit and order-independent.
+ *
  * @example
  * ```ts
  * const registry = createRegistry();
