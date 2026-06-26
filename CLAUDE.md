@@ -124,6 +124,15 @@ You are responsible for maintaining the health of the shared ecosystem. **Follow
 - **Ignore:** Always ignore `dist/`, `.nx/`, and `tmp/` folders.
 - **Entry:** Start by reading `project.json` in the target library to confirm tags.
 
+### Test/ephemeral artifacts — one central, always-cleaned location
+
+Generated output, scratch DBs, logs, and test fixtures are **ephemeral and must never be tracked or scattered**. There is exactly **one canonical root: `tmp/`** (gitignored). Everything ephemeral writes under `tmp/<package>/…` (e.g. `tmp/apigen/generate-out`, `tmp/agent-mcp/test.db`) and is removable with `nx reset` or a project `clean` target.
+
+- **Never invent ad-hoc artifact dirs** — no per-package `data/`, `dist-temp/`, `out-dir/`, or stray repo-root scratch. If code needs a scratch path, derive it under `tmp/`.
+- **Never write a runtime/test DB to the repo root or a tracked path.** SQLite stores (`*.db`/`*.sqlite` + `-wal`/`-shm`) are gitignored globally; persistent app stores belong in the user home (e.g. agent-mcp → `~/.adhd/agent-mcp/`), never in the tree.
+- **A test must clean up after itself** — write under `tmp/`, remove on teardown (bounded, deterministic; see §6). A test that leaves artifacts behind is a defect.
+- The repo-root `data/` (created by agent-mcp's legacy `./data/agents.db` default) is gitignored; moving that default out of the tree is tracked in BACKLOG.
+
 ## 📦 Publishing
 
 See [PUBLISHING.md](./PUBLISHING.md) for the full version-bump, build, and publish workflow, including the post-publish checklist and per-package smoke test references.
