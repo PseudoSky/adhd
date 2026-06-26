@@ -38,6 +38,12 @@ testem.log
 .DS_Store
 Thumbs.db
 
+# Python compiled artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
 .nx/cache
 .nx/workspace-data
 

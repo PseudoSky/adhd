@@ -21,15 +21,34 @@ dependencies = [
 jsonschema = [
     "jsonschema>=4.0",
 ]
+# flask is an optional HTTP server backend for flask_server.py.
+# When not installed, flask_server.py falls back to Python's stdlib
+# http.server (ThreadingHTTPServer) which is fully functional.
+flask = [
+    "flask>=3.0",
+]
+# grpc is required for grpc_server.py (the py-grpc apigen target).
+# These are C-extension wheels; install separately:
+#   pip install grpcio grpcio-tools grpcio-reflection
+grpc = [
+    "grpcio>=1.50",
+    "grpcio-tools>=1.50",
+    "grpcio-reflection>=1.50",
+]
 dev = [
     "jsonschema>=4.0",
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
+    "grpcio>=1.50",
+    "grpcio-tools>=1.50",
+    "grpcio-reflection>=1.50",
 ]
 
 [project.scripts]
-apigen-python-extractor = "apigen_python.extractor:_main"
-apigen-python-adapter   = "apigen_python.gateway_adapter:_main"
+apigen-python-extractor    = "apigen_python.extractor:_main"
+apigen-python-adapter      = "apigen_python.gateway_adapter:_main"
+apigen-python-flask-server = "apigen_python.flask_server:_main"
+apigen-python-grpc-server  = "apigen_python.grpc_server:_main"
 
 [tool.setuptools.packages.find]
 where = ["."]

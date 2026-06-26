@@ -92,3 +92,9 @@ describe('jsonschema plugin', () => {
     expect(output.files[0].content).toContain('\n')
   })
 })
+
+describe('jsonschema plugin — language declaration', () => {
+  it('explicitly declares language: "ts" (FAILS if declaration is dropped)', () => {
+    expect(jsonschemaPlugin.language).toBe('ts')
+  })
+})

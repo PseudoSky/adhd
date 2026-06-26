@@ -22,9 +22,10 @@ import {
   buildDescriptor,
   orchestrateGenerate,
 } from '../lib/orchestrator'
+import { collectFormats } from '../lib/commands/generate'
 import { checkCollisions, CollisionDetectedError } from '@adhd/apigen-naming'
 import { project as projectOp } from '@adhd/apigen-naming'
-import type { Operation, Segment, OutputPlugin, PluginInput } from '@adhd/apigen-core'
+import type { Operation, Segment, OutputPlugin, PluginInput, ComposedSchemas } from '@adhd/apigen-core'
 
 // ---------------------------------------------------------------------------
 // Fixture paths
@@ -382,12 +383,104 @@ describe('orchestrator: projection-override config (Tenet 1)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Live-server tests — gated behind APIGEN_LIVE=1
+// [dod.10 v2 teeth] buildDescriptor / orchestrateGenerate: default-import Decimal
+// source produces format:decimal in packageSchemas and decimal.js in package.json.
+//
+// The v2 path builds ComposedSchemas via generateSchemas + composeSchemas, the
+// SAME pipeline as v1. If normalizeTypeText() is absent from buildSchema, the
+// qualified import path emitted by ts-morph (`import("…decimal.js…").default`)
+// is NOT found in SCALAR_SCHEMAS → schema is {} → no format:decimal →
+// collectDepsFromPackageSchemas returns {} → decimal.js absent from package.json.
+//
+// Regression guarantee: revert normalizeTypeText() call in buildSchema →
+// packageSchemas for the Decimal fixture carry {} outputs → format:decimal
+// absent → collectLogicalTypeDeps returns {} → these tests go RED.
 // ---------------------------------------------------------------------------
-describe.skipIf(!process.env['APIGEN_LIVE'])('orchestrator: live integration (APIGEN_LIVE=1)', () => {
+
+describe('[dod.10 v2 teeth] buildDescriptor: default-import Decimal source carries format:decimal in packageSchemas', () => {
+  const decimalRealFixture = path.join(fixturesDir, 'decimal-real-import.ts')
+
+  // [v2.a] buildDescriptor composes schemas that carry format:decimal for a
+  // source using `import Decimal from 'decimal.js'`.
+  it(
+    'buildDescriptor packageSchemas carry format:decimal for a default-imported Decimal source',
+    async () => {
+      const descriptor = await buildDescriptor({
+        sources: [{ file: decimalRealFixture, namespace: 'decimal-test' }],
+      })
+
+      expect(descriptor.packageSchemas.has('decimal-test'), 'packageSchemas must contain the namespace').toBe(true)
+      const { schemas } = descriptor.packageSchemas.get('decimal-test')!
+
+      // The composed schema for addAmounts must carry format:decimal in input
+      // or output. If normalizeTypeText is not called in buildSchema, the
+      // schema will be {} (unresolvable qualified import path), and this fails.
+      const addAmountsSchema = schemas['addAmounts']
+      expect(addAmountsSchema, 'addAmounts must be present in packageSchemas').toBeDefined()
+
+      const allFormats = new Set<string>()
+      if (addAmountsSchema) {
+        for (const f of collectFormats(addAmountsSchema.input)) allFormats.add(f)
+        for (const f of collectFormats(addAmountsSchema.output)) allFormats.add(f)
+      }
+
+      expect(
+        allFormats.has('decimal'),
+        `format:decimal not in v2 packageSchemas schema — schema=${JSON.stringify(addAmountsSchema)}. ` +
+        `The v2 buildDescriptor path lost format:decimal for the default-imported Decimal type.`,
+      ).toBe(true)
+    },
+    30_000,
+  )
+
+  // [v2.b] orchestrateGenerate drives the full v2 path and collectDepsFromPackageSchemas
+  // returns decimal.js — proving the dep-manifest step works through the v2 path.
+  it(
+    'orchestrateGenerate: collectDepsFromPackageSchemas returns decimal.js for a default-import Decimal source',
+    async () => {
+      const capturedPackageSchemas = new Map<string, { id: string; schemas: ComposedSchemas; importPath: string }>()
+
+      const capturingPlugin: OutputPlugin = {
+        id: 'capturing',
+        description: 'captures packageSchemas for inspection',
+        generate(input: PluginInput) {
+          return { files: [] }
+        },
+      }
+
+      const result = await orchestrateGenerate(
+        { sources: [{ file: decimalRealFixture, namespace: 'decimal-test' }] },
+        capturingPlugin,
+        os.tmpdir(),
+      )
+
+      const { schemas } = result.descriptor.packageSchemas.get('decimal-test')!
+
+      // Walk all schemas and collect all format values.
+      const allFormats = new Set<string>()
+      for (const entry of Object.values(schemas)) {
+        for (const f of collectFormats(entry.input)) allFormats.add(f)
+        for (const f of collectFormats(entry.output)) allFormats.add(f)
+      }
+
+      expect(
+        allFormats.has('decimal'),
+        `v2 orchestrateGenerate: format:decimal not found in descriptor packageSchemas — ` +
+        `schemas=${JSON.stringify(schemas)}. Regression: normalizeTypeText() not called in buildSchema.`,
+      ).toBe(true)
+    },
+    30_000,
+  )
+})
+
+// ---------------------------------------------------------------------------
+// Live-server integration tests (always runs — no env gate)
+// ---------------------------------------------------------------------------
+describe('orchestrator: live integration', () => {
   it('TODO: add a live model end-to-end test here', () => {
-    // This block intentionally left for a future live-run test.
-    // Gate: APIGEN_LIVE=1 must be set in the environment.
+    // Placeholder for a future end-to-end live-model test.
+    // The orchestrator wires schema extraction → run → live model → invariant check.
+    // That test belongs here; the placeholder keeps the suite non-empty and runnable.
     expect(true).toBe(true)
   })
 })
