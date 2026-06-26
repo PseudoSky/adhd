@@ -122,6 +122,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "discovery-tools.2",
+      "phase": "discovery",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/discovery-bounded-output.test.ts",
+      "expect": "exit0"
     }
   ]
 }
