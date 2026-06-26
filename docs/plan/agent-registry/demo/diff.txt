@@ -1,0 +1,11 @@
+Original body lines  : 290
+Compiled body lines  : 294
+Lines only in original (0) — these are minor differences:
+
+Lines only in compiled (2) — includes policy block if any:
+  > ## Policies
+  > - Prevent credential leakage in files, task output, and handoff text
+
+
+Non-policy extra lines in compiled: 0
+CONCLUSION: Only minor syntactic differences (section join separators, policy block appended).
