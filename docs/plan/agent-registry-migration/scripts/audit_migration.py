@@ -78,6 +78,7 @@ Exits 0 when all checks in the phase pass; exits 1 with a failure summary otherw
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -112,6 +113,13 @@ def run(cmd: str):
 def check(check_id: str, description: str, cmd: str, expect_empty: bool = False) -> CheckResult:
     """Run cmd. expect_empty → pass only when output empty; else pass on exit 0.
     Signature matches gap-check.js 3-arg pattern: check(id, description, cmd)."""
+    # F-P6-10 hardening: project.json sets passWithNoTests:true, so a
+    # `nx test --testFile=<missing>` exits 0 ("No test files found") — a GHOST
+    # PASS that would green an audit for a proof that does not exist. Require the
+    # test file to exist first, so a missing proof FAILS the criterion honestly.
+    _m = re.search(r"--testFile=(\S+)", cmd)
+    if _m and not cmd.lstrip().startswith("test -f"):
+        cmd = f"test -f {_m.group(1)} && {cmd}"
     code, out = run(cmd)
     if expect_empty:
         passed = (out == "")
@@ -202,6 +210,13 @@ def phase_migration() -> list:
                           "process|invocation|skill", f"{SRC}/import/import-skill.ts"))
     r.append(grep_present("import-script.3", "importCorpus is a public entrypoint (lib export + CLI bin), closes FEAT-007",
                           "importCorpus|FEAT-007|bin", f"{SRC}/import/import-corpus.ts"))
+    # import-script.4 — F-P6-11: the default registry target IS the live server's
+    # resolver DB (~/.adhd/agent-mcp/registry.db); proven behaviorally (HOME-redirect
+    # + reopen at the server path) and toothed structurally on the source.
+    r.append(check("import-script.4", "default target resolves to ~/.adhd/agent-mcp/registry.db; importCorpus() lands the corpus where the default-on server reads it (reopen-proven)",
+                   f"{NX_TEST} --testFile={TESTS}/import-script.test.ts"))
+    r.append(grep_present("import-script.4.tooth", "import-corpus default target = homedir/.adhd/agent-mcp/registry.db (byte-identical to agent-mcp server path)",
+                          "\\.adhd.*registry\\.db|registry\\.db", f"{SRC}/import/import-corpus.ts"))
     # roundtrip-equivalence-gate — THE headline behavioral gate
     r.append(check("roundtrip-equivalence-gate.1", "import->compile->normalized diff == empty (round-trip equivalence)",
                    f"{NX_TEST} --testFile={TESTS}/roundtrip-equivalence.test.ts"))

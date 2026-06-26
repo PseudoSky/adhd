@@ -54,11 +54,17 @@ contracts are written down, and the removal phase is unsafe until the gate contr
      `depends_on_plans` edge.
   4. **FEAT-007 public entrypoint + equivalence + zero-loss + cross-repo** —
      `importCorpus(...)` as a lib export + CLI bin (`[def:import]`, closes FEAT-007);
-     the equivalence definition (byte vs. behavioral + the normalization applied and
-     why each is sound); the report shape (per-agent PASS/FAIL); the forcing function
-     (`retire()` MUST require all-PASS, `[inv:zero-loss-before-removal]`); and the
-     cross-repo removal boundary (`[inv:cross-repo]` — guards touch fixtures only;
-     cross-repo removal is an operator runbook step).
+     the **default registry target** (F-P6-11) — with no explicit `dbPath`/`--db`/
+     `AGENT_MCP_REGISTRY_DB_PATH`, `importCorpus` writes to
+     `~/.adhd/agent-mcp/registry.db`, **byte-identical to the path the default-on
+     agent-mcp server resolves prompts against** (`agent-mcp/src/index.ts`); writing
+     anywhere else leaves the default resolver staring at an empty registry forever
+     (`[import-script.4]`); the equivalence definition (byte vs. behavioral + the
+     normalization applied and why each is sound); the report shape (per-agent
+     PASS/FAIL); the forcing function (`retire()` MUST require all-PASS,
+     `[inv:zero-loss-before-removal]`); and the cross-repo removal boundary
+     (`[inv:cross-repo]` — guards touch fixtures only; cross-repo removal is an
+     operator runbook step).
 - **Fixtures (`[def:fixture]`):** copy `code-reviewer.md` (canonical example) and one
   `ticket-creation.SKILL.md` into `src/__fixtures__/` and check them in.
 
