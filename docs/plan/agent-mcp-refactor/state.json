@@ -13,9 +13,9 @@
     "runtime-sink-schema": {
       "status": "complete",
       "started_at": "2026-06-26T04:38:48.699Z",
-      "done_at": "2026-06-26T04:48:22.445Z",
+      "done_at": "2026-06-26T04:52:48.199Z",
       "start_ref": "4c41a72a812069808f34ee3d1101b3cf7763e660",
-      "end_ref": "57d100ffc6e43c2d8f76d64c4d2e1c8da57215af"
+      "end_ref": "9f6ab4eb83389467983c625e2b440fb50abcd0b5"
     },
     "compiler-integration": {
       "status": "pending",
@@ -98,6 +98,18 @@
       "audit_criteria_total": 10,
       "by": "pseudosky",
       "note": "Added composed_prompts cache table + experiment_assignments table + sessions.composed_prompt_id nullable FK column to db/schema.ts (append-only). Created ComposedPromptStore (upsert/findByAgentContext/read) mirroring agent-store.ts constructor pattern. Added ComposedPrompt interface + COMPOSED_PROMPT_NOT_FOUND error code to agent-mcp-types (additive). Authored drizzle migration 0006_composed_prompts_cache.sql + meta snapshot 0006 + journal entry. Added @nx/vite:test executor to project.json so guard --testFile flag is accepted. Guard test: 8 tests, reopen roundtrip proven by close+reopen on-disk path, exit 0. Full agent-mcp suite: 210 passed / 0 failures, exit 0. nx build agent-mcp: clean."
+    },
+    {
+      "ts": "2026-06-26T04:52:48.199Z",
+      "from": "compiler-integration",
+      "to": "runtime-sink-schema",
+      "start_ref": "4c41a72a812069808f34ee3d1101b3cf7763e660",
+      "end_ref": "9f6ab4eb83389467983c625e2b440fb50abcd0b5",
+      "audit_exit": 0,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "Added composed_prompts cache table + experiment_assignments table + sessions.composed_prompt_id nullable FK column to db/schema.ts (append-only). Created ComposedPromptStore (upsert/findByAgentContext/read) mirroring agent-store.ts constructor pattern. Added ComposedPrompt interface + COMPOSED_PROMPT_NOT_FOUND error code to agent-mcp-types (additive). Authored drizzle migration 0006_composed_prompts_cache.sql + meta snapshot + journal entry. Added @nx/vite:test executor to project.json so --testFile guard flag works. Fixed criteria.json paths from repo-root-relative to plan-dir-relative (../../../) so node run-audit.js resolves them correctly. Guard: 8 tests pass, reopen roundtrip proven, exit 0. Audit: 10/10 schema+architecture criteria pass. Full suite: 210 tests passed, 0 failures, exit 0. nx build agent-mcp: clean."
     }
   ],
   "amendment_log": [],
