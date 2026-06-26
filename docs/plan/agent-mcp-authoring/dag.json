@@ -84,7 +84,8 @@
       "artifacts": [
         "packages/ai/agent-mcp/src/tools/discovery.ts",
         "packages/ai/agent-mcp/src/server.ts",
-        "packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts"
+        "packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/discovery-bounded-output.test.ts"
       ],
       "context": "contexts/discovery-tools.md",
       "notes": ""
