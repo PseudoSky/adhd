@@ -1,1 +1,14 @@
-{}
+{
+  "live-provider-anthropic-oauth": {
+    "type": "credential",
+    "description": "anthropic provider live run needs Claude Max OAuth in the macOS keychain (useClaudeOauth:true, no API key). Required only when AGENT_MCP_LIVE=1 enables the anthropic matrix case; absent => that provider case skips (not fails).",
+    "required_by": [
+      "live-model-e2e"
+    ],
+    "verification": "security find-generic-password -s 'Claude Code' >/dev/null 2>&1 || test -n \"$ANTHROPIC_API_KEY\"",
+    "status": "needed",
+    "owner": "repo owner (Claude Max account holder)",
+    "how_to_provide": "Sign in to Claude Code so the OAuth token is in the login keychain (Claude Max); or export ANTHROPIC_API_KEY. Then set AGENT_MCP_LIVE=1.",
+    "blocks_at": "per-state"
+  }
+}
