@@ -75,6 +75,11 @@ def _py_type_hint_to_schema(annotation: Any) -> dict[str, Any]:
 
     Only covers the common cases; falls back to {} (any) for complex generics.
     Returns a plain dict.
+
+    Logical-type mappings (mirrors the TS apigen-logical codecs):
+      decimal.Decimal  → {"type": "string", "format": "decimal"}
+      datetime.datetime → {"type": "string", "format": "date-time"}
+      uuid.UUID        → {"type": "string", "format": "uuid"}
     """
     import typing
 
@@ -84,6 +89,31 @@ def _py_type_hint_to_schema(annotation: Any) -> dict[str, Any]:
     # None / NoneType
     if annotation is type(None):
         return {"type": "null"}
+
+    # Logical types — must be checked before the primitive table so that
+    # `Decimal` / `datetime` / `UUID` are not silently swallowed as {}
+    # (they are not in the _primitives dict, so they would fall through to
+    # the dataclass check and ultimately to the {} fallback without this guard).
+    try:
+        from decimal import Decimal as _Decimal
+        if annotation is _Decimal:
+            return {"type": "string", "format": "decimal"}
+    except ImportError:
+        pass
+
+    try:
+        from datetime import datetime as _Datetime
+        if annotation is _Datetime:
+            return {"type": "string", "format": "date-time"}
+    except ImportError:
+        pass
+
+    try:
+        from uuid import UUID as _UUID
+        if annotation is _UUID:
+            return {"type": "string", "format": "uuid"}
+    except ImportError:
+        pass
 
     # Primitives
     _primitives: dict[Any, str] = {
@@ -136,15 +166,60 @@ def _py_type_hint_to_schema(annotation: Any) -> dict[str, Any]:
     return {}
 
 
-def _params_to_input_schema(sig: inspect.Signature) -> dict[str, Any]:
+def _resolve_hints(fn: Any) -> dict[str, Any]:
+    """Resolve all annotations for a callable, handling PEP-563 stringized forms.
+
+    When a module uses ``from __future__ import annotations`` all annotations are
+    stored as strings rather than type objects.  ``typing.get_type_hints`` evaluates
+    those strings against the function's module globals (and the optional
+    ``localns`` dict), returning a ``{param_name: type}`` mapping with real type
+    objects.
+
+    Falls back gracefully if resolution fails (e.g. a forward reference that
+    cannot be resolved in the execution context) — unresolvable params get ``{}``
+    (any) schema, preserving backward compatibility.
+
+    Args:
+        fn: Any callable (function, method, lambda).
+
+    Returns:
+        Dict mapping parameter / return annotation names to resolved type objects.
+        The return type is keyed under ``"return"`` (matching ``typing.get_type_hints``
+        convention).
+    """
+    import typing
+
+    try:
+        # include_extras=False strips Annotated[] wrappers to bare types.
+        hints = typing.get_type_hints(fn, include_extras=False)
+        return hints
+    except Exception:
+        # Fall back to raw __annotations__ (may be strings for PEP-563 modules).
+        raw = getattr(fn, "__annotations__", {})
+        return {k: v for k, v in raw.items() if not isinstance(v, str)}
+
+
+def _params_to_input_schema(sig: inspect.Signature, fn: Any = None) -> dict[str, Any]:
     """Convert a function's signature to a §4 input JSON-Schema object.
 
     - Excludes the first parameter named 'ctx' (§4 inv:ctx-name-only).
     - Each remaining parameter becomes a property.
     - Parameters without defaults are required.
+    - Resolves PEP-563 stringized annotations via ``typing.get_type_hints`` when
+      ``fn`` is supplied, so that ``Decimal``/``datetime``/``UUID`` type hints work
+      correctly even in modules that use ``from __future__ import annotations``.
+
+    Args:
+        sig: The ``inspect.Signature`` for the function.
+        fn:  Optional callable — used to resolve string annotations (PEP 563).
     """
     props: dict[str, Any] = {}
     required: list[str] = []
+
+    # Resolve annotations via get_type_hints when a callable is supplied.
+    # This handles both eager annotations (fn.__annotations__ = real types) and
+    # PEP-563 stringized annotations (fn.__annotations__ = strings).
+    resolved_hints: dict[str, Any] = _resolve_hints(fn) if fn is not None else {}
 
     params = list(sig.parameters.values())
     # Drop 'self' for bound methods.
@@ -163,8 +238,10 @@ def _params_to_input_schema(sig: inspect.Signature) -> dict[str, Any]:
     ]
 
     for p in named:
-        ann = p.annotation
-        if ann is inspect.Parameter.empty:
+        # Prefer the get_type_hints-resolved annotation; fall back to the
+        # raw signature annotation (which may be a string for PEP-563 modules).
+        ann = resolved_hints.get(p.name, p.annotation)
+        if ann is inspect.Parameter.empty or ann is None:
             schema_frag: dict[str, Any] = {}
         else:
             schema_frag = _py_type_hint_to_schema(ann)
@@ -178,12 +255,20 @@ def _params_to_input_schema(sig: inspect.Signature) -> dict[str, Any]:
     return result
 
 
-def _return_to_output_schema(sig: inspect.Signature) -> dict[str, Any]:
+def _return_to_output_schema(sig: inspect.Signature, fn: Any = None) -> dict[str, Any]:
     """Convert a function's return annotation to a §4 output JSON-Schema.
 
     Promise<T> / Awaitable[T] and generator wrappers are unwrapped to T.
+    Resolves PEP-563 stringized return annotations via ``typing.get_type_hints``
+    when ``fn`` is supplied.
+
+    Args:
+        sig: The ``inspect.Signature`` for the function.
+        fn:  Optional callable — used to resolve string annotations (PEP 563).
     """
-    ann = sig.return_annotation
+    # Prefer get_type_hints-resolved return annotation.
+    resolved_hints: dict[str, Any] = _resolve_hints(fn) if fn is not None else {}
+    ann = resolved_hints.get("return", sig.return_annotation)
     if ann is inspect.Parameter.empty:
         return {}
     # Unwrap Coroutine / Awaitable / Generator wrappers.
@@ -257,6 +342,13 @@ def extract_module(
 
     Returns:
         List of Operation dicts (§4 JSON shape).
+
+    Note:
+        Supports modules that use ``from __future__ import annotations`` (PEP 563).
+        The module is registered in ``sys.modules`` before ``exec_module`` so that
+        ``dataclasses._is_type`` (which calls ``sys.modules.get(cls.__module__)``)
+        can resolve the module and ``typing.get_type_hints`` can resolve stringized
+        annotations to real type objects.
     """
     path = Path(module_path).resolve()
     file_stem = path.stem
@@ -271,7 +363,21 @@ def extract_module(
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load module from {path}")
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+
+    # CANONICAL PATTERN (importlib docs): register in sys.modules BEFORE exec_module
+    # so that:
+    #   1. dataclasses._is_type() can resolve cls.__module__ via sys.modules — without
+    #      this, @dataclass definitions crash with AttributeError when the module uses
+    #      `from __future__ import annotations` (PEP 563).
+    #   2. typing.get_type_hints() can resolve string annotations back to real types
+    #      (it needs the module's globals to be reachable via sys.modules).
+    sys.modules[spec.name] = mod
+    try:
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    except Exception:
+        # On failure, remove the partial module so subsequent imports are not poisoned.
+        sys.modules.pop(spec.name, None)
+        raise
 
     operations: list[dict[str, Any]] = []
 
@@ -288,11 +394,40 @@ def extract_module(
     # For index files (stem == 'index' or 'main'), drop the file segment from path (SPEC §5).
     include_file_seg = file_stem.lower() not in ("index", "main")
 
+    # Determine the module's __name__ as assigned by importlib — we use this to
+    # filter out names that were *imported into* the module (e.g. `from decimal
+    # import Decimal`) from names that were *defined in* the module.  An imported
+    # callable's `__module__` attribute points to its defining package, not to
+    # `_apigen_target_`; a locally-defined function has `__module__ == mod.__name__`.
+    mod_name: str = mod.__name__  # '_apigen_target_'
+
     for name in export_names:
         try:
             value = getattr(mod, name)
         except AttributeError:
             continue
+
+        # -----------------------------------------------------------------
+        # FIX: skip names that are imported from another module, not defined
+        # here.  This prevents `from decimal import Decimal` or
+        # `from datetime import datetime` from being extracted as operations.
+        #
+        # Rule: a callable or type whose `__module__` differs from the loaded
+        # module's `__name__` is an *import* — skip it.
+        #
+        # Non-callables (module-level constants) have no `__module__`, so
+        # they bypass this check and fall through to the serialisability gate
+        # below (CONSTANT = 42 → kind='query').
+        #
+        # Exception: when the module explicitly declares `__all__`, trust the
+        # author's intent and do NOT filter by __module__ (they may re-export
+        # third-party callables deliberately).
+        # -----------------------------------------------------------------
+        if not hasattr(mod, "__all__"):
+            obj_module = getattr(value, "__module__", None)
+            if obj_module is not None and obj_module != mod_name:
+                # Imported callable or type — not defined in this module.
+                continue
 
         # Build the §4 path.
         if include_file_seg:
@@ -311,8 +446,10 @@ def extract_module(
 
             streaming = _is_streaming(value)
             is_async = _is_async(value)
-            input_schema = _params_to_input_schema(sig)
-            output_schema = _return_to_output_schema(sig)
+            # Pass `value` so PEP-563 stringized annotations are resolved via
+            # typing.get_type_hints before JSON-schema inference.
+            input_schema = _params_to_input_schema(sig, fn=value)
+            output_schema = _return_to_output_schema(sig, fn=value)
 
             op: dict[str, Any] = {
                 "id": op_id,
@@ -338,7 +475,7 @@ def extract_module(
             except (ValueError, TypeError):
                 sig = inspect.Signature()
 
-            input_schema = _params_to_input_schema(sig)
+            input_schema = _params_to_input_schema(sig, fn=value.__init__)
             ctor_path = path_segs + [] if include_file_seg else path_segs
             ctor_op: dict[str, Any] = {
                 "id": op_id,

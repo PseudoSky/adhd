@@ -1,10 +1,23 @@
 import { describe, it, expect } from 'vitest'
 import * as path from 'node:path'
+import * as net from 'node:net'
 import { Command } from 'commander'
-import { registerRunCommand } from '../lib/commands/run'
+import { registerRunCommand, assertFnsNonEmpty, assertDecimalLibPresent } from '../lib/commands/run'
 import { registerRunRegistryCommand } from '../lib/commands/run-registry'
-import type { OutputPlugin, RunInput } from '@adhd/apigen-core'
+import type { OutputPlugin, RunInput, ComposedSchemas } from '@adhd/apigen-core'
 import mcpPlugin from '@adhd/apigen-plugin-mcp'
+
+/** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */
+async function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer()
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address() as net.AddressInfo
+      srv.close((err) => (err ? reject(err) : resolve(addr.port)))
+    })
+    srv.on('error', reject)
+  })
+}
 
 const fixturesDir = path.join(__dirname, 'fixtures')
 const registryDir = path.join(fixturesDir, 'registry')
@@ -54,7 +67,7 @@ describe('[cli-run-cmd.3] run command — plugin without run() throws', () => {
 // ───────────────────────────────────────────────────────────────────────────
 
 describe('[cli-run-cmd.1+2] run command — imports fns and calls plugin.run()', () => {
-  it('passes a live fns record and resolves on abort', async () => {
+  it('passes a live fns record and resolves on abort', { timeout: 20000 }, async () => {
     let capturedInput: RunInput | undefined
     let resolveRun: (() => void) | undefined
 
@@ -87,8 +100,9 @@ describe('[cli-run-cmd.1+2] run command — imports fns and calls plugin.run()',
       '--type', 'capturing',
     ])
 
-    // Wait until plugin.run() has been called (bounded poll — no sleep)
-    const deadline = Date.now() + 4000
+    // Wait until plugin.run() has been called (bounded poll — no sleep).
+    // 12 s to tolerate concurrent ts-morph compilation across 11 test files.
+    const deadline = Date.now() + 12000
     while (!capturedInput && Date.now() < deadline) {
       await new Promise<void>((r) => setImmediate(r))
     }
@@ -179,14 +193,238 @@ describe('[cli-run-cmd.4] run-registry command — passes multiple packages at o
 })
 
 // ───────────────────────────────────────────────────────────────────────────
-// Live MCP server: run command starts a real streaming-http server
-// Gated behind APIGEN_LIVE=1 — skipped in default CI/audit runs.
+// [dod.fail-fast] Precondition guards — BUG-APIGEN-004 / lt-fail-fast
+//
+// (a) 0-functions source → actionable "0 functions found" message.
+// (b) Decimal surface with absent backing lib → "install decimal.js" message.
+// (c) Normal surface (functions present, no decimal) → no guard fires (negative
+//     control: proves the guard is not blanket-failing valid sources).
+//
+// Guards are tested via their exported helper functions so the tests are fast
+// (no compilation, no module import, deterministic).  The CLI integration path
+// is already covered by [cli-run-cmd.1+2] above.
 // ───────────────────────────────────────────────────────────────────────────
 
-describe.skipIf(!process.env['APIGEN_LIVE'])('[cli-run-cmd.1 live] run command starts a live MCP server via plugin.run()', () => {
-  const port = 47431 // deterministic high port, different from plugin-mcp tests
+describe('[dod.fail-fast.a] assertFnsNonEmpty — 0-function source throws actionable message', () => {
+  const emptyFns: Record<string, (...args: unknown[]) => unknown> = {}
+  const fakeSource = '/path/to/generated-output.ts'
 
+  it('throws when fns is empty', () => {
+    expect(() => assertFnsNonEmpty(emptyFns, fakeSource)).toThrow()
+  })
+
+  it('error message contains "0 functions found"', () => {
+    expect(() => assertFnsNonEmpty(emptyFns, fakeSource))
+      .toThrowError(/0 functions found/)
+  })
+
+  it('error message contains the source path', () => {
+    expect(() => assertFnsNonEmpty(emptyFns, fakeSource))
+      .toThrowError(/generated-output\.ts/)
+  })
+
+  it('error message contains actionable hint about wrong source file', () => {
+    expect(() => assertFnsNonEmpty(emptyFns, fakeSource))
+      .toThrowError(/generated output or the wrong source file/)
+  })
+
+  it('does NOT throw when fns has at least one entry (negative-control: guard is not blanket-failing)', () => {
+    const nonEmptyFns = { getUser: async () => ({ id: '1' }) }
+    expect(() => assertFnsNonEmpty(nonEmptyFns, fakeSource)).not.toThrow()
+  })
+})
+
+describe('[dod.fail-fast.b] assertDecimalLibPresent — absent decimal.js errors at startup', () => {
+  /** Resolver that simulates decimal.js being absent. */
+  const absentResolver = (_pkg: string): string => {
+    throw new Error(`Cannot find module 'decimal.js'`)
+  }
+
+  /** Resolver that simulates decimal.js being present. */
+  const presentResolver = (_pkg: string): string => '/node_modules/decimal.js/index.js'
+
+  /** Minimal ComposedSchemas entry that references format:'decimal'. */
+  const decimalSchemas: ComposedSchemas = {
+    quote: {
+      input: {
+        type: 'object',
+        properties: {
+          amount: { type: 'string', format: 'decimal' },
+        },
+      },
+      output: { type: 'string', format: 'decimal' },
+    },
+  }
+
+  it('throws when a decimal function is present and the lib is absent', () => {
+    expect(() => assertDecimalLibPresent(decimalSchemas, absentResolver)).toThrow()
+  })
+
+  it('error message names the function', () => {
+    expect(() => assertDecimalLibPresent(decimalSchemas, absentResolver))
+      .toThrowError(/quote/)
+  })
+
+  it('error message instructs the user to install decimal.js', () => {
+    expect(() => assertDecimalLibPresent(decimalSchemas, absentResolver))
+      .toThrowError(/install `decimal\.js`/)
+  })
+
+  it('error message names the missing lib', () => {
+    expect(() => assertDecimalLibPresent(decimalSchemas, absentResolver))
+      .toThrowError(/decimal\.js/)
+  })
+
+  it('does NOT throw when decimal.js is present (resolver succeeds)', () => {
+    expect(() => assertDecimalLibPresent(decimalSchemas, presentResolver)).not.toThrow()
+  })
+
+  it('does NOT throw when no function uses decimal format (lib absence is irrelevant)', () => {
+    const noDecimalSchemas: ComposedSchemas = {
+      getUser: {
+        input: { type: 'object', properties: { userId: { type: 'string' } } },
+        output: { type: 'object', properties: { id: { type: 'string' } } },
+      },
+    }
+    // Even with the absent resolver, no decimal usage → no error
+    expect(() => assertDecimalLibPresent(noDecimalSchemas, absentResolver)).not.toThrow()
+  })
+})
+
+describe('[dod.fail-fast.c] normal surface (negative control) — guards do not fire on valid input', () => {
+  it('assertFnsNonEmpty does not fire for a surface with functions (api.ts shape)', () => {
+    const fns = {
+      getUser: async (userId: string) => ({ id: userId }),
+      sendEmail: async (_to: string, _subject: string) => undefined,
+    }
+    expect(() => assertFnsNonEmpty(fns, apiFixture)).not.toThrow()
+  })
+
+  it('assertDecimalLibPresent does not fire for a surface with no decimal types', () => {
+    const schemas: ComposedSchemas = {
+      getUser: {
+        input: { type: 'object', properties: { userId: { type: 'string' } } },
+        output: { type: 'object', properties: { id: { type: 'string' } } },
+      },
+      sendEmail: {
+        input: { type: 'object', properties: { to: { type: 'string' }, subject: { type: 'string' } } },
+        output: { type: 'null' },
+      },
+    }
+    // Default resolver — decimal.js may or may not be installed; since no decimal
+    // usage, the guard never calls the resolver at all.
+    expect(() => assertDecimalLibPresent(schemas)).not.toThrow()
+  })
+})
+
+// ───────────────────────────────────────────────────────────────────────────
+// [cli-run-cmd.non-ts] Non-TS plugin bypasses TS extraction
+//
+// A plugin that declares `language: 'py'` must have its run() called directly
+// — without the source ever being tsx-imported or ts-morph-compiled.
+// This guards against the ERR_UNKNOWN_FILE_EXTENSION regression where
+// py-flask crashed because the CLI tried to `import()` a .py file.
+//
+// Proof the test has teeth: if we removed the `pluginLang !== 'ts'` branch
+// from run.ts, the command would try to tsx-import the .py fixture path and
+// would throw ERR_UNKNOWN_FILE_EXTENSION — this test would go RED.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('[cli-run-cmd.non-ts] non-TS plugin bypasses TS extraction', () => {
+  it('calls plugin.run() with importPath set to the source file, no TS compilation', { timeout: 10000 }, async () => {
+    let capturedInput: RunInput | undefined
+
+    // A fake "py" plugin — language:'py' so effectiveLanguage() returns 'py'.
+    // Its run() resolves immediately after capturing the input.
+    const fakePyPlugin: OutputPlugin = {
+      id: 'fake-py',
+      description: 'fake python plugin for bypass test',
+      language: 'py',
+      generate() { return { files: [] } },
+      async run(input: RunInput): Promise<void> {
+        capturedInput = input
+      },
+    }
+
+    const program = makeProgram()
+    registerRunCommand(program, { 'fake-py': fakePyPlugin })
+
+    // Use a .py path that does NOT exist on disk — if TS extraction were
+    // attempted it would crash before calling run() at all.
+    const fakePySource = path.join(fixturesDir, 'fake_source.py')
+
+    await program.parseAsync([
+      'node', 'apigen-cli',
+      'run',
+      '--source', fakePySource,
+      '--type', 'fake-py',
+      '--namespace', 'testns',
+      '--opt', 'port=9999',
+    ])
+
+    // plugin.run() must have been called
+    expect(capturedInput).toBeDefined()
+
+    // The importPath must be the resolved source path
+    const pkg = capturedInput?.packages[0]
+    expect(pkg).toBeDefined()
+    expect(pkg?.importPath).toBe(path.resolve(fakePySource))
+
+    // The namespace comes from --namespace flag
+    expect(pkg?.id).toBe('testns')
+
+    // The port option is threaded through
+    expect(capturedInput?.options['port']).toBe('9999')
+
+    // schemas and fns are empty (non-TS plugin does its own introspection)
+    expect(pkg?.schemas).toEqual({})
+    expect(pkg?.fns).toBeUndefined()
+  })
+
+  it('v2 path: non-TS plugin bypasses TS extraction with --v2 flag', { timeout: 10000 }, async () => {
+    let capturedInput: RunInput | undefined
+
+    const fakePyPlugin: OutputPlugin = {
+      id: 'fake-py-v2',
+      description: 'fake python plugin for v2 bypass test',
+      language: 'py',
+      generate() { return { files: [] } },
+      async run(input: RunInput): Promise<void> {
+        capturedInput = input
+      },
+    }
+
+    const program = makeProgram()
+    registerRunCommand(program, { 'fake-py-v2': fakePyPlugin })
+
+    const fakePySource = path.join(fixturesDir, 'fake_source.py')
+
+    await program.parseAsync([
+      'node', 'apigen-cli',
+      'run',
+      '--source', fakePySource,
+      '--type', 'fake-py-v2',
+      '--namespace', 'testns-v2',
+      '--opt', 'port=9998',
+      '--v2',
+    ])
+
+    expect(capturedInput).toBeDefined()
+    const pkg = capturedInput?.packages[0]
+    expect(pkg?.importPath).toBe(path.resolve(fakePySource))
+    expect(pkg?.id).toBe('testns-v2')
+    expect(capturedInput?.options['port']).toBe('9998')
+    expect(pkg?.schemas).toEqual({})
+  })
+})
+
+// ───────────────────────────────────────────────────────────────────────────
+// Live MCP server: run command starts a real streaming-http server
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('[cli-run-cmd.1 live] run command starts a live MCP server via plugin.run()', () => {
   it('serves tools/list with fixture tools over streaming-http', { timeout: 20000 }, async () => {
+    const port = await freePort()
     const program = makeProgram()
     registerRunCommand(program, { mcp: mcpPlugin })
 

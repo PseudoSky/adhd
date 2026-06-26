@@ -83,10 +83,22 @@ Green unit tests and passing `grep` audits are **not** proof a feature works. On
 2. **Assertions must have teeth.** A behavioral test must FAIL if the bug is reintroduced. Prove it: revert the fix (or run a deliberately-wrong negative-control variant) and confirm the test goes red. A test that stays green when the code is broken proves nothing.
 3. **Be deterministic without timing.** Prove concurrency with latches/barriers, await events with bounded deadlines, prove persistence by reopening the store — never `sleep`/wall-clock. A flaky proof is not a proof.
 4. **Trust exit codes, not stdout.** Never gate on `… | grep -q passed` — it ignores the process exit code and hides crashes/failures (a ~50% teardown segfault once "passed" this way). Key on the runner's exit status.
-5. **For LLM features, verify with a real model end-to-end.** A scripted/mock provider can fake a tool call the real model can't actually make — that exact gap left HITL unreachable until a live run exposed it. Add a live test gated behind an env flag (e.g. `AGENT_MCP_LIVE=1`, so CI stays offline) that runs a real model through the real loop and asserts model-independent invariants.
+5. **For LLM features, verify with a real model end-to-end.** A scripted/mock provider can fake a tool call the real model can't actually make — that exact gap left HITL unreachable until a live run exposed it. Add a live test that runs a real model through the real loop and asserts model-independent invariants. Gating it behind an env flag (e.g. `AGENT_MCP_LIVE=1`) is legitimate **only because a real model is a paid third-party service** — the one qualifying exception in *Live testing is mandatory* below — and only if you document the approval (named owner, in README + CLAUDE.md + the test header) as that section requires.
 6. **Assert the consumer-visible outcome, not the implementation shape.** "`Promise.all` is present" is a proxy; "an agent gets N results back, faster" is the outcome. An implementation-shaped check can stay green while the guarantee regresses.
 
 When authoring a plan with the `plan-state-machine` skill, each behavioral DoD clause must name the real entrypoint + observable and be proven by an audit check that drives it. **Never mark a task complete on proxy evidence.**
+
+### Live testing is mandatory — no silent gating
+
+**Start from the principle.** A feature is proven only by exercising it the way a consumer does — through the real entrypoint or built artifact. A test that doesn't run is not a safety net; it's a comment. We learned this the expensive way: env-gated "live" suites stayed green for months while the real `apigen run`/`serve` path was broken, and they hid several real bugs (BUG-009..013) that a single default-running test would have caught on the first commit.
+
+**So the default is simple: every behavioural test runs by default, unflagged, in CI.** Spawning a local server, building the artifact first, taking a few seconds, needing `python3`/`grpcurl` on the box — none of these are reasons to gate. They are *setup*, and setup is the test's job (wire `dependsOn:["build"]`, provision the tool in CI). A feature is not "done" until a default-running test drives its real path, and the project's `demo`/`verify` target must do the same.
+
+**There is exactly one exception, and it is narrow.** You may put a test behind an env flag *only* when it calls a **paid or external third-party service** — something this system does not control, or that costs money per run (a real LLM, a billed API). That is the *only* qualifying reason. Ask yourself: *"Does skipping this test save money or avoid an outside system I can't run myself?"* If the honest answer is no, it runs by default — full stop.
+
+**If — and only if — a test qualifies, the gate must be documented in the open:** the approval, with a named owner, surfaced in **all three** of the project's `README.md`, its `CLAUDE.md`, and the gated test file's own header. An undocumented gate is a broken gate.
+
+**Watch for the trap.** "It spawns child processes," "it needs a built CLI," "it's slow," "it's inconvenient in CI" — every one of these *feels* like a reason and is *not* one. They are the exact rationalizations that produce the blind spot. When a test has a hard local prerequisite, make it **fail loudly** if the prerequisite is missing (a missing `python3` should turn the suite red, never make it quietly skip). The single acceptable softening is an **optional external binary** (e.g. `grpcurl`): that one assertion may self-skip *with a visible warning*, and only so long as it never masks a failure in the code under test.
 
 ## 🔄 8. Refactoring & Purity Protocol (CRITICAL)
 

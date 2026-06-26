@@ -5,6 +5,7 @@ import { run } from './run'
 export const apiExpressPlugin: OutputPlugin = {
   id: 'api-express',
   description: 'Expose functions as Express HTTP POST routes',
+  language: 'ts',
   optionsSchema: {
     type: 'object',
     properties: {

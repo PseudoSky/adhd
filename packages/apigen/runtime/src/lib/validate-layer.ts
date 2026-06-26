@@ -32,6 +32,7 @@
  */
 
 import Ajv from 'ajv'
+import addFormats from 'ajv-formats'
 import type { ErrorObject } from 'ajv'
 import { ApiError } from '@adhd/apigen-errors'
 import type { Layer, Call, Next } from './invoke'
@@ -42,9 +43,20 @@ import type { InvokeOptions } from './invoke'
 // Ajv singleton — one instance for all validation in the runtime process.
 // `allErrors: true` collects all violations, not just the first, so the error
 // message is maximally informative.
+// `addFormats` registers all standard JSON Schema `format` keywords (date-time,
+// date, time, uuid, email, uri, etc.) so that a schema like
+// `{ type: 'string', format: 'date-time' }` actively rejects non-conforming
+// strings instead of treating the format keyword as advisory.
 // ---------------------------------------------------------------------------
 
 const ajv = new Ajv({ allErrors: true })
+addFormats(ajv)
+// apigen logical-type `format`s that ajv-formats does not ship. The canonical wire
+// for `decimal` is a decimal string (DESIGN §3); register it so a `{type:'string',
+// format:'decimal'}` param validates instead of throwing "unknown format" once the
+// validate-Layer is active over a live transport. (date-time/int64/byte/uuid are
+// already covered by ajv-formats above.)
+ajv.addFormat('decimal', /^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/)
 
 // ---------------------------------------------------------------------------
 // Helpers

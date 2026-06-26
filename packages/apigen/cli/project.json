@@ -21,6 +21,9 @@
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/cli"
       ],
+      "dependsOn": [
+        "build"
+      ],
       "options": {
         "configFile": "packages/apigen/cli/vite.config.ts"
       }

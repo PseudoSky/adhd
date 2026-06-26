@@ -172,3 +172,9 @@ describe('health plugin — handler returns readiness signal', () => {
     expect(result.host).toBe('py')
   })
 })
+
+describe('health plugin — language declaration', () => {
+  it('explicitly declares language: "ts" (FAILS if declaration is dropped)', () => {
+    expect(healthPlugin.language).toBe('ts')
+  })
+})

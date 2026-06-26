@@ -2,6 +2,19 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { run } from '../lib/run'
 import { dispatch } from '@adhd/apigen-runtime'
 import type { RunInput } from '@adhd/apigen-core'
+import * as net from 'node:net'
+
+/** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */
+async function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer()
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address() as net.AddressInfo
+      srv.close((err) => (err ? reject(err) : resolve(addr.port)))
+    })
+    srv.on('error', reject)
+  })
+}
 
 // ---------- fixture ----------
 // Simple in-process functions — ground truth for assertions.
@@ -71,29 +84,27 @@ const envelopeFns: Record<string, (...args: unknown[]) => unknown> = {
 }
 
 // ---------- streaming-http integration — real MCP HTTP transport ----------
-// Gated behind APIGEN_LIVE=1 — skipped in default CI/audit runs.
 
-describe.skipIf(!process.env['APIGEN_LIVE'])('[plugin-mcp.4] run() streaming-http — tools/list + callTool via real HTTP', () => {
-  const port = 47421 // deterministic high port
+describe('[plugin-mcp.4] run() streaming-http — tools/list + callTool via real HTTP', () => {
+  let port: number
   let controller: AbortController
 
-  const runInput: RunInput = {
-    packages: [
-      {
-        id: 'test-pkg',
-        schemas: testSchema,
-        importPath: '@test/test-pkg',
-        fns: testFns,
-      },
-    ],
-    outputDir: '/tmp/out',
-    options: { transport: 'streaming-http', port },
-    signal: undefined as unknown as AbortSignal, // set below
-  }
-
   beforeAll(async () => {
+    port = await freePort()
     controller = new AbortController()
-    const input: RunInput = { ...runInput, signal: controller.signal }
+    const input: RunInput = {
+      packages: [
+        {
+          id: 'test-pkg',
+          schemas: testSchema,
+          importPath: '@test/test-pkg',
+          fns: testFns,
+        },
+      ],
+      outputDir: '/tmp/out',
+      options: { transport: 'streaming-http', port },
+      signal: controller.signal,
+    }
     // Fire-and-forget; resolves on abort.
     run(input).catch(() => {/* swallowed after abort */})
 
@@ -187,9 +198,11 @@ describe.skipIf(!process.env['APIGEN_LIVE'])('[plugin-mcp.4] run() streaming-htt
     // abort is called in afterAll; verify the server rejects after close
     // (this test runs before afterAll, so we spin up a second server to close immediately)
     const ac = new AbortController()
+    const abortPort = await freePort()
     const input2: RunInput = {
-      ...runInput,
-      options: { transport: 'streaming-http', port: port + 1 },
+      packages: [{ id: 'test-pkg', schemas: testSchema, importPath: '@test/test-pkg', fns: testFns }],
+      outputDir: '/tmp/out',
+      options: { transport: 'streaming-http', port: abortPort },
       signal: ac.signal,
     }
     const done = run(input2)
@@ -224,13 +237,13 @@ describe('[plugin-mcp.5] run.ts does not inline dispatch logic', () => {
 })
 
 // ---------- [v2-proj-transport] MCP envelope binding — _meta["x-<pluginId>-<field>"] ----------
-// Gated behind APIGEN_LIVE=1 — skipped in default CI/audit runs.
 
-describe.skipIf(!process.env['APIGEN_LIVE'])('[v2-proj-transport] run() — MCP envelope from _meta (§9.1)', () => {
-  const port = 47425 // distinct port
+describe('[v2-proj-transport] run() — MCP envelope from _meta (§9.1)', () => {
+  let port: number
   let controller: AbortController
 
   beforeAll(async () => {
+    port = await freePort()
     controller = new AbortController()
     const input: RunInput = {
       packages: [

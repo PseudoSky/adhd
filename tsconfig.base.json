@@ -32,9 +32,21 @@
       "@adhd/agent-mcp-types": ["./packages/ai/agent-mcp-types/src/index.ts"],
       "@adhd/agent-policy": ["./packages/ai/agent-policy/src/index.ts"],
       "@adhd/agent-provider": ["./packages/ai/agent-provider/src/index.ts"],
-      "@adhd/agent-tool-registry": ["./packages/ai/agent-tool-registry/src/index.ts"],
+      "@adhd/agent-tool-registry": [
+        "./packages/ai/agent-tool-registry/src/index.ts"
+      ],
       "@adhd/apigen-cli": ["./packages/apigen/cli/src/index.ts"],
+      "@adhd/apigen-codegen-openapi": [
+        "./packages/apigen/codegen/openapi/src/index.ts"
+      ],
+      "@adhd/apigen-conformance": [
+        "./packages/apigen/conformance/src/index.ts"
+      ],
       "@adhd/apigen-core": ["./packages/apigen/core/src/index.ts"],
+      "@adhd/apigen-errors": ["./packages/apigen/errors/src/index.ts"],
+      "@adhd/apigen-gateway": ["./packages/apigen/gateway/src/index.ts"],
+      "@adhd/apigen-logical": ["./packages/apigen/logical/src/index.ts"],
+      "@adhd/apigen-naming": ["./packages/apigen/naming/src/index.ts"],
       "@adhd/apigen-nx": ["./packages/apigen/nx/src/index.ts"],
       "@adhd/apigen-plugin-api-express": [
         "./packages/apigen/plugins/api-express/src/index.ts"
@@ -42,20 +54,31 @@
       "@adhd/apigen-plugin-api-fastify": [
         "./packages/apigen/plugins/api-fastify/src/index.ts"
       ],
-      "@adhd/apigen-plugin-cli-output": ["./packages/apigen/plugins/cli/src/index.ts"],
+      "@adhd/apigen-plugin-cli-output": [
+        "./packages/apigen/plugins/cli/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-demo-plugin": [
+        "./packages/apigen/plugins/demo-plugin/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-health": [
+        "./packages/apigen/plugins/health/src/index.ts"
+      ],
       "@adhd/apigen-plugin-jsonschema": [
         "./packages/apigen/plugins/jsonschema/src/index.ts"
       ],
+      "@adhd/apigen-plugin-logger": [
+        "./packages/apigen/plugins/logger/src/index.ts"
+      ],
       "@adhd/apigen-plugin-mcp": ["./packages/apigen/plugins/mcp/src/index.ts"],
-      "@adhd/apigen-codegen-openapi": [
-        "./packages/apigen/codegen/openapi/src/index.ts"
+      "@adhd/apigen-plugin-py-flask": [
+        "./packages/apigen/plugins/py-flask/src/index.ts"
       ],
-      "@adhd/apigen-conformance": [
-        "./packages/apigen/conformance/src/index.ts"
+      "@adhd/apigen-plugin-py-grpc": [
+        "./packages/apigen/plugins/py-grpc/src/index.ts"
       ],
-      "@adhd/apigen-errors": ["./packages/apigen/errors/src/index.ts"],
-      "@adhd/apigen-gateway": ["./packages/apigen/gateway/src/index.ts"],
-      "@adhd/apigen-naming": ["./packages/apigen/naming/src/index.ts"],
+      "@adhd/apigen-plugin-openapi": [
+        "./packages/apigen/plugins/openapi/src/index.ts"
+      ],
       "@adhd/apigen-runtime": ["./packages/apigen/runtime/src/index.ts"],
       "@adhd/apigen-schema": ["./packages/apigen/schema/src/index.ts"],
       "@adhd/data": ["./packages/data/src/index.ts"],

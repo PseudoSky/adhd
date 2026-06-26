@@ -1,0 +1,37 @@
+# <%= packageScope %>/<%= projectName %>
+
+apigen logical-types host binding for `<%= hostName %>`.
+
+## Status: non-conformant (red by construction)
+
+This host was scaffolded by `nx generate @adhd/apigen-nx:host <%= hostName %>`.
+Its `host-manifest.json` starts with `supportedIds: []`, making it non-conformant
+until the codec column is filled (DESIGN §16 runbook).
+
+## Adding support for a logical type
+
+Follow the 5-step runbook (DESIGN §16):
+
+1. **Fill the template column** — add `encode` / `decode` / `imports` / `dep` / `mode`
+   for each logical type in the codec registry inside `src/conformance/harness.spec.ts`.
+
+2. **Declare deps** — add the host-library dep to `package.json` and to `host-manifest.json`'s
+   `deps` map (`{ "date-time": { "lib": "some-lib", "version": "^1.0.0" } }`).
+
+3. **Run the conformance harness** — once `@adhd/apigen-conformance` publishes the shared
+   vectors, replace the stub `vectors = []` with the real import and run:
+
+   ```bash
+   npx nx test apigen-host-<%= hostName %>
+   ```
+
+4. **Publish `host-manifest.json`** — add each passing logical-type id to `supportedIds`.
+
+5. **Go green on `apigen:conformance`** — the workspace gate auto-discovers this manifest
+   and requires the full matrix to be green.
+
+## Running the harness
+
+```bash
+npx nx test apigen-host-<%= hostName %>
+```

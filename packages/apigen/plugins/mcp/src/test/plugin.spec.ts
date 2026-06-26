@@ -12,3 +12,9 @@ describe('mcp plugin', () => {
     expect(typeof mcpPlugin.run).toBe('function');
   });
 });
+
+describe('mcp plugin — language declaration', () => {
+  it('explicitly declares language: "ts" (FAILS if declaration is dropped)', () => {
+    expect(mcpPlugin.language).toBe('ts');
+  });
+});

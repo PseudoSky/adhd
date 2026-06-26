@@ -5,6 +5,7 @@ import { run } from './run'
 export const mcpPlugin: OutputPlugin = {
   id: 'mcp',
   description: 'Expose functions as MCP tools (stdio, SSE, or streaming-HTTP transport)',
+  language: 'ts',
   optionsSchema: {
     type: 'object',
     properties: {

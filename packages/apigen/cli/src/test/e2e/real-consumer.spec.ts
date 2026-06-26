@@ -29,8 +29,21 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest'
 import { spawn, type ChildProcess } from 'node:child_process'
 import * as path from 'node:path'
+import * as net from 'node:net'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
+
+/** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */
+async function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer()
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address() as net.AddressInfo
+      srv.close((err) => (err ? reject(err) : resolve(addr.port)))
+    })
+    srv.on('error', reject)
+  })
+}
 
 // ---------------------------------------------------------------------------
 // Paths — the BUILT bin + the UNMODIFIED real package source.
@@ -194,9 +207,8 @@ function fnParamNames(fn: (...a: unknown[]) => unknown): string[] {
 // ---------------------------------------------------------------------------
 
 describe('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transform', () => {
-  const port = 47591
-
   it('POST /<id>/<fn> deep-equals in-process ground truth over real HTTP', async () => {
+    const port = await freePort()
     httpChild = spawn(
       'node',
       [
@@ -262,13 +274,13 @@ describe('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transf
 })
 
 // ---------------------------------------------------------------------------
-// (3) LIVE model variant — APIGEN_LIVE=1 only. Model-independent invariants.
+// (3) Model-independent invariants via a real MCP client (no AI model needed).
 // ---------------------------------------------------------------------------
 
-describe.skipIf(!process.env['APIGEN_LIVE'])(
-  'real-consumer: LIVE model drives the MCP loop (APIGEN_LIVE=1)',
+describe(
+  'real-consumer: LIVE client drives the MCP loop (model-independent invariants)',
   () => {
-    it('a real model lists + calls a real transform tool; result == in-process ground truth', async () => {
+    it('a real MCP client lists + calls a real transform tool; result == in-process ground truth', async () => {
       // Stand up the same MCP server via the built bin.
       const transport = new StdioClientTransport({
         command: 'node',
@@ -281,7 +293,9 @@ describe.skipIf(!process.env['APIGEN_LIVE'])(
         const listed = await client.listTools()
         const names = listed.tools.map((t) => t.name)
         // Model-independent invariant: the live surface exposes the real exports.
-        expect(names).toEqual(ground.exportedNames)
+        // Sort both sides — the MCP server returns tools in declaration order,
+        // ground.exportedNames is sorted alphabetically.
+        expect(names.slice().sort()).toEqual(ground.exportedNames)
         // A real model would pick a tool from `names` and call it; we assert the
         // model-INDEPENDENT outcome — calling a listed tool returns the same value
         // as the in-process export. (The model's CHOICE is non-deterministic; the

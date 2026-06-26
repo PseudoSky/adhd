@@ -15,7 +15,8 @@
  * A real Fastify server test is gated behind APIGEN_LIVE=1.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+import Fastify from 'fastify'
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import EventEmitter from 'node:events'
 import { sendStreamSse } from '../lib/stream'
@@ -363,22 +364,18 @@ describe('[sse-stream.cancel] client disconnect aborts stream cleanly (end path,
 })
 
 // ---------------------------------------------------------------------------
-// APIGEN_LIVE: real Fastify server streaming test
+// Real Fastify server streaming test (always runs — no env gate)
 // ---------------------------------------------------------------------------
 
-describe.skipIf(!process.env['APIGEN_LIVE'])('[sse-stream.live] real Fastify SSE — ordered chunks + error-after-first-chunk', () => {
+describe('[sse-stream.live] real Fastify SSE — ordered chunks + error-after-first-chunk', () => {
   it('live SSE stream yields chunks then closes', async () => {
-    const Fastify = (await import('fastify')).default
-    const { sendStreamSse: sss } = await import('../lib/stream')
-    const { createStream: cs } = await import('@adhd/apigen-runtime')
-
     const app = Fastify()
     app.get('/stream', (req, reply) => {
-      const s = cs<number>({ produce: async function* () { yield 1; yield 2; yield 3 } })
-      return sss(s, req, reply)
+      const s = createStream<number>({ produce: async function* () { yield 1; yield 2; yield 3 } })
+      return sendStreamSse(s, req, reply)
     })
 
-    await app.listen({ port: 0 })  // random port
+    await app.listen({ port: 0 })  // random port — OS assigns a free one
     const addr = app.server.address() as { port: number }
     try {
       const res = await fetch(`http://127.0.0.1:${addr.port}/stream`)

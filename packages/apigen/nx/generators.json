@@ -4,6 +4,11 @@
       "factory": "./src/generators/plugin/generator",
       "schema": "./src/generators/plugin/schema.json",
       "description": "Scaffold a new @adhd/apigen-plugin-* package with correct Nx tags and tsconfig wiring"
+    },
+    "host": {
+      "factory": "./src/generators/host/generator",
+      "schema": "./src/generators/host/schema.json",
+      "description": "Scaffold a new host-language conformance harness + empty host-manifest.json (red by construction) for the apigen logical-types system (DESIGN §16)"
     }
   }
 }

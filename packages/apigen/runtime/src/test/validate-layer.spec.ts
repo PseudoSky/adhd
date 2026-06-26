@@ -1,12 +1,16 @@
 /**
  * Tests for the central validation Layer (SPEC §6).
  *
- * Three behavioral proofs required by the guard:
+ * Four behavioral proofs required by the guard:
  *
  *  1. PASS-THROUGH   — valid input passes through to dispatch (next is called).
  *  2. SHORT-CIRCUIT  — malformed input short-circuits with ApiError{invalid_argument};
  *                      dispatch is NEVER called (negative-control latch proves it).
- *  3. NECESSARY-NOT-SUFFICIENT — a value that is schema-valid but semantically
+ *  3. FORMAT VALIDATION — ajv-formats registers JSON Schema `format` keywords so
+ *                      that a malformed date-time (e.g. "not-a-date") is rejected
+ *                      with ApiError{invalid_argument} while a valid RFC3339 string
+ *                      passes through.  Proves addFormats(ajv) is live.
+ *  4. NECESSARY-NOT-SUFFICIENT — a value that is schema-valid but semantically
  *                      wrong (e.g. negative age when only non-negative makes sense)
  *                      still passes the validator, confirming the §6 boundary:
  *                      validation is a shape pre-filter, not a domain correctness
@@ -212,7 +216,92 @@ describe('validateLayer — short-circuit (malformed input)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 3. NECESSARY-NOT-SUFFICIENT: schema-valid but domain-wrong values pass
+// 3. FORMAT VALIDATION: ajv-formats enforces JSON Schema `format` keywords
+// ---------------------------------------------------------------------------
+
+/**
+ * ComposedSchemas entry whose `data` field carries a `format: "date-time"`
+ * constraint.  Without `addFormats(ajv)` Ajv treats the format keyword as
+ * advisory and accepts any string; with it, non-RFC3339 strings are rejected.
+ */
+const schemasWithDatetime: ComposedSchemas = {
+  scheduleEvent: {
+    input: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: {
+            startsAt: { type: 'string', format: 'date-time' },
+          },
+          required: ['startsAt'],
+          additionalProperties: false,
+        },
+      },
+      required: ['data'],
+    },
+    output: {},
+  },
+}
+
+describe('validateLayer — format validation (ajv-formats)', () => {
+  /**
+   * MALFORMED: a string that is NOT a valid RFC3339 date-time must be rejected
+   * with ApiError{ code: 'invalid_argument' }.  This test is the consumer-
+   * visible proof that `addFormats(ajv)` is wired in and active.
+   *
+   * Negative-control latch: dispatch is never called when validation rejects.
+   */
+  it('rejects a malformed date-time string with ApiError{invalid_argument}', async () => {
+    const dispatchSpy = vi.fn().mockResolvedValue({ ok: true })
+    const localFns = { scheduleEvent: dispatchSpy }
+
+    const invoke = createInvoker([makeValidateLayer(schemasWithDatetime)])
+    const call = makeCall({
+      operation: { id: 'scheduleEvent' },
+      domainArgs: { startsAt: 'not-a-date' },
+    })
+
+    const err = await invoke('scheduleEvent', call, {
+      fns: localFns,
+      schemas: schemasWithDatetime,
+    }).catch((e) => e)
+
+    expect(err).toBeInstanceOf(ApiError)
+    expect((err as ApiError).code).toBe('invalid_argument')
+
+    // NEGATIVE-CONTROL LATCH: dispatch must never have been reached.
+    expect(dispatchSpy).not.toHaveBeenCalled()
+  })
+
+  /**
+   * POSITIVE CONTROL: a valid RFC3339 date-time string passes format validation
+   * and reaches dispatch.  Proves the format check is live (not vacuously
+   * accepting everything), and that correct inputs are not blocked.
+   */
+  it('accepts a valid RFC3339 date-time string and reaches dispatch', async () => {
+    const dispatchSpy = vi.fn().mockResolvedValue({ ok: true })
+    const localFns = { scheduleEvent: dispatchSpy }
+
+    const invoke = createInvoker([makeValidateLayer(schemasWithDatetime)])
+    const call = makeCall({
+      operation: { id: 'scheduleEvent' },
+      domainArgs: { startsAt: '2024-01-15T12:00:00.000Z' },
+    })
+
+    const result = await invoke('scheduleEvent', call, {
+      fns: localFns,
+      schemas: schemasWithDatetime,
+    })
+
+    expect(result).toEqual({ ok: true })
+    // dispatch WAS called — valid date-time passed through.
+    expect(dispatchSpy).toHaveBeenCalledOnce()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 4. NECESSARY-NOT-SUFFICIENT: schema-valid but domain-wrong values pass
 // ---------------------------------------------------------------------------
 
 describe('validateLayer — necessary-not-sufficient (§6 boundary)', () => {

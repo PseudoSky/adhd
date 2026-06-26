@@ -22,9 +22,7 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import Fastify, { type FastifyInstance } from 'fastify'
 import { createStream } from '@adhd/apigen-runtime'
-// Deep relative import of the REAL SSE projection (it is not re-exported from the
-// plugin index; this reaches the actual component under test, not a copy).
-import { sendStreamSse } from '../../../../plugins/api-fastify/src/lib/stream'
+import { sendStreamSse } from '@adhd/apigen-plugin-api-fastify'
 import { ApiError } from '@adhd/apigen-errors'
 
 let app: FastifyInstance | undefined
