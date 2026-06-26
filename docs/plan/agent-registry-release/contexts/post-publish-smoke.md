@@ -18,6 +18,7 @@
 
 - [post-publish-smoke.1] smoke_test.sh imports each published package + runs the USAGE.md install->compose->compile journey
 
+- [post-publish-smoke.2] smoke_test.sh installs agent-mcp OUTSIDE the workspace and require()-resolves its transitive @adhd/* deps from the published graph — runtime-resolution proof (F-P6-13)
 ---
 
 ## Reservations
