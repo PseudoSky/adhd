@@ -175,6 +175,14 @@
       "kind": "command",
       "cmd": "python3 docs/plan/agent-registry-migration/scripts/review_gate.py",
       "expect": "exit0"
+    },
+    {
+      "id": "import-script.4",
+      "phase": "import",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/import-script.test.ts",
+      "expect": "exit0"
     }
   ]
 }
