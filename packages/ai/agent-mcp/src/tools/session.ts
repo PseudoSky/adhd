@@ -2,6 +2,8 @@ import { logger } from "../logger.js";
 import type { AgentStore } from "../store/agent-store.js";
 import type { SessionStore } from "../store/session-store.js";
 import type { PolicyEngine } from "../engine/policy.js";
+import type { PromptResolverDeps } from "../engine/prompt-resolver.js";
+import { resolveComposedPrompt } from "../engine/prompt-resolver.js";
 import type {
     AgentToolInput,
     AgentToolOutput,
@@ -17,6 +19,13 @@ export interface SessionDeps {
     agentStore: AgentStore;
     sessionStore: SessionStore;
     policy: PolicyEngine;
+    /**
+     * Optional prompt-resolver dependencies.  When present, the session-start
+     * path resolves the system-prompt via compileAgent and writes
+     * sessions.composed_prompt_id.  When absent (legacy / tests that don't
+     * exercise the compiler path), the session is created without resolution.
+     */
+    promptResolver?: PromptResolverDeps;
 }
 
 /**
@@ -25,6 +34,10 @@ export interface SessionDeps {
  * When called from within a running task context (executionContext is
  * defined), the policy engine enforces the allowedAgents check and we
  * log an AGENT_DELEGATION event.
+ *
+ * When `deps.promptResolver` is provided, the agent's system-prompt is
+ * resolved via the compiler (with a composed_prompts cache lookup) and
+ * `sessions.composed_prompt_id` is written with the resolved row id.
  */
 export async function agentTool(
     input: AgentToolInput,
@@ -51,9 +64,36 @@ export async function agentTool(
         );
     }
 
+    // Resolve system-prompt via compiler when resolver deps are available.
+    // The resolved content replaces the stored agentDefinition.systemPrompt
+    // (compat-shim: [def:compat-shim]) and the composed_prompt_id is written
+    // to the session row so consumers can trace the exact artifact used.
+    let resolvedSystemPrompt: string | undefined;
+    let composedPromptId: string | undefined;
+
+    if (deps.promptResolver) {
+        const resolved = resolveComposedPrompt(
+            {
+                agentSlug: input.name,
+                platform: agentDefinition.provider.type,
+                context: {},
+            },
+            deps.promptResolver
+        );
+        resolvedSystemPrompt = resolved.content;
+        composedPromptId = resolved.id;
+    }
+
+    // Build the agent definition snapshot: if we resolved a system-prompt via
+    // the compiler, populate systemPrompt from the compiled content (compat-shim).
+    const snapshotDefinition = resolvedSystemPrompt !== undefined
+        ? { ...agentDefinition, systemPrompt: resolvedSystemPrompt }
+        : agentDefinition;
+
     const session = deps.sessionStore.create({
         agentName: input.name,
-        agentDefinition,
+        agentDefinition: snapshotDefinition,
+        composedPromptId,
     });
 
     return { session_id: session.id };

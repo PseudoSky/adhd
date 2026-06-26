@@ -27,6 +27,7 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@adhd/agent-compiler": "*",
     "@adhd/agent-mcp-types": "*",
     "@anthropic-ai/sdk": "0.96.0",
     "@modelcontextprotocol/sdk": "1.29.0",
