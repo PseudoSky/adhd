@@ -78,6 +78,12 @@ Green unit tests and passing `grep` audits are **not** proof a feature works. On
 
 When authoring a plan with the `plan-state-machine` skill, each behavioral DoD clause must name the real entrypoint + observable and be proven by an audit check that drives it. **Never mark a task complete on proxy evidence.**
 
+### Proving an MCP server works — drive the real tools, never a bypass
+
+An MCP server's consumer seam is its **tools as loaded by a host** (`.mcp.json` → `mcp__<server>__*`). So the proof it works is to **call those loaded tools the way a host does** — against real state and real dependencies — and trust the returned **payload + exit code**, not a report. This applies to every MCP server in the repo, not just agent-mcp.
+
+The trap to avoid: **if the tool isn't available, make it available — don't go around it.** When an `mcp__<server>__*` tool is missing or stale, the fix is to load it (build the server, point `.mcp.json` at the built artifact, `/mcp` reload) and call it. It is **not** license to run a shell script that spawns or — worse — *imports* the build and calls its functions directly. That is our code calling our code; it skips the exact layer that fails in real use (host wiring, dist dependency resolution, tool registration, output-size limits), so it can pass while the shipped server is broken. A standalone script is acceptable **only** when it acts as a real MCP client (real JSON-RPC over stdio/http to the unmodified built server) — never when it reaches inside the server. Ask: *am I calling it like a host, or reaching inside it?* Only the former proves anything.
+
 ## 🔄 8. Refactoring & Purity Protocol (CRITICAL)
 
 You are responsible for maintaining the health of the shared ecosystem. **Follow these rules for every code change:**

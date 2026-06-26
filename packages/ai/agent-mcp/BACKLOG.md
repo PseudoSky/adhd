@@ -47,6 +47,50 @@ nice-to-have / cleanup.
 
 ## 🐞 Bugs
 
+### BUG-003 — `agent_list` (no args) returns every full agent definition → blows the host's tool-output token ceiling
+- **Status:** open
+- **Priority:** P2 · **Area:** tools (agent-crud), discovery
+- **Reported:** 2026-06-26 (live MCP validation, orchestrator resume)
+
+**Problem.** Calling `agent_list` with no arguments serialises **all** agent
+definitions in full, including each complete `systemPrompt`. Against the real
+46-agent store this returned **464,821 chars / 692 lines**, which **exceeded the
+MCP host's max tool-output tokens** — the host refused the result and spilled it
+to a file. The tool meant to power *discovery* is unusable for discovery at real
+corpus size. Unit tests never caught it: they list 1–2 in-memory agents, so the
+output is tiny. Only a live call against the real store reveals it.
+
+**Impact.** Any host that calls `agent_list` on a populated store gets an
+unusable (or refused) response. Gets monotonically worse as the registry/corpus
+grows — and Plan 7 will load a much larger corpus. Directly blocks the Plan 8
+discovery lane (`component_search`) if that path shares this shape.
+
+**Proposed fix.** Give `agent_list` a sane **default `limit`** (e.g. 20) with
+`offset` paging, and return a **summary projection** by default (name,
+description, provider type/model, version, tags) — never the full `systemPrompt`
+/ body inline. Expose the full definition only via an explicit `agent_read`
+(which already exists) or an opt-in `full: true`. Mirror the same projection
+discipline in every authoring/discovery list tool added in Plan 8.
+
+**Acceptance criteria**
+- `agent_list` against a ≥46-agent store returns a bounded, summary-only payload
+  that stays under the host token ceiling (assert byte/row bound in an
+  integration test seeded with N≫limit agents).
+- Full body is reachable only via `agent_read`/explicit `full:true`.
+- Reverting the projection (dumping full bodies) turns the bound test red.
+
+**References** — `src/tools/agent-crud.ts` (`agent_list`), `src/server.ts`
+(ListTools/CallTool wiring), USAGE_GUIDE. Cross-ref orchestration-ledger
+F-LIVE-1 (`docs/plan/agent-mcp-refactor/orchestration-ledger.md`).
+
+> Telemetry note (not a separate bug): the `claudecli` provider reports
+> `inputTokens:0/outputTokens:0` in `usage` (the CLI stream-json surfaces no
+> usage), while `anthropic` reports real counts. Budget/metrics on
+> claudecli-routed work silently under-report — folded into the `claudecli`
+> observability gap tracked by **DEBT-002**. (orchestration-ledger F-LIVE-3.)
+
+---
+
 ### BUG-002 — Delegation-opened sessions are never reaped → leak + undeletable sub-agent
 - **Status:** done (in source; ships in the next publish) · **Closed:** 2026-06-16
 - **Priority:** P2
