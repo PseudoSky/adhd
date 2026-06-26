@@ -11,11 +11,11 @@
       "end_ref": "aaeb501327e14ef115567dfa2825cf0710378954"
     },
     "runtime-sink-schema": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-26T04:38:48.699Z",
-      "done_at": null,
+      "done_at": "2026-06-26T04:48:22.445Z",
       "start_ref": "4c41a72a812069808f34ee3d1101b3cf7763e660",
-      "end_ref": null
+      "end_ref": "57d100ffc6e43c2d8f76d64c4d2e1c8da57215af"
     },
     "compiler-integration": {
       "status": "pending",
@@ -86,6 +86,18 @@
       "audit_criteria_total": 5,
       "by": "pseudosky",
       "note": "Confirmed decisions.md (all 4 decisions: thin-cache AgentStore, agent-mcp owns runtime composed_prompts table, systemPrompt compat-shim retained-as-computed, claudecli allowedBuiltinTools derives from composed.tools/AGENT_TOOL). Verified _shared.md caller map against live src tree: all callers confirmed in correct state buckets; found session.ts also imports AgentStore for agentTool.read() — consistent with agent-store-retire ownership. Architecture phase audit passed 5/5 (exit code 0)."
+    },
+    {
+      "ts": "2026-06-26T04:48:22.445Z",
+      "from": "runtime-sink-schema",
+      "to": "runtime-sink-schema",
+      "start_ref": "4c41a72a812069808f34ee3d1101b3cf7763e660",
+      "end_ref": "57d100ffc6e43c2d8f76d64c4d2e1c8da57215af",
+      "audit_exit": 9,
+      "audit_criteria_passed": 1,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "Added composed_prompts cache table + experiment_assignments table + sessions.composed_prompt_id nullable FK column to db/schema.ts (append-only). Created ComposedPromptStore (upsert/findByAgentContext/read) mirroring agent-store.ts constructor pattern. Added ComposedPrompt interface + COMPOSED_PROMPT_NOT_FOUND error code to agent-mcp-types (additive). Authored drizzle migration 0006_composed_prompts_cache.sql + meta snapshot 0006 + journal entry. Added @nx/vite:test executor to project.json so guard --testFile flag is accepted. Guard test: 8 tests, reopen roundtrip proven by close+reopen on-disk path, exit 0. Full agent-mcp suite: 210 passed / 0 failures, exit 0. nx build agent-mcp: clean."
     }
   ],
   "amendment_log": [],
@@ -94,7 +106,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "runtime-sink-schema",
+  "current_state": "compiler-integration",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:22:27.852Z",
     "by": "pseudosky",
