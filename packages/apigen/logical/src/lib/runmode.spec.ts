@@ -160,6 +160,63 @@ describe('buildTranscoder', () => {
       const wire = transcoder.encode([1, 'two', true], schema);
       expect(wire).toEqual([1, 'two', true]);
     });
+
+    // REGRESSION: tuple/positional `items` (an ARRAY of per-index schemas) must
+    // be walked position-by-position — NOT treated as a single element schema
+    // (which made encodeSchemaless envelope every element: the BUG-013 tuple bug
+    // surfaced as `[{"$apigen":"int64","v":"x"},…]`).
+    it('walks positional (tuple) items array by index, no per-element envelope', () => {
+      const registry = createRegistry();
+      registry.register(markedCodec);
+      const transcoder = buildTranscoder(registry.freeze());
+
+      // Tuple [marked, plain-number, plain-boolean]: only position 0 has a codec.
+      const schema: SchemaNode = {
+        type: 'array',
+        items: [
+          { type: 'string', format: MARKED_FORMAT },
+          { type: 'number' },
+          { type: 'boolean' },
+        ],
+        minItems: 3,
+        maxItems: 3,
+      };
+      const wire = transcoder.encode(['x', 1, true], schema);
+      // Position 0 goes through the codec; positions 1 & 2 pass through as-is.
+      // Teeth: a wrong impl envelopes element 0 → {$apigen:…}; here it must be a string.
+      expect(wire).toEqual(['encoded(x)', 1, true]);
+
+      const host = transcoder.decode(wire as Wire, schema);
+      expect(host).toEqual(['decoded(encoded(x))', 1, true]);
+    });
+
+    it('plain tuple of scalars (no logical types) round-trips untouched', () => {
+      const registry = createRegistry();
+      registry.register(markedCodec);
+      const transcoder = buildTranscoder(registry.freeze());
+
+      const schema: SchemaNode = {
+        type: 'array',
+        items: [{ type: 'string' }, { type: 'number' }, { type: 'boolean' }],
+        minItems: 3,
+        maxItems: 3,
+      };
+      const wire = transcoder.encode(['x', 1, true], schema);
+      expect(wire).toEqual(['x', 1, true]);
+      expect(transcoder.decode(wire as Wire, schema)).toEqual(['x', 1, true]);
+    });
+
+    it('positional items: elements past the tuple length pass through', () => {
+      const registry = createRegistry();
+      const transcoder = buildTranscoder(registry.freeze());
+
+      const schema: SchemaNode = {
+        type: 'array',
+        items: [{ type: 'string' }],
+      };
+      const wire = transcoder.encode(['a', 2, 3], schema);
+      expect(wire).toEqual(['a', 2, 3]);
+    });
   });
 
   describe('$ref resolution', () => {
