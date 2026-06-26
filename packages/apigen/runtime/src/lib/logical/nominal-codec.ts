@@ -217,11 +217,17 @@ export function createNominalCodec(opts: NominalCodecOptions): LogicalTypeCodec<
     decode(wire: Wire, node: SchemaNode, ctx: TranscodeCtx): object {
       // ── 1. Validate the wire shape FIRST (validate-then-construct) ──────────
       if (wire === null || typeof wire !== 'object' || Array.isArray(wire)) {
+        let wireKind: string
+        if (wire === null) {
+          wireKind = 'null'
+        } else if (Array.isArray(wire)) {
+          wireKind = 'array'
+        } else {
+          wireKind = typeof wire
+        }
         throw new NominalCodecError(
           'E_NOMINAL_INVALID_WIRE',
-          `[${id}] expected a JSON object on the wire at "${ctx.path}", got ${
-            wire === null ? 'null' : Array.isArray(wire) ? 'array' : typeof wire
-          }.`,
+          `[${id}] expected a JSON object on the wire at "${ctx.path}", got ${wireKind}.`,
         );
       }
       const bagWire = wire as Record<string, Wire>;

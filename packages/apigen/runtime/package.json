@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "dependencies": {
     "@adhd/apigen-core": "^0.1.0",
-    "@adhd/apigen-logical": "^0.1.0",
+    "@adhd/apigen-logical": "^0.0.1",
+    "@adhd/apigen-errors": "^0.1.1",
     "ajv": "^8.20.0",
     "ajv-formats": "^2.1.1",
     "pino": "10.3.1"

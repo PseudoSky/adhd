@@ -198,11 +198,11 @@ function getTsjsTs(): typeof import('typescript') {
   try {
     // ts-json-schema-generator resolves TypeScript relative to its own package
     const tsjsDir = path.dirname(require.resolve('ts-json-schema-generator/package.json'))
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     _tsjsTs = require(require.resolve('typescript', { paths: [tsjsDir] })) as typeof import('typescript')
   } catch {
     // Fallback: use whatever TypeScript is resolvable from here
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     _tsjsTs = require('typescript') as typeof import('typescript')
   }
   return _tsjsTs
@@ -262,6 +262,7 @@ function generatorCacheKey(pathStr: string, tsconfig: string | undefined): strin
  * the amortisation turns O(N) program builds into O(1).
  */
 function runScalarAwareGenerator(config: Config, cacheable: boolean): Record<string, unknown> {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { DEFAULT_CONFIG } = require('ts-json-schema-generator/dist/src/Config.js') as {
     DEFAULT_CONFIG: CompletedConfig
   }
@@ -271,6 +272,7 @@ function runScalarAwareGenerator(config: Config, cacheable: boolean): Record<str
 
   let gen = key !== undefined ? _generatorCache.get(key) : undefined
   if (!gen) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { createProgram } = require('ts-json-schema-generator/dist/factory/program.js') as {
       createProgram: (cfg: CompletedConfig) => unknown
     }

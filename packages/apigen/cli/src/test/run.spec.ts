@@ -1,10 +1,23 @@
 import { describe, it, expect } from 'vitest'
 import * as path from 'node:path'
+import * as net from 'node:net'
 import { Command } from 'commander'
 import { registerRunCommand, assertFnsNonEmpty, assertDecimalLibPresent } from '../lib/commands/run'
 import { registerRunRegistryCommand } from '../lib/commands/run-registry'
 import type { OutputPlugin, RunInput, ComposedSchemas } from '@adhd/apigen-core'
 import mcpPlugin from '@adhd/apigen-plugin-mcp'
+
+/** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */
+async function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer()
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address() as net.AddressInfo
+      srv.close((err) => (err ? reject(err) : resolve(addr.port)))
+    })
+    srv.on('error', reject)
+  })
+}
 
 const fixturesDir = path.join(__dirname, 'fixtures')
 const registryDir = path.join(fixturesDir, 'registry')
@@ -407,13 +420,11 @@ describe('[cli-run-cmd.non-ts] non-TS plugin bypasses TS extraction', () => {
 
 // ───────────────────────────────────────────────────────────────────────────
 // Live MCP server: run command starts a real streaming-http server
-// Gated behind APIGEN_LIVE=1 — skipped in default CI/audit runs.
 // ───────────────────────────────────────────────────────────────────────────
 
-describe.skipIf(!process.env['APIGEN_LIVE'])('[cli-run-cmd.1 live] run command starts a live MCP server via plugin.run()', () => {
-  const port = 47431 // deterministic high port, different from plugin-mcp tests
-
+describe('[cli-run-cmd.1 live] run command starts a live MCP server via plugin.run()', () => {
   it('serves tools/list with fixture tools over streaming-http', { timeout: 20000 }, async () => {
+    const port = await freePort()
     const program = makeProgram()
     registerRunCommand(program, { mcp: mcpPlugin })
 

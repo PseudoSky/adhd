@@ -5,6 +5,8 @@
   "dependencies": {
     "@adhd/apigen-core": "^0.1.0",
     "@adhd/apigen-runtime": "^0.1.0",
+    "@adhd/apigen-errors": "^0.1.1",
+    "@adhd/apigen-naming": "^0.1.1",
     "@modelcontextprotocol/sdk": "1.29.0"
   },
   "publishConfig": {

@@ -923,12 +923,7 @@ def run_flask_server_tests(results: _Results) -> None:
     import urllib.error
     import urllib.request
 
-    print("\n--- E. Flask server live tests (APIGEN_PYFLASK_LIVE=1) ---")
-
-    if not os.environ.get("APIGEN_PYFLASK_LIVE"):
-        print("  SKIP  (set APIGEN_PYFLASK_LIVE=1 to enable)")
-        results.ok("flask.skipped")
-        return
+    print("\n--- E. Flask server live tests ---")
 
     # Locate the fixture module (relative to this script).
     # SCRIPT_DIR = packages/apigen/python
@@ -1338,12 +1333,7 @@ def run_cli_decimal_live_tests(results: _Results) -> None:
     import urllib.error
     import urllib.request
 
-    print("\n--- H. CLI-spawned Decimal decode live tests (APIGEN_PYFLASK_LIVE=1) ---")
-
-    if not os.environ.get("APIGEN_PYFLASK_LIVE"):
-        print("  SKIP  (set APIGEN_PYFLASK_LIVE=1 to enable)")
-        results.ok("cli_decimal.skipped")
-        return
+    print("\n--- H. CLI-spawned Decimal decode live tests ---")
 
     # Locate the decimal_api fixture module.
     fixture_module = (
@@ -1570,6 +1560,231 @@ def run_cli_decimal_live_tests(results: _Results) -> None:
 
 
 # ---------------------------------------------------------------------------
+# J. `from __future__ import annotations` (PEP 563) regression tests
+#    (BUG-APIGEN-008 + BUG-PY-FLASK-002)
+#
+# Drives the REAL flask_server with future_annotations_api.py, which uses
+# `from __future__ import annotations` throughout.  Proves:
+#   1. (extractor unit) schema for Decimal param = {type:string,format:decimal}
+#      NEGATIVE CONTROL: without get_type_hints, annotation is a string "Decimal"
+#      and the schema falls back to {} — the decimal check fails.
+#   2. (extractor unit) @dataclass with `from __future__` does NOT crash.
+#   3. (live) add_decimal "123.456" → "123.457" (real Decimal math, not TypeError).
+#      NEGATIVE CONTROL: if decode is absent, str + Decimal raises TypeError → 500.
+#   4. (live) integer amount → HTTP 400 (schema validation with {format:decimal}).
+#      NEGATIVE CONTROL: empty schema {} accepts integers — check has teeth.
+# ---------------------------------------------------------------------------
+
+def run_future_annotations_tests(results: _Results) -> None:
+    """Run extractor unit + live server tests for PEP-563 future annotations."""
+    import time
+    import urllib.error
+    import urllib.request
+
+    print("\n--- J. from __future__ import annotations (PEP-563) regression ---")
+
+    fixture_module = (
+        SCRIPT_DIR.parent /        # packages/apigen
+        "plugins" / "py-flask" / "src" / "test" / "fixtures" / "future_annotations_api.py"
+    )
+    if not fixture_module.exists():
+        results.fail(
+            "future_ann.fixture.present",
+            f"Fixture not found: {fixture_module}",
+        )
+        return
+
+    results.ok("future_ann.fixture.present")
+
+    # ------------------------------------------------------------------
+    # 1a. Extractor unit: Decimal param schema must be {type:string,format:decimal}
+    # ------------------------------------------------------------------
+    try:
+        ops = extract_module(str(fixture_module), namespace="futureann")
+        op_by_name = {op["path"][-1]["raw"]: op for op in ops}
+
+        if "add_decimal" in op_by_name:
+            add_op = op_by_name["add_decimal"]
+            amount_schema = add_op["input"].get("properties", {}).get("amount", {})
+            if amount_schema.get("type") == "string" and amount_schema.get("format") == "decimal":
+                results.ok("future_ann.extractor.decimal_schema")
+            else:
+                results.fail(
+                    "future_ann.extractor.decimal_schema",
+                    f"expected {{type:string,format:decimal}}, got {amount_schema!r} "
+                    "(likely PEP-563 string annotation not resolved via get_type_hints)",
+                )
+
+            # NEGATIVE CONTROL: without the fix, annotation is the string "Decimal"
+            # (not the type object), so _py_type_hint_to_schema("Decimal") → {}.
+            # Prove the check has teeth: {} accepts integers where decimal must not.
+            from apigen_python.validator import is_valid as _is_valid
+            broken_schema = {
+                "type": "object",
+                "properties": {"amount": {}},
+                "required": ["amount"],
+            }
+            if _is_valid(broken_schema, {"amount": 999}):
+                results.ok("future_ann.extractor.neg_ctrl.empty_permissive")
+            else:
+                results.fail(
+                    "future_ann.extractor.neg_ctrl.empty_permissive",
+                    "broken empty schema {} should accept integer — neg control broken",
+                )
+        else:
+            results.fail("future_ann.extractor.decimal_schema", "'add_decimal' op not found")
+
+        # ------------------------------------------------------------------
+        # 1b. Extractor unit: @dataclass with from __future__ must not crash
+        # ------------------------------------------------------------------
+        # If the sys.modules fix is absent, extract_module raises AttributeError
+        # inside dataclasses._is_type when processing the PaymentRequest dataclass.
+        # The fact that we reached here without exception proves the fix works.
+        results.ok("future_ann.extractor.dataclass_no_crash")
+
+        # ------------------------------------------------------------------
+        # 1c. greet function must be present and have correct schema
+        # ------------------------------------------------------------------
+        if "greet" in op_by_name:
+            greet_op = op_by_name["greet"]
+            name_schema = greet_op["input"].get("properties", {}).get("name", {})
+            if name_schema.get("type") == "string":
+                results.ok("future_ann.extractor.str_schema")
+            else:
+                results.fail(
+                    "future_ann.extractor.str_schema",
+                    f"expected {{type:string}}, got {name_schema!r}",
+                )
+        else:
+            results.fail("future_ann.extractor.str_schema", "'greet' op not found")
+
+    except Exception as exc:
+        results.fail(
+            "future_ann.extractor.decimal_schema",
+            f"extract_module raised {type(exc).__name__}: {exc} "
+            "(dataclass AttributeError = sys.modules fix missing)",
+        )
+        results.fail("future_ann.extractor.dataclass_no_crash", f"exception: {exc}")
+        return
+
+    # ------------------------------------------------------------------
+    # 2. Live server: add_decimal must decode + compute + encode correctly
+    # ------------------------------------------------------------------
+    port = 49283  # distinct port
+    namespace = "futureann"
+    base_url = f"http://127.0.0.1:{port}"
+
+    proc = subprocess.Popen(
+        [
+            sys.executable, "-m", "apigen_python.flask_server",
+            "--module", str(fixture_module),
+            "--namespace", namespace,
+            "--port", str(port),
+        ],
+        cwd=str(SCRIPT_DIR),
+        env={**os.environ, "PYTHONPATH": str(SCRIPT_DIR)},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    # Poll for readiness (bounded to 10 s).
+    deadline = time.monotonic() + 10.0
+    ready = False
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(f"{base_url}/_meta/health", timeout=1) as resp:
+                if resp.status == 200:
+                    ready = True
+                    break
+        except Exception:
+            time.sleep(0.05)
+
+    if not ready:
+        stderr_out = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+        proc.kill()
+        results.fail(
+            "future_ann.startup",
+            f"Server did not become ready within 10 s. stderr: {stderr_out[:500]}",
+        )
+        return
+
+    results.ok("future_ann.startup")
+
+    def _post(fn_name: str, data: dict[str, Any]) -> tuple[int, Any]:
+        req = urllib.request.Request(
+            f"{base_url}/{namespace}/{fn_name}",
+            data=json.dumps({"data": data}).encode(),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return resp.status, json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            return e.code, json.loads(e.read())
+
+    try:
+        # ------------------------------------------------------------------
+        # Test 1: add_decimal "123.456" → "123.457"
+        # PROOF: if PEP-563 fix is absent, amount arrives as str → TypeError
+        # (str + Decimal) → 500.  A 200 with "123.457" proves both:
+        #   (a) schema inference worked  (Decimal param detected)
+        #   (b) decode worked            (wire string → real Decimal)
+        # ------------------------------------------------------------------
+        status, body = _post("add_decimal", {"amount": "123.456"})
+        if status == 200 and body == "123.457":
+            results.ok("future_ann.live.decimal.roundtrip")
+        else:
+            results.fail(
+                "future_ann.live.decimal.roundtrip",
+                f"expected 200 '123.457', got {status} {body!r}. "
+                "If 500: PEP-563 decode broken (str + Decimal TypeError).",
+            )
+
+        # NEGATIVE CONTROL: "123.456" + "0.001" via str concat = "123.4560.001" ≠ "123.457"
+        if status == 200 and isinstance(body, str) and "0.001" not in body:
+            results.ok("future_ann.live.decimal.neg_ctrl.not_str_concat")
+        else:
+            results.fail(
+                "future_ann.live.decimal.neg_ctrl.not_str_concat",
+                f"result looks like string concat or wrong type: {body!r}",
+            )
+
+        # ------------------------------------------------------------------
+        # Test 2: integer amount → HTTP 400 (schema with format:decimal rejects)
+        # NEGATIVE CONTROL: if schema were {} (empty), 999 would PASS validation.
+        # ------------------------------------------------------------------
+        status_int, body_int = _post("add_decimal", {"amount": 999})
+        if status_int == 400 and (body_int or {}).get("code") == "invalid_argument":
+            results.ok("future_ann.live.decimal.rejects_int")
+        else:
+            results.fail(
+                "future_ann.live.decimal.rejects_int",
+                f"expected HTTP 400 invalid_argument for integer, got {status_int} {body_int!r}. "
+                "If 200/500: schema inferred as {} (PEP-563 not resolved).",
+            )
+
+        # ------------------------------------------------------------------
+        # Test 3: greet plain string round-trip
+        # ------------------------------------------------------------------
+        status_g, body_g = _post("greet", {"name": "PEP563"})
+        if status_g == 200 and body_g == "Hello, PEP563!":
+            results.ok("future_ann.live.greet")
+        else:
+            results.fail(
+                "future_ann.live.greet",
+                f"expected 200 'Hello, PEP563!', got {status_g} {body_g!r}",
+            )
+
+    finally:
+        proc.kill()
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+# ---------------------------------------------------------------------------
 # I. gRPC server live tests (gated behind APIGEN_PYGRPC_LIVE=1)
 #
 # Drives the REAL grpc_server subprocess with a real gRPC client (grpcurl).
@@ -1590,12 +1805,7 @@ def run_grpc_server_tests(results: _Results) -> None:
     import shutil
     import time
 
-    print("\n--- I. gRPC server live tests (APIGEN_PYGRPC_LIVE=1) ---")
-
-    if not os.environ.get("APIGEN_PYGRPC_LIVE"):
-        print("  SKIP  (set APIGEN_PYGRPC_LIVE=1 to enable)")
-        results.ok("grpc.skipped")
-        return
+    print("\n--- I. gRPC server live tests ---")
 
     # Locate grpcurl
     grpcurl_bin = shutil.which("grpcurl")
@@ -1898,6 +2108,7 @@ def main() -> int:
     run_flask_server_tests(results)
     run_extractor_pollution_tests(results)
     run_cli_decimal_live_tests(results)
+    run_future_annotations_tests(results)
     run_grpc_server_tests(results)
 
     return results.summary()

@@ -57,7 +57,7 @@ const SCALAR_VECTORS: LogicalTypeVector[] = [
     seed: '9007199254740993',
     wire: '9007199254740993',
     invariants: [{ pointer: '/bigintStr', equals: '9007199254740993' }],
-    negativeControl: { mutate: 'wire', to: 9007199254740993 },
+    negativeControl: { mutate: 'wire', to: Number('9007199254740993') },
   },
   // ---- decimal ----
   {
@@ -362,10 +362,9 @@ describe('registerWellKnown', () => {
 // ---------------------------------------------------------------------------
 
 describe('dateTimeCodec', () => {
-  let codec: LogicalTypeCodec;
   const reg = createRegistry();
   registerWellKnown(reg);
-  codec = reg.get('date-time')!;
+  const codec: LogicalTypeCodec = reg.get('date-time')!;
   const schema = { type: 'string', format: 'date-time' } as SchemaNode;
   const ctx = makeCtx();
 
@@ -401,7 +400,7 @@ describe('int64Codec', () => {
   });
 
   it('strict mode throws on numeric wire (precision loss)', () => {
-    expect(() => codec.decode(9007199254740993 as unknown as Wire, schema, ctx)).toThrow();
+    expect(() => codec.decode(Number('9007199254740993') as unknown as Wire, schema, ctx)).toThrow();
   });
 });
 

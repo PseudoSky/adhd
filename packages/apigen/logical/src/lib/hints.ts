@@ -234,7 +234,7 @@ const GO_COLUMN: LanguageTable = {
     // time.Time serialises as RFC3339Nano via MarshalJSON.
     encode: '__SCAFFOLD_GO_DATETIME_ENCODE__',
     decode: '__SCAFFOLD_GO_DATETIME_DECODE__',
-    imports: ['\"time\"'],
+    imports: ['"time"'],
     mode: 'native',
   },
 
@@ -242,14 +242,14 @@ const GO_COLUMN: LanguageTable = {
     // struct tag `json:"x,string"` or math/big for arbitrary precision.
     encode: '__SCAFFOLD_GO_INT64_ENCODE__',
     decode: '__SCAFFOLD_GO_INT64_DECODE__',
-    imports: ['\"strconv\"'],
+    imports: ['"strconv"'],
     mode: 'native',
   },
 
   'decimal': {
     encode: '__SCAFFOLD_GO_DECIMAL_ENCODE__',
     decode: '__SCAFFOLD_GO_DECIMAL_DECODE__',
-    imports: ['\"github.com/shopspring/decimal\"'],
+    imports: ['"github.com/shopspring/decimal"'],
     dep: { name: 'github.com/shopspring/decimal', version: 'v1' },
     mode: 'lib',
   },
@@ -258,14 +258,14 @@ const GO_COLUMN: LanguageTable = {
     // encoding/base64 — stdlib.
     encode: '__SCAFFOLD_GO_BYTE_ENCODE__',
     decode: '__SCAFFOLD_GO_BYTE_DECODE__',
-    imports: ['\"encoding/base64\"'],
+    imports: ['"encoding/base64"'],
     mode: 'native',
   },
 
   'uuid': {
     encode: '__SCAFFOLD_GO_UUID_ENCODE__',
     decode: '__SCAFFOLD_GO_UUID_DECODE__',
-    imports: ['\"github.com/google/uuid\"'],
+    imports: ['"github.com/google/uuid"'],
     dep: { name: 'github.com/google/uuid', version: 'v1' },
     mode: 'lib',
   },

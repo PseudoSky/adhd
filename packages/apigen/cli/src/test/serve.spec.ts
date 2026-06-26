@@ -56,15 +56,22 @@ describe('[serve.namespaceFromUrl] leading path segment routing', () => {
 describe('[serve.resolveHosts] partition by language → plugin', () => {
   it('routes .ts → api-fastify and .py → py-flask by default', () => {
     const hosts = resolveHosts(['/x/a.ts', '/x/b.py'], {})
-    expect(hosts.map((h) => [h.namespace, h.language, h.plugin])).toEqual([
-      ['a', 'ts', 'api-fastify'],
-      ['b', 'py', 'py-flask'],
+    expect(hosts.map((h) => [h.namespace, h.language, h.plugin, h.transport])).toEqual([
+      ['a', 'ts', 'api-fastify', 'http'],
+      ['b', 'py', 'py-flask', 'http'],
     ])
   })
 
   it('honours a --mount override for a namespace', () => {
     const hosts = resolveHosts(['/x/a.ts'], { a: 'api-express' })
     expect(hosts[0]?.plugin).toBe('api-express')
+    expect(hosts[0]?.transport).toBe('http')
+  })
+
+  it('sets transport=grpc for py-grpc plugin', () => {
+    const hosts = resolveHosts(['/x/b.py'], { b: 'py-grpc' })
+    expect(hosts[0]?.plugin).toBe('py-grpc')
+    expect(hosts[0]?.transport).toBe('grpc')
   })
 
   it('throws on an unrecognised extension', () => {
@@ -87,6 +94,7 @@ describe('[serve.aggregateHealth] merged per-host status (§13.1)', () => {
     plugin: 'api-fastify',
     source: `/x/${ns}.ts`,
     port: 0,
+    transport: 'http',
     alive,
     ready,
   })
@@ -125,14 +133,21 @@ describe('[serve.findFreePort] allocates distinct usable loopback ports', () => 
 // LIVE behavioural suite — drives the REAL serve stack: spawns real
 // `apigen run` children (TS fastify + Python flask), proxies cross-language
 // calls through the front, proves partial availability by killing the Python
-// child, and proves orphan-free teardown.  Gated behind APIGEN_LIVE=1 so the
-// default CI/audit run stays offline (no child spawning, no python3 needed).
+// child, and proves orphan-free teardown.
+//
+// RUNS BY DEFAULT (no env flag): the serve front is the headline feature; a
+// gated suite would let the real cross-language path rot unseen (the exact
+// blind spot that hid BUG-009..013). The CLI bundle is guaranteed present via
+// the `test` target's `dependsOn:["build"]`; `python3` is a hard prerequisite
+// and a missing interpreter FAILS loudly rather than skipping. Only `grpcurl`
+// (an optional external binary) degrades gracefully — its gRPC assertions
+// self-skip with a warning when it is absent, never hiding a TS/Python failure.
 //
 // Determinism: every wait is a bounded poll of a real HTTP round-trip or a
 // real process exit event — never a fixed sleep that races the system.
 // ───────────────────────────────────────────────────────────────────────────
 
-describe.skipIf(!process.env['APIGEN_LIVE'])('[serve.live] real cross-language serve front', () => {
+describe('[serve.live] real cross-language serve front', () => {
   let tmpDir: string | undefined
   let shutdownFn: (() => Promise<void>) | undefined
 
@@ -303,6 +318,179 @@ describe.skipIf(!process.env['APIGEN_LIVE'])('[serve.live] real cross-language s
       })()
       expect(exited, `TS child pid ${tsPid} should be gone after shutdown`).toBe(true)
       expect(tsHost?.alive).toBe(false)
+    },
+  )
+
+  it(
+    'mounts a gRPC host (py-grpc) on the same front port as HTTP hosts',
+    { timeout: 60000 },
+    async () => {
+      // The built CLI bundle must exist (run `nx build apigen-cli` first).
+      expect(fs.existsSync(cliPath), `built CLI not found at ${cliPath}`).toBe(true)
+
+      // Locate grpcurl — required for this test.
+      const grpcurlPath = (() => {
+        const candidates = ['/opt/homebrew/bin/grpcurl', '/usr/local/bin/grpcurl', '/usr/bin/grpcurl']
+        for (const c of candidates) { if (fs.existsSync(c)) return c }
+        return null
+      })()
+      if (!grpcurlPath) {
+        console.warn('[serve.grpc.live] grpcurl not found — skipping gRPC assertions')
+      }
+
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-grpc-serve-'))
+      const aTs = path.join(tmpDir, 'a.ts')
+      const bPy = path.join(tmpDir, 'b.py')
+      fs.writeFileSync(
+        aTs,
+        `export async function addNumbers(a: number, b: number): Promise<number> { return a + b }\n`,
+      )
+      fs.writeFileSync(
+        bPy,
+        `from decimal import Decimal\n\n` +
+        `def add_decimal(amount: Decimal) -> Decimal:\n` +
+        `    return amount + Decimal("0.001")\n\n` +
+        `def greet(name: str) -> str:\n` +
+        `    return f"Hello, {name}!"\n`,
+      )
+
+      const port = await findFreePort()
+      const { hosts, shutdown } = await startServe({
+        sources: [aTs, bPy],
+        port,
+        mounts: { b: 'py-grpc' },
+        cliPath,
+        log: () => undefined,
+      })
+      shutdownFn = shutdown
+      const base = `http://127.0.0.1:${port}`
+
+      // Verify transport tags.
+      const tsHost = hosts.find((h) => h.namespace === 'a')
+      const grpcHost = hosts.find((h) => h.namespace === 'b')
+      expect(tsHost?.transport).toBe('http')
+      expect(grpcHost?.transport).toBe('grpc')
+
+      // --- aggregate health: both hosts ready ---
+      const health0 = (await (await fetch(`${base}/_meta/health`)).json()) as {
+        status: string
+        hosts: Record<string, string>
+      }
+      expect(health0).toEqual({ status: 'ok', hosts: { a: 'ready', b: 'ready' } })
+
+      // --- TS host serves HTTP on the same port ---
+      const tsRes = await fetch(`${base}/a/addNumbers`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ data: { a: 2, b: 40 } }),
+      })
+      expect(tsRes.status).toBe(200)
+      expect(await tsRes.json()).toBe(42)
+
+      // --- gRPC host: call via grpcurl routed through the front port ---
+      if (grpcurlPath) {
+        const { spawn } = await import('node:child_process')
+
+        /**
+         * Run grpcurl asynchronously so the Node.js event loop remains free
+         * to process the in-process h2 server's requests.
+         * `spawnSync` would block the event loop, preventing the proxy from
+         * forwarding packets while grpcurl waits — causing a 10 s timeout.
+         */
+        const runGrpcurl = (args: string[], timeoutMs = 10000): Promise<{
+          status: number | null
+          stdout: string
+          stderr: string
+        }> => new Promise((resolve) => {
+          let stdout = ''
+          let stderr = ''
+          const child = spawn(grpcurlPath!, args, { encoding: 'utf8' } as never)
+          child.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
+          child.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
+          const timer = setTimeout(() => {
+            child.kill()
+            resolve({ status: null, stdout, stderr })
+          }, timeoutMs)
+          child.once('exit', (code) => {
+            clearTimeout(timer)
+            resolve({ status: code, stdout, stderr })
+          })
+        })
+
+        // gRPC call through the front (HTTP/2 h2c, detected by PRI preface)
+        const grpcResult = await runGrpcurl([
+          '-plaintext',
+          '-d', JSON.stringify({ data: { amount: '123.456' } }),
+          `127.0.0.1:${port}`,
+          'b.BService/add_decimal',
+        ])
+        // grpc-status 0 = OK
+        expect(grpcResult.status, `grpcurl exit; stderr=${grpcResult.stderr?.slice(0, 300)}`).toBe(0)
+        const grpcBody = JSON.parse(grpcResult.stdout) as { data: string }
+        const grpcResult2 = JSON.parse(grpcBody.data) as string
+        expect(grpcResult2, 'Decimal round-trip through gRPC front').toBe('123.457')
+
+        // --- gRPC plain string call ---
+        const greetResult = await runGrpcurl([
+          '-plaintext',
+          '-d', JSON.stringify({ data: { name: 'FrontProxy' } }),
+          `127.0.0.1:${port}`,
+          'b.BService/greet',
+        ])
+        expect(greetResult.status, `grpcurl greet exit; stderr=${greetResult.stderr?.slice(0,200)}`).toBe(0)
+        const greetBody = JSON.parse(greetResult.stdout) as { data: string }
+        expect(JSON.parse(greetBody.data)).toBe('Hello, FrontProxy!')
+
+        // --- kill gRPC host → gRPC calls return UNAVAILABLE (status 14), TS still works ---
+        expect(grpcHost?.child?.pid).toBeDefined()
+        grpcHost?.child?.kill('SIGKILL')
+
+        // Bounded wait until alive flips false.
+        const grpcDown = await (async () => {
+          const deadline = Date.now() + 5000
+          while (Date.now() < deadline) {
+            if (grpcHost && !grpcHost.alive) return true
+            await new Promise<void>((r) => setTimeout(r, 100))
+          }
+          return false
+        })()
+        expect(grpcDown, 'gRPC host should be dead').toBe(true)
+
+        // gRPC call to dead host → UNAVAILABLE (grpcurl exits non-zero).
+        const deadResult = await runGrpcurl([
+          '-plaintext',
+          '-d', JSON.stringify({ data: { amount: '1.0' } }),
+          `127.0.0.1:${port}`,
+          'b.BService/add_decimal',
+        ], 5000)
+        // Exit non-zero because the server returned a gRPC error status.
+        expect(
+          deadResult.status !== 0 || deadResult.stderr.includes('Unavailable') ||
+          deadResult.stderr.includes('unavailable') || deadResult.stderr.includes('UNAVAILABLE'),
+          `Expected gRPC error after host death; stderr=${deadResult.stderr?.slice(0,300)} exit=${deadResult.status}`,
+        ).toBe(true)
+      }
+
+      // TS still serves even after gRPC child death.
+      const stillUp = await fetch(`${base}/a/addNumbers`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ data: { a: 1, b: 1 } }),
+      })
+      expect(stillUp.status).toBe(200)
+      expect(await stillUp.json()).toBe(2)
+
+      // Aggregate health degraded: b down, a still ready.
+      const healthDeg = (await (await fetch(`${base}/_meta/health`)).json()) as {
+        status: string
+        hosts: Record<string, string>
+      }
+      expect(healthDeg.status).toBe('degraded')
+      expect(healthDeg.hosts['a']).toBe('ready')
+      expect(healthDeg.hosts['b']).toBe('down')
+
+      await shutdown()
+      shutdownFn = undefined
     },
   )
 })

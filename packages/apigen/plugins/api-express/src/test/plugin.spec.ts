@@ -4,6 +4,19 @@ import { generate } from '../lib/generate'
 import { run } from '../lib/run'
 import healthPlugin from '@adhd/apigen-plugin-health'
 import type { PluginInput, RunInput } from '@adhd/apigen-core'
+import * as net from 'node:net'
+
+/** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */
+async function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer()
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address() as net.AddressInfo
+      srv.close((err) => (err ? reject(err) : resolve(addr.port)))
+    })
+    srv.on('error', reject)
+  })
+}
 
 // ---------- inline fixture ----------
 // Simple in-process functions used by all tests — no mocking of anything under test.
@@ -216,15 +229,14 @@ describe('apiExpressPlugin', () => {
 })
 
 // ---------- run() integration tests — real Express instance ----------
-// Gated behind APIGEN_LIVE=1 — skipped in default CI/audit runs.
 
-describe.skipIf(!process.env['APIGEN_LIVE'])('run() — real Express server', () => {
+describe('run() — real Express server', () => {
   let controller: AbortController
   let baseUrl: string
 
   beforeAll(async () => {
     controller = new AbortController()
-    const port = 47330 // deterministic high port, avoids clashes in CI
+    const port = await freePort()
     const runInput: RunInput = { ...baseInput, options: { port }, signal: controller.signal }
 
     // run() returns a Promise that resolves on abort; fire-and-forget
@@ -290,15 +302,14 @@ describe.skipIf(!process.env['APIGEN_LIVE'])('run() — real Express server', ()
 })
 
 // ---------- [v2-proj-transport] verb-from-safe + envelope binding — live server ----------
-// Gated behind APIGEN_LIVE=1 — skipped in default CI/audit runs.
 
-describe.skipIf(!process.env['APIGEN_LIVE'])('[v2-proj-transport] run() — safe→GET / envelope from headers', () => {
+describe('[v2-proj-transport] run() — safe→GET / envelope from headers', () => {
   let controller: AbortController
   let baseUrl: string
 
   beforeAll(async () => {
     controller = new AbortController()
-    const port = 47335 // distinct port from the POST-only suite above
+    const port = await freePort()
     const packages: PluginInput['packages'] = [
       { id: 'unsafe-pkg', schemas: testSchema, importPath: '@test/test-pkg', fns: testFns },
       { id: 'safe-pkg', schemas: safeSchema, importPath: '@test/safe-pkg', fns: safeFns },
@@ -389,7 +400,6 @@ describe.skipIf(!process.env['APIGEN_LIVE'])('[v2-proj-transport] run() — safe
 // (a) rejects schema-violating input with HTTP 400 BEFORE the fn is called and
 // (b) mounts `--use health` as `GET /_meta/health`. Both regressed when the run
 // path called `dispatch()` directly, bypassing the Layer/mount stack.
-// Gated behind APIGEN_LIVE=1 — skipped in default CI/audit runs.
 
 // Counts dispatch reaching the fn — proves the validate-Layer short-circuits
 // BEFORE dispatch on bad input. `when` arrives as a real Date (dispatch decodes
@@ -425,14 +435,14 @@ const dateTimeSchema = {
   },
 }
 
-describe.skipIf(!process.env['APIGEN_LIVE'])('[BUG-APIGEN-009/010] run() — validate-Layer + health mount (Express)', () => {
+describe('[BUG-APIGEN-009/010] run() — validate-Layer + health mount (Express)', () => {
   let controller: AbortController
   let baseUrl: string
 
   beforeAll(async () => {
     scheduleCalls = 0
     controller = new AbortController()
-    const port = 47335
+    const port = await freePort()
     const runInput: RunInput = {
       packages: [
         {

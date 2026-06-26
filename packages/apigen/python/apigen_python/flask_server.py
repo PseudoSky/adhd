@@ -502,13 +502,22 @@ class ApigenFlaskServer:
                 "Ensure the module has public callable exports."
             )
 
-        # Load the module to get live function references
+        # Load the module to get live function references.
+        # Register in sys.modules BEFORE exec_module (canonical importlib pattern)
+        # so dataclasses._is_type and typing.get_type_hints work correctly for
+        # modules that use `from __future__ import annotations` (PEP 563).
         path = Path(self._module_path).resolve()
         spec = importlib.util.spec_from_file_location("_apigen_flask_module_", str(path))
         if spec is None or spec.loader is None:
             raise ImportError(f"Cannot load module from {path}")
         mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        import sys as _sys
+        _sys.modules[spec.name] = mod
+        try:
+            spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        except Exception:
+            _sys.modules.pop(spec.name, None)
+            raise
 
         # Build fn_registry: op_id → callable
         registry: dict[str, Any] = {}

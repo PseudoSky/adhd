@@ -32,7 +32,7 @@ const NS = 'pkg'
 const SVC = 'PkgService'
 const ADDR = `localhost:${PORT}`
 
-const IS_LIVE = !!process.env['APIGEN_PYGRPC_LIVE']
+const IS_LIVE = true // always run — gRPC server is local, no env gate needed
 
 // ---------------------------------------------------------------------------
 // Server lifecycle helpers
@@ -164,7 +164,7 @@ afterEach(async () => {
 // Live tests
 // ---------------------------------------------------------------------------
 
-describe.skipIf(!IS_LIVE)('py-grpc plugin — LIVE gRPC server (APIGEN_PYGRPC_LIVE=1)', () => {
+describe('py-grpc plugin — LIVE gRPC server', () => {
 
   it('grpcurl list → pkg.PkgService appears', async () => {
     server = await startServer()
