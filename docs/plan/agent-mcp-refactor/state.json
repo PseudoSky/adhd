@@ -60,11 +60,11 @@
       "end_ref": null
     },
     "code-review": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-26T07:04:29.546Z",
-      "done_at": null,
+      "done_at": "2026-06-26T07:09:27.273Z",
       "start_ref": "db0dff62371144b58e1002278edb849224f8d6a2",
-      "end_ref": null
+      "end_ref": "e0e1b721e3813c5bf2d4f288d7d2eda3c06a2a78"
     },
     "code-review-integration": {
       "status": "complete",
@@ -194,6 +194,18 @@
       "audit_criteria_total": 26,
       "by": "pseudosky",
       "note": "both e2e pass + negative controls proven (dod.1 went RED: 'expected WRONG_CONTENT to be COMPILED_CONTENT'; dod.2 went RED: 'expected 2 to be 1') + committed at fb97d2e78116d41f189cc253df118e1ca4218ad9; pre-existing criteria.json CWD bug (nx vite.config not found from planDir) fixed by warming nx cache for all --testFile guards before audit"
+    },
+    {
+      "ts": "2026-06-26T07:09:27.273Z",
+      "from": "code-review",
+      "to": "code-review",
+      "start_ref": "db0dff62371144b58e1002278edb849224f8d6a2",
+      "end_ref": "e0e1b721e3813c5bf2d4f288d7d2eda3c06a2a78",
+      "audit_exit": 0,
+      "audit_criteria_passed": 29,
+      "audit_criteria_total": 29,
+      "by": "pseudosky",
+      "note": "APPROVED — final gate (Plan 6 wave 8). dod.1/dod.2 drive REAL agentTool + stores against on-disk SQLite (compiler boundary only stub), reopen-proven; real production-mutate negative control (rename compileAgent in prompt-resolver.ts) independently re-run → e2e RED under mutation, restored clean. Audit ghost-pass hardening (test -f prefix at audit_mcp_refactor.py:80-82) confirmed load-bearing. All 6 DoD backed; live server wiring active via @adhd/agent-compiler with flat-systemPrompt fallback; full suite 252 passed exit0; build clean; back-out tag agent-mcp-baseline-pre-registry resolves. 1 non-blocking observation (composed_prompt_id is a soft ref, SQLite ADD COLUMN limitation, proven behaviorally)."
     }
   ],
   "amendment_log": [],
@@ -202,7 +214,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "code-review",
+  "current_state": "audit-final",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:22:27.852Z",
     "by": "pseudosky",
