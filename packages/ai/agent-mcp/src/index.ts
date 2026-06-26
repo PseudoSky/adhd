@@ -15,10 +15,17 @@ export { ComposedPromptStore } from "./store/composed-prompt-store.js";
 export { resolveComposedPrompt, computeContextHash } from "./engine/prompt-resolver.js";
 export type { ResolveInput, ResolveResult, ResolveResult as PromptResolveResult, CompileAgentFn, PromptResolverDeps } from "./engine/prompt-resolver.js";
 
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+
+import { compileAgent } from "@adhd/agent-compiler";
+
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
 import { AgentStore, SessionStore, TaskStore } from "./store/index.js";
+import { ComposedPromptStore } from "./store/composed-prompt-store.js";
+import type { PromptResolverDeps } from "./engine/prompt-resolver.js";
 import { BackgroundQueue } from "./engine/queue.js";
 import { DagEngine } from "./engine/dag-engine.js";
 import { Orchestrator } from "./engine/orchestrator.js";
@@ -106,6 +113,43 @@ async function main() {
 
     const dagEngine = new DagEngine(dbAny, queue, taskStore, dispatchFn);
 
+    // ── Prompt resolver (compiler integration) ────────────────────────────
+    //
+    // When AGENT_MCP_REGISTRY_DB_PATH is set, open a read-only handle to the
+    // agent-registry SQLite file and wire compileAgent from @adhd/agent-compiler
+    // as the live promptResolver.  Every `agent` tool call will then resolve the
+    // system-prompt via the compiler (with a composed_prompts cache look-up)
+    // before creating the session.
+    //
+    // When AGENT_MCP_REGISTRY_DB_PATH is absent, promptResolver is undefined and
+    // the server falls back to the stored flat systemPrompt — existing callers
+    // and all legacy-agent tests continue to work unchanged.
+    //
+    // The fallback also fires WITHIN the resolver: if the agent has no registry
+    // composition (AgentError / CompositionError from compileAgent), resolveComposedPrompt
+    // returns null and agentTool uses the flat systemPrompt. This means a mixed
+    // deployment (some registry-backed, some flat) works without any per-agent
+    // configuration.
+    let promptResolver: PromptResolverDeps | undefined;
+
+    const registryDbPath = process.env["AGENT_MCP_REGISTRY_DB_PATH"];
+    if (registryDbPath) {
+        logger.info({ registryDbPath }, "Opening registry DB for compiler integration");
+        const registrySqlite = new Database(registryDbPath);
+        registrySqlite.pragma("journal_mode = WAL");
+        registrySqlite.pragma("foreign_keys = ON");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const registryDb = drizzle(registrySqlite) as any;
+
+        const composedPromptStore = new ComposedPromptStore(dbAny);
+
+        promptResolver = {
+            composedPromptStore,
+            compileAgentFn: compileAgent,
+            registryDb,
+        };
+    }
+
     // Start SSE server alongside MCP server — shares taskStore for terminal-on-connect checks.
     const sseServer = startSseServer(taskStore);
 
@@ -119,6 +163,7 @@ async function main() {
         hooks,
         db: dbAny,
         dagEngine,
+        promptResolver,
     });
 
     // Startup re-enqueue scan: recover tasks that were transitioned to "pending"

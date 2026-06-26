@@ -101,14 +101,22 @@ export function computeContextHash(
  * The result is upserted into agent-mcp's `composed_prompts` table and the
  * returned `id` is suitable for writing to `sessions.composed_prompt_id`.
  *
+ * **Flat-prompt fallback (backward compatibility):** when `compileAgentFn`
+ * throws (e.g. the agent has no registry composition — `AgentError` with code
+ * `AGENT_NOT_FOUND`, or a `CompositionError`) this function returns `null`
+ * instead of propagating.  The caller (`agentTool`) then falls back to the
+ * stored `agentDefinition.systemPrompt`, so a legacy flat-`systemPrompt` agent
+ * continues to work even when a live registry DB is wired.
+ *
  * @param input - Agent slug, target platform, and optional runtime context.
  * @param deps  - Injected ComposedPromptStore, compileAgentFn, and registry DB.
- * @returns {content, id} — the flat system-prompt string and its cache row id.
+ * @returns {content, id} on success, or `null` when no registry composition
+ *   exists for the agent (caller must fall back to the flat systemPrompt).
  */
 export function resolveComposedPrompt(
     input: ResolveInput,
     deps: PromptResolverDeps
-): ResolveResult {
+): ResolveResult | null {
     const { agentSlug, platform, context = {} } = input;
     const { composedPromptStore, compileAgentFn, registryDb } = deps;
 
@@ -127,12 +135,24 @@ export function resolveComposedPrompt(
     // ── Cache MISS — compile and upsert ──────────────────────────────────────
     logger.debug({ agentSlug, platform }, "Composed prompt cache miss — calling compileAgent");
 
-    const compiled = compileAgentFn({
-        agentSlug,
-        platform,
-        context,
-        db: registryDb,
-    });
+    let compiled;
+    try {
+        compiled = compileAgentFn({
+            agentSlug,
+            platform,
+            context,
+            db: registryDb,
+        });
+    } catch (err) {
+        // No registry composition for this agent — fall back to the stored
+        // flat systemPrompt.  Log at debug level: this is expected for agents
+        // that were created via agent_create without registry backing.
+        logger.debug(
+            { agentSlug, err },
+            "compileAgent threw — no registry composition; falling back to flat systemPrompt"
+        );
+        return null;
+    }
 
     const row = composedPromptStore.upsert({
         agentSlug,
