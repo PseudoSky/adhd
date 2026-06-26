@@ -21,6 +21,18 @@
  * ⚠️  --tools "" is NOT used — it disables MCP tools as well as built-ins.
  * ⚠️  --bare is NOT used — it blocks --mcp-config from loading entirely.
  *
+ * Agent-spec mode (config.systemPromptIsAgentSpec === true):
+ *   The agent's systemPrompt is treated as a complete Claude Code agent markdown
+ *   file (YAML frontmatter + body). Instead of --system-prompt + --disallowedTools,
+ *   the provider writes it to an isolated temp project dir and passes
+ *     --add-dir <tmpdir> --setting-sources project --agent <frontmatterName>
+ *   so Claude *internally parses the frontmatter header* — including the `tools:`
+ *   field — which then governs tool access and TAKES PRECEDENCE over the built-in
+ *   disallow enumeration. `--agent` matches the frontmatter `name:`, not the
+ *   filename; cwd is preserved so file/Bash tools keep their working root. Omit
+ *   `tools:` in the header to inherit all tools; list `mcp__<server>__<tool>`
+ *   entries to expose specific MCP tools. allowedBuiltinTools is ignored in this mode.
+ *
  * Tool loop: when Claude Code emits a tool_use block, we execute it via the
  * request.executeTool callback (wired by the orchestrator to the McpClientRegistry)
  * and write a tool_result message back to stdin. This continues until Claude
@@ -37,7 +49,7 @@
 import { spawn, execFile } from "child_process";
 import readline from "readline";
 import { promisify } from "util";
-import { writeFile, unlink } from "fs/promises";
+import { writeFile, unlink, mkdtemp, mkdir, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -213,6 +225,59 @@ export function computeClaudeBuiltinArgs(params: {
     return { effectiveAllowed, disallowedArgv };
 }
 
+// ─── agent-spec (markdown frontmatter) helpers ───────────────────────────────
+
+/** Fallback identity used when an agent-spec prompt has no frontmatter `name:`. */
+const FALLBACK_SPEC_AGENT_NAME = "agent-mcp-runner";
+const FALLBACK_SPEC_DESCRIPTION = "agent-mcp delegated agent";
+
+/**
+ * Extracts the `name:` field from the leading YAML frontmatter block of a Claude
+ * Code agent markdown system prompt. Only the first `---`-delimited block at the
+ * very top of the string is considered. Returns undefined when there is no leading
+ * frontmatter block or no `name:` key.
+ *
+ * Claude Code selects an agent (`--agent <name>`) by this frontmatter name — not
+ * the on-disk filename — so the provider must read it to build the correct flag.
+ */
+export function extractAgentSpecName(md: string): string | undefined {
+    const block = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(md);
+    if (!block) return undefined;
+    const nameLine = /^[ \t]*name:[ \t]*(.+?)[ \t]*$/m.exec(block[1]);
+    if (!nameLine) return undefined;
+    return nameLine[1].replace(/^["']|["']$/g, "").trim() || undefined;
+}
+
+/**
+ * Ensures an agent-spec markdown carries a frontmatter `name:` so the subprocess
+ * can select it with `--agent`. Returns the markdown to write and the agent name
+ * to pass to `--agent`.
+ *
+ * - If the prompt already names the agent, it is used verbatim and the markdown is
+ *   returned unchanged (the spec author's `tools:` header is the source of truth).
+ * - If a frontmatter block exists but lacks `name:`, a generated name is injected
+ *   into it.
+ * - If there is no frontmatter at all, the prompt is wrapped in a minimal block
+ *   (no `tools:` → Claude inherits all tools, matching pre-spec-mode behavior).
+ */
+export function normalizeAgentSpec(md: string): { content: string; agentName: string } {
+    const existing = extractAgentSpecName(md);
+    if (existing) return { content: md, agentName: existing };
+
+    const hasFrontmatter = /^\uFEFF?---[ \t]*\r?\n/.test(md);
+    if (hasFrontmatter) {
+        const content = md.replace(
+            /^(\uFEFF?---[ \t]*\r?\n)/,
+            `$1name: ${FALLBACK_SPEC_AGENT_NAME}\n`,
+        );
+        return { content, agentName: FALLBACK_SPEC_AGENT_NAME };
+    }
+    const content =
+        `---\nname: ${FALLBACK_SPEC_AGENT_NAME}\n` +
+        `description: ${FALLBACK_SPEC_DESCRIPTION}\n---\n${md}`;
+    return { content, agentName: FALLBACK_SPEC_AGENT_NAME };
+}
+
 // ─── provider ────────────────────────────────────────────────────────────────
 
 export class ClaudeCliProvider implements LLMProvider {
@@ -316,6 +381,26 @@ export class ClaudeCliProvider implements LLMProvider {
         return filePath;
     }
 
+    /**
+     * Writes an agent-spec markdown system prompt to an isolated temp project dir
+     * as `<dir>/.claude/agents/<name>.md`, so the subprocess can discover and
+     * parse it via `--add-dir <dir> --setting-sources project --agent <name>`.
+     *
+     * Returns the temp dir (for `--add-dir`) and the frontmatter agent name (for
+     * `--agent`). The caller MUST delete the dir in its finally block.
+     */
+    private async writeAgentSpecDir(md: string): Promise<{ dir: string; agentName: string }> {
+        const { content, agentName } = normalizeAgentSpec(md);
+        const dir = await mkdtemp(join(tmpdir(), "agent-mcp-spec-"));
+        const agentsDir = join(dir, ".claude", "agents");
+        await mkdir(agentsDir, { recursive: true });
+        // The filename does not affect selection (Claude matches the frontmatter
+        // name), but sanitize it so an exotic agent name can't escape the dir.
+        const safeFile = `${agentName.replace(/[^a-zA-Z0-9_-]/g, "_") || "agent"}.md`;
+        await writeFile(join(agentsDir, safeFile), content, "utf8");
+        return { dir, agentName };
+    }
+
     async chat(request: ProviderChatRequest): Promise<ProviderChatResponse> {
         const claudePath = this.config.claudePath ?? "claude";
 
@@ -329,9 +414,24 @@ export class ClaudeCliProvider implements LLMProvider {
         // replaces the full default system prompt, keeping the agent's identity.
         const mcpConfigPath = await this.writeMcpConfigFile();
 
+        // Agent-spec mode: the system prompt IS a Claude Code agent markdown file
+        // (frontmatter + body). We write it to a temp project dir and let Claude
+        // internally parse its `tools:` header, which then governs tool access and
+        // takes precedence over --disallowedTools. Requires a system prompt to wrap.
+        const specMode = this.config.systemPromptIsAgentSpec === true && !!systemPrompt;
+        let agentSpecDir: string | undefined;
+        let agentSpecName: string | undefined;
+        if (specMode && systemPrompt) {
+            const written = await this.writeAgentSpecDir(systemPrompt);
+            agentSpecDir = written.dir;
+            agentSpecName = written.agentName;
+        }
+
         // Compute the disallowed built-in list via the extracted pure seam.
         // Source of truth priority ([inv:no-third-tool-model]) is enforced inside
         // computeClaudeBuiltinArgs — compiledTools wins over allowedBuiltinTools.
+        // Used only in the legacy (non-spec) path below; in spec mode the agent
+        // md `tools:` header is the single source of truth.
         const { disallowedArgv } = computeClaudeBuiltinArgs({
             compiledTools: this.compiledTools,
             allowedBuiltinTools: this.config.allowedBuiltinTools,
@@ -343,10 +443,36 @@ export class ClaudeCliProvider implements LLMProvider {
             "--input-format", "stream-json",
             "--output-format", "stream-json",
             "--verbose",
-            ...disallowedArgv,             // --disallowedTools <name> pairs (MCP tools unaffected)
         ];
 
-        if (systemPrompt)        args.push("--system-prompt", systemPrompt);
+        if (specMode && agentSpecDir && agentSpecName) {
+            // Header-driven tools: Claude parses the agent md's frontmatter `tools:`
+            // and applies it as the authoritative allowlist. We must NOT pass
+            // --disallowedTools or --system-prompt here — the spec header is the
+            // single source of truth. --add-dir makes the temp `.claude/agents/<name>.md`
+            // discoverable; --setting-sources project loads it; --agent selects it by
+            // its frontmatter name (cwd is preserved, so file/Bash tools keep their root).
+            args.push(
+                "--add-dir", agentSpecDir,
+                "--setting-sources", "project",
+                "--agent", agentSpecName,
+            );
+            if (this.config.allowedBuiltinTools?.length) {
+                logger.warn(
+                    { agent: agentSpecName },
+                    "claudecli: allowedBuiltinTools is ignored when systemPromptIsAgentSpec is set; the agent spec's `tools:` header governs tool access",
+                );
+            }
+        } else {
+            // Legacy denylist behavior: block every built-in the agent definition
+            // doesn't explicitly allow, via the compiledTools-aware seam
+            // ([inv:no-third-tool-model] — compiledTools wins over allowedBuiltinTools).
+            // MCP tools are unaffected — loaded via --mcp-config separately.
+            args.push(...disallowedArgv);
+            if (systemPrompt) args.push("--system-prompt", systemPrompt);
+        }
+
+
         if (this.config.model)   args.push("--model", this.config.model);
 
         if (mcpConfigPath) {
@@ -499,6 +625,10 @@ export class ClaudeCliProvider implements LLMProvider {
             // Clean up the temp MCP config file
             if (mcpConfigPath) {
                 unlink(mcpConfigPath).catch(() => { /* best-effort */ });
+            }
+            // Clean up the temp agent-spec project dir
+            if (agentSpecDir) {
+                rm(agentSpecDir, { recursive: true, force: true }).catch(() => { /* best-effort */ });
             }
         }
     }
