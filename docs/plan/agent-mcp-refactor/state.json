@@ -11,10 +11,10 @@
       "end_ref": "aaeb501327e14ef115567dfa2825cf0710378954"
     },
     "runtime-sink-schema": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-26T04:38:48.699Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "4c41a72a812069808f34ee3d1101b3cf7763e660",
       "end_ref": null
     },
     "compiler-integration": {
