@@ -56,8 +56,8 @@ declare `@adhd/agent-compiler`.
 ## Reservations
 
 ```text
-read_only:  ["docs/plan/agent-mcp-refactor/decisions.md", "packages/ai/agent-mcp/src/store/composed-prompt-store.ts", "packages/ai/agent-mcp/src/db/schema.ts", "packages/ai/agent-mcp-types/src/domain.ts"]
-mutates:    ["packages/ai/agent-mcp/src/engine/prompt-resolver.ts", "packages/ai/agent-mcp/src/tools/session.ts", "packages/ai/agent-mcp/src/store/session-store.ts", "packages/ai/agent-mcp/src/index.ts", "packages/ai/agent-mcp/src/__tests__/compiler-resolve.test.ts"]
+read_only:  []
+mutates:    ["packages/ai/agent-mcp/src/engine/prompt-resolver.ts", "packages/ai/agent-mcp/src/tools/session.ts", "packages/ai/agent-mcp/src/store/session-store.ts", "packages/ai/agent-mcp/src/index.ts", "packages/ai/agent-mcp/src/__tests__/compiler-resolve.test.ts", "packages/ai/agent-mcp/package.json", "tsconfig.base.json"]
 ```
 
 ---
