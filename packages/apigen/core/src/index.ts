@@ -7,6 +7,7 @@ export type {
   PluginOutput,
   RunInput,
   OutputPlugin,
+  PluginLanguage,
 } from './lib/types'
 
 export type {
@@ -50,3 +51,10 @@ export { extract, tokenize } from './lib/extract'
 export type { ExtractOptions } from './lib/extract'
 export { extractClasses } from './lib/extract-classes'
 export type { ExtractClassesOptions } from './lib/extract-classes'
+export {
+  languageOfSource,
+  pluginConsumesSource,
+  sourcesForPlugin,
+  effectiveLanguage,
+} from './lib/source-language'
+export type { LanguageAwarePlugin } from './lib/source-language'
