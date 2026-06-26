@@ -25,7 +25,6 @@ Transport: stdio (default) or HTTP. Database: better-sqlite3 via Drizzle ORM (WA
       "args": ["/Users/nix/dev/node/adhd/dist/packages/ai/agent-mcp/src/index.js"],
       "env": {
         "DATABASE_PATH": "/Users/nix/dev/node/adhd/packages/ai/agent-mcp/data/agents.db",
-        "LMSTUDIO_API_KEY": "sk-lm-aTPoK9Gs:qf2Ncsq8ezFfN6kIALi5",
         "LMSTUDIO_BASE_URL": "http://192.168.1.59:1234/v1"
       }
     }
@@ -50,7 +49,6 @@ Call `agent_update` with:
         "args": ["/Users/nix/dev/node/adhd/dist/packages/ai/agent-mcp/src/index.js"],
         "env": {
           "DATABASE_PATH": "/Users/nix/dev/node/adhd/packages/ai/agent-mcp/data/agents.db",
-          "LMSTUDIO_API_KEY": "sk-lm-aTPoK9Gs:qf2Ncsq8ezFfN6kIALi5",
           "LMSTUDIO_BASE_URL": "http://192.168.1.59:1234/v1",
           "ALLOWED_AGENTS": "test"
         }
@@ -117,4 +115,4 @@ Tool names use `server__tool` double-underscore convention.
 ## LM Studio Config
 - Model: `qwen3.5-9b-claude-4.6-highiq-instruct-heretic-uncensored-mlx-mxfp8`
 - Base URL: `http://192.168.1.59:1234/v1`
-- API Key env: `LMSTUDIO_API_KEY` = `sk-lm-aTPoK9Gs:qf2Ncsq8ezFfN6kIALi5`
+- API Key env: `LMSTUDIO_API_KEY` (export in your shell or a gitignored local override — never commit the value; LM Studio ignores it anyway)

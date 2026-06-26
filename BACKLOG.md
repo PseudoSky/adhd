@@ -315,3 +315,6 @@ from them. **Author identity resolved from the running agent's SP context** (sam
 `SOX_AGENT_NAME` → `--- AGENT: <name> ---` header → operating spec `name:`/`version:` frontmatter; humans → git
 author). Schema + validator in `@adhd/workspace-standard`; ties to the `/reflection` provenance convention
 (`agent_id`, `subject_version`, model).
+
+## DEBT-AGENTMCP-BUDGET-IMPORT-001 — `nx test agent-mcp` red: live-budget e2e can't resolve @adhd/agent-mcp-budget
+`src/__tests__/integration/live-budget.e2e.test.ts` top-level-imports `@adhd/agent-mcp-budget`, which fails vite resolution ("Failed to resolve entry for package … incorrect main/module/exports"), failing the whole suite at COLLECTION time — before its `describe.skipIf(!AGENT_MCP_BUDGET_LIVE)` gate can skip it. So default `nx test agent-mcp` is RED (1 file failed / 211 passed). Pre-existing (orthogonal to the openai.ts apiKey fallback + secret redaction). Fix: correct `agent-mcp-budget` package.json `main`/`module`/`exports` (or build it) so the import resolves; consider a lazy/dynamic import so a live-gated suite never fails collection. Deferred agent-mcp/agent-registry initiative.
