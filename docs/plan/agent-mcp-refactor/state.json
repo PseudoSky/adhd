@@ -25,11 +25,11 @@
       "end_ref": "37c554739ca3cd5717a3950269c0c37146112974"
     },
     "agent-store-retire": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-26T05:14:09.348Z",
-      "done_at": null,
+      "done_at": "2026-06-26T05:19:12.898Z",
       "start_ref": "de3c04b9637a8ac9b5d3f19453d6da990775a132",
-      "end_ref": null
+      "end_ref": "0012697896479b218ae0bbb96f2bf88c85ce77bf"
     },
     "policy-engine-bridge": {
       "status": "pending",
@@ -122,6 +122,18 @@
       "audit_criteria_total": 19,
       "by": "pseudosky",
       "note": "Added engine/prompt-resolver.ts (resolveComposedPrompt + computeContextHash), wired into tools/session.ts (optional promptResolver deps on SessionDeps), updated store/session-store.ts (composedPromptId param), exported from src/index.ts, added @adhd/agent-compiler to package.json deps. tsconfig.base.json already had the path alias. Guard: 10/10 tests pass, exit 0. Build: nx build agent-mcp clean, exit 0. Code committed at sha 37c5547."
+    },
+    {
+      "ts": "2026-06-26T05:19:12.898Z",
+      "from": "agent-store-retire",
+      "to": "agent-store-retire",
+      "start_ref": "de3c04b9637a8ac9b5d3f19453d6da990775a132",
+      "end_ref": "0012697896479b218ae0bbb96f2bf88c85ce77bf",
+      "audit_exit": 6,
+      "audit_criteria_passed": 16,
+      "audit_criteria_total": 22,
+      "by": "pseudosky",
+      "note": "validation/agent.ts: systemPrompt z.string() → z.string().optional() with compat-shim JSDoc (grep_absent satisfied). domain.ts: AgentDefinition.systemPrompt: string → systemPrompt?: string with compat-shim JSDoc. agent-store.ts: JSDoc documents thin-cache role. agent-cache-store.test.ts: 8 tests prove create-without-prompt, compat-shim persistence, reopen invariant. Guard exit 0 (8/8). Full suite exit 0 (228 passed, 3 skipped, 26 files). nx build agent-mcp exit 0. Committed at 0012697. git status clean for packages/ai/agent-mcp + packages/ai/agent-mcp-types. BACKLOG.md: DEBT-006 added for server.ts USAGE_GUIDE doc refresh."
     }
   ],
   "amendment_log": [],
@@ -130,7 +142,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "agent-store-retire",
+  "current_state": "policy-engine-bridge",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:22:27.852Z",
     "by": "pseudosky",
