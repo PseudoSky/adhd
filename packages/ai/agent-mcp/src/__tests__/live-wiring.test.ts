@@ -1,12 +1,22 @@
 /**
- * live-wiring.test.ts — composition-root integration test for Plan 6 F-P6-8.
+ * live-wiring.test.ts — SEAM integration test for Plan 6 F-P6-8.
  *
- * Proves that the LIVE agent-mcp composition root (index.ts / server.ts) routes
- * every `agent` tool call through compileAgent from @adhd/agent-compiler when
- * `promptResolver` is wired.  Drives the REAL `agentTool` (the same function that
- * both `agentTool` callsites in server.ts invoke) against a real on-disk SQLite
+ * Proves that the agentTool SEAM routes every `agent` tool call through
+ * compileAgent from @adhd/agent-compiler when `promptResolver` is present in
+ * SessionDeps.  Drives the REAL `agentTool` (the same function that both
+ * `agentTool` callsites in server.ts invoke) against a real on-disk SQLite
  * registry DB seeded with real rows — only the LLM provider boundary is NOT
  * exercised here (no actual model call is made in this test).
+ *
+ * IMPORTANT SCOPE NOTE: this file proves the SEAM (that agentTool correctly
+ * routes through the injected promptResolver), NOT the composition root.  It
+ * hand-builds SessionDeps with a promptResolver directly — it does NOT exercise
+ * the `buildPromptResolver` factory in index.ts.  Deleting the wiring in
+ * index.ts would leave these tests GREEN.
+ *
+ * The composition-root factory gap (F-P6-8b) is closed by index-wiring.test.ts,
+ * which calls the real `buildPromptResolver` export and asserts its output
+ * drives agentTool end-to-end.
  *
  * Invariants proven:
  *

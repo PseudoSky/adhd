@@ -40,6 +40,66 @@ import { tasksTable } from "./db/schema.js";
 import { eq } from "drizzle-orm";
 import { ToolError } from "./validation/errors.js";
 
+// ── buildPromptResolver ───────────────────────────────────────────────────────
+//
+// Pure factory that constructs the PromptResolverDeps struct from environment
+// config.  Extracted from main() so tests can drive it directly without booting
+// the full server.
+//
+// Exported at the package root so index-wiring.test.ts can import it and assert
+// the composition-root wiring behaviour (Plan 6 gap F-P6-8b).
+
+export interface BuildPromptResolverOpts {
+    /** Path to the agent-registry SQLite file.  Absent → resolver is undefined. */
+    registryDbPath?: string;
+    /**
+     * The agent-mcp Drizzle DB handle, used to construct ComposedPromptStore.
+     * Must already have agent-mcp migrations applied.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    agentMcpDb: any;
+}
+
+/**
+ * Build a {@link PromptResolverDeps} from a registry DB path and the agent-mcp
+ * DB handle.
+ *
+ * - When `registryDbPath` is provided, opens the SQLite file in WAL mode, wraps
+ *   it with Drizzle, and wires {@link compileAgent} from @adhd/agent-compiler.
+ * - When `registryDbPath` is absent (undefined / empty string), returns
+ *   `undefined` — the legacy flat-systemPrompt path is used unchanged.
+ *
+ * This function has no observable side-effects beyond opening the SQLite file
+ * when a path is supplied, so it is safe to call in tests with a real on-disk
+ * DB path.
+ *
+ * @param opts.registryDbPath  - Path to the agent-registry SQLite file.
+ * @param opts.agentMcpDb      - Drizzle handle for the agent-mcp DB.
+ * @returns Wired {@link PromptResolverDeps} or `undefined`.
+ */
+export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolverDeps | undefined {
+    const { registryDbPath, agentMcpDb } = opts;
+
+    if (!registryDbPath) {
+        return undefined;
+    }
+
+    logger.info({ registryDbPath }, "Opening registry DB for compiler integration");
+    const registrySqlite = new Database(registryDbPath);
+    registrySqlite.pragma("journal_mode = WAL");
+    registrySqlite.pragma("foreign_keys = ON");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const registryDb = drizzle(registrySqlite) as any;
+
+    const composedPromptStore = new ComposedPromptStore(agentMcpDb);
+
+    return {
+        composedPromptStore,
+        compileAgentFn: compileAgent,
+        registryDb,
+    };
+}
+
 // DEBT-001: top-level safety net for anything that escapes the per-component
 // handlers (SSE 'error' event: BUG-001; queue catch: BackgroundQueue.enqueue;
 // orchestrator try/catch; provider pRetry). An unhandled error here means a
@@ -115,40 +175,27 @@ async function main() {
 
     // ── Prompt resolver (compiler integration) ────────────────────────────
     //
-    // When AGENT_MCP_REGISTRY_DB_PATH is set, open a read-only handle to the
-    // agent-registry SQLite file and wire compileAgent from @adhd/agent-compiler
-    // as the live promptResolver.  Every `agent` tool call will then resolve the
-    // system-prompt via the compiler (with a composed_prompts cache look-up)
-    // before creating the session.
+    // Delegates to buildPromptResolver() — the exported factory that is also
+    // exercised directly by index-wiring.test.ts (Plan 6 gap F-P6-8b).
     //
-    // When AGENT_MCP_REGISTRY_DB_PATH is absent, promptResolver is undefined and
-    // the server falls back to the stored flat systemPrompt — existing callers
-    // and all legacy-agent tests continue to work unchanged.
+    // When AGENT_MCP_REGISTRY_DB_PATH is set, buildPromptResolver opens the
+    // SQLite file and wires compileAgent from @adhd/agent-compiler.  Every
+    // `agent` tool call then resolves the system-prompt via the compiler (with
+    // a composed_prompts cache look-up) before creating the session.
+    //
+    // When AGENT_MCP_REGISTRY_DB_PATH is absent, buildPromptResolver returns
+    // undefined and the server falls back to the stored flat systemPrompt —
+    // existing callers and all legacy-agent tests continue to work unchanged.
     //
     // The fallback also fires WITHIN the resolver: if the agent has no registry
-    // composition (AgentError / CompositionError from compileAgent), resolveComposedPrompt
-    // returns null and agentTool uses the flat systemPrompt. This means a mixed
-    // deployment (some registry-backed, some flat) works without any per-agent
-    // configuration.
-    let promptResolver: PromptResolverDeps | undefined;
-
-    const registryDbPath = process.env["AGENT_MCP_REGISTRY_DB_PATH"];
-    if (registryDbPath) {
-        logger.info({ registryDbPath }, "Opening registry DB for compiler integration");
-        const registrySqlite = new Database(registryDbPath);
-        registrySqlite.pragma("journal_mode = WAL");
-        registrySqlite.pragma("foreign_keys = ON");
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const registryDb = drizzle(registrySqlite) as any;
-
-        const composedPromptStore = new ComposedPromptStore(dbAny);
-
-        promptResolver = {
-            composedPromptStore,
-            compileAgentFn: compileAgent,
-            registryDb,
-        };
-    }
+    // composition (AgentError / CompositionError from compileAgent),
+    // resolveComposedPrompt returns null and agentTool uses the flat
+    // systemPrompt.  A mixed deployment (some registry-backed, some flat) works
+    // without any per-agent configuration.
+    const promptResolver = buildPromptResolver({
+        registryDbPath: process.env["AGENT_MCP_REGISTRY_DB_PATH"],
+        agentMcpDb: dbAny,
+    });
 
     // Start SSE server alongside MCP server — shares taskStore for terminal-on-connect checks.
     const sseServer = startSseServer(taskStore);
