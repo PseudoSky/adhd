@@ -46,11 +46,11 @@
       "end_ref": "85ac9b37d74839413f6e5d80bcefb78af1f697ce"
     },
     "session-e2e": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-26T06:43:48.862Z",
-      "done_at": null,
+      "done_at": "2026-06-26T06:57:22.627Z",
       "start_ref": "0da6b938f88ccc22c82d4a86b0ca608e9484557d",
-      "end_ref": null
+      "end_ref": "fb97d2e78116d41f189cc253df118e1ca4218ad9"
     },
     "audit-final": {
       "status": "pending",
@@ -170,6 +170,18 @@
       "audit_criteria_total": 29,
       "by": "pseudosky",
       "note": "audit-integration gate green 22/22 (orchestrator-verified read-only first); no domain work — bookkeeping transition of a passing deterministic audit."
+    },
+    {
+      "ts": "2026-06-26T06:57:22.627Z",
+      "from": "session-e2e",
+      "to": "session-e2e",
+      "start_ref": "0da6b938f88ccc22c82d4a86b0ca608e9484557d",
+      "end_ref": "fb97d2e78116d41f189cc253df118e1ca4218ad9",
+      "audit_exit": 5,
+      "audit_criteria_passed": 21,
+      "audit_criteria_total": 26,
+      "by": "pseudosky",
+      "note": "both e2e pass + negative controls proven + committed at fb97d2e78116d41f189cc253df118e1ca4218ad9"
     }
   ],
   "amendment_log": [],
@@ -178,7 +190,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "session-e2e",
+  "current_state": "code-review",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:22:27.852Z",
     "by": "pseudosky",
