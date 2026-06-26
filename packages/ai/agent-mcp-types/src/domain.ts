@@ -114,8 +114,24 @@ export type ProviderConfig =
        * Claude Code built-in tool names to permit in the subprocess.
        * Everything not listed is passed to --disallowedTools.
        * MCP tools (from mcpServers) are always available regardless of this list.
+       *
+       * Ignored when `systemPromptIsAgentSpec` is `true` — in that mode the agent
+       * spec's own frontmatter `tools:` header governs tool access.
        */
       allowedBuiltinTools?: string[];
+      /**
+       * When `true`, the agent's `systemPrompt` is treated as a complete Claude Code
+       * agent markdown file (YAML frontmatter header + body). The provider writes it
+       * to a temp project dir and lets Claude **internally parse the header** —
+       * including the `tools:` field — which then governs tool access and TAKES
+       * PRECEDENCE over the built-in `--disallowedTools` enumeration. In this mode the
+       * provider passes `--add-dir/--setting-sources project/--agent` instead of
+       * `--system-prompt`/`--disallowedTools`, so the spec header is the single source
+       * of truth for available built-ins (omit `tools:` to inherit all; list
+       * `mcp__<server>__<tool>` entries to expose specific MCP tools).
+       * Defaults to `false`/`undefined` (legacy denylist behavior, backward compatible).
+       */
+      systemPromptIsAgentSpec?: boolean;
     };
 
 export type McpServerConfig =

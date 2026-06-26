@@ -362,10 +362,11 @@ session_clear({ "session_id": "abc-123" })
 | \`openai\`      | model           | apiKeyEnv defaults to OPENAI_API_KEY                                  |
 | \`anthropic\`   | model           | apiKeyEnv defaults to ANTHROPIC_API_KEY; \`useClaudeOauth: true\` reads OAuth token from macOS keychain (Claude Max / no API key needed) |
 | \`lmstudio\`    | model, baseURL  | OpenAI-compatible local server                                        |
-| \`claudecli\`   | —               | Drives local \`claude\` CLI via stream-json; uses Claude Code's auth; MCP tools work via --mcp-config; built-ins blocked by default (\`allowedBuiltinTools\` to opt in) |
+| \`claudecli\`   | —               | Drives local \`claude\` CLI via stream-json; uses Claude Code's auth; MCP tools work via --mcp-config; built-ins blocked by default (\`allowedBuiltinTools\` to opt in, or \`systemPromptIsAgentSpec: true\` to let the agent-md \`tools:\` header decide) |
 
 \`openai\`, \`anthropic\`, and \`lmstudio\` accept: \`temperature\`, \`maxTokens\`, \`timeoutMs\`, \`retryConfig\`.
-\`claudecli\` accepts: \`model\`, \`claudePath\`, \`timeoutMs\`, \`allowedBuiltinTools\`.
+\`claudecli\` accepts: \`model\`, \`claudePath\`, \`timeoutMs\`, \`allowedBuiltinTools\`, \`systemPromptIsAgentSpec\`.
+When \`systemPromptIsAgentSpec: true\`, the \`systemPrompt\` is treated as a Claude Code agent markdown file (frontmatter + body); Claude parses its \`tools:\` header, which then governs tool access (takes precedence over \`allowedBuiltinTools\`).
 
 ---
 
