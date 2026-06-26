@@ -47,6 +47,34 @@ nice-to-have / cleanup.
 
 ## 🐞 Bugs
 
+### SEC-001 — leaked LMSTUDIO_API_KEY in git history; rotation + PROPOSAL.md scrub outstanding
+- **Status:** open — merge landed secret-clean; **rotation + `PROPOSAL.md` scrub + history purge still owed**
+- **Priority:** P1 (security) · **Area:** repo hygiene, `.mcp.json`, agent-mcp docs
+- **Reported:** 2026-06-26 (orchestrator pre-merge scan)
+
+**What happened.** `main` HEAD `55fc42c` redacted the plaintext LM Studio token
+(`sk-lm-aTPoK9Gs:…`) from `.mcp.json`, `run-e2e.mjs`, and `SESSION-CONTEXT.md`. The
+`agent-registry-execution` branch diverged before that (merge-base `34ed69a`) and still
+carried the token, so a naive merge would have **re-leaked it**. The registry merge into
+main (`326ebef`) was resolved to keep main's **redacted** versions; `git grep sk-lm-` on
+the merged tree is **clean** — no token was re-introduced to HEAD.
+
+**Still outstanding (owner actions — the value is exposed regardless of HEAD).**
+1. **Rotate the LM Studio token.** It remains in ≥4 historical commits, one already on
+   `origin/main` — rotation is the actual fix. Put the new key in `~/.adhd/agent-mcp/.env`
+   (gitignored, per the credentialing ADDENDUM §4).
+2. **Scrub `docs/mcp-env/PROPOSAL.md`** — it **still contains the `sk-lm-` token on main's
+   HEAD** (a tracked analysis doc the `55fc42c` redaction missed). Redact it.
+3. **History purge** of the token across history = a separate, explicitly owner-approved
+   force-push to `origin/main`. Optional once the key is rotated (rotation kills the value).
+
+**Do not push `main` to `origin` until the key is rotated.**
+
+**References** — main `55fc42c`; registry merge `326ebef` (secret-clean verified);
+`docs/mcp-env/PROPOSAL.md` (still leaks); credentialing ADDENDUM §6.
+
+---
+
 ### BUG-003 — `agent_list` (no args) returns every full agent definition → blows the host's tool-output token ceiling
 - **Status:** open
 - **Priority:** P2 · **Area:** tools (agent-crud), discovery
