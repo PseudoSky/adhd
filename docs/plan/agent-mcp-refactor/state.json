@@ -53,11 +53,11 @@
       "end_ref": "fd6313a6dfeb1ebecfd09485c75332e379fa48cf"
     },
     "audit-final": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-26T07:10:40.474Z",
-      "done_at": null,
+      "done_at": "2026-06-26T07:11:00.707Z",
       "start_ref": "24f958d3385089e5aa37be0b48f89740cf3ec20a",
-      "end_ref": null
+      "end_ref": "983b4a325a0c191c3718e5ddbf69c064a0158ba9"
     },
     "code-review": {
       "status": "complete",
@@ -206,6 +206,18 @@
       "audit_criteria_total": 29,
       "by": "pseudosky",
       "note": "APPROVED — final gate (Plan 6 wave 8). dod.1/dod.2 drive REAL agentTool + stores against on-disk SQLite (compiler boundary only stub), reopen-proven; real production-mutate negative control (rename compileAgent in prompt-resolver.ts) independently re-run → e2e RED under mutation, restored clean. Audit ghost-pass hardening (test -f prefix at audit_mcp_refactor.py:80-82) confirmed load-bearing. All 6 DoD backed; live server wiring active via @adhd/agent-compiler with flat-systemPrompt fallback; full suite 252 passed exit0; build clean; back-out tag agent-mcp-baseline-pre-registry resolves. 1 non-blocking observation (composed_prompt_id is a soft ref, SQLite ADD COLUMN limitation, proven behaviorally)."
+    },
+    {
+      "ts": "2026-06-26T07:11:00.707Z",
+      "from": "audit-final",
+      "to": "audit-final",
+      "start_ref": "24f958d3385089e5aa37be0b48f89740cf3ec20a",
+      "end_ref": "983b4a325a0c191c3718e5ddbf69c064a0158ba9",
+      "audit_exit": 0,
+      "audit_criteria_passed": 29,
+      "audit_criteria_total": 29,
+      "by": "pseudosky",
+      "note": "audit-final 32/32 honest-green (hardened vs ghost-pass); both review gates APPROVED; live server resolves via compiler with flat-systemPrompt compat; 250-test suite green; back-out tag intact."
     }
   ],
   "amendment_log": [],
