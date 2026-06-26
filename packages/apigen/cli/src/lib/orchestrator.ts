@@ -73,10 +73,9 @@ export interface SourceEntry {
  *
  * Accepted from `--opt http.verb.<id>=GET` pairs or an `apigen.config` file.
  * Overrides are NEVER written to source.
+ * Extend here as other projection dimensions are added (route, name, …).
  */
-export interface OverrideConfig extends ProjectionConfig {
-  // Extend here as other projection dimensions are added (route, name, …).
-}
+export type OverrideConfig = ProjectionConfig
 
 /** Options passed to the v2 orchestrator. */
 export interface OrchestratorOptions {

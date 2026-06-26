@@ -34,7 +34,7 @@ import {
   type HostAdapter,
   type HostRequest,
   type InProcessRuntime,
-} from '../../../../gateway/src/lib/gateway'
+} from '@adhd/apigen-gateway'
 import type { Operation, Transport } from '@adhd/apigen-core'
 
 // ---------------------------------------------------------------------------

@@ -22,9 +22,10 @@ import {
   buildDescriptor,
   orchestrateGenerate,
 } from '../lib/orchestrator'
+import { collectFormats } from '../lib/commands/generate'
 import { checkCollisions, CollisionDetectedError } from '@adhd/apigen-naming'
 import { project as projectOp } from '@adhd/apigen-naming'
-import type { Operation, Segment, OutputPlugin, PluginInput } from '@adhd/apigen-core'
+import type { Operation, Segment, OutputPlugin, PluginInput, ComposedSchemas } from '@adhd/apigen-core'
 
 // ---------------------------------------------------------------------------
 // Fixture paths
@@ -417,8 +418,6 @@ describe('[dod.10 v2 teeth] buildDescriptor: default-import Decimal source carri
       const addAmountsSchema = schemas['addAmounts']
       expect(addAmountsSchema, 'addAmounts must be present in packageSchemas').toBeDefined()
 
-      // Import collectFormats from generate.ts (the dep-manifest machinery)
-      const { collectFormats } = await import('../lib/commands/generate')
       const allFormats = new Set<string>()
       if (addAmountsSchema) {
         for (const f of collectFormats(addAmountsSchema.input)) allFormats.add(f)
@@ -439,7 +438,7 @@ describe('[dod.10 v2 teeth] buildDescriptor: default-import Decimal source carri
   it(
     'orchestrateGenerate: collectDepsFromPackageSchemas returns decimal.js for a default-import Decimal source',
     async () => {
-      const capturedPackageSchemas = new Map<string, { id: string; schemas: import('@adhd/apigen-core').ComposedSchemas; importPath: string }>()
+      const capturedPackageSchemas = new Map<string, { id: string; schemas: ComposedSchemas; importPath: string }>()
 
       const capturingPlugin: OutputPlugin = {
         id: 'capturing',
@@ -455,8 +454,6 @@ describe('[dod.10 v2 teeth] buildDescriptor: default-import Decimal source carri
         os.tmpdir(),
       )
 
-      // Collect deps via the same function used by the generate command.
-      const { collectFormats } = await import('../lib/commands/generate')
       const { schemas } = result.descriptor.packageSchemas.get('decimal-test')!
 
       // Walk all schemas and collect all format values.
@@ -477,12 +474,13 @@ describe('[dod.10 v2 teeth] buildDescriptor: default-import Decimal source carri
 })
 
 // ---------------------------------------------------------------------------
-// Live-server tests — gated behind APIGEN_LIVE=1
+// Live-server integration tests (always runs — no env gate)
 // ---------------------------------------------------------------------------
-describe.skipIf(!process.env['APIGEN_LIVE'])('orchestrator: live integration (APIGEN_LIVE=1)', () => {
+describe('orchestrator: live integration', () => {
   it('TODO: add a live model end-to-end test here', () => {
-    // This block intentionally left for a future live-run test.
-    // Gate: APIGEN_LIVE=1 must be set in the environment.
+    // Placeholder for a future end-to-end live-model test.
+    // The orchestrator wires schema extraction → run → live model → invariant check.
+    // That test belongs here; the placeholder keeps the suite non-empty and runnable.
     expect(true).toBe(true)
   })
 })

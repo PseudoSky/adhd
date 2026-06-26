@@ -300,9 +300,15 @@ describe('layer — stream-lifecycle (§11)', () => {
     call.ctx.set(Logger, logger);
 
     const next: Next = vi.fn((): AsyncIterable<unknown> => {
-      return (async function* () {
-        throw new Error('stream error');
-      })();
+      return {
+        [Symbol.asyncIterator]() {
+          return {
+            next(): Promise<IteratorResult<unknown>> {
+              return Promise.reject(new Error('stream error'));
+            },
+          };
+        },
+      };
     });
 
     const plugin = makeLoggerPlugin({});

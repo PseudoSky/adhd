@@ -150,7 +150,7 @@
       "phase": "integration",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test apigen-codegen",
+      "cmd": "npx --yes nx test apigen-logical",
       "expect": "exit0"
     },
     {

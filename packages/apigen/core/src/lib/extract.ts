@@ -272,12 +272,12 @@ export async function extract(opts: ExtractOptions): Promise<Operation[]> {
           const params = rawParamsFromSig(sig, varDecl)
           const returnText = sig.getReturnType().getText()
           const init = varDecl.getInitializer()
-          const isAsync =
-            init?.getKindName() === 'ArrowFunction'
-              ? (init as import('ts-morph').ArrowFunction).isAsync()
-              : init?.getKindName() === 'FunctionExpression'
-                ? (init as import('ts-morph').FunctionExpression).isAsync()
-                : false
+          let isAsync = false
+          if (init?.getKindName() === 'ArrowFunction') {
+            isAsync = (init as import('ts-morph').ArrowFunction).isAsync()
+          } else if (init?.getKindName() === 'FunctionExpression') {
+            isAsync = (init as import('ts-morph').FunctionExpression).isAsync()
+          }
           ops.push(
             await buildActionOp(project, sf, namespaceSeg, fileSegment, exportedName, params, returnText, isAsync, tsconfig),
           )
