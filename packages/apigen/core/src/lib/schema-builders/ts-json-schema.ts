@@ -1,6 +1,30 @@
-import { createGenerator, type Config } from 'ts-json-schema-generator'
+import os from 'node:os'
+import path from 'node:path'
+import fs from 'node:fs'
+import {
+  createParser,
+  createFormatter,
+  SchemaGenerator,
+  AnnotatedType,
+  StringType,
+} from 'ts-json-schema-generator'
+import type { Config, CompletedConfig } from 'ts-json-schema-generator'
 import type { Project, SourceFile } from 'ts-morph'
 import { morphFallback } from './morph-fallback'
+import { buildMapSetTupleSchema } from './map-set-tuple'
+
+/**
+ * Maps npm module specifiers to the canonical SCALAR_SCHEMAS key for that module's
+ * primary export.  Used by extractScalarAliases to recognise aliased imports.
+ *
+ * When a user writes `import { Decimal as D2 } from 'decimal.js'` or
+ * `import MyDecimal from 'decimal.js'`, the local name D2 / MyDecimal is an alias
+ * for the canonical key 'Decimal'.  Registering the module here lets
+ * extractScalarAliases build a local-name → canonical-key map automatically.
+ */
+const MODULE_SCALAR_MAP: Readonly<Record<string, string>> = {
+  'decimal.js': 'Decimal',
+}
 
 /**
  * Canonical JSON-Schema fragments for TS built-in scalar types.
@@ -17,15 +41,19 @@ import { morphFallback } from './morph-fallback'
  *
  * Map / Set are handled in later states (lt-extract-nominal / lt-scalars).
  *
- * NOTE on Decimal: ts-morph emits two distinct type-text strings for the same
+ * NOTE on Decimal: ts-morph emits different type-text strings for the same
  * Decimal class depending on how the user imports it:
  *   - `import { Decimal } from 'decimal.js'`  → `"Decimal"`  (keyed directly below)
  *   - `import Decimal from 'decimal.js'`       → qualified import path like
  *     `import("/path/to/decimal.js/decimal").default`
- * Both are normalised to the "Decimal" key in `buildSchema` before this map is
- * consulted — see `normalizeTypeText`.
+ *   - `import { Decimal as D2 } from 'decimal.js'` / `import D2 from 'decimal.js'`
+ *                                              → `"D2"` (local alias)
+ * All forms are normalised to the "Decimal" key before this map is consulted:
+ *   - qualified-import form: handled by `normalizeTypeText` regex
+ *   - alias form:            handled by the alias map from `extractScalarAliases`
+ * See `normalizeTypeText` and `extractScalarAliases`.
  */
-const SCALAR_SCHEMAS: Readonly<Record<string, Record<string, unknown>>> = {
+export const SCALAR_SCHEMAS: Readonly<Record<string, Record<string, unknown>>> = {
   Date:       { type: 'string', format: 'date-time' },
   bigint:     { type: 'string', format: 'int64' },
   Uint8Array: { type: 'string', format: 'byte' },
@@ -36,46 +64,307 @@ const SCALAR_SCHEMAS: Readonly<Record<string, Record<string, unknown>>> = {
 }
 
 /**
+ * TypeReference names that ts-json-schema-generator gets wrong or expands badly.
+ * These are intercepted in the parser augmentor so that ANY occurrence of these
+ * types — top-level, nested in objects, nested in arrays, inside unions — emits
+ * the canonical {type:"string", format:…} instead of the wrong/expanded schema.
+ *
+ * Date, URL, RegExp are already handled correctly by ts-json-schema-generator's
+ * built-in TypeReferenceNodeParser, so they are NOT listed here.
+ */
+const REFERENCE_FORMAT_MAP: Record<string, string> = {
+  Uint8Array: 'byte',
+  Buffer:     'byte',
+  Decimal:    'decimal',
+}
+
+/**
+ * Scan a source file's import declarations and return a map of
+ *   `localName → canonicalScalarKey`
+ * for any import whose module specifier is in MODULE_SCALAR_MAP and whose
+ * local name differs from the canonical key.
+ *
+ * Examples:
+ *   `import { Decimal as D2 } from 'decimal.js'`  → { D2: 'Decimal' }
+ *   `import MyDec from 'decimal.js'`               → { MyDec: 'Decimal' }
+ *   `import Decimal from 'decimal.js'`             → {}  (no alias needed)
+ *   `import { Decimal } from 'decimal.js'`         → {}  (no alias needed)
+ *
+ * The returned map is consumed by normalizeTypeText and morphFallback so that
+ * aliased external scalar types are recognised at ANY nesting depth.
+ */
+export function extractScalarAliases(sf: SourceFile): ReadonlyMap<string, string> {
+  const aliases = new Map<string, string>()
+  for (const imp of sf.getImportDeclarations()) {
+    const modSpec = imp.getModuleSpecifierValue()
+    const canonicalKey = MODULE_SCALAR_MAP[modSpec]
+    if (!canonicalKey) continue
+
+    // Default import: `import MyDec from 'decimal.js'`
+    const defaultImp = imp.getDefaultImport()
+    if (defaultImp) {
+      const localName = defaultImp.getText()
+      if (localName !== canonicalKey) aliases.set(localName, canonicalKey)
+    }
+
+    // Named imports: `import { Decimal as D2 } from 'decimal.js'`
+    //                `import { Decimal } from 'decimal.js'`  (no alias → same as canonical)
+    for (const ni of imp.getNamedImports()) {
+      // localName = alias if present, else the imported name
+      const localName = ni.getAliasNode()?.getText() ?? ni.getName()
+      if (localName !== canonicalKey) aliases.set(localName, canonicalKey)
+    }
+  }
+  return aliases
+}
+
+/**
+ * Structural shape of a ts-json-schema-generator TypeReference AST node.
+ * We avoid importing `ts.Node` directly because ts-json-schema-generator bundles
+ * its own TypeScript version (5.x) which may differ from the workspace version,
+ * causing structural type mismatches at compile time. Using a structural
+ * subtype here is sufficient since we only access the fields we need.
+ */
+type TsRefNode = {
+  kind: number
+  typeName?: { escapedText?: string; right?: { escapedText?: string } }
+}
+
+/**
+ * Minimal shape of a ts-json-schema-generator MutableParser (ChainNodeParser).
+ * Typed structurally to avoid direct coupling to ts-json-schema-generator's
+ * internal TypeScript version.
+ */
+type MutableParserLike = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  addNodeParser(parser: any): void
+}
+
+/**
+ * Parser augmentor for ts-json-schema-generator that intercepts scalar type
+ * nodes and emits {type:"string", format:…} at any nesting depth.
+ *
+ * Two kinds of nodes are intercepted:
+ *   - BigIntKeyword  → {type:string, format:int64}
+ *     (ts-json-schema-generator maps bigint → NumberType, losing precision)
+ *   - TypeReference  for Uint8Array / Buffer / Decimal
+ *     (ts-json-schema-generator expands these to their full object structure
+ *      or emits {}, neither of which is the canonical wire format)
+ *
+ * ts-json-schema-generator's own TypeReferenceNodeParser already handles Date /
+ * URL / RegExp correctly (emits AnnotatedType with the right format string), so
+ * those are intentionally omitted here.
+ */
+function buildParserAugmentor(
+  bigIntKind: number,
+  typeRefKind: number,
+): (chain: MutableParserLike) => void {
+  return (chain) => {
+    // Intercept TypeReference nodes for Uint8Array / Buffer / Decimal
+    chain.addNodeParser({
+      supportsNode(node: TsRefNode) {
+        if (node.kind !== typeRefKind) return false
+        const name = node.typeName?.escapedText ?? node.typeName?.right?.escapedText
+        return name !== undefined && Object.prototype.hasOwnProperty.call(REFERENCE_FORMAT_MAP, name)
+      },
+      createType(node: TsRefNode) {
+        const name = (node.typeName?.escapedText ?? node.typeName?.right?.escapedText) as string
+        return new AnnotatedType(new StringType(), { format: REFERENCE_FORMAT_MAP[name] }, false)
+      },
+    })
+
+    // Intercept BigIntKeyword → {type:string, format:int64}
+    chain.addNodeParser({
+      supportsNode(node: { kind: number }) {
+        return node.kind === bigIntKind
+      },
+      createType() {
+        return new AnnotatedType(new StringType(), { format: 'int64' }, false)
+      },
+    })
+  }
+}
+
+/**
+ * Lazily resolved TypeScript module used by ts-json-schema-generator.
+ * ts-json-schema-generator bundles its own TypeScript (currently 5.x) which
+ * may differ from the workspace TypeScript version. We must use the same
+ * TypeScript instance that ts-json-schema-generator's parsers use, so that
+ * SyntaxKind constants and node shape are consistent.
+ */
+let _tsjsTs: typeof import('typescript') | undefined
+function getTsjsTs(): typeof import('typescript') {
+  if (_tsjsTs) return _tsjsTs
+  try {
+    // ts-json-schema-generator resolves TypeScript relative to its own package
+    const tsjsDir = path.dirname(require.resolve('ts-json-schema-generator/package.json'))
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _tsjsTs = require(require.resolve('typescript', { paths: [tsjsDir] })) as typeof import('typescript')
+  } catch {
+    // Fallback: use whatever TypeScript is resolvable from here
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    _tsjsTs = require('typescript') as typeof import('typescript')
+  }
+  return _tsjsTs
+}
+
+/**
+ * Extract the actual schema object from a ts-json-schema-generator root schema.
+ *
+ * ts-json-schema-generator wraps named types in:
+ *   { "$schema": "...", "$ref": "#/definitions/Name", "definitions": { Name: {...} } }
+ *
+ * For anonymous/simple types (no cross-references) it returns the definition
+ * inline at the root:
+ *   { "$schema": "...", "type": "object", "properties": {...}, "definitions": {} }
+ *
+ * This function unwraps either form and strips generator meta-fields.
+ * The full `definitions` map is preserved so callers that need cross-references
+ * can still access it — but for the anonymous-type alias-injection use-case,
+ * definitions is always empty.
+ */
+function extractSchemaDefinition(
+  schema: Record<string, unknown>,
+  aliasName: string,
+): Record<string, unknown> {
+  // Wrapped form: $ref → definitions
+  if (typeof schema['$ref'] === 'string' && schema['definitions']) {
+    const refKey = (schema['$ref'] as string).replace('#/definitions/', '')
+    const defs = schema['definitions'] as Record<string, unknown>
+    if (defs[refKey]) return defs[refKey] as Record<string, unknown>
+  }
+  // Inline form: strip generator meta-fields
+  const { $schema: _s, definitions: _d, ...rest } = schema as {
+    $schema?: unknown
+    definitions?: unknown
+    [k: string]: unknown
+  }
+  // If aliasName is present at definitions level (some generator versions), pull it
+  const defs = _d as Record<string, unknown> | undefined
+  if (defs && defs[aliasName]) return defs[aliasName] as Record<string, unknown>
+  return rest
+}
+
+/**
+ * Cache of built {@link SchemaGenerator} instances keyed by
+ * `path \0 tsconfig \0 fileVersion`.
+ *
+ * WHY: `createProgram` builds a full TypeScript program (parses the file +
+ * lib.d.ts, runs the type checker) on every call. The BUG-013 change moved from
+ * a single `createGenerator` per type to a `runScalarAwareGenerator` per
+ * `buildSchema` call, so extracting an N-export file rebuilt the whole program N
+ * times — O(N) full type-checks, ~1.4s each. The program/parser/formatter depend
+ * ONLY on `(path, tsconfig, file-contents)`, NOT on the `type` being extracted
+ * (`createSchema(type)` is the cheap lookup). Caching the generator per source
+ * file collapses N program builds into one, turning O(N) type-checks into O(1).
+ *
+ * Invalidation: the cache key includes the file's mtime+size so an edited file
+ * rebuilds. Only the stable real source file (Path 1) is cached; the OS-temp
+ * anonymous-type files (Path 2) pass `cacheable=false` so their single-use
+ * programs are never retained (caching them would OOM a many-export file).
+ */
+type BuiltGenerator = { createSchema(type: string): unknown }
+const _generatorCache = new Map<string, BuiltGenerator>()
+
+/** Stable cache key for a source program: path + tsconfig + file version (mtime-ns, size). */
+function generatorCacheKey(pathStr: string, tsconfig: string | undefined): string {
+  let version = '0'
+  try {
+    const st = fs.statSync(pathStr)
+    version = `${st.mtimeMs}:${st.size}`
+  } catch {
+    // File may not exist yet (caller will surface the real error); use a sentinel.
+    version = 'nostat'
+  }
+  return `${pathStr} ${tsconfig ?? ''} ${version}`
+}
+
+/**
+ * Run ts-json-schema-generator with the scalar-aware parser augmentor.
+ *
+ * Used for BOTH the normal named-type path (replaces bare `createGenerator`)
+ * and the alias-injection fallback for anonymous types.
+ *
+ * `createParser` and `createFormatter` require a `CompletedConfig` (all
+ * optional Config fields filled in). We merge the caller's Config with the
+ * library's DEFAULT_CONFIG, matching what `createGenerator` does internally.
+ *
+ * The built generator (program + augmented parser + formatter) is cached per
+ * source file — see {@link _generatorCache} — but ONLY when `cacheable` is true.
+ *
+ * `cacheable` MUST be false for the anonymous temp-file path (Path 2): those
+ * files use a unique path per call, so caching them would retain a distinct full
+ * TS program per anonymous type and grow the cache without bound (it OOMs a
+ * many-export file). Only the stable real source file (Path 1) is cached, where
+ * the amortisation turns O(N) program builds into O(1).
+ */
+function runScalarAwareGenerator(config: Config, cacheable: boolean): Record<string, unknown> {
+  const { DEFAULT_CONFIG } = require('ts-json-schema-generator/dist/src/Config.js') as {
+    DEFAULT_CONFIG: CompletedConfig
+  }
+  const completedConfig: CompletedConfig = { ...DEFAULT_CONFIG, ...config }
+  const pathStr = completedConfig.path as string
+  const key = cacheable ? generatorCacheKey(pathStr, completedConfig.tsconfig) : undefined
+
+  let gen = key !== undefined ? _generatorCache.get(key) : undefined
+  if (!gen) {
+    const { createProgram } = require('ts-json-schema-generator/dist/factory/program.js') as {
+      createProgram: (cfg: CompletedConfig) => unknown
+    }
+    const ts = getTsjsTs()
+    const augmentor = buildParserAugmentor(ts.SyntaxKind.BigIntKeyword, ts.SyntaxKind.TypeReference)
+    const program = createProgram(completedConfig) as Parameters<typeof createParser>[0]
+    // Cast augmentor through unknown: our MutableParserLike is structurally compatible
+    // with the tsjsg ParserAugmentor but typed independently to avoid TS version conflicts.
+    const parser = createParser(program, completedConfig, augmentor as unknown as Parameters<typeof createParser>[2])
+    const formatter = createFormatter(completedConfig)
+    gen = new SchemaGenerator(program, parser, formatter, completedConfig) as BuiltGenerator
+    if (key !== undefined) _generatorCache.set(key, gen)
+  }
+
+  return gen.createSchema(completedConfig.type as string) as Record<string, unknown>
+}
+
+/**
  * Normalise the raw type-text emitted by ts-morph before consulting
  * {@link SCALAR_SCHEMAS} and before delegating to ts-json-schema-generator /
  * morphFallback.
  *
- * Two categories of normalisation are applied (in order):
+ * Three categories of normalisation are applied (in order):
  *
- * 1. **Decimal import path** — ts-morph emits a fully-qualified import expression
- *    for default-imported external types, e.g.:
+ * 1. **Decimal qualified import path** — ts-morph emits a fully-qualified import
+ *    expression for default-imported external types without a tsconfig, e.g.:
  *      `import("/abs/path/to/node_modules/decimal.js/decimal").default`
- *    This is the same Decimal class as a named `{ Decimal }` import (which
- *    ts-morph represents as the bare string `"Decimal"`). We normalise the
- *    qualified form to `"Decimal"` so both reach the same SCALAR_SCHEMAS entry.
+ *    Normalised to `"Decimal"` so both reach the same SCALAR_SCHEMAS entry.
  *    The pattern anchors on the module path containing `decimal.js` and the
- *    exported binding being `.default` — the canonical shape of
- *    `import Decimal from 'decimal.js'` in a ts-morph Project that lacks a
- *    tsconfig (skipAddingFilesFromTsConfig=true).
+ *    exported binding being `.default`.
  *
- * 2. **Readonly array forms** — ts-morph emits `readonly T[]` for both
- *    `readonly T[]` and `ReadonlyArray<T>` parameter annotations. The
- *    `readonly` modifier is irrelevant to JSON-Schema generation (arrays are
- *    always structurally equivalent regardless of mutability). Stripping it
- *    before item-type resolution ensures morphFallback can match the trailing
- *    `[]` suffix and recurse into the element type correctly.
- *      `readonly string[]`  → `string[]`
- *      `ReadonlyArray<string>` → `string[]`   (ts-morph already emits the
- *                                              former, but guard both)
- *    Nested forms are handled recursively by morphFallback itself (e.g.
- *    `readonly (readonly string[])[]` normalises to `(readonly string[])[]`
- *    then morphFallback recurses and this function is NOT called again — that
- *    edge case is handled below by a loop).
+ * 2. **Import alias map** — when the caller passes a non-empty alias map (built
+ *    by `extractScalarAliases`), a bare local name like `D2` is remapped to its
+ *    canonical scalar key (`'Decimal'`).  This handles both:
+ *      `import { Decimal as D2 } from 'decimal.js'`  → type text `"D2"` → `"Decimal"`
+ *      `import MyDec from 'decimal.js'`              → type text `"MyDec"` → `"Decimal"`
+ *
+ * 3. **Readonly array forms** — ts-morph emits `readonly T[]` for both
+ *    `readonly T[]` and `ReadonlyArray<T>` parameter annotations.  The
+ *    `readonly` modifier is irrelevant to JSON-Schema generation.  Stripping it
+ *    ensures morphFallback can match the trailing `[]` suffix correctly.
  */
-function normalizeTypeText(typeText: string): string {
+function normalizeTypeText(typeText: string, aliases?: ReadonlyMap<string, string>): string {
   let t = typeText.trim()
 
-  // 1. Decimal qualified import  →  'Decimal'
+  // 1. Decimal qualified import path  →  'Decimal'
   if (/^import\(["'][^"']*decimal\.js[^"']*["']\)\.default$/.test(t)) {
     return 'Decimal'
   }
 
-  // 2a. ReadonlyArray<T>  →  T[]
+  // 2. Import alias map  →  canonical scalar key
+  if (aliases?.size) {
+    const mapped = aliases.get(t)
+    if (mapped !== undefined) return mapped
+  }
+
+  // 3a. ReadonlyArray<T>  →  T[]
   //     Handles the generic form directly (ts-morph usually normalises to
   //     "readonly T[]" already, but guard the generic spelling too).
   const readonlyArrayMatch = t.match(/^ReadonlyArray<(.+)>$/)
@@ -83,7 +372,7 @@ function normalizeTypeText(typeText: string): string {
     t = `${readonlyArrayMatch[1].trim()}[]`
   }
 
-  // 2b. readonly T[]  →  T[]
+  // 3b. readonly T[]  →  T[]
   //     Strip the leading "readonly " keyword.  Apply in a loop so that
   //     nested readonly arrays (e.g. "readonly readonly string[]") are also
   //     fully stripped, even though ts-morph doesn't emit those in practice.
@@ -92,6 +381,75 @@ function normalizeTypeText(typeText: string): string {
   }
 
   return t
+}
+
+/** Escape a string for use in a RegExp literal. */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Qualified-import expressions emitted by ts-morph for default-imported
+ * external scalars when the project has no tsconfig, e.g.:
+ *   `import("/abs/path/to/decimal.js/decimal").default`
+ *
+ * When these appear INSIDE composite type strings like
+ *   `{ cost: import("...decimal.js/decimal").default; }`
+ * the whole-string check in normalizeTypeText does not match.  This list
+ * records, for each MODULE_SCALAR_MAP entry, a regex that matches the
+ * qualified import fragment ANYWHERE inside a longer type text.
+ * rewriteQualifiedImports applies them in applyAliasesToTypeText.
+ */
+const QUALIFIED_IMPORT_PATTERNS: ReadonlyArray<{ pattern: RegExp; key: string }> = (
+  Object.entries(MODULE_SCALAR_MAP).map(([modSpec, canonicalKey]) => ({
+    // Matches: import("...{modSpec}...").default  (single or double quotes)
+    // The module specifier appears inside an absolute path, so we allow any
+    // characters between the quote and the specifier, and between the specifier
+    // and the closing quote / `.default`.
+    pattern: new RegExp(
+      `import\\(["'][^"']*${escapeRegExp(modSpec)}[^"']*["']\\)\\.default`,
+      'g',
+    ),
+    key: canonicalKey,
+  }))
+)
+
+/**
+ * Replace all qualified import expressions (e.g. `import("...decimal.js/decimal").default`)
+ * within a composite type text with their canonical SCALAR_SCHEMAS key (`Decimal`).
+ *
+ * This handles the case where ts-morph emits the full qualified form inside an
+ * object or array type text (vs. as the whole type text, which normalizeTypeText handles):
+ *   `{ cost: import(".../decimal.js/decimal").default; }`
+ *                                                ↓
+ *   `{ cost: Decimal; }`
+ */
+function rewriteQualifiedImports(typeText: string): string {
+  let result = typeText
+  for (const { pattern, key } of QUALIFIED_IMPORT_PATTERNS) {
+    result = result.replace(pattern, key)
+  }
+  return result
+}
+
+/**
+ * Rewrite all occurrences of:
+ *   1. Qualified import expressions   `import("...decimal.js/...").default`  → `Decimal`
+ *   2. Local alias names              `D2`                                   → `Decimal`
+ * anywhere in a type-text string so that the anonymous temp-file (Path 2) and
+ * morphFallback (Path 3) only see canonical SCALAR_SCHEMAS keys.
+ *
+ * The alias replacement uses word-boundary matching so that `D2` inside
+ * `{ D2Foo: … }` is not accidentally rewritten.
+ */
+function applyAliasesToTypeText(typeText: string, aliases: ReadonlyMap<string, string>): string {
+  // 1. Qualified import expressions (e.g. import("...decimal.js/...").default → Decimal)
+  let result = rewriteQualifiedImports(typeText)
+  // 2. Local alias names (e.g. D2 → Decimal)
+  for (const [localName, canonicalKey] of aliases) {
+    result = result.replace(new RegExp(`\\b${escapeRegExp(localName)}\\b`, 'g'), canonicalKey)
+  }
+  return result
 }
 
 /** Attempts ts-json-schema-generator first; falls back to morphFallback for inline/anonymous types. */
@@ -103,11 +461,17 @@ export async function buildSchema(
 ): Promise<Record<string, unknown>> {
   if (['void', 'undefined', 'null', 'Promise<void>'].includes(typeText)) return { type: 'null' }
 
+  // Build an alias map for this source file so that locally-aliased external scalar
+  // types (e.g. `import { Decimal as D2 } from 'decimal.js'`) are resolved to their
+  // canonical SCALAR_SCHEMAS key at every nesting depth.
+  const aliases = extractScalarAliases(sf)
+
   // Normalise the type text before the SCALAR_SCHEMAS lookup so that
   // default-imported external types (e.g. `import Decimal from 'decimal.js'`
   // which ts-morph emits as `import("...decimal.js/decimal").default`) are
-  // mapped to their canonical key first.
-  const normalizedTypeText = normalizeTypeText(typeText)
+  // mapped to their canonical key first, and import aliases (e.g. D2 → Decimal)
+  // are resolved via the alias map.
+  const normalizedTypeText = normalizeTypeText(typeText, aliases)
 
   // Resolve well-known built-in TS scalar types to their canonical logical-type schemas
   // BEFORE delegating to ts-json-schema-generator (which emits {} for most of these).
@@ -115,11 +479,76 @@ export async function buildSchema(
   const scalarSchema = SCALAR_SCHEMAS[normalizedTypeText]
   if (scalarSchema !== undefined) return scalarSchema
 
+  // --- Map / Set / tuple: emit array-compatible schemas (not the class expansion) ---
+  //
+  // ts-json-schema-generator resolves `Map<K,V>` / `Set<T>` to the class
+  // declaration and expands it to `{type:object, properties:{size:{type:number}}}`,
+  // which rejects the canonical `[[k,v]]` / `[v]` array wire and tells the
+  // transcoder the value is an object. Tuples expand to a positional `items`
+  // array which is correct for validation but which the legacy generator path
+  // never produced for inline params. We intercept all three here and build the
+  // array-compatible schema directly, recursing through buildSchema so nested
+  // logical types inside them (e.g. `Map<string, Date>`, `Set<Decimal>`,
+  // `[Date, number]`) still get their canonical `format`.
+  // Element types are resolved against the SAME source file / tsconfig.
+  const mapSetTuple = await buildMapSetTupleSchema(normalizedTypeText, (elemType) =>
+    buildSchema(_project, sf, elemType, tsconfig),
+  )
+  if (mapSetTuple !== undefined) return mapSetTuple
+
+  // --- Path 1: named type (ts-json-schema-generator can look it up by name) ---
+  //
+  // Run the scalar-aware generator (with custom parser augmentor) so that even
+  // named types that CONTAIN nested scalars like bigint / Uint8Array / Decimal
+  // get the right format at every depth.
   try {
-    const config: Config = { path: sf.getFilePath(), type: normalizedTypeText, skipTypeCheck: true, tsconfig }
-    const schema = createGenerator(config).createSchema(normalizedTypeText)
+    const config: Config = {
+      path: sf.getFilePath(),
+      type: normalizedTypeText,
+      skipTypeCheck: true,
+      tsconfig,
+    }
+    // Path 1 keys off the stable real source file → cache the built program.
+    const schema = runScalarAwareGenerator(config, true)
     return schema as Record<string, unknown>
   } catch {
-    return morphFallback(normalizedTypeText, 0)
+    // Fall through to alias-injection path for anonymous / inline types.
+  }
+
+  // --- Path 2: anonymous / inline type (e.g. `{ at: Date; label: string; }`, `Date[]`) ---
+  //
+  // ts-json-schema-generator requires a named root type, so we write the inline
+  // type as a named alias into a scratch file and run the generator on that.
+  // This handles all nesting depths (object, array, union) correctly.
+  //
+  // The scratch file is written to the OS temp directory (not inside the source
+  // tree) so it never interferes with the user's TypeScript project.
+  //
+  // IMPORTANT: the temp file has no imports, so locally-aliased scalar types like
+  // `D2` (from `import { Decimal as D2 } from 'decimal.js'`) would be unresolvable.
+  // We rewrite all alias names to their canonical SCALAR_SCHEMAS keys BEFORE writing
+  // the temp file so the parser augmentor can intercept them by canonical name.
+  const aliasName = '__ApigenAnon'
+  // Apply alias rewriting so D2 → Decimal (etc.) in the type text written to the temp file
+  const canonicalTypeText = applyAliasesToTypeText(normalizedTypeText, aliases)
+  const tmpPath = path.join(os.tmpdir(), `__apigen_anon_${process.pid}_${Date.now()}.ts`)
+  try {
+    fs.writeFileSync(tmpPath, `export type ${aliasName} = ${canonicalTypeText};\n`)
+    const config: Config = {
+      path: tmpPath,
+      type: aliasName,
+      skipTypeCheck: true,
+      // No tsconfig for temp files — we only need structural types, not project-level resolution
+    }
+    // Path 2 uses a UNIQUE temp path per call → never cache (would leak a full
+    // TS program per anonymous type and OOM a many-export file).
+    const rawSchema = runScalarAwareGenerator(config, false)
+    return extractSchemaDefinition(rawSchema, aliasName)
+  } catch {
+    // Final safety net: structural text-based fallback.
+    // Pass aliases so morphFallback can resolve them at nested positions too.
+    return morphFallback(canonicalTypeText, 0, aliases)
+  } finally {
+    try { fs.unlinkSync(tmpPath) } catch { /* ignore cleanup errors */ }
   }
 }

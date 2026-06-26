@@ -92,12 +92,23 @@ function encodeNode(value: unknown, schema: SchemaNode, ctx: TranscodeCtx): Wire
     if (!Array.isArray(value)) {
       return encodeSchemaless(value, schema, ctx);
     }
-    const items = schema['items'] as SchemaNode | undefined;
+    const items = schema['items'] as SchemaNode | SchemaNode[] | undefined;
     if (!items) {
       // No items schema → passthrough each element as plain JSON
       return (value as unknown[]).map((el) => encodePassthrough(el)) as Wire[];
     }
     const childPath = ctx.path;
+    // Positional (tuple) form: `items` is an array of per-index schemas
+    // (draft-07 tuple validation). Walk each element against its positional
+    // schema; elements past the tuple length pass through as plain JSON.
+    if (Array.isArray(items)) {
+      return (value as unknown[]).map((el, i) => {
+        const itemSchema = items[i];
+        return itemSchema === undefined
+          ? (encodePassthrough(el) as Wire)
+          : encodeNode(el, itemSchema, { ...ctx, path: `${childPath}/${i}` });
+      }) as Wire[];
+    }
     return (value as unknown[]).map((el, i) =>
       encodeNode(el, items, { ...ctx, path: `${childPath}/${i}` }),
     ) as Wire[];
@@ -167,11 +178,22 @@ function decodeNode(wire: Wire, schema: SchemaNode, ctx: TranscodeCtx): unknown 
     if (!Array.isArray(wire)) {
       return wire;
     }
-    const items = schema['items'] as SchemaNode | undefined;
+    const items = schema['items'] as SchemaNode | SchemaNode[] | undefined;
     if (!items) {
       return wire;
     }
     const childPath = ctx.path;
+    // Positional (tuple) form: `items` is an array of per-index schemas.
+    // Mirror of the encode side — decode each element against its positional
+    // schema; elements past the tuple length pass through unchanged.
+    if (Array.isArray(items)) {
+      return wire.map((el, i) => {
+        const itemSchema = items[i];
+        return itemSchema === undefined
+          ? el
+          : decodeNode(el, itemSchema, { ...ctx, path: `${childPath}/${i}` });
+      });
+    }
     return wire.map((el, i) =>
       decodeNode(el, items, { ...ctx, path: `${childPath}/${i}` }),
     );
