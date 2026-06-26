@@ -87,8 +87,13 @@ export class OpenAIProvider implements LLMProvider {
         // catch-all PROVIDER_ERROR branch instead of the actionable PROVIDER_TIMEOUT,
         // and raising timeoutMs has no effect. Aligning the two means our
         // composedSignal always fires first, giving the right error + message.
+        // Fall back to "lmstudio" when the env var is absent so the OpenAI SDK
+        // never receives `undefined`. This is the canonical no-auth placeholder
+        // for LM Studio (which ignores the Authorization header value entirely);
+        // for real OpenAI usage the env var will always be set so this path
+        // is never reached in practice.
         this.client = new OpenAI({
-            apiKey: process.env[config.apiKeyEnv ?? "OPENAI_API_KEY"],
+            apiKey: process.env[config.apiKeyEnv ?? "OPENAI_API_KEY"] ?? "lmstudio",
             baseURL: config.baseURL,
             timeout: config.timeoutMs ?? 60_000,
         });

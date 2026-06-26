@@ -30,8 +30,11 @@ const DB =
     process.env.DATABASE_PATH ??
     path.resolve(__dirname, "data/agents.db");
 
+// LM Studio ignores the API key value (no auth on the local server); the
+// canonical no-auth placeholder is used when LMSTUDIO_API_KEY is unset. Never
+// hardcode a real token here — export it in your shell if your server needs one.
 const LMSTUDIO_API_KEY =
-    process.env.LMSTUDIO_API_KEY ?? "sk-lm-aTPoK9Gs:qf2Ncsq8ezFfN6kIALi5";
+    process.env.LMSTUDIO_API_KEY ?? "lmstudio";
 
 const LMSTUDIO_BASE_URL =
     process.env.LMSTUDIO_BASE_URL ?? "http://192.168.1.59:1234/v1";

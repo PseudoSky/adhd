@@ -3,10 +3,9 @@
     "agent-mcp": {
       "type": "stdio",
       "command": "node",
-      "args": ["/Users/nix/dev/node/adhd/dist/packages/ai/agent-mcp/src/index.js"],
+      "args": ["dist/packages/ai/agent-mcp/src/index.js"],
       "env": {
-        "DATABASE_PATH": "/Users/nix/dev/node/adhd/packages/ai/agent-mcp/data/agents.db",
-        "LMSTUDIO_API_KEY": "sk-lm-aTPoK9Gs:qf2Ncsq8ezFfN6kIALi5",
+        "DATABASE_PATH": "tmp/agent-mcp/agents-dev.db",
         "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
       }
     },
@@ -15,8 +14,7 @@
       "command": "npx",
       "args": ["-y", "@adhd/agent-mcp@latest"],
       "env": {
-        "DATABASE_PATH": "/Users/nix/dev/node/adhd/packages/ai/agent-mcp/data/agents-published.db",
-        "LMSTUDIO_API_KEY": "sk-lm-aTPoK9Gs:qf2Ncsq8ezFfN6kIALi5",
+        "DATABASE_PATH": "tmp/agent-mcp/agents-published.db",
         "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
       }
     }
