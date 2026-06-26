@@ -10,5 +10,17 @@
     "owner": "repo owner (Claude Max account holder)",
     "how_to_provide": "Sign in to Claude Code so the OAuth token is in the login keychain (Claude Max); or export ANTHROPIC_API_KEY. Then set AGENT_MCP_LIVE=1.",
     "blocks_at": "per-state"
+  },
+  "live-provider-claudecli": {
+    "type": "external-resource",
+    "description": "claudecli provider live run needs the 'claude' CLI installed and authenticated (drives stream-json; config {claudePath,model}). Required only for the claudecli matrix case under AGENT_MCP_LIVE=1; absent => that case skips (not fails). Also the default real provider for dod.5's run step.",
+    "required_by": [
+      "live-model-e2e"
+    ],
+    "verification": "command -v claude >/dev/null 2>&1",
+    "status": "needed",
+    "owner": "executor environment",
+    "how_to_provide": "Install the Claude Code CLI (npm i -g @anthropic-ai/claude-code or equivalent) and ensure 'claude' is on PATH and logged in. Set CLAUDE_CLI_PATH if non-standard.",
+    "blocks_at": "per-state"
   }
 }
