@@ -91,6 +91,68 @@ F-LIVE-1 (`docs/plan/agent-mcp-refactor/orchestration-ledger.md`).
 
 ---
 
+### BUG-004 — Imported agents lost their `tools:` headers → run with zero tools
+> (Tracked as BUG-003 in the credentialing branch; renumbered on merge to avoid an ID clash with the `agent_list` bug above.)
+- **Status:** backlog
+- **Priority:** P1
+- **Area:** agent import tooling → global store (`~/.adhd/agent-mcp/agents.db`), providers
+- **Reported:** 2026-06-22
+
+**Problem / Description** — The global agent store contains 46 agents imported from the
+claude-agents corpus (`~/dev/ai/claude-agents/categories/`). The source `.md` files declare
+tool access in frontmatter — e.g. `code-reviewer.md` has
+`tools: Read, Write, Edit, Bash, Glob, Grep, ListMcpResourcesTool, ReadMcpResourceTool,
+WaitForMcpServers, AskUserQuestion, WebSearch, Monitor, LSP` (229 of 348 source files carry a
+`tools:` header). The importer kept only the markdown **body** as `systemPrompt` and **dropped
+the frontmatter**. Every imported record is now: `provider.type = "anthropic"`, `mcpServers: {}`,
+no `allowedBuiltinTools`, no `systemPromptIsAgentSpec`, no frontmatter in `systemPrompt`.
+
+**Evidence (verified 2026-06-22, all 46, no sampling)** — 46/46 source files located; 46/46
+carry a `tools:` header; the stored `systemPrompt` matches the source body **byte-for-byte after
+stripping frontmatter** for all 46 (0 differ); 0/46 stored prompts contain a `tools:`, `name:`,
+or leading-frontmatter marker anywhere. Confirms uniform frontmatter-stripping at import, not
+per-agent authoring.
+
+**Impact** — These agents run with **zero tools**. Three compounding causes:
+1. The `tools:` header was discarded at import (root cause — data loss).
+2. Even if retained, `provider.type = "anthropic"` cannot honor a header — header-driven tools
+   (`systemPromptIsAgentSpec`) and built-in allowlists (`allowedBuiltinTools`) are `claudecli`-only;
+   the anthropic provider sources tools solely from `mcpServers` (empty here).
+3. The referenced tools (`Read`, `Bash`, `WebSearch`, `LSP`, …) are Claude Code built-ins the
+   anthropic provider has no way to execute (see FEAT-007). A `code-reviewer` that must
+   `Read`/`Grep`/`Bash` the codebase cannot touch a single file.
+
+**Proposed fix / Approach** — Re-import preserving the header, mapping it to a runtime-honored
+form. Cleanest for these file-touching agents: set `provider.type = "claudecli"` +
+`systemPromptIsAgentSpec: true` and store the **full** md (frontmatter + body) as `systemPrompt`
+so Claude parses the `tools:` header. Alternatively keep `anthropic` and translate the header into
+`mcpServers` (filesystem/exec MCP) — but native built-ins (Bash/Read/WebSearch) still require
+FEAT-007.
+
+**Tool-name normalization (Claude Code 2.1.185 uses `ToolSearch` / on-demand tool loading).**
+The source headers list tools this build does NOT statically advertise. Verified: of
+`code-reviewer`'s 13 tools, only `Read, Write, Edit, Bash, AskUserQuestion, WebSearch, Monitor`
+are honored; `Glob, Grep, LS, MultiEdit, LSP` exist in the binary (75/52/7/5 string hits) but are
+**deferred behind `ToolSearch`** (loaded on demand, never in the `init` set), and
+`ListMcpResourcesTool, ReadMcpResourceTool, WaitForMcpServers` only register once an MCP server
+connects (async). So an allowlist that names a deferred tool is a no-op. Normalization rule:
+include **`ToolSearch`** in the header to retain dynamic access to `Glob`/`Grep`/etc., keep `Bash`
+as the deterministic search fallback, drop deferred/MCP-meta names that can't bind, and add
+`mcp__<server>__<tool>` entries only when delegation is wanted.
+
+**Acceptance criteria** — A re-imported `code-reviewer` advertises its **statically-bindable**
+header tools at runtime (proven via `init`: the non-deferred subset matches exactly, and
+`ToolSearch` is present when deferred tools are needed), and can read + search a real file
+end-to-end. Note: deferred tools will NOT appear in `init` even when intended — assert on the
+bindable subset + `ToolSearch`, not the raw header.
+
+**References** — `~/.adhd/agent-mcp/agents.db` (agents table `data` blob),
+`~/dev/ai/claude-agents/categories/04-quality-security/code-reviewer.md` (source header),
+`src/providers/claudecli.ts` (`systemPromptIsAgentSpec`), FEAT-007,
+`docs/plan/agent-registry/SEED_DATA.md` §"Frontmatter → registry table mapping". (Surfaced 2026-06-22.)
+
+---
+
 ### BUG-002 — Delegation-opened sessions are never reaped → leak + undeletable sub-agent
 - **Status:** done (in source; ships in the next publish) · **Closed:** 2026-06-16
 - **Priority:** P2
@@ -428,6 +490,51 @@ anchor-backfill + Plan 8 discovery re-verify. Optionally add a stability metric
 (twice → equal rows); a documented re-capture procedure re-backfills Plan 8 anchors.
 
 **References** — Plan 7 `contexts/haiku-usecase-batch.md`, `contexts/sonnet-consolidation.md`, `contexts/import-script.md`; `human-blockers.json` `corpus-ingest-llm`.
+
+---
+
+### FEAT-007 — Platform-native tool support across providers (runtime wiring)
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** providers (`src/providers/anthropic.ts`, `openai.ts`, `claudecli.ts`), validation (`src/validation/agent.ts`), `@adhd/agent-mcp-types`
+- **Reported:** 2026-06-22
+
+**Problem / Description**
+Agents have no first-class way to declare provider/platform-native tools (executed by
+the provider, not our registry). Today only `claudecli` exposes built-ins, via
+`allowedBuiltinTools` (denylist) or `systemPromptIsAgentSpec` (agent-md `tools:` header).
+Other providers have no path:
+- `anthropic` — `toAnthropicTools()` only emits *custom* tools; it never emits Anthropic
+  **server-side** tool types (`web_search`, `code_execution`) nor **client-executed** tools
+  (`bash`, `text_editor`, `computer`, which would need a local executor loop).
+- `openai` — built-in tools require the Responses API / Assistants; the provider uses
+  chat.completions, so `web_search`/`code_interpreter` are unreachable.
+
+**Relationship to the agent-registry plan** (`docs/plan/agent-registry/`)
+The registry's `@adhd/agent-tool-registry` (canonical tools + `TOOL_PLATFORM_BINDING`) and
+`@adhd/agent-provider` (`PROVIDER_TOOL_FORMAT`) cover the **declaration + compile-time**
+half of this — a canonical `web_search` resolves to `WebSearch` (claude_code) or
+`web_search` (claude_api) and the compiler emits the right header shape. It does **not**
+cover the agent-mcp **runtime** half: the provider adapters must actually forward those
+platform tools to the API and (for client-executed tools) run an execution loop. The seed
+catalog also doesn't yet enumerate the tricky natives (Anthropic server-tool versioned
+`type` strings, activation-flag tools like Claude Code `--chrome`). So this remains an
+agent-mcp runtime gap even if the registry lands. See SCOPE.md "ProviderAdapter Interface".
+
+**Impact** No web search / code execution / native browser for `anthropic` or `openai`
+agents without routing everything through MCP servers or the `claudecli` subprocess.
+
+**Proposed fix / Approach** Decide an interface (per-provider field vs canonical
+capability aliases — the registry favors the latter), then wire the cheap wins first:
+`claudecli` built-ins (done) + `anthropic` server-side `web_search`/`code_execution`
+(emit `{type:"…"}` entries in `toAnthropicTools`; no local executor needed). Gate
+unsupported entries (openai, anthropic client-exec) behind an explicit error.
+
+**Acceptance criteria** An `anthropic` agent can be granted `web_search` and the model
+performs a real search end-to-end (live test); unsupported native-tool requests fail with
+an actionable error rather than silently doing nothing.
+
+**References** — `src/providers/anthropic.ts` (`toAnthropicTools`), `docs/plan/agent-registry/RUNTIME_GAPS.md` (full analysis + recommended handoff), `docs/plan/agent-registry/{SCOPE,DATA_MODEL,SEED_DATA}.md`. (Surfaced during agent-registry plan review, 2026-06-22.)
 
 ---
 
@@ -833,6 +940,74 @@ Steps:
 
 ---
 
+### DEBT-010 — `vite.config.ts` hardcodes a per-package source alias for dynamic `@adhd` imports (workaround, not the real fix)
+- **Status:** open
+- **Priority:** P3 · **Area:** build/test tooling, workspace `@adhd/*` resolution
+- **Reported:** 2026-06-26 (registry merge — `live-budget.e2e.test.ts` resolution)
+
+**Problem.** `live-budget.e2e.test.ts` does `await import("@adhd/agent-mcp-budget")`.
+Under vitest, `nxViteTsPaths()` aliases **static** `@adhd/*` imports to source via
+`tsconfig.base.json` paths, but a bare **dynamic-import** specifier falls through to
+node resolution → the package's `package.json` `exports` (`./index.mjs` / `./index.js`,
+which only exist after a build) → vite throws *"Failed to resolve entry for package
+@adhd/agent-mcp-budget … incorrect main/module/exports"*. The suite failed for a
+resolution reason unrelated to the code under test.
+
+**Workaround applied (the debt).** A hardcoded `resolve.alias` in
+`packages/ai/agent-mcp/vite.config.ts` maps `@adhd/agent-mcp-budget` → its
+`src/index.ts`. It works, but it is **per-package and per-consumer**: every workspace
+`@adhd` dep that is ever imported dynamically would need its own alias line, in every
+package's vite config that does so. It also masks the deeper issue (same family as
+**F-P6-13**: `@adhd/*` `exports` point at unbuilt artifacts, so nothing resolves them
+in-workspace without tsconfig-paths or a symlink).
+
+**Proposed real fix (pick one, workspace-wide).**
+1. Add a **`"development"`/source export condition** to every `@adhd/*` `package.json`
+   (`exports["."].development = "./src/index.ts"`) and have vitest resolve with that
+   condition — fixes static + dynamic uniformly, no per-package aliases.
+2. A **shared vitest resolver plugin** that reads `tsconfig.base.json` paths and aliases
+   ALL `@adhd/*` (static + dynamic) to source, dropped into every package's config.
+3. Make `agent-mcp-budget` a declared build dependency so `test dependsOn build` produces
+   the `index.mjs` the `exports` already name (heavier; rebuilds on every test).
+
+When the real fix lands, delete the `resolve.alias` block from `vite.config.ts`.
+
+**References** — `packages/ai/agent-mcp/vite.config.ts` (the alias),
+`packages/ai/agent-mcp-budget/package.json` (`exports` → unbuilt files),
+`tsconfig.base.json` (paths), F-P6-13 (publish-time `@adhd` dep resolution).
+
+---
+
+### DEBT-011 — `nx typecheck` target is misconfigured (composite + rootDir) → never green
+- **Status:** open
+- **Priority:** P2 · **Area:** build/test tooling, tsconfig project references
+- **Reported:** 2026-06-26 (registry merge verification)
+
+**Problem.** The `typecheck` target cannot pass as configured:
+1. `tsconfig.json` references `tsconfig.spec.json` but the latter lacks
+   `"composite": true` → `tsc --build` fails with `TS6306` (×66) before it checks any code.
+2. Running `tsc -p tsconfig.lib.json` directly surfaces 73 `TS6059` "File … is not under
+   rootDir 'agent-mcp/src'" errors, because cross-package `@adhd/*` imports resolve to
+   **source** (via tsconfig paths) instead of built `.d.ts`, and source sits outside the
+   package `rootDir`. So the package has **no working static type-check gate** — exactly the
+   blind spot DEMO.md §0.3 calls out ("39/39 green while `nx typecheck` was red, hiding 13 errors").
+
+This is pre-existing and repo-wide (not introduced by the registry merge — the merge left
+`agent-mcp/tsconfig*.json` untouched). The actual source is type-clean today (a direct
+`tsc` shows **zero** errors in `src/` once the config artifacts are excluded), but nothing
+*enforces* that.
+
+**Proposed fix.** Either (a) give every package a `references`-free `typecheck` tsconfig that
+sets `composite:false`, `noEmit:true`, and resolves `@adhd/*` to built `.d.ts` (build deps
+first), or (b) a project-references setup where each `@adhd` package is `composite:true` with
+emitted declarations so cross-package checks use `.d.ts`, not source. Then wire `nx typecheck`
+to the corrected target and add it to the CI gate so source type errors fail loudly.
+
+**References** — `packages/ai/agent-mcp/tsconfig.json` / `tsconfig.spec.json` / `tsconfig.lib.json`,
+`tsconfig.base.json` paths, DEMO.md §0.3 (the green-but-untyped failure mode).
+
+---
+
 ## ✅ Done
 
 ### BUG-001 — SSE server crashes the whole process on `EADDRINUSE`
@@ -865,6 +1040,27 @@ now interrupts the in-flight tool call instead of waiting for the batch.
 **Test:** `parallel.integration.test.ts` → "DEBT-003 … cancel interrupts an
 in-flight tool call via the threaded signal" (teeth-checked: dropping the signal
 arg makes the stub hang → the test times out).
+
+### BUG-002 — `@adhd/agent-mcp-budget` dist missing `index.mjs` breaks live-budget e2e test
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** build, providers
+- **Reported:** 2026-06-26
+
+`dist/packages/ai/agent-mcp-budget/package.json` declares `"import": "./index.mjs"`
+in its exports map, but the Vite build only emits `index.js` and `index.cjs` — no
+`index.mjs`. Vite's Vitest resolver fails with "Failed to resolve entry for package
+@adhd/agent-mcp-budget" when `live-budget.e2e.test.ts` tries to import it.
+
+**Root cause:** The `agent-mcp-budget` vite.config is likely missing `formats: ["es"]`
+or has the output filename set to `.js` instead of `.mjs` for the ESM build.
+
+**Fix:** In `packages/ai/agent-mcp-budget/vite.config.ts`, ensure
+`build.lib.formats` includes `"es"` with `fileName: () => "index.mjs"`, or align
+the `exports."import"` field in the generated `package.json` with the actual
+output filename (`index.js`).
+
+**Evidence:** `ls dist/packages/ai/agent-mcp-budget/` → `index.cjs index.d.ts index.js package.json` (no `index.mjs`).
 
 ---
 
