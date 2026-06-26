@@ -76,6 +76,51 @@
       "updated_at": "2026-06-23T20:11:43.991Z"
     },
     {
+      "plan": "agent-mcp-authoring",
+      "dir": "agent-mcp-authoring",
+      "status": "authored",
+      "mutate_set": [
+        "docs/plan/agent-mcp-authoring/contexts/authoring-design.md",
+        "docs/plan/agent-mcp-authoring/decisions.md",
+        "docs/plan/agent-mcp-authoring/review.md",
+        "docs/plan/agent-mcp-authoring/scripts/audit_authoring.py",
+        "docs/plan/agent-mcp-authoring/scripts/review_gate.py",
+        "docs/plan/agent-registry/demo/compose-via-mcp.mjs",
+        "packages/ai/agent-mcp/CHANGELOG.md",
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp/src/__tests__/agent-define.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/component-define.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/systemprompt-compat.test.ts",
+        "packages/ai/agent-mcp/src/registry/composition-writer.ts",
+        "packages/ai/agent-mcp/src/registry/name-slug.ts",
+        "packages/ai/agent-mcp/src/registry/registry-bridge.ts",
+        "packages/ai/agent-mcp/src/server.ts",
+        "packages/ai/agent-mcp/src/tools/agent-crud.ts",
+        "packages/ai/agent-mcp/src/tools/authoring.ts",
+        "packages/ai/agent-mcp/src/tools/discovery.ts",
+        "packages/ai/agent-mcp/src/tools/guide.ts",
+        "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts",
+        "packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts",
+        "packages/ai/agent-registry/src/enrich/embedding.ts",
+        "packages/ai/agent-registry/src/enrich/enrich-component.ts",
+        "packages/ai/agent-registry/src/enrich/summarize.ts",
+        "packages/ai/agent-registry/src/enrich/usecase-anchors.ts",
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/store/usecase-store.ts"
+      ],
+      "references": [],
+      "assumed_baseline": [],
+      "depends_on": [
+        "agent-mcp-refactor"
+      ],
+      "updated_at": "2026-06-25T22:56:04.306Z"
+    },
+    {
       "plan": "agent-mcp-refactor",
       "dir": "agent-mcp-refactor",
       "status": "published",
@@ -199,17 +244,23 @@
         "packages/ai/agent-registry-migration/project.json",
         "packages/ai/agent-registry-migration/src/__fixtures__/code-reviewer.md",
         "packages/ai/agent-registry-migration/src/__fixtures__/ticket-creation.SKILL.md",
-        "packages/ai/agent-registry-migration/src/__tests__/body-sections.test.ts",
-        "packages/ai/agent-registry-migration/src/__tests__/frontmatter.test.ts",
-        "packages/ai/agent-registry-migration/src/__tests__/import-pipeline.test.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/corpus-parser.test.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/dataset-build.test.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/haiku-usecase-batch.test.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/import-script.test.ts",
         "packages/ai/agent-registry-migration/src/__tests__/removal-runbook.test.ts",
         "packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts",
-        "packages/ai/agent-registry-migration/src/__tests__/skills-migration.test.ts",
-        "packages/ai/agent-registry-migration/src/import/import-agent.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/sonnet-consolidation.test.ts",
+        "packages/ai/agent-registry-migration/src/import/import-corpus.ts",
         "packages/ai/agent-registry-migration/src/import/import-skill.ts",
         "packages/ai/agent-registry-migration/src/index.ts",
-        "packages/ai/agent-registry-migration/src/parse/body-sections.ts",
-        "packages/ai/agent-registry-migration/src/parse/frontmatter.ts",
+        "packages/ai/agent-registry-migration/src/ingest/dataset-build.ts",
+        "packages/ai/agent-registry-migration/src/ingest/haiku-batch.ts",
+        "packages/ai/agent-registry-migration/src/ingest/sonnet-consolidate.ts",
+        "packages/ai/agent-registry-migration/src/ingest/usecase-candidate.ts",
+        "packages/ai/agent-registry-migration/src/ingest/usecase-vocabulary.ts",
+        "packages/ai/agent-registry-migration/src/parse/agent-parser.ts",
+        "packages/ai/agent-registry-migration/src/parse/component-mapping.ts",
         "packages/ai/agent-registry-migration/src/removal/retire.ts",
         "packages/ai/agent-registry-migration/src/verify/equivalence-gate.ts",
         "packages/ai/agent-registry-migration/src/verify/normalize.ts",
@@ -218,7 +269,34 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-23T20:11:43.992Z"
+      "updated_at": "2026-06-26T03:59:27.839Z"
+    },
+    {
+      "plan": "agent-registry-release",
+      "dir": "agent-registry-release",
+      "status": "authored",
+      "mutate_set": [
+        ".gitignore",
+        "docs/plan/agent-registry-release/MERGE_RUNBOOK.md",
+        "docs/plan/agent-registry-release/POST_PUBLISH.md",
+        "docs/plan/agent-registry-release/PUBLISH_RUNBOOK.md",
+        "docs/plan/agent-registry-release/contexts/closeout-design.md",
+        "docs/plan/agent-registry-release/decisions.md",
+        "docs/plan/agent-registry-release/scripts/audit_release.py",
+        "docs/plan/agent-registry-release/scripts/check_agent_mcp_baseline.py",
+        "docs/plan/agent-registry-release/scripts/smoke_test.sh",
+        "docs/plan/agent-registry/CLOSEOUT.md",
+        "docs/plan/agent-registry/demo/README.md",
+        "docs/plan/plan-index.json"
+      ],
+      "references": [],
+      "assumed_baseline": [],
+      "depends_on": [
+        "agent-mcp-authoring",
+        "agent-mcp-refactor",
+        "agent-registry-migration"
+      ],
+      "updated_at": "2026-06-25T22:56:04.345Z"
     },
     {
       "plan": "agent-registry-schema",
@@ -590,5 +668,5 @@
       "updated_at": "2026-06-23T20:11:43.997Z"
     }
   ],
-  "updated_at": "2026-06-23T20:11:44.004Z"
+  "updated_at": "2026-06-26T03:59:27.848Z"
 }
