@@ -52,8 +52,8 @@ tool-permission scheme.
 ## Reservations
 
 ```text
-read_only:  ["docs/plan/agent-mcp-refactor/decisions.md", "packages/ai/agent-mcp/src/engine/prompt-resolver.ts"]
-mutates:    ["packages/ai/agent-mcp/src/engine/policy.ts", "packages/ai/agent-mcp/src/providers/claudecli.ts", "packages/ai/agent-mcp/src/validation/agent.ts", "packages/ai/agent-mcp/src/__tests__/policy-tool-reconcile.test.ts"]
+read_only:  []
+mutates:    ["packages/ai/agent-mcp/src/engine/policy.ts", "packages/ai/agent-mcp/src/providers/claudecli.ts", "packages/ai/agent-mcp/src/validation/agent.ts", "packages/ai/agent-mcp/src/__tests__/policy-tool-reconcile.test.ts", "packages/ai/agent-mcp/package.json", "tsconfig.base.json"]
 ```
 
 ---
