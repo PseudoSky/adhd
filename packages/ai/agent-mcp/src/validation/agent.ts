@@ -101,9 +101,9 @@ export const agentDefinitionSchema = z.object({
    *
    * Populated at session start from `compileAgent().content`. The `AgentStore`
    * is now a thin compiled-agent cache; this field holds the resolved system
-   * prompt produced by the compiler/registry, not a user-supplied blob.
+   * prompt populated from compiler/registry output, not a user-supplied blob.
    */
-  systemPrompt: z.string().optional(),
+  systemPrompt: z.optional(z.string()),
   // Full standard MCP server configs embedded in the agent definition.
   // Keys are server names; values are standard McpServerConfig objects.
   mcpServers: z.record(z.string(), mcpServerConfigSchema).default({}),
@@ -134,7 +134,8 @@ export const agentCreateInputSchema = agentDefinitionSchema.omit({
 const agentPatchSchema = z.object({
   description: z.string().optional(),
   provider: providerConfigSchema.optional(),
-  systemPrompt: z.string().optional(),
+  // COMPUTED COMPAT SHIM — populated from compiler output, not user-authored.
+  systemPrompt: z.optional(z.string()),
   mcpServers: z.record(z.string(), mcpServerConfigSchema).optional(),
   permissions: agentPermissionsSchema.optional(),
   maxToolLoops: z.number().int().positive().optional(),
