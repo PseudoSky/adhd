@@ -9,8 +9,152 @@ import {
   parseOverrides,
   loadOverrideConfig,
 } from '../orchestrator'
-import type { ExportMode, OutputPlugin, PluginInput } from '@adhd/apigen-core'
+import type { ExportMode, OutputPlugin, PluginInput, ComposedSchemas } from '@adhd/apigen-core'
 import { emitResolutionScaffolding } from '../scaffold'
+
+// ---------------------------------------------------------------------------
+// Per-surface minimal dependency manifest (DESIGN §14.1, BUG-APIGEN-002)
+// ---------------------------------------------------------------------------
+
+/**
+ * TypeScript logical-type → npm dependency map.
+ *
+ * Keyed by the JSON-Schema `format` value that signals the logical type.
+ * Only non-stdlib / non-branded types carry a dep entry; all others are
+ * zero-dep (stdlib BigInt, Buffer, etc.) or branded strings.
+ *
+ * DESIGN §13.2 TS column:
+ *   decimal  → decimal.js ^10  (the only non-stdlib TS scalar dep)
+ *   int64    → stdlib BigInt   (no dep)
+ *   date-time→ stdlib Date     (no dep)
+ *   byte     → stdlib Buffer   (no dep)
+ *   uuid     → stdlib (branded string, no dep)
+ *
+ * Note: this is an inline map. When @adhd/apigen-logical ships a
+ * TS_DEP_MAP export that carries the same data from the TemplateCell
+ * `dep` fields, this inline copy should be replaced by that import.
+ */
+export const TS_LOGICAL_TYPE_DEP_MAP: Readonly<Record<string, { name: string; version: string }>> = {
+  decimal: { name: 'decimal.js', version: '^10' },
+} as const
+
+/**
+ * Recursively walk a JSON-Schema node (any depth) and collect every
+ * unique `format` string value found anywhere in the tree.
+ *
+ * Pure function: no I/O, no mutation of the input.
+ *
+ * @param node  Any JSON value (Schema node, array, primitive).
+ * @param seen  Cycle guard — the set of objects already visited (prevents
+ *              infinite loops on schemas with `definitions` back-refs).
+ * @returns     A `Set<string>` of all format strings found.
+ */
+export function collectFormats(
+  node: unknown,
+  seen: WeakSet<object> = new WeakSet(),
+): Set<string> {
+  const out = new Set<string>()
+
+  if (node === null || typeof node !== 'object') return out
+  if (seen.has(node as object)) return out
+  seen.add(node as object)
+
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      for (const f of collectFormats(item, seen)) out.add(f)
+    }
+    return out
+  }
+
+  const rec = node as Record<string, unknown>
+
+  // Collect the `format` at this node.
+  if (typeof rec['format'] === 'string') {
+    out.add(rec['format'])
+  }
+
+  // Recurse into every value.
+  for (const val of Object.values(rec)) {
+    for (const f of collectFormats(val, seen)) out.add(f)
+  }
+
+  return out
+}
+
+/**
+ * Given a surface's `ComposedSchemas`, return the npm dependency entries
+ * required to support the logical types actually used by its operations.
+ *
+ * Walks every input + output schema, unions their `format` annotations,
+ * looks each up in {@link TS_LOGICAL_TYPE_DEP_MAP}, and returns a
+ * `Record<name, version>` suitable for merging into `package.json`
+ * `dependencies`.
+ *
+ * A surface with NO rich types returns an empty record (no `decimal.js`,
+ * etc.). A surface using `Decimal` returns `{ 'decimal.js': '^10' }`.
+ *
+ * @param schemas The surface's composed schema map (fn-name → {input, output}).
+ */
+export function collectLogicalTypeDeps(
+  schemas: ComposedSchemas | Record<string, { input: Record<string, unknown>; output: Record<string, unknown> }>,
+): Record<string, string> {
+  const formats = new Set<string>()
+
+  for (const entry of Object.values(schemas)) {
+    for (const f of collectFormats(entry.input)) formats.add(f)
+    for (const f of collectFormats(entry.output)) formats.add(f)
+  }
+
+  const deps: Record<string, string> = {}
+  for (const fmt of formats) {
+    const dep = TS_LOGICAL_TYPE_DEP_MAP[fmt]
+    if (dep) deps[dep.name] = dep.version
+  }
+  return deps
+}
+
+/**
+ * Collect logical-type deps across ALL packages in a multi-source
+ * `orchestrateGenerate` result and return the union dep map.
+ */
+function collectDepsFromPackageSchemas(
+  packageSchemas: Map<string, { id: string; schemas: ComposedSchemas; importPath: string }>,
+): Record<string, string> {
+  const merged: Record<string, string> = {}
+  for (const { schemas } of packageSchemas.values()) {
+    Object.assign(merged, collectLogicalTypeDeps(schemas))
+  }
+  return merged
+}
+
+/**
+ * Patch the generated `package.json` in `outputDir` by merging in
+ * `logicalTypeDeps`. When the `package.json` has no deps or the dep
+ * map is empty this is a no-op (safe to call unconditionally).
+ *
+ * Called AFTER {@link emitResolutionScaffolding} so the base deps
+ * (apigen-runtime, sdk) are already present.
+ *
+ * Exported for testing; the generate command is the normal caller.
+ */
+export function patchPackageJsonDeps(outputDir: string, logicalTypeDeps: Record<string, string>): void {
+  if (Object.keys(logicalTypeDeps).length === 0) return
+
+  const pkgPath = path.join(outputDir, 'package.json')
+  if (!fs.existsSync(pkgPath)) return
+
+  let pkg: Record<string, unknown>
+  try {
+    pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as Record<string, unknown>
+  } catch {
+    return // malformed package.json — leave it alone
+  }
+
+  const existing = (pkg['dependencies'] as Record<string, string> | undefined) ?? {}
+  pkg['dependencies'] = { ...existing, ...logicalTypeDeps }
+
+  fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+}
 
 /** Parse --opt key=value pairs into an options record. */
 function parseOptPairs(pairs: string[]): Record<string, unknown> {
@@ -79,7 +223,7 @@ export function registerGenerateCommand(
 
       if (opts.v2) {
         // --- v2 unified path: detect → extract → merge → collision-check → gen ---
-        const { pluginOutput } = await orchestrateGenerate(
+        const { pluginOutput, descriptor } = await orchestrateGenerate(
           {
             sources: [{ file: sourceFile, exportMode, namespace: opts.namespace, tsconfig: opts.tsconfig }],
             usePlugins: opts.use,
@@ -101,6 +245,8 @@ export function registerGenerateCommand(
         if (scaffolded.length > 0) {
           logger.info(`scaffolded ${scaffolded.join(', ')} in ${outputDir}`)
         }
+        // Patch package.json with per-surface logical-type deps (DESIGN §14.1).
+        patchPackageJsonDeps(outputDir, collectDepsFromPackageSchemas(descriptor.packageSchemas))
         logger.info(`wrote ${pluginOutput.files.length} files to ${outputDir}`)
         return
       }
@@ -127,6 +273,8 @@ export function registerGenerateCommand(
       if (scaffolded.length > 0) {
         logger.info(`scaffolded ${scaffolded.join(', ')} in ${outputDir}`)
       }
+      // Patch package.json with per-surface logical-type deps (DESIGN §14.1).
+      patchPackageJsonDeps(outputDir, collectLogicalTypeDeps(schemas))
       logger.info(`wrote ${output.files.length} files to ${outputDir}`)
     })
 }

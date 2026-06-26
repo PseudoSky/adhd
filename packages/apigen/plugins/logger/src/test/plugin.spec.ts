@@ -300,9 +300,15 @@ describe('layer — stream-lifecycle (§11)', () => {
     call.ctx.set(Logger, logger);
 
     const next: Next = vi.fn((): AsyncIterable<unknown> => {
-      return (async function* () {
-        throw new Error('stream error');
-      })();
+      return {
+        [Symbol.asyncIterator]() {
+          return {
+            next(): Promise<IteratorResult<unknown>> {
+              return Promise.reject(new Error('stream error'));
+            },
+          };
+        },
+      };
     });
 
     const plugin = makeLoggerPlugin({});
@@ -361,6 +367,12 @@ describe('makeLoggerPlugin', () => {
     const p = makeLoggerPlugin({});
     expect(p.capabilities.target).toBeDefined();
     expect(p.capabilities.target!.name).toBe('logger');
+  });
+});
+
+describe('loggerPlugin — language declaration', () => {
+  it('explicitly declares language: "ts" (FAILS if declaration is dropped)', () => {
+    expect(loggerPlugin.language).toBe('ts');
   });
 });
 

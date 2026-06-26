@@ -5,6 +5,7 @@ import { run } from './run'
 export const apiFastifyPlugin: OutputPlugin = {
   id: 'api-fastify',
   description: 'Expose functions as Fastify HTTP POST routes',
+  language: 'ts',
   optionsSchema: {
     type: 'object',
     properties: {

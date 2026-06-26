@@ -25,6 +25,7 @@
 // extractor emits and every plugin consumes.
 
 import type { Operation, JSONSchema } from './descriptor'
+import type { PluginLanguage } from './types'
 
 // ---------------------------------------------------------------------------
 // §7 — canonical transport identifiers (SPEC §5/§7)
@@ -472,6 +473,19 @@ export interface Plugin<Opts = Record<string, unknown>> {
    * and generated documentation.
    */
   description?: string
+
+  /**
+   * The source language this plugin consumes.
+   *
+   * Used by the `serve` command to route each source file to the plugin(s)
+   * whose `language` matches its extension (`.ts`/`.tsx`/`.mts`/`.cts` → `'ts'`,
+   * `.py` → `'py'`, etc.).
+   *
+   * Defaults to `'ts'` when omitted for backward-compatibility with plugins
+   * authored before this field was introduced.  All first-party plugins
+   * explicitly declare `language: 'ts'`.
+   */
+  language?: PluginLanguage
 
   /**
    * Optional JSON Schema for plugin-specific options.

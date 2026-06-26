@@ -4,6 +4,7 @@ import { generate } from './generate'
 export const cliPlugin: OutputPlugin = {
   id: 'cli',
   description: 'Emit a Commander CLI program where each exported function becomes a subcommand',
+  language: 'ts',
   optionsSchema: {
     type: 'object',
     properties: {

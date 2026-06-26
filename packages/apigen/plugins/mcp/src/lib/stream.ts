@@ -29,6 +29,7 @@
 
 import { collectWithPhase } from '@adhd/apigen-runtime'
 import type { ApiStream } from '@adhd/apigen-runtime'
+import { ApiError } from '@adhd/apigen-errors'
 
 // ---------------------------------------------------------------------------
 // MCP chunk / result envelope shapes
@@ -140,7 +141,6 @@ export async function projectStreamMcpFull(stream: ApiStream<unknown>): Promise<
     return { content }
   } catch (err) {
     // Error-after-first-chunk: chunks already in `content`; append in-band error.
-    const { ApiError } = await import('@adhd/apigen-errors')
     const apiError =
       err instanceof ApiError
         ? err

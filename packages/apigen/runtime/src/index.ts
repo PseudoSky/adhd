@@ -1,10 +1,9 @@
-export { createInvoker } from './lib/invoke'
+export { createInvoker, LayerContext } from './lib/invoke'
 export type {
   Layer,
   LayerResult,
   Next,
   Call,
-  LayerContext,
   InvokeOptions,
   InvokeFn,
 } from './lib/invoke'
@@ -33,3 +32,7 @@ export { InstanceRegistry } from './lib/instance-registry'
 export type { InstanceRegistryOptions, CreateResult, AnyConstructor } from './lib/instance-registry'
 export { createStream, drainStream, collectWithPhase, isApiStream } from './lib/stream'
 export type { ApiStream, CreateStreamOptions, CollectResult } from './lib/stream'
+export { createUnionCodec, UnionCodecError } from './lib/logical/union-codec'
+export type { UnionCodecOptions, UnionCodecErrorCode } from './lib/logical/union-codec'
+export { tsHostBinding, WELL_KNOWN_TS_CODECS } from './lib/logical/host-ts'
+export type { HostBinding } from './lib/logical/host-ts'
