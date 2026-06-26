@@ -9,7 +9,8 @@
     "import",
     "verify",
     "removal",
-    "audit"
+    "audit",
+    "ingest"
   ],
   "terminal": "done",
   "nodes": {
@@ -179,7 +180,7 @@
   },
   "authored_with": {
     "plugin": "workflow",
-    "version": "0.8.22",
+    "version": "0.8.23",
     "hash": "1e4130a84aed"
   }
 }
