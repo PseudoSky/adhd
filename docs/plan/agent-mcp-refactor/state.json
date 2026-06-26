@@ -4,10 +4,10 @@
   "dag": "dag.json",
   "states": {
     "refactor-design": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-26T04:30:24.089Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "8cb4e18eba6cbc5d7767bc612586934ff713254f",
       "end_ref": null
     },
     "runtime-sink-schema": {
@@ -78,7 +78,7 @@
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
-    "version": "0.8.22",
+    "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
   "current_state": "refactor-design",
