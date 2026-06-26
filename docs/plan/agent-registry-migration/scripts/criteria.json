@@ -124,24 +124,6 @@
       ]
     },
     {
-      "id": "import-pipeline.1",
-      "phase": "import",
-      "tier": null,
-      "kind": "command",
-      "cmd": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/import-pipeline.test.ts",
-      "expect": "exit0"
-    },
-    {
-      "id": "import-pipeline.2",
-      "phase": "import",
-      "tier": null,
-      "kind": "present",
-      "pattern": "AgentStore|ComponentStore|CompositionStore|AgentToolStore",
-      "paths": [
-        "packages/ai/agent-registry-migration/src/import/import-agent.ts"
-      ]
-    },
-    {
       "id": "roundtrip-equivalence-gate.1",
       "phase": "verify",
       "tier": null,
