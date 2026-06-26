@@ -228,9 +228,9 @@
   },
   "current_state": "audit-final",
   "dod_provenance": {
-    "confirmed_at": "2026-06-23T04:22:27.852Z",
+    "confirmed_at": "2026-06-26T19:17:41.847Z",
     "by": "pseudosky",
-    "note": "DoD derived from docs/plan/agent-registry SCOPE+REFERENCES; confirmed by team-lead plan-authoring task 2026-06-22",
+    "note": "DoD-met confirmed by owner via LIVE end-to-end test 2026-06-26: real built server over MCP stdio + real claudecli model — agent_create -> agent (registry-on graceful fallback) -> task -> result=\"42\" (17+25), completed. Live test ALSO caught+fixed 2 release-blockers the green suite missed: F-P6-13 (runtime @adhd dep resolution) + F-P6-14 (migration 0006 timestamp skipped upgrades, fixed db53687).",
     "dod_ids": [
       "dod.1",
       "dod.2",
