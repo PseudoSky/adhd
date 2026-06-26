@@ -1,4 +1,5 @@
 import Fastify from 'fastify'
+import type { FastifyReply } from 'fastify'
 import {
   createInvoker,
   makeValidateLayer,
@@ -189,6 +190,26 @@ function collectMountRoutes(
   return routes
 }
 
+/**
+ * Emit the invoker result as canonical JSON wire (`application/json`).
+ *
+ * BUG-APIGEN-015: a scalar logical return (`Decimal`/`int64`/`Date`) is encoded
+ * by the runtime to a STRING like `"123.456"`. If a Fastify handler simply
+ * returns that string, Fastify serialises it as a raw `text/plain` body
+ * (`123.456`, no quotes — and for a `Date`, `2024-…Z` which is not even valid
+ * JSON). That drifts from the py-flask host, which emits the canonical JSON
+ * string `"123.456"`, breaking cross-language wire parity on the RESPONSE path
+ * (and losing precision for any client that `JSON.parse`s a bare big number).
+ *
+ * Serialising every result with `JSON.stringify` and pinning
+ * `application/json` makes scalar returns byte-identical to py-flask while
+ * leaving object/array returns unchanged. `undefined` (void op) becomes `null`.
+ */
+function sendJson(reply: FastifyReply, result: unknown): string {
+  reply.type('application/json')
+  return JSON.stringify(result === undefined ? null : result)
+}
+
 export async function run(input: RunInput): Promise<void> {
   const port = (input.options['port'] as number) ?? 3000
   const host = (input.options['host'] as string) ?? '127.0.0.1'
@@ -236,7 +257,7 @@ export async function run(input: RunInput): Promise<void> {
 
       if (verb === 'GET') {
         // safe op: domain args from query string, envelope from request headers
-        app.get(route, async (req) => {
+        app.get(route, async (req, reply) => {
           const envelope = extractEnvelopeFromHeaders(
             fnSchema as Record<string, unknown>,
             req.headers as Record<string, string | string[] | undefined>,
@@ -248,11 +269,11 @@ export async function run(input: RunInput): Promise<void> {
             domainArgs: req.query as Record<string, unknown>,
             signal: input.signal,
           }
-          return invoke(fnName, call, invokeOpts)
+          return sendJson(reply, await invoke(fnName, call, invokeOpts))
         })
       } else {
         // unsafe op: domain args from body.data, envelope from request headers
-        app.post(route, async (req) => {
+        app.post(route, async (req, reply) => {
           const { data = {} } = (req.body as Record<string, unknown> | undefined) ?? {}
           const envelope = extractEnvelopeFromHeaders(
             fnSchema as Record<string, unknown>,
@@ -265,7 +286,7 @@ export async function run(input: RunInput): Promise<void> {
             domainArgs: data as Record<string, unknown>,
             signal: input.signal,
           }
-          return invoke(fnName, call, invokeOpts)
+          return sendJson(reply, await invoke(fnName, call, invokeOpts))
         })
       }
     }
