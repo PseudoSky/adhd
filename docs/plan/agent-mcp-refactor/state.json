@@ -46,10 +46,10 @@
       "end_ref": "85ac9b37d74839413f6e5d80bcefb78af1f697ce"
     },
     "session-e2e": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-26T06:43:48.862Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "0da6b938f88ccc22c82d4a86b0ca608e9484557d",
       "end_ref": null
     },
     "audit-final": {
