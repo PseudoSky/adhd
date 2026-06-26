@@ -30,3 +30,30 @@ export {
 } from './lib/descriptor-ext';
 
 export { buildTranscoder, tryRegister } from './lib/runmode';
+
+export {
+  dateTimeCodec,
+  int64Codec,
+  decimalCodec,
+  makeDecimal,
+  byteCodec,
+  uuidCodec,
+  numberSpecialCodec,
+  registerWellKnown,
+} from './lib/codecs/index';
+export type { DecimalString } from './lib/codecs/index';
+
+// Template-cell registry (DESIGN §13.1–§13.3, §14.1)
+export {
+  CANONICAL_LOGICAL_TYPE_IDS,
+  TEMPLATE_CELLS,
+  cellsFor,
+  depsForLogicalTypes,
+  tsDepMap,
+  assertNoEmptyCells,
+} from './lib/hints';
+export type {
+  CanonicalLogicalTypeId,
+  HostLanguage,
+  LanguageTable,
+} from './lib/hints';

@@ -29,3 +29,20 @@ export function takesRegExp(pattern: RegExp): string {
 export function takesString(value: string): string {
   return value
 }
+
+// BUG-APIGEN-011: readonly array forms must preserve element type
+export async function echoReadonlyStringArray(xs: readonly string[]): Promise<readonly string[]> {
+  return xs
+}
+
+export async function echoReadonlyNumberArray(xs: readonly number[]): Promise<readonly number[]> {
+  return xs
+}
+
+export async function echoReadonlyArrayGeneric(xs: ReadonlyArray<string>): Promise<ReadonlyArray<string>> {
+  return xs
+}
+
+export async function echoNestedReadonlyArray(xs: readonly string[][]): Promise<readonly string[][]> {
+  return xs
+}

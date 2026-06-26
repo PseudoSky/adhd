@@ -39,6 +39,14 @@
         ]
       }
     },
+    "conformance": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "{workspaceRoot}/node_modules/.bin/tsx --tsconfig packages/apigen/conformance/tsconfig.json packages/apigen/conformance/src/lib/gate.ts",
+        "cwd": "{workspaceRoot}"
+      },
+      "dependsOn": []
+    },
     "nx-release-publish": {
       "options": {
         "packageRoot": "dist/{projectRoot}"

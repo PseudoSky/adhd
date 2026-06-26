@@ -75,6 +75,11 @@ def _py_type_hint_to_schema(annotation: Any) -> dict[str, Any]:
 
     Only covers the common cases; falls back to {} (any) for complex generics.
     Returns a plain dict.
+
+    Logical-type mappings (mirrors the TS apigen-logical codecs):
+      decimal.Decimal  → {"type": "string", "format": "decimal"}
+      datetime.datetime → {"type": "string", "format": "date-time"}
+      uuid.UUID        → {"type": "string", "format": "uuid"}
     """
     import typing
 
@@ -84,6 +89,31 @@ def _py_type_hint_to_schema(annotation: Any) -> dict[str, Any]:
     # None / NoneType
     if annotation is type(None):
         return {"type": "null"}
+
+    # Logical types — must be checked before the primitive table so that
+    # `Decimal` / `datetime` / `UUID` are not silently swallowed as {}
+    # (they are not in the _primitives dict, so they would fall through to
+    # the dataclass check and ultimately to the {} fallback without this guard).
+    try:
+        from decimal import Decimal as _Decimal
+        if annotation is _Decimal:
+            return {"type": "string", "format": "decimal"}
+    except ImportError:
+        pass
+
+    try:
+        from datetime import datetime as _Datetime
+        if annotation is _Datetime:
+            return {"type": "string", "format": "date-time"}
+    except ImportError:
+        pass
+
+    try:
+        from uuid import UUID as _UUID
+        if annotation is _UUID:
+            return {"type": "string", "format": "uuid"}
+    except ImportError:
+        pass
 
     # Primitives
     _primitives: dict[Any, str] = {
@@ -288,11 +318,40 @@ def extract_module(
     # For index files (stem == 'index' or 'main'), drop the file segment from path (SPEC §5).
     include_file_seg = file_stem.lower() not in ("index", "main")
 
+    # Determine the module's __name__ as assigned by importlib — we use this to
+    # filter out names that were *imported into* the module (e.g. `from decimal
+    # import Decimal`) from names that were *defined in* the module.  An imported
+    # callable's `__module__` attribute points to its defining package, not to
+    # `_apigen_target_`; a locally-defined function has `__module__ == mod.__name__`.
+    mod_name: str = mod.__name__  # '_apigen_target_'
+
     for name in export_names:
         try:
             value = getattr(mod, name)
         except AttributeError:
             continue
+
+        # -----------------------------------------------------------------
+        # FIX: skip names that are imported from another module, not defined
+        # here.  This prevents `from decimal import Decimal` or
+        # `from datetime import datetime` from being extracted as operations.
+        #
+        # Rule: a callable or type whose `__module__` differs from the loaded
+        # module's `__name__` is an *import* — skip it.
+        #
+        # Non-callables (module-level constants) have no `__module__`, so
+        # they bypass this check and fall through to the serialisability gate
+        # below (CONSTANT = 42 → kind='query').
+        #
+        # Exception: when the module explicitly declares `__all__`, trust the
+        # author's intent and do NOT filter by __module__ (they may re-export
+        # third-party callables deliberately).
+        # -----------------------------------------------------------------
+        if not hasattr(mod, "__all__"):
+            obj_module = getattr(value, "__module__", None)
+            if obj_module is not None and obj_module != mod_name:
+                # Imported callable or type — not defined in this module.
+                continue
 
         # Build the §4 path.
         if include_file_seg:

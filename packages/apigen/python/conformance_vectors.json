@@ -695,5 +695,171 @@
       "expectedFlag": "--rate-limit",
       "expectedEnv": "APIGEN_RATE_LIMIT"
     }
+  ],
+  "LOGICAL_TYPE_VECTORS": [
+    {
+      "id": "logical.date-time.roundtrip",
+      "logicalType": "date-time",
+      "schema": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "seed": {
+        "$construct": "date-time",
+        "args": [
+          "2024-01-15T12:34:56.789Z"
+        ]
+      },
+      "wire": "2024-01-15T12:34:56.789Z",
+      "invariants": [
+        {
+          "pointer": "/epochMs",
+          "equals": 1705322096789
+        }
+      ],
+      "negativeControl": {
+        "mutate": "wire",
+        "to": "2024-01-15T12:34:56.789+05:30"
+      }
+    },
+    {
+      "id": "logical.int64.roundtrip",
+      "logicalType": "int64",
+      "schema": {
+        "type": "string",
+        "format": "int64"
+      },
+      "seed": "9007199254740993",
+      "wire": "9007199254740993",
+      "invariants": [
+        {
+          "pointer": "/bigintStr",
+          "equals": "9007199254740993"
+        }
+      ],
+      "negativeControl": {
+        "mutate": "wire",
+        "to": 9007199254740992
+      }
+    },
+    {
+      "id": "logical.decimal.roundtrip",
+      "logicalType": "decimal",
+      "schema": {
+        "type": "string",
+        "format": "decimal"
+      },
+      "seed": "123.456",
+      "wire": "123.456",
+      "invariants": [
+        {
+          "pointer": "/str",
+          "equals": "123.456"
+        }
+      ],
+      "negativeControl": {
+        "mutate": "wire",
+        "to": 123.456
+      }
+    },
+    {
+      "id": "logical.byte.roundtrip",
+      "logicalType": "byte",
+      "schema": {
+        "type": "string",
+        "format": "byte"
+      },
+      "seed": {
+        "$construct": "byte",
+        "args": [
+          [
+            72,
+            101,
+            108,
+            108,
+            111
+          ]
+        ]
+      },
+      "wire": "SGVsbG8=",
+      "invariants": [
+        {
+          "pointer": "/utf8",
+          "equals": "Hello"
+        }
+      ],
+      "negativeControl": {
+        "mutate": "wire",
+        "to": "SGVs_G8="
+      }
+    },
+    {
+      "id": "logical.uuid.roundtrip",
+      "logicalType": "uuid",
+      "schema": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "seed": "550e8400-e29b-41d4-a716-446655440000",
+      "wire": "550e8400-e29b-41d4-a716-446655440000",
+      "invariants": [
+        {
+          "pointer": "/value",
+          "equals": "550e8400-e29b-41d4-a716-446655440000"
+        }
+      ],
+      "negativeControl": {
+        "mutate": "wire",
+        "to": "550E8400-E29B-41D4-A716-446655440000"
+      }
+    },
+    {
+      "id": "logical.number-special.nan",
+      "logicalType": "number-special",
+      "schema": {
+        "type": "number"
+      },
+      "seed": {
+        "$construct": "number-special",
+        "args": [
+          "NaN"
+        ]
+      },
+      "wire": "NaN",
+      "invariants": [
+        {
+          "pointer": "/isNaN",
+          "equals": true
+        }
+      ],
+      "negativeControl": {
+        "mutate": "wire",
+        "to": null
+      }
+    },
+    {
+      "id": "logical.number-special.infinity",
+      "logicalType": "number-special",
+      "schema": {
+        "type": "number"
+      },
+      "seed": {
+        "$construct": "number-special",
+        "args": [
+          "Infinity"
+        ]
+      },
+      "wire": "Infinity",
+      "invariants": [
+        {
+          "pointer": "/isFinite",
+          "equals": false
+        }
+      ],
+      "negativeControl": {
+        "mutate": "wire",
+        "to": null
+      }
+    }
   ]
 }
