@@ -359,10 +359,14 @@ describe('[v2-proj-transport] run() — safe→GET / envelope from headers', () 
   it('[v2-fastify.run.verb.1] safe op responds to GET (x-apigen-safe:true)', async () => {
     const res = await fetch(`${baseUrl}/safe-pkg/ping`, { method: 'GET' })
     expect(res.ok).toBe(true)
-    // Fastify serializes string primitives as plain text (not JSON-quoted).
-    // Accept either "pong" (JSON string) or pong (text) for robustness.
-    const text = await res.text()
-    expect(text.replace(/^"|"$/g, '')).toBe('pong')
+    // BUG-APIGEN-015 regression guard: a scalar return MUST be canonical JSON
+    // wire (application/json + a JSON-quoted string), byte-identical to the
+    // py-flask host — NOT a bare text/plain body. Reverting the sendJson fix
+    // makes Fastify emit `pong` as text/plain and turns all three red.
+    expect(res.headers.get('content-type')).toMatch(/application\/json/)
+    const raw = await res.text()
+    expect(raw).toBe('"pong"') // quoted JSON string, not bare `pong`
+    expect(JSON.parse(raw)).toBe('pong') // and it parses as valid JSON
   })
 
   it('[v2-fastify.run.verb.2] (negative) safe op does NOT respond to POST', async () => {
