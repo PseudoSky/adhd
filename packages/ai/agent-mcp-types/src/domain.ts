@@ -147,6 +147,26 @@ export interface AgentDefinition {
   updatedAt: string;
 }
 
+// ── Composed-prompt cache (agent-mcp runtime sink, Domain 5) ─────────────────
+// Keyed by (agent_slug, context_hash); written by compiler-integration on cache-miss.
+
+export interface ComposedPrompt {
+  /** Row id — written to sessions.composed_prompt_id at session start. */
+  id: string;
+  /** Slug of the agent whose prompt was compiled. */
+  agentSlug: string;
+  /**
+   * Opaque hash of the compilation context (e.g. SHA-256 of registry component
+   * versions). The cache lookup key together with agentSlug.
+   */
+  contextHash: string;
+  /** Flat, fully-resolved system-prompt string produced by compileAgent(). */
+  content: string;
+  /** JSON-serialised record of component-version ids used during compilation. */
+  componentVersions: string;
+  createdAt: string;
+}
+
 export interface ExecutionContext {
   taskId: string;
   sessionId: string;

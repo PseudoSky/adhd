@@ -2,7 +2,8 @@ import {
     index,
     integer,
     sqliteTable,
-    text
+    text,
+    uniqueIndex
 } from "drizzle-orm/sqlite-core";
 
 // ──────────────────────────────────────────────
@@ -37,6 +38,10 @@ export const sessionsTable = sqliteTable("sessions", {
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
     closedAt: text("closed_at"),
+    // Nullable FK → composed_prompts.id; set at session start when the compiler
+    // produces or finds a cached compiled prompt. Null for sessions created before
+    // the registry integration (backward-compatible additive column).
+    composedPromptId: text("composed_prompt_id"),
 });
 
 // ──────────────────────────────────────────────
@@ -115,6 +120,48 @@ export const taskEventsTable = sqliteTable("task_events", {
         ]
     }).notNull(),
     payload: text("payload"), // JSON
+    createdAt: text("created_at").notNull(),
+});
+
+// ──────────────────────────────────────────────
+// composed_prompts   (runtime-sink-schema, Domain 5)
+// ──────────────────────────────────────────────
+// Runtime cache of compiler-output rows keyed by (agent_slug, context_hash).
+// Written on cache-miss at session start; consumed by compiler-integration.
+export const composedPromptsTable = sqliteTable(
+    "composed_prompts",
+    {
+        id: text("id").primaryKey(),
+        agentSlug: text("agent_slug").notNull(),
+        // Opaque hash of the compilation context (component versions, etc.).
+        // Together with agent_slug this is the cache lookup key.
+        contextHash: text("context_hash").notNull(),
+        // Flat, fully-resolved system-prompt string produced by compileAgent().
+        content: text("content").notNull(),
+        // JSON blob: record of component-version ids used during compilation.
+        componentVersions: text("component_versions").notNull(),
+        createdAt: text("created_at").notNull(),
+    },
+    (table) => [
+        // Cache lookup: WHERE agent_slug = ? AND context_hash = ?
+        uniqueIndex("idx_composed_prompts_agent_ctx").on(
+            table.agentSlug,
+            table.contextHash
+        ),
+    ]
+);
+
+// ──────────────────────────────────────────────
+// experiment_assignments   (runtime-sink-schema, Domain 5)
+// ──────────────────────────────────────────────
+// Records which A/B variant a session was assigned to for each experiment slug.
+export const experimentAssignmentsTable = sqliteTable("experiment_assignments", {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id")
+        .notNull()
+        .references(() => sessionsTable.id, { onDelete: "cascade" }),
+    experimentSlug: text("experiment_slug").notNull(),
+    variant: text("variant").notNull(),
     createdAt: text("created_at").notNull(),
 });
 
