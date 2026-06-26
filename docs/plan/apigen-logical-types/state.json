@@ -513,9 +513,9 @@
   },
   "current_state": "lt-final-audit",
   "dod_provenance": {
-    "confirmed_at": "2026-06-24T00:17:39.019Z",
+    "confirmed_at": "2026-06-26T23:53:10.106Z",
     "by": "pseudosky",
-    "note": "DoD confirmed by requester (pseudosky); 10 clauses reviewed, negative-controls hardened — proceed to execution",
+    "note": "All 10 DoD clauses re-verified GREEN on current code (post BUG-015 + DEBT-LT): probe dod.1/2/4/6/7/8/9/10 EXIT 0; dod.3 nominal via apigen-runtime 114/114; dod.5 crosshost conformance 22 vectors byte-equal both hosts. BUG-APIGEN-015 (host response-envelope drift) found post-audit, fixed + guarded with proven teeth. final-review.md filled with current evidence. Demo (all 4 frameworks at once) PASS=11.",
     "dod_ids": [
       "dod.1",
       "dod.2",
