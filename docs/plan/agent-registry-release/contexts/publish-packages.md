@@ -18,6 +18,7 @@
 
 - [publish-packages.1] PUBLISH_RUNBOOK.md contains NO --skip-nx-cache token (never ship stale dist)
 
+- [publish-packages.2] PUBLISH_RUNBOOK reconciles every @adhd/* dep to a real published version (no "*" ships) and names the transitive deps + a verification command (F-P6-13)
 ---
 
 ## Reservations
