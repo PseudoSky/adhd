@@ -66,6 +66,16 @@
       "paths": [
         "docs/plan/agent-registry-release/POST_PUBLISH.md"
       ]
+    },
+    {
+      "id": "publish-packages.2",
+      "phase": "publish",
+      "tier": null,
+      "kind": "present",
+      "pattern": "F-P6-13",
+      "paths": [
+        "docs/plan/agent-registry-release/PUBLISH_RUNBOOK.md"
+      ]
     }
   ]
 }
