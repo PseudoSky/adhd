@@ -1,0 +1,11 @@
+/**
+ * <%= packageScope %>/<%= projectName %>
+ *
+ * apigen logical-types host binding for `<%= hostName %>`.
+ *
+ * @see host-manifest.json — conformance manifest (fill supportedIds once codecs pass the harness)
+ * @see src/conformance/harness.spec.ts — conformance harness (DESIGN §16)
+ */
+
+export const HOST_NAME = '<%= hostName %>' as const
+export const LOGICAL_TYPE_VERSION = '<%= logicalTypeVersion %>' as const

@@ -1,0 +1,15 @@
+{
+  "name": "@adhd/apigen-plugin-py-grpc",
+  "version": "0.1.0",
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "types": "./index.d.ts",
+  "description": "apigen plugin: serve Python functions over gRPC (grpcio; in-memory descriptors; grpc_reflection)",
+  "keywords": ["apigen", "plugin", "python", "grpc", "protobuf"],
+  "dependencies": {
+    "@adhd/apigen-core": "^0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

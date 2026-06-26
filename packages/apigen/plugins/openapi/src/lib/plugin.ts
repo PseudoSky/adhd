@@ -105,6 +105,7 @@ function buildOpenapiOperations(
 export const openapiPlugin: Plugin<OpenapiOptions> = {
   id: 'openapi',
   description: 'Mount plugin: serves the OpenAPI 3.1 doc at GET /meta/openapi',
+  language: 'ts',
 
   optionsSchema: {
     type: 'object',
