@@ -20,6 +20,14 @@ export class SessionStore {
     create(input: {
         agentName: string;
         agentDefinition: AgentDefinition;
+        /**
+         * Optional: the composed_prompts row id produced (or served from cache)
+         * by the prompt-resolver at session start.  Written to
+         * sessions.composed_prompt_id so callers can trace the exact compiled
+         * artifact used.  Null/undefined for legacy sessions created before the
+         * registry integration (backward-compatible additive column).
+         */
+        composedPromptId?: string;
     }): Session {
         const now = nowIso();
         const id = generateId();
@@ -32,6 +40,7 @@ export class SessionStore {
             status: "active",
             createdAt: now,
             updatedAt: now,
+            composedPromptId: input.composedPromptId ?? null,
         }).run();
 
         logger.info(
