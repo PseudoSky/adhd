@@ -4,6 +4,7 @@ import { dispatch } from '@adhd/apigen-runtime'
 import { apiFastifyPlugin } from '../lib/plugin'
 import { generate } from '../lib/generate'
 import { run } from '../lib/run'
+import healthPlugin from '@adhd/apigen-plugin-health'
 import type { PluginInput, RunInput } from '@adhd/apigen-core'
 
 // ---------- inline fixture ----------
@@ -400,5 +401,143 @@ describe.skipIf(!process.env['APIGEN_LIVE'])('[v2-proj-transport] run() — safe
     })
     // Server should still respond (it reads session from header, not body)
     expect(res.status).toBeLessThan(500)
+  })
+})
+
+// ---------- BUG-APIGEN-009 / -010 — validate-Layer + health mount over real HTTP ----------
+// These drive a REAL Fastify server through `run()` and assert the served path
+// (a) rejects schema-violating input with HTTP 400 BEFORE the fn is called and
+// (b) mounts `--use health` as `GET /_meta/health`. Both regressed when the run
+// path called `dispatch()` directly, bypassing the Layer/mount stack.
+// Gated behind APIGEN_LIVE=1 — skipped in default CI/audit runs.
+
+// Counts dispatch reaching the fn — proves the validate-Layer short-circuits
+// BEFORE dispatch on bad input (the fn must NOT run). `when` arrives as a real
+// Date (dispatch decodes the date-time wire value); we echo its ISO form back.
+let scheduleCalls = 0
+function scheduleEvent(when: unknown): { ok: true; when: string } {
+  scheduleCalls += 1
+  return { ok: true, when: (when as Date).toISOString() }
+}
+
+/**
+ * Schema with a required `when` field constrained to `date-time` format.
+ * `output: {}` is schema-less passthrough so the response object is serialised
+ * as-is (no transcoder object-shaping) — isolating the test to the input-side
+ * validation behaviour under verification (BUG-APIGEN-009).
+ */
+const dateTimeSchema = {
+  scheduleEvent: {
+    input: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: {
+            when: { type: 'string', format: 'date-time' },
+          },
+          required: ['when'],
+        },
+      },
+      required: ['data'],
+    },
+    output: {},
+  },
+}
+
+describe.skipIf(!process.env['APIGEN_LIVE'])('[BUG-APIGEN-009/010] run() — validate-Layer + health mount (Fastify)', () => {
+  let controller: AbortController
+  let baseUrl: string
+
+  beforeAll(async () => {
+    scheduleCalls = 0
+    controller = new AbortController()
+    const port = 47330
+    const runInput: RunInput = {
+      packages: [
+        {
+          id: 'sched',
+          schemas: dateTimeSchema,
+          importPath: '@test/sched',
+          fns: { scheduleEvent: (when: unknown) => scheduleEvent(when) },
+        },
+      ],
+      outputDir: '/tmp/out',
+      // BUG-APIGEN-010: thread the loaded health plugin exactly as the CLI does.
+      options: { port, usePlugins: [healthPlugin] },
+      signal: controller.signal,
+    }
+
+    run(runInput).catch(() => {/* swallowed after abort */})
+
+    baseUrl = `http://127.0.0.1:${port}`
+    const deadline = Date.now() + 10000
+    while (Date.now() < deadline) {
+      try {
+        const r = await fetch(`${baseUrl}/_meta/health`, { method: 'GET' })
+        if (r.status < 500) break
+      } catch {
+        await new Promise((r) => setTimeout(r, 50))
+      }
+    }
+  }, 15000)
+
+  afterAll(() => {
+    controller.abort()
+  })
+
+  it('[009] malformed date-time → 400 invalid_argument, fn never called', async () => {
+    const before = scheduleCalls
+    const res = await fetch(`${baseUrl}/sched/scheduleEvent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      // 2099-02-30 is not a real calendar date → ajv date-time format rejects it.
+      body: JSON.stringify({ data: { when: '2099-02-30T00:00:00.000Z' } }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.code).toBe('invalid_argument')
+    // The target fn must NOT have run (validation short-circuits before dispatch).
+    expect(scheduleCalls).toBe(before)
+  })
+
+  it('[009] missing required field → 400 invalid_argument, fn never called', async () => {
+    const before = scheduleCalls
+    const res = await fetch(`${baseUrl}/sched/scheduleEvent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: {} }),
+    })
+    expect(res.status).toBe(400)
+    expect((await res.json()).code).toBe('invalid_argument')
+    expect(scheduleCalls).toBe(before)
+  })
+
+  it('[009] valid date-time → 200 and the fn runs', async () => {
+    const before = scheduleCalls
+    const res = await fetch(`${baseUrl}/sched/scheduleEvent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: { when: '2026-01-02T03:04:05.000Z' } }),
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.ok).toBe(true)
+    // The dispatch encode seam serialises the Date back to RFC 3339.
+    expect(body.when).toBe('2026-01-02T03:04:05.000Z')
+    expect(scheduleCalls).toBe(before + 1)
+  })
+
+  it('[010] --use health mounts GET /_meta/health → 200 { status: ok }', async () => {
+    const res = await fetch(`${baseUrl}/_meta/health`, { method: 'GET' })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.status).toBe('ok')
+  })
+})
+
+describe('api-fastify plugin — language declaration', () => {
+  it('explicitly declares language: "ts" (FAILS if declaration is dropped)', () => {
+    expect(apiFastifyPlugin.language).toBe('ts')
   })
 })

@@ -2,7 +2,7 @@
   "name": "@adhd/apigen-cli",
   "version": "0.1.0",
   "bin": {
-    "apigen-cli": "./index.js"
+    "apigen": "./index.js"
   },
   "dependencies": {
     "commander": "^14.0.3",
@@ -21,7 +21,9 @@
     "@adhd/apigen-plugin-jsonschema": "^0.1.0",
     "@adhd/apigen-plugin-api-fastify": "^0.1.0",
     "@adhd/apigen-plugin-api-express": "^0.1.0",
-    "@adhd/apigen-plugin-cli-output": "^0.1.0"
+    "@adhd/apigen-plugin-cli-output": "^0.1.0",
+    "@adhd/apigen-plugin-py-flask": "^0.1.0",
+    "@adhd/apigen-plugin-py-grpc": "^0.1.0"
   },
   "main": "./index.js",
   "module": "./index.mjs",

@@ -227,6 +227,7 @@ export const loggerPlugin: Plugin<LoggerOptions> = {
   id: 'logger',
   description:
     'Layer plugin: wraps every operation with entry/exit/error logging (SPEC §7.2a / §8.1). Seeds Logger into call.ctx for downstream consumers.',
+  language: 'ts',
 
   optionsSchema: {
     type: 'object',

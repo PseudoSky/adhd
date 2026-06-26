@@ -4,6 +4,7 @@ import * as path from 'node:path'
 export const jsonschemaPlugin: OutputPlugin = {
   id: 'jsonschema',
   description: 'Emit one JSON Schema file per function per package',
+  language: 'ts',
   optionsSchema: {
     type: 'object',
     properties: {

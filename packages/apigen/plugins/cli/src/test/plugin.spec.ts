@@ -396,3 +396,9 @@ describe('generate()', () => {
     })
   })
 })
+
+describe('cli plugin — language declaration', () => {
+  it('explicitly declares language: "ts" (FAILS if declaration is dropped)', () => {
+    expect(cliPlugin.language).toBe('ts')
+  })
+})

@@ -161,3 +161,9 @@ describe('openapi plugin — handler returns OpenAPI doc', () => {
     expect(Object.keys(result.paths).length).toBeGreaterThan(0)
   })
 })
+
+describe('openapi plugin — language declaration', () => {
+  it('explicitly declares language: "ts" (FAILS if declaration is dropped)', () => {
+    expect(openapiPlugin.language).toBe('ts')
+  })
+})

@@ -1,0 +1,44 @@
+{
+  "name": "apigen-plugin-py-grpc",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "options": {
+        "outputPath": "dist/packages/apigen/plugins/py-grpc",
+        "emptyOutDir": true
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/plugins/py-grpc"
+      ],
+      "options": {
+        "configFile": "packages/apigen/plugins/py-grpc/vite.config.ts"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": [
+        "build",
+        "test"
+      ],
+      "executor": "@nx/js:release-publish",
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  },
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "packages/apigen/plugins/py-grpc"
+      }
+    }
+  }
+}
