@@ -320,6 +320,12 @@ use-case anchors. Keep idempotence (cache by content hash).
 
 **References** — `docs/plan/agent-mcp-authoring/decisions.md` D1; SCOPE.md §"Out of Scope" (embedding-based similarity was excluded from Plans 1–7).
 
+**Update (2026-06-26, owner):** sox-ecosystem is extracting its embedding system into
+reusable tooling. When that lands, the model-backed `EmbedFn` here should consume that
+shared tooling rather than standing up its own embedder — i.e. the `EmbedFn` seam's
+production implementation becomes a thin adapter over the sox-ecosystem embedding tool.
+Re-scope this FEAT once the shared tooling's import surface is known.
+
 ### FEAT-009 — Discovery-lane corpus dependency on Plan 7 (migration)
 - **Status:** backlog
 - **Priority:** P3
