@@ -67,11 +67,11 @@
       "end_ref": null
     },
     "code-review-integration": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-06-26T05:38:03.773Z",
-      "done_at": null,
+      "done_at": "2026-06-26T06:35:17.370Z",
       "start_ref": "154d33ca954cdb2a262452bf2eb93ed4a49cd991",
-      "end_ref": null
+      "end_ref": "3243383927cba5ebd6ccb7dd7a085f2e7fed42f9"
     }
   },
   "transition_log": [
@@ -146,6 +146,18 @@
       "audit_criteria_total": 19,
       "by": "pseudosky",
       "note": "Implemented: PolicyEngine.check() reads rate (max_recursion_depth/max_tool_loops) and permission (allowlist) limits from @adhd/agent-policy template rules when policyTemplateRules is supplied, falling back to PolicyConfig defaults when absent. ClaudeCliProvider reconciled: compiledTools (AGENT_TOOL model string[] from compileAgent({platform:claude_code}).tools) constructor param wins over config.allowedBuiltinTools when supplied [inv:no-third-tool-model]. validation/agent.ts claudecliProviderSchema allowedBuiltinTools doc updated to reference AGENT_TOOL model. Added @adhd/agent-policy to package.json deps. New test: 9 tests across 3 describe blocks prove template-limit override + fallback + per-agent precedence + compiled-tools/allowedBuiltinTools reconciliation with negative controls. Guard test: exit 0 (9/9). Full nx test agent-mcp: exit 0 (237 passed, 4 skipped, 27 files). nx build agent-mcp: exit 0. Committed at cc6ddaa."
+    },
+    {
+      "ts": "2026-06-26T06:35:17.370Z",
+      "from": "code-review-integration",
+      "to": "code-review-integration",
+      "start_ref": "154d33ca954cdb2a262452bf2eb93ed4a49cd991",
+      "end_ref": "3243383927cba5ebd6ccb7dd7a085f2e7fed42f9",
+      "audit_exit": 3,
+      "audit_criteria_passed": 16,
+      "audit_criteria_total": 19,
+      "by": "pseudosky",
+      "note": "APPROVED on re-review — B1/B2 teeth + F-P6-8 live wiring + F-P6-8b factory verified"
     }
   ],
   "amendment_log": [],
@@ -154,7 +166,7 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "code-review-integration",
+  "current_state": "audit-integration",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:22:27.852Z",
     "by": "pseudosky",
