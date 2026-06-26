@@ -44,6 +44,21 @@ __pycache__/
 *.pyo
 *.pyd
 
+# Runtime / ephemeral test artifacts — NEVER tracked, always regenerable.
+# Canonical ephemeral-artifacts root is tmp/ (already ignored above): all
+# generated output, scratch DBs, and test fixtures write under tmp/<package>/
+# and are removable with `nx reset` / a `clean` target. Stray runtime stores
+# (SQLite DBs, the repo-root data/ that agent-mcp's ./data default creates,
+# scratch MCP servers) are caught here so they can never clutter a commit.
+/data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+calc-server.*
+
 .nx/cache
 .nx/workspace-data
 
