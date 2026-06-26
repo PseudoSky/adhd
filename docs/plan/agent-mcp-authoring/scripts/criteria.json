@@ -130,6 +130,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/discovery-bounded-output.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "component-define.2",
+      "phase": "authoring",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/component-define.test.ts",
+      "expect": "exit0"
     }
   ]
 }
