@@ -57,6 +57,16 @@ Verdict: **no plan-defect halt** — preflight green, proceeding to dispatch.
 | 5 | audit-schema (GATE) | orchestrator-driven | — | n/a | **real guard `--phase schema` 16/16 PASS (exit 0)** | 0 | **ADVANCE** | end_ref `dfc70e8`. Gate verified green via authored python guard BEFORE completing. `--complete` aggregate `audit_pass:false (6/18)` = F-TR4 noise (fragile run-audit.js, counts unbuilt seed/dod + cwd-mis-resolved paths) — does NOT gate; state.json shows complete + advanced. Self-driven (nothing to author; reservation = audit script already present + passing) |
 | 6 | seed-and-roundtrip | typescript-pro | sonnet | byte-proxy | guard exit 0 (7/7, cache-hit) | 0 (1 spurious re-start) | **ADVANCE** | commit `fa97fc8` (7 files, within reservation; schema/stores/agent-mcp untouched); idempotent (onConflictDoNothing) + reopen-resolve + negative-control teeth. **dod.2 proven.** F-TR10 double-start recovered via re-`--complete` |
 
+| 7 | code-review (GATE) | code-reviewer | **opus** | byte-proxy | review_gate exit 0 | 0 | **ADVANCE** | **VERDICT: APPROVED** (review `9828aea`); ran full real-DB suite 57/57; clean single cycle (no double-start — F-TR10 mitigation held). 2 non-blocking findings (F-TR12) |
+| 8 | audit-final (DoD GATE) | orchestrator-driven | — | n/a | **`--phase final` 28/28 PASS incl dod.1-5** | 0 | **PLAN BODY COMPLETE — awaiting human `--confirm-dod`** | 9/9 states complete, terminal. `--complete` aggregate `audit_failed` = F-TR4 noise. `dod_confirmed:False` → human DoD sign-off pending (hard rule: DoD confirmation is a human decision) |
+
+### Findings (post-code-review)
+
+- **F-TR12 (review non-blocking findings):** (1) `[inv:version-retained]` has no
+  *behavioral* test — coverage gap (bumping a tool's version retains the prior row is
+  asserted structurally, not driven). Backlog candidate. (2) Shared interfaces not
+  `I`-prefixed — consistent with repo, accepted. Neither blocks APPROVED.
+
 ### Findings (post-wave-6)
 
 - **F-TR9 (cache external-dep gap):** `targetDefaults.test.inputs.externalDependencies`
