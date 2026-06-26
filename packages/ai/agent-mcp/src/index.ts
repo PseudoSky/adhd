@@ -11,6 +11,9 @@ export const AGENT_MCP_DEFAULT_MAX_TOKENS = parseInt(
 export { HookRegistry } from "./engine/hooks.js";
 // Re-export stores so consumers (tests, plugins) can import from the package root
 export { ComposedPromptStore } from "./store/composed-prompt-store.js";
+// Re-export prompt resolver for consumers that wire the compiler integration
+export { resolveComposedPrompt, computeContextHash } from "./engine/prompt-resolver.js";
+export type { ResolveInput, ResolveResult, ResolveResult as PromptResolveResult, CompileAgentFn, PromptResolverDeps } from "./engine/prompt-resolver.js";
 
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
