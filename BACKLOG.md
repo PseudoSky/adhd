@@ -120,9 +120,9 @@ The following non-blocking issues were discovered during the `lt-code-review` ga
 ## BUG-APIGEN-008 — Python extractor breaks on dataclasses under `from __future__ import annotations`
 - **Discovered:** while mounting a real Python surface (`/tmp/myapi.py`) via `python3 -m apigen_python.gateway_adapter --module <path>`.
 - **Symptom:** `AttributeError` in `dataclasses._is_type` (`sys.modules.get(cls.__module__).__dict__` → None) when the loaded module uses `@dataclass` + `from __future__ import annotations`.
-- **Root cause:** `apigen_python/extractor.py:extract_module` calls `spec.loader.exec_module(mod)` WITHOUT first registering `sys.modules[spec.name] = mod`. With stringized (future) annotations, dataclasses resolves the class namespace via `sys.modules` and finds nothing.
-- **Fix:** in `extract_module`, set `sys.modules[spec.name] = mod` before `exec_module` (canonical pattern for dynamically-exec'd modules); optionally `del` on failure. One line + robustness.
-- **Workaround:** omit `from __future__ import annotations` in the user module.
+- **Root cause:** `apigen_python/extractor.py:extract_module` calls `spec.loader.exec_module(mod)` WITHOUT first registering `sys.modules[spec.name] = mod`. With stringized (future) annotations, dataclasses resolves the class namespace via `sys.modules` and finds nothing. Combined with BUG-PY-FLASK-002: all annotation strings from PEP 563 needed `typing.get_type_hints()` resolution.
+- **Fix (RESOLVED 2026-06-26):** `extract_module` sets `sys.modules[spec.name] = mod` before `exec_module` and cleans up on failure. `_resolve_hints()` calls `typing.get_type_hints(fn, include_extras=False)` to resolve stringized annotations. `_params_to_input_schema` and `_return_to_output_schema` pass `fn=` to use resolved hints. Tests: `future_ann.*` suite in run_tests.py §J (11 tests), all live-verified against a Flask server.
+- **Status:** FIXED.
 
 ## BUG-APIGEN-009 — validate-Layer not active over `apigen run` (HTTP transports) — RESOLVED 2026-06-25
 - **Discovered:** user-perspective demo, driving a live `apigen run --type api-fastify` server.
@@ -144,7 +144,8 @@ The following non-blocking issues were discovered during the `lt-code-review` ga
 - **Fix:** normalize `readonly T[]` / `ReadonlyArray<T>` to `T[]` before item-type resolution in `packages/apigen/core/src/lib/schema-builders/ts-json-schema.ts`; add an extraction test asserting `items:{type:"string"}`, plus a live round-trip test asserting `["a","b"]` survives unchanged.
 - **Process note:** also a TEST-QUALITY bug in the demo — substring assertions (`grep -qF "a"`) are proxy evidence; tightened to exact-output matching so a wrong shape FAILs.
 
-## DEBT-APIGEN-LINT-001 — `enforce-module-boundaries` crashes + flags static `@adhd/apigen-runtime` import in api-fastify/api-express run.ts
+## DEBT-APIGEN-LINT-001 — `enforce-module-boundaries` crashes + flags static `@adhd/apigen-runtime` import in api-fastify/api-express run.ts — RESOLVED 2026-06-26
+- **RESOLVED + orchestrator-VERIFIED (2026-06-26):** the "static import of lazy-loaded library" errors were fixed by converting the dynamic `import('@adhd/...')` in the offending spec files (api-fastify/api-express/mcp/logger/cli specs) to STATIC top-of-file imports, so the libs are no longer classified lazy-loaded — the legit `run.ts` static imports stay. The autofix ENOENT is gone (the 5 stub `index.ts` from LINT-002 now exist). **Verified:** `nx run-many -t lint` over all 21 apigen projects → **EXIT=0, 0 errors**; full apigen `nx run-many -t test` (19 projects) → **EXIT=0** (no behavior regression). Masking audit: zero severity downgrades, zero illegitimate `eslint-disable` (the only 4 added are on genuinely-lazy path-resolved `require()` in `ts-json-schema.ts`, with the disable directive corrected to the rule that actually fires).
 - **Discovered:** 2026-06-25, while linting after the BUG-APIGEN-009/010 fix (pre-existing — reproduces identically on `git show HEAD:.../api-fastify/src/lib/run.ts`).
 - **Symptom:** `nx lint apigen-plugin-api-fastify` (and api-express) errors: "Static imports of lazy-loaded libraries are forbidden — `apigen-runtime` is lazy-loaded in `stream.spec.ts`". The rule's autofix path additionally throws `ENOENT … packages/ai/agent-compiler/src/index.ts` (a separate missing-file issue in the workspace graph), aborting the lint task.
 - **Root cause:** `api-fastify/src/test/stream.spec.ts` (and similar) dynamically `import('@adhd/apigen-runtime')`, so the `@nx/enforce-module-boundaries` rule treats every *static* import of that lib in the same project as forbidden — but `run.ts` legitimately needs the static import (`dispatch`/`createInvoker`/`makeValidateLayer`/…). Not introduced by the BUG-009/010 change; the static import predates it.
@@ -161,7 +162,7 @@ The following non-blocking issues were discovered during the `lt-code-review` ga
 - **Root cause:** `_py_type_hint_to_schema` checks `annotation in _primitives` (a dict keyed by type objects), which never matches a string literal like `'str'`. No `get_type_hints()` call is made to resolve the deferred annotations.
 - **Fix direction:** in `extractor.py`, use `typing.get_type_hints(fn, globalns={...}, localns={...})` instead of raw `inspect.signature().parameters[n].annotation` when the annotation is a `str`. This resolves PEP 563 string annotations back to type objects. A fallback import of module globals/locals is needed to handle forward-referenced custom types.
 - **Workaround (current):** fixtures and user modules must not use `from __future__ import annotations`. Use `from typing import Dict, List, Optional` (3.8-compat) or `dict[str, Any]` (3.10+) instead. Document this in `pyproject.toml` and `flask_server.py` docstring.
-- **Status:** OPEN — the `test_api.py` fixture avoids `from __future__ import annotations` and all tests pass. A user module that uses this import will get weak validation.
+- **Status:** FIXED (2026-06-26) — combined with BUG-APIGEN-008 fix. `typing.get_type_hints()` resolves stringized PEP 563 annotations to type objects before schema inference. Verified: `future_ann.live.decimal.roundtrip` passes with a real Flask server; `future_ann.extractor.decimal_schema` asserts `{type:string,format:decimal}` from a `from __future__ import annotations` module.
 
 ### BUG-PYFLASK-003 — extractor extracted imported classes (Decimal, datetime) as constructor ops
 **Discovered:** 2026-06-25, via live CLI run `node dist/.../apigen/cli/index.js run --type py-flask --source /tmp/x.py`.
@@ -179,7 +180,17 @@ The following non-blocking issues were discovered during the `lt-code-review` ga
 ### DEFER-PYGRPC-002 — serve.ts gRPC host not wired (HTTP/2 front for the gateway)
 **Discovered:** 2026-06-25, during py-grpc implementation.
 **Detail:** `serve.ts` has a documented seam for a per-host `transport` tag and an HTTP/2 front. The standalone `--type py-grpc` target works and is fully verified. Wiring it into `serve.ts` requires: (a) an HTTP/2 server in Node (e.g. `@grpc/grpc-js` or an HTTP/2 proxy); (b) routing `/<namespace>.<Service>/<method>` to the Python subprocess; (c) forwarding gRPC metadata (x-adhd-*) to envelope. The architecture is clear from the py-grpc server design; execution is blocked on serve.ts HTTP/2 infrastructure.
-**Status:** DEFERRED.
+**Fix (RESOLVED 2026-06-26):**
+- `createFrontServer()` now uses a raw `net.Server` TCP mux that peeks the first 3 bytes (`PRI`) of each connection to distinguish h2c (gRPC) from HTTP/1.1. `socket.once('readable') + socket.read(3) + socket.unshift()` (paused-mode) correctly replays bytes to both parsers.
+- Pure `http2.createServer()` (no `allowHTTP1`) handles gRPC streams; a separate `http.createServer()` handles HTTP/1.1. The `httpServer` is monkey-patched to delegate `listen/close/address` to the raw TCP server.
+- `proxyGrpcStream()` proxies h2c streams to the gRPC backend via a cached `http2.connect()` session (`getGrpcSession()`). Key fixes: `waitForTrailers: true` in `stream.respond()` and `wantTrailers` event for `sendTrailers()`; `flags & 0x1` (END_STREAM in HEADERS) detection for zero-body gRPC error responses (UNIMPLEMENTED); `te: trailers` explicitly set in forwarded headers (grpcio strictly requires this header — strips it from HOP_BY_HOP caused RST_STREAM code=2 from Python gRPC backend).
+- `sendGrpcUnavailable()` sends gRPC status 14 (UNAVAILABLE) for dead hosts, correctly using `waitForTrailers`.
+- gRPC reflection (`/grpc.reflection.*`) routing to first alive gRPC host for grpcurl compatibility.
+- `spawnGrpcHost()` reads `{"ready":true}` from stdout; `waitForGrpcReady()` polls TCP connect.
+- Test: `spawnSync` replaced with async `spawn` wrapper in `serve.spec.ts` to avoid blocking the in-process h2 server's event loop.
+- All 16 `serve.spec.ts` live tests pass; all 107 apigen-cli tests pass; 124/124 Python tests pass.
+- **VERIFIED state-side by orchestrator (2026-06-26):** `te'] = 'trailers'` present at `serve.ts:720`; `APIGEN_LIVE=1 npx vitest run src/test/serve.spec.ts` → **16/16 EXIT=0** (drove the real cross-language h2c/HTTP1 front + grpcurl 1.9.3 + grpcio); Python `run_tests.py` → **124/124 EXIT=0** (real Flask + gRPC servers). Confirmed by use, not from the agent's report.
+**Status:** FIXED.
 
 ### BUG-PYFLASK-004 — Decimal/datetime params not decoded from wire; integer accepted for decimal param
 **Discovered:** 2026-06-25, via live CLI run. `add_decimal(amount: Decimal)` received a raw `str` from the wire (not decoded to `Decimal`) → `str + Decimal` → TypeError 500. Integer `999` for a decimal param returned HTTP 200 instead of 400.
@@ -203,3 +214,100 @@ The following non-blocking issues were discovered during the `lt-code-review` ga
 
 ## BUG-APIGEN-013 — RESOLVED
 Logical types (Date/bigint/Decimal/bytes/uuid) now extract their `format` at ANY nesting depth and import form (built-ins via a ts-json-schema-generator custom parser augmentor; imported externals like `Decimal` via qualified-import + alias rewrite). Verified live: `Promise<{ at: Date }>` → `{"at":"…RFC3339…"}`, `{ cost: Decimal }` (default+alias import) → `{"cost":"123.456"}`, `Decimal[]` nested → plain strings — no `$apigen` envelope. apigen-core 191 tests green.
+
+## Features
+
+## FEAT-APIGEN-001 — Rust / Go / Java host languages — priority: HIGH
+- **What:** apigen treats Rust/Go/Java as first-class at the *contract* level — declared in `PluginLanguage` (`packages/apigen/core/src/lib/types.ts`), routed by `source-language.ts` (`.rs`/`.go`/`.java`), wire mapped per-type in the DESIGN (§13.2), with a host-runbook generator (`packages/apigen/nx/src/generators/host`). But there is **zero implementation**: no extractor, runtime, server plugin, or filled codec columns. Only TS + Python hosts exist (proven byte-equal).
+- **Deliverable per language:** fill that language's template-cell column (encode/decode/imports/dep/mode per logical type) + an extractor (source → operations) + a runtime (validate→dispatch→wire via the language's logical codecs) + an HTTP server target (analogous to `py-flask`) + go green on the cross-host conformance gate (`apigen-conformance:conformance`).
+- **Order:** Java first (cheapest — DESIGN notes one dep, `jackson-datatype-jsr310`, rest stdlib Jackson), then Go, then Rust.
+- **Acceptance:** `apigen serve --source a.ts --source b.py --source c.java` round-trips a Date/Decimal **byte-identically** across all three; conformance matrix green for each new host.
+
+## FEAT-WORKSPACE-001 — workspace-standards base generator + custom workspace lint — priority: HIGH (foundational)
+**Goal:** every nx project/target in the monorepo conforms to one enforced standard, generated by inheritance and verified by a custom workspace lint.
+
+**Every project must:**
+- Define the standard nx **targets**: `build`, `lint`, `test` — plus `demo`/`verify` (drives the live use-driven gate; ties to the live-testing rule in CLAUDE.md) and `nx-release-publish` (publishable libs) with `dependsOn:[build,test]`.
+- Contain the standard **files**: `README.md`, `CLAUDE.md` (per-project agent invariants/footguns), `DEMO.md` (runnable; the `demo` target drives it), `CHANGELOG.md` (Keep-a-Changelog + conventional commits), and a `PLAYBOOK.md` (pre- and post-merge requirements).
+- Carry standard `project.json` **conventions**: `tags` for `layer:*` + `platform:*` (architecture enforcement), correct `dependsOn` ordering, `publishConfig.access:public` for publishable libs.
+
+**Base generator (enforcement by inheritance):** a `@adhd/workspace-base` generator package that ALL other nx generators compose/inherit, so the targets+files+conventions are generated automatically and can't be forgotten. **The base must support an `upgrade`/migration** that back-fills and updates every existing project when the base changes (`nx g @adhd/workspace-base:upgrade` → idempotent sync across all projects).
+
+**Custom workspace lint (the gate):** a repo-level check (custom nx target / lint rule / CI gate) that FAILS if any project is missing a required target, a required file, or a required `project.json` field — so the standard is *enforced*, not merely generated.
+
+**Additional standards (proposed):**
+- A `verify` aggregate target = `lint` + `test` + `demo`, required to pass pre-merge.
+- DEMO.md must be runnable end-to-end; the `demo` target is its CI entry (no env-gating of the demo — per the live-testing rule).
+- README declares layer/platform + public API; CLAUDE.md declares the project's invariants/footguns for agents; PLAYBOOK declares pre/post-merge steps (build/lint/test/demo + changelog bump + version stamp).
+- CHANGELOG enforced: a changeset/entry required for any `src` change (CI gate).
+- tsconfig consistency (extends workspace base; `@adhd/*` path aliases), `.eslintrc` consistency, hyphenated package names, `I`-prefixed shared interfaces (per CLAUDE.md §7).
+- CLI projects: `bin` + `#!/usr/bin/env node` shebang convention.
+- Test policy: ≥1 **default-running** live/integration test per public feature (per the live-testing rule — gated tests don't satisfy this).
+
+## BUG-APIGEN-014 — apigen-schema has no real test + live suites are env-gated (must run by default)
+- **apigen-schema:** `nx test apigen-schema` fails ("No test files found") — stub package with a `test` target but zero tests. Add a real, default-running test that exercises the package (per the live-testing rule, `passWithNoTests` is NOT acceptable). **Status: OPEN.**
+- **Live-gating — PARTIALLY fixed (Python ✓ / TS serve ✗):**
+  - **Python side (FIXED + orchestrator-VERIFIED 2026-06-26):** all `APIGEN_PYFLASK_LIVE`/`APIGEN_PYGRPC_LIVE` `skipIf` guards removed from `run_tests.py`; **124/124 run unconditionally, EXIT=0** (driven by orchestrator). *Doc-debt:* three stale comments remain (`run_tests.py:904,1318,1788` still say "gated behind APIGEN_PYFLASK_LIVE=1") — the gates are gone; the comments mislead. Clean them.
+  - **TS serve side (FIXED + orchestrator-VERIFIED 2026-06-26):** the `APIGEN_LIVE` gate was an explicit CLAUDE.md violation (a local server / built artifact is not a third-party paid service). **Removed** `describe.skipIf(!process.env['APIGEN_LIVE'])` → plain `describe` at `serve.spec.ts:143`; added `dependsOn:["build"]` to the apigen-cli `test` target so the bundle is always present; rewrote the suite header to document run-by-default + the hard-fail-on-missing-`python3` / graceful-skip-only-for-optional-`grpcurl` policy. **Verified:** default `npx nx test apigen-cli` → **EXIT=0, 107 passed (107), 0 skipped** (was 105 passed | 2 skipped). The real cross-language serve front now runs on every test invocation. CLAUDE.md "Live testing is mandatory" was also rewritten to be progressive/teachable (principle → default → the one paid-3rd-party exception → the rationalization trap → hard-prereq-fails-loud vs optional-binary-self-skips).
+  - **Doc-debt remaining:** the 3 stale "gated behind…" comments in `run_tests.py:904,1318,1788` (gates already gone) — cosmetic cleanup, still OPEN.
+
+## DEBT-APIGEN-LINT-002 — broader workspace lint debt (surfaced fixing LINT-001) — RESOLVED 2026-06-26
+- **RESOLVED + orchestrator-VERIFIED (2026-06-26).** Full `nx run-many -t lint` over all 21 apigen projects → **EXIT=0, 0 errors**; `nx run-many -t test` (19 projects) → **EXIT=0**. Breakdown:
+  - **Stub `src/index.ts`** for the 5 unscaffolded packages confirmed present (resolves the autofix ENOENT). *Still true:* replace stubs with real exports when the agent-* plans execute (stubs are comment-marked) — tracked, not blocking.
+  - **`vite.config.ts` boundary violation — fixed repo-wide:** every affected apigen project's `.eslintrc.json` now carries the same `ignorePatterns: [..., "vite.config.{js,ts,mjs,mts}"]` template as api-fastify (14 configs). No rule weakened.
+  - **Pre-existing `nx lint` errors fixed by real code changes** (not suppressed): missing `package.json` deps added with correct version specifiers (`@adhd/apigen-errors`/`-logical` across runtime/core/cli/cli-output/mcp); `no-nested-ternary`, `no-useless-escape`, `no-loss-of-precision` (→ `Number('…')`, value-preserving, test negative-controls only), `prefer-const`, `require-yield`, `no-extra-semi`, `no-empty-interface`, `no-inner-declarations` each refactored surgically; the only `eslint-disable` additions are 4 legit lazy `require()` sites in `ts-json-schema.ts`.
+- **Residual (non-gating):** warnings remain across several projects (`0 errors, N warnings`) — pre-existing, not part of this debt; a separate optional warning-cleanup pass if desired. The 3 stale "gated behind…" comments in `run_tests.py` (BUG-014) are still open cosmetic cleanup.
+
+## FEAT-WORKSPACE-001 — reframed: agent-optimized, core/adapter split (2026-06-26)
+Full scope: `docs/workspace-base/SCOPE.md` (rewritten). **Reframe:** optimize the monorepo for *agents, not
+human browsing* — a 5-layer decision-routing system (generated index → auto-loaded CLAUDE.md → impact graph →
+soft memory → intent router); invariant = "generate the routing table, author the rulebook, keep memory soft,
+promote invariants to machine-checkable gates" (memory `01KW2GHJE…`).
+
+**Split into a platform-agnostic core + thin adapters** so the reusable parts aren't confined to nx/Node:
+- `@adhd/workspace-standard` — **generalizable core** (pure TS, zero nx import; validates a Python/Rust/Go
+  package equally): required-targets registry, required-files+section engine, managed-region engine,
+  post-change rule engine, provenance validator, routing-index format + drift gate, boundary-policy *as data*,
+  per-package metadata schema, configurable layout map.
+- `@adhd/workspace-nx` — **nx adapter**: generators + root post-generate hook, `@adhd/eslint-plugin-workspace`
+  (boundary enforcement), `nx affected` impact-graph binding, esbuild/tsconfig stamping, registry drift gate.
+
+Resolved (Q1–Q8): inheritance = automatic-via-root-nx (fallback explicit `applyWorkspaceStandard`); upgrade =
+managed-region markers + marker-tag confirmation; gate = eslint workspace rule; scope = all projects +
+`exempt`; targets += `typecheck` (non-TS → mypy/pyright); file-content = existence-error + placeholder
+warn(dev)/error(prod).
+
+**Config homes (NOT package.json — decoupled from Node):** root taxonomy + layout + boundary policy →
+**`.adhd/workspace.json`** (repo-defined; each repo defines its OWN taxonomy — adhd is project-focused, we take
+sox's *mechanism* not its db/ml vocabulary; areas/groups carry `description`/`whenToUse`/`examples` so agents
+place code from meaning, not guessing). Per-package metadata → **`<pkg>/.adhd/meta.json`** (ecosystem-neutral).
+`generate-lib.sh` superseded. **The 5 reframe layers are implemented as generator + linter logic, not docs**
+(SCOPE §0a): generator stamps meta + scaffolds CLAUDE.md hierarchy + ROUTER + regenerates routing index;
+linter gates index drift, undeclared area/group, missing CLAUDE.md/markers, dangling router targets, boundary
+policy, post-change rules, provenance.
+
+**Harvested from sox `memory-refactor` NX-GENERATOR-HANDOFF (their needs align — same generator, more mature
+layout):** name decoupled from folder path (integrity/registry key — hard rule); per-package metadata block
+`{area,group,concerns,invariants,entrypoints}` as the routing source of truth; two-level `area/group`
+taxonomy + depConstraint allow-matrix (`data↛platform`, `shared` is leaf); the `authoring`(core)↔`sox-nx`
+(adapter) split (= our core/adapter cut); the 4-point acceptance suite. *adhd contributes back:* required-docs
+set + post-change enforcement + provenance + managed markers (sox only stamps a CLAUDE.md stub). The generic
+core is intended to be consumed by **both** repos (sox's `sox-nx` becomes a second adapter).
+
+**Broken out as their own features (reusable beyond workspace scaffolding):**
+
+## FEAT-CHANGE-ENFORCE-001 — post-change enforcement layer — priority: HIGH
+Declarative "what must update when you change X" rule engine, git-diff-driven, **nx-free** (lives in
+`@adhd/workspace-standard`): src→CHANGELOG `Unreleased`; public-API→README "Public API"+DEMO; new
+feature→DEMO + ≥1 default-running live test; dep add/remove→manifest+CHANGELOG; breaking→major bump+note.
+Warn (dev) / error (CI). Generalizes CLAUDE.md's disclose/never-bury/changelog rules into a checkable gate.
+Depends on FEAT-PROVENANCE-001.
+
+## FEAT-PROVENANCE-001 — change provenance schema + validator — priority: HIGH
+Every change carries: work-item id (`plan:`|`backlog:`|`oneoff`) · dispatcher · author `name:version` ·
+provider/model. **Carrier = BOTH:** git **commit trailers** (`Work-Item:`/`Author:`/`Model:`) are the
+enforceable source written at commit time; the **CHANGELOG** trailer is the human-visible projection generated
+from them. **Author identity resolved from the running agent's SP context** (same as `/reflection`:
+`SOX_AGENT_NAME` → `--- AGENT: <name> ---` header → operating spec `name:`/`version:` frontmatter; humans → git
+author). Schema + validator in `@adhd/workspace-standard`; ties to the `/reflection` provenance convention
+(`agent_id`, `subject_version`, model).

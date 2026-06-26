@@ -216,11 +216,17 @@ export function createUnionCodec(opts: UnionCodecOptions): LogicalTypeCodec<obje
     decode(wire: Wire, node: SchemaNode, ctx: TranscodeCtx): object {
       // ── 1. Validate: wire must be a non-null, non-array object ────────────────
       if (wire === null || typeof wire !== 'object' || Array.isArray(wire)) {
+        let wireKind: string
+        if (wire === null) {
+          wireKind = 'null'
+        } else if (Array.isArray(wire)) {
+          wireKind = 'array'
+        } else {
+          wireKind = typeof wire
+        }
         throw new UnionCodecError(
           'E_UNION_INVALID_WIRE',
-          `[${id}] expected a JSON object on the wire at "${ctx.path}", got ${
-            wire === null ? 'null' : Array.isArray(wire) ? 'array' : typeof wire
-          }.`,
+          `[${id}] expected a JSON object on the wire at "${ctx.path}", got ${wireKind}.`,
         );
       }
       const wireObj = wire as Record<string, Wire>;

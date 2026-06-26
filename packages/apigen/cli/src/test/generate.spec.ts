@@ -14,6 +14,7 @@ import {
 import { registerGenerateRegistryCommand } from '../lib/commands/generate-registry'
 import { discoverPackages } from '../lib/registry'
 import jsonschemaPlugin from '@adhd/apigen-plugin-jsonschema'
+import { generateSchemas, composeSchemas } from '@adhd/apigen-core'
 import type { OutputPlugin } from '@adhd/apigen-core'
 
 const fixturesDir = path.join(__dirname, 'fixtures')
@@ -540,11 +541,9 @@ describe('[dod.10 teeth] decimal default-import: schema carries format:decimal a
   it(
     'v1 generate pipeline: generated package.json declares decimal.js for a default-imported Decimal source',
     async () => {
-      // Import the actual generateSchemas + composeSchemas to prove the
+      // Use the actual generateSchemas + composeSchemas to prove the
       // schema carries format:decimal at the extraction layer — the
       // consumer-visible outcome the dep-manifest step keys on.
-      const { generateSchemas, composeSchemas } = await import('@adhd/apigen-core')
-
       const gen = await generateSchemas({
         sourceFile: decimalRealFixture,
         exportMode: { type: 'named' },
@@ -556,8 +555,6 @@ describe('[dod.10 teeth] decimal default-import: schema carries format:decimal a
       // in the input or output. If normalizeTypeText is not called, the schema
       // will be {} (ts-json-schema-generator cannot resolve the qualified import
       // path), and collectFormats will find no decimal format → decimal.js absent.
-      const { collectFormats, collectLogicalTypeDeps } = await import('../lib/commands/generate')
-
       const addAmountsSchema = schemas['addAmounts']
       expect(addAmountsSchema, 'addAmounts schema must be present').toBeDefined()
 

@@ -1,6 +1,6 @@
 # lt-codegen-hints — STATE_NAME
 
-**Phase:** integration · **Kind:** work · **Depends on:** lt-host-ts, lt-host-python · **Guard:** `npx nx test apigen-codegen`
+**Phase:** integration · **Kind:** work · **Depends on:** lt-host-ts, lt-host-python · **Guard:** `npx nx test apigen-logical`
 
 ---
 
@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-- [lt-codegen-hints.1] guard green: npx nx test apigen-codegen
+- [lt-codegen-hints.1] guard green: npx nx test apigen-logical
 
 ---
 
@@ -24,7 +24,7 @@
 
 ```text
 read_only:  []
-mutates:    ["packages/apigen/codegen/src/lib/hints.ts"]
+mutates:    ["packages/apigen/logical/src/lib/hints.ts"]
 ```
 
 ---

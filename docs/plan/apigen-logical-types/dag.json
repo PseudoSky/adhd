@@ -258,9 +258,9 @@
         "lt-host-ts",
         "lt-host-python"
       ],
-      "guard": "npx --yes nx test apigen-codegen",
+      "guard": "npx --yes nx test apigen-logical",
       "artifacts": [
-        "packages/apigen/codegen/src/lib/hints.ts"
+        "packages/apigen/logical/src/lib/hints.ts"
       ],
       "context": "contexts/lt-codegen-hints.md",
       "notes": ""

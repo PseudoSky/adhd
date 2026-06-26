@@ -27,7 +27,7 @@ const PORT = 49271  // deterministic high port, avoids clashes
 const NS = 'testapi'
 const BASE = `http://127.0.0.1:${PORT}`
 
-const IS_LIVE = !!process.env['APIGEN_PYFLASK_LIVE']
+const IS_LIVE = true // always run — Python server is local, no env gate needed
 
 // ---------------------------------------------------------------------------
 // Server lifecycle helpers
@@ -133,7 +133,7 @@ async function getHealth(): Promise<Response> {
 // Live tests
 // ---------------------------------------------------------------------------
 
-describe.skipIf(!IS_LIVE)('py-flask plugin — LIVE server (APIGEN_PYFLASK_LIVE=1)', () => {
+describe('py-flask plugin — LIVE server', () => {
 
   it('GET /_meta/health → 200 with status:ok', async () => {
     server = await startServer()
