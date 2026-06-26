@@ -200,3 +200,6 @@ The following non-blocking issues were discovered during the `lt-code-review` ga
 - **Root cause (unverified):** the extractor doesn't propagate `format` to fields of an inline/anonymous object type, so the nested `Date` field gets `{}` and the schema-less envelope path runs. Same family as BUG-APIGEN-011 (readonly arrays) — nested-type extraction dropping the logical format.
 - **Impact:** correct round-trip (envelope preserves the value) but non-idiomatic wire; cross-host byte-equality for nested rich fields not guaranteed.
 - **Fix:** propagate logical `format` into inline object-type field schemas in `ts-json-schema.ts`; add a nested-Date-in-object extraction + round-trip test.
+
+## BUG-APIGEN-013 — RESOLVED
+Logical types (Date/bigint/Decimal/bytes/uuid) now extract their `format` at ANY nesting depth and import form (built-ins via a ts-json-schema-generator custom parser augmentor; imported externals like `Decimal` via qualified-import + alias rewrite). Verified live: `Promise<{ at: Date }>` → `{"at":"…RFC3339…"}`, `{ cost: Decimal }` (default+alias import) → `{"cost":"123.456"}`, `Decimal[]` nested → plain strings — no `$apigen` envelope. apigen-core 191 tests green.
