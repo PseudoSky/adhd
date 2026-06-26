@@ -1,0 +1,78 @@
+{
+  "name": "agent-provider",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/ai/agent-provider/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:ai", "platform:node"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/ai/agent-provider",
+        "main": "packages/ai/agent-provider/src/index.ts",
+        "tsConfig": "packages/ai/agent-provider/tsconfig.lib.json",
+        "clean": true,
+        "assets": [
+          {
+            "input": "packages/ai/agent-provider",
+            "glob": "drizzle/**/*",
+            "output": "."
+          }
+        ]
+      }
+    },
+
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node dist/packages/ai/agent-provider/src/index.js"
+      },
+      "dependsOn": ["build"]
+    },
+
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "nx build agent-provider --watch"
+      }
+    },
+
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/ai/agent-provider/tsconfig.json --noEmit"
+      }
+    },
+
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": ["{options.reportsDirectory}"],
+      "options": {
+        "configFile": "packages/ai/agent-provider/vite.config.ts",
+        "reportsDirectory": "../../../coverage/packages/ai/agent-provider"
+      }
+    },
+
+    "clean": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "rm -rf dist/packages/ai/agent-provider"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": ["build", "test"],
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  }
+}

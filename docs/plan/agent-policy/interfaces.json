@@ -1,1 +1,109 @@
-{}
+{
+  "drizzle-orm": {
+    "provenance": "vendored-source",
+    "resolved_version": "see packages/ai/agent-mcp/package.json (match version)",
+    "source": "node_modules/drizzle-orm/sqlite-core/index.d.ts",
+    "confidence": "vendored",
+    "interface": "sqliteTable('policy_templates', { slug: text().primaryKey(), enforcement: text({mode:'json'}), rules: text({mode:'json'}) })",
+    "shape": {
+      "enforcement_array": "enforcement = text({ mode: 'json' }) holding an ARRAY (e.g. [\"agent\",\"ci\"]) \u2014 a policy can carry MULTIPLE enforcement values; it MUST read back as Array.isArray (enforcement-is-array), never a scalar",
+      "lookup_not_enum": "policy_types.slug is a text PK lookup table, NOT a sql enum (lookup-not-enum) \u2014 new types extend without a migration",
+      "key_api_note": "Mirror packages/ai/agent-mcp/src/db/schema.ts. agent_policy.agent_slug is a logical text key (agents live in @adhd/agent-registry). policy_slug FK -> policy_templates.slug is within-package."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "policy-type-and-template-schema",
+      "agent-policy-junction",
+      "policy-inheritance",
+      "audit-schema"
+    ]
+  },
+  "better-sqlite3": {
+    "provenance": "vendored-source",
+    "resolved_version": "see packages/ai/agent-mcp/package.json (match version)",
+    "source": "node_modules/better-sqlite3/lib/index.d.ts",
+    "confidence": "vendored",
+    "interface": "new Database(path); db.pragma('journal_mode = WAL'); db.close()",
+    "shape": {
+      "key_api_note": "Copy packages/ai/agent-mcp/src/db/client.ts. Store tests close + reopen the handle to prove persistence (the enforcement array + override_config + inherited_from must survive the reopen)."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "policy-type-and-template-schema",
+      "agent-policy-junction",
+      "policy-inheritance",
+      "seed-and-roundtrip"
+    ]
+  },
+  "zod": {
+    "provenance": "vendored-source",
+    "resolved_version": "see packages/ai/agent-mcp-budget/package.json (match version)",
+    "source": "node_modules/zod/index.d.ts",
+    "confidence": "vendored",
+    "interface": "z.object({ maxModelCalls: z.number().int().positive().optional() }) -> configSchema; z.infer<typeof configSchema>",
+    "shape": {
+      "configSchema": "export const configSchema = z.object({ maxModelCalls: z.number().int().positive().optional() }) \u2014 validates the rate-policy limit(s) the enforcement plugin reads from the template rules / per-agent override_config",
+      "key_api_note": "Mirror packages/ai/agent-mcp-budget/src/index.ts configSchema export exactly \u2014 the agent-mcp plugin loader validates plugin config against this schema."
+    },
+    "cited_by": [
+      "enforcement-plugin"
+    ]
+  },
+  "agent-mcp-types-hooks-consumed": {
+    "provenance": "docs",
+    "resolved_version": "see packages/ai/agent-mcp-types/package.json",
+    "source": "packages/ai/agent-mcp-types/src/hooks.ts + src/registry.ts (consumed, not modified)",
+    "confidence": "documented",
+    "interface": "import { HookRegistry } from '@adhd/agent-mcp-types'; import type { IHookRegistry, IEnforcementError, Plugin, PluginContext, PluginFactory, PreModelRequestPayload, PostModelResponsePayload, TaskStartPayload } from '@adhd/agent-mcp-types'",
+    "shape": {
+      "IHookRegistry": "{ register<E extends HookEvent>(event, handler): void ; registerEnforcement<E extends EnforcementEvent>(event, handler): void } \u2014 observational register() errors are swallowed; registerEnforcement() handler errors PROPAGATE and fail the task",
+      "EnforcementEvent": "EnforcementEvent = 'pre:model_request' \u2014 the ONLY enforcement event (enforcement-event-pre-model-only). registerEnforcement('pre:model_request', handler) is the single hook that may throw.",
+      "IEnforcementError": "{ isEnforcementError: true; code: string; message: string } \u2014 the enforcement plugin throws this (code 'POLICY_VIOLATION') when a rate limit is crossed",
+      "HookRegistry": "the REAL concrete class \u2014 the enforcement-plugin test constructs `new HookRegistry()` (NOT a mock) and asserts `await hooks.enforce('pre:model_request', payload)` REJECTS with isEnforcementError===true once the limit is reached (real-registry-not-mock).",
+      "Plugin / PluginFactory / PluginContext": "Plugin.install(hooks: IHookRegistry): void ; PluginFactory = (ctx: PluginContext) => Plugin ; PluginContext = { db, config }. Mirror the @adhd/agent-mcp-budget plugin shape.",
+      "shared_type_rule": "IHookRegistry and the plugin contract live in @adhd/agent-mcp-types per REFERENCES.md:197-211 so @adhd/agent-policy depends on them WITHOUT a circular dep on the orchestrator. No new shared type required for this plan \u2014 all consumed symbols already exist in agent-mcp-types/src/{hooks,registry}.ts.",
+      "key_api_note": "agent-policy DEPENDS ON @adhd/agent-mcp-types only (no plan deps). Its runtime enforcement is an agent-mcp PLUGIN following the @adhd/agent-mcp-budget reference (REFERENCES.md:213-218) \u2014 it registers ON agent-mcp's IHookRegistry but does NOT import the agent-mcp orchestrator package (avoids the cycle)."
+    },
+    "cited_by": [
+      "enforcement-plugin"
+    ]
+  },
+  "agent-mcp-budget-reference": {
+    "provenance": "docs",
+    "resolved_version": "see packages/ai/agent-mcp-budget/package.json",
+    "source": "packages/ai/agent-mcp-budget/src/index.ts (reference implementation, READ-ONLY)",
+    "confidence": "documented",
+    "interface": "the canonical plugin pattern: export const configSchema = z.object({...}); class Plugin { install(hooks) { hooks.register(...); hooks.registerEnforcement('pre:model_request', p => this.enforce(p)) } }; const createPlugin: PluginFactory = ({db, config}) => new Plugin(...); export default createPlugin; export { createPlugin }",
+    "shape": {
+      "pattern": "@adhd/agent-policy's enforcement plugin MIRRORS this: configSchema (zod) + a Plugin class whose install() registers observational handlers (try/caught) to accumulate per-task counts AND ONE registerEnforcement('pre:model_request', ...) with NO try/catch so the throw propagates.",
+      "key_api_note": "This is the canonical pattern REFERENCES.md:213-218 names. agent-policy's runtime enforcement exposes itself as a plugin following this reference, NOT a reimplementation. Read-only reference \u2014 agent-policy does not modify agent-mcp-budget."
+    },
+    "cited_by": [
+      "enforcement-plugin"
+    ]
+  },
+  "agent-policy-public-api": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0",
+    "source": "packages/ai/agent-policy/src/index.ts (barrel)",
+    "confidence": "documented",
+    "interface": "@adhd/agent-policy exports: { openPolicyDb, schema, PolicyTemplateStore, AgentPolicyStore, configSchema, createPlugin (default + named), seed }",
+    "shape": {
+      "PolicyTemplateStore": "new PolicyTemplateStore(db); create(template) ; read(slug) -> {slug, type, description, rules(obj), enforcement(array), version, isSystem} ; list(typeFilter?). Typed errors POLICY_TEMPLATE_NOT_FOUND / POLICY_TEMPLATE_ALREADY_EXISTS. enforcement is a deserialized ARRAY.",
+      "AgentPolicyStore": "new AgentPolicyStore(db); attach({agentSlug, policySlug, overrideConfig?, isMandatory?}) (direct attach, inherited_from=null) ; attachToCategory({categorySlug, policySlug, isMandatory}) (propagates to all current + future category members) ; listForAgent(agentSlug) -> AgentPolicyAssignment[] (direct + inherited, override_config deserialized). Typed error AGENT_POLICY_ALREADY_ATTACHED.",
+      "AgentPolicyAssignment": "{ agentSlug: string; policySlug: string; overrideConfig: Record<string,unknown>|null; isMandatory: boolean; inheritedFrom: string|null } \u2014 SHARED cross-package type (REFERENCES.md:197-211, DATA_MODEL). NEW-SHARED-TYPE: AgentPolicyAssignment should be ADDED to @adhd/agent-mcp-types/src/domain.ts (additive) so the compiler (plan 5) consumes the same shape when folding policies into the compiled header; tracked in agent-compiler/interfaces.json.",
+      "enforcement_plugin": "configSchema + createPlugin (default + named) \u2014 the agent-mcp plugin exposing runtime rate-policy enforcement; registers a throwing handler on hooks.registerEnforcement('pre:model_request', ...).",
+      "seed": "seed(db) \u2014 idempotent seeder for policy_types + the core policy_templates (no-credentials, sox-audit-trail, reviewer-posture, max-rework-3) from SEED_DATA.md.",
+      "key_api_note": "agent-policy DEPENDS ON @adhd/agent-mcp-types (IHookRegistry + plugin contract) and NO other plan. It is consumed by: @adhd/agent-compiler (plan 5) which reads PolicyTemplateStore + AgentPolicyStore.listForAgent to fold policy constraints into the compiled header at COMPILE time; the migration (plan 7) which writes AGENT_POLICY rows; and @adhd/agent-mcp (plan 6) which loads the enforcement plugin and whose PolicyEngine reads template rate/permission limits at RUNTIME."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "policy-type-and-template-schema",
+      "agent-policy-junction",
+      "policy-inheritance",
+      "enforcement-plugin",
+      "seed-and-roundtrip",
+      "audit-schema"
+    ]
+  }
+}

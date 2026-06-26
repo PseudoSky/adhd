@@ -236,6 +236,14 @@
       "kind": "command",
       "cmd": "python3 docs/plan/agent-policy/scripts/audit_policy.py --phase final",
       "expect": "exit0"
+    },
+    {
+      "id": "code-review.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-policy/scripts/review_gate.py",
+      "expect": "exit0"
     }
   ]
 }

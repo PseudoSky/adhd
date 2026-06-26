@@ -1,0 +1,40 @@
+{
+  "live-provider-anthropic-oauth": {
+    "type": "credential",
+    "description": "anthropic provider live run needs Claude Max OAuth in the macOS keychain (useClaudeOauth:true, no API key). Required only when AGENT_MCP_LIVE=1 enables the anthropic matrix case; absent => that provider case skips (not fails). VERIFIED live 2026-06-26 via useClaudeOauth (Claude Max keychain): a {type:anthropic, useClaudeOauth:true} agent ran end-to-end with real telemetry — the orchestrator must NOT re-halt on this blocker.",
+    "required_by": [
+      "live-model-e2e"
+    ],
+    "verification": "security find-generic-password -s 'Claude Code' >/dev/null 2>&1 || test -n \"$ANTHROPIC_API_KEY\"",
+    "status": "verified",
+    "owner": "repo owner (Claude Max account holder)",
+    "how_to_provide": "Sign in to Claude Code so the OAuth token is in the login keychain (Claude Max); or export ANTHROPIC_API_KEY. Then set AGENT_MCP_LIVE=1.",
+    "destination": "env:ANTHROPIC_API_KEY",
+    "blocks_at": "per-state"
+  },
+  "live-provider-claudecli": {
+    "type": "external-resource",
+    "description": "claudecli provider live run needs the 'claude' CLI installed and authenticated (drives stream-json; config {claudePath,model}). Required for the claudecli matrix case under AGENT_MCP_LIVE=1 AND as the default REAL provider for dod.5's composition-journey run step; absent => the affected case skips (not fails).",
+    "required_by": [
+      "composition-journey-e2e",
+      "live-model-e2e"
+    ],
+    "verification": "command -v claude >/dev/null 2>&1",
+    "status": "needed",
+    "owner": "executor environment",
+    "how_to_provide": "Install the Claude Code CLI (npm i -g @anthropic-ai/claude-code or equivalent) and ensure 'claude' is on PATH and logged in. Set CLAUDE_CLI_PATH if non-standard.",
+    "blocks_at": "per-state"
+  },
+  "live-provider-lmstudio": {
+    "type": "external-resource",
+    "description": "lmstudio provider live run needs a running LM Studio OpenAI-compatible server reachable at LMSTUDIO_BASE_URL (config {model,baseURL}). Required only for the lmstudio matrix case under AGENT_MCP_LIVE=1; absent => that case skips (not fails).",
+    "required_by": [
+      "live-model-e2e"
+    ],
+    "verification": "test -n \"$LMSTUDIO_BASE_URL\" && curl -sf \"$LMSTUDIO_BASE_URL/models\" >/dev/null 2>&1",
+    "status": "needed",
+    "owner": "executor environment",
+    "how_to_provide": "Start LM Studio's local server with a model loaded; export LMSTUDIO_BASE_URL (e.g. http://localhost:1234/v1). Set AGENT_MCP_LIVE=1.",
+    "blocks_at": "per-state"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1782193532682,
+      "tag": "0000_third_nitro",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1782194438176,
+      "tag": "0001_agents_and_taxonomy",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1782194854246,
+      "tag": "0002_agent_components_junction",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1782196800000,
+      "tag": "0003_usecase_context_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1782195766328,
+      "tag": "0004_composed_prompts",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1782235784302,
+      "tag": "0005_warm_norman_osborn",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1782239097742,
+      "tag": "0006_component_head_version_split",
+      "breakpoints": true
+    }
+  ]
+}

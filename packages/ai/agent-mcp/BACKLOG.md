@@ -47,6 +47,50 @@ nice-to-have / cleanup.
 
 ## 🐞 Bugs
 
+### BUG-003 — `agent_list` (no args) returns every full agent definition → blows the host's tool-output token ceiling
+- **Status:** open
+- **Priority:** P2 · **Area:** tools (agent-crud), discovery
+- **Reported:** 2026-06-26 (live MCP validation, orchestrator resume)
+
+**Problem.** Calling `agent_list` with no arguments serialises **all** agent
+definitions in full, including each complete `systemPrompt`. Against the real
+46-agent store this returned **464,821 chars / 692 lines**, which **exceeded the
+MCP host's max tool-output tokens** — the host refused the result and spilled it
+to a file. The tool meant to power *discovery* is unusable for discovery at real
+corpus size. Unit tests never caught it: they list 1–2 in-memory agents, so the
+output is tiny. Only a live call against the real store reveals it.
+
+**Impact.** Any host that calls `agent_list` on a populated store gets an
+unusable (or refused) response. Gets monotonically worse as the registry/corpus
+grows — and Plan 7 will load a much larger corpus. Directly blocks the Plan 8
+discovery lane (`component_search`) if that path shares this shape.
+
+**Proposed fix.** Give `agent_list` a sane **default `limit`** (e.g. 20) with
+`offset` paging, and return a **summary projection** by default (name,
+description, provider type/model, version, tags) — never the full `systemPrompt`
+/ body inline. Expose the full definition only via an explicit `agent_read`
+(which already exists) or an opt-in `full: true`. Mirror the same projection
+discipline in every authoring/discovery list tool added in Plan 8.
+
+**Acceptance criteria**
+- `agent_list` against a ≥46-agent store returns a bounded, summary-only payload
+  that stays under the host token ceiling (assert byte/row bound in an
+  integration test seeded with N≫limit agents).
+- Full body is reachable only via `agent_read`/explicit `full:true`.
+- Reverting the projection (dumping full bodies) turns the bound test red.
+
+**References** — `src/tools/agent-crud.ts` (`agent_list`), `src/server.ts`
+(ListTools/CallTool wiring), USAGE_GUIDE. Cross-ref orchestration-ledger
+F-LIVE-1 (`docs/plan/agent-mcp-refactor/orchestration-ledger.md`).
+
+> Telemetry note (not a separate bug): the `claudecli` provider reports
+> `inputTokens:0/outputTokens:0` in `usage` (the CLI stream-json surfaces no
+> usage), while `anthropic` reports real counts. Budget/metrics on
+> claudecli-routed work silently under-report — folded into the `claudecli`
+> observability gap tracked by **DEBT-002**. (orchestration-ledger F-LIVE-3.)
+
+---
+
 ### BUG-002 — Delegation-opened sessions are never reaped → leak + undeletable sub-agent
 - **Status:** done (in source; ships in the next publish) · **Closed:** 2026-06-16
 - **Priority:** P2
@@ -260,9 +304,167 @@ no per-agent concurrency cap — only a server-wide `QUEUE_CONCURRENCY`.
 
 **References** — `src/engine/queue.ts`. (Migrated from GAPS §4 Phase-1 items.)
 
+### FEAT-007 — Public registry-write entrypoint (seed/ingest over a tool/CLI)
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** registry, authoring (Plan 8 dependency)
+- **Reported:** 2026-06-25 (filed during agent-mcp-authoring plan authoring)
+
+**Problem / Description**
+There is no PUBLIC registry-write entrypoint for seeding/ingesting registry rows
+(platforms, tools, models, policies, components, agents). The registry packages
+ship no CLI bin, and `agent_define`/`component_define` (Plan 8) cover authoring an
+agent/component but not bulk seeding the substrate (tool/model/policy
+vocabularies). The Plan 8 `composition-journey-e2e` "zero-internal-import" gate is
+forced to seed the substrate via the store API in a separate fixture file the test
+does not import — an honest boundary, but a gap.
+
+**Impact**
+A zero-context user cannot stand up a registry from scratch over the public
+surface; the maintained integration test can drive every step EXCEPT the one-time
+substrate seed without a deep import.
+
+**Proposed fix / Approach**
+Add a registry seed/ingest CLI subcommand (or MCP tool) that loads the substrate
+vocabularies + ingests an agent `.md`, so the e2e journey is fully public-surface.
+
+**Acceptance criteria** The §7 journey + substrate seed both run over a public bin/tool; the e2e test imports zero `packages/ai/**/src/**`.
+
+**Planning update (2026-06-25, agent-registry-migration re-author).** Plan 7 was
+re-authored as an LLM-driven ingestion pipeline whose `import-script` state ships a
+public `importCorpus(...)` entrypoint (lib export + CLI bin) that runs
+parse→ingest→dataset-build and writes components/use-cases/weighted-links/agents/
+skills through the published registry stores. That entrypoint is the public
+registry-write door this item asks for; FEAT-007 is **owned by Plan 7
+`import-script`** (`[dod.4]` / `[import-script.1..3]`) and closes when that state
+ships. The executor files the closure note here at that point.
+
+**References** — Plan 8 `docs/plan/agent-mcp-authoring/contexts/composition-journey-e2e.md`; **Plan 7 `docs/plan/agent-registry-migration/contexts/import-script.md`**; DEMO.md §6; demo audit finding (CLI bins: `agent-compiler` exists, registry packages have none).
+
+### FEAT-008 — Model-backed embedder behind the deterministic enrichment seam
+- **Status:** backlog
+- **Priority:** P3
+- **Area:** registry enrichment (Plan 8 D1 follow-up)
+- **Reported:** 2026-06-25 (filed during agent-mcp-authoring plan authoring)
+
+**Problem / Description**
+Plan 8 D1 ships a deterministic, dependency-free in-package embedding (hashed
+lexical vector) as `component_define`'s enrichment substrate — chosen for
+determinism/idempotence and because no embedding infra exists in the workspace and
+the memory-server is not a local importable path. It is sufficient for relative
+ranking but not SOTA semantic recall.
+
+**Impact** `component_search` ranking quality is lexical, not semantic-model-grade.
+
+**Proposed fix / Approach** Swap a model-backed embedder behind the injectable
+`EmbedFn = (text)=>Float32Array` seam (default stays deterministic); re-embed
+use-case anchors. Keep idempotence (cache by content hash).
+
+**Acceptance criteria** A model-backed `EmbedFn` improves `component_search` ordering on a labeled set; `component_define` stays idempotent on identical content.
+
+**References** — `docs/plan/agent-mcp-authoring/decisions.md` D1; SCOPE.md §"Out of Scope" (embedding-based similarity was excluded from Plans 1–7).
+
+**Update (2026-06-26, owner):** sox-ecosystem is extracting its embedding system into
+reusable tooling. When that lands, the model-backed `EmbedFn` here should consume that
+shared tooling rather than standing up its own embedder — i.e. the `EmbedFn` seam's
+production implementation becomes a thin adapter over the sox-ecosystem embedding tool.
+Re-scope this FEAT once the shared tooling's import surface is known.
+
+### FEAT-009 — Discovery-lane corpus dependency on Plan 7 (migration)
+- **Status:** backlog
+- **Priority:** P3
+- **Area:** discovery (Plan 8 / Plan 7 overlap)
+- **Reported:** 2026-06-25 (filed during agent-mcp-authoring plan authoring)
+
+**Problem / Description**
+Plan 8's discovery lane (`component_search`, `*_list`) is proven against demo
+fixture agents. The real 346-agent corpus it should search over is imported by
+Plan 7 (`agent-registry-migration`, unbuilt). Until Plan 7 runs, discovery returns
+only fixture components — corpus-scale sharing/discovery is NOT-YET-COVERED
+(DEMO.md §8 row N2).
+
+**Impact** Discovery is real but shallow until the corpus is migrated.
+
+**Proposed fix / Approach** Sequence Plan 7 before/with Plan 8 execution; re-run the discovery DoD against the migrated corpus.
+
+**Acceptance criteria** `component_search` ranks real corpus components; ≥1 shared component is referenced by ≥N migrated agents.
+
+**Planning update (2026-06-25, agent-registry-migration re-author).** Plan 7 now
+explicitly produces the discovery corpus: `dataset-build` writes the 18-typed
+components + the sonnet-consolidated canonical use-cases WITH anchor embeddings (via
+Plan 8's `enrich/usecase-anchors` substrate) + weighted component↔use-case links.
+That consolidated use-case set IS the ANCHOR vocabulary Plan 8 enrichment resolves
+against — Plan 8 ships SEED anchors, Plan 7 `dataset-build` backfills the
+corpus-derived ones. The relation is documented sequencing (CLOSEOUT.md), NOT a
+`depends_on_plans` edge; Plan 8 proves on seed anchors, Plan 7 backfills the real
+ones. Re-run Plan 8's discovery DoD after Plan 7's `dataset-build` to close this.
+
+**References** — DEMO.md §8 N2; CLOSEOUT.md §3 (recommended execution order); **Plan 7 `contexts/sonnet-consolidation.md` + `contexts/dataset-build.md`**; Plan 8 `contexts/embedding-substrate.md` (seed anchors).
+
+### FEAT-010 — LLM-ingestion live-vs-replay corpus determinism
+- **Status:** backlog
+- **Priority:** P3
+- **Area:** registry ingestion (Plan 7 re-author)
+- **Reported:** 2026-06-25 (filed during agent-registry-migration re-author)
+
+**Problem / Description**
+Plan 7's re-authored ingestion pipeline runs REAL LLMs (haiku fan-out + sonnet
+consolidation) on the live path (`AGENT_REGISTRY_INGEST_LIVE=1`,
+`corpus-ingest-llm` blocker). LLM output is non-deterministic, so the **CI/offline
+path is a captured replay** of one live consolidation; `importCorpus --replay`
+reproduces that dataset deterministically. The live path produces a fresh (possibly
+different) canonical use-case vocabulary each run.
+
+**Impact** The corpus dataset (and thus Plan 8's discovery anchors) depends on WHICH
+live run was captured. Re-running live ingestion can shift the vocabulary, requiring
+a re-capture + a Plan 8 discovery-DoD re-verification.
+
+**Proposed fix / Approach** Treat the captured consolidation record as the
+versioned source of truth; gate vocabulary changes behind a deliberate re-capture +
+anchor-backfill + Plan 8 discovery re-verify. Optionally add a stability metric
+(vocabulary churn between live runs) to decide when a re-capture is warranted.
+
+**Acceptance criteria** A captured replay reproduces the dataset deterministically
+(twice → equal rows); a documented re-capture procedure re-backfills Plan 8 anchors.
+
+**References** — Plan 7 `contexts/haiku-usecase-batch.md`, `contexts/sonnet-consolidation.md`, `contexts/import-script.md`; `human-blockers.json` `corpus-ingest-llm`.
+
 ---
 
 ## 🔧 Tech Debt / Improvements
+
+### DEBT-006 — server.ts USAGE_GUIDE doc examples still show systemPrompt as required
+- **Status:** backlog
+- **Priority:** P3
+- **Area:** docs / server
+- **Reported:** 2026-06-26
+
+**Problem / Description** — `server.ts` contains USAGE_GUIDE inline-doc strings
+that show `agent_create` examples with `systemPrompt` as a required authoring
+field (e.g. `"systemPrompt": "You are a helpful assistant"`). After Plan 6 wave 3
+(`agent-store-retire`) the field is an optional computed compat shim populated from
+`compileAgent()` output — not user-authored. The USAGE_GUIDE examples should be
+updated to reflect this: either omit `systemPrompt` from the example payload or add
+a comment clarifying it is auto-populated from compiler output.
+
+**Impact** — Documentation only; no runtime regression. Callers passing
+`systemPrompt` in `agent_create` will still have it accepted (it is now
+`.optional()`, not removed), so backward-compatibility is intact. The misleading
+examples could confuse future integrators.
+
+**Proposed fix / Approach** — In `server.ts`, locate the `agent_create` USAGE_GUIDE
+JSON snippets and either (a) remove the `systemPrompt` key, or (b) replace it with
+a comment noting it is computed. `server.ts` is outside the `agent-store-retire`
+mutate reservation; this edit is owned by a doc-refresh pass after Plan 6 completes.
+
+**Acceptance criteria** — `server.ts` USAGE_GUIDE examples do not show
+`systemPrompt` as a required user-provided field.
+
+**References** — `packages/ai/agent-mcp/src/server.ts` (USAGE_GUIDE strings),
+`docs/plan/agent-mcp-refactor/contexts/agent-store-retire.md` (reservation note),
+`decisions.md` Decision 3.
+
+---
 
 ### DEBT-001 — Audit & harden against unhandled exceptions across the server
 - **Status:** done (in source; ships in the next publish) · **Closed:** 2026-06-16

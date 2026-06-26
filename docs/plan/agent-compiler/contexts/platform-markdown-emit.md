@@ -1,6 +1,6 @@
 # platform-markdown-emit — compileAgent: FULL PLATFORM ARTIFACT
 
-**Phase:** emit · **Kind:** work · **Depends on:** model-and-policy-emit · **Guard:** `npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-agent.test.ts`
+**Phase:** emit · **Kind:** work · **Depends on:** code-review-engine · **Guard:** `npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-agent.test.ts`
 
 ---
 

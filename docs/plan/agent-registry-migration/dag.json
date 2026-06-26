@@ -6,6 +6,7 @@
     "architecture",
     "foundation",
     "parse",
+    "ingest",
     "import",
     "verify",
     "removal",
@@ -42,72 +43,11 @@
       "context": "contexts/scaffold-package.md",
       "notes": ""
     },
-    "frontmatter-parser": {
-      "kind": "work",
-      "phase": "parse",
-      "depends_on": [
-        "scaffold-package"
-      ],
-      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/frontmatter.test.ts",
-      "artifacts": [
-        "packages/ai/agent-registry-migration/src/parse/frontmatter.ts",
-        "packages/ai/agent-registry-migration/src/index.ts",
-        "packages/ai/agent-registry-migration/src/__tests__/frontmatter.test.ts"
-      ],
-      "context": "contexts/frontmatter-parser.md",
-      "notes": ""
-    },
-    "body-section-splitter": {
-      "kind": "work",
-      "phase": "parse",
-      "depends_on": [
-        "frontmatter-parser"
-      ],
-      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/body-sections.test.ts",
-      "artifacts": [
-        "packages/ai/agent-registry-migration/src/parse/body-sections.ts",
-        "packages/ai/agent-registry-migration/src/index.ts",
-        "packages/ai/agent-registry-migration/src/__tests__/body-sections.test.ts"
-      ],
-      "context": "contexts/body-section-splitter.md",
-      "notes": ""
-    },
-    "import-pipeline": {
-      "kind": "work",
-      "phase": "import",
-      "depends_on": [
-        "body-section-splitter"
-      ],
-      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/import-pipeline.test.ts",
-      "artifacts": [
-        "packages/ai/agent-registry-migration/src/import/import-agent.ts",
-        "packages/ai/agent-registry-migration/src/index.ts",
-        "packages/ai/agent-registry-migration/src/__tests__/import-pipeline.test.ts"
-      ],
-      "context": "contexts/import-pipeline.md",
-      "notes": ""
-    },
-    "skills-migration": {
-      "kind": "work",
-      "phase": "import",
-      "depends_on": [
-        "import-pipeline"
-      ],
-      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/skills-migration.test.ts",
-      "artifacts": [
-        "packages/ai/agent-registry-migration/src/import/import-skill.ts",
-        "packages/ai/agent-registry-migration/src/index.ts",
-        "packages/ai/agent-registry-migration/src/__tests__/skills-migration.test.ts"
-      ],
-      "context": "contexts/skills-migration.md",
-      "notes": ""
-    },
     "roundtrip-equivalence-gate": {
       "kind": "work",
       "phase": "verify",
       "depends_on": [
-        "import-pipeline",
-        "skills-migration"
+        "import-script"
       ],
       "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/roundtrip-equivalence.test.ts",
       "artifacts": [
@@ -153,7 +93,7 @@
       "kind": "audit",
       "phase": "audit",
       "depends_on": [
-        "removal-runbook"
+        "code-review"
       ],
       "guard": "python3 docs/plan/agent-registry-migration/scripts/audit_migration.py --phase final",
       "artifacts": [
@@ -161,11 +101,104 @@
       ],
       "context": "contexts/audit-final.md",
       "notes": ""
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "audit",
+      "depends_on": [
+        "removal-runbook"
+      ],
+      "guard": "python3 docs/plan/agent-registry-migration/scripts/review_gate.py",
+      "artifacts": [
+        "docs/plan/agent-registry-migration/review.md",
+        "docs/plan/agent-registry-migration/scripts/review_gate.py"
+      ],
+      "context": "contexts/code-review.md",
+      "notes": "Reviewer routing: code-reviewer (opus). Diff-reading code review of the implementation states (migration-design..removal-runbook) against CLAUDE.md (layer/platform isolation, @adhd/ imports, I-prefixed interfaces, JSDoc on shared public fns, the 'Proving features actually work' verification standard) AND this plan's decisions/contracts. Must check design-intent fidelity the structural audit misses: the import pipeline drives the REAL registry stores (not mocks); the round-trip equivalence gate actually blocks removal; the removal-runbook is gated on an all-PASS equivalence report (forcing function); cross-repo claude-agents removal is a gated step; no cross-package FK violations. Default verdict NEEDS-WORK; a PASS must be explicitly justified. On NEEDS-WORK, fixes go back to the implementation states, then re-review. Mutates only review.md + scripts/review_gate.py."
+    },
+    "corpus-parser": {
+      "kind": "work",
+      "phase": "parse",
+      "depends_on": [
+        "scaffold-package"
+      ],
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/corpus-parser.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry-migration/src/parse/agent-parser.ts",
+        "packages/ai/agent-registry-migration/src/parse/component-mapping.ts",
+        "packages/ai/agent-registry-migration/src/index.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/corpus-parser.test.ts"
+      ],
+      "context": "contexts/corpus-parser.md",
+      "notes": ""
+    },
+    "haiku-usecase-batch": {
+      "kind": "work",
+      "phase": "ingest",
+      "depends_on": [
+        "corpus-parser"
+      ],
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/haiku-usecase-batch.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry-migration/src/ingest/haiku-batch.ts",
+        "packages/ai/agent-registry-migration/src/ingest/usecase-candidate.ts",
+        "packages/ai/agent-registry-migration/src/index.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/haiku-usecase-batch.test.ts"
+      ],
+      "context": "contexts/haiku-usecase-batch.md",
+      "notes": ""
+    },
+    "sonnet-consolidation": {
+      "kind": "work",
+      "phase": "ingest",
+      "depends_on": [
+        "haiku-usecase-batch"
+      ],
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/sonnet-consolidation.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry-migration/src/ingest/sonnet-consolidate.ts",
+        "packages/ai/agent-registry-migration/src/ingest/usecase-vocabulary.ts",
+        "packages/ai/agent-registry-migration/src/index.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/sonnet-consolidation.test.ts"
+      ],
+      "context": "contexts/sonnet-consolidation.md",
+      "notes": ""
+    },
+    "dataset-build": {
+      "kind": "work",
+      "phase": "ingest",
+      "depends_on": [
+        "sonnet-consolidation"
+      ],
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/dataset-build.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry-migration/src/ingest/dataset-build.ts",
+        "packages/ai/agent-registry-migration/src/index.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/dataset-build.test.ts"
+      ],
+      "context": "contexts/dataset-build.md",
+      "notes": ""
+    },
+    "import-script": {
+      "kind": "work",
+      "phase": "import",
+      "depends_on": [
+        "dataset-build"
+      ],
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/import-script.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry-migration/src/import/import-corpus.ts",
+        "packages/ai/agent-registry-migration/src/import/import-skill.ts",
+        "packages/ai/agent-registry-migration/src/index.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/import-script.test.ts"
+      ],
+      "context": "contexts/import-script.md",
+      "notes": ""
     }
   },
   "authored_with": {
     "plugin": "workflow",
-    "version": "0.8.22",
+    "version": "0.8.23",
     "hash": "1e4130a84aed"
   }
 }

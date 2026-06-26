@@ -93,7 +93,7 @@
       "kind": "work",
       "phase": "emit",
       "depends_on": [
-        "model-and-policy-emit"
+        "code-review-engine"
       ],
       "guard": "npx --yes nx test agent-compiler --testFile=packages/ai/agent-compiler/src/__tests__/compile-agent.test.ts",
       "artifacts": [
@@ -170,7 +170,7 @@
       "kind": "audit",
       "phase": "audit",
       "depends_on": [
-        "compile-fixtures-e2e"
+        "code-review"
       ],
       "guard": "python3 docs/plan/agent-compiler/scripts/audit_compiler.py --phase final",
       "artifacts": [
@@ -178,6 +178,34 @@
       ],
       "context": "contexts/audit-final.md",
       "notes": ""
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "audit",
+      "depends_on": [
+        "compile-fixtures-e2e"
+      ],
+      "guard": "python3 docs/plan/agent-compiler/scripts/review_gate.py",
+      "artifacts": [
+        "docs/plan/agent-compiler/review.md",
+        "docs/plan/agent-compiler/scripts/review_gate.py"
+      ],
+      "context": "contexts/code-review.md",
+      "notes": "Reviewer routing: architect-reviewer (opus) — this plan produces an architectural artifact (the composition engine). Diff-reading review of the full implementation (compiler-design..compile-fixtures-e2e) against CLAUDE.md (layer/platform isolation, @adhd/ imports, I-prefixed interfaces, JSDoc on shared public fns, the 'Proving features actually work' verification standard) AND this plan's decisions/contracts. Must check design-intent fidelity the structural audit misses: cross-package joins honor the decided single-DB topology; composition-order resolution matches the recorded context-condition precedence; the per-platform header builder matches the decided contract; composed_prompts caching keys on the right context hash; no cross-package FK violations. Default verdict NEEDS-WORK; a PASS must be explicitly justified. On NEEDS-WORK, fixes go back to the implementation states, then re-review. Mutates only review.md + scripts/review_gate.py. (A mid-plan review, code-review-engine, gates the composition-engine core before the emit phase.)"
+    },
+    "code-review-engine": {
+      "kind": "review",
+      "phase": "resolve",
+      "depends_on": [
+        "model-and-policy-emit"
+      ],
+      "guard": "python3 docs/plan/agent-compiler/scripts/review_gate_engine.py",
+      "artifacts": [
+        "docs/plan/agent-compiler/review-engine.md",
+        "docs/plan/agent-compiler/scripts/review_gate_engine.py"
+      ],
+      "context": "contexts/code-review-engine.md",
+      "notes": "Reviewer routing: architect-reviewer (opus). MID-PLAN review at the resolve->emit boundary: reviews the composition-engine core (composition-resolve, tool-header-emit, model-and-policy-emit) BEFORE the platform emitters/CLI/cache build on it, so a topology/precedence defect is caught early instead of after e2e. Reviews against CLAUDE.md (layer/platform isolation, @adhd/ imports, I-prefixed interfaces, JSDoc, verification standard) AND decisions.md/contracts. Must check: cross-package joins honor the decided single-DB topology; composition body-ordering follows the junction order + recorded context-condition precedence; tool/model/policy resolution reads the binding tables (not hard-coded); no cross-package FK violations. Default verdict NEEDS-WORK; a PASS must be explicitly justified. On NEEDS-WORK, fixes go back to the resolve-phase states, then re-review. Mutates only review-engine.md + scripts/review_gate_engine.py."
     }
   },
   "authored_with": {

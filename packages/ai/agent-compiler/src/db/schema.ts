@@ -1,0 +1,39 @@
+import {
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
+
+// ──────────────────────────────────────────────
+// @adhd/agent-compiler — table prefix: compiler_
+//
+// Every table in THIS package MUST be named with the `compiler_` prefix.
+// All registry-family packages share ONE SQLite file, so the prefix is the only
+// thing preventing cross-package table-name collisions. See REGISTRY-PACKAGE-RULES.md.
+//
+// Invariants enforced here (do not break them):
+//   • Cross-package keys are LOGICAL ONLY — plain text columns, no .references()
+//     across package prefixes. In-package FKs use .references() normally.
+//   • Controlled vocabularies are lookup tables (text PK) or plain text columns,
+//     NEVER SQL enums — a new value is a new row, no migration.
+//   • Composite PKs use `primaryKey({ columns: [...] })`, never a non-unique index().
+//   • Bump-don't-delete: if you retain versions, never delete a prior version row.
+//
+// The drizzle-orm/sqlite-core helpers are re-exported so a downstream module can
+// `import { sqliteTable, text } from "@adhd/agent-compiler"` without re-importing the
+// dependency directly, and so this skeleton's import is exercised before any table
+// exists. Define real tables here and add them to the barrel in ../index.ts.
+// ──────────────────────────────────────────────
+
+export { index, integer, primaryKey, sqliteTable, text, uniqueIndex };
+
+// Example (delete this comment, add real tables prefixed `compiler_`):
+//
+// export const exampleTable = sqliteTable("compiler_example", {
+//     slug: text("slug").primaryKey(),
+//     label: text("label").notNull(),
+//     createdAt: text("created_at").notNull(),
+// });

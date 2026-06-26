@@ -1,6 +1,6 @@
 # audit-integration — integration-phase hold point
 
-**Phase:** audit · **Kind:** audit · **Depends on:** policy-engine-bridge · **Guard:** `python3 docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py --phase integration`
+**Phase:** audit · **Kind:** audit · **Depends on:** code-review-integration · **Guard:** `python3 docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py --phase integration`
 
 ---
 

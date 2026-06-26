@@ -1,6 +1,6 @@
 # audit-final — FINAL AUDIT: PROVE EVERY [dod.N] THROUGH ITS REAL ENTRYPOINT
 
-**Phase:** audit · **Kind:** audit · **Depends on:** removal-runbook · **Guard:** `python3 docs/plan/agent-registry-migration/scripts/audit_migration.py --phase final`
+**Phase:** audit · **Kind:** audit · **Depends on:** code-review · **Guard:** `python3 docs/plan/agent-registry-migration/scripts/audit_migration.py --phase final`
 
 ---
 

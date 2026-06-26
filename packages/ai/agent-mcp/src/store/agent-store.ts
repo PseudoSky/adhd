@@ -10,6 +10,19 @@ import { ToolError } from "../validation/errors.js";
 import { nowIso } from "../utils/timestamps.js";
 import type { IHookRegistry } from "@adhd/agent-mcp-types";
 
+/**
+ * Thin compiled-agent cache (Plan 6 wave 3 — agent-store-retire).
+ *
+ * `AgentStore` was previously the source of truth for agent definitions
+ * (authored `systemPrompt` blob + provider config). After wave 3 it is a
+ * compiled-agent cache: the `agents.data` blob is populated from
+ * `compileAgent()` output by `compiler-integration`, not authored by the user.
+ *
+ * The CRUD tool surface (`agent_create` / `agent_read` / `agent_update` /
+ * `agent_delete` / `agent_list`) is retained unchanged for non-regression.
+ * `agent_create` and `agent_update` no longer require a flat `systemPrompt` —
+ * the field is an optional computed compat shim populated from compiler output.
+ */
 export class AgentStore {
     constructor(
         private readonly db: BetterSQLite3Database<Record<string, never>>,

@@ -4,67 +4,67 @@
   "dag": "dag.json",
   "states": {
     "scaffold-package": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T05:32:56.068Z",
+      "done_at": "2026-06-23T05:35:41.631Z",
+      "start_ref": "34ed69a0c9cdf65daeb31b51654583b56ea09d79",
+      "end_ref": "c1f59c3306408b85e14ccf72c4fe87bf4db1dba5"
     },
     "lookup-and-component-schema": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T05:39:37.520Z",
+      "done_at": "2026-06-23T05:49:56.689Z",
+      "start_ref": "f72e27c5b4fb44bf3cb6ca685f243f40f3ef4689",
+      "end_ref": "3d14ca7cf939afff0a29e73a3c0a1ab67ea7da5d"
     },
     "agent-and-taxonomy-schema": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T05:58:24.434Z",
+      "done_at": "2026-06-23T06:02:35.713Z",
+      "start_ref": "8b3e047f0aa5d88b5a7acc8bb8c662ac8514dc0a",
+      "end_ref": "a753e62352904e2ea18b8128a11bab448468b474"
     },
     "composition-junction": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T06:06:33.303Z",
+      "done_at": "2026-06-23T06:11:12.778Z",
+      "start_ref": "054c48119f9f9b67a6e014be8473b0d2633d32f6",
+      "end_ref": "eefea94d58c49e9a0fc045ea63a004c55c0df8d3"
     },
     "usecase-and-context-rules": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T06:13:08.359Z",
+      "done_at": "2026-06-23T06:16:55.059Z",
+      "start_ref": "9305c59c86d71c926d04f1f7b5867e6784840eee",
+      "end_ref": "1c500b4f30aa29bc986e0a6cdc67aede6773ae03"
     },
     "composed-prompt-cache": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T06:20:05.331Z",
+      "done_at": "2026-06-23T06:25:33.916Z",
+      "start_ref": "56f003385d5bf675c07ea77b33591bc8a6c5538f",
+      "end_ref": "13c2d395bd2f397ba47c832a869b77d87d133d3d"
     },
     "audit-schema": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T14:59:43.964Z",
+      "done_at": "2026-06-23T14:59:52.933Z",
+      "start_ref": "0d92141213f8b39af81342bbc5b8fd975fdf1e0d",
+      "end_ref": "ca81e5287acd2284c239e2315c136a1779821ccd"
     },
     "seed-and-roundtrip": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T15:01:47.008Z",
+      "done_at": "2026-06-23T15:15:06.341Z",
+      "start_ref": "9f6c0b2af456f3159d1cb2cedb64bc52f0719348",
+      "end_ref": "60aea137012ae334b2e2971fd47af33aef4597b7"
     },
     "audit-final": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T15:16:45.981Z",
+      "done_at": "2026-06-23T15:16:58.015Z",
+      "start_ref": "f0f1be50f8e0357b68d5f5f85a27916fd1821e76",
+      "end_ref": "048d67b13c97c5168417b29a3a53412c73f53b04"
     },
     "design-and-architecture": {
       "status": "complete",
@@ -86,6 +86,126 @@
       "audit_criteria_total": 26,
       "by": "pseudosky",
       "note": "Resolved 4 open cross-domain decisions in decisions.md: (1) DB topology = one shared SQLite file with registry_/tool_/provider_/policy_ prefixes, one handle, no ATTACH, no cross-package FK (DAG-neutral baseline that agent-compiler already assumes); (2) context-condition eval = ALL matching included with deterministic total order (position, version, slug), is_required unmatched => error; (3) keep both context_condition + context_rules with a single shared predicate evaluator + additive union (junction wins dedup); (4) version pin is per-reference (slug, version_pin?), null=latest-at-resolve, identical at junction/policy/experiment sites. Architecture guard passes 3/3 (exit 0). No decision changes the DAG."
+    },
+    {
+      "ts": "2026-06-23T05:35:41.631Z",
+      "from": "scaffold-package",
+      "to": "scaffold-package",
+      "start_ref": "34ed69a0c9cdf65daeb31b51654583b56ea09d79",
+      "end_ref": "c1f59c3306408b85e14ccf72c4fe87bf4db1dba5",
+      "audit_exit": 3,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "Created @adhd/agent-registry package skeleton at packages/ai/agent-registry/. Files: project.json (Nx name agent-registry, tags layer:ai+platform:node, @nx/js:tsc build with drizzle asset glob, release block), package.json (name @adhd/agent-registry, deps drizzle-orm@0.45.2, better-sqlite3@12.10.0, zod@4.4.3 matching agent-mcp versions), tsconfig.json + tsconfig.lib.json (mirroring agent-mcp, ESNext/ES2022/Bundler moduleResolution), src/db/client.ts (better-sqlite3 WAL, reads REGISTRY_DATABASE_PATH|DATABASE_PATH, Decision 1 shared-file comment), src/db/schema.ts (drizzle-orm/sqlite-core imports, no tables yet, per-state comments), src/index.ts (barrel: client + schema re-exports). tsconfig.base.json: added single @adhd/agent-registry line only. nx build agent-registry passed exit 0."
+    },
+    {
+      "ts": "2026-06-23T05:49:56.689Z",
+      "from": "lookup-and-component-schema",
+      "to": "lookup-and-component-schema",
+      "start_ref": "f72e27c5b4fb44bf3cb6ca685f243f40f3ef4689",
+      "end_ref": "3d14ca7cf939afff0a29e73a3c0a1ab67ea7da5d",
+      "audit_exit": 8,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 11,
+      "by": "pseudosky",
+      "note": "Added registry_prompt_types (text PK slug, description, is_system integer) and registry_prompt_components (composite PK slug+version via index, type FK to prompt_types, integer version default 1, content, is_shared integer, created_at/updated_at) to schema.ts. Created ComponentStore with create, read(slug), readVersion(slug,n), version(slug,newContent), list({type?,shared?}) methods plus upsertType/readType. Added migrate-runner.ts and migrate.ts (FK-safe migration runner mirroring agent-mcp pattern). Generated drizzle migration 0000_third_nitro.sql into packages/ai/agent-registry/drizzle/. Added vite.config.ts with pool:forks+fileParallelism:false for better-sqlite3 stability. Updated project.json with @nx/vite:test executor (needed for --testFile flag pass-through). component-store.test.ts drives a real on-disk SQLite file (never :memory:), closes and reopens the handle to prove persistence [inv:reopen-proves-persistence], asserts old version rows survive after version() bump [inv:version-retained], and covers create/read/readVersion/version/list. All 15 tests passed (exit 0). Deliverables committed at 3d14ca7."
+    },
+    {
+      "ts": "2026-06-23T06:02:35.713Z",
+      "from": "agent-and-taxonomy-schema",
+      "to": "agent-and-taxonomy-schema",
+      "start_ref": "8b3e047f0aa5d88b5a7acc8bb8c662ac8514dc0a",
+      "end_ref": "a753e62352904e2ea18b8128a11bab448468b474",
+      "audit_exit": 8,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 11,
+      "by": "pseudosky",
+      "note": "Added registry_taxonomy_categories (slug PK, name, description, position integer, parent_slug self-FK) and registry_agents (slug PK, display_name, description, status text, model_hint text NOT FK, taxonomy_category in-pkg FK, default_posture, created_at, updated_at) tables to schema.ts. Generated drizzle migration 0001_agents_and_taxonomy.sql. Created AgentStore (create/read/update/delete/list with category+status filter) and TaxonomyStore (createCategory/listCategories ordered by position ASC). agent-store.test.ts: 15 tests, all green, exit 0. Proves persistence via reopen, position ordering regression guard, category/status filter correctness. Committed a753e62."
+    },
+    {
+      "ts": "2026-06-23T06:11:12.778Z",
+      "from": "composition-junction",
+      "to": "composition-junction",
+      "start_ref": "054c48119f9f9b67a6e014be8473b0d2633d32f6",
+      "end_ref": "eefea94d58c49e9a0fc045ea63a004c55c0df8d3",
+      "audit_exit": 15,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "Built registry_agent_components junction (position, version_pin, context_condition, is_required; agent_slug FK; component_slug logical-only). CompositionStore.resolveComposition: Decision-2 ALL-INCLUDED evaluator (position ASC, version DESC, slug ASC total order), Decision-4 version-pin resolution (null=latest-at-resolve, int=exact). REQUIRED_COMPONENT_EXCLUDED CompositionError for is_required+unmatched. 6 tests pass (real on-disk DB, reopen-proves-persistence, order/pin/context + throws). Migration 0002_agent_components_junction.sql generated. Committed eefea94."
+    },
+    {
+      "ts": "2026-06-23T06:16:55.059Z",
+      "from": "usecase-and-context-rules",
+      "to": "usecase-and-context-rules",
+      "start_ref": "9305c59c86d71c926d04f1f7b5867e6784840eee",
+      "end_ref": "1c500b4f30aa29bc986e0a6cdc67aede6773ae03",
+      "audit_exit": 15,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "built + test passed (5/5) + committed (1c500b4)"
+    },
+    {
+      "ts": "2026-06-23T06:25:16.891Z",
+      "from": "composed-prompt-cache",
+      "to": "composed-prompt-cache",
+      "start_ref": "56f003385d5bf675c07ea77b33591bc8a6c5538f",
+      "end_ref": "daf9b0216f44e6aad90f2a6f0497d3e57c28ed06",
+      "audit_exit": 16,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "built + test passed (9/9, exit 0) + committed daf9b02"
+    },
+    {
+      "ts": "2026-06-23T06:25:33.916Z",
+      "from": "audit-schema",
+      "to": "composed-prompt-cache",
+      "start_ref": "56f003385d5bf675c07ea77b33591bc8a6c5538f",
+      "end_ref": "13c2d395bd2f397ba47c832a869b77d87d133d3d",
+      "audit_exit": 16,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "built + test passed (9/9, exit 0) + committed daf9b02"
+    },
+    {
+      "ts": "2026-06-23T14:59:52.933Z",
+      "from": "audit-schema",
+      "to": "audit-schema",
+      "start_ref": "0d92141213f8b39af81342bbc5b8fd975fdf1e0d",
+      "end_ref": "ca81e5287acd2284c239e2315c136a1779821ccd",
+      "audit_exit": 15,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 23,
+      "by": "pseudosky",
+      "note": "Schema-phase audit green (22/22 schema-table criteria). Resolved F1 build regression (tsconfig lib ES2022, 6a91d04) and F2 plan-ordering defect via planner-repair (seed criteria recategorized to final phase, 0d92141). Guard exit 0."
+    },
+    {
+      "ts": "2026-06-23T15:15:06.341Z",
+      "from": "seed-and-roundtrip",
+      "to": "seed-and-roundtrip",
+      "start_ref": "9f6c0b2af456f3159d1cb2cedb64bc52f0719348",
+      "end_ref": "60aea137012ae334b2e2971fd47af33aef4597b7",
+      "audit_exit": 18,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 21,
+      "by": "pseudosky",
+      "note": "built + roundtrip suite passed (4/4, exit 0) + nc scripts authored + PROVED teeth (test went RED after nc_mutate, GREEN after nc_restore) + committed 60aea13"
+    },
+    {
+      "ts": "2026-06-23T15:16:58.015Z",
+      "from": "audit-final",
+      "to": "audit-final",
+      "start_ref": "f0f1be50f8e0357b68d5f5f85a27916fd1821e76",
+      "end_ref": "048d67b13c97c5168417b29a3a53412c73f53b04",
+      "audit_exit": 15,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 23,
+      "by": "pseudosky",
+      "note": "Final-phase audit 31/31 green incl. all DoD clauses dod.1-5 and the seed-and-roundtrip negative-control teeth. Package builds + all suites pass."
     }
   ],
   "amendment_log": [],
@@ -94,11 +214,11 @@
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "scaffold-package",
+  "current_state": "audit-final",
   "dod_provenance": {
-    "confirmed_at": "2026-06-23T03:43:53.482Z",
+    "confirmed_at": "2026-06-23T20:45:51.107Z",
     "by": "pseudosky",
-    "note": "DoD derived from docs/plan/agent-registry/{GOAL,SCOPE,DATA_MODEL,SEED_DATA}.md; confirmed by team-lead via plan-authoring task 2026-06-22",
+    "note": "Completion-time DoD confirmation: human (pseudosky) confirmed all 5 clauses (dod.1-5) verbatim via plan-orchestrator after the orchestrator surfaced them; all proven MET and re-verified state-side this session — final-phase audit 31/31 PASS exit 0 (incl. behavioral dod.1-3 driving real vitest suites + neg-control teeth), nx build clean exit 0, nx test 62/62 pass exit 0.",
     "dod_ids": [
       "dod.1",
       "dod.2",

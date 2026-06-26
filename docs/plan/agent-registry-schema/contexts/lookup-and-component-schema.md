@@ -6,27 +6,46 @@
 
 ## Goal
 
-The `prompt_types` lookup table and the `prompt_components` table exist in the
-Drizzle schema, and `ComponentStore` can create / read / version components.
-A component round-trips through a real DB and survives reopen.
+The `prompt_types` lookup table and the component tables exist in the Drizzle
+schema, and `ComponentStore` can create / read / version components. A component
+round-trips through a real DB and survives reopen.
+
+> **Post-execution architecture correction (Decision 5, decisions.md).** This state
+> originally shipped a single `registry_prompt_components` table keyed by a composite
+> PK `(slug, version)`. Because `slug` was then not a unique column it could not be an
+> FK target, leaving every component reference a logical-only FK. The table was split
+> into **`registry_components`** (identity / head, single-column `slug` PK) +
+> **`registry_component_versions`** (history, `version_id` PK + `UNIQUE(slug, version)`),
+> making `slug` and `version_id` real FK targets. The store API names/semantics below
+> are unchanged; the prose is updated to the corrected tables. The state's
+> state.json/dag.json are NOT changed — this is a doc-accuracy correction.
 
 ---
 
 ## Semantic Distillation
 
-- **Primitive:** ADD `prompt_types` + `prompt_components` tables and
-  `ComponentStore`. See `[def:component]`, `[inv:lookup-not-enum]`,
-  `[inv:version-retained]`, `[inv:reopen-proves-persistence]`.
-- **Delta Spec** (`DATA_MODEL.md` Domain 1; field shapes per `decisions.md`):
+- **Primitive:** ADD `prompt_types` + the component tables (`registry_components` +
+  `registry_component_versions`, Decision 5) and `ComponentStore`. See
+  `[def:component]`, `[inv:lookup-not-enum]`, `[inv:version-retained]`,
+  `[inv:reopen-proves-persistence]`.
+- **Delta Spec** (`DATA_MODEL.md` Domain 1; field shapes per `decisions.md` incl.
+  Decision 5):
   - `prompt_types` — text PK `slug`, `description`, `is_system` integer flag.
     NOT a SQL enum (`[inv:lookup-not-enum]`).
-  - `prompt_components` — `slug` (human ref), `type` (FK → `prompt_types.slug`),
-    integer `version` (default 1, increments on content change), text `content`,
-    `is_shared` integer flag, `created_at`/`updated_at`. PK is `(slug, version)`
-    so old versions are retained (`[inv:version-retained]`).
-  - `ComponentStore` (`[ref:store-class]`): `create`, `read(slug)` (latest
-    version), `readVersion(slug, n)`, `version(slug, newContent)` (writes a new
-    row at `version+1`), `list({type?, shared?})`.
+  - `registry_components` (identity / head) — `slug` **single-column text PK**,
+    `type` (enforced FK → `prompt_types.slug`), `is_shared` integer flag,
+    `created_at`. Identity-level facts only — they do not change per version.
+  - `registry_component_versions` (history) — `version_id` **integer PK
+    autoincrement** (single-column surrogate, FK-able), `slug` (enforced FK →
+    `registry_components.slug`), integer `version` (default 1, increments on content
+    change), text `content`, `created_at`/`updated_at`, and a real
+    **`UNIQUE(slug, version)`** index so old versions are retained with DB teeth
+    (`[inv:version-retained]`).
+  - `ComponentStore` (`[ref:store-class]`): `create` (writes head + v1 atomically),
+    `read(slug)` (head joined to latest version), `readVersion(slug, n)`,
+    `version(slug, newContent)` (appends a version row at `version+1`),
+    `list({type?, shared?})`, plus `resolveVersionId(slug, n)` → the version's
+    `version_id`. The returned `PromptComponent` carries a `versionId`.
   - Tests (`component-store.test.ts`): create → read; version bump retains old
     row; **reopen the DB and assert the component is still there**
     (`[inv:reopen-proves-persistence]`).
@@ -37,7 +56,7 @@ A component round-trips through a real DB and survives reopen.
 ## Acceptance criteria
 
 - [lookup-and-component-schema.1] prompt_types lookup table defined
-- [lookup-and-component-schema.2] prompt_components table with integer version + is_shared
+- [lookup-and-component-schema.2] registry_components (head) + registry_component_versions (integer version) tables defined; is_shared on the head (Decision 5)
 - [lookup-and-component-schema.3] component-store round-trip test passes
 
 ---

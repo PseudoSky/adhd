@@ -102,3 +102,54 @@ This plan consumes `compileAgent` from `@adhd/agent-compiler` (plan 5,
 `docs/plan/agent-registry/USAGE.md` §"Runtime Integration via agent-mcp"). It is an
 `assumed_baseline`: `compiler-integration` cannot go green until the package is in
 the workspace (built + tsconfig path). `[inv:compiler-is-baseline]`.
+
+## Decision 5 — Live server wiring via @adhd/agent-compiler (reversal of prior deferral)
+
+**Decision (2026-06-26, owner call relayed via orchestrator):** The live agent-mcp
+MCP server is NOW wired to resolve system prompts via `@adhd/agent-compiler` at
+session start.  The seam added in earlier waves (`promptResolver?: PromptResolverDeps`
+in `SessionDeps`, `resolveComposedPrompt` in `prompt-resolver.ts`) was dormant —
+`index.ts` and both `agentTool` callsites in `server.ts` did NOT pass a
+`promptResolver`. This decision reverses the prior deferral and wires the live path.
+
+**Prior deferral:** The original `compiler-integration` state left the server-side
+wiring deferred (decisions.md was silent on live wiring; the seam was declared
+"dormant" in the opus review of the open gate). The deferral was a pragmatic choice
+during the multi-wave execution — the seam existed but the composition root did not
+yet pass a live resolver.
+
+**What changed (2026-06-26):**
+
+1. `packages/ai/agent-mcp/src/index.ts` — reads `AGENT_MCP_REGISTRY_DB_PATH`
+   env var; when set, opens a read-write SQLite handle to the registry DB and
+   constructs a real `promptResolver` (`ComposedPromptStore` + `compileAgent`
+   from `@adhd/agent-compiler`).  Passes it to `startServer` via `ServerDeps`.
+
+2. `packages/ai/agent-mcp/src/server.ts` — `ServerDeps` gains
+   `promptResolver?: PromptResolverDeps`; both `agentTool` callsites (in-process
+   handler + `CallToolRequestSchema` dispatcher) now forward `promptResolver`.
+
+3. `packages/ai/agent-mcp/src/engine/prompt-resolver.ts` — `resolveComposedPrompt`
+   return type widened to `ResolveResult | null`.  When `compileAgentFn` throws
+   (e.g. `AgentError: AGENT_NOT_FOUND` for a flat/legacy agent), the function
+   returns `null` instead of propagating.  `agentTool` then falls back to the
+   stored `agentDefinition.systemPrompt` unchanged.
+
+4. `packages/ai/agent-mcp/src/tools/session.ts` — `agentTool` checks `resolved !== null`
+   before using the compiled content, preserving the flat-`systemPrompt` compat path.
+
+**Non-regression guarantee:** All 241 pre-existing tests still pass.  When
+`AGENT_MCP_REGISTRY_DB_PATH` is absent (the default in CI and in all existing tests),
+`promptResolver` is `undefined` and the server runs exactly as before.  The
+flat-`systemPrompt` fallback fires within the resolver even when a registry DB IS
+wired: a legacy agent with no registry composition gets its stored systemPrompt with
+`composed_prompt_id = NULL`.
+
+**Proof:** `packages/ai/agent-mcp/src/__tests__/live-wiring.test.ts` (3 tests):
+- `[F-P6-8.registry-agent]` — registry-backed agent gets compiled systemPrompt.
+- `[F-P6-8.flat-fallback]` — flat-only agent falls back to stored systemPrompt.
+- `[F-P6-8.negative-control]` — WITHOUT promptResolver, registry agent keeps original
+  authored prompt (proves the positive test would fail if the wiring were removed).
+
+**Constrains:** `session-e2e` (composed_prompt_id FK proof), `compiler-integration`
+(live server wiring now ACTIVE for registry-backed agents).

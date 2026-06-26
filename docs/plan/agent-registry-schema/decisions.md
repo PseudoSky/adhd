@@ -29,7 +29,7 @@ tables distinguished by a package-name prefix:
 
 | Package                  | Table prefix | Example tables                                                   |
 | :----------------------- | :----------- | :--------------------------------------------------------------- |
-| `@adhd/agent-registry`   | `registry_`  | `registry_prompt_types`, `registry_prompt_components`, `registry_agents`, `registry_agent_components`, `registry_context_rules`, `registry_composed_prompts` |
+| `@adhd/agent-registry`   | `registry_`  | `registry_prompt_types`, `registry_components`, `registry_component_versions`, `registry_agents`, `registry_agent_components`, `registry_context_rules`, `registry_composed_prompts` |
 | `@adhd/agent-tool-registry` | `tool_`   | `tool_tools`, `tool_platform_bindings`, `tool_mcp_servers`, `tool_agent_tools` |
 | `@adhd/agent-provider`   | `provider_`  | `provider_providers`, `provider_models`, `provider_model_platform_bindings`, `provider_tool_formats` |
 | `@adhd/agent-policy`     | `policy_`    | `policy_policy_types`, `policy_policy_templates`, `policy_agent_policies` |
@@ -46,7 +46,12 @@ tables distinguished by a package-name prefix:
    FK level. This keeps each package independently migratable and seedable: a package
    can create and migrate its own tables without the others' tables existing yet.
 3. **In-package FKs are unchanged.** Within one prefix, `.references()` FKs are used
-   normally (e.g. `registry_prompt_components.type` → `registry_prompt_types.name`).
+   normally (e.g. `registry_components.type` → `registry_prompt_types.slug`). After
+   the Decision 5 head/version split, the in-package FKs are MORE complete: every
+   reference to a component (`registry_agent_components.component_slug`,
+   `registry_component_usage.component_slug`, `registry_context_rules.component_slug`,
+   and `registry_agent_components.version_pin`) is now a real DB-enforced FK rather
+   than a logical-only one.
 4. **Each package owns its migration directory** (`drizzle/`) and only ever
    creates/alters tables in its own prefix.
 
@@ -239,6 +244,11 @@ pair with one universal resolution rule:
 
 - **`version_pin` is an explicit integer →** resolve to **exactly** that version row.
   Pinned references are frozen; releasing X v2 does not affect them.
+  Per Decision 5, the stored `version_pin` integer is a
+  `registry_component_versions.version_id` (a stable single-column surrogate), not a
+  human `version` number — this is what lets the pin be a DB-enforced FK. Callers may
+  still pin ergonomically by `(slug, version)`; `CompositionStore.attach` /
+  `resolvePinVersionId` resolve that pair to the `version_id` actually stored.
 - **`version_pin IS NULL →** resolve to the **highest existing `version` for that
   `component_slug` at resolution time** ("latest"). Releasing X v2 advances every
   unpinned reference on its next resolution.
@@ -295,6 +305,96 @@ or reshape a state.
 
 ---
 
+## Decision 5 — Component identity vs. version modeling: head/version split (POST-EXECUTION CORRECTION)
+
+> **Status:** binding. Recorded AFTER the schema-phase states executed, as a
+> deliberate foundation correction before the registry-family schemas merge or any
+> dependent plan (`agent-compiler`, `agent-registry-migration`) builds against the
+> component shape. The schema-phase state.json / dag.json are NOT changed; this is a
+> design correction with full code + migration + test coverage, not a re-plan.
+
+**Question.** The original `lookup-and-component-schema` state modeled a component as a
+single `registry_prompt_components` table with a **composite** PRIMARY KEY
+`(slug, version)`. That makes `slug` a non-unique column, so it **cannot be a foreign
+key target**. As a consequence, every reference to a component was a *logical FK only*
+(a plain text column, no DB enforcement): `registry_agent_components.component_slug`,
+`registry_component_usage.component_slug`, `registry_context_rules.component_slug`, and
+the `registry_agent_components.version_pin` (which pointed at a `version` number with no
+row guaranteed to exist). Orphan references and pins to nonexistent versions were
+silently accepted — exactly the referential-integrity holes Decision 1 already accepted
+*across* packages but never intended *within* a package, where Decision 1 §3 explicitly
+keeps in-package FKs enforced.
+
+**Decision.** **Split component IDENTITY from component HISTORY** so the identity has a
+single-column PK that other tables can FK onto with real enforcement:
+
+- **`registry_components`** (identity / head) — `slug` text **PRIMARY KEY** (single
+  column), `type` text NOT NULL **enforced FK → `registry_prompt_types.slug`**,
+  `is_shared` boolean NOT NULL default false, `created_at` text NOT NULL. `type` and
+  `is_shared` are identity-level facts (what the component IS), so they live on the head
+  and never change per version.
+- **`registry_component_versions`** (history / audit) — `version_id` integer **PRIMARY
+  KEY autoincrement** (single-column surrogate, FK-able), `slug` text NOT NULL
+  **enforced FK → `registry_components.slug`**, `version` integer NOT NULL, `content`
+  text NOT NULL, `created_at` / `updated_at` text NOT NULL, and a real
+  **`UNIQUE(slug, version)`** index. Bumping a component appends a new version row at
+  `max(version)+1`; old rows are retained (`[inv:version-retained]`, now with DB teeth
+  via the unique index).
+
+**The four references are now real DB-enforced FKs:**
+
+1. `registry_agent_components.component_slug` → **`registry_components.slug`** (enforced).
+2. `registry_agent_components.version_pin` → **`registry_component_versions.version_id`**
+   (NULLABLE-enforced FK; null = resolve latest at resolve-time, set = exactly that
+   version row, now guaranteed to exist). Modeled as **two SEPARATE FKs** on the
+   junction (`component_slug` always-enforced + `version_pin` nullable-enforced), NOT one
+   composite `(component_slug, version_pin)` FK: SQLite treats a composite FK with a NULL
+   column as satisfied (un-enforced), which would lose enforcement for the common
+   null-pin case.
+3. `registry_component_usage.component_slug` → **`registry_components.slug`** (enforced).
+4. `registry_context_rules.component_slug` → **`registry_components.slug`** (enforced).
+
+**`registry_composed_prompts.component_versions` (audit map).** Kept as
+`{componentSlug: version}` — human `version` numbers, not `version_id`s. Rationale: this
+column is a human-readable audit trail (GOAL.md "Audit Trail"), `(slug, version)` is the
+form an operator reads and reasons about, and `ComponentStore.resolveVersionId(slug,
+version)` maps it to a `version_id` whenever a stable surrogate is needed. It is a JSON
+audit record, not an FK, so it does not require the surrogate.
+
+**Why this over the single-table model:**
+
+- **Enforceable in-package integrity.** A single-column PK is the only shape SQLite can
+  FK onto. This is what turns four "logical FKs" into four enforced ones, closing the
+  orphan-reference and dangling-pin holes — proven by FK-teeth tests that FAIL when any
+  FK is removed.
+- **`version_pin` integrity.** Pinning to a `version_id` (a row that must exist) is
+  strictly safer than pinning to a `version` number (which the old model could not
+  guarantee corresponded to any row).
+- **Multi-writer integrity.** With several registry-family packages and the migration
+  importer writing concurrently, DB-level enforcement (not store-layer discipline alone)
+  is what prevents a careless writer from leaving orphans.
+- **Audit.** Identity vs. history separation makes "what is this component" (one head
+  row) and "how has it changed" (its version rows) first-class and independently
+  queryable.
+
+**Store-API impact (semantics preserved).** `ComponentStore.create/read/readVersion/
+version/list` keep their names and meaning; `create()` writes head + v1 atomically,
+`version()` appends a version row, `read()` joins head to its latest version. The
+public `PromptComponent` gains a `versionId` field, and two helpers are added:
+`ComponentStore.resolveVersionId(slug, version)` and `CompositionStore.resolvePinVersionId
+(slug, version)` plus an ergonomic `attach({ pinVersion })`.
+
+**Trade-off accepted.** Two tables and a head↔version join instead of one table. The join
+is a single indexed `slug` equality and only runs in the store layer; the integrity and
+audit gains far outweigh it.
+
+**DAG impact: NONE.** No schema-phase state is added, removed, or reshaped. Downstream
+plans consume the registry through `ComponentStore` / `CompositionStore` /
+`resolveComposition` and the `composed_prompts` audit map — all preserved — so their
+DAGs are unaffected. Their *contract notes* are updated (head/version shape) for accuracy.
+
+---
+
 ## Summary
 
 | # | Decision | Rule (one line) | DAG impact |
@@ -302,8 +402,9 @@ or reshape a state.
 | 1 | DB topology | One shared SQLite file, `registry_*`/`tool_*`/`provider_*`/`policy_*` prefixes, one handle, no `ATTACH`, no cross-package FK | none (recommended/baseline) |
 | 2 | Context-condition evaluation | ALL matching included; total order `(position, version, slug)`; `is_required` unmatched ⇒ error | none |
 | 3 | `context_condition` vs `context_rules` | Keep both tables, one shared predicate evaluator, additive union, junction wins on dedup | none |
-| 4 | Version-pin semantics | Pin is per-reference `(slug, version_pin?)`; null = latest-at-resolve; identical at junction / policy / experiment sites | none |
+| 4 | Version-pin semantics | Pin is per-reference; null = latest-at-resolve; stored pin is a `version_id` (Decision 5); identical at junction / policy / experiment sites | none |
+| 5 | Component identity vs. version | Split `registry_components` (head, slug PK) from `registry_component_versions` (history, version_id PK) so the 4 component references become DB-enforced FKs + version_pin integrity | none (post-execution correction) |
 
-**No decision changes the DAG.** All four resolve to the options the downstream plans
+**No decision changes the DAG.** All five resolve to the options the downstream plans
 (`agent-tool-registry`, `agent-provider`, `agent-policy`, `agent-compiler`) were
 authored to consume. No planner-class amendment is required.

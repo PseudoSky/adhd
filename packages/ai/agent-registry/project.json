@@ -1,0 +1,68 @@
+{
+  "name": "agent-registry",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/ai/agent-registry/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:ai", "platform:node"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/ai/agent-registry",
+        "main": "packages/ai/agent-registry/src/index.ts",
+        "tsConfig": "packages/ai/agent-registry/tsconfig.lib.json",
+        "clean": true,
+        "assets": [
+          {
+            "input": "packages/ai/agent-registry",
+            "glob": "drizzle/**/*",
+            "output": "."
+          }
+        ]
+      }
+    },
+
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        { "externalDependencies": ["vitest"] }
+      ],
+      "outputs": ["{workspaceRoot}/coverage/packages/ai/agent-registry"],
+      "options": {
+        "vitestConfig": "packages/ai/agent-registry/vite.config.ts"
+      }
+    },
+
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/ai/agent-registry/tsconfig.json --noEmit"
+      }
+    },
+
+    "clean": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "rm -rf dist/packages/ai/agent-registry"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": ["build", "test"],
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  }
+}

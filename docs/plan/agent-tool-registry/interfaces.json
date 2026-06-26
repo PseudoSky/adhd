@@ -1,1 +1,62 @@
-{}
+{
+  "drizzle-orm": {
+    "provenance": "vendored-source",
+    "resolved_version": "see packages/ai/agent-mcp/package.json (match version)",
+    "source": "node_modules/drizzle-orm/sqlite-core/index.d.ts",
+    "confidence": "vendored",
+    "interface": "sqliteTable(name, cols, t => ({ pk })); within-package .references(() => tools.name) FK; cross-package FK is FORBIDDEN (logical text key only)",
+    "shape": {
+      "within_package_fk": "tool_platform_bindings.tool_name = text().references(() => tools.name) \u2014 within-package FK is fine",
+      "logical_key_no_fk": "agent_tools.agent_slug = text() WITHOUT .references() \u2014 agents live in @adhd/agent-registry; cross-package SQLite FK is forbidden (no-cross-pkg-fk). Use a plain logical text key.",
+      "key_api_note": "Mirror packages/ai/agent-mcp/src/db/schema.ts. Tables prefixed for the shared-DB-file convention. permission / availability / type are SEEDED TEXT lookup values, NOT sql enums."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "tool-and-type-schema",
+      "platform-and-binding-schema",
+      "mcp-server-schema",
+      "agent-tool-junction",
+      "audit-schema"
+    ]
+  },
+  "better-sqlite3": {
+    "provenance": "vendored-source",
+    "resolved_version": "see packages/ai/agent-mcp/package.json (match version)",
+    "source": "node_modules/better-sqlite3/lib/index.d.ts",
+    "confidence": "vendored",
+    "interface": "new Database(path); db.pragma('journal_mode = WAL'); db.close()",
+    "shape": {
+      "key_api_note": "Copy packages/ai/agent-mcp/src/db/client.ts for the WAL connection. Store tests close + reopen the handle to prove persistence."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "agent-tool-junction",
+      "seed-and-roundtrip"
+    ]
+  },
+  "agent-tool-registry-public-api": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0",
+    "source": "packages/ai/agent-tool-registry/src/index.ts (barrel)",
+    "confidence": "documented",
+    "interface": "@adhd/agent-tool-registry exports: { openToolRegistryDb, schema, ToolStore, PlatformStore, ToolBindingStore, McpServerStore, AgentToolStore }",
+    "shape": {
+      "client": "import { openToolRegistryDb } from '@adhd/agent-tool-registry' \u2014 better-sqlite3 WAL handle over the (shared) registry DB; drizzle DB typed over the tool schema.",
+      "ToolStore": "new ToolStore(db); create({name, type, description, version?, requiresApproval?, isDestructive?, dependencyToolIds?, capabilities?}) ; read(name) -> ToolRow|null ; list(typeFilter?). name is the canonical tool id (e.g. 'file_read','shell_exec','web_search').",
+      "PlatformStore": "new PlatformStore(db); create({id, headerFormat, supportsToolSelection}) ; read(id). headerFormat in {'yaml_frontmatter','json_object','none'}. id in {'claude_code','claude_api','openai','bedrock','cursor','vscode'}.",
+      "ToolBindingStore": "new ToolBindingStore(db); bind({toolName, platform, platformToolName, availability, requiresMcp?, invocationNote?}) ; resolve(toolName, platform) -> {platformToolName, availability, requiresMcp}|null ; listForPlatform(platform). availability in {'available','restricted','unavailable','requires_permission'}. THIS is the table @adhd/agent-compiler joins to build the per-platform tools: header (shell_exec -> Bash on claude_code).",
+      "McpServerStore": "new McpServerStore(db); create({id, transport, toolNames, configSchema}) ; read(id) ; listForTool(toolName). transport in {'stdio','sse','http'}. Used by the compiler to build the mcpServers block when a binding has requiresMcp=true.",
+      "AgentToolStore": "new AgentToolStore(db); grant(agentSlug, toolName, permission, contextCondition?) ; listForAgent(agentSlug) -> {toolName, permission, contextCondition}[] ; revoke(agentSlug, toolName). permission in {'full','read_only','restricted'} \u2014 grant persists the permission arg VERBATIM. agentSlug is a LOGICAL key into agent-registry's agents (no cross-package FK).",
+      "key_api_note": "FOUNDATION contract \u2014 NO plan dependencies (extends @adhd/agent-mcp-types only; agent_slug is a logical key, not a FK into agent-registry). The compiler (plan 5) reads AgentToolStore.listForAgent + ToolBindingStore.resolve to emit the tools: header (consumed by agent-compiler/contexts/tool-header-emit.md). The migration (plan 7) reads ToolBindingStore.resolve to map a claude_code 'tools:' frontmatter token (e.g. 'Bash') back to a canonical id ('shell_exec') and writes AgentTool grants."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "tool-and-type-schema",
+      "platform-and-binding-schema",
+      "mcp-server-schema",
+      "agent-tool-junction",
+      "seed-and-roundtrip",
+      "audit-schema"
+    ]
+  }
+}

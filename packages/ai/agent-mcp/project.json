@@ -64,6 +64,15 @@
       "options": {
         "packageRoot": "dist/{projectRoot}"
       }
+    },
+
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": ["{workspaceRoot}/coverage/packages/ai/agent-mcp"],
+      "options": {
+        "configFile": "packages/ai/agent-mcp/vite.config.ts",
+        "passWithNoTests": true
+      }
     }
   }
 }

@@ -4,91 +4,262 @@
   "dag": "dag.json",
   "states": {
     "compiler-design": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-24T00:57:15.164Z",
+      "done_at": "2026-06-24T01:00:46.060Z",
+      "start_ref": "7ae0c856fcea713d9c717640c5cc9f345283f9d3",
+      "end_ref": "b2b24f6f995c0e7c1501d2afd96e9e7784354724"
     },
     "scaffold-package": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-24T01:03:21.702Z",
+      "done_at": "2026-06-24T01:09:58.943Z",
+      "start_ref": "26bace5a23fbfbd6c1f5f8b5b1d23fdd27d1fdde",
+      "end_ref": "38f2e25a08467fd19440e0510b641b4dafdd02b5"
     },
     "composition-resolve": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-25T13:27:26.687Z",
+      "done_at": "2026-06-25T13:32:34.816Z",
+      "start_ref": "4667d3bc463ebb09b89d553784f18b838c0b5949",
+      "end_ref": "a90b2b7fcd820d787e831cfb54b4a81961f47402"
     },
     "tool-header-emit": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-25T13:35:46.491Z",
+      "done_at": "2026-06-25T13:41:59.499Z",
+      "start_ref": "10d1f44a3791ae998960fb7346930f99724b59cf",
+      "end_ref": "ee04f42978c76c70ca7d39773c38ce6785a36ccf"
     },
     "model-and-policy-emit": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-25T13:43:53.185Z",
+      "done_at": "2026-06-25T13:55:57.567Z",
+      "start_ref": "3b715dcee34d327425ff5bf7af68dc9a23ae79fb",
+      "end_ref": "213f40b4e18a01fe6cec2cb522406fd112f080be"
     },
     "platform-markdown-emit": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-25T14:03:17.902Z",
+      "done_at": "2026-06-25T14:16:09.278Z",
+      "start_ref": "7bd2905247282f75cb5730b2a9ac7c16e62ba573",
+      "end_ref": "d45490ea6f8c14cb0ed85e75695c5d38d7d08ade"
     },
     "compile-cli": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-25T14:18:00.492Z",
+      "done_at": "2026-06-25T14:36:54.097Z",
+      "start_ref": "565058b596d1b90814a94ba91defe37fd6491e8c",
+      "end_ref": "75125d2329bd72fb6edb6e11651816a0a0e6e98c"
     },
     "composed-prompt-caching": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-25T14:38:42.807Z",
+      "done_at": "2026-06-25T14:46:22.243Z",
+      "start_ref": "1e86e6ab72a7f9afa6e708aa09a8dfd60107a81b",
+      "end_ref": "4becf5001c1ca4152cd98a6b89707f6e1e244dde"
     },
     "audit-engine": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-25T14:48:42.453Z",
+      "done_at": "2026-06-25T14:48:51.743Z",
+      "start_ref": "d2b4aa73a4fe0bd6f8d85208d62f330b4bc72987",
+      "end_ref": "f269105f9d0a6f582a1c5056cce50e670d0641b2"
     },
     "compile-fixtures-e2e": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-25T14:51:39.888Z",
+      "done_at": "2026-06-25T15:03:52.994Z",
+      "start_ref": "152c833bbedd37c7757d6ed76ca392124da48de1",
+      "end_ref": "4982b1ed5f5cf9e60d30b95fa50bfbd7d8941962"
     },
     "audit-final": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-25T15:22:51.177Z",
+      "done_at": "2026-06-25T15:23:05.166Z",
+      "start_ref": "f64cb2d28a594ba8bd16f1f443ae71cfda484d59",
+      "end_ref": "7a8f3e7d1f1b93833df5ffd6442e5b2fc49b5a0a"
+    },
+    "code-review": {
+      "status": "complete",
+      "started_at": "2026-06-25T15:06:55.674Z",
+      "done_at": "2026-06-25T15:21:36.486Z",
+      "start_ref": "200a794c489b762dda4dc9a68992005582ffe554",
+      "end_ref": "5ec0d0a0e3d25f07431cffd694d7ff950afb5ef0"
+    },
+    "code-review-engine": {
+      "status": "complete",
+      "started_at": "2026-06-25T13:57:42.997Z",
+      "done_at": "2026-06-25T14:00:50.089Z",
+      "start_ref": "e7d6d305f36ec49209c58ca148558ff59e77588e",
+      "end_ref": "6c8a4c1270386555503357a1605a8e560291835e"
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-06-24T01:00:46.060Z",
+      "from": "compiler-design",
+      "to": "compiler-design",
+      "start_ref": "7ae0c856fcea713d9c717640c5cc9f345283f9d3",
+      "end_ref": "b2b24f6f995c0e7c1501d2afd96e9e7784354724",
+      "audit_exit": 4,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 4,
+      "by": "pseudosky",
+      "note": "decisions.md: A=consume resolveComposition precedence (all-included), B=header builder per header_format (yaml_frontmatter/json_object/none), C=one-handle prefix join (inherited), D=context_hash over (context,componentVersions); architecture guard exit 0; SHA b2b24f6"
+    },
+    {
+      "ts": "2026-06-24T01:09:58.943Z",
+      "from": "scaffold-package",
+      "to": "scaffold-package",
+      "start_ref": "26bace5a23fbfbd6c1f5f8b5b1d23fdd27d1fdde",
+      "end_ref": "38f2e25a08467fd19440e0510b641b4dafdd02b5",
+      "audit_exit": 8,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 10,
+      "by": "pseudosky",
+      "note": "built via generator + guard exit 0 + SHA 38f2e25"
+    },
+    {
+      "ts": "2026-06-25T13:32:34.816Z",
+      "from": "composition-resolve",
+      "to": "composition-resolve",
+      "start_ref": "4667d3bc463ebb09b89d553784f18b838c0b5949",
+      "end_ref": "a90b2b7fcd820d787e831cfb54b4a81961f47402",
+      "audit_exit": 15,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "Added packages/ai/agent-compiler/src/resolve/composition.ts exporting resolveBody(db, agentSlug, context) → {body, componentVersions}. Ordering + context filtering is a SINGLE delegated call to CompositionStore.resolveComposition — not re-implemented. Exported from src/index.ts. Test seeds 3 real registry rows (one context-conditioned at position=3) into a real on-disk SQLite DB via agent-registry store APIs; asserts body is sections joined in position order, conditional component included/excluded per context, and empty-agent edge case. Guard (nx test agent-compiler --testFile=composition-resolve.test.ts) exited 0, 3/3 tests passing, deterministic on two consecutive runs. Commit a90b2b7."
+    },
+    {
+      "ts": "2026-06-25T13:41:59.499Z",
+      "from": "tool-header-emit",
+      "to": "tool-header-emit",
+      "start_ref": "10d1f44a3791ae998960fb7346930f99724b59cf",
+      "end_ref": "ee04f42978c76c70ca7d39773c38ce6785a36ccf",
+      "audit_exit": 15,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "Added resolveTools(db, agentSlug, platform) in resolve/tools.ts: fetches agent_tools grants via AgentToolStore.listForAgent, then BindingStore.listForPlatform (one platform-keyed query, idx_bindings_platform), builds a Map<toolName, binding>, walks grants in order and drops availability=unavailable. Exported from index.ts. Test tool-header.test.ts seeds real rows via seed() + AgentToolStore.grant(), proves claude_code returns PascalCase aliases (Read/Grep/WebSearch), claude_api returns snake_case aliases (read_file/web_search), human_input dropped on claude_api (unavailable), persistence via close+reopen, empty-agent edge case. Guard exit 0, 7/7 tests pass, deterministic on re-run. Commit ee04f42."
+    },
+    {
+      "ts": "2026-06-25T13:55:57.567Z",
+      "from": "model-and-policy-emit",
+      "to": "model-and-policy-emit",
+      "start_ref": "3b715dcee34d327425ff5bf7af68dc9a23ae79fb",
+      "end_ref": "213f40b4e18a01fe6cec2cb522406fd112f080be",
+      "audit_exit": 15,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "Added resolve/model.ts (resolveModel delegates to ModelStore.resolveModelId with platform-keyed binding; falls back to canonical id on MODEL_BINDING_NOT_FOUND, Decision E recorded) and resolve/policy.ts (resolvePolicyConstraints delegates to AgentPolicyStore.resolveForAgent for 3-query direct+inherited merge, joins PolicyTemplateStore.read per slug, produces Constraint[]). Both exported from src/index.ts. Test model-policy.test.ts seeds real rows on on-disk DB via seedProvider+seedPolicy+AgentStore+TaxonomyStore+AgentPolicyStore; asserts resolveModel claude_code=opus, claude_api=claude-opus-4-8, no-credentials constraint present, inherited reviewer-posture constraint present (inheritedFrom=category), empty constraints for no-policy agent (dod.3 negative-control), persistence via close+reopen. Fix: multi-package migrations require provider first (1750* timestamps) before registry+policy (1782* timestamps) — Drizzle skips entries with when<=last-recorded. Guard: 10/10 tests pass exit 0, deterministic on second run. Commit: 213f40b"
+    },
+    {
+      "ts": "2026-06-25T14:00:50.089Z",
+      "from": "code-review-engine",
+      "to": "code-review-engine",
+      "start_ref": "e7d6d305f36ec49209c58ca148558ff59e77588e",
+      "end_ref": "6c8a4c1270386555503357a1605a8e560291835e",
+      "audit_exit": 15,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 18,
+      "by": "pseudosky",
+      "note": "APPROVED: single-DB topology confirmed (client.ts:31-40), no cross-pkg FKs (schema.ts skeleton), body-ordering fully delegated to resolveComposition (composition.ts:62), all binding reads go through store classes (tools.ts:78, model.ts:65, policy.ts:65), platform:node + @adhd/ imports + JSDoc + real-rows tests all pass. One advisory: body join uses \\n not \\n\\n — emit-phase must confirm separator ownership."
+    },
+    {
+      "ts": "2026-06-25T14:16:09.278Z",
+      "from": "platform-markdown-emit",
+      "to": "platform-markdown-emit",
+      "start_ref": "7bd2905247282f75cb5730b2a9ac7c16e62ba573",
+      "end_ref": "d45490ea6f8c14cb0ed85e75695c5d38d7d08ade",
+      "audit_exit": 19,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 21,
+      "by": "pseudosky",
+      "note": "Added emit/markdown.ts (yaml_frontmatter), emit/json.ts (json_object, separate file for dod.7), compile.ts (compileAgent orchestrator), updated index.ts. The \\n\\n separator advisory was resolved at the emit layer: composition.ts:72 joins with \\n and is read-only, so compile.ts calls CompositionStore.resolveComposition directly to own the join and applies \\n\\n between sections per Decision B.1 — no composition.ts edit required, no blocker raised. Guard: npx nx test agent-compiler --testFile=...compile-agent.test.ts → 21/21 tests, exit 0, confirmed deterministic on second run. Commit: d45490ea6f8c14cb0ed85e75695c5d38d7d08ade."
+    },
+    {
+      "ts": "2026-06-25T14:36:54.097Z",
+      "from": "compile-cli",
+      "to": "compile-cli",
+      "start_ref": "565058b596d1b90814a94ba91defe37fd6491e8c",
+      "end_ref": "75125d2329bd72fb6edb6e11651816a0a0e6e98c",
+      "audit_exit": 20,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 23,
+      "by": "pseudosky",
+      "note": "Added src/cli/compile.ts (argv parser + dispatcher), bin entry in package.json, and compile-cli.test.ts spawning real child process. Guard: npx nx test agent-compiler --testFile=compile-cli.test.ts → exit 0, 8/8 passed. Bin invoked as node dist/.../src/cli/compile.js; @adhd symlinks created in dist/node_modules/@adhd by beforeAll so ESM resolution works. Fixed pre-existing TS2352 in compile.ts (double-cast via unknown) to unblock tsc build. Commit: 75125d2."
+    },
+    {
+      "ts": "2026-06-25T14:46:22.243Z",
+      "from": "composed-prompt-caching",
+      "to": "composed-prompt-caching",
+      "start_ref": "1e86e6ab72a7f9afa6e708aa09a8dfd60107a81b",
+      "end_ref": "4becf5001c1ca4152cd98a6b89707f6e1e244dde",
+      "audit_exit": 22,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 25,
+      "by": "pseudosky",
+      "note": "Added cache/composed-prompt-cache.ts (lookup+write, Decision D combined hash: registryContextHash(ctx)+\" \"+sortedJSON(versions)+\" \"+platform), wired into compileAgent as cache-first SELECT before assembly (dod.4 negative-control), CompiledAgent.id null→number, compile-agent.test.ts placeholder updated, compile-cache.test.ts proves persistence by CLOSE+REOPEN + resolveComposition spy confirms assembly bypassed on HIT + different context yields new row (count 1→2); guard exit 0 (57/57); commit 4becf50"
+    },
+    {
+      "ts": "2026-06-25T14:48:51.743Z",
+      "from": "audit-engine",
+      "to": "audit-engine",
+      "start_ref": "d2b4aa73a4fe0bd6f8d85208d62f330b4bc72987",
+      "end_ref": "f269105f9d0a6f582a1c5056cce50e670d0641b2",
+      "audit_exit": 20,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 28,
+      "by": "pseudosky",
+      "note": "Schema-phase audit GREEN 25/25 (architecture + all work states scaffold→composition→tools→model+policy→emit→cli→cache) via real cwd-robust audit_compiler.py; architecture phase also exit 0. Engine internally consistent — hold point cleared, e2e convergence unblocked. No script change needed (pre-staged checks correct). Orchestrator-driven audit gate."
+    },
+    {
+      "ts": "2026-06-25T15:03:52.994Z",
+      "from": "compile-fixtures-e2e",
+      "to": "compile-fixtures-e2e",
+      "start_ref": "152c833bbedd37c7757d6ed76ca392124da48de1",
+      "end_ref": "4982b1ed5f5cf9e60d30b95fa50bfbd7d8941962",
+      "audit_exit": 27,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 30,
+      "by": "pseudosky",
+      "note": "Seeded api-design-reviewer-e2e fixture (all four prefixes, one DB handle): registry_* (taxonomy+agent+5 junction rows), tool_* (file_read/file_grep/web_search grants), provider_* (claude_sonnet_4_6 model_hint), policy_* (no-credentials direct attach). 18/18 tests pass, exit 0, two deterministic runs confirmed. [dod.1] tools: line = Read,Grep,WebSearch (NOT canonical names) — negative bites: removing BindingStore platform filter emits file_read instead of Read, toContain(\"Read\") fails. [dod.2] {ticket_type:security} → SECURITY_CRITERIA_ANCHOR present + \"All user inputs validated at boundary\" present; default → absent — bites: removing context_condition evaluator includes both criteria, .not.toContain(SECURITY_CRITERIA_ANCHOR) fails. [dod.3] no-credentials constraint text present with attachment; separate DB without attach → constraint absent — bites: hardcoded text would appear in no-attach DB, .not.toContain fails. claude_api: JSON.parse yields {systemPrompt,tools} (array, not string) from same rows. Commit sha: 4982b1e."
+    },
+    {
+      "ts": "2026-06-25T15:21:36.486Z",
+      "from": "code-review",
+      "to": "code-review",
+      "start_ref": "200a794c489b762dda4dc9a68992005582ffe554",
+      "end_ref": "5ec0d0a0e3d25f07431cffd694d7ff950afb5ef0",
+      "audit_exit": 25,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 28,
+      "by": "pseudosky",
+      "note": "APPROVED — BLOCKING-1 (Decision D version-drift cache-miss test teeth) resolved by abf8446; 6/6 mandatory checks pass; teeth independently re-verified to bite (drop version values → unit :371 + integration :463 go red, 7 pre-existing green)"
+    },
+    {
+      "ts": "2026-06-25T15:23:05.166Z",
+      "from": "audit-final",
+      "to": "audit-final",
+      "start_ref": "f64cb2d28a594ba8bd16f1f443ae71cfda484d59",
+      "end_ref": "7a8f3e7d1f1b93833df5ffd6442e5b2fc49b5a0a",
+      "audit_exit": 20,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 28,
+      "by": "pseudosky",
+      "note": "Final-phase audit GREEN 39/39 via real cwd-robust audit_compiler.py --phase final: all prior-phase (27) + every behavioral DoD [dod.1-7] driving real entrypoints (compile-e2e/compile-cache/compile-cli + structural). Acceptance gate cleared."
+    }
+  ],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "compiler-design",
+  "current_state": "audit-final",
   "dod_provenance": {
     "confirmed_at": "2026-06-23T04:26:44.237Z",
     "by": "pseudosky",

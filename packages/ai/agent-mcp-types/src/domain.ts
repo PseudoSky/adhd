@@ -132,7 +132,18 @@ export interface AgentDefinition {
   description?: string;
   version: number;
   provider: ProviderConfig;
-  systemPrompt: string;
+  /**
+   * COMPUTED COMPAT SHIM — never user-authored after Plan 6 wave 3 (agent-store-retire).
+   *
+   * Populated at session start from `compileAgent().content`. The `AgentStore`
+   * is now a thin compiled-agent cache; this field holds the resolved system
+   * prompt produced by the compiler/registry, not a user-supplied blob.
+   *
+   * Callers in `tools/task.ts` and `store/session-store.ts` read this field
+   * unchanged — they receive the compiler-resolved value set by
+   * `compiler-integration`, not an authored string.
+   */
+  systemPrompt?: string;
   mcpServers: Record<string, McpServerConfig>;
   permissions: AgentPermissions;
   maxToolLoops?: number;
@@ -145,6 +156,26 @@ export interface AgentDefinition {
   allowHumanInput?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Composed-prompt cache (agent-mcp runtime sink, Domain 5) ─────────────────
+// Keyed by (agent_slug, context_hash); written by compiler-integration on cache-miss.
+
+export interface ComposedPrompt {
+  /** Row id — written to sessions.composed_prompt_id at session start. */
+  id: string;
+  /** Slug of the agent whose prompt was compiled. */
+  agentSlug: string;
+  /**
+   * Opaque hash of the compilation context (e.g. SHA-256 of registry component
+   * versions). The cache lookup key together with agentSlug.
+   */
+  contextHash: string;
+  /** Flat, fully-resolved system-prompt string produced by compileAgent(). */
+  content: string;
+  /** JSON-serialised record of component-version ids used during compilation. */
+  componentVersions: string;
+  createdAt: string;
 }
 
 export interface ExecutionContext {
@@ -174,4 +205,33 @@ export interface ToolDefinition {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+}
+
+// ── Provider Adapter contract (agent-registry plan: agent-provider) ────────────
+// Defined here (not in agent-provider) so that agent-mcp can depend on the
+// interface without creating a circular dependency.  Dependency direction:
+//   agent-mcp-types ← agent-provider ← agent-mcp
+
+/**
+ * A streaming chunk emitted by a ProviderAdapter.stream() call.
+ * Discriminated union — add variants as new delta kinds are needed.
+ */
+export type StreamChunk =
+  | { type: "text";      text: string }
+  | { type: "tool_call"; id: string; name: string; arguments: string };
+
+/**
+ * Adapter interface that wraps a single AI provider.
+ * Implemented in @adhd/agent-provider; consumed by @adhd/agent-mcp.
+ *
+ * `model` is the **canonical** model id (e.g. `claude_opus_4_8`); the
+ * implementation resolves it to a per-platform string via ModelStore before
+ * calling the upstream API.
+ */
+export interface ProviderAdapter {
+  stream(
+    messages: Message[],
+    tools: ToolDefinition[] | undefined,
+    model: string
+  ): AsyncIterable<StreamChunk>;
 }

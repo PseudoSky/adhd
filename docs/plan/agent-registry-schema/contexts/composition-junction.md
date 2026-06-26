@@ -11,22 +11,37 @@ returns an agent's components in assembly order, with `version_pin` and
 `context_condition` honored. This is the heart of the registry — it proves a
 prompt can be reconstructed from rows.
 
+> **Post-execution architecture correction (Decision 5, decisions.md).** After this
+> state executed, the component model was split into `registry_components` (head) +
+> `registry_component_versions` (history). The junction's `component_slug` and
+> `version_pin` are now **DB-enforced** FKs (component_slug → `registry_components.slug`;
+> version_pin → `registry_component_versions.version_id`), not logical-only refs.
+> `version_pin` now stores a `version_id`. `resolveComposition` semantics (order, pin,
+> context filter, is_required) are unchanged. state.json/dag.json are NOT changed.
+
 ---
 
 ## Semantic Distillation
 
 - **Primitive:** ADD `agent_components` junction + `CompositionStore`. See
   `[def:junction-row]`, `[def:context-condition]`, `[def:composition]`.
-- **Delta Spec** (`DATA_MODEL.md` Domain 1 "Agent-Component Junction"):
-  - `agent_components` — `agent_slug` (FK), `component_slug` (FK), integer
-    `position` (assembly order), `version_pin` (nullable integer — null = latest,
-    int = pin to that version), `context_condition` (nullable JSON text), and
-    `is_required` integer flag. PK `(agent_slug, component_slug, position)`.
+- **Delta Spec** (`DATA_MODEL.md` Domain 1 "Agent-Component Junction"; FKs per
+  Decision 5):
+  - `agent_components` — `agent_slug` (enforced FK → `registry_agents.slug`),
+    `component_slug` (enforced FK → `registry_components.slug`, Decision 5), integer
+    `position` (assembly order), `version_pin` (nullable integer — a
+    `registry_component_versions.version_id`, enforced nullable FK; null = latest,
+    set = pin to that exact version row), `context_condition` (nullable JSON text),
+    and `is_required` integer flag. PK `(agent_slug, component_slug, position)`.
+    Two SEPARATE FKs are used for component_slug + version_pin (a composite FK with a
+    nullable column is not enforced in SQLite) — see Decision 5.
   - `CompositionStore.resolveComposition(agentSlug, context)` →
     ordered component list:
     1. read all junction rows for the agent ordered by `position`;
-    2. for each, pick the pinned version (or latest if `version_pin` null) from
-       `prompt_components`;
+    2. for each, pick the pinned version by its `version_id` (asserting the version
+       row's `slug` matches the junction's `component_slug`), or the latest version
+       for the slug if `version_pin` is null, joining `registry_components` to
+       `registry_component_versions`;
     3. EVALUATE `context_condition` against the supplied `context` using the
        deterministic rule recorded in `decisions.md` (precedence when two rows
        target the same position) — exclude non-matching rows;
@@ -40,7 +55,7 @@ prompt can be reconstructed from rows.
 
 ## Acceptance criteria
 
-- [composition-junction.1] agent_components junction with position, version_pin, context_condition, is_required
+- [composition-junction.1] agent_components junction with position, version_pin (enforced FK → registry_component_versions.version_id), context_condition, is_required; component_slug enforced FK → registry_components.slug (Decision 5)
 - [composition-junction.2] resolveComposition reads ordered components
 - [composition-junction.3] composition ordering/pin/context test passes
 

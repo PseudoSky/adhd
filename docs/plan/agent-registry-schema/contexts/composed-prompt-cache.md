@@ -55,6 +55,10 @@ mutates:    ["packages/ai/agent-registry/src/db/schema.ts", "packages/ai/agent-r
 
 - `component_versions` is the audit trail GOAL.md "Audit Trail" depends on —
   store the exact `{componentSlug: version}` map used, so a behavior regression
-  is traceable to a component version.
+  is traceable to a component version. Per Decision 5 (decisions.md) this audit map
+  deliberately records the human `version` number (not the
+  `registry_component_versions.version_id` surrogate): it is a human-readable audit
+  record, not an FK, and `ComponentStore.resolveVersionId(slug, version)` maps a
+  `(slug, version)` to its `version_id` whenever the stable surrogate is needed.
 - The `context_hash` algorithm should be deterministic + stable (sorted-key JSON
   → sha256). `@adhd/agent-compiler` will reuse the same hash; export the helper.

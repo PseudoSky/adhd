@@ -20,6 +20,7 @@ import { BackgroundQueue } from "./engine/queue.js";
 import { Orchestrator } from "./engine/orchestrator.js";
 import type { DagEngine } from "./engine/dag-engine.js";
 import type { PolicyEngine } from "./engine/policy.js";
+import type { PromptResolverDeps } from "./engine/prompt-resolver.js";
 import type { InProcessToolDescriptor, InProcessToolHandler } from "./clients/in-process.js";
 import type { IHookRegistry } from "@adhd/agent-mcp-types";
 
@@ -71,6 +72,13 @@ export interface ServerDeps {
     selfUrl?: string;
     /** DagEngine — manages dependency cycle detection and fan-in dispatch. */
     dagEngine: DagEngine;
+    /**
+     * Optional prompt-resolver dependencies.  When present, every `agent` tool
+     * call resolves the system-prompt via @adhd/agent-compiler before creating
+     * the session.  When absent (no registry DB configured), the legacy
+     * flat-`systemPrompt` path is used unchanged.
+     */
+    promptResolver?: PromptResolverDeps;
 }
 
 function toMcpErrorContent(error: unknown): { content: Array<{ type: "text"; text: string }>; isError: true } {
@@ -484,7 +492,12 @@ export function createServer(deps: ServerDeps): Server {
             case "agent":
                 return agentTool(
                     agentToolInputSchema.parse(args),
-                    { agentStore: deps.agentStore, sessionStore: deps.sessionStore, policy: deps.policy },
+                    {
+                        agentStore: deps.agentStore,
+                        sessionStore: deps.sessionStore,
+                        policy: deps.policy,
+                        promptResolver: deps.promptResolver,
+                    },
                     ctx
                 );
             case "task":
@@ -656,12 +669,16 @@ export function createServer(deps: ServerDeps): Server {
 
                 case "agent":
                     return toMcpContent(
-                        await agentTool(agentToolInputSchema.parse(args), {
-                            agentStore: deps.agentStore,
-                            sessionStore: deps.sessionStore,
-                            policy: deps.policy,
-                        })
-                        // No executionContext — top-level call
+                        await agentTool(
+                            agentToolInputSchema.parse(args),
+                            {
+                                agentStore: deps.agentStore,
+                                sessionStore: deps.sessionStore,
+                                policy: deps.policy,
+                                promptResolver: deps.promptResolver,
+                            }
+                            // No executionContext — top-level call
+                        )
                     );
 
                 case "session_list":

@@ -1,0 +1,133 @@
+{
+  "schema_version": 2,
+  "title": "Agent Registry — Release & Closeout (worktree merge, publish, cleanup)",
+  "plan_kind": "brownfield",
+  "phases": [
+    "closeout-design",
+    "worktree-clarity",
+    "cleanup",
+    "merge-gate",
+    "publish",
+    "post-publish"
+  ],
+  "terminal": "done",
+  "nodes": {
+    "closeout-design": {
+      "kind": "work",
+      "phase": "closeout-design",
+      "depends_on": [],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase design",
+      "artifacts": [
+        "docs/plan/agent-registry-release/decisions.md",
+        "docs/plan/agent-registry-release/contexts/closeout-design.md"
+      ],
+      "context": "contexts/closeout-design.md",
+      "notes": ""
+    },
+    "worktree-clarity": {
+      "kind": "work",
+      "phase": "worktree-clarity",
+      "depends_on": [
+        "closeout-design"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase clarity",
+      "artifacts": [
+        "docs/plan/agent-registry/CLOSEOUT.md"
+      ],
+      "context": "contexts/worktree-clarity.md",
+      "notes": ""
+    },
+    "artifact-cleanup": {
+      "kind": "work",
+      "phase": "cleanup",
+      "depends_on": [
+        "worktree-clarity"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase cleanup",
+      "artifacts": [
+        "docs/plan/agent-registry/demo/README.md",
+        "docs/plan/plan-index.json",
+        ".gitignore"
+      ],
+      "context": "contexts/artifact-cleanup.md",
+      "notes": ""
+    },
+    "agent-mcp-backout-gate": {
+      "kind": "work",
+      "phase": "merge-gate",
+      "depends_on": [
+        "artifact-cleanup"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/check_agent_mcp_baseline.py",
+      "artifacts": [
+        "docs/plan/agent-registry-release/scripts/check_agent_mcp_baseline.py"
+      ],
+      "context": "contexts/agent-mcp-backout-gate.md",
+      "notes": ""
+    },
+    "merge-to-main": {
+      "kind": "work",
+      "phase": "merge-gate",
+      "depends_on": [
+        "agent-mcp-backout-gate"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase merge",
+      "artifacts": [
+        "docs/plan/agent-registry-release/MERGE_RUNBOOK.md"
+      ],
+      "context": "contexts/merge-to-main.md",
+      "notes": ""
+    },
+    "publish-packages": {
+      "kind": "work",
+      "phase": "publish",
+      "depends_on": [
+        "merge-to-main"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase publish",
+      "artifacts": [
+        "docs/plan/agent-registry-release/PUBLISH_RUNBOOK.md"
+      ],
+      "context": "contexts/publish-packages.md",
+      "notes": ""
+    },
+    "post-publish-smoke": {
+      "kind": "work",
+      "phase": "post-publish",
+      "depends_on": [
+        "publish-packages"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase smoke",
+      "artifacts": [
+        "docs/plan/agent-registry-release/scripts/smoke_test.sh",
+        "docs/plan/agent-registry-release/POST_PUBLISH.md"
+      ],
+      "context": "contexts/post-publish-smoke.md",
+      "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "post-publish",
+      "depends_on": [
+        "post-publish-smoke"
+      ],
+      "guard": "python3 docs/plan/agent-registry-release/scripts/audit_release.py --phase final",
+      "artifacts": [
+        "docs/plan/agent-registry-release/scripts/audit_release.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
+    }
+  },
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.23",
+    "hash": "1e4130a84aed"
+  },
+  "goal": "The agent-registry-execution worktree is merged to main (or an explicit no-merge decision recorded) with the agent-mcp byte-identical back-out guarantee verified as a gate; the 5 registry packages + agent-mcp@2.0.0 are published via nx release publish (clean cached build+test); every untracked design/demo artifact is committed/relocated/removed; and a written worktree-clarity artifact eliminates the owner's confusion about where the work lives and how to land it.",
+  "depends_on_plans": [
+    "agent-mcp-authoring",
+    "agent-mcp-refactor",
+    "agent-registry-migration"
+  ]
+}

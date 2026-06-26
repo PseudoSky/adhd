@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "authoring-design.1",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "def:embedding-source",
+      "paths": [
+        "docs/plan/agent-mcp-authoring/decisions.md"
+      ]
+    },
+    {
+      "id": "authoring-design.2",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "def:name-slug-seam",
+      "paths": [
+        "docs/plan/agent-mcp-authoring/decisions.md"
+      ]
+    },
+    {
+      "id": "authoring-design.3",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "def:agent-mcp-modification-manifest",
+      "paths": [
+        "docs/plan/agent-mcp-authoring/decisions.md"
+      ]
+    },
+    {
+      "id": "authoring-design.4",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "def:agent-define-transaction",
+      "paths": [
+        "docs/plan/agent-mcp-authoring/decisions.md"
+      ]
+    },
+    {
+      "id": "embedding-substrate.1",
+      "phase": "enrichment",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "enrichment-pipeline.1",
+      "phase": "enrichment",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "name-slug-seam.1",
+      "phase": "seam",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "discovery-tools.1",
+      "phase": "discovery",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "component-define.1",
+      "phase": "authoring",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/component-define.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "agent-define.1",
+      "phase": "authoring",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/agent-define.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "compat-shim.1",
+      "phase": "compat",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/systemprompt-compat.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "versioning.1",
+      "phase": "compat",
+      "tier": null,
+      "kind": "present",
+      "pattern": "\"version\": \"2\\.",
+      "paths": [
+        "packages/ai/agent-mcp/package.json"
+      ]
+    },
+    {
+      "id": "composition-journey-e2e.1",
+      "phase": "e2e",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "live-model-e2e.1",
+      "phase": "e2e",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "discovery-tools.2",
+      "phase": "discovery",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/discovery-bounded-output.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "component-define.2",
+      "phase": "authoring",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/component-define.test.ts",
+      "expect": "exit0"
+    }
+  ]
+}
