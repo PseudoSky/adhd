@@ -47,6 +47,7 @@ Exits 0 when all checks in the phase pass; exits 1 with a failure summary otherw
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -75,6 +76,13 @@ def run(cmd: str):
 
 
 def check(check_id: str, description: str, cmd: str, expect_empty: bool = False) -> CheckResult:
+    # F-P6-10 hardening: project.json sets passWithNoTests:true, so a
+    # `nx test --testFile=<missing>` exits 0 ("No test files found") — a GHOST
+    # PASS that would green an audit for a proof that does not exist. Require the
+    # test file to exist first, so a missing proof FAILS the criterion honestly.
+    _m = re.search(r"--testFile=(\S+)", cmd)
+    if _m and not cmd.lstrip().startswith("test -f"):
+        cmd = f"test -f {_m.group(1)} && {cmd}"
     code, out = run(cmd)
     if expect_empty:
         passed = (out == "")
@@ -136,8 +144,21 @@ def phase_final() -> list:
                    f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/name-slug-seam.test.ts"))
     r.append(check("discovery-tools.1", "all discovery tools return name-keyed results over the real stores",
                    f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/discovery-tools.test.ts"))
+    # discovery-tools.2 — BUG-003: list/search tools bounded by default. Drives a
+    # store seeded N>>limit; asserts <=limit summary-projected items, no full
+    # systemPrompt/body inline, total output under a KB-scale ceiling (the 464,821-char
+    # blowout cannot recur). Real tools over the bridge + real store; no mocks.
+    r.append(check("discovery-tools.2", "BUG-003: agent_list/component_search/*_list bounded by default (N>>limit -> <=limit summary items, no full body inline, output under ceiling)",
+                   f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/discovery-bounded-output.test.ts"))
     r.append(check("component-define.1", "component_define upsert enriches on write, version-bumps on change, idempotent",
                    f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/component-define.test.ts"))
+    # component-define.2 — component_delete pairs creation with deletion. Behavioral
+    # proof (define->delete leaves no trace, reopen-proven; typed errors; no orphan)
+    # + a structural tooth that the delete op is actually registered in the lane.
+    r.append(check("component-define.2", "component_delete: define->delete leaves no trace (reopen-proven), COMPONENT_NOT_FOUND on unknown, no-orphan on shared-with-consumers",
+                   f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/component-define.test.ts"))
+    r.append(grep_present("component-define.2.tool", "component_delete is registered in the authoring lane",
+                          "component_delete", f"{MCP}/src/tools/authoring.ts"))
     r.append(check("agent-define.1", "agent_define declarative upsert: full-replace, version-bump, idempotent, typed errors",
                    f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/agent-define.test.ts"))
     r.append(check("compat-shim.1", "agent_create({systemPrompt}) compat shim + VALIDATION_ERROR on both + 11-tool surface intact",

@@ -73,4 +73,10 @@ mutates:    ["packages/ai/agent-registry-migration/src/ingest/haiku-batch.ts", "
   must prove concurrency, never `sleep`.
 - **Over-generation is fine here** — consolidation prunes. Do NOT try to canonicalize
   or weight in this stage; that is `sonnet-consolidation`'s job.
+- **Ingest telemetry: never assert on `claudecli` token counts (DEBT-002).** The
+  cheap tier here is a real haiku model via the **`anthropic`** provider, which
+  reports real `inputTokens`/`outputTokens`. If a cost/budget assertion is ever
+  added to this or `sonnet-consolidation`, route it through `anthropic` usage — the
+  `claudecli` provider reports a permanent `0/0`, so a budget check keyed on it would
+  silently read zero. (No criterion in this plan depends on token counts today.)
 - Append exports to `src/index.ts` (append-only barrel).

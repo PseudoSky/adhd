@@ -106,6 +106,7 @@ packages/ai/agent-mcp/CHANGELOG.md
 # agent-mcp test files this plan ADDS (proofs):
 packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts
 packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts
+packages/ai/agent-mcp/src/__tests__/discovery-bounded-output.test.ts
 packages/ai/agent-mcp/src/__tests__/component-define.test.ts
 packages/ai/agent-mcp/src/__tests__/agent-define.test.ts
 packages/ai/agent-mcp/src/__tests__/systemprompt-compat.test.ts

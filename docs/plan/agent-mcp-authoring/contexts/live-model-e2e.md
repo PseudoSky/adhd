@@ -107,6 +107,13 @@ mutates:    ["packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts"]
   runner's exit status (a teardown segfault can print "passed" — project memory:
   better-sqlite3 vitest teardown). Await completion on a bounded deadline, never
   `sleep`.
+- **Do NOT assert on `claudecli` token usage (DEBT-002 / F-LIVE-3).** The `claudecli`
+  provider reports `inputTokens:0 / outputTokens:0` — its telemetry is a known zero.
+  This matrix's invariants are deliberately usage-FREE (the `agent_define` tool call
+  happened + `stopReason: completed`), so they hold on every provider. If a live
+  token/budget assertion is ever needed here, route it through the **`anthropic`**
+  provider (`useClaudeOauth`), which reports real usage — never `claudecli`, or the
+  assertion reads a permanent zero and is theater.
 - Reuse the public-surface harness from `composition-journey-e2e`; this state swaps
   the run-step provider for each live provider in the matrix and adds the
   empty-registry negative control. Adds only `authoring-live-e2e.test.ts` (test
