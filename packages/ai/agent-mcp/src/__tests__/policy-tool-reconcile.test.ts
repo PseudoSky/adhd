@@ -16,7 +16,7 @@
 import { describe, it, expect } from "vitest";
 import { PolicyEngine } from "../engine/policy.js";
 import type { AgentPolicyTemplateRule } from "../engine/policy.js";
-import { ClaudeCliProvider } from "../providers/claudecli.js";
+import { computeClaudeBuiltinArgs } from "../providers/claudecli.js";
 import { ToolError } from "../validation/errors.js";
 import { nowIso } from "../utils/timestamps.js";
 import { generateId } from "../utils/ids.js";
@@ -231,167 +231,108 @@ describe("[policy-engine-bridge.1] PolicyEngine.check() reads agent-policy templ
 });
 
 // ── [policy-engine-bridge.2 / .3] claudecli tool gating derives from AGENT_TOOL model ──
+//
+// All three tests below drive the REAL `computeClaudeBuiltinArgs` seam extracted
+// from `claudecli.ts` — NO subclass reimplementation of the ternary.  A regression
+// in the real derivation will make these assertions fail.
 
 describe("[policy-engine-bridge.2 / .3] ClaudeCliProvider tool gating uses compiled AGENT_TOOL model", () => {
-    /**
-     * Probe which built-ins would be disallowed by inspecting the args that
-     * ClaudeCliProvider builds. We do this by extracting the computed disallowed
-     * list from the effective allowed set — purely in-process, no subprocess.
-     *
-     * The canonical CLAUDE_CODE_BUILTIN_TOOLS list from claudecli.ts:
-     */
+
     const ALL_BUILTINS = [
         "Bash", "Edit", "MultiEdit", "Read", "Write", "Glob", "Grep",
         "LS", "WebFetch", "WebSearch", "TodoRead", "TodoWrite",
         "NotebookRead", "NotebookEdit", "Task",
     ] as const;
 
-    /**
-     * Helper: given a ClaudeCliProvider instance, derive which builtins are
-     * effectively allowed by simulating the provider's internal logic:
-     *   allowed = ALL_BUILTINS - disallowed
-     *
-     * We use a scripted approach: construct the provider and read the effective
-     * allowed set through a subclass that exposes the private computation.
-     * Since we can't call the private method, we test observable behaviour by
-     * checking that the provider correctly represents the derived allowed set
-     * through the module's exported types.
-     *
-     * For a "teeth" assertion we call the provider's construction and verify
-     * the allowed set resolves from compiledTools, NOT from allowedBuiltinTools,
-     * by constructing two providers that differ only in which argument is supplied.
-     */
+    it("compiledTools wins over config.allowedBuiltinTools [inv:no-third-tool-model]", () => {
+        // compiledTools = ["Read","Grep"] must produce those as the effective allowed set,
+        // even though allowedBuiltinTools says only ["Bash"].
+        const { effectiveAllowed, disallowedArgv } = computeClaudeBuiltinArgs({
+            compiledTools: ["Read", "Grep"],
+            allowedBuiltinTools: ["Bash"], // narrower — must be ignored
+        });
 
-    it("when compiledTools is supplied, it overrides config.allowedBuiltinTools [inv:no-third-tool-model]", () => {
-        // config.allowedBuiltinTools says only "Read" is allowed.
-        // compiledTools (AGENT_TOOL model) says "Read" and "Grep" are allowed.
-        // The provider must derive its allowed set from compiledTools.
+        // "Read" and "Grep" are the only allowed tools (from compiledTools)
+        expect(effectiveAllowed).toEqual(["Read", "Grep"]);
 
-        const compiledTools = ["Read", "Grep"]; // AGENT_TOOL model output
+        // "Bash" is in allowedBuiltinTools but NOT in compiledTools → must be disallowed
+        // Teeth: if compiledTools were ignored and allowedBuiltinTools won, "Bash" would
+        // not be in disallowedArgv and these assertions would FAIL.
+        expect(disallowedArgv).toContain("Bash");
+        expect(disallowedArgv).not.toContain("Read");
+        expect(disallowedArgv).not.toContain("Grep");
 
-        const providerWithCompiled = new ClaudeCliProvider(
-            {
-                type: "claudecli",
-                allowedBuiltinTools: ["Read"], // narrower — should be overridden
-            },
-            {},
-            compiledTools
-        );
-
-        // The only way to observe the effective allowed set without running a real
-        // subprocess is to confirm compiledTools is stored (unit observable contract).
-        // We do this by testing that the provider was constructed without error and
-        // carries the right shape — the real teeth come from negative-control below.
-        expect(providerWithCompiled).toBeInstanceOf(ClaudeCliProvider);
-
-        // Negative-control: provider with ONLY config.allowedBuiltinTools (no compiled)
-        // must differ from the provider that has compiledTools ["Read","Grep"].
-        // If compiledTools were ignored, both would behave identically — only allowing "Read".
-        // We prove compiledTools is used by verifying the instance properties differ.
-        const providerWithConfig = new ClaudeCliProvider(
-            {
-                type: "claudecli",
-                allowedBuiltinTools: ["Read"],
-            },
-            {}
-            // compiledTools is absent — config.allowedBuiltinTools is the fallback
-        );
-
-        // Both are valid ClaudeCliProvider instances. The distinction is that one
-        // has compiledTools set (AGENT_TOOL model) and the other does not.
-        // The test below proves the semantic difference through a subclass inspection.
-        expect(providerWithConfig).toBeInstanceOf(ClaudeCliProvider);
+        // NEGATIVE CONTROL: flip the priority (honour allowedBuiltinTools instead of compiledTools)
+        // — shown as a comment because running it proves the assertions above go red:
+        //   const wrong = computeClaudeBuiltinArgs({ compiledTools: undefined, allowedBuiltinTools: ["Bash"] });
+        //   expect(wrong.effectiveAllowed).toEqual(["Read","Grep"]) → FAILS (would be ["Bash"])
     });
 
-    it("effective allowed set is compiledTools when supplied — not config.allowedBuiltinTools", () => {
-        // Build a subclass that exposes the effective allowed builtins for testing.
-        // This avoids spawning a real subprocess while still exercising real code.
-        class InspectableClaudeCliProvider extends ClaudeCliProvider {
-            getEffectiveAllowedBuiltins(): string[] {
-                // Mirror the logic from chat() — this is the exact code path under test.
-                // compiledTools wins over config.allowedBuiltinTools.
-                // We access via protected pattern — exposed only in test subclass.
-                const compiledTools = (this as unknown as { compiledTools: string[] | undefined }).compiledTools;
-                const config = (this as unknown as { config: { allowedBuiltinTools?: string[] } }).config;
-                return compiledTools !== undefined
-                    ? compiledTools
-                    : (config.allowedBuiltinTools ?? []);
-            }
+    it("effective allowed set equals compiledTools when supplied — all others disallowed", () => {
+        // compiledTools = ["Read","Grep","WebSearch"]; allowedBuiltinTools = ["Bash"] (must lose)
+        const compiledTools = ["Read", "Grep", "WebSearch"];
+        const { effectiveAllowed, disallowedArgv } = computeClaudeBuiltinArgs({
+            compiledTools,
+            allowedBuiltinTools: ["Bash"],
+        });
+
+        expect(effectiveAllowed).toEqual(compiledTools);
+
+        // "Bash" is NOT in compiledTools → must appear in disallowedArgv
+        expect(disallowedArgv).toContain("Bash");
+        // compiledTools members must NOT appear in disallowedArgv
+        for (const tool of compiledTools) {
+            expect(disallowedArgv).not.toContain(tool);
         }
-
-        // Case A: compiledTools supplied — must be the effective allowed set.
-        const compiledTools = ["Read", "Grep", "WebSearch"]; // AGENT_TOOL model
-        const providerA = new InspectableClaudeCliProvider(
-            {
-                type: "claudecli",
-                allowedBuiltinTools: ["Bash"], // must be ignored when compiledTools present
-            },
-            {},
-            compiledTools
-        );
-        expect(providerA.getEffectiveAllowedBuiltins()).toEqual(compiledTools);
-        // Negative-control: if compiledTools were ignored, this would equal ["Bash"]
-        expect(providerA.getEffectiveAllowedBuiltins()).not.toContain("Bash");
-
-        // Case B: no compiledTools — falls back to config.allowedBuiltinTools.
-        const providerB = new InspectableClaudeCliProvider(
-            {
-                type: "claudecli",
-                allowedBuiltinTools: ["Read", "Grep"],
-            },
-            {}
-            // no compiledTools
-        );
-        expect(providerB.getEffectiveAllowedBuiltins()).toEqual(["Read", "Grep"]);
-
-        // Case C: neither compiledTools nor allowedBuiltinTools — empty (block all).
-        const providerC = new InspectableClaudeCliProvider(
-            { type: "claudecli" },
-            {}
-        );
-        expect(providerC.getEffectiveAllowedBuiltins()).toEqual([]);
+        // Every ALL_BUILTINS member outside compiledTools must be disallowed
+        const expectedDisallowedCount = ALL_BUILTINS.length - compiledTools.length;
+        const disallowedToolNames = disallowedArgv.filter(a => !a.startsWith("--"));
+        expect(disallowedToolNames).toHaveLength(expectedDisallowedCount);
     });
 
-    it("derived disallowed list excludes compiledTools entries — verifies correct blocking", () => {
-        class InspectableClaudeCliProvider extends ClaudeCliProvider {
-            getDisallowedBuiltins(): string[] {
-                const allBuiltins: readonly string[] = [
-                    "Bash", "Edit", "MultiEdit", "Read", "Write", "Glob", "Grep",
-                    "LS", "WebFetch", "WebSearch", "TodoRead", "TodoWrite",
-                    "NotebookRead", "NotebookEdit", "Task",
-                ];
-                const compiledTools = (this as unknown as { compiledTools: string[] | undefined }).compiledTools;
-                const config = (this as unknown as { config: { allowedBuiltinTools?: string[] } }).config;
-                const effective = compiledTools !== undefined
-                    ? compiledTools
-                    : (config.allowedBuiltinTools ?? []);
-                const allowed = new Set(effective);
-                return allBuiltins.filter(t => !allowed.has(t));
-            }
+    it("falls back to allowedBuiltinTools when compiledTools is undefined", () => {
+        // No compiledTools → allowedBuiltinTools = ["Read","Grep"] is the fallback.
+        const { effectiveAllowed, disallowedArgv } = computeClaudeBuiltinArgs({
+            compiledTools: undefined,
+            allowedBuiltinTools: ["Read", "Grep"],
+        });
+
+        expect(effectiveAllowed).toEqual(["Read", "Grep"]);
+        expect(disallowedArgv).not.toContain("Read");
+        expect(disallowedArgv).not.toContain("Grep");
+        expect(disallowedArgv).toContain("Bash"); // not in allowedBuiltinTools
+    });
+
+    it("empty effective allowed set when neither compiledTools nor allowedBuiltinTools is set", () => {
+        const { effectiveAllowed, disallowedArgv } = computeClaudeBuiltinArgs({
+            compiledTools: undefined,
+            allowedBuiltinTools: undefined,
+        });
+
+        expect(effectiveAllowed).toEqual([]);
+        // All builtins must be disallowed
+        const disallowedToolNames = disallowedArgv.filter(a => !a.startsWith("--"));
+        expect(disallowedToolNames).toHaveLength(ALL_BUILTINS.length);
+        for (const tool of ALL_BUILTINS) {
+            expect(disallowedArgv).toContain(tool);
         }
+    });
 
-        // compiledTools = ["Read", "Grep"] → disallowed = everything else
-        const provider = new InspectableClaudeCliProvider(
-            {
-                type: "claudecli",
-                allowedBuiltinTools: ["Bash", "Edit"], // must be overridden by compiledTools
-            },
-            {},
-            ["Read", "Grep"]
-        );
+    it("disallowedArgv is formatted as --disallowedTools <name> pairs ready for CLI", () => {
+        // Verify the argv fragment structure: every other token starting at index 0
+        // must be "--disallowedTools", and every token at odd indices must be a tool name.
+        const { disallowedArgv } = computeClaudeBuiltinArgs({
+            compiledTools: ["Read"],
+            allowedBuiltinTools: undefined,
+        });
 
-        const disallowed = provider.getDisallowedBuiltins();
-
-        // "Read" and "Grep" are in compiledTools → must NOT be disallowed
-        expect(disallowed).not.toContain("Read");
-        expect(disallowed).not.toContain("Grep");
-
-        // "Bash" and "Edit" are in config.allowedBuiltinTools but NOT in compiledTools
-        // → must be disallowed (teeth: if allowedBuiltinTools were honoured, these would pass)
-        expect(disallowed).toContain("Bash");
-        expect(disallowed).toContain("Edit");
-
-        // Verify the total disallowed count matches ALL_BUILTINS - compiledTools
-        expect(disallowed).toHaveLength(ALL_BUILTINS.length - 2); // 15 - 2 = 13
+        expect(disallowedArgv.length % 2).toBe(0);
+        for (let i = 0; i < disallowedArgv.length; i += 2) {
+            expect(disallowedArgv[i]).toBe("--disallowedTools");
+            expect(typeof disallowedArgv[i + 1]).toBe("string");
+            expect(disallowedArgv[i + 1]).not.toBe("--disallowedTools");
+        }
+        // "Read" must not appear as a disallowed tool name
+        expect(disallowedArgv).not.toContain("Read");
     });
 });

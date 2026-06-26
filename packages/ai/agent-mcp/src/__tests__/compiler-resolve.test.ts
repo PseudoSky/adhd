@@ -34,6 +34,9 @@ import { SessionStore } from "../store/session-store.js";
 import { resolveComposedPrompt, computeContextHash } from "../engine/prompt-resolver.js";
 import type { CompileAgentFn, PromptResolverDeps } from "../engine/prompt-resolver.js";
 import type { AgentCreateInput } from "../validation/index.js";
+import { agentTool } from "../tools/session.js";
+import type { SessionDeps } from "../tools/session.js";
+import { PolicyEngine } from "../engine/policy.js";
 
 // ── Test DB helpers ────────────────────────────────────────────────────────────
 
@@ -328,5 +331,137 @@ describe("computeContextHash", () => {
         const a = computeContextHash("agent", "openai", { b: "2", a: "1" });
         const b = computeContextHash("agent", "openai", { a: "1", b: "2" });
         expect(a).toBe(b);
+    });
+});
+
+// ── [compiler-integration.B2] agentTool prompt-resolver seam ─────────────────
+//
+// [inv:real-agentTool-seam] — drives the REAL `agentTool` exported from
+// tools/session.ts with a real SQLite DB (on-disk), real AgentStore/SessionStore/
+// ComposedPromptStore, and a stubbed compileAgentFn (only the LLM provider
+// boundary is mocked).  Deleting the `if (deps.promptResolver)` block in
+// tools/session.ts makes these assertions FAIL (proven by negative control).
+//
+// [inv:reopen-proves-persistence] — after agentTool resolves, the DB handle is
+// CLOSED and REOPENED from the same file path.  The assertions on
+// `composed_prompt_id` and `systemPrompt` run against the reopened handle, so
+// passing them proves the values were actually persisted — not held in memory.
+
+describe("agentTool — promptResolver seam [inv:real-agentTool-seam]", () => {
+    it("populates snapshot.systemPrompt from resolved content and sets composed_prompt_id", async () => {
+        // ── setup: real on-disk DB with migrations ───────────────────────────
+        const { sqlite, db } = openDb(dbPath);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dbAny = db as any;
+
+        const agentStore = new AgentStore(dbAny);
+        const sessionStore = new SessionStore(dbAny);
+        const composedPromptStore = new ComposedPromptStore(dbAny);
+        const { fn: compileAgentFn } = makeStubCompileAgent(COMPILED_CONTENT);
+
+        agentStore.create(sampleAgentInput());
+
+        const policy = new PolicyEngine({
+            serverMaxDepth: 10,
+            serverMaxToolLoops: 50,
+            policyTemplateRules: [],
+        });
+
+        const promptResolver: PromptResolverDeps = {
+            composedPromptStore,
+            compileAgentFn,
+            registryDb: dbAny,
+        };
+
+        const deps: SessionDeps = {
+            agentStore,
+            sessionStore,
+            policy,
+            promptResolver,
+        };
+
+        // ── drive the REAL agentTool (production seam under test) ────────────
+        const output = await agentTool({ name: AGENT_NAME }, deps);
+        const sessionId = output.session_id;
+
+        // Close the handle and REOPEN to prove persistence (not in-memory state)
+        sqlite.close();
+        const { sqlite: sqlite2, db: db2 } = openDb(dbPath);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const db2Any = db2 as any;
+
+        // ── assert: systemPrompt in the snapshot equals the compiled content ──
+        const snapshotStore = new SessionStore(db2Any);
+        const snapshotDef = snapshotStore.getAgentDefinition(sessionId);
+        expect(snapshotDef.systemPrompt).toBe(COMPILED_CONTENT);
+        expect(snapshotDef.systemPrompt).not.toBe("original authored prompt — should be replaced by compiled content");
+
+        // ── assert: composed_prompt_id is non-null in the raw DB row ─────────
+        const row = (sqlite2 as unknown as {
+            prepare: (s: string) => { get: (...args: unknown[]) => Record<string, unknown> | undefined }
+        })
+            .prepare("SELECT composed_prompt_id FROM sessions WHERE id = ?")
+            .get(sessionId);
+
+        expect(row).toBeDefined();
+        expect(row!["composed_prompt_id"]).not.toBeNull();
+        expect(typeof row!["composed_prompt_id"]).toBe("string");
+        expect((row!["composed_prompt_id"] as string).length).toBeGreaterThan(0);
+
+        sqlite2.close();
+    });
+
+    it("NEGATIVE CONTROL: without promptResolver, composed_prompt_id is null and systemPrompt is the original", async () => {
+        // Proves the `if (deps.promptResolver)` block is the only path that writes
+        // the compiled content and the composed_prompt_id.  Deleting that block
+        // makes the POSITIVE test above go red (this test validates that assumption).
+        const { sqlite, db } = openDb(dbPath);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dbAny = db as any;
+
+        const agentStore = new AgentStore(dbAny);
+        const sessionStore = new SessionStore(dbAny);
+
+        agentStore.create(sampleAgentInput());
+
+        const policy = new PolicyEngine({
+            serverMaxDepth: 10,
+            serverMaxToolLoops: 50,
+            policyTemplateRules: [],
+        });
+
+        // NO promptResolver — legacy path
+        const deps: SessionDeps = {
+            agentStore,
+            sessionStore,
+            policy,
+            // promptResolver intentionally absent
+        };
+
+        const output = await agentTool({ name: AGENT_NAME }, deps);
+        const sessionId = output.session_id;
+
+        sqlite.close();
+        const { sqlite: sqlite2, db: db2 } = openDb(dbPath);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const db2Any = db2 as any;
+
+        // composed_prompt_id must be NULL — the resolver was never called
+        const row = (sqlite2 as unknown as {
+            prepare: (s: string) => { get: (...args: unknown[]) => Record<string, unknown> | undefined }
+        })
+            .prepare("SELECT composed_prompt_id FROM sessions WHERE id = ?")
+            .get(sessionId);
+
+        expect(row).toBeDefined();
+        expect(row!["composed_prompt_id"]).toBeNull();
+
+        // systemPrompt must be the original authored value (not compiled)
+        const snapshotStore = new SessionStore(db2Any);
+        const snapshotDef = snapshotStore.getAgentDefinition(sessionId);
+        expect(snapshotDef.systemPrompt).toBe("original authored prompt — should be replaced by compiled content");
+        expect(snapshotDef.systemPrompt).not.toBe(COMPILED_CONTENT);
+
+        sqlite2.close();
     });
 });
