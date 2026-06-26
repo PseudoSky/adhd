@@ -1,1 +1,84 @@
-{}
+{
+  "better-sqlite3": {
+    "provenance": "vendored-source",
+    "resolved_version": "see packages/ai/agent-mcp/package.json",
+    "source": "node_modules/better-sqlite3/lib/index.d.ts",
+    "confidence": "vendored",
+    "interface": "new Database(path); db.pragma('journal_mode = WAL'); db.close()",
+    "shape": {
+      "key_api_note": "agent-mcp already owns the runtime sink DB (packages/ai/agent-mcp/src/db/schema.ts). This plan ADDS composed_prompts + experiment_assignments tables + sessions.composed_prompt_id FK with a generated drizzle migration (nullable FK so the migration is backward-compatible). The composed-prompt-schema test closes + reopens to prove the cache row persists (reopen-proves-cache). Gate on the runner exit code."
+    },
+    "cited_by": [
+      "runtime-sink-schema"
+    ]
+  },
+  "compiler-consumed": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0 (see docs/plan/agent-compiler/interfaces.json :: agent-compiler-public-api)",
+    "source": "@adhd/agent-compiler (UPSTREAM \u2014 plan agent-compiler)",
+    "confidence": "documented",
+    "interface": "import { compileAgent } from '@adhd/agent-compiler'",
+    "shape": {
+      "resolveComposedPrompt": "engine/prompt-resolver.ts :: resolveComposedPrompt({ agentSlug, platform, context }): 1) compute context_hash; ComposedPromptStore.findByAgentContext(...); 2) on HIT return cached { content, id } WITHOUT calling compileAgent; 3) on MISS call compileAgent(...), upsert the row, return { content, id }. Wired into tools/session.ts (session start) + store/session-store.ts (snapshot). sessions.composed_prompt_id = id; the AgentDefinition snapshot's systemPrompt is populated from content (the compat shim).",
+      "dependency_edge": "agent-mcp-refactor DEPENDS ON agent-compiler. The spawner / AgentStore delegates prompt resolution to compileAgent \u2014 references compileAgent. Mirrors REFERENCES.md 'SOX Runtime / System Prompt Compiler Integration' + 'What Changes in agent-mcp'.",
+      "package_wiring": "add @adhd/agent-compiler to agent-mcp package.json deps + a tsconfig.base.json path (criteria compiler-integration .4/.5).",
+      "key_api_note": "Consumed by compiler-integration. The resolver test stubs compileAgent (this tests the resolver SEAM, not a model call) and asserts the session resolves the stubbed content and writes a non-null composed_prompt_id."
+    },
+    "cited_by": [
+      "runtime-sink-schema",
+      "compiler-integration",
+      "session-e2e"
+    ]
+  },
+  "provider-consumed": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0 (see docs/plan/agent-provider/interfaces.json :: agent-provider-public-api)",
+    "source": "@adhd/agent-provider (UPSTREAM \u2014 plan agent-provider)",
+    "confidence": "documented",
+    "interface": "import { ProviderAdapterImpl } from '@adhd/agent-provider'; import type { ProviderAdapter } from '@adhd/agent-mcp-types'",
+    "shape": {
+      "ProviderAdapter": "agent-mcp receives a ProviderAdapter instance (from @adhd/agent-provider) and calls adapter.stream(messages, tools, model) \u2014 it does NOT name a concrete provider (REFERENCES.md 'Collaborator: agent-mcp'). Provider-specific concerns (model resolution, API call format, streaming) are delegated to @adhd/agent-provider.",
+      "feat007_wiring": "policy-engine-bridge / runtime wiring forwards COMPILED platform tools (server-side type-tagged) to the provider via agent-provider's emitToolsForProvider. The full client-side execution loop for unsupported native tools (bash/computer) remains OUT OF SCOPE here too (FEAT-007 in agent-mcp/BACKLOG.md) \u2014 the provider plan only emits + gates.",
+      "dependency_edge": "agent-mcp-refactor DEPENDS ON agent-provider (and on @adhd/agent-mcp-types for the ProviderAdapter / StreamChunk types). Dependency direction: agent-mcp-types <- agent-provider <- agent-mcp (no cycle).",
+      "key_api_note": "Consumed by policy-engine-bridge (claudecli reconciliation) + session-e2e (the real provider drives the session). The claudecli allowedBuiltinTools / systemPromptIsAgentSpec fields are reconciled onto the compiled composed.tools / AGENT_TOOL model so there is ONE tool-permission source of truth."
+    },
+    "cited_by": [
+      "compiler-integration",
+      "policy-engine-bridge",
+      "session-e2e"
+    ]
+  },
+  "policy-consumed": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0 (see docs/plan/agent-policy/interfaces.json :: agent-policy-public-api)",
+    "source": "@adhd/agent-policy (UPSTREAM \u2014 plan agent-policy)",
+    "confidence": "documented",
+    "interface": "import { PolicyTemplateStore, createPlugin as policyPlugin } from '@adhd/agent-policy'",
+    "shape": {
+      "policy_engine_bridge": "engine/policy.ts :: PolicyEngine.check() reads rate (recursion/loop) + permission (allowedAgents) limits from agent-policy TEMPLATE rules when present; the hardcoded PolicyConfig becomes the DEFAULT, not the only source. Reuses the @adhd/agent-policy template shape (does not re-derive policy semantics).",
+      "enforcement_plugin": "the @adhd/agent-policy enforcement plugin loads through agent-mcp's existing plugin loader (agent-mcp.config.json / AGENT_MCP_PLUGINS) and registers on the IHookRegistry \u2014 REUSE, not replace (REFERENCES.md 'Plugin Architecture \u2014 Reuse, Not Replace').",
+      "dependency_edge": "agent-mcp-refactor reads agent-policy template limits at runtime. (Note: agent-policy already depends only on agent-mcp-types, so agent-mcp consuming agent-policy is acyclic.)",
+      "key_api_note": "Consumed by policy-engine-bridge. The reconciliation test proves a policy-template limit overrides the PolicyConfig default through PolicyEngine.check()."
+    },
+    "cited_by": [
+      "policy-engine-bridge"
+    ]
+  },
+  "agent-mcp-types-consumed": {
+    "provenance": "docs",
+    "resolved_version": "see packages/ai/agent-mcp-types/package.json",
+    "source": "packages/ai/agent-mcp-types/src/domain.ts (RESIGNED here: AgentDefinition.systemPrompt)",
+    "confidence": "documented",
+    "interface": "AgentDefinition.systemPrompt: required string -> optional/computed compat shim; (consumes ComposedPrompt, ProviderAdapter, StreamChunk added by upstream plans)",
+    "shape": {
+      "systemPrompt_resign": "validation/agent.ts: REMOVE the required systemPrompt: z.string() authoring field. Per decisions.md: either drop it (replace with composedPromptId) or make it .optional() with a JSDoc note that it is COMPUTED/populated from compiler output (agent-store-retire.2 greps for that compat note). Declared in dag.json changes.resigns.",
+      "ComposedPrompt": "agent-mcp's runtime composed_prompts row + the resolver return value conform to the shared ComposedPrompt type (added to agent-mcp-types by the compiler plan).",
+      "AgentStore_thin_cache": "store/agent-store.ts becomes a thin compiled-agent cache (the agents table transitions from source-of-truth to compiled cache); agent_create/update no longer require an authored prompt.",
+      "key_api_note": "This is the only cross-package type RESIGN in the corpus (systemPrompt). It is the documented removal target in SCOPE.md/REFERENCES.md. Source of truth for agent definitions MOVES to the registry + compiler."
+    },
+    "cited_by": [
+      "agent-store-retire",
+      "policy-engine-bridge"
+    ]
+  }
+}

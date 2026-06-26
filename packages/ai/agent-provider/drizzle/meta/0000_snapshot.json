@@ -1,0 +1,50 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "0000_providers_and_models",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "provider_providers": {
+      "name": "provider_providers",
+      "columns": {
+        "id": { "name": "id", "type": "text", "primaryKey": true, "notNull": true, "autoincrement": false },
+        "transport": { "name": "transport", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "auth_pattern": { "name": "auth_pattern", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "base_url": { "name": "base_url", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "endpoint_template": { "name": "endpoint_template", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "created_at": { "name": "created_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "updated_at": { "name": "updated_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "provider_models": {
+      "name": "provider_models",
+      "columns": {
+        "id": { "name": "id", "type": "text", "primaryKey": true, "notNull": true, "autoincrement": false },
+        "context_window": { "name": "context_window", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "output_limit": { "name": "output_limit", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "vision": { "name": "vision", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": false },
+        "prompt_caching": { "name": "prompt_caching", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": false },
+        "extended_thinking": { "name": "extended_thinking", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": false },
+        "pricing_tier": { "name": "pricing_tier", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "created_at": { "name": "created_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "updated_at": { "name": "updated_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false }
+      },
+      "indexes": {
+        "idx_provider_models_pricing_tier": {
+          "name": "idx_provider_models_pricing_tier",
+          "columns": ["pricing_tier"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    }
+  },
+  "enums": {},
+  "views": {}
+}

@@ -1,1 +1,16 @@
-{}
+{
+  "corpus-ingest-llm": {
+    "type": "credential",
+    "description": "The LLM ingestion stages (haiku fan-out + sonnet consolidation) drive REAL models via the agent-mcp provider. Required only when AGENT_REGISTRY_INGEST_LIVE=1 runs the live pipeline; absent => the LLM stages skip (not fail) and CI runs the deterministic replay fixture. Needs Claude model access (Claude Max OAuth keychain / ANTHROPIC_API_KEY, or claudecli on PATH). VERIFIED live 2026-06-26 via useClaudeOauth (Claude Max keychain): Anthropic OAuth model access ran end-to-end with real telemetry this session — the orchestrator must NOT re-halt on Anthropic OAuth for the ingest stages.",
+    "required_by": [
+      "haiku-usecase-batch",
+      "sonnet-consolidation"
+    ],
+    "verification": "test -n \"$AGENT_REGISTRY_INGEST_LIVE\" && { security find-generic-password -s 'Claude Code' >/dev/null 2>&1 || test -n \"$ANTHROPIC_API_KEY\" || command -v claude >/dev/null 2>&1; }",
+    "status": "verified",
+    "owner": "repo owner (Claude model access)",
+    "how_to_provide": "Provide Claude model access (sign in to Claude Code for keychain OAuth, or export ANTHROPIC_API_KEY, or install the claude CLI) and set AGENT_REGISTRY_INGEST_LIVE=1 to run the live ingestion. Leave unset for the deterministic replay (CI default).",
+    "destination": "env:ANTHROPIC_API_KEY",
+    "blocks_at": "per-state"
+  }
+}

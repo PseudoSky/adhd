@@ -1,1 +1,134 @@
-{}
+{
+  "better-sqlite3": {
+    "provenance": "vendored-source",
+    "resolved_version": "12.10.0",
+    "source": "node_modules/better-sqlite3/lib/index.d.ts",
+    "confidence": "vendored",
+    "interface": "new Database(sharedPath); db.pragma('journal_mode = WAL'); db.pragma('foreign_keys = ON'); db.close()",
+    "shape": {
+      "one_db_handle": "src/db/client.ts opens ONE better-sqlite3 handle over the SHARED registry DB file and returns a drizzle DB typed over the UNION of the four upstream packages' schemas (one-db-handle). The compiler reads from agent-registry, agent-tool-registry, agent-provider, and agent-policy tables in a single connection.",
+      "reopen_proves_cache": "the compile-cache test closes + reopens the handle before the second compile to prove the composed_prompts row persisted (reopen-proves-cache).",
+      "key_api_note": "The compiler is a CONSUMER package — it writes only the composed_prompts cache; it reads the upstream tables. Gate tests on the runner exit code (never grep -q passed)."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "composition-resolve",
+      "compile-cache",
+      "composed-prompt-caching"
+    ]
+  },
+  "registry-consumed": {
+    "provenance": "vendored-source",
+    "resolved_version": "0.0.1",
+    "source": "packages/ai/agent-registry/src/store/composition-store.ts (CompositionStore, ResolvedComponent — lines 110-398, 41-50); packages/ai/agent-registry/src/store/composed-prompt-store.ts (ComposedPromptStore, contextHash, ComposedPrompt — lines 37-46, 67-75, 99-202); packages/ai/agent-registry/src/index.ts (barrel)",
+    "confidence": "verified",
+    "interface": "import { CompositionStore, ComposedPromptStore, contextHash } from '@adhd/agent-registry'",
+    "shape": {
+      "component_model": "Decision 5 head/version split: registry_components (identity, slug TEXT PK) + registry_component_versions (history, version_id INTEGER PK AUTOINCREMENT, UNIQUE(slug,version)). The old single registry_prompt_components (slug,version) composite-PK table no longer exists.",
+      "resolveComposition": "CompositionStore.resolveComposition(agentSlug, ctx?): ResolvedComponent[] — the compiler's resolve/composition.ts CALLS this and concatenates component.content in returned (position) order. ResolvedComponent = { componentSlug, position, resolvedVersion, component: PromptComponent }. component.version is the human version number; component.versionId is the registry_component_versions.version_id surrogate. The compiler MUST NOT re-implement ORDER BY position or the context evaluator (context-precedence-consumed) — that logic is OWNED by agent-registry (Decision 2). See packages/ai/agent-registry/src/store/composition-store.ts:243-297.",
+      "version_pin": "registry_agent_components.version_pin stores a registry_component_versions.version_id (enforced nullable FK), not a human version number. null = resolve latest at resolve-time. CompositionStore.attach() accepts versionPin (version_id) or pinVersion (human version → resolved to version_id).",
+      "composed_prompts_component_versions": "the JSON audit map {componentSlug: version} written to registry_composed_prompts.component_versions records human version numbers (not version_ids) — human-readable audit record per Decision 5. Use ComponentStore.resolveVersionId(slug,version) if a stable version_id is needed.",
+      "contextHash": "contextHash(context: Record<string,string>): string — takes only string values; sorted-key JSON canonicalization → SHA-256 hex. The compiler REUSES this exported helper for the cache key so agent-registry, agent-compiler, and agent-mcp all derive the SAME hash. Single source of truth. See packages/ai/agent-registry/src/store/composed-prompt-store.ts:37-46.",
+      "ComposedPromptStore": "ComposedPromptStore.write({agentSlug,contextHash,content,componentVersions}): ComposedPrompt — WRITTEN by the compiler (cache row insert). lookup(agentSlug,hash): ComposedPrompt|null — O(1) cache hit check before recompile. read(id): ComposedPrompt — by PK. ComposedPrompt.id is number (integer autoincrement). See packages/ai/agent-registry/src/store/composed-prompt-store.ts:115-181.",
+      "dependency_edge": "agent-compiler DEPENDS ON agent-registry-schema. References CompositionStore.resolveComposition + ComposedPromptStore.write/lookup + contextHash.",
+      "key_api_note": "Consumed by composition-resolve (resolveBody) + composed-prompt-caching (cache write)."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "composition-resolve",
+      "composed-prompt-caching"
+    ]
+  },
+  "tool-registry-consumed": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0 (see docs/plan/agent-tool-registry/interfaces.json :: agent-tool-registry-public-api)",
+    "source": "@adhd/agent-tool-registry (UPSTREAM — plan agent-tool-registry)",
+    "confidence": "documented",
+    "interface": "import { AgentToolStore, ToolBindingStore } from '@adhd/agent-tool-registry'",
+    "shape": {
+      "resolveTools": "the compiler's resolve/tools.ts reads AgentToolStore.listForAgent(agentSlug) and joins ToolBindingStore.resolve(toolName, platform) to produce ResolvedTool[] (canonical -> platform alias + availability); drops 'unavailable' bindings. shell_exec -> 'Bash' on claude_code, 'bash' on claude_api.",
+      "dependency_edge": "agent-compiler DEPENDS ON agent-tool-registry. References AgentToolStore.listForAgent + ToolBindingStore.resolve.",
+      "key_api_note": "Consumed by tool-header-emit. The markdown emitter renders the alias list as `tools: Read, Grep, WebSearch`; the json emitter renders the structured array."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "tool-header-emit",
+      "platform-markdown-emit"
+    ]
+  },
+  "provider-consumed": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0 (see docs/plan/agent-provider/interfaces.json :: agent-provider-public-api)",
+    "source": "@adhd/agent-provider (UPSTREAM — plan agent-provider)",
+    "confidence": "documented",
+    "interface": "import { ModelStore, ToolFormatStore } from '@adhd/agent-provider'",
+    "shape": {
+      "resolveModel": "the compiler's resolve/model.ts reads the agent's model_hint and calls ModelStore.resolveModelId(modelHint, platform) -> platformModelId (claude_opus_4_8 -> 'opus' on claude_code, 'claude-opus-4-8' on claude_api); falls back to the canonical id if no binding (recorded in decisions.md).",
+      "ToolFormatStore": "the json emitter consults ToolFormatStore.getShape(providerId, canonicalTool) to shape tool defs per provider (custom vs server_side type-tagged) at COMPILE time, mirroring agent-provider's emitToolsForProvider branching.",
+      "dependency_edge": "agent-compiler DEPENDS ON agent-provider. References ModelStore.resolveModelId + ToolFormatStore.getShape. This is COMPILE-time model resolution — the reason the provider registry was extracted from agent-mcp (eliminates the cycle where the compiler would otherwise import the orchestrator).",
+      "key_api_note": "Consumed by model-and-policy-emit + platform-markdown-emit (json)."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "model-and-policy-emit",
+      "platform-markdown-emit"
+    ]
+  },
+  "policy-consumed": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0 (see docs/plan/agent-policy/interfaces.json :: agent-policy-public-api)",
+    "source": "@adhd/agent-policy (UPSTREAM — plan agent-policy)",
+    "confidence": "documented",
+    "interface": "import { AgentPolicyStore, PolicyTemplateStore } from '@adhd/agent-policy'",
+    "shape": {
+      "resolvePolicyConstraints": "the compiler's resolve/policy.ts reads AgentPolicyStore.listForAgent(agentSlug) (direct + inherited via inherited_from), joins PolicyTemplateStore.read(policySlug).rules, and produces Constraint[] the header/body renders (no-credentials -> 'Never write API keys or secrets...'). Respects the eager/lazy inheritance decision OWNED by agent-policy (plan 4).",
+      "AgentPolicyAssignment": "consumes the AgentPolicyAssignment shape (cross-package type; to live in @adhd/agent-mcp-types per the shared-type rule).",
+      "dependency_edge": "agent-compiler DEPENDS ON agent-policy. References AgentPolicyStore.listForAgent + PolicyTemplateStore.read.",
+      "key_api_note": "Consumed by model-and-policy-emit. The compiler folds policy rows into the compiled permissions/constraint block."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "model-and-policy-emit"
+    ]
+  },
+  "agent-mcp-types-shared-additions": {
+    "provenance": "docs",
+    "resolved_version": "see packages/ai/agent-mcp-types/package.json",
+    "source": "packages/ai/agent-mcp-types/src/domain.ts (NEW SHARED TYPES — additive)",
+    "confidence": "documented",
+    "interface": "ADD to @adhd/agent-mcp-types (per REFERENCES.md:197-211): ComposedPrompt, PromptComponent, AgentPolicyAssignment",
+    "shape": {
+      "ComposedPrompt": "{ id: number; agentSlug: string; contextHash: string; content: string; componentVersions: Record<string, number>; createdAt: string } — id is number (integer autoincrement PK matching registry_composed_prompts); the compiler RETURNS this shape ([def:composed-output]) and writes it to both the registry composed_prompts cache and agent-mcp's runtime sink.",
+      "PromptComponent": "{ slug: string; type: string; content: string; version: number; versionId: number; isShared: boolean; createdAt: string; updatedAt: string } — versionId added by Decision 5.",
+      "AgentPolicyAssignment": "{ agentSlug: string; policySlug: string; overrideConfig: Record<string,unknown>|null; isMandatory: boolean; inheritedFrom: string|null } — produced by @adhd/agent-policy, consumed by the compiler.",
+      "NEW_SHARED_TYPES": "These three types are SHARED across registry packages + agent-mcp. Per REFERENCES.md:197-211 they must be ADDED to @adhd/agent-mcp-types/src/domain.ts (additive, no circular dep) rather than duplicated in a new types package. Do NOT create @adhd/agent-registry-types. (ProviderAdapter + StreamChunk are added by the agent-provider plan; ComposedPrompt + PromptComponent + AgentPolicyAssignment are added here / wherever first needed.)",
+      "key_api_note": "The compiler's compileAgent return value ({ id?, content, tools, componentVersions }) conforms to ComposedPrompt once the cache write assigns the id. agent-mcp (plan 6) consumes the same ComposedPrompt shape at session start."
+    },
+    "cited_by": [
+      "composition-resolve",
+      "platform-markdown-emit",
+      "composed-prompt-caching",
+      "model-and-policy-emit"
+    ]
+  },
+  "agent-compiler-public-api": {
+    "provenance": "docs",
+    "resolved_version": "1.0.0",
+    "source": "packages/ai/agent-compiler/src/index.ts (barrel)",
+    "confidence": "documented",
+    "interface": "@adhd/agent-compiler exports: { compileAgent } and a `bin` CLI (agent-registry compile <slug>)",
+    "shape": {
+      "compileAgent": "compileAgent({ agentSlug, platform, context, db }): Promise<{ id?: string; content: string; tools: ResolvedTool[]; componentVersions: Record<string,number> }> — THE convergence entrypoint. Orchestrates resolveBody (registry) + resolveTools (tool-registry) + resolveModel/ToolFormat (provider) + resolvePolicyConstraints (policy), dispatches on the platform header_format to emit/markdown.ts (yaml_frontmatter) or emit/json.ts (json_object), and writes/hits the composed_prompts cache (id set on cache write). claude_code -> markdown with --- frontmatter (name, description, tools: aliases, model: alias) + junction-ordered body + policy constraint block; claude_api -> { systemPrompt, tools }.",
+      "cli_bin": "package.json bin maps `agent-registry` (compile <slug> --platform <p> --context '{...}' --format json --out-dir <d> --all --category <c> --db <path>) -> ./src/cli/compile.js. Default writes content to stdout; --out-dir writes <slug>.md; exits non-zero on unknown slug/platform. Mirrors USAGE.md 'Compiling to Markdown'.",
+      "consumed_by_agent_mcp": "@adhd/agent-mcp (plan 6) imports compileAgent for session-start prompt resolution (USAGE.md 'Runtime Integration via agent-mcp'); the migration (plan 7) drives the compile CLI as the round-trip equivalence gate.",
+      "key_api_note": "agent-compiler is the CONVERGENCE point: it DEPENDS ON all four foundation plans (agent-registry-schema, agent-tool-registry, agent-provider, agent-policy). It is the single package that joins all four domains' stores. Downstream: agent-mcp-refactor (plan 6) and agent-registry-migration (plan 7) depend on agent-compiler. No cycles (provider/types extraction guarantees this)."
+    },
+    "cited_by": [
+      "scaffold-package",
+      "platform-markdown-emit",
+      "compile-cli",
+      "composed-prompt-caching",
+      "compile-fixtures-e2e"
+    ]
+  }
+}

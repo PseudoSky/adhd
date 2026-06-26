@@ -17,34 +17,6 @@
       "start_ref": null,
       "end_ref": null
     },
-    "frontmatter-parser": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
-    },
-    "body-section-splitter": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
-    },
-    "import-pipeline": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
-    },
-    "skills-migration": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
-    },
     "roundtrip-equivalence-gate": {
       "status": "pending",
       "started_at": null,
@@ -72,20 +44,62 @@
       "done_at": null,
       "start_ref": null,
       "end_ref": null
+    },
+    "code-review": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "corpus-parser": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "haiku-usecase-batch": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "sonnet-consolidation": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "dataset-build": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "import-script": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
     }
   },
   "transition_log": [],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
-    "version": "0.8.22",
+    "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
   "current_state": "migration-design",
   "dod_provenance": {
-    "confirmed_at": "2026-06-23T04:23:31.376Z",
+    "confirmed_at": "2026-06-26T04:18:33.555Z",
     "by": "pseudosky",
-    "note": "DoD derived from docs/plan/agent-registry SCOPE+REFERENCES+SEED_DATA §0; confirmed by team-lead plan-authoring task 2026-06-22",
+    "note": "Owner human sign-off 2026-06-26: LLM-driven corpus ingestion — deterministic parser over full 18-type set -> haiku fan-out per component -> sonnet consolidation (dedup with teeth) -> dataset-build -> public importCorpus(); anchor backfill for Plan 8. Confirmed via plain-language DoD sheet.",
     "dod_ids": [
       "dod.1",
       "dod.2",

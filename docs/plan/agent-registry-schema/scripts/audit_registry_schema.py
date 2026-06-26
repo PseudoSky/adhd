@@ -117,7 +117,12 @@ def phase_schema() -> list:
     r.append(grep_absent("scaffold-package.5", "no browser globals", r'from "react"|document\.|window\.', f"{PKG}/src"))
     # lookup-and-component-schema
     r.append(grep_present("lookup-and-component-schema.1", "prompt_types table", "prompt_types|promptTypes", SCHEMA))
-    r.append(grep_present("lookup-and-component-schema.2", "prompt_components table", "prompt_components|promptComponents", SCHEMA))
+    # Decision 5: the single (slug, version) registry_prompt_components table was split
+    # into registry_components (identity/head) + registry_component_versions (history).
+    # The version table is the one carrying the integer `version` column this criterion
+    # is about, so grep for it (the old `prompt_components` token no longer exists).
+    r.append(grep_present("lookup-and-component-schema.2", "registry_component_versions table",
+                          "registry_component_versions|componentVersionsTable", SCHEMA))
     r.append(check("lookup-and-component-schema.3", "component-store test passes",
                    f"npx --yes nx test agent-registry --testFile={TESTS}/component-store.test.ts"))
     # agent-and-taxonomy-schema
@@ -140,13 +145,10 @@ def phase_schema() -> list:
     r.append(grep_present("composed-prompt-cache.1", "composed_prompts table", "composed_prompts|composedPrompts", SCHEMA))
     r.append(check("composed-prompt-cache.2", "composed-prompt-store cache test passes",
                    f"npx --yes nx test agent-registry --testFile={TESTS}/composed-prompt-store.test.ts"))
-    # seed-and-roundtrip
-    r.append(check("seed-and-roundtrip.1", "seed/reopen/idempotency suite passes",
-                   f"npx --yes nx test agent-registry --testFile={TESTS}/roundtrip.test.ts"))
-    r.append(grep_present("seed-and-roundtrip.2", "seed lists DATA_MODEL types",
-                          "success_criteria|escalation|convergence", f"{PKG}/src/seed/prompt-types.ts"))
-    r.append(check("seed-and-roundtrip.3", "negative-control: roundtrip has teeth (positive probe)",
-                   f"npx --yes nx test agent-registry --testFile={TESTS}/roundtrip.test.ts"))
+    # NOTE: seed-and-roundtrip.* criteria are NOT evaluated here. The seed-and-roundtrip
+    # work-state runs in a LATER wave (depends_on: ["audit-schema"]), so audit-schema must
+    # gate only the schema-TABLE criteria above. The seed criteria are enforced at the true
+    # final gate in phase_final() (audit-final, the last wave) where the work is complete.
     r.append(check("audit-schema.1", "schema-phase audit self-consistent", "true"))
     return r
 
@@ -158,6 +160,15 @@ def phase_schema() -> list:
 
 def phase_final() -> list:
     r = phase_schema()
+    # seed-and-roundtrip — gated HERE (audit-final), not in phase_schema. By the final
+    # wave the seed-and-roundtrip work-state has run, so these criteria are enforceable
+    # with full teeth at the true final gate.
+    r.append(check("seed-and-roundtrip.1", "seed/reopen/idempotency suite passes",
+                   f"npx --yes nx test agent-registry --testFile={TESTS}/roundtrip.test.ts"))
+    r.append(grep_present("seed-and-roundtrip.2", "seed lists DATA_MODEL types",
+                          "success_criteria|escalation|convergence", f"{PKG}/src/seed/prompt-types.ts"))
+    r.append(check("seed-and-roundtrip.3", "negative-control: roundtrip has teeth (positive probe)",
+                   f"npx --yes nx test agent-registry --testFile={TESTS}/roundtrip.test.ts"))
     # [dod.1] component round-trips after reopen
     r.append(check("dod.1", "component round-trips through real store after reopen",
                    f"npx --yes nx test agent-registry --testFile={TESTS}/roundtrip.test.ts"))

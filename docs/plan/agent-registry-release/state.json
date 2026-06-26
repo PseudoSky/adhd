@@ -1,0 +1,83 @@
+{
+  "schema_version": 2,
+  "title": "Agent Registry — Release & Closeout (worktree merge, publish, cleanup)",
+  "dag": "dag.json",
+  "states": {
+    "closeout-design": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "worktree-clarity": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "artifact-cleanup": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "agent-mcp-backout-gate": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "merge-to-main": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "publish-packages": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "post-publish-smoke": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "audit-final": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    }
+  },
+  "transition_log": [],
+  "amendment_log": [],
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.23",
+    "hash": "1e4130a84aed"
+  },
+  "current_state": "closeout-design",
+  "dod_provenance": {
+    "confirmed_at": "2026-06-26T04:28:04.958Z",
+    "by": "pseudosky",
+    "note": "Owner sign-off 2026-06-26 (delegated to orchestrator): worktree-clarity + back-out-gated merge + nx release publish (no --skip-nx-cache) + artifact cleanup. Confirmed via plain-language DoD sheet.",
+    "dod_ids": [
+      "dod.1",
+      "dod.2",
+      "dod.3",
+      "dod.4",
+      "dod.5"
+    ]
+  }
+}

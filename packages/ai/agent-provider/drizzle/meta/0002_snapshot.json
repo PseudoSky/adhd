@@ -1,0 +1,98 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "0002_provider_tool_formats",
+  "prevId": "0001_model_platform_bindings",
+  "tables": {
+    "provider_providers": {
+      "name": "provider_providers",
+      "columns": {
+        "id": { "name": "id", "type": "text", "primaryKey": true, "notNull": true, "autoincrement": false },
+        "transport": { "name": "transport", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "auth_pattern": { "name": "auth_pattern", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "base_url": { "name": "base_url", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "endpoint_template": { "name": "endpoint_template", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "created_at": { "name": "created_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "updated_at": { "name": "updated_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "provider_models": {
+      "name": "provider_models",
+      "columns": {
+        "id": { "name": "id", "type": "text", "primaryKey": true, "notNull": true, "autoincrement": false },
+        "context_window": { "name": "context_window", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "output_limit": { "name": "output_limit", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "vision": { "name": "vision", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": false },
+        "prompt_caching": { "name": "prompt_caching", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": false },
+        "extended_thinking": { "name": "extended_thinking", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": false },
+        "pricing_tier": { "name": "pricing_tier", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "created_at": { "name": "created_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "updated_at": { "name": "updated_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false }
+      },
+      "indexes": {
+        "idx_provider_models_pricing_tier": {
+          "name": "idx_provider_models_pricing_tier",
+          "columns": ["pricing_tier"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "provider_model_platform_bindings": {
+      "name": "provider_model_platform_bindings",
+      "columns": {
+        "model_id": { "name": "model_id", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "platform": { "name": "platform", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "platform_model_id": { "name": "platform_model_id", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false }
+      },
+      "indexes": {
+        "idx_provider_mpb_model_id": {
+          "name": "idx_provider_mpb_model_id",
+          "columns": ["model_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "provider_model_platform_bindings_model_id_platform_pk": {
+          "name": "provider_model_platform_bindings_model_id_platform_pk",
+          "columns": ["model_id", "platform"]
+        }
+      },
+      "uniqueConstraints": {}
+    },
+    "provider_tool_formats": {
+      "name": "provider_tool_formats",
+      "columns": {
+        "provider_id": { "name": "provider_id", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "canonical_tool": { "name": "canonical_tool", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "emit_shape": { "name": "emit_shape", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "type_tag": { "name": "type_tag", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "note": { "name": "note", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false }
+      },
+      "indexes": {
+        "idx_provider_tool_formats_provider_id": {
+          "name": "idx_provider_tool_formats_provider_id",
+          "columns": ["provider_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "provider_tool_formats_provider_id_canonical_tool_pk": {
+          "name": "provider_tool_formats_provider_id_canonical_tool_pk",
+          "columns": ["provider_id", "canonical_tool"]
+        }
+      },
+      "uniqueConstraints": {}
+    }
+  },
+  "enums": {},
+  "views": {}
+}

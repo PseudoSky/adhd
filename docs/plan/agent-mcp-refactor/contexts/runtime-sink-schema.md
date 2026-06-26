@@ -53,8 +53,8 @@ proven by REOPEN (`[inv:reopen-proves-cache]`).
 ## Reservations
 
 ```text
-read_only:  ["docs/plan/agent-mcp-refactor/decisions.md", "packages/ai/agent-mcp/src/store/session-store.ts"]
-mutates:    ["packages/ai/agent-mcp/src/db/schema.ts", "packages/ai/agent-mcp/src/store/composed-prompt-store.ts", "packages/ai/agent-mcp/src/index.ts", "packages/ai/agent-mcp/drizzle", "packages/ai/agent-mcp/src/__tests__/composed-prompt-schema.test.ts"]
+read_only:  []
+mutates:    ["packages/ai/agent-mcp/src/db/schema.ts", "packages/ai/agent-mcp/src/store/composed-prompt-store.ts", "packages/ai/agent-mcp/src/store/index.ts", "packages/ai/agent-mcp/src/index.ts", "packages/ai/agent-mcp/src/validation/errors.ts", "packages/ai/agent-mcp/project.json", "packages/ai/agent-mcp/drizzle", "packages/ai/agent-mcp/src/__tests__/composed-prompt-schema.test.ts", "packages/ai/agent-mcp-types/src/domain.ts", "packages/ai/agent-mcp-types/src/errors.ts"]
 ```
 
 ---

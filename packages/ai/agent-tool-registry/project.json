@@ -1,0 +1,63 @@
+{
+  "name": "agent-tool-registry",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/ai/agent-tool-registry/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:ai", "platform:node"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/ai/agent-tool-registry",
+        "main": "packages/ai/agent-tool-registry/src/index.ts",
+        "tsConfig": "packages/ai/agent-tool-registry/tsconfig.lib.json",
+        "clean": true,
+        "assets": [
+          {
+            "input": "packages/ai/agent-tool-registry",
+            "glob": "drizzle/**/*",
+            "output": "."
+          }
+        ]
+      }
+    },
+
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/ai/agent-tool-registry/tsconfig.json --noEmit"
+      }
+    },
+
+    "clean": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "rm -rf dist/packages/ai/agent-tool-registry"
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": ["{workspaceRoot}/coverage/packages/ai/agent-tool-registry"],
+      "options": {
+        "configFile": "packages/ai/agent-tool-registry/vite.config.ts",
+        "passWithNoTests": true
+      }
+    },
+
+    "nx-release-publish": {
+      "dependsOn": ["build", "test"],
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  }
+}

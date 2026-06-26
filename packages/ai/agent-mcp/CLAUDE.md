@@ -137,6 +137,20 @@ npx nx test agent-mcp --watch   # watch mode
 
 The E2E suite (`E2E_PROMPT.md` + `run-e2e.mjs`) runs 14 scenarios against a live LM Studio instance and requires `DATABASE_PATH`, `LMSTUDIO_API_KEY`, and `LMSTUDIO_BASE_URL` to be set.
 
+## Mandatory: prove it through the LIVE MCP tools — never a bypass
+
+Unit tests use `:memory:` SQLite and a stubbed provider. They are necessary and they are **not** proof the server works. This server's only real consumer is an **MCP host calling its tools** — so the mandatory proof-of-life is exactly that: drive the `mcp__agent-mcp__*` tools **as loaded from `.mcp.json`**, over MCP stdio, against the **real store and a real provider**, and trust the returned payload + exit code. One such pass routinely catches what the whole green unit suite cannot: `.mcp.json` mis-wiring, `dist/` dependency-resolution failures (the externalized `@adhd/*` deps), tool-registration drift after a reload, OAuth/keychain reality, and tool-output that blows the host's token ceiling (a no-arg `agent_list` once returned 464 KB). The required loop:
+
+1. **Build, then make the tool actually available** — `nx build agent-mcp`, point `.mcp.json` at `dist/.../index.js`, ask the user to run `/mcp` to reload. (See the update cycle in [AGENT-DEV.md](./AGENT-DEV.md).)
+2. **Call the loaded tools as a host does:** `agent_create → agent → task → result`, plus the read paths (`agent_list`, `usage_query`).
+3. **Real state, real model:** the real DB (`~/.adhd/agent-mcp/agents.db`, *not* `:memory:`), and a real provider — `claudecli` (local Claude auth) or `anthropic` with `useClaudeOauth: true` (Claude Max keychain, no API key). Assert the model-independent invariant (`result`, `status: "completed"`, real `usage`), key on the **payload and exit code**, then clean up anything you wrote.
+
+### The anti-pattern this section exists to kill
+
+**If an `mcp__agent-mcp__*` tool is missing or not loaded, that is NOT license to "just run a shell script instead."** Hand-spawning the build — `node dist/index.js` with JSON-RPC piped by hand, or a `.mjs` that **imports the server's own modules and calls its functions directly** — is *our code calling our code*. It skips the exact seam (`.mcp.json` wiring → host → tool registration → dist resolution → output limits) that breaks in real use, so it can pass while the shipped server is unusable. **A missing tool means "load it," never "go around it."** The recovery is always step 1 above: build, repoint `.mcp.json`, `/mcp` reload — then call the tool.
+
+The one legitimate standalone harness is a script that acts as a **real MCP client** (uses `@modelcontextprotocol/sdk`'s `Client` + `StdioClientTransport` to speak real JSON-RPC stdio to the **unmodified built server**) — e.g. `docs/plan/agent-registry/demo/live-test-mcp.mjs`. That still crosses the real seam; importing server internals does not. When in doubt: *am I calling the server the way a host would, or am I reaching inside it?* Only the former counts.
+
 ## Error codes
 
 | Code | Thrown by |

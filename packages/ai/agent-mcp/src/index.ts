@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import "dotenv/config";
+import os from "node:os";
+import path from "node:path";
 
 /** Default max_tokens for providers that do not set maxTokens in their config. */
 export const AGENT_MCP_DEFAULT_MAX_TOKENS = parseInt(
@@ -9,11 +11,23 @@ export const AGENT_MCP_DEFAULT_MAX_TOKENS = parseInt(
 
 // Re-export HookRegistry so plugins can import it for testing without deep internal paths
 export { HookRegistry } from "./engine/hooks.js";
+// Re-export stores so consumers (tests, plugins) can import from the package root
+export { ComposedPromptStore } from "./store/composed-prompt-store.js";
+// Re-export prompt resolver for consumers that wire the compiler integration
+export { resolveComposedPrompt, computeContextHash } from "./engine/prompt-resolver.js";
+export type { ResolveInput, ResolveResult, ResolveResult as PromptResolveResult, CompileAgentFn, PromptResolverDeps } from "./engine/prompt-resolver.js";
+
+import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
+
+import { compileAgent } from "@adhd/agent-compiler";
 
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
 import { AgentStore, SessionStore, TaskStore } from "./store/index.js";
+import { ComposedPromptStore } from "./store/composed-prompt-store.js";
+import type { PromptResolverDeps } from "./engine/prompt-resolver.js";
 import { BackgroundQueue } from "./engine/queue.js";
 import { DagEngine } from "./engine/dag-engine.js";
 import { Orchestrator } from "./engine/orchestrator.js";
@@ -27,6 +41,83 @@ import { enqueueExistingTask } from "./tools/task.js";
 import { tasksTable } from "./db/schema.js";
 import { eq } from "drizzle-orm";
 import { ToolError } from "./validation/errors.js";
+
+// ── buildPromptResolver ───────────────────────────────────────────────────────
+//
+// Pure factory that constructs the PromptResolverDeps struct from environment
+// config.  Extracted from main() so tests can drive it directly without booting
+// the full server.
+//
+// Exported at the package root so index-wiring.test.ts can import it and assert
+// the composition-root wiring behaviour (Plan 6 gap F-P6-8b).
+
+export interface BuildPromptResolverOpts {
+    /** Path to the agent-registry SQLite file.  Absent → resolver is undefined. */
+    registryDbPath?: string;
+    /**
+     * The agent-mcp Drizzle DB handle, used to construct ComposedPromptStore.
+     * Must already have agent-mcp migrations applied.
+     */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    agentMcpDb: any;
+}
+
+/**
+ * Build a {@link PromptResolverDeps} from a registry DB path and the agent-mcp
+ * DB handle.
+ *
+ * - When `registryDbPath` is provided, opens the SQLite file in WAL mode, wraps
+ *   it with Drizzle, and wires {@link compileAgent} from @adhd/agent-compiler.
+ * - When `registryDbPath` is absent (undefined / empty string), returns
+ *   `undefined` — the legacy flat-systemPrompt path is used unchanged.
+ *
+ * This function has no observable side-effects beyond opening the SQLite file
+ * when a path is supplied, so it is safe to call in tests with a real on-disk
+ * DB path.
+ *
+ * @param opts.registryDbPath  - Path to the agent-registry SQLite file.
+ * @param opts.agentMcpDb      - Drizzle handle for the agent-mcp DB.
+ * @returns Wired {@link PromptResolverDeps} or `undefined`.
+ */
+export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolverDeps | undefined {
+    const { registryDbPath, agentMcpDb } = opts;
+
+    if (!registryDbPath) {
+        return undefined;
+    }
+
+    // Graceful degradation: the registry DB at the default path
+    // (~/.adhd/agent-mcp/registry.db) will be absent or unmigrated until Plan 7
+    // imports the corpus.  Opening a nonexistent directory throws; an empty /
+    // unmigrated DB produces empty tables that cause compileAgent to throw, which
+    // resolveComposedPrompt already catches and converts to a null (flat-prompt
+    // fallback).  We catch the open failure here so the server still starts and
+    // every flat-systemPrompt agent continues to work unchanged.
+    let registrySqlite: Database.Database;
+    try {
+        logger.info({ registryDbPath }, "Opening registry DB for compiler integration");
+        registrySqlite = new Database(registryDbPath, { fileMustExist: true });
+        registrySqlite.pragma("journal_mode = WAL");
+        registrySqlite.pragma("foreign_keys = ON");
+    } catch (err) {
+        logger.info(
+            { registryDbPath, err },
+            "Registry DB not available — falling back to flat systemPrompt for all agents"
+        );
+        return undefined;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const registryDb = drizzle(registrySqlite) as any;
+
+    const composedPromptStore = new ComposedPromptStore(agentMcpDb);
+
+    return {
+        composedPromptStore,
+        compileAgentFn: compileAgent,
+        registryDb,
+    };
+}
 
 // DEBT-001: top-level safety net for anything that escapes the per-component
 // handlers (SSE 'error' event: BUG-001; queue catch: BackgroundQueue.enqueue;
@@ -101,6 +192,37 @@ async function main() {
 
     const dagEngine = new DagEngine(dbAny, queue, taskStore, dispatchFn);
 
+    // ── Prompt resolver (compiler integration) ────────────────────────────
+    //
+    // Delegates to buildPromptResolver() — the exported factory that is also
+    // exercised directly by index-wiring.test.ts (Plan 6 gap F-P6-8b).
+    //
+    // When AGENT_MCP_REGISTRY_DB_PATH is set, buildPromptResolver opens the
+    // SQLite file and wires compileAgent from @adhd/agent-compiler.  Every
+    // `agent` tool call then resolves the system-prompt via the compiler (with
+    // a composed_prompts cache look-up) before creating the session.
+    //
+    // When AGENT_MCP_REGISTRY_DB_PATH is absent, buildPromptResolver returns
+    // undefined and the server falls back to the stored flat systemPrompt —
+    // existing callers and all legacy-agent tests continue to work unchanged.
+    //
+    // The fallback also fires WITHIN the resolver: if the agent has no registry
+    // composition (AgentError / CompositionError from compileAgent),
+    // resolveComposedPrompt returns null and agentTool uses the flat
+    // systemPrompt.  A mixed deployment (some registry-backed, some flat) works
+    // without any per-agent configuration.
+    // Registry resolver is ON by default.  The default path
+    // (~/.adhd/agent-mcp/registry.db) is the coupling point that Plan 7's corpus
+    // import must write to.  buildPromptResolver degrades gracefully when the file
+    // is absent (directory not yet created) or unmigrated (empty tables) — it logs
+    // an info message and returns undefined so every flat-systemPrompt agent still
+    // runs unchanged.
+    const promptResolver = buildPromptResolver({
+        registryDbPath: process.env["AGENT_MCP_REGISTRY_DB_PATH"]
+            ?? path.join(os.homedir(), ".adhd", "agent-mcp", "registry.db"),
+        agentMcpDb: dbAny,
+    });
+
     // Start SSE server alongside MCP server — shares taskStore for terminal-on-connect checks.
     const sseServer = startSseServer(taskStore);
 
@@ -114,6 +236,7 @@ async function main() {
         hooks,
         db: dbAny,
         dagEngine,
+        promptResolver,
     });
 
     // Startup re-enqueue scan: recover tasks that were transitioned to "pending"

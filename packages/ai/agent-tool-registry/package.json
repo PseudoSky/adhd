@@ -1,0 +1,39 @@
+{
+  "name": "@adhd/agent-tool-registry",
+  "version": "0.0.1",
+  "description": "Canonical tool and platform registry for agent runtimes — Drizzle-backed SQLite store",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "src",
+    "drizzle"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    }
+  },
+  "scripts": {
+    "build": "nx build agent-tool-registry",
+    "typecheck": "tsc -p tsconfig.lib.json --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
+  },
+  "dependencies": {
+    "better-sqlite3": "12.10.0",
+    "drizzle-orm": "0.45.2",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@vitest/coverage-v8": "^1.0.4",
+    "drizzle-kit": "^0.31.10",
+    "tslib": "^2.6.0",
+    "typescript": "^5.5.0",
+    "vite": "~5.0.13",
+    "vitest": "^1.6.0"
+  }
+}

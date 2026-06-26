@@ -135,9 +135,25 @@ function buildUserMessage(messages: Message[]): string {
 
 /**
  * Complete list of Claude Code built-in tool names (as of Claude Code 1.x).
- * All of these are disallowed by default for claudecli agents; only tools
- * listed in the agent's `allowedBuiltinTools` are permitted. MCP tools
- * (loaded via --mcp-config) are unaffected by this list.
+ *
+ * All of these are disallowed by default for claudecli agents. The permitted
+ * set is resolved from one of two sources in priority order:
+ *
+ *   1. compiledTools (AGENT_TOOL model) — the platform-alias array produced by
+ *      `compileAgent({ platform: "claude_code" }).tools` via @adhd/agent-compiler.
+ *      This is the strategic source of truth: each string is a `TOOL_PLATFORM_BINDING`
+ *      alias for the `claude_code` platform, derived from AGENT_TOOL grants in the
+ *      registry. When compiledTools is supplied to the constructor, it is used as
+ *      the allowed set and config.allowedBuiltinTools is ignored.
+ *
+ *   2. config.allowedBuiltinTools — the per-agent legacy allowlist (still honoured
+ *      when no compiled tool set is available, e.g. during the transition window
+ *      before compiler-integration lands).
+ *
+ * [inv:no-third-tool-model] — claudecli must NOT maintain an independent third
+ * tool-permission list separate from AGENT_TOOL / compiled.tools.
+ *
+ * MCP tools (loaded via --mcp-config) are unaffected by this list.
  */
 const CLAUDE_CODE_BUILTIN_TOOLS = [
     "Bash",
@@ -157,15 +173,71 @@ const CLAUDE_CODE_BUILTIN_TOOLS = [
     "Task",
 ] as const;
 
+// ─── built-in arg computation (pure, testable seam) ──────────────────────────
+
+/**
+ * Compute the effective allowed built-in set and the `--disallowedTools` argv
+ * entries that must be passed to the `claude` CLI subprocess.
+ *
+ * This is the single source of truth for [inv:no-third-tool-model]: the
+ * allowed set is resolved in priority order:
+ *   1. `compiledTools` (AGENT_TOOL / compile.tools model) — wins when present.
+ *   2. `config.allowedBuiltinTools`  — legacy / transition-window fallback.
+ *
+ * Extracted here so tests can assert the REAL produced argv without spawning
+ * a subprocess.  `chat()` must call this function; no divergence allowed.
+ *
+ * @param compiledTools - Platform-alias array from `compileAgent().tools`, or
+ *   `undefined` when the compiler integration is not available yet.
+ * @param allowedBuiltinTools - Per-agent legacy allowlist from config.
+ * @returns `{ effectiveAllowed, disallowedArgv }` where `disallowedArgv` is the
+ *   flat `["--disallowedTools", "<name>", ...]` fragment ready to push into args.
+ */
+export function computeClaudeBuiltinArgs(params: {
+    compiledTools: string[] | undefined;
+    allowedBuiltinTools: string[] | undefined;
+}): { effectiveAllowed: string[]; disallowedArgv: string[] } {
+    const effectiveAllowed: string[] =
+        params.compiledTools !== undefined
+            ? params.compiledTools              // AGENT_TOOL / compiled.tools model wins
+            : (params.allowedBuiltinTools ?? []);
+
+    const allowed = new Set(effectiveAllowed);
+    const disallowed = CLAUDE_CODE_BUILTIN_TOOLS.filter(t => !allowed.has(t));
+
+    const disallowedArgv: string[] = [];
+    for (const tool of disallowed) {
+        disallowedArgv.push("--disallowedTools", tool);
+    }
+
+    return { effectiveAllowed, disallowedArgv };
+}
+
 // ─── provider ────────────────────────────────────────────────────────────────
 
 export class ClaudeCliProvider implements LLMProvider {
     private readonly config: ClaudeCliConfig;
     private readonly mcpServers: Record<string, McpServerConfig>;
+    /**
+     * Platform-alias tool list derived from the AGENT_TOOL / compiled.tools model.
+     *
+     * When supplied (via `compileAgent({ platform: "claude_code" }).tools`), this
+     * array is the single source of truth for which Claude Code built-ins are
+     * permitted — config.allowedBuiltinTools is ignored. When absent, the provider
+     * falls back to config.allowedBuiltinTools (legacy / transition-window path).
+     *
+     * [inv:no-third-tool-model] — one tool-permission source, not two.
+     */
+    private readonly compiledTools: string[] | undefined;
 
-    constructor(config: ClaudeCliConfig, mcpServers: Record<string, McpServerConfig> = {}) {
+    constructor(
+        config: ClaudeCliConfig,
+        mcpServers: Record<string, McpServerConfig> = {},
+        compiledTools?: string[]
+    ) {
         this.config = config;
         this.mcpServers = mcpServers;
+        this.compiledTools = compiledTools;
     }
 
     /**
@@ -257,10 +329,13 @@ export class ClaudeCliProvider implements LLMProvider {
         // replaces the full default system prompt, keeping the agent's identity.
         const mcpConfigPath = await this.writeMcpConfigFile();
 
-        // Compute the disallowed built-in list: everything in CLAUDE_CODE_BUILTIN_TOOLS
-        // that is NOT listed in the agent's allowedBuiltinTools allowlist.
-        const allowed = new Set(this.config.allowedBuiltinTools ?? []);
-        const disallowed = CLAUDE_CODE_BUILTIN_TOOLS.filter(t => !allowed.has(t));
+        // Compute the disallowed built-in list via the extracted pure seam.
+        // Source of truth priority ([inv:no-third-tool-model]) is enforced inside
+        // computeClaudeBuiltinArgs — compiledTools wins over allowedBuiltinTools.
+        const { disallowedArgv } = computeClaudeBuiltinArgs({
+            compiledTools: this.compiledTools,
+            allowedBuiltinTools: this.config.allowedBuiltinTools,
+        });
 
         const args: string[] = [
             "-p",
@@ -268,14 +343,8 @@ export class ClaudeCliProvider implements LLMProvider {
             "--input-format", "stream-json",
             "--output-format", "stream-json",
             "--verbose",
+            ...disallowedArgv,             // --disallowedTools <name> pairs (MCP tools unaffected)
         ];
-
-        // Block every built-in that the agent definition doesn't explicitly allow.
-        // --disallowedTools accepts individual tool names as separate flag pairs.
-        // MCP tools are not affected — they're loaded via --mcp-config separately.
-        for (const tool of disallowed) {
-            args.push("--disallowedTools", tool);
-        }
 
         if (systemPrompt)        args.push("--system-prompt", systemPrompt);
         if (this.config.model)   args.push("--model", this.config.model);

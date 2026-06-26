@@ -1,0 +1,218 @@
+{
+  "schema_version": 2,
+  "title": "agent-mcp Authoring & Discovery — registry-backed composition over MCP (agent-mcp@2.0.0)",
+  "plan_kind": "brownfield",
+  "phases": [
+    "architecture",
+    "enrichment",
+    "seam",
+    "discovery",
+    "authoring",
+    "compat",
+    "e2e",
+    "audit"
+  ],
+  "terminal": "done",
+  "nodes": {
+    "authoring-design": {
+      "kind": "work",
+      "phase": "architecture",
+      "depends_on": [],
+      "guard": "python3 docs/plan/agent-mcp-authoring/scripts/audit_authoring.py --phase architecture",
+      "artifacts": [
+        "docs/plan/agent-mcp-authoring/decisions.md",
+        "docs/plan/agent-mcp-authoring/contexts/authoring-design.md"
+      ],
+      "context": "contexts/authoring-design.md",
+      "notes": ""
+    },
+    "embedding-substrate": {
+      "kind": "work",
+      "phase": "enrichment",
+      "depends_on": [
+        "authoring-design"
+      ],
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry/src/enrich/embedding.ts",
+        "packages/ai/agent-registry/src/enrich/usecase-anchors.ts",
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts"
+      ],
+      "context": "contexts/embedding-substrate.md",
+      "notes": ""
+    },
+    "enrichment-pipeline": {
+      "kind": "work",
+      "phase": "enrichment",
+      "depends_on": [
+        "embedding-substrate"
+      ],
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry/src/enrich/enrich-component.ts",
+        "packages/ai/agent-registry/src/enrich/summarize.ts",
+        "packages/ai/agent-registry/src/store/usecase-store.ts",
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts"
+      ],
+      "context": "contexts/enrichment-pipeline.md",
+      "notes": ""
+    },
+    "name-slug-seam": {
+      "kind": "work",
+      "phase": "seam",
+      "depends_on": [
+        "enrichment-pipeline"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/registry/name-slug.ts",
+        "packages/ai/agent-mcp/src/registry/registry-bridge.ts",
+        "packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts"
+      ],
+      "context": "contexts/name-slug-seam.md",
+      "notes": ""
+    },
+    "discovery-tools": {
+      "kind": "work",
+      "phase": "discovery",
+      "depends_on": [
+        "name-slug-seam"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/tools/discovery.ts",
+        "packages/ai/agent-mcp/src/server.ts",
+        "packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/discovery-bounded-output.test.ts"
+      ],
+      "context": "contexts/discovery-tools.md",
+      "notes": ""
+    },
+    "component-define": {
+      "kind": "work",
+      "phase": "authoring",
+      "depends_on": [
+        "discovery-tools"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/component-define.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/tools/authoring.ts",
+        "packages/ai/agent-mcp/src/server.ts",
+        "packages/ai/agent-mcp/src/__tests__/component-define.test.ts"
+      ],
+      "context": "contexts/component-define.md",
+      "notes": ""
+    },
+    "agent-define": {
+      "kind": "work",
+      "phase": "authoring",
+      "depends_on": [
+        "component-define"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/agent-define.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/tools/authoring.ts",
+        "packages/ai/agent-mcp/src/registry/composition-writer.ts",
+        "packages/ai/agent-mcp/src/server.ts",
+        "packages/ai/agent-mcp/src/__tests__/agent-define.test.ts"
+      ],
+      "context": "contexts/agent-define.md",
+      "notes": ""
+    },
+    "compat-shim": {
+      "kind": "work",
+      "phase": "compat",
+      "depends_on": [
+        "agent-define"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/systemprompt-compat.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/tools/agent-crud.ts",
+        "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-mcp/src/tools/guide.ts",
+        "packages/ai/agent-mcp/src/__tests__/systemprompt-compat.test.ts"
+      ],
+      "context": "contexts/compat-shim.md",
+      "notes": ""
+    },
+    "versioning": {
+      "kind": "work",
+      "phase": "compat",
+      "depends_on": [
+        "compat-shim"
+      ],
+      "guard": "npx --yes nx build agent-mcp",
+      "artifacts": [
+        "packages/ai/agent-mcp/package.json",
+        "packages/ai/agent-mcp/CHANGELOG.md"
+      ],
+      "context": "contexts/versioning.md",
+      "notes": ""
+    },
+    "composition-journey-e2e": {
+      "kind": "work",
+      "phase": "e2e",
+      "depends_on": [
+        "versioning"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
+        "docs/plan/agent-registry/demo/compose-via-mcp.mjs"
+      ],
+      "context": "contexts/composition-journey-e2e.md",
+      "notes": ""
+    },
+    "live-model-e2e": {
+      "kind": "work",
+      "phase": "e2e",
+      "depends_on": [
+        "composition-journey-e2e"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts"
+      ],
+      "context": "contexts/live-model-e2e.md",
+      "notes": ""
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "audit",
+      "depends_on": [
+        "live-model-e2e"
+      ],
+      "guard": "python3 docs/plan/agent-mcp-authoring/scripts/review_gate.py",
+      "artifacts": [
+        "docs/plan/agent-mcp-authoring/review.md",
+        "docs/plan/agent-mcp-authoring/scripts/review_gate.py"
+      ],
+      "context": "contexts/code-review.md",
+      "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "code-review"
+      ],
+      "guard": "python3 docs/plan/agent-mcp-authoring/scripts/audit_authoring.py --phase final",
+      "artifacts": [
+        "docs/plan/agent-mcp-authoring/scripts/audit_authoring.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
+    }
+  },
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.23",
+    "hash": "1e4130a84aed"
+  },
+  "goal": "An orchestrating agent composes a NEW agent from registry components over MCP only — prompt_types_list → component_search (auto-ranked) → component_read → tool_list/model_list/policy_list → agent_define/component_define (declarative idempotent upserts with auto-enrichment) → agent → task — without reading any agent file or store internals, while the 11-tool runtime hot path and agent-mcp byte-back-out guarantee both hold.",
+  "depends_on_plans": [
+    "agent-mcp-refactor"
+  ]
+}

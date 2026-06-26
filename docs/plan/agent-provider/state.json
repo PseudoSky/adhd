@@ -4,81 +4,257 @@
   "dag": "dag.json",
   "states": {
     "scaffold-package": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T23:06:16.610Z",
+      "done_at": "2026-06-23T23:11:05.618Z",
+      "start_ref": "ed332b2d31ed585fc45d05f21b8477bdb1391927",
+      "end_ref": "c0b7d13636f43e5c193edc1115421684929e89fd"
     },
     "provider-and-model-schema": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T23:13:31.480Z",
+      "done_at": "2026-06-23T23:20:04.045Z",
+      "start_ref": "3d7a90b6d883c344ee138bedc11c0de256f97395",
+      "end_ref": "40c79737c5c080b38ec25ea0ebb716a26dbe06d8"
     },
     "model-platform-bindings": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T23:21:54.207Z",
+      "done_at": "2026-06-23T23:26:32.271Z",
+      "start_ref": "a2929398da5e7d440d5c5280b874db335d5b5b98",
+      "end_ref": "b629f789b89a681100f130c02353c4f358939865"
     },
     "provider-tool-formats": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T23:31:28.342Z",
+      "done_at": "2026-06-23T23:35:11.371Z",
+      "start_ref": "69787c91ab947499117746d43ecf84668c204a55",
+      "end_ref": "e0fc0be470954d59a2a8fc9b927e5b71902ab0e9"
     },
     "audit-schema": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T23:36:56.852Z",
+      "done_at": "2026-06-23T23:37:23.971Z",
+      "start_ref": "1d30e81d45f27f74de2f5b22e5063ea288d7b1b3",
+      "end_ref": "4b608c8a37137c70daba6defdb803b4fb347a411"
     },
     "provider-adapter-contract": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T23:40:29.706Z",
+      "done_at": "2026-06-23T23:44:38.399Z",
+      "start_ref": "c7f6e8a167cf3278af6bd42c9c857e076a203f71",
+      "end_ref": "02ec01b4a664787692f400aba6609809fac3c61a"
     },
     "runtime-tool-forwarding": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-23T23:52:29.922Z",
+      "done_at": "2026-06-24T00:22:10.114Z",
+      "start_ref": "e7d8d4a91ad8b6f1829d3490d1298db1d9eafa13",
+      "end_ref": "1d9027f6fc331d169c74c0aa2bc64c73bfe1f0e8"
     },
     "seed-and-roundtrip": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-24T00:05:00.574Z",
+      "done_at": "2026-06-24T00:10:05.806Z",
+      "start_ref": "5d3952e77f3816b29b59bd3839fda741721b4dd4",
+      "end_ref": "9eb7405abb9e8000f7ad56085e3dcc2f77f36f29"
     },
     "audit-final": {
-      "status": "pending",
-      "started_at": null,
-      "done_at": null,
-      "start_ref": null,
-      "end_ref": null
+      "status": "complete",
+      "started_at": "2026-06-24T00:23:14.200Z",
+      "done_at": "2026-06-24T00:23:36.730Z",
+      "start_ref": "3c2a8025f81ebb6d979a8fdfe944c945fc2112b7",
+      "end_ref": "8aa02ae44999da3c82c488700c5576f4a1ea283e"
+    },
+    "code-review": {
+      "status": "complete",
+      "started_at": "2026-06-24T00:15:50.946Z",
+      "done_at": "2026-06-24T00:19:57.044Z",
+      "start_ref": "02ce0cd662afedb9b89feb0d216c7bb1561e89fb",
+      "end_ref": "456851d80352ee9d2b0155325e7a635784a0594a"
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-06-23T23:11:05.618Z",
+      "from": "scaffold-package",
+      "to": "scaffold-package",
+      "start_ref": "ed332b2d31ed585fc45d05f21b8477bdb1391927",
+      "end_ref": "c0b7d13636f43e5c193edc1115421684929e89fd",
+      "audit_exit": 3,
+      "audit_criteria_passed": 2,
+      "audit_criteria_total": 5,
+      "by": "pseudosky",
+      "note": "build exit 0 + test --passWithNoTests exit 0 + SHA c0b7d13"
+    },
+    {
+      "ts": "2026-06-23T23:20:04.045Z",
+      "from": "provider-and-model-schema",
+      "to": "provider-and-model-schema",
+      "start_ref": "3d7a90b6d883c344ee138bedc11c0de256f97395",
+      "end_ref": "40c79737c5c080b38ec25ea0ebb716a26dbe06d8",
+      "audit_exit": 10,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 14,
+      "by": "pseudosky",
+      "note": "providers + models tables (provider_providers, provider_models), ProviderStore/ModelStore, drizzle migration 0000_providers_and_models.sql; 11 tests pass incl. close+reopen bool assertion; guard exit 0; SHA 40c7973"
+    },
+    {
+      "ts": "2026-06-23T23:26:32.271Z",
+      "from": "model-platform-bindings",
+      "to": "model-platform-bindings",
+      "start_ref": "a2929398da5e7d440d5c5280b874db335d5b5b98",
+      "end_ref": "b629f789b89a681100f130c02353c4f358939865",
+      "audit_exit": 11,
+      "audit_criteria_passed": 3,
+      "audit_criteria_total": 14,
+      "by": "pseudosky",
+      "note": "Added provider_model_platform_bindings table (composite PK model_id+platform), ModelStore.createBinding/resolveModelId, drizzle migration 0001. Guard: 8/8 tests pass exit 0. SHA: b629f78"
+    },
+    {
+      "ts": "2026-06-23T23:35:11.371Z",
+      "from": "provider-tool-formats",
+      "to": "provider-tool-formats",
+      "start_ref": "69787c91ab947499117746d43ecf84668c204a55",
+      "end_ref": "e0fc0be470954d59a2a8fc9b927e5b71902ab0e9",
+      "audit_exit": 10,
+      "audit_criteria_passed": 4,
+      "audit_criteria_total": 14,
+      "by": "pseudosky",
+      "note": "Added provider_tool_formats table (composite PK provider_id+canonical_tool, emit_shape text, type_tag nullable, note nullable), ToolFormatStore (create/read/getShape/listByProvider), migration 0002, 0002_snapshot.json, updated _journal.json, 12 tests all pass (close+reopen persistence proven, server_side typeTag populated, unsupported note set, custom both null, cross-provider isolation). Guard exit 0. SHA e0fc0be."
+    },
+    {
+      "ts": "2026-06-23T23:37:23.971Z",
+      "from": "audit-schema",
+      "to": "audit-schema",
+      "start_ref": "1d30e81d45f27f74de2f5b22e5063ea288d7b1b3",
+      "end_ref": "4b608c8a37137c70daba6defdb803b4fb347a411",
+      "audit_exit": 10,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 17,
+      "by": "pseudosky",
+      "note": "audit-schema gate: audit_provider.py --phase schema PASS (exit 0), verified by orchestrator. 4 schema states green (providers/models, bindings, tool-formats)."
+    },
+    {
+      "ts": "2026-06-23T23:44:13.922Z",
+      "from": "provider-adapter-contract",
+      "to": "provider-adapter-contract",
+      "start_ref": "c7f6e8a167cf3278af6bd42c9c857e076a203f71",
+      "end_ref": "e787eede11ec1f9143f5d914f925812633b63649",
+      "audit_exit": 13,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 20,
+      "by": "pseudosky",
+      "note": "Added StreamChunk+ProviderAdapter to agent-mcp-types (additive); ProviderAdapterImpl in agent-provider resolves canonical model ids via ModelStore.resolveModelId; 4/4 guard tests pass (real SQLite + close+reopen); nx build agent-mcp exit 0; nx build agent-mcp-types exit 0; SHA e787eed"
+    },
+    {
+      "ts": "2026-06-23T23:44:38.399Z",
+      "from": "runtime-tool-forwarding",
+      "to": "provider-adapter-contract",
+      "start_ref": "c7f6e8a167cf3278af6bd42c9c857e076a203f71",
+      "end_ref": "02ec01b4a664787692f400aba6609809fac3c61a",
+      "audit_exit": 13,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 20,
+      "by": "pseudosky",
+      "note": "Added StreamChunk+ProviderAdapter to agent-mcp-types (additive); ProviderAdapterImpl in agent-provider resolves canonical model ids via ModelStore.resolveModelId; 4/4 guard tests pass (real SQLite + close+reopen); nx build agent-mcp exit 0; nx build agent-mcp-types exit 0; SHA e787eed"
+    },
+    {
+      "ts": "2026-06-23T23:55:29.686Z",
+      "from": "runtime-tool-forwarding",
+      "to": "runtime-tool-forwarding",
+      "start_ref": "e7d8d4a91ad8b6f1829d3490d1298db1d9eafa13",
+      "end_ref": "7e614e1f9ac52e5600f9a80516558d483a6ec833",
+      "audit_exit": 17,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 24,
+      "by": "pseudosky",
+      "note": "FEAT-007 emit-tools.ts: emitTool+emitToolsForProvider branch on emit_shape (server_side→type-tagged, unsupported→throw, custom→std def). UnsupportedNativeToolError exported. 12 tests all pass (teeth on both paths + negative-control). Guard exit 0. SHA fc9aaac0b7d1e84671a5bdfe24382f0f34355a2b."
+    },
+    {
+      "ts": "2026-06-24T00:06:39.738Z",
+      "from": "seed-and-roundtrip",
+      "to": "runtime-tool-forwarding",
+      "start_ref": "e7d8d4a91ad8b6f1829d3490d1298db1d9eafa13",
+      "end_ref": "eca2e20ede94e6f9fb089e98e36902d8d2171d17",
+      "audit_exit": 17,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 24,
+      "by": "pseudosky",
+      "note": "FEAT-007 emit-tools.ts: emitTool+emitToolsForProvider branch on emit_shape (server_side→type-tagged, unsupported→throw, custom→std def). UnsupportedNativeToolError exported. 12 tests pass. Real negative-control mutation scripts added (nc_break_emitter/nc_restore_emitter + nc_break_binding/nc_restore_binding) fixing NL-description criteria. review.md APPROVED. All 24 audit criteria PASS (audit exit 0). SHAs fc9aaac + eca2e20."
+    },
+    {
+      "ts": "2026-06-24T00:10:05.806Z",
+      "from": "runtime-tool-forwarding",
+      "to": "seed-and-roundtrip",
+      "start_ref": "5d3952e77f3816b29b59bd3839fda741721b4dd4",
+      "end_ref": "9eb7405abb9e8000f7ad56085e3dcc2f77f36f29",
+      "audit_exit": 20,
+      "audit_criteria_passed": 8,
+      "audit_criteria_total": 28,
+      "by": "pseudosky",
+      "note": "seed/providers.ts (5 providers) + seed/models.ts (4 models) + seed/bindings.ts (8 bindings) + seed/index.ts (unified idempotent seeder) + __tests__/roundtrip.test.ts (20 tests, all 4 acceptance criteria). Guard exit 0. SHA 9eb7405."
+    },
+    {
+      "ts": "2026-06-24T00:17:23.912Z",
+      "from": "code-review",
+      "to": "runtime-tool-forwarding",
+      "start_ref": "e7d8d4a91ad8b6f1829d3490d1298db1d9eafa13",
+      "end_ref": "65ccce1d9b94ee68dc49016d272a04c0b4de220a",
+      "audit_exit": 0,
+      "audit_criteria_passed": 24,
+      "audit_criteria_total": 24,
+      "by": "pseudosky",
+      "note": "FEAT-007 emit-tools.ts: emitTool+emitToolsForProvider branch on emit_shape (server_side→type-tagged, unsupported→throw, custom→std def). 12 tests pass. Real negative-control mutation scripts + fixed criteria.json paths (plan-dir-relative) + review.md APPROVED. All 24 audit criteria PASS from plan-dir cwd (audit exit 0). SHAs fc9aaac + eca2e20 + 65ccce1."
+    },
+    {
+      "ts": "2026-06-24T00:19:57.044Z",
+      "from": "runtime-tool-forwarding",
+      "to": "code-review",
+      "start_ref": "02ce0cd662afedb9b89feb0d216c7bb1561e89fb",
+      "end_ref": "456851d80352ee9d2b0155325e7a635784a0594a",
+      "audit_exit": 0,
+      "audit_criteria_passed": 17,
+      "audit_criteria_total": 17,
+      "by": "pseudosky",
+      "note": "APPROVED — 456851d80352ee9d2b0155325e7a635784a0594a; agent-mcp-types change additive, nx build agent-mcp exit 0, 67 tests pass"
+    },
+    {
+      "ts": "2026-06-24T00:22:10.114Z",
+      "from": "audit-final",
+      "to": "runtime-tool-forwarding",
+      "start_ref": "e7d8d4a91ad8b6f1829d3490d1298db1d9eafa13",
+      "end_ref": "1d9027f6fc331d169c74c0aa2bc64c73bfe1f0e8",
+      "audit_exit": 0,
+      "audit_criteria_passed": 30,
+      "audit_criteria_total": 30,
+      "by": "pseudosky",
+      "note": "FEAT-007 emit-tools.ts: emitTool+emitToolsForProvider (server_side→type-tagged, unsupported→throw). 12 tests pass. All 30 audit criteria PASS (24 structural + dod.1-6) from plan dir, exit 0. Real NC mutation scripts. review.md APPROVED. SHAs fc9aaac+eca2e20+65ccce1+1d9027f."
+    },
+    {
+      "ts": "2026-06-24T00:23:36.730Z",
+      "from": "audit-final",
+      "to": "audit-final",
+      "start_ref": "3c2a8025f81ebb6d979a8fdfe944c945fc2112b7",
+      "end_ref": "8aa02ae44999da3c82c488700c5576f4a1ea283e",
+      "audit_exit": 0,
+      "audit_criteria_passed": 23,
+      "audit_criteria_total": 23,
+      "by": "pseudosky",
+      "note": "audit-final DoD gate: audit_provider.py --phase final 33/33 PASS incl dod.1-6 (+agent-mcp build exit 0). code-review APPROVED. Plan body complete."
+    }
+  ],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.22",
     "hash": "1e4130a84aed"
   },
-  "current_state": "scaffold-package",
+  "current_state": "done",
   "dod_provenance": {
-    "confirmed_at": "2026-06-23T04:05:24.204Z",
+    "confirmed_at": "2026-06-24T00:59:57.907Z",
     "by": "pseudosky",
-    "note": "DoD derived from docs/plan/agent-registry spec + RUNTIME_GAPS; confirmed by team-lead plan-authoring task 2026-06-22",
+    "note": "DoD dod.1-6 re-confirmed by user 2026-06-24 with FRESH consumer-framed grounding (replaces authoring-stamp, NB-6 parity). Accepted as scoped foundation: dod.6 ProviderAdapter is contract+impl ONLY, not yet consumed by agent-mcp (wiring deferred to mcp-refactor); no live-model e2e test (deferred). Gaps -> agent-provider/BACKLOG.md. Initiative NOT complete until gaps covered (per user directive).",
     "dod_ids": [
       "dod.1",
       "dod.2",

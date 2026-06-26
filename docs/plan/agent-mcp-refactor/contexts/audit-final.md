@@ -1,6 +1,6 @@
 # audit-final — acceptance gate
 
-**Phase:** audit · **Kind:** audit · **Depends on:** session-e2e · **Guard:** `python3 docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py --phase final`
+**Phase:** audit · **Kind:** audit · **Depends on:** code-review · **Guard:** `python3 docs/plan/agent-mcp-refactor/scripts/audit_mcp_refactor.py --phase final`
 
 ---
 
