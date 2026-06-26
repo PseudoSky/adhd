@@ -76,6 +76,16 @@
       "paths": [
         "docs/plan/agent-registry-release/PUBLISH_RUNBOOK.md"
       ]
+    },
+    {
+      "id": "post-publish-smoke.2",
+      "phase": "post-publish",
+      "tier": null,
+      "kind": "present",
+      "pattern": "F-P6-13",
+      "paths": [
+        "docs/plan/agent-registry-release/scripts/smoke_test.sh"
+      ]
     }
   ]
 }
