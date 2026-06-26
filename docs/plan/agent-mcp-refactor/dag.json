@@ -58,7 +58,9 @@
         "packages/ai/agent-mcp/src/tools/session.ts",
         "packages/ai/agent-mcp/src/store/session-store.ts",
         "packages/ai/agent-mcp/src/index.ts",
-        "packages/ai/agent-mcp/src/__tests__/compiler-resolve.test.ts"
+        "packages/ai/agent-mcp/src/__tests__/compiler-resolve.test.ts",
+        "packages/ai/agent-mcp/package.json",
+        "tsconfig.base.json"
       ],
       "context": "contexts/compiler-integration.md",
       "notes": "",
