@@ -224,6 +224,21 @@
       ],
       "context": "contexts/sonnet-consolidation.md",
       "notes": ""
+    },
+    "dataset-build": {
+      "kind": "work",
+      "phase": "ingest",
+      "depends_on": [
+        "sonnet-consolidation"
+      ],
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/dataset-build.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry-migration/src/ingest/dataset-build.ts",
+        "packages/ai/agent-registry-migration/src/index.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/dataset-build.test.ts"
+      ],
+      "context": "contexts/dataset-build.md",
+      "notes": ""
     }
   },
   "authored_with": {
