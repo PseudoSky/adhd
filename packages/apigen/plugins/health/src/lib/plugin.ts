@@ -136,6 +136,7 @@ function buildHealthOperations(
 export const healthPlugin: Plugin<HealthOptions> = {
   id: 'health',
   description: 'Mount plugin: exposes GET /meta/health for gateway readiness (SPEC §13.1)',
+  language: 'ts',
 
   optionsSchema: {
     type: 'object',

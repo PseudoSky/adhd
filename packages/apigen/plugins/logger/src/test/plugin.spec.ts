@@ -364,6 +364,12 @@ describe('makeLoggerPlugin', () => {
   });
 });
 
+describe('loggerPlugin — language declaration', () => {
+  it('explicitly declares language: "ts" (FAILS if declaration is dropped)', () => {
+    expect(loggerPlugin.language).toBe('ts');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // §6 — Logger ctx key: class is usable as typed extension token
 // ---------------------------------------------------------------------------
