@@ -25,10 +25,10 @@
       "end_ref": "37c554739ca3cd5717a3950269c0c37146112974"
     },
     "agent-store-retire": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-26T05:14:09.348Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "de3c04b9637a8ac9b5d3f19453d6da990775a132",
       "end_ref": null
     },
     "policy-engine-bridge": {
