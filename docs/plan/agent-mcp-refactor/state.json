@@ -18,10 +18,10 @@
       "end_ref": "9f6ab4eb83389467983c625e2b440fb50abcd0b5"
     },
     "compiler-integration": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-06-26T05:03:12.969Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "41a59d5031498e2cfd33ca609dfc20a0b1bba5b9",
       "end_ref": null
     },
     "agent-store-retire": {
