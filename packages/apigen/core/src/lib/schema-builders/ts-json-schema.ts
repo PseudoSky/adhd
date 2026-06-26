@@ -1,4 +1,3 @@
-import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
 import {
@@ -12,6 +11,7 @@ import type { Config, CompletedConfig } from 'ts-json-schema-generator'
 import type { Project, SourceFile } from 'ts-morph'
 import { morphFallback } from './morph-fallback'
 import { buildMapSetTupleSchema } from './map-set-tuple'
+import { withResolvedType, walkType } from './morph-walk'
 
 /**
  * Maps npm module specifiers to the canonical SCALAR_SCHEMAS key for that module's
@@ -206,43 +206,6 @@ function getTsjsTs(): typeof import('typescript') {
     _tsjsTs = require('typescript') as typeof import('typescript')
   }
   return _tsjsTs
-}
-
-/**
- * Extract the actual schema object from a ts-json-schema-generator root schema.
- *
- * ts-json-schema-generator wraps named types in:
- *   { "$schema": "...", "$ref": "#/definitions/Name", "definitions": { Name: {...} } }
- *
- * For anonymous/simple types (no cross-references) it returns the definition
- * inline at the root:
- *   { "$schema": "...", "type": "object", "properties": {...}, "definitions": {} }
- *
- * This function unwraps either form and strips generator meta-fields.
- * The full `definitions` map is preserved so callers that need cross-references
- * can still access it — but for the anonymous-type alias-injection use-case,
- * definitions is always empty.
- */
-function extractSchemaDefinition(
-  schema: Record<string, unknown>,
-  aliasName: string,
-): Record<string, unknown> {
-  // Wrapped form: $ref → definitions
-  if (typeof schema['$ref'] === 'string' && schema['definitions']) {
-    const refKey = (schema['$ref'] as string).replace('#/definitions/', '')
-    const defs = schema['definitions'] as Record<string, unknown>
-    if (defs[refKey]) return defs[refKey] as Record<string, unknown>
-  }
-  // Inline form: strip generator meta-fields
-  const { $schema: _s, definitions: _d, ...rest } = schema as {
-    $schema?: unknown
-    definitions?: unknown
-    [k: string]: unknown
-  }
-  // If aliasName is present at definitions level (some generator versions), pull it
-  const defs = _d as Record<string, unknown> | undefined
-  if (defs && defs[aliasName]) return defs[aliasName] as Record<string, unknown>
-  return rest
 }
 
 /**
@@ -515,40 +478,39 @@ export async function buildSchema(
     // Fall through to alias-injection path for anonymous / inline types.
   }
 
-  // --- Path 2: anonymous / inline type (e.g. `{ at: Date; label: string; }`, `Date[]`) ---
+  // --- Path 2: anonymous / inline type (e.g. `{ at: Date; label: string; }`, `Date[]`,
+  //             `Record<string, number>`, `Box<number>`) ---
   //
-  // ts-json-schema-generator requires a named root type, so we write the inline
-  // type as a named alias into a scratch file and run the generator on that.
-  // This handles all nesting depths (object, array, union) correctly.
+  // PERFORMANCE: the original BUG-013 implementation of this path wrote a scratch
+  // `.ts` file and built a BRAND-NEW `ts-json-schema-generator` program (parse
+  // lib.d.ts + the scratch file, run the checker) for EVERY anonymous type —
+  // O(types) full program builds, ~0.35–1.0s each (the 23-fn showcase summed to
+  // ~17.8s; the test suite to ~494s). The named-type Path 1 was cached but this
+  // path could not be (a unique temp path per call).
   //
-  // The scratch file is written to the OS temp directory (not inside the source
-  // tree) so it never interferes with the user's TypeScript project.
+  // Instead we resolve the inline type through the ALREADY-LOADED ts-morph
+  // program (`_project` / `sf` — lib.d.ts + the user's imports are already parsed
+  // and type-checked) by adding a throwaway in-memory type alias to `sf`, then
+  // walking the resolved `Type` structurally. Each resolution is ~10ms and
+  // builds NO temp file and NO new generator program. See `morph-walk.ts`.
   //
-  // IMPORTANT: the temp file has no imports, so locally-aliased scalar types like
-  // `D2` (from `import { Decimal as D2 } from 'decimal.js'`) would be unresolvable.
-  // We rewrite all alias names to their canonical SCALAR_SCHEMAS keys BEFORE writing
-  // the temp file so the parser augmentor can intercept them by canonical name.
-  const aliasName = '__ApigenAnon'
-  // Apply alias rewriting so D2 → Decimal (etc.) in the type text written to the temp file
-  const canonicalTypeText = applyAliasesToTypeText(normalizedTypeText, aliases)
-  const tmpPath = path.join(os.tmpdir(), `__apigen_anon_${process.pid}_${Date.now()}.ts`)
+  // The walk delegates every nested node back through `buildSchema` (this same
+  // entrypoint), so scalar formats (Date/bigint/Uint8Array/Buffer/Decimal),
+  // Map/Set/tuple wire, import aliases (`D2`), and readonly arrays all keep
+  // flowing through their existing handlers — correctness is unchanged.
   try {
-    fs.writeFileSync(tmpPath, `export type ${aliasName} = ${canonicalTypeText};\n`)
-    const config: Config = {
-      path: tmpPath,
-      type: aliasName,
-      skipTypeCheck: true,
-      // No tsconfig for temp files — we only need structural types, not project-level resolution
-    }
-    // Path 2 uses a UNIQUE temp path per call → never cache (would leak a full
-    // TS program per anonymous type and OOM a many-export file).
-    const rawSchema = runScalarAwareGenerator(config, false)
-    return extractSchemaDefinition(rawSchema, aliasName)
+    const walked = await withResolvedType(_project, sf, normalizedTypeText, (resolved) =>
+      walkType(resolved, (elemType) => buildSchema(_project, sf, elemType, tsconfig), 0),
+    )
+    if (walked !== undefined) return walked
   } catch {
-    // Final safety net: structural text-based fallback.
-    // Pass aliases so morphFallback can resolve them at nested positions too.
-    return morphFallback(canonicalTypeText, 0, aliases)
-  } finally {
-    try { fs.unlinkSync(tmpPath) } catch { /* ignore cleanup errors */ }
+    // Fall through to the text-based fallback below.
   }
+
+  // Final safety net: structural text-based fallback for any type the ts-morph
+  // walk could not resolve. We rewrite aliases (D2 → Decimal) and qualified
+  // imports to canonical SCALAR_SCHEMAS keys first so morphFallback can resolve
+  // them at nested positions too.
+  const canonicalTypeText = applyAliasesToTypeText(normalizedTypeText, aliases)
+  return morphFallback(canonicalTypeText, 0, aliases)
 }
