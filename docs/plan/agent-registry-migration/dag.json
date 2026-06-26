@@ -6,11 +6,11 @@
     "architecture",
     "foundation",
     "parse",
+    "ingest",
     "import",
     "verify",
     "removal",
-    "audit",
-    "ingest"
+    "audit"
   ],
   "terminal": "done",
   "nodes": {
@@ -176,6 +176,22 @@
       ],
       "context": "contexts/code-review.md",
       "notes": "Reviewer routing: code-reviewer (opus). Diff-reading code review of the implementation states (migration-design..removal-runbook) against CLAUDE.md (layer/platform isolation, @adhd/ imports, I-prefixed interfaces, JSDoc on shared public fns, the 'Proving features actually work' verification standard) AND this plan's decisions/contracts. Must check design-intent fidelity the structural audit misses: the import pipeline drives the REAL registry stores (not mocks); the round-trip equivalence gate actually blocks removal; the removal-runbook is gated on an all-PASS equivalence report (forcing function); cross-repo claude-agents removal is a gated step; no cross-package FK violations. Default verdict NEEDS-WORK; a PASS must be explicitly justified. On NEEDS-WORK, fixes go back to the implementation states, then re-review. Mutates only review.md + scripts/review_gate.py."
+    },
+    "corpus-parser": {
+      "kind": "work",
+      "phase": "parse",
+      "depends_on": [
+        "scaffold-package"
+      ],
+      "guard": "npx --yes nx test agent-registry-migration --testFile=packages/ai/agent-registry-migration/src/__tests__/corpus-parser.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry-migration/src/parse/agent-parser.ts",
+        "packages/ai/agent-registry-migration/src/parse/component-mapping.ts",
+        "packages/ai/agent-registry-migration/src/index.ts",
+        "packages/ai/agent-registry-migration/src/__tests__/corpus-parser.test.ts"
+      ],
+      "context": "contexts/corpus-parser.md",
+      "notes": ""
     }
   },
   "authored_with": {
