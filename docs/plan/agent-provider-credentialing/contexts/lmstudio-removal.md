@@ -21,6 +21,7 @@
 - [lmstudio-removal.2] factory.ts has no case "lmstudio"
 - [lmstudio-removal.3] validation/agent.ts has no lmstudioProviderSchema
 - [lmstudio-removal.4] domain.ts union no longer contains a lmstudio member
+- [lmstudio-removal.5] providers/index.ts no longer exports LMStudioProvider
 ---
 
 ## Reservations
