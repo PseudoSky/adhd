@@ -1,1 +1,23 @@
-{}
+{
+  "store-read": {
+    "anchor": "packages/ai/agent-mcp/src/store/agent-store.ts",
+    "rule": "Read upstream rows through the published store classes — CompositionStore.resolveComposition (@adhd/agent-registry), ToolBindingStore.resolve / AgentToolStore.listForAgent (@adhd/agent-tool-registry), ModelStore.resolveModelId / ToolFormatStore.getShape (@adhd/agent-provider), AgentPolicyStore.listForAgent / PolicyTemplateStore.read (@adhd/agent-policy) — over ONE shared better-sqlite3 handle. Do NOT re-implement ORDER BY position or the context evaluator; delegate to resolveComposition.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:store-read]",
+    "audit_check": "[composition-resolve.2]"
+  },
+  "compile-agent": {
+    "anchor": "packages/ai/agent-mcp/src/store/session-store.ts",
+    "rule": "The public surface is compileAgent({agentSlug, platform, context, db}) returning { id, content, tools, componentVersions } — mirroring the USAGE.md 'Runtime Integration via agent-mcp' snippet (composed.content / composed.tools / composed.id / composed.componentVersions). claude_code emits yaml_frontmatter markdown; claude_api emits a json_object. agent-mcp (plan 6) consumes this exact return shape at session start.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:compile-agent]",
+    "audit_check": "[platform-markdown-emit.3]"
+  },
+  "cli-bin": {
+    "anchor": "packages/ai/agent-mcp/package.json",
+    "rule": "The compile CLI bin mirrors agent-mcp's bin entry in package.json; it parses compile <slug> --platform <p> [--context '{...}'] [--format json] [--out-dir <d>] [--all --category <c>] [--db <path>] and writes markdown to stdout (or files under --out-dir), exiting non-zero on unknown slug/platform. The migration round-trip gate (plan 7) drives this real bin.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:cli-bin]",
+    "audit_check": "[compile-cli.2]"
+  }
+}

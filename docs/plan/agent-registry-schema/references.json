@@ -1,1 +1,16 @@
-{}
+{
+  "drizzle-schema": {
+    "anchor": "packages/ai/agent-mcp/src/db/schema.ts",
+    "rule": "Drizzle table style mirrors agent-mcp: sqliteTable(...), text().primaryKey(), integer().notNull().default(...), index(...), .references(...). Lookup tables use a text PK (NOT a sql enum) so seed rows extend without a migration. JSON columns are text({ mode: 'json' }).",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:drizzle-schema]",
+    "audit_check": "[lookup-and-component-schema.3]"
+  },
+  "store-class": {
+    "anchor": "packages/ai/agent-mcp/src/store/agent-store.ts",
+    "rule": "Store classes mirror agent-mcp: constructor takes a BetterSQLite3Database, methods are thin Drizzle queries, errors are typed ToolError-style codes. CompositionStore.resolveComposition OWNS ordering + version-pin + context-condition evaluation; downstream consumers delegate to it.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:store-class]",
+    "audit_check": "[composition-junction.3]"
+  }
+}

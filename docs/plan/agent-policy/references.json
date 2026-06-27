@@ -1,1 +1,30 @@
-{}
+{
+  "drizzle-schema": {
+    "anchor": "packages/ai/agent-mcp/src/db/schema.ts",
+    "rule": "Drizzle table style mirrors agent-mcp: sqliteTable(...), text().primaryKey(), integer().notNull().default(...), index(...), .references(...). JSON columns are text({ mode: 'json' }). policy_templates.enforcement is a JSON ARRAY (multi-value, e.g. ['agent','ci']) that must read back as Array.isArray. policy_types is a text-PK lookup table, not a sql enum.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:drizzle-schema]",
+    "audit_check": "[policy-type-and-template-schema.3]"
+  },
+  "store-class": {
+    "anchor": "packages/ai/agent-mcp/src/store/agent-store.ts",
+    "rule": "Store classes mirror agent-mcp: constructor takes a BetterSQLite3Database, methods are thin Drizzle queries, errors are typed ToolError-style codes (POLICY_TEMPLATE_NOT_FOUND, AGENT_POLICY_ALREADY_ATTACHED). AgentPolicyStore.listForAgent returns direct + inherited rows with inherited_from set.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:store-class]",
+    "audit_check": "[agent-policy-junction.3]"
+  },
+  "budget-plugin": {
+    "anchor": "packages/ai/agent-mcp-budget/src/index.ts",
+    "rule": "The enforcement plugin mirrors agent-mcp-budget EXACTLY: export const configSchema = z.object({...}); a Plugin class with install(hooks: IHookRegistry) that registers observational register(...) handlers (try/caught) AND one hooks.registerEnforcement('pre:model_request', p => this.enforce(p)) (NO try/catch — throws propagate); const createPlugin: PluginFactory = ({db, config}) => new Plugin(...) exported as BOTH default and named createPlugin.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:budget-plugin]",
+    "audit_check": "[enforcement-plugin.3]"
+  },
+  "hook-registry": {
+    "anchor": "packages/ai/agent-mcp-types/src/registry.ts",
+    "rule": "The real HookRegistry is exported from @adhd/agent-mcp-types. The enforcement-plugin test uses the REAL registry, not a mock: new HookRegistry(); plugin.install(hooks); await hooks.enforce('pre:model_request', payload) must REJECT with isEnforcementError===true once the limit is crossed, and resolve under the limit.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:hook-registry]",
+    "audit_check": "[enforcement-plugin.4]"
+  }
+}

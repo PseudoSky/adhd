@@ -83,3 +83,15 @@ mutates:    ["packages/ai/agent-mcp-types/src/domain.ts", "packages/ai/agent-mcp
   resign is needed. An `architect-reviewer` glance on the `StreamChunk` shape is
   worthwhile (Execution model).
 - Proves `[dod.6]`.
+- **Live lmstudio round-trip (gated, optional proof for `[lmstudio_adapter_roundtrip]`):**
+  the HARD guard for this state stays the offline `adapter-resolve.test.ts`. In
+  addition, wire the `lmstudio` adapter's live proof to the ready-made artifact
+  `scripts/live-lmstudio-roundtrip.sh` — it env-pins the absolute `lms` bin, brings
+  up the LM Studio server + the `qwen3.5-9b-claude-4.6-highiq-instruct-heretic-uncensored-mlx-mxfp8`
+  model itself (so an ejected model is not a precondition), drives a REAL completion
+  against `http://localhost:1234/v1/chat/completions`, and asserts a
+  MODEL-INDEPENDENT invariant (non-empty assistant content). It runs only under
+  `AGENT_MCP_LIVE=1` and skips (exit 0) offline / when the bin or model is absent,
+  so CI stays offline. Implement the adapter's live test to shell out to this script
+  (or port it 1:1 into a `*.live.test.ts` gated on the same flag); do NOT make it a
+  default guard — a live-model dependency must never gate the offline build.

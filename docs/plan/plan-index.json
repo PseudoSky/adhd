@@ -231,6 +231,46 @@
       "updated_at": "2026-06-23T20:11:43.992Z"
     },
     {
+      "plan": "agent-provider-credentialing",
+      "dir": "agent-provider-credentialing",
+      "status": "published",
+      "mutate_set": [
+        "docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py",
+        "docs/plan/agent-provider-credentialing/scripts/check-no-secrets.sh",
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp/.env.example",
+        "packages/ai/agent-mcp/src/__tests__/backcompat-normalize.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/credential-inference.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/debt-005-sdk-timeout.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/dotenv-load.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/integration/live-budget.e2e.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/integration/live-dag.e2e.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/integration/live-oauth.e2e.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/integration/openai-compat-roundtrip.e2e.test.ts",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "packages/ai/agent-mcp/src/index.ts",
+        "packages/ai/agent-mcp/src/providers/anthropic.ts",
+        "packages/ai/agent-mcp/src/providers/claudecli.ts",
+        "packages/ai/agent-mcp/src/providers/factory.ts",
+        "packages/ai/agent-mcp/src/providers/index.ts",
+        "packages/ai/agent-mcp/src/providers/lmstudio.ts",
+        "packages/ai/agent-mcp/src/providers/openai.ts",
+        "packages/ai/agent-mcp/src/providers/types.ts",
+        "packages/ai/agent-mcp/src/server.ts",
+        "packages/ai/agent-mcp/src/utils/load-env.ts",
+        "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-provider/src/__tests__/model-store.test.ts",
+        "packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+        "packages/ai/agent-provider/src/db/schema.ts",
+        "packages/ai/agent-provider/src/seed/providers.ts"
+      ],
+      "references": [],
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-06-27T00:10:24.002Z"
+    },
+    {
       "plan": "agent-registry-migration",
       "dir": "agent-registry-migration",
       "status": "published",
@@ -668,5 +708,5 @@
       "updated_at": "2026-06-23T20:11:43.997Z"
     }
   ],
-  "updated_at": "2026-06-26T03:59:27.848Z"
+  "updated_at": "2026-06-27T00:10:24.010Z"
 }
