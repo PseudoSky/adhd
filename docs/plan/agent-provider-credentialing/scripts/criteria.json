@@ -211,6 +211,15 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/integration/openai-compat-roundtrip.e2e.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-credentialing.3",
+      "phase": "audit",
+      "tier": 3,
+      "kind": "negative-control",
+      "positive": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/integration/openai-compat-roundtrip.e2e.test.ts",
+      "mutate": "node docs/plan/agent-provider-credentialing/scripts/nc_break_credential.mjs",
+      "restore": "git checkout -- packages/ai/agent-mcp/src/providers/openai.ts"
     }
   ]
 }

@@ -19,6 +19,7 @@
 - [audit-credentialing.1] no LM Studio secret in any tracked file (incl docs/mcp-env/PROPOSAL.md); .env paths gitignored
 
 - [audit-credentialing.2] live openai_compat_roundtrip drives the real openai adapter (unconditional credential flow; network leg self-skips loud if box down)
+- [audit-credentialing.3] teeth: breaking openai credential resolution makes the unconditional credential-flow assertions fail RED even with the LM Studio box down
 ---
 
 ## Reservations
