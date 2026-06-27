@@ -177,6 +177,16 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/dotenv-load.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "backcompat-normalizer.1",
+      "phase": "backcompat",
+      "tier": 0,
+      "kind": "present",
+      "pattern": "preprocess",
+      "paths": [
+        "packages/ai/agent-mcp/src/validation/agent.ts"
+      ]
     }
   ]
 }
