@@ -85,6 +85,20 @@
       ],
       "context": "contexts/dotenv-dual-load.md",
       "notes": ""
+    },
+    "backcompat-normalizer": {
+      "kind": "work",
+      "phase": "backcompat",
+      "depends_on": [
+        "provider-credential-runtime"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/backcompat-normalize.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-mcp/src/__tests__/backcompat-normalize.test.ts"
+      ],
+      "context": "contexts/backcompat-normalizer.md",
+      "notes": ""
     }
   },
   "authored_with": {
