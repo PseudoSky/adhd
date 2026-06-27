@@ -10,7 +10,24 @@
     "audit"
   ],
   "terminal": "done",
-  "nodes": {},
+  "nodes": {
+    "unified-credential-contract": {
+      "kind": "work",
+      "phase": "contract",
+      "depends_on": [],
+      "guard": "python3 docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py --phase contract",
+      "artifacts": [
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-provider/src/seed/providers.ts",
+        "packages/ai/agent-provider/src/db/schema.ts",
+        "packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+        "packages/ai/agent-provider/src/__tests__/model-store.test.ts",
+        "docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py"
+      ],
+      "context": "contexts/unified-credential-contract.md",
+      "notes": ""
+    }
+  },
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.23",
