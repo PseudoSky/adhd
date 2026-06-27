@@ -1,0 +1,13 @@
+{
+  "schema_version": 2,
+  "title": "Agent Provider — Unified Credentialing, baseURL Everywhere, lmstudio Removal, .env Standard",
+  "plan_kind": "greenfield",
+  "phases": [],
+  "terminal": "done",
+  "nodes": {},
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.23",
+    "hash": "1e4130a84aed"
+  }
+}
