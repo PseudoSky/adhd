@@ -187,6 +187,14 @@
       "paths": [
         "packages/ai/agent-mcp/src/validation/agent.ts"
       ]
+    },
+    {
+      "id": "backcompat-normalizer.2",
+      "phase": "backcompat",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/backcompat-normalize.test.ts",
+      "expect": "exit0"
     }
   ]
 }

@@ -18,6 +18,7 @@
 
 - [backcompat-normalizer.1] validation/agent.ts adds a normalize-on-load preprocess for legacy rows
 
+- [backcompat-normalizer.2] legacy lmstudio/apiKeyEnv config normalizes and the real agents.db rows parse
 ---
 
 ## Reservations
