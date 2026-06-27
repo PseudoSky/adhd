@@ -88,6 +88,14 @@
       "paths": [
         "packages/ai/agent-mcp/src/providers/claudecli.ts"
       ]
+    },
+    {
+      "id": "provider-credential-runtime.6",
+      "phase": "runtime",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/credential-inference.test.ts",
+      "expect": "exit0"
     }
   ]
 }
