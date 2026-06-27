@@ -18,6 +18,7 @@
 
 - [unified-credential-contract.1] domain.ts declares credentialEnv on the unified provider config
 
+- [unified-credential-contract.2] domain.ts declares optional credentialType override
 ---
 
 ## Reservations
