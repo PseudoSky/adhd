@@ -47,26 +47,32 @@ nice-to-have / cleanup.
 
 ## 🐞 Bugs
 
-### SEC-001 — leaked LMSTUDIO_API_KEY in git history; rotation + PROPOSAL.md scrub outstanding
-- **Status:** open — merge landed secret-clean; **rotation + `PROPOSAL.md` scrub + history purge still owed**
+### SEC-001 — leaked LMSTUDIO_API_KEY in git history; rotation outstanding
+- **Status:** open — HEAD is secret-clean; **rotation + history purge still owed**
 - **Priority:** P1 (security) · **Area:** repo hygiene, `.mcp.json`, agent-mcp docs
-- **Reported:** 2026-06-26 (orchestrator pre-merge scan)
+- **Reported:** 2026-06-26 (orchestrator pre-merge scan) · **Corrected:** 2026-06-27
 
 **What happened.** `main` HEAD `55fc42c` redacted the plaintext LM Studio token
-(`sk-lm-aTPoK9Gs:…`) from `.mcp.json`, `run-e2e.mjs`, and `SESSION-CONTEXT.md`. The
-`agent-registry-execution` branch diverged before that (merge-base `34ed69a`) and still
-carried the token, so a naive merge would have **re-leaked it**. The registry merge into
-main (`326ebef`) was resolved to keep main's **redacted** versions; `git grep sk-lm-` on
-the merged tree is **clean** — no token was re-introduced to HEAD.
+from `.mcp.json`, `run-e2e.mjs`, and `SESSION-CONTEXT.md`. The `agent-registry-execution`
+branch diverged before that (merge-base `34ed69a`) and still carried the token, so a naive
+merge would have **re-leaked it**. The registry merge into main (`326ebef`) was resolved to
+keep main's **redacted** versions; a full-value `git grep` on HEAD is **clean** — the secret
+value is absent from every tracked file.
 
-**Still outstanding (owner actions — the value is exposed regardless of HEAD).**
+**Correction (2026-06-27).** An earlier draft of this entry claimed `docs/mcp-env/PROPOSAL.md`
+"still contains the token" — that was wrong. `PROPOSAL.md` carries only a `sk-lm-...`
+**placeholder**, not the real value. The only HEAD match for the real key-id prefix was this
+backlog entry's own quotation of it (now removed). **No tracked file on HEAD holds the secret.**
+
+**Still outstanding (owner actions — the value is exposed in history regardless of HEAD).**
 1. **Rotate the LM Studio token.** It remains in ≥4 historical commits, one already on
    `origin/main` — rotation is the actual fix. Put the new key in `~/.adhd/agent-mcp/.env`
    (gitignored, per the credentialing ADDENDUM §4).
-2. **Scrub `docs/mcp-env/PROPOSAL.md`** — it **still contains the `sk-lm-` token on main's
-   HEAD** (a tracked analysis doc the `55fc42c` redaction missed). Redact it.
-3. **History purge** of the token across history = a separate, explicitly owner-approved
+2. **History purge** of the token across history = a separate, explicitly owner-approved
    force-push to `origin/main`. Optional once the key is rotated (rotation kills the value).
+
+**Going forward**, `agent-provider-credentialing` dod.7 scans every tracked file for the real
+value and fails the plan if any reintroduces it.
 
 **Do not push `main` to `origin` until the key is rotated.**
 
