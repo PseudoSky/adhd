@@ -203,6 +203,14 @@
       "kind": "command",
       "cmd": "bash docs/plan/agent-provider-credentialing/scripts/check-no-secrets.sh",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-credentialing.2",
+      "phase": "audit",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/integration/openai-compat-roundtrip.e2e.test.ts",
+      "expect": "exit0"
     }
   ]
 }
