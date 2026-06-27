@@ -10,6 +10,16 @@
       "paths": [
         "packages/ai/agent-mcp-types/src/domain.ts"
       ]
+    },
+    {
+      "id": "unified-credential-contract.2",
+      "phase": "contract",
+      "tier": 0,
+      "kind": "present",
+      "pattern": "credentialType",
+      "paths": [
+        "packages/ai/agent-mcp-types/src/domain.ts"
+      ]
     }
   ]
 }
