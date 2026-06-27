@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [provider-credential-runtime.1] openai.ts resolves the credential from credentialEnv
 
 ---
 
