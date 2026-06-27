@@ -19,3 +19,5 @@
 - `[dod.3]` **A missing credential fails loud for a non-localhost openai baseURL instead of silently sending a placeholder. (structural)** — A missing credential fails loud for a non-localhost openai baseURL instead of silently sending a placeholder..
 
 - `[dod.4]` **The deterministic dual .env load resolves <project>/.adhd/agent-mcp/.env over ~/.adhd/agent-mcp/.env (project overrides home). (structural)** — The deterministic dual .env load resolves <project>/.adhd/agent-mcp/.env over ~/.adhd/agent-mcp/.env (project overrides home)..
+
+- `[dod.5]` **A legacy agent config (type:"lmstudio", apiKeyEnv/authTokenEnv) normalizes on load to the unified shape and still validates — proven against the real ~/.adhd/agent-mcp/agents.db. (structural)** — A legacy agent config (type:"lmstudio", apiKeyEnv/authTokenEnv) normalizes on load to the unified shape and still validates — proven against the real ~/.adhd/agent-mcp/agents.db..
