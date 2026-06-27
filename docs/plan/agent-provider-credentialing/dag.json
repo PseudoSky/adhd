@@ -69,6 +69,22 @@
       ],
       "context": "contexts/lmstudio-removal.md",
       "notes": ""
+    },
+    "dotenv-dual-load": {
+      "kind": "work",
+      "phase": "env",
+      "depends_on": [
+        "unified-credential-contract"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/dotenv-load.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/index.ts",
+        "packages/ai/agent-mcp/src/utils/load-env.ts",
+        "packages/ai/agent-mcp/.env.example",
+        "packages/ai/agent-mcp/src/__tests__/dotenv-load.test.ts"
+      ],
+      "context": "contexts/dotenv-dual-load.md",
+      "notes": ""
     }
   },
   "authored_with": {
