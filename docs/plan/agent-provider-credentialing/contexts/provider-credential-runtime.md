@@ -20,6 +20,7 @@
 
 - [provider-credential-runtime.2] openai.ts no longer carries the ?? "lmstudio" placeholder
 - [provider-credential-runtime.3] anthropic.ts infers wire form (sk-ant-oat branch) and reads credentialEnv
+- [provider-credential-runtime.4] anthropic.ts passes baseURL into the Anthropic SDK client
 ---
 
 ## Reservations
