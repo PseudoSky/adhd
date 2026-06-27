@@ -9,7 +9,7 @@
     "status": "needed",
     "owner": "team-lead",
     "how_to_provide": "Put the (current, rotated) LM Studio API key in ~/.adhd/agent-mcp/.env as LMSTUDIO_API_KEY=<value>. This file is gitignored; the key must never be committed.",
-    "destination": "~/.adhd/agent-mcp/.env (gitignored)",
+    "destination": "env:LMSTUDIO_API_KEY in ~/.adhd/agent-mcp/.env (gitignored)",
     "blocks_at": "execution-start"
   }
 }
