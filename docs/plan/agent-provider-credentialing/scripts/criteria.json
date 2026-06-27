@@ -20,6 +20,16 @@
       "paths": [
         "packages/ai/agent-mcp-types/src/domain.ts"
       ]
+    },
+    {
+      "id": "unified-credential-contract.3",
+      "phase": "contract",
+      "tier": 0,
+      "kind": "absent",
+      "pattern": "id:\\s*\"lmstudio\"",
+      "paths": [
+        "packages/ai/agent-provider/src/seed/providers.ts"
+      ]
     }
   ]
 }
