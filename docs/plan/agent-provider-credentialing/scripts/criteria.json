@@ -134,6 +134,16 @@
       "paths": [
         "packages/ai/agent-mcp-types/src/domain.ts"
       ]
+    },
+    {
+      "id": "lmstudio-removal.5",
+      "phase": "runtime",
+      "tier": 0,
+      "kind": "absent",
+      "pattern": "LMStudioProvider",
+      "paths": [
+        "packages/ai/agent-mcp/src/providers/index.ts"
+      ]
     }
   ]
 }
