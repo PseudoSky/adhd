@@ -48,6 +48,16 @@
       "paths": [
         "packages/ai/agent-mcp/src/providers/openai.ts"
       ]
+    },
+    {
+      "id": "provider-credential-runtime.2",
+      "phase": "runtime",
+      "tier": 0,
+      "kind": "absent",
+      "pattern": "\\?\\?\\s*\"lmstudio\"",
+      "paths": [
+        "packages/ai/agent-mcp/src/providers/openai.ts"
+      ]
     }
   ]
 }
