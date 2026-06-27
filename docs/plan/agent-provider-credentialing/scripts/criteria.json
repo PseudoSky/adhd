@@ -169,6 +169,14 @@
       "tier": 1,
       "kind": "exists",
       "path": "packages/ai/agent-mcp/.env.example"
+    },
+    {
+      "id": "dotenv-dual-load.3",
+      "phase": "env",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/dotenv-load.test.ts",
+      "expect": "exit0"
     }
   ]
 }
