@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "unified-credential-contract.1",
+      "phase": "contract",
+      "tier": 0,
+      "kind": "present",
+      "pattern": "credentialEnv",
+      "paths": [
+        "packages/ai/agent-mcp-types/src/domain.ts"
+      ]
+    }
+  ]
+}
