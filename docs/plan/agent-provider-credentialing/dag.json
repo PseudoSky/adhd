@@ -26,6 +26,24 @@
       ],
       "context": "contexts/unified-credential-contract.md",
       "notes": ""
+    },
+    "provider-credential-runtime": {
+      "kind": "work",
+      "phase": "runtime",
+      "depends_on": [
+        "unified-credential-contract"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/credential-inference.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/providers/openai.ts",
+        "packages/ai/agent-mcp/src/providers/anthropic.ts",
+        "packages/ai/agent-mcp/src/providers/claudecli.ts",
+        "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-mcp/src/__tests__/credential-inference.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/integration/openai-compat-roundtrip.e2e.test.ts"
+      ],
+      "context": "contexts/provider-credential-runtime.md",
+      "notes": ""
     }
   },
   "authored_with": {
