@@ -5,7 +5,8 @@
   "phases": [
     "contract",
     "runtime",
-    "env"
+    "env",
+    "backcompat"
   ],
   "terminal": "done",
   "nodes": {},
