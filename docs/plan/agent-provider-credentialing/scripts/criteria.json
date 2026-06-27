@@ -124,6 +124,16 @@
       "paths": [
         "packages/ai/agent-mcp/src/validation/agent.ts"
       ]
+    },
+    {
+      "id": "lmstudio-removal.4",
+      "phase": "runtime",
+      "tier": 0,
+      "kind": "absent",
+      "pattern": "type: \"lmstudio\"",
+      "paths": [
+        "packages/ai/agent-mcp-types/src/domain.ts"
+      ]
     }
   ]
 }
