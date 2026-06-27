@@ -20,7 +20,6 @@
     "@adhd/agent-mcp-types": "*"
   },
   "dependencies": {
-    "zod": "*",
-    "better-sqlite3": "*"
+    "zod": "*"
   }
 }

@@ -340,7 +340,7 @@ describe("parallel.integration – concurrent Promise.all dispatch", () => {
             async run(input: Parameters<Orchestrator["run"]>[0]): ReturnType<Orchestrator["run"]> {
                 // Patch the registry to intercept Phase 2 calls and run them sequentially
                 const realGetClient = input.registry.getClient.bind(input.registry);
-                let firstToolBlocked = false;
+                const firstToolBlocked = false;
 
                 const seqRegistry = {
                     ...input.registry,
