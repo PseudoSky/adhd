@@ -20,6 +20,7 @@
 
 - [dotenv-dual-load.2] .env.example documents the unified credential shape
 - [dotenv-dual-load.3] dual .env load resolves project-over-home (unit test)
+- [dotenv-dual-load.4] the project .adhd/agent-mcp/.env secret destination is gitignored
 ---
 
 ## Reservations

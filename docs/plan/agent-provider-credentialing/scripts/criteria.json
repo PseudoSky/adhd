@@ -220,6 +220,14 @@
       "positive": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/integration/openai-compat-roundtrip.e2e.test.ts",
       "mutate": "node docs/plan/agent-provider-credentialing/scripts/nc_break_credential.mjs",
       "restore": "git checkout -- packages/ai/agent-mcp/src/providers/openai.ts"
+    },
+    {
+      "id": "dotenv-dual-load.4",
+      "phase": "env",
+      "tier": 1,
+      "kind": "command",
+      "cmd": "git check-ignore -q .adhd/agent-mcp/.env",
+      "expect": "exit0"
     }
   ]
 }
