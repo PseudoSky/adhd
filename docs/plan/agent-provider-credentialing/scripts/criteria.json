@@ -96,6 +96,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/credential-inference.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "lmstudio-removal.1",
+      "phase": "runtime",
+      "tier": 1,
+      "kind": "command",
+      "cmd": "test ! -f packages/ai/agent-mcp/src/providers/lmstudio.ts",
+      "expect": "exit0"
     }
   ]
 }
