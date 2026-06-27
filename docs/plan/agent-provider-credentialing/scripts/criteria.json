@@ -195,6 +195,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/backcompat-normalize.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-credentialing.1",
+      "phase": "audit",
+      "tier": 1,
+      "kind": "command",
+      "cmd": "bash docs/plan/agent-provider-credentialing/scripts/check-no-secrets.sh",
+      "expect": "exit0"
     }
   ]
 }
