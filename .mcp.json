@@ -5,7 +5,7 @@
       "command": "node",
       "args": ["dist/packages/ai/agent-mcp/src/index.js"],
       "env": {
-        "DATABASE_PATH": "tmp/agent-mcp/agents-dev.db",
+        "DATABASE_PATH": "data/agent-mcp/agents-dev.db",
         "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
       }
     },
@@ -14,7 +14,7 @@
       "command": "npx",
       "args": ["-y", "@adhd/agent-mcp@latest"],
       "env": {
-        "DATABASE_PATH": "tmp/agent-mcp/agents-published.db",
+        "DATABASE_PATH": "data/agent-mcp/agents-published.db",
         "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
       }
     }
