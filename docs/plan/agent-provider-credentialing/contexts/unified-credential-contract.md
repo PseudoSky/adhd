@@ -19,6 +19,7 @@
 - [unified-credential-contract.1] domain.ts declares credentialEnv on the unified provider config
 
 - [unified-credential-contract.2] domain.ts declares optional credentialType override
+- [unified-credential-contract.3] registry seed no longer seeds a lmstudio provider row
 ---
 
 ## Reservations
