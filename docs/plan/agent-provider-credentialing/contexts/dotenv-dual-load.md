@@ -18,6 +18,7 @@
 
 - [dotenv-dual-load.1] the env loader targets .adhd/agent-mcp/.env (project + home)
 
+- [dotenv-dual-load.2] .env.example documents the unified credential shape
 ---
 
 ## Reservations
