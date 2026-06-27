@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "@adhd/agent-compiler": "*",
+    "@adhd/agent-mcp-budget": "*",
     "@adhd/agent-mcp-types": "*",
     "@adhd/agent-policy": "*",
     "@anthropic-ai/sdk": "0.96.0",
@@ -40,9 +41,13 @@
     "p-retry": "^4.6.2",
     "pino": "10.3.1",
     "uuid": "14.0.0",
-    "zod": "4.4.3"
+    "zod": "4.4.3",
+    "util": "0.12.5"
   },
   "devDependencies": {
+    "@adhd/agent-provider": "*",
+    "@adhd/agent-registry": "*",
+    "@adhd/agent-tool-registry": "*",
     "@types/better-sqlite3": "^7.6.13",
     "@vitest/coverage-v8": "^1.0.4",
     "drizzle-kit": "^0.31.10",
