@@ -6,7 +6,8 @@
     "contract",
     "runtime",
     "env",
-    "backcompat"
+    "backcompat",
+    "audit"
   ],
   "terminal": "done",
   "nodes": {},
