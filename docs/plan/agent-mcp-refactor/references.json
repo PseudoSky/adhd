@@ -1,1 +1,23 @@
-{}
+{
+  "drizzle-schema": {
+    "anchor": "packages/ai/agent-mcp/src/db/schema.ts",
+    "rule": "New tables/columns mirror agent-mcp schema style: sqliteTable(...), text().primaryKey(), integer().notNull().default(...), index(...), .references(...). composed_prompts + experiment_assignments tables + sessions.composed_prompt_id (nullable FK, backward-compatible) are generated with drizzle-kit into packages/ai/agent-mcp/drizzle/ and run via db/migrate.ts.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:drizzle-schema]",
+    "audit_check": "[runtime-sink-schema.4]"
+  },
+  "store-class": {
+    "anchor": "packages/ai/agent-mcp/src/store/session-store.ts",
+    "rule": "composed-prompt-store.ts mirrors the existing agent-store.ts / session-store.ts pattern: constructor takes a BetterSQLite3Database, thin Drizzle queries, typed ToolError codes. ComposedPromptStore upsert / findByAgentContext / read round-trips a row through a real on-disk DB proven by reopen.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:store-class]",
+    "audit_check": "[runtime-sink-schema.5]"
+  },
+  "agent-mcp-types": {
+    "anchor": "packages/ai/agent-mcp-types/src/domain.ts",
+    "rule": "New shared types (ComposedPrompt) extend @adhd/agent-mcp-types — no new types package, no circular dep on the orchestrator (REFERENCES.md '@adhd/agent-mcp-types'). AgentDefinition.systemPrompt is RESIGNED from a required authoring field to an optional/computed compat shim (or replaced by composedPromptId); the resolver populates it from compiler output.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:agent-mcp-types]",
+    "audit_check": "[agent-store-retire.3]"
+  }
+}

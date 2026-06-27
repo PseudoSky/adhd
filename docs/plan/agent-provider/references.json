@@ -1,1 +1,30 @@
-{}
+{
+  "drizzle-schema": {
+    "anchor": "packages/ai/agent-mcp/src/db/schema.ts",
+    "rule": "Drizzle table style mirrors agent-mcp: sqliteTable('provider_…', …), text().primaryKey(), integer({mode:'boolean'}) for capability flags, index(...), .references(...). Every table name is prefixed provider_. Capability booleans must read back as booleans (not 0/1) after reopen.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:drizzle-schema]",
+    "audit_check": "[provider-and-model-schema.3]"
+  },
+  "store-class": {
+    "anchor": "packages/ai/agent-mcp/src/store/agent-store.ts",
+    "rule": "Store classes mirror agent-mcp: constructor takes a BetterSQLite3Database, methods are thin Drizzle queries, errors are typed ToolError-style codes. ModelStore.resolveModelId(canonical, platform) throws ToolError MODEL_BINDING_NOT_FOUND when absent.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:store-class]",
+    "audit_check": "[model-platform-bindings.3]"
+  },
+  "provider-config": {
+    "anchor": "packages/ai/agent-mcp-types/src/domain.ts",
+    "rule": "The existing ProviderConfig union (anthropic | openai | lmstudio | claudecli) already generalizes provider config; the adapter implements against it. The existing ToolDefinition ({name, description, inputSchema}) is the custom-tool shape the emitter branches away from for server-side tools. ProviderAdapter + StreamChunk are ADDED to agent-mcp-types additively (defined there, implemented here).",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:provider-config]",
+    "audit_check": "[provider-adapter-contract.1]"
+  },
+  "runtime-gap": {
+    "anchor": "packages/ai/agent-mcp/src/providers/anthropic.ts",
+    "rule": "toAnthropicTools() is the concrete FEAT-007 gap: it maps every tool to {name, description, input_schema} and never emits a {type:…} server-side entry. emitToolsForProvider (runtime-tool-forwarding) is the strategic replacement — emitted standalone here (server-side type-tagged + explicit error for unsupported native), wired into anthropic.ts by agent-mcp-refactor (plan 6). The full client-side execution loop stays out of scope.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:runtime-gap]",
+    "audit_check": "[runtime-tool-forwarding.1]"
+  }
+}

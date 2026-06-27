@@ -1,1 +1,16 @@
-{}
+{
+  "drizzle-schema": {
+    "anchor": "packages/ai/agent-mcp/src/db/schema.ts",
+    "rule": "Drizzle table style mirrors agent-mcp: sqliteTable(...), text().primaryKey(), integer(...,{mode:'boolean'}) for flags, text(...,{mode:'json'}) for JSON arrays/schemas, index(...), .references(...) for within-package FKs. agent_tools.agent_slug is a logical text key (no cross-package FK into agent-registry).",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:drizzle-schema]",
+    "audit_check": "[platform-and-binding-schema.3]"
+  },
+  "store-class": {
+    "anchor": "packages/ai/agent-mcp/src/store/agent-store.ts",
+    "rule": "Store classes mirror agent-mcp: constructor takes a BetterSQLite3Database, methods are thin Drizzle queries, errors are typed codes. AgentToolStore.grant persists the permission arg verbatim; ToolBindingStore.resolve(toolName, platform) is the join the compiler/migration consume.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:store-class]",
+    "audit_check": "[agent-tool-junction.2]"
+  }
+}
