@@ -19,6 +19,7 @@
 - [provider-credential-runtime.1] openai.ts resolves the credential from credentialEnv
 
 - [provider-credential-runtime.2] openai.ts no longer carries the ?? "lmstudio" placeholder
+- [provider-credential-runtime.3] anthropic.ts infers wire form (sk-ant-oat branch) and reads credentialEnv
 ---
 
 ## Reservations
