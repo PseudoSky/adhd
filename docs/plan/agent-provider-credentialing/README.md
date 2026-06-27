@@ -17,3 +17,5 @@
 - `[dod.2]` **The anthropic adapter infers the credential wire form from the value: sk-ant-api… resolves to an x-api-key client and sk-ant-oat… resolves to an Authorization: Bearer client with the oauth-2025-04-20 beta header. (structural)** — The anthropic adapter infers the credential wire form from the value: sk-ant-api… resolves to an x-api-key client and sk-ant-oat… resolves to an Authorization: Bearer client with the oauth-2025-04-20 beta header..
 
 - `[dod.3]` **A missing credential fails loud for a non-localhost openai baseURL instead of silently sending a placeholder. (structural)** — A missing credential fails loud for a non-localhost openai baseURL instead of silently sending a placeholder..
+
+- `[dod.4]` **The deterministic dual .env load resolves <project>/.adhd/agent-mcp/.env over ~/.adhd/agent-mcp/.env (project overrides home). (structural)** — The deterministic dual .env load resolves <project>/.adhd/agent-mcp/.env over ~/.adhd/agent-mcp/.env (project overrides home)..
