@@ -53,6 +53,7 @@
       ],
       "guard": "npx --yes nx build agent-mcp && python3 docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py --phase runtime",
       "artifacts": [
+        "packages/ai/agent-mcp-types/src/domain.ts",
         "packages/ai/agent-mcp/src/providers/lmstudio.ts",
         "packages/ai/agent-mcp/src/providers/factory.ts",
         "packages/ai/agent-mcp/src/providers/index.ts",
@@ -65,10 +66,20 @@
         "packages/ai/agent-mcp/src/__tests__/debt-005-sdk-timeout.test.ts",
         "packages/ai/agent-mcp/src/__tests__/integration/live-oauth.e2e.test.ts",
         "packages/ai/agent-mcp/src/__tests__/integration/live-budget.e2e.test.ts",
-        "packages/ai/agent-mcp/src/__tests__/integration/live-dag.e2e.test.ts"
+        "packages/ai/agent-mcp/src/__tests__/integration/live-dag.e2e.test.ts",
+        "packages/ai/agent-mcp/CHANGELOG.md",
+        "packages/ai/agent-mcp/BACKLOG.md",
+        "packages/ai/agent-mcp/SPEC.md",
+        "packages/ai/agent-mcp/PLAN-MEMORY.md"
       ],
       "context": "contexts/lmstudio-removal.md",
-      "notes": ""
+      "changes": {
+        "deletes": [
+          "LMStudioProvider",
+          "lmstudioProviderSchema"
+        ]
+      },
+      "notes": "Serial after provider-credential-runtime: both edit validation/agent.ts and openai.ts; serializing avoids a same-file merge conflict (these two states are NOT parallel). The 'lmstudio' type-literal removal (string discriminant in the union, factory, schema, comments) is proven by the negative-grep audit checks rather than --discover, since whole-word 'lmstudio' must NOT collide with the retained LMSTUDIO_API_KEY / LMSTUDIO_BASE_URL env-var names that back-compat keeps."
     },
     "dotenv-dual-load": {
       "kind": "work",
@@ -81,7 +92,8 @@
         "packages/ai/agent-mcp/src/index.ts",
         "packages/ai/agent-mcp/src/utils/load-env.ts",
         "packages/ai/agent-mcp/.env.example",
-        "packages/ai/agent-mcp/src/__tests__/dotenv-load.test.ts"
+        "packages/ai/agent-mcp/src/__tests__/dotenv-load.test.ts",
+        ".gitignore"
       ],
       "context": "contexts/dotenv-dual-load.md",
       "notes": ""
@@ -90,7 +102,8 @@
       "kind": "work",
       "phase": "backcompat",
       "depends_on": [
-        "provider-credential-runtime"
+        "provider-credential-runtime",
+        "lmstudio-removal"
       ],
       "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/backcompat-normalize.test.ts",
       "artifacts": [
@@ -104,7 +117,9 @@
       "kind": "audit",
       "phase": "audit",
       "depends_on": [
-        "lmstudio-removal"
+        "lmstudio-removal",
+        "dotenv-dual-load",
+        "backcompat-normalizer"
       ],
       "guard": "python3 docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py --phase audit",
       "artifacts": [
