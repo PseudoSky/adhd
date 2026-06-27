@@ -3,7 +3,8 @@
   "title": "Agent Provider — Unified Credentialing, baseURL Everywhere, lmstudio Removal, .env Standard",
   "plan_kind": "brownfield",
   "phases": [
-    "contract"
+    "contract",
+    "runtime"
   ],
   "terminal": "done",
   "nodes": {},
