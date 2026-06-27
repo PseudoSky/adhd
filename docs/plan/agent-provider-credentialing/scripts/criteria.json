@@ -78,6 +78,16 @@
       "paths": [
         "packages/ai/agent-mcp/src/providers/anthropic.ts"
       ]
+    },
+    {
+      "id": "provider-credential-runtime.5",
+      "phase": "runtime",
+      "tier": 0,
+      "kind": "present",
+      "pattern": "ANTHROPIC_BASE_URL",
+      "paths": [
+        "packages/ai/agent-mcp/src/providers/claudecli.ts"
+      ]
     }
   ]
 }
