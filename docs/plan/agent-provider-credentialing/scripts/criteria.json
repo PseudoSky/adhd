@@ -58,6 +58,16 @@
       "paths": [
         "packages/ai/agent-mcp/src/providers/openai.ts"
       ]
+    },
+    {
+      "id": "provider-credential-runtime.3",
+      "phase": "runtime",
+      "tier": 0,
+      "kind": "present",
+      "pattern": "credentialEnv",
+      "paths": [
+        "packages/ai/agent-mcp/src/providers/anthropic.ts"
+      ]
     }
   ]
 }
