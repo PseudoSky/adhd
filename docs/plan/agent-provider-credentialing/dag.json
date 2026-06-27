@@ -99,6 +99,20 @@
       ],
       "context": "contexts/backcompat-normalizer.md",
       "notes": ""
+    },
+    "audit-credentialing": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "lmstudio-removal"
+      ],
+      "guard": "python3 docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py --phase audit",
+      "artifacts": [
+        "docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py",
+        "docs/plan/agent-provider-credentialing/scripts/check-no-secrets.sh"
+      ],
+      "context": "contexts/audit-credentialing.md",
+      "notes": ""
     }
   },
   "authored_with": {
