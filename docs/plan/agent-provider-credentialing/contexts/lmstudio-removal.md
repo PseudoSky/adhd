@@ -18,6 +18,7 @@
 
 - [lmstudio-removal.1] providers/lmstudio.ts is deleted
 
+- [lmstudio-removal.2] factory.ts has no case "lmstudio"
 ---
 
 ## Reservations
