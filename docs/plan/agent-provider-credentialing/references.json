@@ -1,1 +1,16 @@
-{}
+{
+  "credential-inference-idiom": {
+    "anchor": "packages/ai/agent-mcp/src/providers/anthropic.ts:306",
+    "rule": "The unified wire-form inference must preserve the existing anthropic idiom: a credential value beginning sk-ant-oat is an OAuth token -> build the client with authToken AND defaultHeaders { \"anthropic-beta\": \"oauth-2025-04-20\" }; a value beginning sk-ant-api (or default) -> build with apiKey (x-api-key). The only change is the credential SOURCE: read it from the single credentialEnv (default ANTHROPIC_API_KEY) instead of separate apiKeyEnv/authTokenEnv. useClaudeOauth keychain mode is untouched.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:credential-inference-idiom]",
+    "audit_check": "[provider-credential-runtime.3]"
+  },
+  "provider-discriminated-union": {
+    "anchor": "packages/ai/agent-mcp/src/validation/agent.ts:90",
+    "rule": "The agent-mcp zod z.discriminatedUnion('type', [...]) must stay in lock-step with the ProviderConfig union in @adhd/agent-mcp-types/src/domain.ts: same members (anthropic | openai | claudecli - NO lmstudio), same credentialEnv/credentialType/baseURL fields. The normalize-on-load preprocess wraps the union input so legacy rows coerce to a valid member before discrimination.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:provider-discriminated-union]",
+    "audit_check": "[unified-credential-contract.1]"
+  }
+}

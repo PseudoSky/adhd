@@ -1,7 +1,19 @@
 # ADDENDUM — Unified provider credentialing, `baseURL` everywhere, `lmstudio` removal, `.env` standard, token purge
 
-**Status:** proposed plan amendment (pre-execution — `agent-provider` is at `current_state: scaffold-package`, 0/9).
-**Owner plans:** `agent-provider` (plan 3 — the contract) + `agent-mcp-refactor` (plan 6 — the runtime wiring). See §7 for the split.
+> **STATUS — INTEGRATED & SUPERSEDED (2026-06-26).** This addendum has been folded
+> into a real, executable `plan-state-machine` plan:
+> **[`docs/plan/agent-provider-credentialing/`](../agent-provider-credentialing/README.md)**.
+> The original owner plans (`agent-provider` plan 3, `agent-mcp-refactor` plan 6) are
+> both **closed 10/10** and can no longer execute this work, so a new plan owns both the
+> contract change (`@adhd/agent-mcp-types` + agent-provider registry seed) and the runtime
+> change (`@adhd/agent-mcp` providers / `.env` loader / normalizer). The stale
+> "pre-execution … 0/9" line below is **historical** — track progress in the new plan's
+> `state.json`. §1–§5 + §8 below are the source directives; §6 (token rotation) remains
+> operational (a `human-blockers.json` `lmstudio-credential` entry references the key, but
+> rotation itself is NOT a plan gate, per the §6 ruling).
+
+**Status (historical):** proposed plan amendment (pre-execution — `agent-provider` was at `current_state: scaffold-package`, 0/9) — **now integrated into `agent-provider-credentialing`**.
+**Owner plans (historical):** `agent-provider` (plan 3 — the contract) + `agent-mcp-refactor` (plan 6 — the runtime wiring), both since closed. See §7 for the original split; the new `agent-provider-credentialing` plan owns the merged scope.
 **Provenance:** authored 2026-06-26 by `plan-orchestrator` from a live design session; this captures the design agreed *before* it was recognized that the work belongs in the provider registry rather than an ad-hoc `agent-mcp/src/providers/*.ts` patch.
 **Why an addendum:** the `agent-provider` plan defines the `ProviderAdapter` contract but its current scope omits credential/auth/`baseURL`/`.env` handling, and it *assumes* an `lmstudio` adapter (`[lmstudio_adapter_roundtrip]`). The directives below add the missing credential contract and **remove** `lmstudio` — so the plan must be amended (and its lmstudio proof reconciled) before execution.
 
