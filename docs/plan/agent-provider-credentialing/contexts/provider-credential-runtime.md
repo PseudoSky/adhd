@@ -18,6 +18,7 @@
 
 - [provider-credential-runtime.1] openai.ts resolves the credential from credentialEnv
 
+- [provider-credential-runtime.2] openai.ts no longer carries the ?? "lmstudio" placeholder
 ---
 
 ## Reservations
