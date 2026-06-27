@@ -1,1 +1,15 @@
-{}
+{
+  "lmstudio-credential": {
+    "type": "credential",
+    "description": "A valid LM Studio credential must exist in ~/.adhd/agent-mcp/.env so the live [openai_compat_roundtrip] proof can source the key and actually exercise the box. (Rotation of the previously-leaked key is operational, NOT a plan gate — ADDENDUM §6; just ensure a working value is present here.)",
+    "required_by": [
+      "audit-credentialing"
+    ],
+    "verification": "bash -c 'f=\"$HOME/.adhd/agent-mcp/.env\"; [ -f \"$f\" ] && grep -qE \"^LMSTUDIO_API_KEY=.+\" \"$f\"'",
+    "status": "needed",
+    "owner": "team-lead",
+    "how_to_provide": "Put the (current, rotated) LM Studio API key in ~/.adhd/agent-mcp/.env as LMSTUDIO_API_KEY=<value>. This file is gitignored; the key must never be committed.",
+    "destination": "~/.adhd/agent-mcp/.env (gitignored)",
+    "blocks_at": "execution-start"
+  }
+}
