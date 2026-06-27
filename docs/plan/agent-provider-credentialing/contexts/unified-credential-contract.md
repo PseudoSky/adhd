@@ -20,6 +20,7 @@
 
 - [unified-credential-contract.2] domain.ts declares optional credentialType override
 - [unified-credential-contract.3] registry seed no longer seeds a lmstudio provider row
+- [unified-credential-contract.4] agent-provider registry round-trip test passes after the lmstudio seed row is removed
 ---
 
 ## Reservations
