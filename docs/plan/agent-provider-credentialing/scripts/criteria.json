@@ -144,6 +144,14 @@
       "paths": [
         "packages/ai/agent-mcp/src/providers/index.ts"
       ]
+    },
+    {
+      "id": "lmstudio-removal.6",
+      "phase": "runtime",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "npx --yes nx build agent-mcp",
+      "expect": "exit0"
     }
   ]
 }
