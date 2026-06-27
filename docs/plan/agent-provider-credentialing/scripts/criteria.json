@@ -162,6 +162,13 @@
       "paths": [
         "packages/ai/agent-mcp/src/utils/load-env.ts"
       ]
+    },
+    {
+      "id": "dotenv-dual-load.2",
+      "phase": "env",
+      "tier": 1,
+      "kind": "exists",
+      "path": "packages/ai/agent-mcp/.env.example"
     }
   ]
 }
