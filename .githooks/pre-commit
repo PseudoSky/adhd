@@ -1,0 +1,31 @@
+#!/usr/bin/env sh
+#
+# Pre-commit hook — runs `nx affected lint` on the projects touched by the staged
+# changes and blocks the commit if lint fails.
+#
+# Activated repo-wide via `core.hooksPath=.githooks` (set by the root `prepare`
+# script on `npm install`, or manually: `git config core.hooksPath .githooks`).
+#
+# Bypass for an emergency commit: `git commit --no-verify`  (use sparingly).
+
+# Staged files (Added/Copied/Modified/Renamed), NUL-safe join into a comma list.
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+if [ -z "$staged" ]; then
+  exit 0
+fi
+
+files=$(printf '%s' "$staged" | paste -sd, -)
+
+echo "pre-commit: running 'nx affected -t lint' on staged changes…"
+npx nx affected --target=lint --files="$files"
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  echo ""
+  echo "✖ pre-commit: affected lint failed — fix the errors above before committing."
+  echo "  (bypass in an emergency with: git commit --no-verify)"
+  exit 1
+fi
+
+echo "✓ pre-commit: affected lint clean."
+exit 0
