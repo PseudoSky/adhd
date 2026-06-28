@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-mcp",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Stateful MCP-native agent runtime with provider abstraction and recursive delegation",
   "type": "module",
   "publishConfig": {
@@ -26,9 +26,11 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },
+  "optionalDependencies": {
+    "@adhd/agent-compiler": "0.0.1"
+  },
   "dependencies": {
-    "@adhd/agent-compiler": "*",
-    "@adhd/agent-mcp-types": "*",
+    "@adhd/agent-mcp-types": "2.0.0",
     "@anthropic-ai/sdk": "0.96.0",
     "@modelcontextprotocol/sdk": "1.29.0",
     "better-sqlite3": "12.10.0",

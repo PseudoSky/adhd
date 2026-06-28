@@ -260,7 +260,7 @@ export class CompositionStore {
 
             // Step 4: required but excluded → error immediately.
             if (!conditionMatches) {
-                if (Boolean(row.isRequired)) {
+                if (row.isRequired) {
                     throw new CompositionError(
                         "REQUIRED_COMPONENT_EXCLUDED",
                         `Required component '${row.componentSlug}' at position ${row.position} ` +
@@ -290,7 +290,9 @@ export class CompositionStore {
         included.sort((a, b) => {
             if (a.position !== b.position) return a.position - b.position;
             if (b.resolvedVersion !== a.resolvedVersion) return b.resolvedVersion - a.resolvedVersion;
-            return a.componentSlug < b.componentSlug ? -1 : a.componentSlug > b.componentSlug ? 1 : 0;
+            if (a.componentSlug < b.componentSlug) return -1;
+            if (a.componentSlug > b.componentSlug) return 1;
+            return 0;
         });
 
         return included;

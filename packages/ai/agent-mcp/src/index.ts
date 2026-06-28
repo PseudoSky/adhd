@@ -15,15 +15,13 @@ export type { ResolveInput, ResolveResult, ResolveResult as PromptResolveResult,
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
-import { compileAgent } from "@adhd/agent-compiler";
-
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
 import { config } from "./config.js";
 import { AgentStore, SessionStore, TaskStore } from "./store/index.js";
 import { ComposedPromptStore } from "./store/composed-prompt-store.js";
-import type { PromptResolverDeps } from "./engine/prompt-resolver.js";
+import type { CompileAgentFn, PromptResolverDeps } from "./engine/prompt-resolver.js";
 import { BackgroundQueue } from "./engine/queue.js";
 import { DagEngine } from "./engine/dag-engine.js";
 import { Orchestrator } from "./engine/orchestrator.js";
@@ -57,16 +55,31 @@ export interface BuildPromptResolverOpts {
      */
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     agentMcpDb: any;
+    /**
+     * The compileAgent function from @adhd/agent-compiler.  When absent (the
+     * package is not installed), the resolver returns undefined and every agent
+     * falls back to its flat systemPrompt — the same graceful path used when the
+     * registry DB itself is absent.
+     *
+     * In production, main() performs a dynamic optional import and passes the
+     * resolved function here.  Tests that exercise compiler integration inject a
+     * real or stubbed compileAgentFn directly.
+     */
+    compileAgentFn?: CompileAgentFn;
 }
 
 /**
- * Build a {@link PromptResolverDeps} from a registry DB path and the agent-mcp
- * DB handle.
+ * Build a {@link PromptResolverDeps} from a registry DB path, an optional
+ * compile function, and the agent-mcp DB handle.
  *
- * - When `registryDbPath` is provided, opens the SQLite file in WAL mode, wraps
- *   it with Drizzle, and wires {@link compileAgent} from @adhd/agent-compiler.
- * - When `registryDbPath` is absent (undefined / empty string), returns
- *   `undefined` — the legacy flat-systemPrompt path is used unchanged.
+ * Returns `undefined` (flat-systemPrompt fallback) when ANY of the following is
+ * true:
+ * - `registryDbPath` is absent (undefined / empty string).
+ * - `compileAgentFn` is absent — @adhd/agent-compiler is not installed.
+ * - The registry SQLite file cannot be opened (file missing, directory absent).
+ *
+ * When all three prerequisites are satisfied, opens the SQLite file in WAL mode,
+ * wraps it with Drizzle, and returns a fully-wired {@link PromptResolverDeps}.
  *
  * This function has no observable side-effects beyond opening the SQLite file
  * when a path is supplied, so it is safe to call in tests with a real on-disk
@@ -74,12 +87,22 @@ export interface BuildPromptResolverOpts {
  *
  * @param opts.registryDbPath  - Path to the agent-registry SQLite file.
  * @param opts.agentMcpDb      - Drizzle handle for the agent-mcp DB.
+ * @param opts.compileAgentFn  - Compile function from @adhd/agent-compiler (optional).
  * @returns Wired {@link PromptResolverDeps} or `undefined`.
  */
 export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolverDeps | undefined {
-    const { registryDbPath, agentMcpDb } = opts;
+    const { registryDbPath, agentMcpDb, compileAgentFn } = opts;
 
     if (!registryDbPath) {
+        return undefined;
+    }
+
+    // When the compiler package is not installed (optional dependency), degrade
+    // gracefully to the flat-systemPrompt path — same as when the registry DB is absent.
+    if (!compileAgentFn) {
+        logger.info(
+            "@adhd/agent-compiler not available — registry/compiler integration disabled; using flat system-prompts"
+        );
         return undefined;
     }
 
@@ -111,7 +134,7 @@ export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolv
 
     return {
         composedPromptStore,
-        compileAgentFn: compileAgent,
+        compileAgentFn,
         registryDb,
     };
 }
@@ -230,17 +253,29 @@ async function main() {
     // Delegates to buildPromptResolver() — the exported factory that is also
     // exercised directly by index-wiring.test.ts (Plan 6 gap F-P6-8b).
     //
-    // When ADHD_AGENT_REGISTRY_DB_PATH is set, buildPromptResolver opens the
-    // SQLite file and wires compileAgent from @adhd/agent-compiler.  Every
+    // @adhd/agent-compiler is an OPTIONAL dependency: the dynamic import below
+    // succeeds only when the package is installed.  On failure (standalone install
+    // without the compiler), the catch logs an info message and leaves
+    // compileAgentFn undefined — buildPromptResolver then returns undefined and
+    // every agent falls back to its flat systemPrompt.
+    //
+    // When ADHD_AGENT_REGISTRY_DB_PATH is set AND the compiler is installed,
+    // buildPromptResolver opens the SQLite file and wires compileAgentFn.  Every
     // `agent` tool call then resolves the system-prompt via the compiler (with
     // a composed_prompts cache look-up) before creating the session.
-    //
-    // When absent, buildPromptResolver returns undefined and the server falls
-    // back to the stored flat systemPrompt — existing callers and all legacy-agent
-    // tests continue to work unchanged.
+    let compileAgentFn: CompileAgentFn | undefined;
+    try {
+        ({ compileAgent: compileAgentFn } = await import("@adhd/agent-compiler"));
+    } catch {
+        logger.info(
+            "@adhd/agent-compiler not installed — registry/compiler integration disabled; using flat system-prompts"
+        );
+    }
+
     const promptResolver = buildPromptResolver({
         registryDbPath: config.server.registryDbPath,
         agentMcpDb: dbAny,
+        compileAgentFn,
     });
 
     // ── Startup env-ref verification (§4) ─────────────────────────────────
