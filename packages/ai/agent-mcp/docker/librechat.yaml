@@ -1,0 +1,23 @@
+# LibreChat config — exposes agent-mcp agents as a custom OpenAI-compatible endpoint.
+# Mounted into the LibreChat container at /app/librechat.yaml (see docker-compose.yml).
+# Reference: https://docs.librechat.ai/install/configuration/custom_config.html
+version: 1.2.8
+cache: true
+
+endpoints:
+  custom:
+    - name: "agent-mcp"
+      # The gateway requires no provider key of its own (agents hold their secrets);
+      # LibreChat just needs a non-empty value here.
+      apiKey: "unused"
+      # In-compose: reach the gateway by service name. (Host-build fallback: use
+      # "http://host.docker.internal:3010/v1" — see README.)
+      baseURL: "http://agent-mcp:3010/v1"
+      models:
+        fetch: true                 # populate the model picker from GET /v1/models (= your agents)
+        default: ["claude-oauth", "deepseek"]
+      # The key line: bind each LibreChat conversation to an agent-mcp session.
+      # LibreChat mints the conversationId; the gateway maps it to (and owns) the session.
+      headers:
+        X-AgentMcp-Session: "{{LIBRECHAT_BODY_CONVERSATIONID}}"
+      titleConvo: false             # avoid extra title-generation calls; flip on if you want titles

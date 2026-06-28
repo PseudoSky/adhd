@@ -169,12 +169,57 @@ Resolution order for "which agent-mcp session is this conversation?":
 3. **None matched** → create a session, seed it from the request's history once (cold
    start), and return its id (via response `id` / a header) for clients that can reuse it.
 
+All bindings resolve through the **persisted `session_aliases` index (§6a)** — durable
+across restarts; the in-memory map from P0 is only a hot cache in front of it.
+
 **Delta extraction:** forward only the trailing new user message; the prior transcript is
 ignored for content (agent-mcp has it). The resent transcript is used **only** to rehydrate
 a session that the gateway has lost (facade restart) — a resilience fallback, never canon.
 
 **No double-context:** because we forward the delta into a session that already holds the
 history, context isn't duplicated; `AGENT_MCP_CONTEXT_LIMIT` governs windowing inside agent-mcp.
+
+---
+
+## 6a. Session addressing, ownership & provenance (persisted)
+
+The conversation→session binding is **persisted on agent-mcp's side**, not held in gateway
+process memory — so it survives restarts (deploy / crash / `/mcp` reload). The in-memory
+`Map` from P0 becomes only a hot cache in front of this.
+
+**It's a session *alias index*, not an "external conversation id."** A LibreChat
+`conversationId`, an OpenAI **Responses** `previous_response_id`, and an Assistants
+`thread_id` are the *same* concept — an external handle that resolves to one session. One
+table serves them all (and any future stateful protocol with zero new schema):
+
+```sql
+session_aliases(
+  session_id  TEXT,    -- → sessions.id
+  scheme      TEXT,    -- "conversation" | "response" | "thread" | "external"
+  namespace   TEXT,    -- owner / auth subject (caller-controlled ids must be scoped)
+  value       TEXT,    -- the external handle
+  created_at  TEXT,
+  UNIQUE(scheme, namespace, value)          -- + index for per-request lookup
+)
+```
+- Gateway today writes `scheme="conversation"` (e.g. the LibreChat id), namespaced by owner.
+- Responses/Assistants later write `scheme="response"` / `"thread"` — same mechanism, no new schema.
+- Many aliases → one session (a session reachable from several surfaces).
+- Lookup: `findSessionByAlias(scheme, namespace, value)`; the gateway records the alias on session create.
+
+**Plus two first-class session columns** the management console + multi-user need (in the
+*same* migration, not bolted on later):
+- **`owner` / `user_id`** — authz + the console's "my sessions"; the alias `namespace` keys
+  off it. 1:1 → a column, not an alias.
+- **`origin`** — how the session was created: `gateway:librechat`, `mcp`, `cli`, `console`,
+  `delegation`. Provenance for the console to filter/group by.
+- *(optional)* **`title`/`label`** — display name for natively-created sessions (MCP/CLI/console)
+  with no UI-generated title.
+
+**Deliberately NOT folded in** (different lifecycles): **idempotency keys** (turn-retry
+dedupe → task-scoped, TTL'd), **delegation lineage** (parent↔sub-agent session → an internal
+FK), and **arbitrary metadata** (→ a `metadata` JSON column if ever needed). None belong in
+the alias index, which needs its uniqueness/index guarantees.
 
 ---
 
@@ -269,7 +314,7 @@ Non-streaming mode buffers to a single `chat.completion`.
 
 ## 12. Phasing
 - **P0 — `/v1/*` routes on the existing `node:http` server:** add `GET /v1/models` + `POST /v1/chat/completions` (SSE) branches to `streaming/sse-server.ts` (no new dependency), **served by default** (the SSE server already starts — no flag, not hidden); agents-as-models, **explicit `X-AgentMcp-Session` header binding** (fingerprint fallback), delta-forward, one HITL round-trip; in-process stores/orchestrator. **Validate against a real LibreChat** custom endpoint (reference Path-A UI); Open WebUI secondary.
-- **P1 — harden:** `model#id` override, cancellation (`task_cancel` on disconnect), usage in `usage`, keep-alives during long tool loops, docs.
+- **P1 — persist session binding + harden:** the headline item is **durable session addressing (§6a)** — add the `session_aliases` table + `sessions.owner`/`origin` (migration), replace the in-memory `Map` with `findSessionByAlias` (Map kept only as a hot cache), namespaced by owner; **test: a binding survives a server restart** (reopen → same conversation id resolves to the same session). Plus: `model#id` override, cancellation (`task_cancel` on disconnect), usage in `usage`, keep-alives during long tool loops, docs.
 - **P2 — Path B (build-our-own) + session API:** `/sessions*` endpoints + a thin **`assistant-ui` + `shadcn/ui`** client (chat with tool-call/HITL rendering · session browser: list / open-with-history / continue / branch · management panels: agents/providers/policies/budgets/usage). Optional Ollama endpoints.
 - **P3 — Responses API** for thread-aware UIs; optional tool-status streaming; vision pass-through.
 
