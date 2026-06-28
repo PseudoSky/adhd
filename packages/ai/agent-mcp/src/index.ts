@@ -1,13 +1,8 @@
 #!/usr/bin/env node
-import "dotenv/config";
+// config.ts handles dotenv hierarchy loading at module-load time; no separate
+// "dotenv/config" import needed.
 import os from "node:os";
 import path from "node:path";
-
-/** Default max_tokens for providers that do not set maxTokens in their config. */
-export const AGENT_MCP_DEFAULT_MAX_TOKENS = parseInt(
-    process.env["AGENT_MCP_DEFAULT_MAX_TOKENS"] ?? "8192",
-    10
-);
 
 // Re-export HookRegistry so plugins can import it for testing without deep internal paths
 export { HookRegistry } from "./engine/hooks.js";
@@ -25,6 +20,7 @@ import { compileAgent } from "@adhd/agent-compiler";
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
+import { config } from "./config.js";
 import { AgentStore, SessionStore, TaskStore } from "./store/index.js";
 import { ComposedPromptStore } from "./store/composed-prompt-store.js";
 import type { PromptResolverDeps } from "./engine/prompt-resolver.js";
@@ -41,6 +37,7 @@ import { enqueueExistingTask } from "./tools/task.js";
 import { tasksTable } from "./db/schema.js";
 import { eq } from "drizzle-orm";
 import { ToolError } from "./validation/errors.js";
+import type { AgentDefinition } from "./validation/index.js";
 
 // ── buildPromptResolver ───────────────────────────────────────────────────────
 //
@@ -134,6 +131,45 @@ process.on("unhandledRejection", (reason) => {
     process.exit(1);
 });
 
+// ── Startup env-ref verification (§4) ────────────────────────────────────────
+// Harvest every ADHD_AGENT_* env-var name referenced across all agent env blocks,
+// then call config.verifyEnvRefs to surface missing / disallowed names as
+// structured warnings. Never crashes — one misconfigured agent must not block the
+// rest of a mixed deployment.
+
+function verifyAgentEnvRefs(agents: AgentDefinition[]): void {
+    const names: string[] = [];
+    for (const agent of agents) {
+        const p = agent.provider;
+        if (p.type === "openai" || p.type === "anthropic") {
+            const env = p.env;
+            if (env?.secret)   names.push(env.secret);
+            if (env?.base_url) names.push(env.base_url);
+            if (env?.model)    names.push(env.model);
+        }
+    }
+
+    if (names.length === 0) return;
+
+    const { missing, disallowed } = config.verifyEnvRefs(names);
+
+    if (missing.length > 0) {
+        logger.warn(
+            { missingEnvVars: missing },
+            "Startup warning: the following env vars are referenced in agent configs but are not set. " +
+            "Tasks using those agents will fail at credential resolution. " +
+            "Set them in ~/.adhd/.env."
+        );
+    }
+    if (disallowed.length > 0) {
+        logger.warn(
+            { disallowedEnvVars: disallowed },
+            "Startup warning: the following env-var names in agent configs violate the ADHD_AGENT_- prefix guard. " +
+            "Add them to ADHD_AGENT_ENV_ALLOWLIST if they are intentional."
+        );
+    }
+}
+
 async function main() {
     // Run DB migrations synchronously before advertising tools
     runMigrations();
@@ -154,7 +190,7 @@ async function main() {
     const usagePlugin = new UsagePlugin(dbAny);
     await usagePlugin.install(hooks);
 
-    // External plugins: loaded from AGENT_MCP_PLUGINS env var.
+    // External plugins: loaded from config.plugins.entries (ADHD_AGENT_PLUGINS env var).
     // Each entry is a module specifier (absolute path or npm package name) that
     // exports a createPlugin(ctx) factory. Failures are logged and skipped.
     await loadExternalPlugins(hooks, dbAny);
@@ -163,12 +199,9 @@ async function main() {
     const queue = new BackgroundQueue();
     const orchestrator = new Orchestrator();
     const policy = new PolicyEngine({
-        serverMaxDepth: parseInt(process.env["AGENT_MCP_MAX_DEPTH"] ?? "5", 10),
-        serverMaxToolLoops: parseInt(process.env["AGENT_MCP_MAX_TOOL_LOOPS"] ?? "50", 10),
-        serverAllowedAgents: process.env["ALLOWED_AGENTS"]
-            ?.split(",")
-            .map(s => s.trim())
-            .filter(Boolean),
+        serverMaxDepth:      config.server.maxDepth,
+        serverMaxToolLoops:  config.server.maxToolLoops,
+        serverAllowedAgents: config.server.allowedAgents as string[] | undefined,
     });
 
     // Build DagEngine with an injected dispatchFn closure.
@@ -197,31 +230,27 @@ async function main() {
     // Delegates to buildPromptResolver() — the exported factory that is also
     // exercised directly by index-wiring.test.ts (Plan 6 gap F-P6-8b).
     //
-    // When AGENT_MCP_REGISTRY_DB_PATH is set, buildPromptResolver opens the
+    // When ADHD_AGENT_REGISTRY_DB_PATH is set, buildPromptResolver opens the
     // SQLite file and wires compileAgent from @adhd/agent-compiler.  Every
     // `agent` tool call then resolves the system-prompt via the compiler (with
     // a composed_prompts cache look-up) before creating the session.
     //
-    // When AGENT_MCP_REGISTRY_DB_PATH is absent, buildPromptResolver returns
-    // undefined and the server falls back to the stored flat systemPrompt —
-    // existing callers and all legacy-agent tests continue to work unchanged.
-    //
-    // The fallback also fires WITHIN the resolver: if the agent has no registry
-    // composition (AgentError / CompositionError from compileAgent),
-    // resolveComposedPrompt returns null and agentTool uses the flat
-    // systemPrompt.  A mixed deployment (some registry-backed, some flat) works
-    // without any per-agent configuration.
-    // Registry resolver is ON by default.  The default path
-    // (~/.adhd/agent-mcp/registry.db) is the coupling point that Plan 7's corpus
-    // import must write to.  buildPromptResolver degrades gracefully when the file
-    // is absent (directory not yet created) or unmigrated (empty tables) — it logs
-    // an info message and returns undefined so every flat-systemPrompt agent still
-    // runs unchanged.
+    // When absent, buildPromptResolver returns undefined and the server falls
+    // back to the stored flat systemPrompt — existing callers and all legacy-agent
+    // tests continue to work unchanged.
     const promptResolver = buildPromptResolver({
-        registryDbPath: process.env["AGENT_MCP_REGISTRY_DB_PATH"]
-            ?? path.join(os.homedir(), ".adhd", "agent-mcp", "registry.db"),
+        registryDbPath: config.server.registryDbPath,
         agentMcpDb: dbAny,
     });
+
+    // ── Startup env-ref verification (§4) ─────────────────────────────────
+    // Must run after store init so we can list all agents.
+    try {
+        const allAgents = agentStore.list() as AgentDefinition[];
+        verifyAgentEnvRefs(allAgents);
+    } catch (err) {
+        logger.warn({ err }, "Startup env-ref verification failed — continuing");
+    }
 
     // Start SSE server alongside MCP server — shares taskStore for terminal-on-connect checks.
     const sseServer = startSseServer(taskStore);

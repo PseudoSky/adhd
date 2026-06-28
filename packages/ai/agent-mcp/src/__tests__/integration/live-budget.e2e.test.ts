@@ -34,13 +34,14 @@ const LIVE_PROVIDER =
         ? {
               type: "anthropic" as const,
               model: "claude-haiku-4-5-20251001",
-              authTokenEnv: "ANTHROPIC_AUTH_TOKEN",
+              env: { secret: "ADHD_AGENT_ANTHROPIC_SECRET" },
               maxTokens: 256,
               timeoutMs: 30_000,
           }
         : {
-              type: "lmstudio" as const,
+              type: "openai" as const,
               model: process.env["AGENT_MCP_LIVE_MODEL"] ?? "qwen2.5-14b-instruct",
+              baseURL: process.env["LMSTUDIO_BASE_URL"] ?? "http://localhost:1234/v1",
               maxTokens: 256,
               // 180s — matches the known-working math_worker config for qwen2.5-14b-instruct
               // on this machine (model may need to load from cold start)

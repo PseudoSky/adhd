@@ -2,17 +2,17 @@ import http from "node:http";
 import { subscribeToTask, type TaskStreamEvent } from "./event-bus.js";
 import type { TaskStore } from "../store/task-store.js";
 import { logger } from "../logger.js";
+import { config } from "../config.js";
 
-const SSE_PORT = parseInt(process.env["SSE_PORT"] ?? "3001", 10);
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
 
 /**
  * Start the task-streaming SSE server.
  *
- * @param port  port to bind (default `SSE_PORT` env, else 3001). Pass `0` for an
+ * @param port  port to bind (default config.sse.port, else 3001). Pass `0` for an
  *              ephemeral port (used by tests).
- * @param host  host to bind (default `SSE_HOST` env, else 127.0.0.1).
+ * @param host  host to bind (default config.sse.host, else 127.0.0.1).
  *
  * A bind failure (e.g. `EADDRINUSE` when the port is already taken) is handled
  * gracefully: it is logged and SSE streaming is left unavailable, but the
@@ -21,8 +21,8 @@ const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
  */
 export function startSseServer(
     taskStore: TaskStore,
-    port: number = SSE_PORT,
-    host: string = process.env["SSE_HOST"] ?? "127.0.0.1"
+    port: number = config.sse.port,
+    host: string = config.sse.host
 ): http.Server {
     const server = http.createServer((req, res) => {
         // Route: GET /tasks/:id/stream — :id must be a UUID

@@ -5,6 +5,7 @@ import pRetry from "p-retry";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
 import { resolveToolCallName } from "../clients/tool-naming.js";
+import { config } from "../config.js";
 
 import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
 
@@ -76,38 +77,46 @@ function toOpenAITools(tools?: ToolDefinition[]): ChatCompletionTool[] | undefin
 
 export class OpenAIProvider implements LLMProvider {
     protected readonly client: OpenAI;
-    private readonly config: Extract<ProviderConfig, { type: "openai" }>;
+    private readonly providerConfig: Extract<ProviderConfig, { type: "openai" }>;
+    /** Resolved model id (from env or inline field). */
+    protected readonly resolvedModel: string;
 
-    constructor(config: Extract<ProviderConfig, { type: "openai" }>) {
-        this.config = config;
-        // DEBT-005: pass timeoutMs to the SDK client so the SDK's built-in HTTP
-        // timeout (default ~10 min) never fires before our AbortSignal.timeout().
-        // Without this, slow local models exceed the SDK default and throw a
-        // generic "Request timed out" (APIConnectionTimeoutError) that hits the
-        // catch-all PROVIDER_ERROR branch instead of the actionable PROVIDER_TIMEOUT,
-        // and raising timeoutMs has no effect. Aligning the two means our
-        // composedSignal always fires first, giving the right error + message.
-        // Fall back to "lmstudio" when the env var is absent so the OpenAI SDK
-        // never receives `undefined`. This is the canonical no-auth placeholder
-        // for LM Studio (which ignores the Authorization header value entirely);
-        // for real OpenAI usage the env var will always be set so this path
-        // is never reached in practice.
+    constructor(providerConfig: Extract<ProviderConfig, { type: "openai" }>) {
+        this.providerConfig = providerConfig;
+
+        // Resolve credentials, URL, and model via the sole env-reader (config).
+        // Fails loud for non-localhost base URLs without a secret (§3).
+        // Localhost servers (LM Studio, etc.) are exempt — no secret required.
+        // DEBT-005: timeout is forwarded to the SDK client so our AbortSignal.timeout()
+        // always fires first, producing PROVIDER_TIMEOUT instead of a generic SDK error.
+        const resolved = config.getProviderConfig({
+            provider:     "openai",
+            secret:       providerConfig.env?.secret,
+            url:          providerConfig.env?.base_url,
+            model:        providerConfig.env?.model,
+            inlineBaseURL: providerConfig.baseURL,
+            inlineModel:  providerConfig.model,
+        });
+
+        this.resolvedModel = resolved.model ?? providerConfig.model ?? "";
+
         this.client = new OpenAI({
-            apiKey: process.env[config.apiKeyEnv ?? "OPENAI_API_KEY"] ?? "lmstudio",
-            baseURL: config.baseURL,
-            timeout: config.timeoutMs ?? 60_000,
+            // Localhost-exempt servers have no secret; "no-auth" is ignored by the server.
+            apiKey:  resolved.secret ?? "no-auth",
+            baseURL: resolved.baseURL,
+            timeout: providerConfig.timeoutMs ?? 60_000,
         });
     }
 
     async chat(request: ProviderChatRequest): Promise<ProviderChatResponse> {
-        const retryConfig = this.config.retryConfig;
+        const retryConfig = this.providerConfig.retryConfig;
 
         const run = async (): Promise<ProviderChatResponse> => {
             const response = await this.client.chat.completions.create(
                 {
-                    model: this.config.model,
-                    temperature: this.config.temperature,
-                    max_tokens: this.config.maxTokens,
+                    model: this.resolvedModel,
+                    temperature: this.providerConfig.temperature,
+                    max_tokens: this.providerConfig.maxTokens,
                     messages: toOpenAIMessages(request.messages),
                     tools: toOpenAITools(request.tools),
                 },
@@ -160,7 +169,7 @@ export class OpenAIProvider implements LLMProvider {
                         inputTokens: sdkUsage.prompt_tokens,
                         outputTokens: sdkUsage.completion_tokens,
                         stopReason: normalisedStopReason,
-                        maxTokens: this.config.maxTokens,
+                        maxTokens: this.providerConfig.maxTokens,
                     }
                     : undefined,
             };

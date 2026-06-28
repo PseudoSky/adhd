@@ -37,7 +37,7 @@ function makeDeps() {
     const agentDef = {
         name: "test-agent",
         version: 1,
-        provider: { type: "openai" as const, model: "gpt-4o-mini" },
+        provider: { type: "openai" as const, model: "gpt-4o-mini", baseURL: "http://localhost:1234/v1" },
         systemPrompt: "You are helpful.",
         mcpServers: {},
         permissions: {},

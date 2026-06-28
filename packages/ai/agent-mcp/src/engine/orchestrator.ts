@@ -1,4 +1,5 @@
 import { logger } from "../logger.js";
+import { config } from "../config.js";
 import type { LLMProvider } from "../providers/types.js";
 import type { ExecutionContext, Message } from "../validation/index.js";
 import type { IHookRegistry, IEnforcementError } from "@adhd/agent-mcp-types";
@@ -128,7 +129,7 @@ export class Orchestrator {
 
         // Working copy of messages — we append to this as the loop progresses
         const currentMessages: Message[] = [...input.messages];
-        const contextLimit = parseInt(process.env["AGENT_MCP_CONTEXT_LIMIT"] ?? "0", 10);
+        const contextLimit = config.server.contextLimit;
 
         // BUG-002: track sessions opened by delegation during this task so we can
         // close them on failure or cancellation, preventing orphaned active sessions
@@ -213,7 +214,7 @@ export class Orchestrator {
                         signal: composedSignal,
                         // executeTool is used by providers (e.g. claudecli) that manage
                         // their own internal tool loop. Standard providers (anthropic,
-                        // openai, lmstudio) return stopReason "tool_calls" and ignore this.
+                        // openai) return stopReason "tool_calls" and ignore this.
                         executeTool: async (server, tool, args) => {
                             const client = await registry.getClient(server);
                             try {

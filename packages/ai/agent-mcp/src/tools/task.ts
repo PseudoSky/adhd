@@ -1,4 +1,5 @@
 import { logger } from "../logger.js";
+import { config } from "../config.js";
 import type { BackgroundQueue } from "../engine/queue.js";
 import type { DagEngine } from "../engine/dag-engine.js";
 import type { Orchestrator } from "../engine/orchestrator.js";
@@ -310,8 +311,7 @@ export async function taskTool(
     // A synchronous task is already complete by the time the caller gets the
     // response, so an SSE URL for it would only ever hit the terminal-on-connect
     // path and close immediately — omit it.
-    const ssePort = process.env["SSE_PORT"] ?? "3001";
-    const sseBaseUrl = process.env["SSE_BASE_URL"] ?? `http://localhost:${ssePort}`;
+    const sseBaseUrl = config.sse.baseUrl;
     const streamUrl =
         input.stream && input.background
             ? `${sseBaseUrl}/tasks/${task.id}/stream`

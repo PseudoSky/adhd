@@ -69,6 +69,11 @@ calc-server.*
 # `git add -A` from sweeping local job/worktree state into commits).
 .claude/
 
+# agent-mcp secret store — ADHD_AGENT_* secrets live in ~/.adhd/.env (outside
+# the repo) but a project-local .adhd/.env is also supported for convenience.
+# Never track it.
+.adhd/
+
 # Next.js
 .next
 out

@@ -91,7 +91,7 @@ function makeCtx(overrides: Partial<{ serverMaxToolLoops: number }> = {}): Execu
         agentDefinition: {
             name: "test-agent",
             version: 1,
-            provider: { type: "openai", model: "test-model" },
+            provider: { type: "openai", model: "test-model", baseURL: "http://localhost:1234/v1" },
             systemPrompt: "test",
             mcpServers: {},
             permissions: {},
@@ -470,7 +470,7 @@ describe("DEBT-003 – cancel interrupts an in-flight tool call via the threaded
             const agentName = `cancel-agent-${generateId()}`;
             harness.agentStore.create({
                 name: agentName,
-                provider: { type: "openai", model: "test-model" },
+                provider: { type: "openai", model: "test-model", baseURL: "http://localhost:1234/v1" },
                 systemPrompt: "test",
                 mcpServers: {},
                 permissions: {},

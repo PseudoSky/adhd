@@ -574,6 +574,33 @@ an actionable error rather than silently doing nothing.
 
 ## 🔧 Tech Debt / Improvements
 
+### DEBT-014 — env-name guard runs on the READ path, rejecting legacy stored secret names
+- **Status:** FIXED (working tree, pending release) — guard moved to input-only via
+  `envNameGuard` on `agentCreateInputSchema` / `agentUpdateInputSchema`; removed from the
+  base `providerEnvBlockSchema` so stored reads (incl. `agent_delete`) no longer reject
+  legacy names. Verified: build + `z.toJSONSchema` + test green.
+- **Severity:** medium (back-compat correctness for real `agents.db` rows)
+- **Symptom:** A stored agent row whose secret env var is not `ADHD_AGENT_`-prefixed
+  (e.g. a pre-change row with `apiKeyEnv: "DEEPSEEK_API_KEY"` / `"OPENAI_API_KEY"`)
+  now FAILS `agentDefinitionStoredSchema.parse()` on read. The legacy shim
+  (`legacyShim`) coerces `apiKeyEnv → env.secret` but keeps the original name, and
+  `providerEnvBlockSchema.superRefine → config.isEnvNameAllowed()` then rejects it
+  because it lacks the `ADHD_AGENT_` prefix. This can break `agent_list` (parses all
+  rows) and reading any affected agent/session snapshot.
+- **Root cause:** the env-name guard's purpose is to stop a caller from naming an
+  arbitrary secret at **create/update** time; it should NOT gate **reads** of
+  already-stored rows. It is currently baked into `providerEnvBlockSchema`, so it runs
+  on every parse — including the read-only `providerConfigStoredSchema` path.
+- **Fix:** apply the `isEnvNameAllowed` refinement only on the **input** schemas
+  (`agentCreateInputSchema` / `agentUpdateInputSchema`) — e.g. layer it as a
+  `.superRefine` on those, and remove it from the base `providerEnvBlockSchema` so
+  `agentDefinitionStoredSchema` (read path) parses legacy names without rejection.
+  Optionally have `legacyShim` map well-known legacy names
+  (`OPENAI_API_KEY`→`ADHD_AGENT_OPENAI_SECRET`, etc.) to ease migration.
+- **Discovered:** during the `docs/mcp-env/SPEC.md` JSON-Schema regression fix
+  (transform split). Mitigated short-term by recreating affected agents under the new
+  `env.secret: "ADHD_AGENT_*"` shape.
+
 ### DEBT-006 — server.ts USAGE_GUIDE doc examples still show systemPrompt as required
 - **Status:** backlog
 - **Priority:** P3
@@ -1074,6 +1101,35 @@ now interrupts the in-flight tool call instead of waiting for the batch.
 **Test:** `parallel.integration.test.ts` → "DEBT-003 … cancel interrupts an
 in-flight tool call via the threaded signal" (teeth-checked: dropping the signal
 arg makes the stub hang → the test times out).
+
+### DEBT-012 — Legacy provider config shim removal (apiKeyEnv, authTokenEnv, lmstudio type)
+- **Status:** backlog
+- **Priority:** P3
+- **Area:** config, providers, validation
+- **Reported:** 2026-06-27
+
+The legacy shim in `config.ts` `z.preprocess` and `validation/index.ts` `ProviderConfigSchema` translates the old field names (`apiKeyEnv`, `authTokenEnv`, `useClaudeOauth` as object field, `type: "lmstudio"`) into their new equivalents for backward compat. After a deprecation window, these should be removed:
+
+1. `ProviderConfigSchema` in `validation/index.ts`: remove `apiKeyEnv`, `authTokenEnv` from the accepted fields and the `.transform()` that maps them to `env.secret`.
+2. The `lmstudio` → `openai` alias in the discriminated union — remove the alias entry.
+3. The `z.preprocess` shim in `config.ts` if any env-level shims remain.
+4. Add a clear error message pointing users to the migration guide.
+
+**Migration note:** Users with existing agent definitions in the DB using `apiKeyEnv`/`authTokenEnv`/`lmstudio` will need a one-time migration. Consider providing a migration script (`scripts/migrate-provider-config.ts`) that reads all agents, applies the transformation, and writes them back.
+
+---
+
+### DEBT-013 — `~/.adhd/.env` not in root `.gitignore`
+- **Status:** backlog
+- **Priority:** P3
+- **Area:** security, devex
+- **Reported:** 2026-06-27
+
+The repo root `.gitignore` lists `.env` but not `.adhd/.env`. The `~/.adhd/.env` file is the recommended location for `ADHD_AGENT_*` secrets. While `~` (the home directory) is outside the repo tree and thus never tracked, users who create `.adhd/.env` inside the project directory (e.g. `<project>/.adhd/.env`) could accidentally stage it.
+
+**Fix:** Add `.adhd/` and `.adhd/.env` to the repo root `.gitignore`.
+
+---
 
 ### BUG-002 — `@adhd/agent-mcp-budget` dist missing `index.mjs` breaks live-budget e2e test
 - **Status:** backlog

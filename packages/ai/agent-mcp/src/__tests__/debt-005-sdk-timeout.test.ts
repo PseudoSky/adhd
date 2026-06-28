@@ -11,6 +11,9 @@
  * Teeth check: removing the `timeout: config.timeoutMs` line from OpenAIProvider
  * causes the spy assertion to fail (the constructor would be called without the
  * timeout property) — the test goes red exactly where it should.
+ *
+ * Note: tests use `baseURL: "http://localhost:1234/v1"` so `config.getProviderConfig`
+ * applies the localhost exemption (no ADHD_AGENT_OPENAI_SECRET required).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
@@ -43,6 +46,9 @@ function makeOpenAIConfig(overrides: Partial<Extract<ProviderConfig, { type: "op
     return {
         type: "openai",
         model: "gpt-4o-mini",
+        // Use a localhost baseURL so config.getProviderConfig applies the
+        // localhost exemption — no ADHD_AGENT_OPENAI_SECRET required.
+        baseURL: "http://localhost:1234/v1",
         ...overrides,
     };
 }
@@ -81,17 +87,14 @@ describe("DEBT-005 — timeoutMs forwarded to OpenAI SDK constructor", () => {
         expect(constructorArg["timeout"]).toBe(1_200_000);
     });
 
-    it("LMStudioProvider inherits the passthrough via OpenAIProvider super()", async () => {
-        // LMStudio is a thin subclass of OpenAIProvider — verify the fix
-        // propagates through the inheritance chain.
-        const { LMStudioProvider } = await import("../providers/lmstudio.js");
-        openAISpy.mockClear();
-
-        new LMStudioProvider({
-            type: "lmstudio",
-            model: "some-model",
-            timeoutMs: 300_000,
-        });
+    it("timeout passthrough applies for any localhost server (lm-studio, ollama, etc.)", () => {
+        // lmstudio is now just an OpenAI-compatible server with a localhost base URL.
+        // Verify that different localhost origins still get the timeout forwarded.
+        const timeoutMs = 300_000;
+        new OpenAIProvider(makeOpenAIConfig({
+            baseURL: "http://127.0.0.1:11434/v1", // ollama-style
+            timeoutMs,
+        }));
 
         const constructorArg = openAISpy.mock.calls[0]![0] as Record<string, unknown>;
         expect(constructorArg["timeout"]).toBe(300_000);

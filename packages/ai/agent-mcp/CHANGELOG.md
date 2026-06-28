@@ -11,6 +11,46 @@ planning in [ROADMAP.md](./ROADMAP.md).
 
 ## [Unreleased]
 
+### Changed — environment & provider-config overhaul (BREAKING) — `docs/mcp-env/SPEC.md`
+- **Single config module.** New `src/config.ts` is the only reader of `process.env`
+  (all 26 prior scattered reads routed through it): a Zod-validated, deep-frozen `config`
+  singleton built once via the pure `loadConfig(env)` factory. New `src/utils/load-env.ts`
+  loads a 3-tier `.env` hierarchy — `<project>/.env` → `<project>/.adhd/.env` →
+  `~/.adhd/.env` (most-specific wins) — once at startup.
+- **All env vars renamed to the `ADHD_AGENT_` prefix.** The old bare / `AGENT_MCP_*` /
+  `LMSTUDIO_*` names are no longer read (see CLAUDE.md migration table). Provider
+  credentials follow one template: `ADHD_AGENT_<PROVIDER>_{SECRET,BASE_URL,MODEL}`.
+- **Unified provider credential field.** `apiKeyEnv` + `authTokenEnv` collapse into one
+  `env: { secret, base_url?, model? }` block holding env-var **names** (never values), so
+  `agent_read`/`agent_list` never expose secrets. Anthropic infers the wire form from the
+  value (`sk-ant-api…` → `x-api-key`; `sk-ant-oat…` → Bearer + `oauth-2025-04-20` + Claude
+  Code identity block). `baseURL` is `/v1`-normalized at runtime; a missing secret on a
+  non-localhost `openai` `baseURL` fails loud (localhost is exempt).
+- **Env-name guard** (`ADHD_AGENT_`-prefix only, extensible via `ADHD_AGENT_ENV_ALLOWLIST`)
+  enforced on `agent_create`/`agent_update` input.
+
+### Removed
+- **`lmstudio` provider type** and `providers/lmstudio.ts` — LM Studio is now a plain
+  `openai` provider with a `baseURL`. The `?? "lmstudio"` silent-placeholder is gone
+  (legacy `type:"lmstudio"` rows are coerced to `openai` on load).
+- **Anthropic macOS-keychain OAuth subsystem** (`useClaudeOauth`, `getAccessToken`,
+  keychain read/write, OAuth refresh, `_useOauthIdentity`) — superseded by supplying the
+  `claude setup-token` one-year token through `env.secret`.
+
+### Fixed
+- **MCP `tools/list` crash** ("Transforms cannot be represented in JSON Schema"): the
+  baseURL `.transform()` and legacy-shim `z.preprocess()` were leaking into the
+  MCP-exposed input schema. Split into transform-free schemas (for `z.toJSONSchema`) vs a
+  read-only `providerConfigStoredSchema` / `agentDefinitionStoredSchema` that applies the
+  shim only when the stores parse persisted rows.
+- **DEBT-014:** the env-name guard ran on the read path, so legacy rows with non-prefixed
+  secret names failed to parse (breaking even `agent_delete`). Guard moved to
+  create/update input only.
+
+_Verified live through the loaded MCP tools (`agent_create → task → result`): an Anthropic
+OAuth-token agent returned a real completion; a DeepSeek (`openai`) agent authenticated
+successfully (reached provider billing)._
+
 ### Added
 - **`claudecli` header-driven tools (`systemPromptIsAgentSpec`).** New optional
   boolean on the `claudecli` provider config. When `true`, the agent's `systemPrompt`
