@@ -1,10 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ContentBlockParam, MessageParam, Tool } from "@anthropic-ai/sdk/resources/messages";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import pRetry from "p-retry";
-
-const execFileAsync = promisify(execFile);
 
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
@@ -13,6 +9,7 @@ import { resolveToolCallName } from "../clients/tool-naming.js";
 import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import { logger } from "../logger.js";
+import { config } from "../config.js";
 
 import type {
     LLMProvider,
@@ -25,7 +22,7 @@ import type {
 // Maps model-name prefix → documented max output tokens (standard sync API,
 // no beta headers). Checked longest-prefix-first so "claude-opus-4-5" (64k)
 // wins over "claude-opus-4" (128k). Source: docs.anthropic.com/models/overview.
-// AGENT_MCP_DEFAULT_MAX_TOKENS env var overrides for unlisted / future models.
+// config.server.defaultMaxTokens is used as the fallback for unknown / future models.
 const MODEL_MAX_TOKENS: [prefix: string, maxTokens: number][] = [
     // Claude 5 (GA 2026-06)
     ["claude-fable-5",          128_000],
@@ -52,150 +49,45 @@ const MODEL_MAX_TOKENS: [prefix: string, maxTokens: number][] = [
 ];
 
 function defaultMaxTokens(model: string): number {
-    const envOverride = process.env["AGENT_MCP_DEFAULT_MAX_TOKENS"];
-    if (envOverride) return parseInt(envOverride, 10);
     for (const [prefix, maxTokens] of MODEL_MAX_TOKENS) {
         if (model.startsWith(prefix)) return maxTokens;
     }
-    return 32_000; // unknown/future model — conservative but not restrictive
+    // Unknown / future model — fall back to the global default
+    return config.server.defaultMaxTokens;
 }
 
-// ─── OAuth keychain helpers ───────────────────────────────────────────────────
+// ─── Wire-form inference (§3a) ────────────────────────────────────────────────
+// One secret; the wire form is inferred from its value prefix.
+//   sk-ant-api… → x-api-key client (standard console.anthropic.com key)
+//   sk-ant-oat… → Authorization: Bearer + anthropic-beta: oauth-2025-04-20
+//   anything else → try as authToken (subscription tokens have varied prefixes)
 
-const KEYCHAIN_SERVICE = "Claude Code-credentials";
-const OAUTH_TOKEN_URL   = "https://platform.claude.com/v1/oauth/token";
-const OAUTH_CLIENT_ID   = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
-/** Refresh when fewer than this many ms remain on the access token. */
-const REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 min
-
-interface ClaudeOauthCreds {
-    accessToken: string;
-    refreshToken: string;
-    expiresAt: number; // epoch ms
+interface AnthropicClientParts {
+    client: Anthropic;
+    useOauthIdentity: boolean;
 }
 
-async function readKeychainCreds(): Promise<ClaudeOauthCreds> {
-    const { stdout } = await execFileAsync(
-        "security",
-        ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
-        { encoding: "utf8" }
-    );
-    const parsed = JSON.parse(stdout.trim()) as { claudeAiOauth: ClaudeOauthCreds };
-    return parsed.claudeAiOauth;
-}
-
-async function writeKeychainCreds(creds: ClaudeOauthCreds): Promise<void> {
-    // Read the full existing keychain entry so we preserve any other fields
-    const { stdout } = await execFileAsync(
-        "security",
-        ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
-        { encoding: "utf8" }
-    );
-    const existing = JSON.parse(stdout.trim()) as Record<string, unknown>;
-    existing["claudeAiOauth"] = creds;
-
-    // -U updates the existing entry in place
-    await execFileAsync(
-        "security",
-        [
-            "add-generic-password",
-            "-U",
-            "-s", KEYCHAIN_SERVICE,
-            "-a", KEYCHAIN_SERVICE,
-            "-w", JSON.stringify(existing),
-        ],
-        { encoding: "utf8" }
-    );
-}
-
-async function refreshOauthToken(refreshToken: string): Promise<ClaudeOauthCreds> {
-    // ⚠️  UNVERIFIED PATH — refresh confirmed blocked (HTTP 429) while the access token
-    //     is still valid; the endpoint appears to enforce "no early refresh" as an OAuth
-    //     policy.  This function will only be called when the token is within
-    //     REFRESH_BUFFER_MS of expiry (see getAccessToken below), which is the correct
-    //     window.  To confirm it actually works end-to-end:
-    //
-    //       1. Check the current expiry:
-    //            security find-generic-password -s "Claude Code-credentials" -w \
-    //              | python3 -c "import sys,json,time; d=json.load(sys.stdin);
-    //                  exp=d['claudeAiOauth']['expiresAt']/1000;
-    //                  print(time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(exp)),
-    //                        f'({round((exp-time.time())/60,1)} min remaining)')"
-    //
-    //       2. Wait until ≤5 min remain (or temporarily lower REFRESH_BUFFER_MS to
-    //          something large like 7*60*60*1000 to force the code path immediately).
-    //
-    //       3. Call getAccessToken() and confirm a new token is returned.
-    //
-    //     If this ever returns a 429 in production it means the token expired and the
-    //     refresh endpoint itself is down — the fallback in getAccessToken() will use
-    //     the stored (expired) token and let the SDK surface a 401.
-
-    const body = new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-        client_id: OAUTH_CLIENT_ID,
-    });
-
-    const res = await fetch(OAUTH_TOKEN_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-    });
-
-    const rawBody = await res.text();
-
-    let json: { access_token?: string; refresh_token?: string; expires_in?: number; error?: unknown } = {};
-    try {
-        json = JSON.parse(rawBody) as typeof json;
-    } catch {
-        throw new Error(
-            `OAuth refresh failed: response was not JSON\n` +
-            `  status: ${res.status} ${res.statusText}\n` +
-            `  body: ${rawBody}`
-        );
+function buildAnthropicClient(
+    secret: string,
+    timeoutMs: number | undefined
+): AnthropicClientParts {
+    if (secret.startsWith("sk-ant-api")) {
+        return {
+            client: new Anthropic({ apiKey: secret, timeout: timeoutMs }),
+            useOauthIdentity: false,
+        };
     }
-
-    if (!res.ok || !json.access_token) {
-        throw new Error(
-            `OAuth refresh failed\n` +
-            `  status: ${res.status} ${res.statusText}\n` +
-            `  body: ${rawBody}`
-        );
-    }
-
-    const fresh: ClaudeOauthCreds = {
-        accessToken:  json.access_token,
-        refreshToken: json.refresh_token ?? refreshToken, // some providers rotate it
-        expiresAt:    Date.now() + (json.expires_in ?? 3600) * 1000,
+    // OAuth / subscription token — requires the oauth-2025-04-20 beta header and
+    // the Claude Code identity block in the system prompt (see below).
+    const isOauth = secret.startsWith("sk-ant-oat");
+    return {
+        client: new Anthropic({
+            authToken: secret,
+            timeout: timeoutMs,
+            ...(isOauth ? { defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" } } : {}),
+        }),
+        useOauthIdentity: isOauth,
     };
-
-    // Persist rotated credentials back to the keychain so Claude Code stays in sync
-    await writeKeychainCreds(fresh);
-
-    return fresh;
-}
-
-/**
- * Returns a fresh access token, refreshing via OAuth if the stored one is
- * within REFRESH_BUFFER_MS of expiry. Falls back to the stored token on
- * refresh failure (it may still be valid).
- */
-async function getAccessToken(): Promise<string> {
-    const creds = await readKeychainCreds();
-
-    if (Date.now() < creds.expiresAt - REFRESH_BUFFER_MS) {
-        return creds.accessToken; // still good
-    }
-
-    // Token is expired or nearly so — refresh
-    try {
-        const fresh = await refreshOauthToken(creds.refreshToken);
-        return fresh.accessToken;
-    } catch {
-        // Refresh failed — fall back to stored token and let the SDK surface the 401
-        return creds.accessToken;
-    }
 }
 
 function toAnthropicTools(tools?: ToolDefinition[]): Tool[] | undefined {
@@ -275,92 +167,44 @@ function toAnthropicMessages(messages: Message[]): MessageParam[] {
 const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude.";
 
 export class AnthropicProvider implements LLMProvider {
-    private client: Anthropic;
-    private readonly config: Extract<ProviderConfig, { type: "anthropic" }>;
-    /** True when the active client was built with a sk-ant-oat OAuth token. */
-    private _useOauthIdentity = false;
+    private readonly client: Anthropic;
+    private readonly providerConfig: Extract<ProviderConfig, { type: "anthropic" }>;
+    /** True when the resolved secret is a sk-ant-oat… OAuth token. */
+    private readonly useOauthIdentity: boolean;
 
-    constructor(config: Extract<ProviderConfig, { type: "anthropic" }>) {
-        this.config = config;
+    constructor(providerConfig: Extract<ProviderConfig, { type: "anthropic" }>) {
+        this.providerConfig = providerConfig;
 
-        if (config.useClaudeOauth) {
-            // Deferred: client is built per-request in chat() after fetching a fresh token.
-            // Set a placeholder that will be replaced before any real call.
-            this.client = null as unknown as Anthropic;
-            return;
+        // Resolve the single unified secret via config (§3 / §3c)
+        const resolved = config.getProviderConfig({
+            provider: "anthropic",
+            secret:      providerConfig.env?.secret,
+            model:       providerConfig.env?.model,
+            inlineModel: providerConfig.model,
+        });
+
+        if (!resolved.secret) {
+            // No secret found and we're not a localhost server (anthropic has no localhost exemption)
+            throw new ToolError(
+                "PROVIDER_AUTH_ERROR",
+                `Anthropic requires a credential. ` +
+                `Set ADHD_AGENT_ANTHROPIC_SECRET in your ~/.adhd/.env ` +
+                `(run \`claude setup-token\` to obtain an OAuth access token, ` +
+                `or use your console.anthropic.com API key).`
+            );
         }
 
-        // Resolve credentials in priority order:
-        //   1. Explicit API key env var (e.g. ANTHROPIC_API_KEY)
-        //   2. Explicit auth token env var (e.g. ANTHROPIC_AUTH_TOKEN, for subscription users)
-        //   3. Neither — let SDK auto-detect from its own ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN
-        //      env fallbacks (throws AuthenticationError if neither is set)
-        const apiKey = process.env[config.apiKeyEnv ?? "ANTHROPIC_API_KEY"] || undefined;
-        const authToken = process.env[config.authTokenEnv ?? "ANTHROPIC_AUTH_TOKEN"] || undefined;
+        const { client, useOauthIdentity } = buildAnthropicClient(
+            resolved.secret,
+            providerConfig.timeoutMs
+        );
 
-        if (apiKey) {
-            this.client = new Anthropic({ apiKey, timeout: config.timeoutMs });
-        } else if (authToken) {
-            // OAuth tokens (sk-ant-oat…) require the oauth-2025-04-20 beta header;
-            // without it the Messages API returns 429. API keys (sk-ant-api…) do not.
-            const isOauth = authToken.startsWith("sk-ant-oat");
-            this._useOauthIdentity = isOauth;
-            this.client = new Anthropic({
-                authToken,
-                timeout: config.timeoutMs,
-                ...(isOauth ? { defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" } } : {}),
-            });
-        } else {
-            // No credentials found via env — SDK will throw a clear AuthenticationError
-            // DEBT-005: pass timeoutMs so SDK timeout aligns with our AbortSignal.
-            // Less critical than OpenAI: Anthropic uses .stream() which bypasses the
-            // SDK's synchronous 10-minute limit, but we align for consistency.
-            this.client = new Anthropic({ timeout: config.timeoutMs });
-        }
+        this.client = client;
+        this.useOauthIdentity = useOauthIdentity;
     }
 
     async chat(request: ProviderChatRequest): Promise<ProviderChatResponse> {
-        // For useClaudeOauth mode, fetch a fresh token on every chat() call so
-        // long-running servers never hold a stale client across token expiry.
-        if (this.config.useClaudeOauth) {
-            try {
-                const authToken = await getAccessToken();
-                // Subscription OAuth tokens always require the beta header + Claude Code identity in system prompt
-                this._useOauthIdentity = true;
-                this.client = new Anthropic({
-                    authToken,
-                    timeout: this.config.timeoutMs,
-                    defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" },
-                });
-            } catch (keychainErr) {
-                const keychainMsg = keychainErr instanceof Error ? keychainErr.message : String(keychainErr);
-                logger.warn({ keychainMsg }, "AnthropicProvider: keychain read failed, trying env var fallbacks");
-
-                const apiKey = process.env["ANTHROPIC_API_KEY"] || undefined;
-                const authToken = process.env["ANTHROPIC_AUTH_TOKEN"] || undefined;
-
-                if (apiKey) {
-                    this._useOauthIdentity = false;
-                    this.client = new Anthropic({ apiKey, timeout: this.config.timeoutMs });
-                } else if (authToken) {
-                    const isOauth = authToken.startsWith("sk-ant-oat");
-                    this._useOauthIdentity = isOauth;
-                    this.client = new Anthropic({
-                        authToken,
-                        timeout: this.config.timeoutMs,
-                        ...(isOauth ? { defaultHeaders: { "anthropic-beta": "oauth-2025-04-20" } } : {}),
-                    });
-                } else {
-                    throw new ToolError(
-                        "PROVIDER_AUTH_ERROR",
-                        `Anthropic keychain read failed: ${keychainMsg}. ` +
-                        `Set ANTHROPIC_AUTH_TOKEN (run \`claude setup-token\` to obtain an OAuth access token) or use authTokenEnv in the provider config`
-                    );
-                }
-            }
-        }
-
-        const retryConfig = this.config.retryConfig;
+        const retryConfig = this.providerConfig.retryConfig;
 
         const systemMessages = request.messages.filter(m => m.role === "system");
         const systemPrompt = systemMessages.map(m => m.content || "").join("\n") || undefined;
@@ -373,7 +217,7 @@ export class AnthropicProvider implements LLMProvider {
             // has its own system prompt fails unless the identity is its own block.
             // (Proven by bisect: array form → 200; identity+prompt joined string → 429.)
             // API-key mode keeps the plain string.
-            const effectiveSystem = this._useOauthIdentity
+            const effectiveSystem = this.useOauthIdentity
                 ? [
                       { type: "text" as const, text: CLAUDE_CODE_IDENTITY },
                       ...(systemPrompt
@@ -382,15 +226,20 @@ export class AnthropicProvider implements LLMProvider {
                   ]
                 : systemPrompt;
 
+            const effectiveModel = this.providerConfig.model ?? "";
+            if (!effectiveModel) {
+                logger.warn("AnthropicProvider: no model configured; API will likely reject");
+            }
+
             // Use streaming to avoid the SDK's synchronous "Streaming is required
             // for operations that may take longer than 10 minutes" throw that fires
             // when max_tokens is large (e.g. 64k on haiku-4-5) with messages.create().
             const stream = this.client.messages.stream(
                 {
-                    model: this.config.model,
+                    model: effectiveModel,
                     system: effectiveSystem,
-                    temperature: this.config.temperature,
-                    max_tokens: this.config.maxTokens ?? defaultMaxTokens(this.config.model),
+                    temperature: this.providerConfig.temperature,
+                    max_tokens: this.providerConfig.maxTokens ?? defaultMaxTokens(effectiveModel),
                     messages: toAnthropicMessages(request.messages),
                     tools: toAnthropicTools(request.tools),
                 },
@@ -444,7 +293,7 @@ export class AnthropicProvider implements LLMProvider {
                     inputTokens: sdkUsage.input_tokens,
                     outputTokens: sdkUsage.output_tokens,
                     stopReason: normalisedStopReason,
-                    maxTokens: this.config.maxTokens ?? defaultMaxTokens(this.config.model),
+                    maxTokens: this.providerConfig.maxTokens ?? defaultMaxTokens(effectiveModel),
                     cacheReadTokens: sdkUsage.cache_read_input_tokens ?? undefined,
                     cacheCreationTokens: sdkUsage.cache_creation_input_tokens ?? undefined,
                 },
@@ -466,7 +315,8 @@ export class AnthropicProvider implements LLMProvider {
                         throw new ToolError(
                             "PROVIDER_AUTH_ERROR",
                             `Anthropic authentication failed. ` +
-                            `Set ANTHROPIC_AUTH_TOKEN (run \`claude setup-token\` to obtain an OAuth access token) or use authTokenEnv in the provider config`
+                            `Check ADHD_AGENT_ANTHROPIC_SECRET in your ~/.adhd/.env ` +
+                            `(run \`claude setup-token\` to obtain a fresh OAuth access token).`
                         );
                     }
                 },

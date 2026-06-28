@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { messagesTable, sessionsTable } from "../db/schema.js";
 import { logger } from "../logger.js";
 import type { AgentDefinition, Message, Session, SessionListInput } from "../validation/index.js";
-import { agentDefinitionSchema, sessionSchema } from "../validation/index.js";
+import { agentDefinitionStoredSchema, sessionSchema } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
@@ -97,7 +97,7 @@ export class SessionStore {
             );
         }
 
-        return agentDefinitionSchema.parse(JSON.parse(row.agentData));
+        return agentDefinitionStoredSchema.parse(JSON.parse(row.agentData));
     }
 
     list(input: SessionListInput): Session[] {

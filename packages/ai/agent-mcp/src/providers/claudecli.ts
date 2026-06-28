@@ -46,14 +46,11 @@
  *     anthropic provider with useClaudeOauth: true for a fully supported path.
  */
 
-import { spawn, execFile } from "child_process";
+import { spawn } from "child_process";
 import readline from "readline";
-import { promisify } from "util";
 import { writeFile, unlink, mkdtemp, mkdir, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-
-const execFileAsync = promisify(execFile);
 
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
@@ -62,6 +59,7 @@ import type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from "./t
 import type { McpServerConfig, ProviderConfig, Message } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import { logger } from "../logger.js";
+import { config } from "../config.js";
 
 type ClaudeCliConfig = Extract<ProviderConfig, { type: "claudecli" }>;
 
@@ -306,39 +304,26 @@ export class ClaudeCliProvider implements LLMProvider {
     }
 
     /**
-     * Build the subprocess environment. Inherits the parent process env and,
-     * on macOS, tries to inject ANTHROPIC_AUTH_TOKEN from the Claude Code keychain.
-     * This is required when --bare is set, because --bare skips the settings
-     * discovery that normally loads Claude Code's auth configuration.
+     * Build the subprocess environment for the claude CLI subprocess.
+     *
+     * Merges the live process.env (PATH, HOME, call-time vars) with the
+     * config snapshot (ADHD_AGENT_* vars loaded from the .env hierarchy at
+     * startup), with the config snapshot winning on conflicts. This ensures
+     * the subprocess inherits both the user's shell context and any overrides
+     * loaded via the .env hierarchy — and allows test-injected env vars (e.g.
+     * CAPTURE_FILE) to flow through to the subprocess without a module reload.
      */
-    private async buildSubprocessEnv(): Promise<{ env: NodeJS.ProcessEnv; keychainError?: string }> {
-        const env: NodeJS.ProcessEnv = { ...process.env };
-
-        // If an explicit auth token env var is already present, nothing to do
-        if (env["ANTHROPIC_AUTH_TOKEN"] || env["ANTHROPIC_API_KEY"]) {
-            return { env };
+    private buildSubprocessEnv(): Record<string, string> {
+        const result: Record<string, string> = {};
+        // Start with the live env for full context (PATH, HOME, etc.)
+        for (const [k, v] of Object.entries(process.env)) {
+            if (v !== undefined) result[k] = v;
         }
-
-        let keychainError: string | undefined;
-
-        // Try macOS keychain — same store as useClaudeOauth in AnthropicProvider
-        try {
-            const { stdout } = await execFileAsync(
-                "security",
-                ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
-                { encoding: "utf8" }
-            );
-            const parsed = JSON.parse(stdout.trim()) as {
-                claudeAiOauth?: { accessToken?: string };
-            };
-            const token = parsed.claudeAiOauth?.accessToken;
-            if (token) env["ANTHROPIC_AUTH_TOKEN"] = token;
-        } catch (err) {
-            keychainError = err instanceof Error ? err.message : String(err);
-            logger.warn({ keychainError }, "claudecli: keychain read failed; subprocess will use inherited env");
+        // Overlay the config snapshot so ADHD_AGENT_* values from .env files win
+        for (const [k, v] of Object.entries(config.subprocessEnv())) {
+            result[k] = v;
         }
-
-        return { env, keychainError };
+        return result;
     }
 
     /**
@@ -481,7 +466,7 @@ export class ClaudeCliProvider implements LLMProvider {
             args.push("--mcp-config", mcpConfigPath, "--strict-mcp-config");
         }
 
-        const { env: subEnv, keychainError } = await this.buildSubprocessEnv();
+        const subEnv = this.buildSubprocessEnv();
 
         const proc = spawn(claudePath, args, {
             stdio: ["pipe", "pipe", "pipe"],
@@ -602,8 +587,9 @@ export class ClaudeCliProvider implements LLMProvider {
             if (!finalResult) {
                 throw new ToolError(
                     "PROVIDER_AUTH_ERROR",
-                    `Claude CLI returned empty result${keychainError ? `. Keychain error: ${keychainError}` : ""}. ` +
-                    `Set ANTHROPIC_AUTH_TOKEN (run \`claude setup-token\` to obtain an OAuth access token) or use authTokenEnv in the provider config`
+                    "Claude CLI returned empty result. " +
+                    "Ensure `claude auth status` shows a valid login. " +
+                    "To use the Anthropic API instead, set ADHD_AGENT_ANTHROPIC_SECRET in your ~/.adhd/.env."
                 );
             }
 

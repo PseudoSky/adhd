@@ -20,22 +20,23 @@ import { describe, it, expect } from "vitest";
 const isLive = process.env["AGENT_MCP_LIVE"] === "1";
 
 // Provider is selectable so the same real-orchestrator-loop vehicle can run
-// against a local LM Studio model OR the Anthropic API (env OAuth token).
-//   AGENT_MCP_LIVE_PROVIDER=lmstudio  → local LM Studio (LMSTUDIO_BASE_URL/API_KEY env)
-//   default                          → anthropic via ANTHROPIC_AUTH_TOKEN
+// against a local LM Studio / Ollama model OR the Anthropic API.
+//   AGENT_MCP_LIVE_PROVIDER=lmstudio  → local LM Studio (LMSTUDIO_BASE_URL env)
+//   default                           → anthropic via ADHD_AGENT_ANTHROPIC_SECRET
 const LIVE_PROVIDER =
     process.env["AGENT_MCP_LIVE_PROVIDER"] === "lmstudio"
         ? {
-              type: "lmstudio" as const,
+              type: "openai" as const,
               model:
                   process.env["AGENT_MCP_LIVE_MODEL"] ??
                   "qwen3.5-9b-claude-4.6-highiq-instruct-heretic-uncensored-mlx-mxfp8",
+              baseURL: process.env["LMSTUDIO_BASE_URL"] ?? "http://localhost:1234/v1",
               timeoutMs: 120_000,
           }
         : {
               type: "anthropic" as const,
               model: "claude-sonnet-4-6",
-              authTokenEnv: "ANTHROPIC_AUTH_TOKEN",
+              env: { secret: "ADHD_AGENT_ANTHROPIC_SECRET" },
               timeoutMs: 30_000,
           };
 

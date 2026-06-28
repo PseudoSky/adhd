@@ -1,6 +1,7 @@
 import PQueue from "p-queue";
 
 import { logger } from "../logger.js";
+import { config } from "../config.js";
 
 export type BackgroundTaskFn = () => Promise<void>;
 
@@ -15,9 +16,7 @@ export class BackgroundQueue {
     private readonly queue: PQueue;
 
     constructor(concurrency?: number) {
-        const resolvedConcurrency =
-            concurrency ??
-            parseInt(process.env["QUEUE_CONCURRENCY"] ?? "5", 10);
+        const resolvedConcurrency = concurrency ?? config.queue.concurrency;
 
         this.queue = new PQueue({ concurrency: resolvedConcurrency });
     }

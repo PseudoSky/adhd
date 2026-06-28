@@ -6,6 +6,11 @@
  * use a temp-directory-scoped marker file as the IPC channel to verify that a
  * plugin's install() actually ran, rather than relying solely on logger spies.
  *
+ * The config singleton (config.plugins.configPath / config.plugins.entries) is
+ * frozen at module load time. Tests therefore pass explicit values as overrides
+ * directly to findConfigFile / loadConfigFile / loadExternalPlugins rather than
+ * mutating process.env — the override params were added specifically for this.
+ *
  * Teeth checks:
  *   1. Config file with invalid JSON → loadConfigFile returns empty plugins array.
  *   2. Config file with invalid schema → loadConfigFile returns empty plugins array.
@@ -13,8 +18,8 @@
  *   4. Plugin factory throws → plugin skipped, subsequent plugin loads.
  *   5. Plugin without a factory export → plugin skipped.
  */
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, existsSync, rmSync } from "node:fs";
+import { describe, it, expect } from "vitest";
+import { mkdtempSync, writeFileSync, existsSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -95,28 +100,19 @@ export default function createPlugin(ctx) {
 `;
 }
 
-// ── Env cleanup ───────────────────────────────────────────────────────────────
-
-afterEach(() => {
-    delete process.env["AGENT_MCP_CONFIG"];
-    delete process.env["AGENT_MCP_PLUGINS"];
-});
-
 // ── findConfigFile ────────────────────────────────────────────────────────────
 
 describe("findConfigFile", () => {
-    it("returns null when AGENT_MCP_CONFIG points to a nonexistent file", () => {
-        process.env["AGENT_MCP_CONFIG"] = "/tmp/definitely-does-not-exist-agent-mcp.json";
-        expect(findConfigFile()).toBeNull();
+    it("returns null when explicit path points to a nonexistent file", () => {
+        expect(findConfigFile("/tmp/definitely-does-not-exist-agent-mcp.json")).toBeNull();
     });
 
-    it("returns the explicit path when AGENT_MCP_CONFIG file exists", () => {
+    it("returns the explicit path when the file exists", () => {
         const dir = tempDir();
         try {
             const p = join(dir, "explicit.json");
             writeFileSync(p, "{}");
-            process.env["AGENT_MCP_CONFIG"] = p;
-            expect(findConfigFile()).toBe(p);
+            expect(findConfigFile(p)).toBe(p);
         } finally {
             rmSync(dir, { recursive: true });
         }
@@ -127,10 +123,8 @@ describe("findConfigFile", () => {
 
 describe("loadConfigFile", () => {
     it("returns empty plugins when no config file is found", () => {
-        // Point AGENT_MCP_CONFIG at a nonexistent path so local/global files
-        // (if any happen to exist in the test environment) are bypassed.
-        process.env["AGENT_MCP_CONFIG"] = "/tmp/__nonexistent_agent_mcp_test__.json";
-        expect(loadConfigFile().plugins).toEqual([]);
+        // Pass a nonexistent path to bypass the local/global fallback files.
+        expect(loadConfigFile("/tmp/__nonexistent_agent_mcp_test__.json").plugins).toEqual([]);
     });
 
     it("parses a valid config file with plugins", () => {
@@ -143,9 +137,8 @@ describe("loadConfigFile", () => {
                     { module: "@adhd/agent-mcp-budget", config: { maxUSD: 10 } },
                 ],
             }));
-            process.env["AGENT_MCP_CONFIG"] = p;
 
-            const result = loadConfigFile();
+            const result = loadConfigFile(p);
             expect(result.plugins).toHaveLength(2);
             expect(result.plugins[0].module).toBe("@adhd/agent-mcp-metrics");
             expect(result.plugins[0].config).toEqual({}); // defaulted
@@ -161,8 +154,7 @@ describe("loadConfigFile", () => {
         try {
             const p = join(dir, "config.json");
             writeFileSync(p, JSON.stringify({ plugins: [{ module: "my-plugin" }] }));
-            process.env["AGENT_MCP_CONFIG"] = p;
-            expect(loadConfigFile().plugins[0].config).toEqual({});
+            expect(loadConfigFile(p).plugins[0].config).toEqual({});
         } finally {
             rmSync(dir, { recursive: true });
         }
@@ -173,8 +165,7 @@ describe("loadConfigFile", () => {
         try {
             const p = join(dir, "bad.json");
             writeFileSync(p, "{ not json !!!");
-            process.env["AGENT_MCP_CONFIG"] = p;
-            expect(loadConfigFile().plugins).toEqual([]);
+            expect(loadConfigFile(p).plugins).toEqual([]);
         } finally {
             rmSync(dir, { recursive: true });
         }
@@ -185,8 +176,7 @@ describe("loadConfigFile", () => {
         try {
             const p = join(dir, "config.json");
             writeFileSync(p, JSON.stringify({ plugins: [{ module: 42 }] }));
-            process.env["AGENT_MCP_CONFIG"] = p;
-            expect(loadConfigFile().plugins).toEqual([]);
+            expect(loadConfigFile(p).plugins).toEqual([]);
         } finally {
             rmSync(dir, { recursive: true });
         }
@@ -197,8 +187,7 @@ describe("loadConfigFile", () => {
         try {
             const p = join(dir, "config.json");
             writeFileSync(p, JSON.stringify({}));
-            process.env["AGENT_MCP_CONFIG"] = p;
-            expect(loadConfigFile().plugins).toEqual([]);
+            expect(loadConfigFile(p).plugins).toEqual([]);
         } finally {
             rmSync(dir, { recursive: true });
         }
@@ -215,9 +204,8 @@ describe("loadExternalPlugins — happy path", () => {
             const pluginPath = writePlugin(dir, "plugin.mjs", markerPlugin(markerPath));
             const configPath = join(dir, "config.json");
             writeFileSync(configPath, JSON.stringify({ plugins: [{ module: pluginPath }] }));
-            process.env["AGENT_MCP_CONFIG"] = configPath;
 
-            await loadExternalPlugins(new HookRegistry(), {});
+            await loadExternalPlugins(new HookRegistry(), {}, { configPath });
             expect(existsSync(markerPath)).toBe(true);
         } finally {
             rmSync(dir, { recursive: true });
@@ -233,34 +221,33 @@ describe("loadExternalPlugins — happy path", () => {
             writeFileSync(configPath, JSON.stringify({
                 plugins: [{ module: pluginPath, config: { threshold: 42, label: "test" } }],
             }));
-            process.env["AGENT_MCP_CONFIG"] = configPath;
 
-            await loadExternalPlugins(new HookRegistry(), {});
+            await loadExternalPlugins(new HookRegistry(), {}, { configPath });
 
-            const received = JSON.parse(require("node:fs").readFileSync(markerPath, "utf-8"));
+            const received = JSON.parse(readFileSync(markerPath, "utf-8"));
             expect(received).toEqual({ threshold: 42, label: "test" });
         } finally {
             rmSync(dir, { recursive: true });
         }
     });
 
-    it("loads a plugin via AGENT_MCP_PLUGINS env var (no config file needed)", async () => {
+    it("loads a plugin via pluginEntries override (no config file needed)", async () => {
         const dir = tempDir();
         const markerPath = join(dir, "installed.json");
         try {
             const pluginPath = writePlugin(dir, "plugin.mjs", markerPlugin(markerPath));
-            // No config file — use legacy env var
-            process.env["AGENT_MCP_CONFIG"] = "/tmp/__nonexistent__.json";
-            process.env["AGENT_MCP_PLUGINS"] = pluginPath;
 
-            await loadExternalPlugins(new HookRegistry(), {});
+            await loadExternalPlugins(new HookRegistry(), {}, {
+                configPath: "/tmp/__nonexistent__.json",
+                pluginEntries: [pluginPath],
+            });
             expect(existsSync(markerPath)).toBe(true);
         } finally {
             rmSync(dir, { recursive: true });
         }
     });
 
-    it("loads config-file plugins before AGENT_MCP_PLUGINS entries (ordering)", async () => {
+    it("loads config-file plugins before pluginEntries entries (ordering)", async () => {
         const dir = tempDir();
         const orderPath = join(dir, "order.json");
         const trackPlugin = (id: string) => `
@@ -283,12 +270,13 @@ export default function createPlugin(ctx) {
             const p2 = writePlugin(dir, "p2.mjs", trackPlugin("envvar"));
             const configPath = join(dir, "config.json");
             writeFileSync(configPath, JSON.stringify({ plugins: [{ module: p1 }] }));
-            process.env["AGENT_MCP_CONFIG"] = configPath;
-            process.env["AGENT_MCP_PLUGINS"] = p2;
 
-            await loadExternalPlugins(new HookRegistry(), {});
+            await loadExternalPlugins(new HookRegistry(), {}, {
+                configPath,
+                pluginEntries: [p2],
+            });
 
-            const order = JSON.parse(require("node:fs").readFileSync(orderPath, "utf-8"));
+            const order = JSON.parse(readFileSync(orderPath, "utf-8"));
             expect(order).toEqual(["config", "envvar"]);
         } finally {
             rmSync(dir, { recursive: true });
@@ -309,10 +297,10 @@ export function createPlugin(ctx) {
 }
 `;
             const pluginPath = writePlugin(dir, "named.mjs", content);
-            writeFileSync(join(dir, "config.json"), JSON.stringify({ plugins: [{ module: pluginPath }] }));
-            process.env["AGENT_MCP_CONFIG"] = join(dir, "config.json");
+            const configPath = join(dir, "config.json");
+            writeFileSync(configPath, JSON.stringify({ plugins: [{ module: pluginPath }] }));
 
-            await loadExternalPlugins(new HookRegistry(), {});
+            await loadExternalPlugins(new HookRegistry(), {}, { configPath });
             expect(existsSync(markerPath)).toBe(true);
         } finally {
             rmSync(dir, { recursive: true });
@@ -328,14 +316,14 @@ describe("loadExternalPlugins — configSchema validation", () => {
         const markerPath = join(dir, "schema-valid.json");
         try {
             const pluginPath = writePlugin(dir, "schema.mjs", schemaPlugin(markerPath));
-            writeFileSync(join(dir, "config.json"), JSON.stringify({
+            const configPath = join(dir, "config.json");
+            writeFileSync(configPath, JSON.stringify({
                 plugins: [{ module: pluginPath, config: { maxUSD: 10 } }],
             }));
-            process.env["AGENT_MCP_CONFIG"] = join(dir, "config.json");
 
-            await loadExternalPlugins(new HookRegistry(), {});
+            await loadExternalPlugins(new HookRegistry(), {}, { configPath });
 
-            const received = JSON.parse(require("node:fs").readFileSync(markerPath, "utf-8"));
+            const received = JSON.parse(readFileSync(markerPath, "utf-8"));
             expect(received).toEqual({ maxUSD: 10 });
         } finally {
             rmSync(dir, { recursive: true });
@@ -347,12 +335,12 @@ describe("loadExternalPlugins — configSchema validation", () => {
         const markerPath = join(dir, "schema-invalid.json");
         try {
             const pluginPath = writePlugin(dir, "schema.mjs", schemaPlugin(markerPath));
-            writeFileSync(join(dir, "config.json"), JSON.stringify({
+            const configPath = join(dir, "config.json");
+            writeFileSync(configPath, JSON.stringify({
                 plugins: [{ module: pluginPath, config: { maxUSD: -5 } }], // negative → rejected
             }));
-            process.env["AGENT_MCP_CONFIG"] = join(dir, "config.json");
 
-            await loadExternalPlugins(new HookRegistry(), {});
+            await loadExternalPlugins(new HookRegistry(), {}, { configPath });
 
             // Plugin was skipped — marker file must NOT exist
             expect(existsSync(markerPath)).toBe(false);
@@ -368,15 +356,15 @@ describe("loadExternalPlugins — configSchema validation", () => {
         try {
             const badPlugin  = writePlugin(dir, "bad.mjs",  schemaPlugin(badMarker));
             const goodPlugin = writePlugin(dir, "good.mjs", markerPlugin(goodMarker));
-            writeFileSync(join(dir, "config.json"), JSON.stringify({
+            const configPath = join(dir, "config.json");
+            writeFileSync(configPath, JSON.stringify({
                 plugins: [
                     { module: badPlugin,  config: { maxUSD: -1 } }, // fails
                     { module: goodPlugin },                           // must still load
                 ],
             }));
-            process.env["AGENT_MCP_CONFIG"] = join(dir, "config.json");
 
-            await loadExternalPlugins(new HookRegistry(), {});
+            await loadExternalPlugins(new HookRegistry(), {}, { configPath });
 
             expect(existsSync(badMarker)).toBe(false);  // skipped
             expect(existsSync(goodMarker)).toBe(true);  // loaded
@@ -395,12 +383,12 @@ describe("loadExternalPlugins — failure resilience", () => {
         try {
             const badPlugin  = writePlugin(dir, "bad.mjs",  THROWING_FACTORY);
             const goodPlugin = writePlugin(dir, "good.mjs", markerPlugin(goodMarker));
-            writeFileSync(join(dir, "config.json"), JSON.stringify({
+            const configPath = join(dir, "config.json");
+            writeFileSync(configPath, JSON.stringify({
                 plugins: [{ module: badPlugin }, { module: goodPlugin }],
             }));
-            process.env["AGENT_MCP_CONFIG"] = join(dir, "config.json");
 
-            await expect(loadExternalPlugins(new HookRegistry(), {})).resolves.toBeUndefined();
+            await expect(loadExternalPlugins(new HookRegistry(), {}, { configPath })).resolves.toBeUndefined();
             expect(existsSync(goodMarker)).toBe(true);
         } finally {
             rmSync(dir, { recursive: true });
@@ -413,12 +401,12 @@ describe("loadExternalPlugins — failure resilience", () => {
         try {
             const noFactory  = writePlugin(dir, "nofactory.mjs", NO_FACTORY);
             const goodPlugin = writePlugin(dir, "good.mjs", markerPlugin(goodMarker));
-            writeFileSync(join(dir, "config.json"), JSON.stringify({
+            const configPath = join(dir, "config.json");
+            writeFileSync(configPath, JSON.stringify({
                 plugins: [{ module: noFactory }, { module: goodPlugin }],
             }));
-            process.env["AGENT_MCP_CONFIG"] = join(dir, "config.json");
 
-            await expect(loadExternalPlugins(new HookRegistry(), {})).resolves.toBeUndefined();
+            await expect(loadExternalPlugins(new HookRegistry(), {}, { configPath })).resolves.toBeUndefined();
             expect(existsSync(goodMarker)).toBe(true);
         } finally {
             rmSync(dir, { recursive: true });
@@ -430,15 +418,15 @@ describe("loadExternalPlugins — failure resilience", () => {
         const goodMarker = join(dir, "good.json");
         try {
             const goodPlugin = writePlugin(dir, "good.mjs", markerPlugin(goodMarker));
-            writeFileSync(join(dir, "config.json"), JSON.stringify({
+            const configPath = join(dir, "config.json");
+            writeFileSync(configPath, JSON.stringify({
                 plugins: [
                     { module: "@adhd/this-package-definitely-does-not-exist-xyz-9999" },
                     { module: goodPlugin },
                 ],
             }));
-            process.env["AGENT_MCP_CONFIG"] = join(dir, "config.json");
 
-            await expect(loadExternalPlugins(new HookRegistry(), {})).resolves.toBeUndefined();
+            await expect(loadExternalPlugins(new HookRegistry(), {}, { configPath })).resolves.toBeUndefined();
             expect(existsSync(goodMarker)).toBe(true);
         } finally {
             rmSync(dir, { recursive: true });
@@ -446,16 +434,20 @@ describe("loadExternalPlugins — failure resilience", () => {
     });
 
     it("resolves successfully when no plugins are configured anywhere", async () => {
-        process.env["AGENT_MCP_CONFIG"] = "/tmp/__nonexistent_agent_mcp_test_2__.json";
-        await expect(loadExternalPlugins(new HookRegistry(), {})).resolves.toBeUndefined();
+        await expect(
+            loadExternalPlugins(new HookRegistry(), {}, {
+                configPath: "/tmp/__nonexistent_agent_mcp_test_2__.json",
+                pluginEntries: [],
+            })
+        ).resolves.toBeUndefined();
     });
 });
 
 // ── Real @adhd/agent-mcp-budget integration via config/env ───────────────────
 //
 // These tests load the REAL built budget plugin (not a synthetic .mjs) via the
-// same paths the production server uses: agent-mcp.config.json or
-// AGENT_MCP_PLUGINS env var. This verifies the full config→load→enforce chain.
+// same paths the production server uses: agent-mcp.config.json or pluginEntries.
+// This verifies the full config→load→enforce chain.
 //
 // We reference the dist file by absolute path because @adhd packages are not
 // symlinked into node_modules in this monorepo (Nx uses TS path aliases, not
@@ -491,13 +483,13 @@ describe("loadExternalPlugins — real @adhd/agent-mcp-budget integration", () =
     it("loads budget plugin via config file and enforces maxModelCalls:1 on second model call", async () => {
         const dir = tempDir();
         try {
-            writeFileSync(join(dir, "config.json"), JSON.stringify({
+            const configPath = join(dir, "config.json");
+            writeFileSync(configPath, JSON.stringify({
                 plugins: [{ module: BUDGET_PLUGIN_DIST, config: { maxModelCalls: 1 } }],
             }));
-            process.env["AGENT_MCP_CONFIG"] = join(dir, "config.json");
 
             const hooks = new HookRegistry();
-            await loadExternalPlugins(hooks, null);
+            await loadExternalPlugins(hooks, null, { configPath });
 
             const ctx = makeCtx();
             await hooks.emit("task:start", { executionContext: ctx, messages: [] });
@@ -524,16 +516,18 @@ describe("loadExternalPlugins — real @adhd/agent-mcp-budget integration", () =
         }
     });
 
-    it("loads budget plugin via AGENT_MCP_PLUGINS env var and enforces maxTotalTokens", async () => {
-        // AGENT_MCP_PLUGINS doesn't support per-plugin config; the plugin's
+    it("loads budget plugin via pluginEntries override and enforces no-op with empty config", async () => {
+        // pluginEntries doesn't support per-plugin config; the plugin's
         // configSchema.parse({}) defaults kick in (all limits undefined = no enforcement).
-        // We test the env-var load path itself and verify the plugin installs cleanly.
-        process.env["AGENT_MCP_CONFIG"] = "/tmp/__nonexistent_budget_test__.json";
-        process.env["AGENT_MCP_PLUGINS"] = BUDGET_PLUGIN_DIST;
-
+        // We test the pluginEntries load path itself and verify the plugin installs cleanly.
         const hooks = new HookRegistry();
         // loadExternalPlugins must not throw even with empty default config
-        await expect(loadExternalPlugins(hooks, null)).resolves.toBeUndefined();
+        await expect(
+            loadExternalPlugins(hooks, null, {
+                configPath: "/tmp/__nonexistent_budget_test__.json",
+                pluginEntries: [BUDGET_PLUGIN_DIST],
+            })
+        ).resolves.toBeUndefined();
 
         // With no limits configured, enforcement must be a no-op
         const ctx = makeCtx("env-var-task");

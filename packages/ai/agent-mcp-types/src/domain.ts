@@ -96,10 +96,53 @@ export interface RetryConfig {
   factor: number;
 }
 
+/**
+ * Provider configuration stored in an agent definition.
+ *
+ * Credentials are **env-var pointers** (names, never values) stored in the
+ * `env` block so they never leak through `agent_read` / `agent_list`. Inline
+ * literal fields (`baseURL`, `model`) are also accepted as fallbacks.
+ *
+ * Legacy fields `apiKeyEnv`, `authTokenEnv`, `useClaudeOauth`, and the
+ * `"lmstudio"` type are coerced to the unified shape on read by the
+ * normalize-on-load shim in `validation/agent.ts` — no migration needed.
+ * LM Studio is just `type: "openai"` with a localhost `baseURL`.
+ */
+export type ProviderEnvBlock = {
+  /** Env-var NAME whose value is the credential (API key or OAuth token). */
+  secret?: string;
+  /** Env-var NAME whose value is the provider base URL. */
+  base_url?: string;
+  /** Env-var NAME whose value is the model id. */
+  model?: string;
+};
+
 export type ProviderConfig =
-  | { type: "anthropic"; model: string; apiKeyEnv?: string; authTokenEnv?: string; useClaudeOauth?: boolean; temperature?: number; maxTokens?: number; timeoutMs?: number; retryConfig?: RetryConfig }
-  | { type: "openai";    model: string; apiKeyEnv?: string; baseURL?: string; temperature?: number; maxTokens?: number; timeoutMs?: number; retryConfig?: RetryConfig }
-  | { type: "lmstudio";  model: string; apiKeyEnv?: string; baseURL?: string; temperature?: number; maxTokens?: number; timeoutMs?: number; retryConfig?: RetryConfig }
+  | {
+      type: "anthropic";
+      /** Inline model id — may also be supplied via env.model. */
+      model?: string;
+      /** Env-var pointers (ADHD_AGENT_*-prefixed names only). */
+      env?: ProviderEnvBlock;
+      temperature?: number;
+      maxTokens?: number;
+      timeoutMs?: number;
+      retryConfig?: RetryConfig;
+    }
+  | {
+      type: "openai";
+      /** Inline model id — may also be supplied via env.model. */
+      model?: string;
+      /** Env-var pointers (ADHD_AGENT_*-prefixed names only). */
+      env?: ProviderEnvBlock;
+      /** Inline literal base URL — normalised to include /v1 if absent.
+       *  LM Studio: set to "http://localhost:1234/v1" (no secret required). */
+      baseURL?: string;
+      temperature?: number;
+      maxTokens?: number;
+      timeoutMs?: number;
+      retryConfig?: RetryConfig;
+    }
   /** Uses the local `claude` CLI (Claude Code) as a subprocess provider. Works with any auth
    *  method already configured in Claude Code (subscription, API key, OAuth).
    *  All Claude Code built-in tools are disallowed by default; only MCP tools from

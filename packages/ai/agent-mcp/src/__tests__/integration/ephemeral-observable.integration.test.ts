@@ -45,7 +45,7 @@ import type { ExecutionContext } from "../../validation/index.js";
 function createAgent(h: Harness, agentName: string): void {
     h.agentStore.create({
         name: agentName,
-        provider: { type: "openai", model: "test-model" },
+        provider: { type: "openai", model: "test-model", baseURL: "http://localhost:1234/v1" },
         systemPrompt: "You are a test agent.",
         mcpServers: {},
         permissions: {},
@@ -308,7 +308,7 @@ describe("T6: request_human_input forbidden in ephemeral mode", () => {
         // Agent with allowHumanInput so the HITL tool is advertised
         h.agentStore.create({
             name: agentName,
-            provider: { type: "openai", model: "test-model" },
+            provider: { type: "openai", model: "test-model", baseURL: "http://localhost:1234/v1" },
             systemPrompt: "You are a HITL agent.",
             mcpServers: {},
             permissions: {},

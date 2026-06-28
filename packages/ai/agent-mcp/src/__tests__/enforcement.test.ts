@@ -22,7 +22,7 @@ function makeExecCtx(taskId = "t-1") {
         agentDefinition: {
             name: "agent",
             version: 1 as const,
-            provider: { type: "openai" as const, model: "gpt-4o-mini" },
+            provider: { type: "openai" as const, model: "gpt-4o-mini", baseURL: "http://localhost:1234/v1" },
             systemPrompt: "",
             mcpServers: {},
             permissions: {},

@@ -4,13 +4,19 @@
  * Verifies that the task tool includes stream_url in the response when
  * stream: true, and omits it when stream is false or not provided.
  *
+ * The SSE base URL is read from `config.sse.baseUrl`, which is the frozen
+ * singleton value derived from ADHD_AGENT_SSE_BASE_URL / ADHD_AGENT_SSE_PORT
+ * at startup time. Dynamic env-var mutations during tests don't affect it —
+ * that behavior is covered by config.test.ts (CFG-004).
+ *
  * Acceptance criteria:
  *  - [stream-task-tool.2] stream_url present when stream=true
  *  - [stream-task-tool.4] stream_url NOT present when stream=false or omitted
- *  - [stream-task-tool.3] SSE_BASE_URL env var used in URL construction
+ *  - [stream-task-tool.3] stream_url format is {config.sse.baseUrl}/tasks/{taskId}/stream
  */
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { taskTool } from "../tools/task.js";
+import { config } from "../config.js";
 import type { TaskDeps } from "../tools/task.js";
 import type { Task, TaskToolInput } from "../validation/index.js";
 import { nowIso } from "../utils/timestamps.js";
@@ -41,7 +47,9 @@ function makeDeps(taskId: string): TaskDeps {
     const agentDef = {
         name: "test-agent",
         version: 1,
-        provider: { type: "openai" as const, model: "gpt-4o-mini" },
+        // baseURL: localhost → config.getProviderConfig applies localhost exemption,
+        // no ADHD_AGENT_OPENAI_SECRET required.
+        provider: { type: "openai" as const, model: "gpt-4o-mini", baseURL: "http://localhost:1234/v1" },
         systemPrompt: "You are helpful.",
         mcpServers: {},
         permissions: {},
@@ -114,15 +122,8 @@ function makeSessionInput(overrides: Partial<{ stream: boolean; background: bool
 // ---------------------------------------------------------------------------
 
 describe("stream-task-tool — stream_url in task response", () => {
-    const originalEnv = { ...process.env };
-
-    afterEach(() => {
-        // Restore env: clear, then conditionally restore the original value.
-        delete process.env["SSE_PORT"];
-        delete process.env["SSE_BASE_URL"];
-        if (originalEnv["SSE_PORT"]) process.env["SSE_PORT"] = originalEnv["SSE_PORT"];
-        if (originalEnv["SSE_BASE_URL"]) process.env["SSE_BASE_URL"] = originalEnv["SSE_BASE_URL"];
-    });
+    // The SSE base URL from the frozen singleton
+    const sseBase = config.sse.baseUrl;
 
     describe("stream: true", () => {
         it("includes stream_url in response when stream=true (background mode)", async () => {
@@ -136,42 +137,14 @@ describe("stream-task-tool — stream_url in task response", () => {
             expect(result.stream_url).toContain(`/tasks/${taskId}/stream`);
         });
 
-        it("stream_url uses default base URL (http://localhost:3001) when SSE_BASE_URL not set", async () => {
-            delete process.env["SSE_BASE_URL"];
-            delete process.env["SSE_PORT"];
-
+        it("stream_url uses config.sse.baseUrl (the frozen singleton value)", async () => {
             const taskId = generateId();
             const deps = makeDeps(taskId);
             const input = makeSessionInput({ stream: true, background: true });
 
             const result = await taskTool(input, deps);
 
-            expect(result.stream_url).toBe(`http://localhost:3001/tasks/${taskId}/stream`);
-        });
-
-        it("stream_url uses SSE_BASE_URL env var when set", async () => {
-            process.env["SSE_BASE_URL"] = "https://api.example.com";
-
-            const taskId = generateId();
-            const deps = makeDeps(taskId);
-            const input = makeSessionInput({ stream: true, background: true });
-
-            const result = await taskTool(input, deps);
-
-            expect(result.stream_url).toBe(`https://api.example.com/tasks/${taskId}/stream`);
-        });
-
-        it("stream_url uses SSE_PORT when SSE_BASE_URL not set but SSE_PORT is set", async () => {
-            delete process.env["SSE_BASE_URL"];
-            process.env["SSE_PORT"] = "4242";
-
-            const taskId = generateId();
-            const deps = makeDeps(taskId);
-            const input = makeSessionInput({ stream: true, background: true });
-
-            const result = await taskTool(input, deps);
-
-            expect(result.stream_url).toBe(`http://localhost:4242/tasks/${taskId}/stream`);
+            expect(result.stream_url).toBe(`${sseBase}/tasks/${taskId}/stream`);
         });
     });
 
@@ -199,15 +172,16 @@ describe("stream-task-tool — stream_url in task response", () => {
 
     describe("stream_url format", () => {
         it("stream_url matches expected pattern: {base}/tasks/{taskId}/stream", async () => {
-            process.env["SSE_BASE_URL"] = "http://localhost:3001";
-
             const taskId = generateId();
             const deps = makeDeps(taskId);
             const input = makeSessionInput({ stream: true, background: true });
 
             const result = await taskTool(input, deps);
 
-            const expectedPattern = /^http:\/\/localhost:3001\/tasks\/[0-9a-f-]+\/stream$/;
+            // Pattern: {sseBase}/tasks/{uuid}/stream
+            const expectedPattern = new RegExp(
+                `^${sseBase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/tasks/[0-9a-f-]+/stream$`
+            );
             expect(result.stream_url).toMatch(expectedPattern);
         });
     });

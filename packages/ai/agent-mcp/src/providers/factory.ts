@@ -1,7 +1,6 @@
 import type { McpServerConfig, ProviderConfig } from "../validation/index.js";
 import { AnthropicProvider } from "./anthropic.js";
 import { ClaudeCliProvider } from "./claudecli.js";
-import { LMStudioProvider } from "./lmstudio.js";
 import { OpenAIProvider } from "./openai.js";
 import type { LLMProvider } from "./types.js";
 
@@ -12,20 +11,18 @@ import type { LLMProvider } from "./types.js";
  *   to build the --mcp-config inline JSON passed to the claude subprocess.
  */
 export function createProvider(
-    config: ProviderConfig,
+    providerConfig: ProviderConfig,
     mcpServers?: Record<string, McpServerConfig>
 ): LLMProvider {
-    switch (config.type) {
+    switch (providerConfig.type) {
         case "anthropic":
-            return new AnthropicProvider(config);
+            return new AnthropicProvider(providerConfig);
         case "claudecli":
-            return new ClaudeCliProvider(config, mcpServers ?? {});
+            return new ClaudeCliProvider(providerConfig, mcpServers ?? {});
         case "openai":
-            return new OpenAIProvider(config);
-        case "lmstudio":
-            return new LMStudioProvider(config);
+            return new OpenAIProvider(providerConfig);
         default: {
-            const exhaustive: never = config;
+            const exhaustive: never = providerConfig;
             throw new Error(`Unknown provider type: ${(exhaustive as { type: string }).type}`);
         }
     }

@@ -33,6 +33,7 @@ import { homedir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import { logger } from "../logger.js";
+import { config } from "../config.js";
 import type { IHookRegistry, Plugin, PluginContext, PluginFactory } from "@adhd/agent-mcp-types";
 
 // ── Config file schema ────────────────────────────────────────────────────────
@@ -79,12 +80,19 @@ interface PluginModule {
 /**
  * Returns the path to the active agent-mcp config file, or `null` if none is
  * found. Search order:
- *   1. `AGENT_MCP_CONFIG` env var — absolute path to any JSON file
+ *   1. `configPathOverride` (when provided directly — used by tests)
+ *      or `ADHD_AGENT_CONFIG` singleton value — absolute path to any JSON file
  *   2. `{cwd}/agent-mcp.config.json` — project-local (next to package.json)
  *   3. `{HOME}/.agent-mcp/config.json` — global user config
+ *
+ * @param configPathOverride — explicit path that takes priority over the
+ *   singleton value; pass `null` to force "no explicit path" (skip the env
+ *   lookup) without passing an actual file path.
  */
-export function findConfigFile(): string | null {
-    const explicit = process.env["AGENT_MCP_CONFIG"];
+export function findConfigFile(configPathOverride?: string | null): string | null {
+    const explicit = configPathOverride !== undefined
+        ? configPathOverride
+        : config.plugins.configPath;
     if (explicit) {
         if (!existsSync(explicit)) {
             logger.warn(
@@ -108,9 +116,11 @@ export function findConfigFile(): string | null {
 /**
  * Reads, parses, and validates the agent-mcp config file. Returns
  * `{ plugins: [] }` on any failure so the caller can always destructure safely.
+ *
+ * @param configPathOverride — forwarded to `findConfigFile`; used in tests.
  */
-export function loadConfigFile(): AgentMcpConfigFile {
-    const configPath = findConfigFile();
+export function loadConfigFile(configPathOverride?: string | null): AgentMcpConfigFile {
+    const configPath = findConfigFile(configPathOverride);
     if (!configPath) return { plugins: [] };
 
     let raw: unknown;
@@ -259,20 +269,24 @@ async function loadOnePlugin(
  *
  * Processing order:
  *   1. Plugins from the agent-mcp config file (with optional validated `config` blocks).
- *   2. Specifiers from `AGENT_MCP_PLUGINS` env var (comma-separated, no per-plugin
- *      options — legacy shorthand for simple activations or CI environments).
+ *   2. Specifiers from `ADHD_AGENT_PLUGINS` (comma-separated, no per-plugin options).
  *
  * All failures (bad config file, unresolvable module, failed schema validation,
  * factory errors) are logged at `error` level and skipped — a broken plugin
  * never prevents the server from starting.
+ *
+ * @param overrides — explicit values for testability; production code omits this.
+ *   `configPath`    — forwarded to `findConfigFile`
+ *   `pluginEntries` — explicit module list (replaces `config.plugins.entries`)
  */
-export async function loadExternalPlugins(hooks: IHookRegistry, db: unknown): Promise<void> {
-    const configFile = loadConfigFile();
+export async function loadExternalPlugins(
+    hooks: IHookRegistry,
+    db: unknown,
+    overrides?: { configPath?: string | null; pluginEntries?: string[] },
+): Promise<void> {
+    const configFile = loadConfigFile(overrides?.configPath);
 
-    const legacyEntries: PluginEntry[] = (process.env["AGENT_MCP_PLUGINS"] ?? "")
-        .split(",")
-        .map(s => s.trim())
-        .filter(Boolean)
+    const legacyEntries: PluginEntry[] = (overrides?.pluginEntries ?? config.plugins.entries)
         .map(module => ({ module, config: {} }));
 
     const allEntries: PluginEntry[] = [...configFile.plugins, ...legacyEntries];

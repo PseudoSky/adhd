@@ -49,7 +49,7 @@ async function setupAgent(harness: Harness): Promise<{ agentName: string; sessio
     const agentName = `hitl-agent-${generateId()}`;
     harness.agentStore.create({
         name: agentName,
-        provider: { type: "openai", model: "test-model" },
+        provider: { type: "openai", model: "test-model", baseURL: "http://localhost:1234/v1" },
         systemPrompt: "You are a HITL test agent.",
         mcpServers: {},
         permissions: {},
