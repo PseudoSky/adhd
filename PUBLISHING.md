@@ -49,6 +49,24 @@ and recompiles from source), **publishing always rebuilds from source and runs
 the test suite first** — a stray manual edit in `dist/` can never be published,
 and a red test suite blocks the release. This is the required path.
 
+#### Publishing dependents (cascade)
+
+`nx.json` sets `release.version.updateDependents: "auto"`, so a version bump to a
+**base** package (e.g. `@adhd/agent-mcp-types`) automatically bumps every package that
+depends on it **and** rewrites their dependency range — keeping the ecosystem consistent.
+To get the cascade you must version through nx (not a bare `npm version`):
+
+```bash
+# versions the named project AND its dependents, writes changelogs, then publishes all of them
+npx nx release version --projects=<base-pkg> <patch|minor|major>   # cascades to dependents
+npx nx release publish                                              # publishes everything just versioned
+# add --dry-run to either to preview
+```
+
+A bare `npm version` in a single package does **not** trigger the cascade — use it only
+for a leaf package with no dependents. When in doubt, prefer `nx release` so dependents
+are never left behind on a stale dep.
+
 **Manual fallback** (only if `nx release` is unavailable — does NOT enforce the
 clean-build/test gate, so run the build + tests yourself first):
 
