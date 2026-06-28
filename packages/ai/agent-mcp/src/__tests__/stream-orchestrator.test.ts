@@ -22,22 +22,22 @@ import type { SessionStore } from "../store/session-store.js";
 // ---------------------------------------------------------------------------
 
 const policy = {
-    check: () => {},
+    check: () => { /* no-op: test stub — policy always permits */ },
 } as unknown as PolicyEngine;
 
 const taskStore = {
-    updateStatus: () => {},
-    appendEvent: () => {},
-    unregisterCancellation: () => {},
+    updateStatus: () => { /* no-op: test stub */ },
+    appendEvent: () => { /* no-op: test stub */ },
+    unregisterCancellation: () => { /* no-op: test stub */ },
 } as unknown as TaskStore;
 
 const sessionStore = {
-    appendMessage: async () => {},
+    appendMessage: async () => { /* no-op: test stub */ },
 } as unknown as SessionStore;
 
 const noopRegistry = {
     listAllTools: async () => [],
-    closeAll: async () => {},
+    closeAll: async () => { /* no-op: test stub */ },
 } as unknown as McpClientRegistry;
 
 function makeCtx(taskId: string): ExecutionContext {
@@ -143,7 +143,7 @@ function makeToolRegistry(): McpClientRegistry {
         getClient: async () => ({
             callTool: async () => "tool-result-value",
         }),
-        closeAll: async () => {},
+        closeAll: async () => { /* no-op: test stub */ },
     } as unknown as McpClientRegistry;
 }
 
@@ -272,7 +272,7 @@ describe("stream-orchestrator — SSE event emission", () => {
             setTimeout(() => controller.abort(), 20);
 
             // Orchestrator throws on cancellation — swallow it
-            await runPromise.catch(() => {});
+            await runPromise.catch(() => { /* swallow expected cancellation throw */ });
             unsubscribe();
 
             const doneEvents = events.filter(e => e.type === "done");
@@ -305,7 +305,7 @@ describe("stream-orchestrator — SSE event emission", () => {
                 sessionStore,
                 signal: new AbortController().signal,
                 taskId,
-            }).catch(() => {}); // swallow expected throw
+            }).catch(() => { /* swallow expected throw */ });
 
             unsubscribe();
 

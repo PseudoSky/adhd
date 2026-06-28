@@ -208,19 +208,19 @@ async function main() {
     //
     // The closure avoids a circular import between dag-engine.ts and tools/task.ts:
     // DagEngine dispatches waiting→pending tasks by calling dispatchFn(taskId) rather
-    // than importing enqueueExistingTask directly. The closure captures `taskDeps`
-    // which is populated after startServer resolves (below).
+    // than importing enqueueExistingTask directly. The closure captures `taskDepsRef`
+    // whose value is populated after startServer resolves (below).
     //
     // dispatchFn is only invoked when DagEngine.dispatchReady() finds a ready task,
-    // which always happens AFTER server startup, so `taskDeps` is guaranteed to be
-    // set by the time the closure executes.
-    let taskDeps: Parameters<typeof enqueueExistingTask>[1] | undefined;
+    // which always happens AFTER server startup, so `taskDepsRef.value` is guaranteed
+    // to be set by the time the closure executes.
+    const taskDepsRef: { value: Parameters<typeof enqueueExistingTask>[1] | undefined } = { value: undefined };
 
     const dispatchFn = async (taskId: string): Promise<void> => {
-        if (!taskDeps) {
+        if (!taskDepsRef.value) {
             throw new Error(`DagEngine.dispatchFn called before server initialised (taskId=${taskId})`);
         }
-        await enqueueExistingTask(taskId, taskDeps);
+        await enqueueExistingTask(taskId, taskDepsRef.value);
     };
 
     const dagEngine = new DagEngine(dbAny, queue, taskStore, dispatchFn);
@@ -273,7 +273,7 @@ async function main() {
     // crash between the DB UPDATE and queue.enqueue(). Safe to run every startup
     // because the queue is idempotent — already-running tasks are just re-queued.
     //
-    // taskDeps must be set before the orphan scan so dispatchFn can call
+    // taskDepsRef.value must be set before the orphan scan so dispatchFn can call
     // enqueueExistingTask.
     //
     // NOTE: inProcessDescriptors and inProcessHandler are not available here
@@ -281,7 +281,7 @@ async function main() {
     // in-process recursive calls at the dispatch level — they can use in-process
     // tools once running via the normal orchestrator path through server.ts.
     // Pass empty stubs: the orchestrator builds its own registry per task.
-    taskDeps = {
+    taskDepsRef.value = {
         agentStore,
         sessionStore,
         taskStore,
@@ -308,7 +308,7 @@ async function main() {
         logger.info({ count: orphanedPending.length }, "Re-enqueueing orphaned pending tasks");
         for (const row of orphanedPending) {
             try {
-                await enqueueExistingTask(row.id, taskDeps);
+                await enqueueExistingTask(row.id, taskDepsRef.value!);
             } catch (err) {
                 logger.warn({ taskId: row.id, err }, "Failed to re-enqueue orphaned task");
             }

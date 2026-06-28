@@ -65,7 +65,7 @@ function makeStubRegistry(
             if (!handler) throw new Error(`No handler for ${key}`);
             return handler(args);
         },
-        close: async (): Promise<void> => {},
+        close: async (): Promise<void> => { /* no-op: test stub */ },
     });
 
     return {
@@ -79,7 +79,7 @@ function makeStubRegistry(
             return all;
         },
         getClient: async (name: string): Promise<IMcpClient> => stubClient(name),
-        closeAll: async (): Promise<void> => {},
+        closeAll: async (): Promise<void> => { /* no-op: test stub */ },
     } as unknown as McpClientRegistry;
 }
 
@@ -107,8 +107,8 @@ function makeTaskStoreSpy() {
     const events: string[] = [];
     return {
         updateStatus: (_id: string, status: string) => { events.push(`status:${status}`); return {} as ReturnType<Harness["taskStore"]["updateStatus"]>; },
-        appendEvent: () => {},
-        unregisterCancellation: () => {},
+        appendEvent: () => { /* no-op: test stub */ },
+        unregisterCancellation: () => { /* no-op: test stub */ },
         // read must exist so orchestrator treats task as durable
         read: () => ({}),
         _events: events,
@@ -117,7 +117,7 @@ function makeTaskStoreSpy() {
 
 function makeSessionStoreSpy() {
     return {
-        appendMessage: async () => {},
+        appendMessage: async () => { /* no-op: test stub */ },
     };
 }
 
@@ -510,9 +510,9 @@ describe("DEBT-003 – cancel interrupts an in-flight tool call via the threaded
                             signal.addEventListener("abort", onAbort, { once: true });
                         });
                     },
-                    close: async (): Promise<void> => {},
+                    close: async (): Promise<void> => { /* no-op: test stub */ },
                 }),
-                closeAll: async (): Promise<void> => {},
+                closeAll: async (): Promise<void> => { /* no-op: test stub */ },
             } as unknown as McpClientRegistry;
 
             const patchedDeps: TaskDeps = {
