@@ -12,11 +12,18 @@ export default defineConfig({
   // plugin via `await import("@adhd/agent-mcp-budget")`) to their SOURCE.
   // nxViteTsPaths aliases static imports, but a bare dynamic-import specifier
   // falls through to node resolution → the package's `exports` (pointing at an
-  // unbuilt `./index.mjs`) → "failed to resolve entry". An explicit source alias
-  // runs the test against source with no build step required.
+  // unbuilt path like `./index.mjs` or `./src/index.js`) → "failed to resolve
+  // entry". An explicit source alias runs the test against source with no build
+  // step required.
+  //
+  // Entries here:
+  //   @adhd/agent-mcp-budget — optional plugin; dynamically imported in loader.ts
+  //   @adhd/agent-compiler   — optional dep; dynamically imported in index.ts
+  //                            (and top-level awaited in integration test files)
   resolve: {
     alias: {
       '@adhd/agent-mcp-budget': path.join(__dirname, '../agent-mcp-budget/src/index.ts'),
+      '@adhd/agent-compiler':   path.join(__dirname, '../agent-compiler/src/index.ts'),
     },
   },
 
