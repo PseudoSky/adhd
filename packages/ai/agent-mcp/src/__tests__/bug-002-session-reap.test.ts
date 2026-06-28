@@ -61,12 +61,12 @@ function makeUserMessage(sessionId: string): Message {
     return { id: generateId(), sessionId, role: "user", content: "run", createdAt: nowIso() };
 }
 
-const policy = { check: () => {} } as unknown as PolicyEngine;
+const policy = { check: () => { /* no-op: test stub — policy always permits */ } } as unknown as PolicyEngine;
 
 const baseTaskStore = {
-    updateStatus: () => {},
-    appendEvent: () => {},
-    unregisterCancellation: () => {},
+    updateStatus: () => { /* no-op: test stub */ },
+    appendEvent: () => { /* no-op: test stub */ },
+    unregisterCancellation: () => { /* no-op: test stub */ },
 } as unknown as TaskStore;
 
 // ---------------------------------------------------------------------------
@@ -111,7 +111,7 @@ describe("BUG-002 — orchestrator closes delegation sessions on failure", () =>
         // is fine to throw since we only care about the agent tool call.
         const registry = {
             listAllTools: async () => [{ name: "agent-mcp__agent", description: "", inputSchema: {} }],
-            closeAll: async () => {},
+            closeAll: async () => { /* no-op: test stub */ },
             resolveToolName: undefined,
             getClient: async (server: string) => ({
                 callTool: async (tool: string) => {
@@ -124,7 +124,7 @@ describe("BUG-002 — orchestrator closes delegation sessions on failure", () =>
         } as unknown as McpClientRegistry;
 
         const sessionStore = {
-            appendMessage: () => {},
+            appendMessage: () => { /* no-op: test stub */ },
             close: closeSpy,
         } as unknown as SessionStore;
 
@@ -188,7 +188,7 @@ describe("BUG-002 — orchestrator closes delegation sessions on failure", () =>
 
         const registry = {
             listAllTools: async () => [{ name: "agent-mcp__agent", description: "", inputSchema: {} }],
-            closeAll: async () => {},
+            closeAll: async () => { /* no-op: test stub */ },
             resolveToolName: undefined,
             getClient: async (server: string) => ({
                 callTool: async (tool: string) => {
@@ -201,7 +201,7 @@ describe("BUG-002 — orchestrator closes delegation sessions on failure", () =>
         } as unknown as McpClientRegistry;
 
         const sessionStore = {
-            appendMessage: () => {},
+            appendMessage: () => { /* no-op: test stub */ },
             close: closeSpy,
         } as unknown as SessionStore;
 
@@ -257,7 +257,7 @@ describe("BUG-002 — orchestrator closes delegation sessions on failure", () =>
 
         const registry = {
             listAllTools: async () => [{ name: "agent-mcp__agent", description: "", inputSchema: {} }],
-            closeAll: async () => {},
+            closeAll: async () => { /* no-op: test stub */ },
             resolveToolName: undefined,
             getClient: async (server: string) => ({
                 callTool: async (tool: string) => {
@@ -268,7 +268,7 @@ describe("BUG-002 — orchestrator closes delegation sessions on failure", () =>
         } as unknown as McpClientRegistry;
 
         const sessionStore = {
-            appendMessage: () => {},
+            appendMessage: () => { /* no-op: test stub */ },
             close: closeSpy,
         } as unknown as SessionStore;
 

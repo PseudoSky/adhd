@@ -41,7 +41,7 @@ function makeEmptyRegistry(): McpClientRegistry {
     return {
         listAllTools: async (): Promise<ToolDefinition[]> => [],
         getClient: async (): Promise<IMcpClient> => { throw new Error("no tools"); },
-        closeAll: async (): Promise<void> => {},
+        closeAll: async (): Promise<void> => { /* no-op: test stub */ },
     } as unknown as McpClientRegistry;
 }
 
@@ -71,7 +71,6 @@ describe("hitl.integration – request_human_input happy path", () => {
             const { sessionId } = await setupAgent(harness);
 
             // Track HITL suspension: we need to read the DB while the task is suspended
-            let capturedTaskId: string | undefined;
             let suspendedDetected = false;
             let resumeTokenFromDb: string | undefined;
 
@@ -131,7 +130,7 @@ describe("hitl.integration – request_human_input happy path", () => {
                 { session_id: sessionId, prompt: "trigger HITL", background: true },
                 patchedDeps
             );
-            capturedTaskId = taskOut.task_id;
+            const capturedTaskId = taskOut.task_id;
 
             // Wait for the task to reach awaiting_input status
             // Poll the DB — event-driven (no sleep): check in a tight loop with a bounded deadline

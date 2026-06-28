@@ -48,7 +48,7 @@ function makeEmptyRegistry(): McpClientRegistry {
         getClient: async (): Promise<IMcpClient> => {
             throw new Error("no tools expected");
         },
-        closeAll: async (): Promise<void> => {},
+        closeAll: async (): Promise<void> => { /* no-op: test stub */ },
     } as unknown as McpClientRegistry;
 }
 
@@ -426,7 +426,7 @@ describe("dag.integration – restart orphan scan", () => {
 
             // Simulate the crash: close the DB without letting the queue run.
             harness.rawSqlite.close();
-            harness.teardown = async () => {};
+            harness.teardown = async () => { /* no-op: suppressed for crash-simulation test */ };
         } catch (err) {
             await harness.teardown();
             throw err;

@@ -90,9 +90,9 @@ describe.skipIf(!isLive)(`live-oauth.e2e – real ${LIVE_PROVIDER.type} provider
                                     echoCallLog.push(tool);
                                     return `echo:${tool}:${JSON.stringify(args)}`;
                                 },
-                                close: async () => {},
+                                close: async () => { /* no-op: test stub */ },
                             }),
-                            closeAll: async () => {},
+                            closeAll: async () => { /* no-op: test stub */ },
                         };
 
                         return harness.orchestrator.run({
@@ -163,7 +163,7 @@ describe.skipIf(!isLive)(`live-oauth.e2e – real ${LIVE_PROVIDER.type} provider
                             registry: {
                                 listAllTools: async () => [],
                                 getClient: async () => { throw new Error("no tools"); },
-                                closeAll: async () => {},
+                                closeAll: async () => { /* no-op: test stub */ },
                                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             } as any,
                         }),

@@ -375,7 +375,7 @@ describe("T7: startup orphan scan skips ephemeral pending rows", () => {
             // Simulate crash: close the sqlite handle directly and suppress
             // file deletion so the DB survives for the second harness.
             h.rawSqlite.close();
-            h.teardown = async () => {};
+            h.teardown = async () => { /* no-op: suppressed for crash-simulation test */ };
         } catch (err) {
             await h.teardown();
             throw err;

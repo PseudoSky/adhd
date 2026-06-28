@@ -120,10 +120,14 @@ export function usageQuery(db: Database, input: TaskUsageInput): UsageQueryResul
   // ── Grouped aggregation path ──────────────────────────────────────────────
   if (input?.group_by) {
     // Map the group_by enum to the actual column reference.
-    const groupCol =
-      input.group_by === "model"    ? taskUsageTable.model :
-      input.group_by === "provider" ? taskUsageTable.providerType :
-                                      taskUsageTable.agentName; // "agent"
+    let groupCol: typeof taskUsageTable.model | typeof taskUsageTable.providerType | typeof taskUsageTable.agentName;
+    if (input.group_by === "model") {
+        groupCol = taskUsageTable.model;
+    } else if (input.group_by === "provider") {
+        groupCol = taskUsageTable.providerType;
+    } else {
+        groupCol = taskUsageTable.agentName; // "agent"
+    }
 
     const groups = db
       .select({

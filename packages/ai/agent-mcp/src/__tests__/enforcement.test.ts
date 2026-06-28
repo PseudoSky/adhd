@@ -142,9 +142,9 @@ function makeNoopRegistry() {
         getClient: async () => ({
             listTools: async () => [],
             callTool: async () => "ok",
-            close: async () => {},
+            close: async () => { /* no-op: test stub */ },
         }),
-        closeAll: async () => {},
+        closeAll: async () => { /* no-op: test stub */ },
     };
 }
 

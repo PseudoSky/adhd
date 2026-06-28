@@ -56,7 +56,7 @@ function makeDeps() {
             read: vi.fn(() => ({ status: "active", id: generateId() })),
             getAgentDefinition: vi.fn(() => agentDef),
             getMessages: vi.fn(() => []),
-            appendMessage: vi.fn(async () => {}),
+            appendMessage: vi.fn(async () => { /* no-op: test stub */ }),
         } as unknown as TaskDeps["sessionStore"],
         taskStore: {
             create,
@@ -69,14 +69,14 @@ function makeDeps() {
         orchestrator: { run: vi.fn(async () => ({ result: "done" })) } as unknown as TaskDeps["orchestrator"],
         queue: { enqueue: vi.fn() } as unknown as TaskDeps["queue"],
         policy: { check: vi.fn() } as unknown as TaskDeps["policy"],
-        hooks: { register: vi.fn(), emit: vi.fn(async () => {}) } as unknown as TaskDeps["hooks"],
+        hooks: { register: vi.fn(), emit: vi.fn(async () => { /* no-op: test stub */ }) } as unknown as TaskDeps["hooks"],
         selfUrl: undefined,
         inProcessDescriptors: [],
         inProcessHandler: vi.fn(async () => { throw new Error("not used"); }) as unknown as TaskDeps["inProcessHandler"],
         db: {} as TaskDeps["db"],
         dagEngine: {
             validateNoCycle,
-            dispatchReady: vi.fn(async () => {}),
+            dispatchReady: vi.fn(async () => { /* no-op: test stub */ }),
         } as unknown as TaskDeps["dagEngine"],
     };
     return { deps, create, validateNoCycle };
