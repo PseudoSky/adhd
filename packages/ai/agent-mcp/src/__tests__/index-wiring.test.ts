@@ -61,8 +61,11 @@ import { seed as seedToolRegistry } from "@adhd/agent-tool-registry";
 import { seed as seedProvider } from "@adhd/agent-provider";
 import { seed as seedPolicy } from "@adhd/agent-policy";
 
-// ── Fixture seeder — same fixture used by live-wiring.test.ts ────────────────
-import { seedFixtureAgent } from "@adhd/agent-compiler";
+// ── Fixture seeder + real compile function ───────────────────────────────────
+// Dynamic import required: @adhd/agent-compiler is an optional dep in this package
+// (lazily loaded via dynamic import in production index.ts);
+// @nx/enforce-module-boundaries forbids static imports of lazy-loaded libraries.
+const { seedFixtureAgent, compileAgent } = await import("@adhd/agent-compiler");
 
 // ── The REAL factory under test (the composition root) ───────────────────────
 import { buildPromptResolver } from "../index.js";
@@ -221,6 +224,7 @@ describe("index-wiring — buildPromptResolver composition-root factory [F-P6-8b
         const result = buildPromptResolver({
             registryDbPath: registryDbPath,
             agentMcpDb: dbAny,
+            compileAgentFn: compileAgent,
         });
 
         expect(result).not.toBeUndefined();
@@ -257,6 +261,7 @@ describe("index-wiring — buildPromptResolver composition-root factory [F-P6-8b
         const opts: BuildPromptResolverOpts = {
             registryDbPath: registryDbPath,
             agentMcpDb: dbAny,
+            compileAgentFn: compileAgent,
         };
         const promptResolver = buildPromptResolver(opts);
         expect(promptResolver).not.toBeUndefined();

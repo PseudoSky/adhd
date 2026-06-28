@@ -65,7 +65,10 @@ import { seed as seedProvider } from "@adhd/agent-provider";
 import { seed as seedPolicy } from "@adhd/agent-policy";
 
 // ── Fixture seeder + real compileAgent (live production boundary under test) ──
-import { seedFixtureAgent, compileAgent } from "@adhd/agent-compiler";
+// Dynamic import required: @adhd/agent-compiler is an optional dep in this package
+// (lazily loaded via dynamic import in production index.ts);
+// @nx/enforce-module-boundaries forbids static imports of lazy-loaded libraries.
+const { seedFixtureAgent, compileAgent } = await import("@adhd/agent-compiler");
 
 /** Slug of the seeded fixture agent — mirrors FIXTURE_AGENT_SLUG from fixtures.ts. */
 const FIXTURE_AGENT_SLUG = "api-design-reviewer-e2e";

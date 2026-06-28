@@ -26,10 +26,10 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "@adhd/agent-policy": "*",
-    "@adhd/agent-provider": "*",
-    "@adhd/agent-registry": "*",
-    "@adhd/agent-tool-registry": "*",
+    "@adhd/agent-policy": "0.0.1",
+    "@adhd/agent-provider": "0.1.0",
+    "@adhd/agent-registry": "0.0.1",
+    "@adhd/agent-tool-registry": "0.0.1",
     "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2"
   },

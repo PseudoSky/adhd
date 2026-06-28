@@ -24,7 +24,7 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "@adhd/agent-mcp-types": "*",
+    "@adhd/agent-mcp-types": "2.0.0",
     "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2"
   },
