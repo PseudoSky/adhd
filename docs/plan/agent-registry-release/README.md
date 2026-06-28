@@ -1,5 +1,17 @@
 # Agent Registry — Release & Closeout (worktree merge, publish, cleanup)
 
+> ## ⚠ Note (2026-06-28): the suite was PUBLISHED out-of-band — this plan is still `pending`
+>
+> The 6 registry/agent-mcp packages were published to npm **outside** this plan's state
+> machine (an owner-approved pragmatic publish to unblock the compiler chain), following
+> only the **runbook mechanics** (R3 dependency order, R6 no-`"*"` concrete pinning,
+> out-of-workspace smoke). **This plan's gates were NOT run** — no baseline pin, back-out
+> gate, `--no-ff` worktree merge, or final audit. The published set + divergences (notably
+> `agent-mcp@2.0.1`, not `2.0.0`, and `@adhd/agent-compiler` now an *optional* dep) are
+> logged in [`POST_PUBLISH.md` → Run log](./POST_PUBLISH.md). The related in-package env
+> overhaul that triggered this is `docs/mcp-env/SPEC.md`. If this plan is later executed
+> for a proper closeout, reconcile against those already-published versions.
+
 The `agent-registry-execution` worktree is merged to `main` (or an explicit
 no-merge decision is recorded) with the agent-mcp byte-identical back-out
 guarantee verified as a gate; the 5 registry packages + `agent-mcp@2.0.0` are

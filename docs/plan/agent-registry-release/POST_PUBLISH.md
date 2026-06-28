@@ -37,3 +37,30 @@ this file's run log below.
 
 > Appended by `post-publish-smoke` at execution time: resolved versions + smoke
 > exit codes + date.
+
+### 2026-06-28 — OUT-OF-BAND pragmatic publish (NOT via this plan's state machine)
+
+The registry suite was published to npm **out of band** — the `agent-registry-release`
+state machine remains `pending` (no baseline pin / back-out gate / `--no-ff` merge /
+audit). This followed the **runbook mechanics only** (R3 order, R6 no-`"*"` concrete
+pinning, out-of-workspace smoke), per an explicit owner decision to unblock the compiler
+chain for consumers. Divergences from the plan as written:
+
+- **`agent-mcp` is `2.0.1`, not `2.0.0`.** An earlier ad-hoc `2.0.0` shipped with `"*"`
+  deps + the chain unpublished (install-broken, F-P6-13) and is immutable on npm; `2.0.1`
+  supersedes it with concrete pins + the chain published.
+- **`@adhd/agent-compiler` is an OPTIONAL dependency of agent-mcp** (dynamic import,
+  graceful flat-prompt fallback) so agent-mcp installs standalone; full compiler/registry
+  integration when the optional chain is present.
+
+Published versions (all `latest`): `agent-mcp-types@2.0.0`, `agent-registry@0.0.1`,
+`agent-tool-registry@0.0.1`, `agent-provider@0.1.0`, `agent-policy@0.0.1`,
+`agent-compiler@0.0.1`, `agent-mcp@2.0.1`. dist verified concrete (no `"*"`).
+
+Smoke: out-of-workspace `npm i @adhd/agent-mcp@2.0.1` → **exit 0** (standalone install
+fixed). Full-chain resolution re-verified after npm propagation of the 5 new package
+names. The plan's full USAGE-journey smoke (`scripts/smoke_test.sh`, compile-CLI) was
+NOT run — pragmatic-publish scope.
+
+> If the initiative is later closed out properly, reconcile these already-published
+> versions with the plan's version strategy.
