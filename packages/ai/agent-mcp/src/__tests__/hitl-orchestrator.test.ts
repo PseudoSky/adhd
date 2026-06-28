@@ -16,15 +16,15 @@ import type { SessionStore } from "../store/session-store.js";
 
 const registry = {
     listAllTools: async () => [],
-    closeAll: async () => {},
+    closeAll: async () => { /* no-op: test stub */ },
 } as unknown as McpClientRegistry;
 
 const policy = {
-    check: () => {},
+    check: () => { /* no-op: test stub — policy always permits */ },
 } as unknown as PolicyEngine;
 
 const sessionStore = {
-    appendMessage: async () => {},
+    appendMessage: async () => { /* no-op: test stub */ },
 } as unknown as SessionStore;
 
 /**
@@ -38,8 +38,8 @@ function makeTaskStore() {
             updates.push({ status, fields });
             return {} as ReturnType<TaskStore["updateStatus"]>;
         }),
-        appendEvent: vi.fn(() => {}),
-        unregisterCancellation: vi.fn(() => {}),
+        appendEvent: vi.fn(() => { /* no-op: test stub */ }),
+        unregisterCancellation: vi.fn(() => { /* no-op: test stub */ }),
         // read must exist so orchestrator treats this as a durable task (not ephemeral)
         read: vi.fn(() => ({})),
     } as unknown as TaskStore;
@@ -171,8 +171,8 @@ describe("HITL orchestrator", () => {
                     }
                     return {} as ReturnType<TaskStore["updateStatus"]>;
                 }),
-                appendEvent: vi.fn(() => {}),
-                unregisterCancellation: vi.fn(() => {}),
+                appendEvent: vi.fn(() => { /* no-op: test stub */ }),
+                unregisterCancellation: vi.fn(() => { /* no-op: test stub */ }),
                 read: vi.fn(() => ({})),
             } as unknown as TaskStore;
 
@@ -339,8 +339,8 @@ describe("HITL orchestrator", () => {
             // Ephemeral tasks now use the real TaskStore, detected via isEphemeral: true flag
             const ephemeralStore = {
                 updateStatus: vi.fn(() => ({} as ReturnType<TaskStore["updateStatus"]>)),
-                appendEvent: vi.fn(() => {}),
-                unregisterCancellation: vi.fn(() => {}),
+                appendEvent: vi.fn(() => { /* no-op: test stub */ }),
+                unregisterCancellation: vi.fn(() => { /* no-op: test stub */ }),
                 read: vi.fn(() => ({})),
             } as unknown as TaskStore;
 

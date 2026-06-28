@@ -128,10 +128,16 @@ function buildUserMessage(messages: Message[]): string {
 
     const lines: string[] = ["[Conversation history]"];
     for (const msg of history) {
-        const label =
-            msg.role === "user"      ? "User" :
-            msg.role === "assistant" ? "Assistant" :
-            msg.role === "tool"      ? "Tool result" : "System";
+        let label: string;
+        if (msg.role === "user") {
+            label = "User";
+        } else if (msg.role === "assistant") {
+            label = "Assistant";
+        } else if (msg.role === "tool") {
+            label = "Tool result";
+        } else {
+            label = "System";
+        }
         const body =
             msg.content ??
             (msg.toolCalls ? `[called tools: ${msg.toolCalls.map(tc => tc.tool).join(", ")}]` : "");

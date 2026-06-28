@@ -16,7 +16,7 @@ import type { SessionStore } from "../store/session-store.js";
 
 const registry = {
     listAllTools: async () => [],
-    closeAll: async () => {},
+    closeAll: async () => { /* no-op: test stub */ },
     // Defensive: tests that dispatch tools provide their own registry. If a test
     // using this shared stub ever reaches getClient (e.g. policy enforcement is
     // moved out of the Phase-1 pre-dispatch loop), fail with a clear message
@@ -27,17 +27,17 @@ const registry = {
 } as unknown as McpClientRegistry;
 
 const policy = {
-    check: () => {},
+    check: () => { /* no-op: test stub — policy always permits */ },
 } as unknown as PolicyEngine;
 
 const taskStore = {
-    updateStatus: () => {},
-    appendEvent: () => {},
-    unregisterCancellation: () => {},
+    updateStatus: () => { /* no-op: test stub */ },
+    appendEvent: () => { /* no-op: test stub */ },
+    unregisterCancellation: () => { /* no-op: test stub */ },
 } as unknown as TaskStore;
 
 const sessionStore = {
-    appendMessage: () => {},
+    appendMessage: () => { /* no-op: test stub */ },
 } as unknown as SessionStore;
 
 function makeCtx(providerOverrides: Partial<ExecutionContext["agentDefinition"]["provider"]> = {}): ExecutionContext {
@@ -308,7 +308,7 @@ describe("Orchestrator", () => {
                         return "ok";
                     },
                 }),
-                closeAll: async () => {},
+                closeAll: async () => { /* no-op: test stub */ },
             } as unknown as McpClientRegistry;
 
             // One tool call every turn, never completing — the ONLY thing that stops
@@ -403,7 +403,7 @@ describe("Orchestrator", () => {
                         return `result-from-${tool}`;
                     },
                 }),
-                closeAll: async () => {},
+                closeAll: async () => { /* no-op: test stub */ },
             } as unknown as McpClientRegistry;
 
             // SessionStore stub that records toolCallIds from appended tool result messages
@@ -487,7 +487,7 @@ describe("Orchestrator", () => {
                         return "ok-result";
                     },
                 }),
-                closeAll: async () => {},
+                closeAll: async () => { /* no-op: test stub */ },
             } as unknown as McpClientRegistry;
 
             const errorSessionStore = {

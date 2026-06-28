@@ -132,12 +132,14 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
         serverMaxToolLoops: opts.serverMaxToolLoops ?? 50,
     });
 
-    // Mirror dispatchFn wiring from index.ts
-    let taskDeps: TaskDeps | undefined;
+    // Mirror dispatchFn wiring from index.ts.
+    // Ref-box pattern: const closure captures the box; the box's value is filled
+    // after all stores are constructed (same pattern as index.ts main()).
+    const taskDepsRef: { value: TaskDeps | undefined } = { value: undefined };
 
     const dispatchFn = async (taskId: string): Promise<void> => {
-        if (!taskDeps) throw new Error("dispatchFn called before harness initialized");
-        await enqueueExistingTask(taskId, taskDeps);
+        if (!taskDepsRef.value) throw new Error("dispatchFn called before harness initialized");
+        await enqueueExistingTask(taskId, taskDepsRef.value);
     };
 
     const dagEngine = new DagEngine(dbAny, queue, taskStore, dispatchFn);
@@ -172,7 +174,7 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
           } as Orchestrator)
         : orchestrator;
 
-    taskDeps = {
+    taskDepsRef.value = {
         agentStore,
         sessionStore,
         taskStore,
@@ -201,7 +203,7 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
 
         for (const row of orphanedPending) {
             try {
-                await enqueueExistingTask(row.id, taskDeps);
+                await enqueueExistingTask(row.id, taskDepsRef.value!);
             } catch {
                 // ignore failures in teardown
             }
@@ -275,7 +277,7 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
         orchestrator: effectiveOrchestrator,
         policy,
         dagEngine,
-        taskDeps: taskDeps as TaskDeps,
+        taskDeps: taskDepsRef.value as TaskDeps,
         hooks,
         teardown,
         dbPath,

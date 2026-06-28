@@ -44,7 +44,7 @@ function makeEmptyRegistry(): McpClientRegistry {
     return {
         listAllTools: async (): Promise<ToolDefinition[]> => [],
         getClient: async (): Promise<IMcpClient> => { throw new Error("no tools"); },
-        closeAll: async (): Promise<void> => {},
+        closeAll: async (): Promise<void> => { /* no-op: test stub */ },
     } as unknown as McpClientRegistry;
 }
 
@@ -60,9 +60,9 @@ function makeStubRegistryWithTool(
         getClient: async (): Promise<IMcpClient> => ({
             listTools: async () => [{ name: toolName, description: "test tool", inputSchema: {} }],
             callTool: async (_tool: string, args: unknown) => handler(args),
-            close: async () => {},
+            close: async () => { /* no-op: test stub */ },
         }),
-        closeAll: async (): Promise<void> => {},
+        closeAll: async (): Promise<void> => { /* no-op: test stub */ },
     } as unknown as McpClientRegistry;
 }
 

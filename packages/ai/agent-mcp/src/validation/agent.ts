@@ -149,8 +149,12 @@ export const providerConfigSchema = z.discriminatedUnion("type", [
 
 // Stored-row variant: applies the legacy normalize-on-load shim (§9.1) BEFORE
 // validation so pre-change agents.db rows keep parsing. Used ONLY on the READ path
-// (agent-store / session snapshot). NEVER pass this to z.toJSONSchema — z.preprocess
-// is a transform and would break MCP tools/list.
+// (agent-store / session snapshot). NEVER pass this to z.toJSONSchema as a tool
+// inputSchema — doing so would let the shim silently coerce caller inputs
+// (lmstudio→openai, apiKeyEnv→env.secret) before validation runs, which would
+// bypass the env-name guard for callers supplying the pre-rename field names.
+// Note: in Zod v4 z.preprocess does NOT throw in z.toJSONSchema (unlike .transform());
+// the separation here is semantic, not a crash-prevention measure.
 export const providerConfigStoredSchema = z.preprocess(legacyShim, providerConfigSchema);
 
 export type { ProviderConfig } from "@adhd/agent-mcp-types";
@@ -210,7 +214,16 @@ export const agentDefinitionStoredSchema = agentDefinitionSchema.extend({
 // Stops a caller from pointing an agent at an arbitrary host secret at create/update
 // time. Applied via .superRefine on the input schemas ONLY (refinements are
 // representable in JSON Schema, unlike transforms). Never on the read path.
-function envNameGuard(provider: ProviderConfig | undefined, ctx: z.RefinementCtx): void {
+//
+// `providerPath` is the path from the superRefine root to the `provider` key so
+// that ctx.addIssue reports the correct field location. For agentCreateInputSchema
+// (root IS the agent) it is ["provider"]; for agentUpdateInputSchema (root is
+// { name, patch }) it must be ["patch", "provider"].
+function envNameGuard(
+    provider: ProviderConfig | undefined,
+    ctx: z.RefinementCtx,
+    providerPath: (string | number)[] = ["provider"],
+): void {
     // `env` exists only on the openai/anthropic members of the union (not claudecli).
     if (!provider || !("env" in provider) || !provider.env) return;
     for (const [field, name] of Object.entries(provider.env)) {
@@ -218,7 +231,7 @@ function envNameGuard(provider: ProviderConfig | undefined, ctx: z.RefinementCtx
         if (!config.isEnvNameAllowed(name)) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
-                path: ["provider", "env", field],
+                path: [...providerPath, "env", field],
                 message:
                     `env.${field}: "${name}" is not an allowed env-var name. ` +
                     `Only ADHD_AGENT_-prefixed names are permitted by default ` +
@@ -234,7 +247,7 @@ export const agentCreateInputSchema = agentDefinitionSchema
         createdAt: true,
         updatedAt: true,
     })
-    .superRefine((val, ctx) => envNameGuard(val.provider, ctx));
+    .superRefine((val, ctx) => envNameGuard(val.provider, ctx, ["provider"]));
 
 // Patch schema for agent_update — intentionally no .default() on any field
 // so that absent fields stay undefined and don't overwrite stored values.
@@ -254,7 +267,7 @@ export const agentUpdateInputSchema = z
         name: z.string().min(1),
         patch: agentPatchSchema,
     })
-    .superRefine((val, ctx) => envNameGuard(val.patch.provider, ctx));
+    .superRefine((val, ctx) => envNameGuard(val.patch.provider, ctx, ["patch", "provider"]));
 
 export const agentReadInputSchema = z.object({
     name: z.string().min(1),

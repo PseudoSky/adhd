@@ -66,7 +66,7 @@ function makeDeps(taskId: string): TaskDeps {
             read: vi.fn(() => ({ status: "active", id: generateId() })),
             getAgentDefinition: vi.fn(() => agentDef),
             getMessages: vi.fn(() => []),
-            appendMessage: vi.fn(async () => {}),
+            appendMessage: vi.fn(async () => { /* no-op: test stub */ }),
         } as unknown as TaskDeps["sessionStore"],
 
         taskStore: {
@@ -92,7 +92,7 @@ function makeDeps(taskId: string): TaskDeps {
 
         hooks: {
             register: vi.fn(),
-            emit: vi.fn(async () => {}),
+            emit: vi.fn(async () => { /* no-op: test stub */ }),
         } as unknown as TaskDeps["hooks"],
 
         selfUrl: undefined,
@@ -103,7 +103,7 @@ function makeDeps(taskId: string): TaskDeps {
 
         dagEngine: {
             validateNoCycle: vi.fn(),
-            dispatchReady: vi.fn(async () => {}),
+            dispatchReady: vi.fn(async () => { /* no-op: test stub */ }),
         } as unknown as TaskDeps["dagEngine"],
     };
 }

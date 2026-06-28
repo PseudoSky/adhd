@@ -36,10 +36,10 @@ function makeTaskStore(task: Task): { store: TaskStore; updates: Array<{ status:
             updates.push({ status, fields });
             return { ...task, status } as Task;
         }),
-        cancel: vi.fn(() => {}),
-        registerCancellation: vi.fn(() => {}),
-        unregisterCancellation: vi.fn(() => {}),
-        appendEvent: vi.fn(() => {}),
+        cancel: vi.fn(() => { /* no-op: test stub */ }),
+        registerCancellation: vi.fn(() => { /* no-op: test stub */ }),
+        unregisterCancellation: vi.fn(() => { /* no-op: test stub */ }),
+        appendEvent: vi.fn(() => { /* no-op: test stub */ }),
         list: vi.fn(() => []),
     } as unknown as TaskStore;
     return { store, updates };

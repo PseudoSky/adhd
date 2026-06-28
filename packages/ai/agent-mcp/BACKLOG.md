@@ -1069,6 +1069,58 @@ to the corrected target and add it to the CI gate so source type errors fail lou
 
 ---
 
+### DEBT-015 — `executionContextSchema` exported but unreferenced in the source tree
+- **Status:** open
+- **Priority:** P4 · **Area:** validation / dead code
+- **Reported:** 2026-06-27 (env-config review)
+
+**Problem.** `src/validation/execution.ts` exports `executionContextSchema` (a Zod
+schema for `ExecutionContext`). A `grep -rn "executionContextSchema" src/` finds only
+the definition — no call site in the source tree uses it. The schema uses
+`agentDefinitionSchema` (the transform-free variant), which is correct if the schema
+were used at runtime (execution contexts are freshly constructed from already-parsed
+agent definitions, not from stored rows). But the schema is never called, so it is
+dead code.
+
+**Impact.** No runtime regression; the schema is unused. The dead export adds noise
+and a future risk: if a caller ever imports it to validate a stored-row-derived
+execution context, they should use `agentDefinitionStoredSchema` in that field, not
+`agentDefinitionSchema`. Cleaning up eliminates the ambiguity.
+
+**Proposed fix.** Remove the `executionContextSchema` export from `execution.ts`
+(and from the barrel `validation/index.ts` re-export chain) unless a concrete consumer
+exists. If the schema is added back later, use `agentDefinitionStoredSchema` for the
+`agentDefinition` field to match what the stores produce.
+
+**References** — `packages/ai/agent-mcp/src/validation/execution.ts:6`,
+`packages/ai/agent-mcp/src/validation/index.ts`.
+
+---
+
+### DEBT-016 — agent.ts comment inaccurate about z.preprocess throwing in z.toJSONSchema
+- **Status:** FIXED (working tree, pending release) — comment corrected in the
+  env-config review pass (2026-06-27). The stored-schema separation is now documented
+  as a semantic guard (not a crash-prevention measure). See
+  `src/validation/agent.ts` comment above `providerConfigStoredSchema`.
+- **Priority:** P3 · **Area:** docs / validation
+- **Reported:** 2026-06-27
+
+**Problem.** The comment on `providerConfigStoredSchema` stated "NEVER pass this to
+z.toJSONSchema — z.preprocess is a transform and would break MCP tools/list."
+In Zod v4, `z.preprocess` does NOT throw in `z.toJSONSchema` (only `.transform()`
+does). The comment implied a crash-prevention rationale that is false in the current
+Zod version, creating confusion about why the stored/input schema split exists.
+
+**Fix.** Comment updated to state the true reason: the preprocess shim would silently
+coerce caller inputs (lmstudio→openai, apiKeyEnv→env.secret) before input validation
+and the env-name guard run, effectively letting callers bypass the guard by supplying
+pre-rename field names.
+
+**References** — `src/validation/agent.ts:150-158`,
+`src/__tests__/agent-validation.test.ts [AVT-001.stored-ok-in-json-schema]`.
+
+---
+
 ## ✅ Done
 
 ### BUG-001 — SSE server crashes the whole process on `EADDRINUSE`
