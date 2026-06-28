@@ -3,6 +3,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import type { ChildProcess } from "node:child_process";
 
 import { logger } from "../logger.js";
+import { config } from "../config.js";
 import type { ToolDefinition } from "../providers/types.js";
 import type { McpStdioConfig } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
@@ -23,7 +24,7 @@ export class StdioMcpClient implements IMcpClient {
             command: this.config.command,
             args: this.config.args ?? [],
             env: {
-                ...process.env,
+                ...config.subprocessEnv(),
                 ...this.config.env,
             } as Record<string, string>,
         });

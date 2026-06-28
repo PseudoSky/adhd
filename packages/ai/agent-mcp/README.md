@@ -56,7 +56,67 @@ Four concepts:
 
 Pick the tab for your provider and paste the block into your MCP host config.
 
-**LM Studio**
+**Recommended — put secrets in `~/.adhd/.env`, not in the MCP config**
+
+Create `~/.adhd/.env` (loaded automatically at startup):
+```bash
+# OpenAI
+ADHD_AGENT_OPENAI_SECRET=sk-...
+
+# Anthropic
+ADHD_AGENT_ANTHROPIC_SECRET=sk-ant-...
+```
+
+Then the MCP config needs no secrets at all:
+
+```json
+{
+  "mcpServers": {
+    "agent-mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@adhd/agent-mcp"]
+    }
+  }
+}
+```
+
+**`.env` load hierarchy.** At startup the server loads up to three `.env` files and
+merges them with **most-specific wins**:
+
+| Order | File | Typical use |
+|---|---|---|
+| 1 (highest) | `<project>/.env` | per-checkout overrides |
+| 2 | `<project>/.adhd/.env` | per-project shared (gitignored) |
+| 3 (lowest) | `~/.adhd/.env` | your machine-wide secrets |
+
+A key set in `<project>/.env` beats the same key in `~/.adhd/.env`. Values are read
+**once** and frozen for the process lifetime — after editing any `.env`, reload the MCP
+server (e.g. `/mcp` in your host) so the new values are picked up. Why a file and not the
+MCP-config `env` block? A stdio MCP host forwards only a tiny allowlist of OS vars
+(`HOME`, `PATH`, …) to the server and does **not** expand `${VAR}` in the config, so the
+`.env` files are the reliable, secret-free way to get credentials into the server.
+
+> **Secrets are referenced by env-var *name*, never by value.** An agent's
+> `provider.env.secret` holds the *name* of the env var (e.g. `ADHD_AGENT_OPENAI_SECRET`),
+> so stored agent definitions — and `agent_read` / `agent_list` output — never contain the
+> key itself. Only `ADHD_AGENT_`-prefixed names may be referenced by default (extend with
+> `ADHD_AGENT_ENV_ALLOWLIST`).
+
+**LM Studio** (local — no credentials needed; server runs on localhost)
+```json
+{
+  "mcpServers": {
+    "agent-mcp": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@adhd/agent-mcp"]
+    }
+  }
+}
+```
+
+**OpenAI** (put key in `~/.adhd/.env` — see above; or inline for quick tests)
 ```json
 {
   "mcpServers": {
@@ -65,16 +125,14 @@ Pick the tab for your provider and paste the block into your MCP host config.
       "command": "npx",
       "args": ["-y", "@adhd/agent-mcp"],
       "env": {
-        "DATABASE_PATH": "/absolute/path/to/agents.db",
-        "LMSTUDIO_API_KEY": "your-lmstudio-key",
-        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+        "ADHD_AGENT_OPENAI_SECRET": "sk-..."
       }
     }
   }
 }
 ```
 
-**OpenAI**
+**Anthropic** (put key in `~/.adhd/.env` — see above; or inline for quick tests)
 ```json
 {
   "mcpServers": {
@@ -83,45 +141,34 @@ Pick the tab for your provider and paste the block into your MCP host config.
       "command": "npx",
       "args": ["-y", "@adhd/agent-mcp"],
       "env": {
-        "DATABASE_PATH": "/absolute/path/to/agents.db",
-        "OPENAI_API_KEY": "sk-..."
+        "ADHD_AGENT_ANTHROPIC_SECRET": "sk-ant-..."
       }
     }
   }
 }
 ```
 
-**Anthropic**
-```json
-{
-  "mcpServers": {
-    "agent-mcp": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@adhd/agent-mcp"],
-      "env": {
-        "DATABASE_PATH": "/absolute/path/to/agents.db",
-        "ANTHROPIC_API_KEY": "sk-ant-..."
-      }
-    }
-  }
-}
-```
+For **Claude Code** save this as `.mcp.json` in your project root. Any other MCP host uses the same `command` / `args` / `env` structure.
 
-For **Claude Code** save this as `.mcp.json` in your project root. For **LM Studio** paste it into the MCP plugin settings. Any other MCP host uses the same `command` / `args` / `env` structure.
+All environment variables use the `ADHD_AGENT_` prefix. The full reference:
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_PATH` | required | Absolute path to the SQLite database file. Created automatically if it does not exist. |
-| `LMSTUDIO_API_KEY` | `""` | LM Studio API key (any non-empty string if your server doesn't require one) |
-| `LMSTUDIO_BASE_URL` | `http://localhost:1234/v1` | LM Studio server base URL |
-| `OPENAI_API_KEY` | `""` | OpenAI API key |
-| `ANTHROPIC_API_KEY` | `""` | Anthropic API key |
-| `ALLOWED_AGENTS` | unrestricted | Comma-separated list of agents any agent may delegate to (server-wide fallback) |
-| `AGENT_MCP_MAX_DEPTH` | `5` | Maximum recursion depth |
-| `AGENT_MCP_MAX_TOOL_LOOPS` | `50` | Maximum tool calls per task |
-| `AGENT_MCP_CONTEXT_LIMIT` | `0` (disabled) | Estimated token limit for the message window. When > 0, oldest non-system messages are dropped before each provider call. Set ~10% below the model's actual context window. |
-| `AGENT_MCP_DEFAULT_MAX_TOKENS` | `8192` | Default `max_tokens` for Anthropic providers that do not set `maxTokens` in their agent config. |
+| `ADHD_AGENT_DATABASE_PATH` | `~/.adhd/agent-mcp/agents.db` | Absolute path to the SQLite database file. Created automatically if it does not exist. |
+| `ADHD_AGENT_OPENAI_SECRET` | `""` | OpenAI (or OpenAI-compatible) API key |
+| `ADHD_AGENT_OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible base URL (override to point at LM Studio, Ollama, etc.) |
+| `ADHD_AGENT_ANTHROPIC_SECRET` | `""` | Anthropic API key or OAuth bearer token |
+| `ADHD_AGENT_DEEPSEEK_SECRET` | `""` | DeepSeek API key |
+| `ADHD_AGENT_ALLOWED_AGENTS` | unrestricted | Comma-separated list of agents any agent may delegate to (server-wide fallback) |
+| `ADHD_AGENT_MAX_DEPTH` | `5` | Maximum recursion depth |
+| `ADHD_AGENT_MAX_TOOL_LOOPS` | `50` | Maximum tool calls per task |
+| `ADHD_AGENT_CONTEXT_LIMIT` | `0` (disabled) | Estimated token limit for the message window. When > 0, oldest non-system messages are dropped before each provider call. Set ~10% below the model's actual context window. |
+| `ADHD_AGENT_DEFAULT_MAX_TOKENS` | `8192` | Default `max_tokens` for Anthropic providers that do not set `maxTokens` in their agent config. |
+| `ADHD_AGENT_LOG_LEVEL` | `info` | Pino log level (`trace`/`debug`/`info`/`warn`/`error`/`fatal`/`silent`) |
+| `ADHD_AGENT_QUEUE_CONCURRENCY` | `5` | Max concurrent background tasks |
+| `ADHD_AGENT_SSE_PORT` | `3001` | SSE server port |
+| `ADHD_AGENT_SSE_BASE_URL` | `http://localhost:{port}` | Public base URL for SSE stream links |
+| `ADHD_AGENT_ENV_ALLOWLIST` | `""` | Comma-separated env-var names agents may reference that don't start with `ADHD_AGENT_` |
 
 ### 2. Create a sub-agent
 
@@ -131,9 +178,8 @@ Call `agent_create` from your LLM:
 {
   "name": "researcher",
   "provider": {
-    "type": "lmstudio",
+    "type": "openai",
     "model": "your-model-name",
-    "apiKeyEnv": "LMSTUDIO_API_KEY",
     "baseURL": "http://localhost:1234/v1",
     "timeoutMs": 120000
   },
@@ -143,6 +189,8 @@ Call `agent_create` from your LLM:
 }
 ```
 
+For a local LM Studio server no credentials are needed — the localhost exemption applies automatically. For OpenAI, set `ADHD_AGENT_OPENAI_SECRET` in `~/.adhd/.env` and omit `baseURL`.
+
 ### 3. Create an orchestrator
 
 An orchestrator is just an agent whose system prompt tells it to delegate, and whose `mcpServers` gives it access to `agent-mcp` itself:
@@ -151,9 +199,8 @@ An orchestrator is just an agent whose system prompt tells it to delegate, and w
 {
   "name": "orchestrator",
   "provider": {
-    "type": "lmstudio",
+    "type": "openai",
     "model": "your-model-name",
-    "apiKeyEnv": "LMSTUDIO_API_KEY",
     "baseURL": "http://localhost:1234/v1",
     "timeoutMs": 180000
   },
@@ -164,10 +211,7 @@ An orchestrator is just an agent whose system prompt tells it to delegate, and w
       "command": "npx",
       "args": ["-y", "@adhd/agent-mcp"],
       "env": {
-        "DATABASE_PATH": "/absolute/path/to/agents.db",
-        "LMSTUDIO_API_KEY": "your-key",
-        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1",
-        "ALLOWED_AGENTS": "researcher"
+        "ADHD_AGENT_ALLOWED_AGENTS": "researcher"
       }
     }
   },
@@ -177,7 +221,7 @@ An orchestrator is just an agent whose system prompt tells it to delegate, and w
 }
 ```
 
-`ALLOWED_AGENTS` and `permissions.allowedAgents` restrict which agents the orchestrator can delegate to. Both must list the same agents.
+`ADHD_AGENT_ALLOWED_AGENTS` and `permissions.allowedAgents` restrict which agents the orchestrator can delegate to. Both must list the same agents.
 
 ### 4. Call the orchestrator
 
@@ -192,19 +236,22 @@ The orchestrator model runs its tool-use loop, delegates to `researcher`, and re
 
 ## Providers
 
-### LM Studio (local)
+### LM Studio (local, Ollama, and any OpenAI-compatible server)
+
+Local servers on `localhost` or `127.0.0.1` require no credentials — the localhost exemption applies automatically:
 
 ```json
 {
-  "type": "lmstudio",
+  "type": "openai",
   "model": "your-model-name",
-  "apiKeyEnv": "LMSTUDIO_API_KEY",
   "baseURL": "http://localhost:1234/v1",
   "timeoutMs": 180000
 }
 ```
 
-Set `LMSTUDIO_API_KEY` to any non-empty string if your local server does not require authentication.
+For Ollama use `baseURL: "http://localhost:11434/v1"`. No `env.secret` needed for either.
+
+> **Migration note:** The `"type": "lmstudio"` alias still works but is deprecated. Use `"type": "openai"` with an explicit `baseURL`.
 
 ### OpenAI
 
@@ -212,46 +259,42 @@ Set `LMSTUDIO_API_KEY` to any non-empty string if your local server does not req
 {
   "type": "openai",
   "model": "gpt-4o-mini",
-  "apiKeyEnv": "OPENAI_API_KEY"
+  "env": { "secret": "ADHD_AGENT_OPENAI_SECRET" }
 }
 ```
+
+Set `ADHD_AGENT_OPENAI_SECRET` in `~/.adhd/.env`. The `env.secret` field is the env-var **name** that holds the key, not the key itself — so secrets never appear in agent definitions stored in the database.
 
 ### Anthropic
 
-Three auth modes, tried in order:
+One credential field — `env.secret` — holds **either** a console API key (`sk-ant-api…`)
+**or** an OAuth/subscription token (`sk-ant-oat…`, from `claude setup-token`). The provider
+infers the wire form from the value's prefix; there is no separate field or flag.
 
-**API key** (standard, all platforms)
 ```json
 {
   "type": "anthropic",
-  "model": "claude-haiku-4-5",
-  "apiKeyEnv": "ANTHROPIC_API_KEY"
+  "model": "claude-sonnet-4-6",
+  "env": { "secret": "ADHD_AGENT_ANTHROPIC_SECRET" }
 }
 ```
 
-**Bearer token via env var** (all platforms — works with `claude setup-token` or any manually-set token)
-```json
-{
-  "type": "anthropic",
-  "model": "claude-haiku-4-5",
-  "authTokenEnv": "ANTHROPIC_AUTH_TOKEN"
-}
-```
-Set `ANTHROPIC_AUTH_TOKEN` in your MCP server env to the token value.
+Set `ADHD_AGENT_ANTHROPIC_SECRET` in `~/.adhd/.env` to **either** form:
 
-**Claude Max keychain** (macOS only — no API key or billing required)
-```json
-{
-  "type": "anthropic",
-  "model": "claude-haiku-4-5",
-  "useClaudeOauth": true
-}
-```
-Reads the OAuth token that Claude Code stores in the macOS keychain under `Claude Code-credentials`. Automatically refreshes when the token is within 5 minutes of expiry. Requires Claude Code to be installed and authenticated (`claude auth login --claude-ai`). No additional env vars needed.
+- **`sk-ant-api…`** (console.anthropic.com API key) → sent as an `x-api-key` client; your
+  agent's system prompt is used verbatim.
+- **`sk-ant-oat…`** (OAuth token; run `claude setup-token`) → sent as
+  `Authorization: Bearer` with the `anthropic-beta: oauth-2025-04-20` header, and the
+  Claude Code identity (`"You are Claude Code, Anthropic's official CLI for Claude."`) is
+  prepended as a **distinct first `system` block**, your agent's own prompt following as
+  the second block. Anthropic's OAuth gate requires this exact shape — a `system` that
+  isn't the identity as its own block is rejected with a *misleading* `429
+  rate_limit_error` (no rate-limit headers). So under an OAuth token the model is told it
+  is "Claude Code" before it sees your instructions.
 
-> **Platform note:** `useClaudeOauth` only works on macOS. Use `authTokenEnv` on Linux or Windows.
-
-**What OAuth mode adds to your agent's system prompt.** When the Anthropic token is an OAuth/subscription token (`sk-ant-oat…` — used by both `useClaudeOauth` and an OAuth `authTokenEnv`), the provider automatically (a) sets the `anthropic-beta: oauth-2025-04-20` header and (b) prepends the Claude Code identity — `"You are Claude Code, Anthropic's official CLI for Claude."` — to the request's `system` **as a distinct first block**, with your agent's own system prompt preserved as the second block. Anthropic's OAuth gate requires this: a request whose `system` isn't the identity as its own block is rejected with a *misleading* `429 rate_limit_error` (with no rate-limit headers). So under OAuth your model is told it is "Claude Code" before it sees your agent's instructions. Plain API keys (`sk-ant-api…`) get neither the header nor the identity and use your system prompt verbatim.
+> **Removed in the env overhaul (see CHANGELOG):** the macOS-keychain `useClaudeOauth`
+> mode and the separate `apiKeyEnv` / `authTokenEnv` fields. Use the unified `env.secret`
+> above; the one-year token from `claude setup-token` is the supported keychain-free path.
 
 ### Claude CLI
 
@@ -568,7 +611,7 @@ Before each delegation, the server checks:
 
 1. **Recursion depth** — default max 5. Configurable via `AGENT_MCP_MAX_DEPTH`.
 2. **Tool loop limit** — default max 50 tool calls per task. Configurable via `AGENT_MCP_MAX_TOOL_LOOPS`.
-3. **allowedAgents** — per-agent `permissions.allowedAgents` takes precedence over the server-level `ALLOWED_AGENTS` env var.
+3. **allowedAgents** — per-agent `permissions.allowedAgents` takes precedence over the server-level `ADHD_AGENT_ALLOWED_AGENTS` env var.
    - `undefined` = unrestricted
    - `[]` = block all delegation
    - `["researcher"]` = only allow delegation to `researcher`
@@ -593,7 +636,7 @@ Agents are provider-agnostic — the orchestrator and workers can run on complet
 {
   "name": "lmstudio-worker",
   "provider": {
-    "type": "lmstudio",
+    "type": "openai",
     "model": "your-local-model",
     "baseURL": "http://localhost:1234/v1"
   },
@@ -602,6 +645,8 @@ Agents are provider-agnostic — the orchestrator and workers can run on complet
   "permissions": {}
 }
 ```
+
+No credentials needed — the localhost exemption applies automatically for `localhost`/`127.0.0.1`.
 
 **2. Create a Claude orchestrator**
 
@@ -613,7 +658,7 @@ The `mcpServers` key must be `"agent-mcp"` exactly — the registry detects this
   "provider": {
     "type": "anthropic",
     "model": "claude-haiku-4-5",
-    "useClaudeOauth": true
+    "env": { "secret": "ADHD_AGENT_ANTHROPIC_SECRET" }
   },
   "systemPrompt": "You coordinate work. Use the agent-mcp__task tool to delegate tasks to other agents. Always report back what the sub-agent returned.",
   "mcpServers": {
@@ -622,8 +667,7 @@ The `mcpServers` key must be `"agent-mcp"` exactly — the registry detects this
       "command": "npx",
       "args": ["-y", "@adhd/agent-mcp"],
       "env": {
-        "DATABASE_PATH": "/absolute/path/to/agents.db",
-        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+        "ADHD_AGENT_ALLOWED_AGENTS": "lmstudio-worker"
       }
     }
   },
@@ -659,8 +703,7 @@ If you have Claude Code installed and authenticated, you can use the `claudecli`
       "command": "npx",
       "args": ["-y", "@adhd/agent-mcp"],
       "env": {
-        "DATABASE_PATH": "/absolute/path/to/agents.db",
-        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+        "ADHD_AGENT_ALLOWED_AGENTS": "lmstudio-worker"
       }
     }
   },
@@ -692,7 +735,7 @@ If you have Claude Code installed and authenticated, you can use the `claudecli`
 | `MAX_TOOL_LOOPS_EXCEEDED` | Tool call limit per task reached |
 | `PROVIDER_ERROR` | Generic LLM provider failure |
 | `PROVIDER_TIMEOUT` | Provider call timed out (`timeoutMs` exceeded) |
-| `PROVIDER_AUTH_ERROR` | Provider authentication failed (HTTP 401, keychain denial, or OAuth fallback exhausted). Run `claude setup-token` and set `ANTHROPIC_AUTH_TOKEN`, or use `authTokenEnv` in the provider config. |
+| `PROVIDER_AUTH_ERROR` | Provider authentication failed (HTTP 401, or no credential resolved). Set the provider's `env.secret` env var in `~/.adhd/.env` (for Anthropic, an API key `sk-ant-api…` or a `claude setup-token` OAuth token `sk-ant-oat…`). |
 | `PROVIDER_RATE_LIMITED` | Provider rate limit exceeded (HTTP 429 after retries) |
 | `CONTEXT_WINDOW_EXCEEDED` | Session history exceeded the model's context window. Set `AGENT_MCP_CONTEXT_LIMIT` to enable automatic sliding-window truncation. |
 | `MCP_CLIENT_ERROR` | An MCP tool call within a task failed |

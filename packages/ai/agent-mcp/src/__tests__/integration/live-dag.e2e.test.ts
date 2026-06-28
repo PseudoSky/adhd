@@ -52,15 +52,16 @@ const CALC_LOG = path.join(os.tmpdir(), "agent-mcp-dag-calc.log");
 const LIVE_PROVIDER =
     process.env["AGENT_MCP_LIVE_PROVIDER"] === "lmstudio"
         ? {
-              type: "lmstudio" as const,
+              type: "openai" as const,
               model:
                   process.env["AGENT_MCP_LIVE_MODEL"] ?? "qwen2.5-14b-instruct",
+              baseURL: process.env["LMSTUDIO_BASE_URL"] ?? "http://localhost:1234/v1",
               timeoutMs: 240_000,
           }
         : {
               type: "anthropic" as const,
               model: "claude-sonnet-4-6",
-              authTokenEnv: "ANTHROPIC_AUTH_TOKEN",
+              env: { secret: "ADHD_AGENT_ANTHROPIC_SECRET" },
               timeoutMs: 60_000,
           };
 

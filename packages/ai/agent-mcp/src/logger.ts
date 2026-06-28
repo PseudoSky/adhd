@@ -1,4 +1,5 @@
 import pino from "pino";
+import { config } from "./config.js";
 
 /**
  * Application logger.
@@ -10,7 +11,7 @@ import pino from "pino";
  */
 export const logger = pino(
     {
-        level: process.env["LOG_LEVEL"] ?? "info",
+        level: config.logging.level,
         // Remove default `pid` and `hostname` fields for cleaner structured logs.
         base: undefined,
     },

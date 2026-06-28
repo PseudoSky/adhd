@@ -18,7 +18,7 @@ export interface ProviderChatRequest {
      * The orchestrator builds this from the per-task McpClientRegistry so the
      * provider can execute MCP tools without owning the registry itself.
      *
-     * Providers that return stopReason "tool_calls" (anthropic, openai, lmstudio)
+     * Providers that return stopReason "tool_calls" (anthropic, openai)
      * do NOT use this — the orchestrator handles tool execution for them.
      */
     executeTool?: (

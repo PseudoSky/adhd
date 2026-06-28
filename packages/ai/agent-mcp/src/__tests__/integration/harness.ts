@@ -327,7 +327,7 @@ export async function createSessionAndAgent(
     // The provider is passed via the harness task runner helper
     harness.agentStore.create({
         name: agentName,
-        provider: { type: "openai", model: "test-model" },
+        provider: { type: "openai", model: "test-model", baseURL: "http://localhost:1234/v1" },
         systemPrompt: "You are a test assistant.",
         mcpServers: {},
         permissions: {},

@@ -5,7 +5,7 @@ import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 import { agentsTable, sessionsTable } from "../db/schema.js";
 import { logger } from "../logger.js";
 import type { AgentCreateInput, AgentDefinition, AgentUpdateInput } from "../validation/index.js";
-import { agentDefinitionSchema } from "../validation/index.js";
+import { agentDefinitionStoredSchema } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import { nowIso } from "../utils/timestamps.js";
 import type { IHookRegistry } from "@adhd/agent-mcp-types";
@@ -77,7 +77,7 @@ export class AgentStore {
             );
         }
 
-        return agentDefinitionSchema.parse(JSON.parse(row.data));
+        return agentDefinitionStoredSchema.parse(JSON.parse(row.data));
     }
 
     update(input: AgentUpdateInput): AgentDefinition {
@@ -144,6 +144,6 @@ export class AgentStore {
 
     list(): AgentDefinition[] {
         const rows = this.db.select().from(agentsTable).all();
-        return rows.map(row => agentDefinitionSchema.parse(JSON.parse(row.data)));
+        return rows.map(row => agentDefinitionStoredSchema.parse(JSON.parse(row.data)));
     }
 }

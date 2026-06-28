@@ -70,7 +70,7 @@ async function setupAgent(harness: Harness): Promise<{ agentName: string; sessio
     const agentName = `sse-agent-${generateId()}`;
     harness.agentStore.create({
         name: agentName,
-        provider: { type: "openai", model: "test-model" },
+        provider: { type: "openai", model: "test-model", baseURL: "http://localhost:1234/v1" },
         systemPrompt: "You are an SSE test agent.",
         mcpServers: {},
         permissions: {},

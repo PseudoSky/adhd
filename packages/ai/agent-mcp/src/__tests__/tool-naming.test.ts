@@ -107,7 +107,7 @@ describe("resolveToolCallName (DEBT-004 bare-name resolution)", () => {
  */
 describe("OpenAIProvider resolves a bare tool call (DEBT-004 consumer)", () => {
     function providerReturning(toolName: string): OpenAIProvider {
-        const p = new OpenAIProvider({ type: "openai", model: "test" } as never);
+        const p = new OpenAIProvider({ type: "openai", model: "test", baseURL: "http://localhost:1234/v1" } as never);
         // override the protected SDK client with a stub
         (p as unknown as { client: unknown }).client = {
             chat: { completions: { create: async () => ({

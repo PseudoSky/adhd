@@ -13,6 +13,7 @@ const _require = createRequire(import.meta.url);
 const PACKAGE_VERSION: string = (_require("../package.json") as { version: string }).version;
 
 import { logger } from "./logger.js";
+import { config } from "./config.js";
 import type { AgentStore } from "./store/agent-store.js";
 import type { SessionStore } from "./store/session-store.js";
 import type { TaskStore } from "./store/task-store.js";
@@ -359,12 +360,11 @@ session_clear({ "session_id": "abc-123" })
 
 | type          | required fields | notes                                                                 |
 |---------------|-----------------|-----------------------------------------------------------------------|
-| \`openai\`      | model           | apiKeyEnv defaults to OPENAI_API_KEY                                  |
-| \`anthropic\`   | model           | apiKeyEnv defaults to ANTHROPIC_API_KEY; \`useClaudeOauth: true\` reads OAuth token from macOS keychain (Claude Max / no API key needed) |
-| \`lmstudio\`    | model, baseURL  | OpenAI-compatible local server                                        |
+| \`openai\`      | model           | Set ADHD_AGENT_OPENAI_SECRET (or env.secret pointer). LM Studio: use \`baseURL: "http://localhost:1234/v1"\` — no secret needed for localhost. |
+| \`anthropic\`   | model           | Set ADHD_AGENT_ANTHROPIC_SECRET (\`sk-ant-api…\` key or \`sk-ant-oat…\` OAuth token from \`claude setup-token\`). Wire form inferred from prefix. |
 | \`claudecli\`   | —               | Drives local \`claude\` CLI via stream-json; uses Claude Code's auth; MCP tools work via --mcp-config; built-ins blocked by default (\`allowedBuiltinTools\` to opt in, or \`systemPromptIsAgentSpec: true\` to let the agent-md \`tools:\` header decide) |
 
-\`openai\`, \`anthropic\`, and \`lmstudio\` accept: \`temperature\`, \`maxTokens\`, \`timeoutMs\`, \`retryConfig\`.
+\`openai\` and \`anthropic\` accept: \`temperature\`, \`maxTokens\`, \`timeoutMs\`, \`retryConfig\`.
 \`claudecli\` accepts: \`model\`, \`claudePath\`, \`timeoutMs\`, \`allowedBuiltinTools\`, \`systemPromptIsAgentSpec\`.
 When \`systemPromptIsAgentSpec: true\`, the \`systemPrompt\` is treated as a Claude Code agent markdown file (frontmatter + body); Claude parses its \`tools:\` header, which then governs tool access (takes precedence over \`allowedBuiltinTools\`).
 
@@ -388,7 +388,7 @@ usage_query({ "group_by": "agent" })
 // Aggregate by model within a time window
 usage_query({ "group_by": "model", "since": "2026-06-01T00:00:00Z" })
 
-// Aggregate by provider (openai / anthropic / lmstudio / claudecli)
+// Aggregate by provider (openai / anthropic / claudecli)
 usage_query({ "group_by": "provider" })
 
 // Combine filters: per-model breakdown for one agent
@@ -769,8 +769,8 @@ export async function startServer(deps: ServerDeps): Promise<{
     httpServer?: http.Server;
 }> {
     const server = createServer(deps);
-    const transport = process.env["TRANSPORT"] ?? "stdio";
-    const port = parseInt(process.env["PORT"] ?? "3000", 10);
+    const transport = config.transport.kind;
+    const port = config.transport.port;
 
     if (transport === "stdio") {
         const stdioTransport = new StdioServerTransport();

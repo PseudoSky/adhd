@@ -1,5 +1,39 @@
 # Agent Provider — Unified Credentialing, baseURL Everywhere, lmstudio Removal, .env Standard
 
+> ## ⚠ Reconciliation (2026-06-28): largely SUPERSEDED by `docs/mcp-env/SPEC.md`
+>
+> The credentialing **runtime** goals of this plan were implemented out-of-band — as a
+> single in-package change to `@adhd/agent-mcp` (+ `@adhd/agent-mcp-types`) driven by
+> [`docs/mcp-env/SPEC.md`](../../mcp-env/SPEC.md) — **not** by executing this plan's state
+> machine (all states remain `pending`; `state.json` was never advanced). Build + tests
+> green; verified live via the MCP tools (OAuth-token Anthropic agent → real completion;
+> DeepSeek `openai` agent → authenticated).
+>
+> **Done by the SPEC (overlaps this plan's intent):** unified credential field, `baseURL`
+> everywhere + `/v1` runtime normalization, **`lmstudio` type removed** (+ no
+> `?? "lmstudio"` placeholder), deterministic multi-file `.env` load, **legacy
+> normalize-on-load shim**, fail-loud on missing non-localhost secret, Anthropic
+> wire-form inference (`sk-ant-api…`/`sk-ant-oat…`), keychain subsystem removed.
+>
+> **Deltas from this plan's design (intentional):**
+> - Credential field is **`provider.env.{secret,base_url,model}`** (env-var *names*), **not**
+>   `credentialEnv` + `credentialType`.
+> - `.env` hierarchy is **`<project>/.env` → `<project>/.adhd/.env` → `~/.adhd/.env`**, not
+>   `<project>/.adhd/agent-mcp/.env` over `~/.adhd/agent-mcp/.env`.
+> - Env-name guard added (`ADHD_AGENT_`-prefix, input-only).
+>
+> **Still OUTSTANDING (NOT covered by the SPEC) — the only reason to keep this plan:**
+> - The **`@adhd/agent-provider` registry SEED** (`provider_providers` / `provider_models` /
+>   platform-binding / tool-format rows) — `dod.1`'s registry-seed clause.
+> - This plan's specific live proof `[openai_compat_roundtrip]` against the LM Studio box
+>   (`dod.6`) — the SPEC proved the path with DeepSeek + Anthropic instead.
+> - `dod.7` zero-secrets scrub that explicitly names this directory's `PROPOSAL.md`.
+>
+> **Recommendation:** either retire this plan, or re-scope it to just the registry-seed +
+> its live proof. Do not execute it as-is — it would re-do (and conflict with) shipped work.
+
+---
+
 This plan integrates `ADDENDUM-unified-credentialing.md` (authored against the now-closed
 `agent-provider` (Plan 3) and `agent-mcp-refactor` (Plan 6), which can no longer execute it)
 into a single executable state machine. It unifies the two scattered provider credential

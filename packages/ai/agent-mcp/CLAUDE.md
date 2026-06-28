@@ -45,8 +45,8 @@ src/
 
   providers/
     factory.ts      — creates provider from AgentDefinition.provider config
-    openai.ts       — OpenAI + LM Studio (OpenAI-compatible)
-    anthropic.ts    — Anthropic; supports apiKey, authToken env, and useClaudeOauth keychain mode
+    openai.ts       — OpenAI + any OpenAI-compatible server (LM Studio, Ollama, DeepSeek) via baseURL
+    anthropic.ts    — Anthropic; unified env.secret (API key or OAuth token; wire form inferred from value)
     claudecli.ts    — drives local `claude` CLI as a subprocess (no external tool calls)
     lmstudio.ts     — thin alias for OpenAI provider with lmstudio defaults
     types.ts        — LLMProvider interface, ToolDefinition, ProviderChatResponse
@@ -80,7 +80,7 @@ src/
 
 **In-process recursion.** When an agent's `mcpServers` includes `"agent-mcp"`, the `McpClientRegistry` detects the name and routes tool calls to `InProcessMcpClient` instead of spawning a subprocess. This avoids network hops for recursive delegation and is how orchestrator→sub-agent calls work. The key must be exactly `"agent-mcp"` (or the URL must match `selfUrl` for http/sse transport).
 
-**Anthropic OAuth keychain (`useClaudeOauth`).** Setting `useClaudeOauth: true` on an anthropic provider causes `AnthropicProvider` to read the OAuth access token directly from the macOS keychain service `Claude Code-credentials` on every `chat()` call. The token is automatically refreshed when within 5 minutes of expiry. This lets Claude Max subscribers run agents without an API key or billing setup. **macOS only** — depends on the `security` CLI. On other platforms use `authTokenEnv` instead.
+**Anthropic credential inference (unified `env.secret`).** `AnthropicProvider` resolves one secret via `config.getProviderConfig` and infers the wire form from the value: `sk-ant-api…` → `x-api-key` client (system prompt verbatim); `sk-ant-oat…` → `Authorization: Bearer` + `anthropic-beta: oauth-2025-04-20` + the Claude Code identity prepended as a distinct first `system` block (Anthropic's OAuth gate rejects any other shape with a misleading `429`). The former macOS-keychain `useClaudeOauth` path was **removed** — supply the `claude setup-token` one-year OAuth token through `env.secret` instead.
 
 **Per-task registry lifetime.** `McpClientRegistry` is created fresh for each task and torn down in the `Orchestrator`'s `finally` block via `closeAll()`. Never reused across tasks.
 
@@ -97,21 +97,64 @@ src/
 
 ## Environment variables
 
+All variables use the `ADHD_AGENT_` prefix. Place secrets in `~/.adhd/.env` (loaded automatically) rather than in `.mcp.json` env blocks.
+
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_PATH` | required | Absolute path to SQLite file — created if absent |
-| `LMSTUDIO_API_KEY` | `""` | LM Studio API key |
-| `LMSTUDIO_BASE_URL` | `http://localhost:1234/v1` | LM Studio base URL |
-| `OPENAI_API_KEY` | `""` | OpenAI API key |
-| `ANTHROPIC_API_KEY` | `""` | Anthropic API key (console.anthropic.com) |
-| `ANTHROPIC_AUTH_TOKEN` | `""` | Anthropic bearer token (subscription users — generate with `claude setup-token`, or set to an OAuth access token directly) |
-| `ALLOWED_AGENTS` | unrestricted | Comma-separated server-level agent allowlist |
-| `AGENT_MCP_MAX_DEPTH` | `5` | Max recursion depth |
-| `AGENT_MCP_MAX_TOOL_LOOPS` | `50` | Max tool calls per task |
-| `AGENT_MCP_CONTEXT_LIMIT` | `0` (disabled) | Estimated token limit for the message window passed to each provider call. When > 0, oldest non-system messages are dropped to fit. Set 10% below the model's actual context window. |
-| `AGENT_MCP_DEFAULT_MAX_TOKENS` | `8192` | Default `max_tokens` for Anthropic providers that don't set `maxTokens` in their config. |
-| `QUEUE_CONCURRENCY` | `5` | Max concurrent background tasks |
-| `LOG_LEVEL` | `info` | Pino log level |
+| `ADHD_AGENT_DATABASE_PATH` | `~/.adhd/agent-mcp/agents.db` | Absolute path to SQLite file — created if absent |
+| `ADHD_AGENT_OPENAI_SECRET` | `""` | OpenAI (or OpenAI-compatible) API key |
+| `ADHD_AGENT_OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible base URL (override for LM Studio, Ollama, etc.) |
+| `ADHD_AGENT_ANTHROPIC_SECRET` | `""` | Anthropic API key or OAuth bearer token |
+| `ADHD_AGENT_DEEPSEEK_SECRET` | `""` | DeepSeek API key |
+| `ADHD_AGENT_ALLOWED_AGENTS` | unrestricted | Comma-separated server-level agent allowlist |
+| `ADHD_AGENT_MAX_DEPTH` | `5` | Max recursion depth |
+| `ADHD_AGENT_MAX_TOOL_LOOPS` | `50` | Max tool calls per task |
+| `ADHD_AGENT_CONTEXT_LIMIT` | `0` (disabled) | Estimated token limit for the message window passed to each provider call. When > 0, oldest non-system messages are dropped to fit. Set 10% below the model's actual context window. |
+| `ADHD_AGENT_DEFAULT_MAX_TOKENS` | `8192` | Default `max_tokens` for Anthropic providers that don't set `maxTokens` in their config. |
+| `ADHD_AGENT_QUEUE_CONCURRENCY` | `5` | Max concurrent background tasks |
+| `ADHD_AGENT_LOG_LEVEL` | `info` | Pino log level |
+| `ADHD_AGENT_SSE_PORT` | `3001` | SSE server port |
+| `ADHD_AGENT_SSE_HOST` | `127.0.0.1` | SSE server bind host |
+| `ADHD_AGENT_SSE_BASE_URL` | `http://localhost:{port}` | Public base URL used in `stream_url` links |
+| `ADHD_AGENT_ENV_ALLOWLIST` | `""` | Comma-separated names agents may reference that don't start with `ADHD_AGENT_` |
+| `ADHD_AGENT_CONFIG` | `""` | Path to agent-mcp plugin config YAML |
+| `ADHD_AGENT_PLUGINS` | `""` | Comma-separated plugin entry paths |
+
+### Migration from pre-2.0 names
+
+The old bare names (`DATABASE_PATH`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AGENT_MCP_MAX_DEPTH`, etc.) are no longer read. Rename them to the `ADHD_AGENT_*` equivalents above.
+
+Provider config fields also changed: `apiKeyEnv`/`authTokenEnv` → `env: { secret: "ADHD_AGENT_*" }`, and `type: "lmstudio"` → `type: "openai"` (the `lmstudio` alias still works but is deprecated, coerced on load).
+
+### `.env` loading (config.ts is the single source of truth)
+
+`src/config.ts` is the **only** module that reads `process.env`. It runs
+`src/utils/load-env.ts` once at startup, then validates + deep-freezes a `config`
+singleton; every other module reads `config.*` (never `process.env`). Tests use the pure
+`loadConfig(env)` factory.
+
+Load order (`loadEnvHierarchy`, most-specific wins): **`<project>/.env` → `<project>/.adhd/.env` → `~/.adhd/.env`**.
+Values are frozen for the process lifetime (no live re-read) — after editing a `.env`,
+reload the MCP server. This file path matters because a stdio MCP host forwards only a
+~6-var OS allowlist to the server and does **not** expand `${VAR}` in `.mcp.json` `env`
+blocks; the `.env` files are the reliable secret-free channel.
+
+### Provider credential model (§3)
+
+- **One unified `env.secret`** (an env-var *name*, not a value) per provider, plus
+  optional `env.base_url` / `env.model`. Resolved at runtime by `config.getProviderConfig`.
+  Secrets stay name-pointers so `agent_read`/`agent_list` never leak values.
+- **`openai`** (the only OpenAI-compatible type — `lmstudio` was removed): `baseURL` is
+  `/v1`-normalized at runtime; a missing secret on a non-localhost `baseURL` **fails
+  loud**; localhost is exempt (no key needed).
+- **`anthropic`**: the wire form is **inferred from the secret value** — `sk-ant-api…` →
+  `x-api-key`; `sk-ant-oat…` → `Authorization: Bearer` + `anthropic-beta:
+  oauth-2025-04-20` + the Claude Code identity as a distinct first system block (the
+  429-avoidance). The macOS-keychain `useClaudeOauth` path was **removed**; supply the
+  `claude setup-token` one-year token via `env.secret` instead.
+- **Env-name guard:** only `ADHD_AGENT_`-prefixed names may be referenced by an agent
+  def, enforced on `agent_create`/`agent_update` **input only** (never on stored reads, so
+  legacy rows still parse — DEBT-014). Extend with `ADHD_AGENT_ENV_ALLOWLIST`.
 
 ## Adding a new tool
 
@@ -139,11 +182,11 @@ The E2E suite (`E2E_PROMPT.md` + `run-e2e.mjs`) runs 14 scenarios against a live
 
 ## Mandatory: prove it through the LIVE MCP tools — never a bypass
 
-Unit tests use `:memory:` SQLite and a stubbed provider. They are necessary and they are **not** proof the server works. This server's only real consumer is an **MCP host calling its tools** — so the mandatory proof-of-life is exactly that: drive the `mcp__agent-mcp__*` tools **as loaded from `.mcp.json`**, over MCP stdio, against the **real store and a real provider**, and trust the returned payload + exit code. One such pass routinely catches what the whole green unit suite cannot: `.mcp.json` mis-wiring, `dist/` dependency-resolution failures (the externalized `@adhd/*` deps), tool-registration drift after a reload, OAuth/keychain reality, and tool-output that blows the host's token ceiling (a no-arg `agent_list` once returned 464 KB). The required loop:
+Unit tests use `:memory:` SQLite and a stubbed provider. They are necessary and they are **not** proof the server works. This server's only real consumer is an **MCP host calling its tools** — so the mandatory proof-of-life is exactly that: drive the `mcp__agent-mcp__*` tools **as loaded from `.mcp.json`**, over MCP stdio, against the **real store and a real provider**, and trust the returned payload + exit code. One such pass routinely catches what the whole green unit suite cannot: `.mcp.json` mis-wiring, `dist/` dependency-resolution failures (the externalized `@adhd/*` deps), tool-registration drift after a reload, OAuth/credential reality, and tool-output that blows the host's token ceiling (a no-arg `agent_list` once returned 464 KB). The required loop:
 
 1. **Build, then make the tool actually available** — `nx build agent-mcp`, point `.mcp.json` at `dist/.../index.js`, ask the user to run `/mcp` to reload. (See the update cycle in [AGENT-DEV.md](./AGENT-DEV.md).)
 2. **Call the loaded tools as a host does:** `agent_create → agent → task → result`, plus the read paths (`agent_list`, `usage_query`).
-3. **Real state, real model:** the real DB (`~/.adhd/agent-mcp/agents.db`, *not* `:memory:`), and a real provider — `claudecli` (local Claude auth) or `anthropic` with `useClaudeOauth: true` (Claude Max keychain, no API key). Assert the model-independent invariant (`result`, `status: "completed"`, real `usage`), key on the **payload and exit code**, then clean up anything you wrote.
+3. **Real state, real model:** the real DB (`~/.adhd/agent-mcp/agents.db`, *not* `:memory:`), and a real provider — `claudecli` (local Claude auth) or `anthropic` with an OAuth/API-key token via `env.secret` (e.g. `ADHD_AGENT_ANTHROPIC_SECRET` in `~/.adhd/.env`). Assert the model-independent invariant (`result`, `status: "completed"`, real `usage`), key on the **payload and exit code**, then clean up anything you wrote.
 
 ### The anti-pattern this section exists to kill
 
@@ -172,22 +215,23 @@ The one legitimate standalone harness is a script that acts as a **real MCP clie
 | `CONTEXT_WINDOW_EXCEEDED` | Orchestrator (context_length_exceeded from provider) |
 | `MCP_CLIENT_ERROR` | clients/* |
 
-## OAuth / claudecli keychain trust
+## OAuth / credential handling
 
-**`useClaudeOauth: true`** (Anthropic provider) reads the OAuth access token from the macOS keychain service `Claude Code-credentials` on every `chat()` call. The MCP host process must share the same keychain trust context as Claude Code.
+**Anthropic** — supply the credential through the unified `env.secret` (an
+`ADHD_AGENT_*` env-var name resolved from your `.env`). The value may be a console API
+key (`sk-ant-api…`) or an OAuth token from `claude setup-token` (`sk-ant-oat…`); the
+provider infers the wire form (see "Anthropic credential inference" under Key design
+decisions). A missing secret throws `PROVIDER_AUTH_ERROR`. The macOS-keychain
+`useClaudeOauth` mode and the `apiKeyEnv`/`authTokenEnv` fields were removed in the env
+overhaul (see CHANGELOG).
 
-**Fallback chain** — if the keychain read fails, the Anthropic provider degrades in order:
-1. `ANTHROPIC_API_KEY` env var (standard API key)
-2. `ANTHROPIC_AUTH_TOKEN` env var (OAuth token or bearer token)
-3. If both are absent → throws `PROVIDER_AUTH_ERROR`
-
-**Manual token injection** — run `claude setup-token` to print an OAuth access token, then:
 ```bash
-export ANTHROPIC_AUTH_TOKEN=<token>
+# in ~/.adhd/.env
+ADHD_AGENT_ANTHROPIC_SECRET=sk-ant-oat-...   # or sk-ant-api-...
 ```
-Or set `authTokenEnv: "MY_TOKEN_VAR"` in the provider config to read from a named env var.
 
-**claudecli provider** — uses whatever credentials `claude auth status` shows. On token-injection failure, throws `PROVIDER_AUTH_ERROR` with the keychain error and the same recovery hint.
+**claudecli provider** — uses whatever credentials `claude auth status` shows (no env var
+needed). On auth failure, throws `PROVIDER_AUTH_ERROR`.
 
 ## Backlog, history, and roadmap
 
