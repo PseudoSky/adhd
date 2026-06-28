@@ -3,6 +3,7 @@
   "version": "0.4.0",
   "license": "MIT",
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
     "watch:test": "`yarn bin`/vitest watch --changed",
     "watch": "nx run-many --targets=build --configuration=development --all --watch",
     "build": "nx run-many --targets=build --configuration=production --all",
