@@ -8,7 +8,13 @@ MCP server that lets any LLM host create agents, open sessions, run tasks, and d
 npx nx build agent-mcp          # compile to dist/packages/ai/agent-mcp
 npx nx test agent-mcp           # run vitest unit tests
 npx nx build agent-mcp --watch  # watch mode
+npx nx serve agent-mcp          # build + run the server (incl. the OpenAI-compatible chat
+                                # gateway on the SSE host/port); config from .env / ~/.adhd/.env
 ```
+
+Config (`ADHD_AGENT_*`) is loaded from `.env` (repo root) → `.adhd/.env` → `~/.adhd/.env`;
+non-secret defaults live in [`.env.example`](./.env.example) (`cp` it to `.env` and add
+secrets). The chat gateway + LibreChat Docker stack is in [`docker/`](./docker/).
 
 > **IMPORTANT FOR LLM AGENTS**: After any change to files in `src/`, follow the full
 > update cycle in [AGENT-DEV.md](./AGENT-DEV.md) — build, ask the user to run `/mcp`
