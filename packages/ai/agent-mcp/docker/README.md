@@ -42,13 +42,13 @@ create agents first via the MCP tools (`agent_create`).
 The chat gateway ships in `@adhd/agent-mcp@2.1.0`. **Until that's published**, run the
 gateway from your local build on the **host** and point LibreChat at it:
 
-1. Start the gateway on the host (from the repo root):
+1. Configure + start the gateway on the host (from the repo root):
    ```bash
-   npx nx build agent-mcp
-   ADHD_AGENT_DATABASE_PATH=data/agent-mcp/agents-dev.db \
-   ADHD_AGENT_SSE_HOST=0.0.0.0 ADHD_AGENT_SSE_PORT=3010 \
-   node dist/packages/ai/agent-mcp/src/index.js
+   cp packages/ai/agent-mcp/.env.example .env   # defaults: dev DB, SSE 0.0.0.0:3010
+   #   then add your ADHD_AGENT_*_SECRET to .env (or keep them in ~/.adhd/.env)
+   npx nx serve agent-mcp                        # builds, then runs the gateway on :3010
    ```
+   (`nx serve` loads `.env` / `~/.adhd/.env` automatically — no inline env vars needed.)
 2. In `docker-compose.yml`, **comment out the `agent-mcp` service** (and its `depends_on`).
 3. In `librechat.yaml`, set `baseURL: "http://host.docker.internal:3010/v1"`.
 4. `docker compose up -d` (mongo + meilisearch + librechat only).
