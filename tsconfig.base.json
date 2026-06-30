@@ -27,13 +27,16 @@
     "skipDefaultLibCheck": true,
     "paths": {
       "@adhd/agent-compiler": ["./packages/ai/agent-compiler/src/index.ts"],
-      "@adhd/agent-registry": ["./packages/ai/agent-registry/src/index.ts"],
       "@adhd/agent-mcp": ["./packages/ai/agent-mcp/src/index.ts"],
-      "@adhd/agent-nx": ["./packages/ai/agent-nx/src/index.ts"],
       "@adhd/agent-mcp-budget": ["./packages/ai/agent-mcp-budget/src/index.ts"],
+      "@adhd/agent-mcp-sanitize": [
+        "./packages/ai/agent-mcp-sanitize/src/index.ts"
+      ],
       "@adhd/agent-mcp-types": ["./packages/ai/agent-mcp-types/src/index.ts"],
+      "@adhd/agent-nx": ["./packages/ai/agent-nx/src/index.ts"],
       "@adhd/agent-policy": ["./packages/ai/agent-policy/src/index.ts"],
       "@adhd/agent-provider": ["./packages/ai/agent-provider/src/index.ts"],
+      "@adhd/agent-registry": ["./packages/ai/agent-registry/src/index.ts"],
       "@adhd/agent-tool-registry": [
         "./packages/ai/agent-tool-registry/src/index.ts"
       ],
@@ -72,19 +75,23 @@
         "./packages/apigen/plugins/logger/src/index.ts"
       ],
       "@adhd/apigen-plugin-mcp": ["./packages/apigen/plugins/mcp/src/index.ts"],
+      "@adhd/apigen-plugin-openapi": [
+        "./packages/apigen/plugins/openapi/src/index.ts"
+      ],
       "@adhd/apigen-plugin-py-flask": [
         "./packages/apigen/plugins/py-flask/src/index.ts"
       ],
       "@adhd/apigen-plugin-py-grpc": [
         "./packages/apigen/plugins/py-grpc/src/index.ts"
       ],
-      "@adhd/apigen-plugin-openapi": [
-        "./packages/apigen/plugins/openapi/src/index.ts"
-      ],
       "@adhd/apigen-runtime": ["./packages/apigen/runtime/src/index.ts"],
       "@adhd/apigen-schema": ["./packages/apigen/schema/src/index.ts"],
       "@adhd/data": ["./packages/data/src/index.ts"],
       "@adhd/decompile": ["./packages/decompile/src/index.ts"],
+      "@adhd/dispatch-client": ["./packages/shared/dispatch-client/src/index.ts"],
+      "@adhd/dispatch-optimizer": [
+        "./packages/shared/dispatch-optimizer/src/index.ts"
+      ],
       "@adhd/query": ["./packages/query/src/index.ts"],
       "@adhd/react-hooks": ["./packages/react-hooks/src/index.ts"],
       "@adhd/storybook": ["./packages/storybook/src/index.ts"],
