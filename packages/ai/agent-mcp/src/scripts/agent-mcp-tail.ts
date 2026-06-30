@@ -155,19 +155,23 @@ function poll(): void {
         const model = row.model ?? p["model"] ?? "?";
         const mc = p["messageCount"] ?? p["messagesCount"] ?? p["message_count"] ?? "?";
         const tc = p["toolCount"] ?? p["tool_count"] ?? "?";
-        detail = `model=${model} messages=${mc} tools=${tc}`;
+        const inRaw = row.inputTokens ?? 0;
+        const inStr = inRaw >= 1000 ? `${(inRaw / 1000).toFixed(1)}K` : `${inRaw}`;
+        detail = `model=${model} in=${inStr} messages=${mc} tools=${tc}`;
         break;
       }
       case "MODEL_RESPONSE": {
         const stop = p["stopReason"] ?? p["stop_reason"] ?? p["stop"] ?? "?";
+        const outRaw = row.outputTokens ?? 0;
+        const outStr = outRaw >= 1000 ? `${(outRaw / 1000).toFixed(1)}K` : `${outRaw}`;
         let content = msgContent ?? "";
         if (content) {
           if (!verbose && content.length > 500) content = content.slice(0, 500) + "...";
-          detail = `${stop} ${content}`;
+          detail = `${stop} out=${outStr} ${content}`;
         } else {
           const msgCount = p["messageCount"] ?? p["messagesCount"] ?? p["message_count"] ?? "?";
           const toolCount = p["toolCount"] ?? p["tool_count"] ?? "?";
-          detail = `${stop} msgs=${msgCount} tools=${toolCount}`;
+          detail = `${stop} out=${outStr} msgs=${msgCount} tools=${toolCount}`;
         }
         break;
       }
@@ -212,16 +216,14 @@ function poll(): void {
         detail = pretty(row.payload, 500);
     }
 
-    let inputTotal = "";
+    let tokenDisplay = "";
     if (row.taskId && row.inputTokens != null) {
-      const inT = row.inputTokens;
-      const outT = row.outputTokens ?? 0;
-      const inStr = inT >= 1000 ? `${(inT / 1000).toFixed(1)}K` : `${inT}`;
-      const outStr = outT >= 1000 ? `${(outT / 1000).toFixed(1)}K` : `${outT}`;
-      inputTotal = `${inStr}/${outStr}`;
+      const inS = row.inputTokens >= 1000 ? `${(row.inputTokens / 1000).toFixed(1)}K` : `${row.inputTokens}`;
+      const outS = row.outputTokens != null && row.outputTokens >= 1000 ? `${(row.outputTokens / 1000).toFixed(1)}K` : `${row.outputTokens ?? 0}`;
+      tokenDisplay = `${inS}/${outS}`;
     }
 
-    const line = `${time} ${agent.padEnd(18)} ${sess.padEnd(8)} ${row.type.padEnd(15)} ${inputTotal.padStart(10)} ${detail}`;
+    const line = `${time} ${agent.padEnd(18)} ${sess.padEnd(8)} ${row.type.padEnd(15)} ${tokenDisplay.padStart(12)} ${detail}`;
     for (const part of line.split("\n")) {
       console.log(part);
     }
