@@ -4,56 +4,56 @@
   "dag": "dag.json",
   "states": {
     "closeout-design": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
       "end_ref": null
     },
     "worktree-clarity": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
       "end_ref": null
     },
     "artifact-cleanup": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
       "end_ref": null
     },
     "agent-mcp-backout-gate": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
       "end_ref": null
     },
     "merge-to-main": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
       "end_ref": null
     },
     "publish-packages": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
       "end_ref": null
     },
     "post-publish-smoke": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
       "end_ref": null
     },
     "audit-final": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
@@ -67,11 +67,11 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "closeout-design",
+  "current_state": "audit-final",
   "dod_provenance": {
     "confirmed_at": "2026-06-26T04:28:04.958Z",
     "by": "pseudosky",
-    "note": "Owner sign-off 2026-06-26 (delegated to orchestrator): worktree-clarity + back-out-gated merge + nx release publish (no --skip-nx-cache) + artifact cleanup. Confirmed via plain-language DoD sheet.",
+    "note": "SUPERSEDED — merge (commit 326ebef) and npm publish happened out-of-band. Packages published at divergent versions (agent-mcp@2.0.1, @adhd/agent-compiler optional dep). No back-out gate or ceremony was run. The artifact-cleanup clause (dod.4) was extracted to agent-registry-migration artifact-cleanup state. Version reconciliation is tracked there as well.",
     "dod_ids": [
       "dod.1",
       "dod.2",

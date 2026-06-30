@@ -12,6 +12,7 @@
     }
   },
   "tags": ["layer:ai", "platform:node"],
+  "implicitDependencies": ["agent-mcp-budget", "agent-policy", "agent-mcp-sanitize"],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",

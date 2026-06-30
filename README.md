@@ -18,10 +18,28 @@ Run `npx nx dev adhd` to start the development server. Happy coding!
 
 Run `npx nx build adhd` to build the application. The build artifacts are stored in the output directory (e.g. `dist/` or `build/`), ready to be deployed.
 
-## @adhd/data
-## @adhd/query
-## @adhd/react-hooks
-## @adhd/transforms
+## @adhd/data — Generic data analysis utilities (filter, sort, group, aggregate)
+## @adhd/query — In-browser/Node DB engine with composable queries
+## @adhd/react-hooks — UI component logic and hooks for browser apps
+## @adhd/transforms — Basic type transforms (camelCase, deepCopy, etc.)
+
+## @adhd/agent-mcp — MCP server for spawning and coordinating AI agents
+
+[`@adhd/agent-mcp`](packages/ai/agent-mcp/) is an MCP server that gives any LLM the ability to spawn, delegate to, and coordinate AI agents. It supports cross-provider orchestration (Claude delegates to LM Studio, etc.), sessions, DAG task dependencies, human-in-the-loop, and recursive sub-agent delegation.
+
+**Official plugins** (load via `agent-mcp.config.json`):
+
+| Package | Purpose |
+|---------|---------|
+| [`@adhd/agent-mcp-budget`](packages/ai/agent-mcp-budget/) | Cap token spend, cost, wall-clock time per task/session/agent |
+| [`@adhd/agent-mcp-policy`](packages/ai/agent-policy/) | Rate limits and delegation permissions |
+| [`@adhd/agent-mcp-sanitize`](packages/ai/agent-mcp-sanitize/) | Sub-agent output sanitization (prompt-injection defence) |
+
+## @adhd/apigen-cli — CLI runner: `apigen run --source ./api.ts --type mcp`
+## @adhd/apigen-core — Core operation descriptor extraction and transport projection
+## @adhd/apigen-gateway — Runtime API gateway for serving projected endpoints
+## @adhd/apigen-codegen-openapi — OpenAPI code generation from operation descriptors
+## @adhd/apigen-plugin-mcp — MCP transport plugin: functions → MCP tools
 
 Testing in a shell
 

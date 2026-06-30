@@ -2,7 +2,7 @@ import { logger } from "../logger.js";
 import { config } from "../config.js";
 import type { LLMProvider } from "../providers/types.js";
 import type { ExecutionContext, Message } from "../validation/index.js";
-import type { IHookRegistry, IEnforcementError } from "@adhd/agent-mcp-types";
+import type { IHookRegistry, IEnforcementError, PostToolCallPayload } from "@adhd/agent-mcp-types";
 import { ToolError } from "../validation/errors.js";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
@@ -538,6 +538,27 @@ export class Orchestrator {
                         if (!r) continue; // should not happen
                         toolResult = r.toolResult;
                         isError = r.isError;
+
+                        // ── Plugin transform: tool_result ──────────────────────
+                        // Plugins register on "transform:tool_result" via
+                        // hooks.register() and mutate the payload in place
+                        // (it's passed by reference). After emit() returns,
+                        // the mutated result is used for the tool result message.
+                        const resolved =
+                            registry.resolveToolName?.(`${tc.server}__${tc.tool}`) ??
+                            { server: tc.server, tool: tc.tool };
+                        const qualifiedToolName = `${resolved.server}__${resolved.tool}`;
+                        const transformPayload: PostToolCallPayload = {
+                            executionContext,
+                            toolName: qualifiedToolName,
+                            callId: tc.id,
+                            toolInput: tc.arguments,
+                            result: toolResult,
+                            isError,
+                        };
+                        await hooks.emit("transform:tool_result", transformPayload);
+                        toolResult = transformPayload.result;
+                        isError = transformPayload.isError;
                     }
 
                     const toolResultMessage: Message = {

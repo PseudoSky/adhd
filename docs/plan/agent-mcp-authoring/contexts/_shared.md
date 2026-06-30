@@ -16,6 +16,24 @@ every state in this plan. Read this before any state context.
   `resolveComposedPrompt`, the `composed_prompts` cache keyed by
   `(agent, context_hash)`, the registry-backed session-start path. `assumed_baseline`.
 
+## sox-ecosystem dependency (FEAT-008 consumable)
+
+This plan consumes the following **published (or locally-linked) sox-ecosystem packages** instead of building embedding infrastructure from scratch:
+
+| Package | Version | Purpose | Required by |
+|---------|---------|---------|-------------|
+| `@adhd/sox-embedding-provider` | `0.1.0` | Text→vector embedding: `type:'hash'` for deterministic (seeded SHA-256 Box-Muller, dim=N), `type:'fastembed'` for real ONNX (bge-base-en-v1.5 768d), `type:'remote'` for API. Pluggable via `createEmbeddingProvider(config)`. | `embedding-substrate` |
+| `@adhd/sox-vector-store` | `0.1.0` | Multi-space vector persistence (sqlite-vec vec0) + kNN/cosine search. `openVectorStore()`, `knn()`, `upsert()`, `reembed()`. | `embedding-substrate`, `enrichment-pipeline`, `discovery-tools` |
+| `@adhd/sox-ingest` | `0.1.0` | Private ingest helpers: `extractiveSummary()` (lead-N sentence extraction, zero LLM), content hashing. | `enrichment-pipeline` |
+| `@adhd/sox-analysis` | `0.1.0` | Batch analysis: near-dup detection, importance scoring, clustering. Used by `enrichment-pipeline` batch pass. | `enrichment-pipeline` |
+
+**Publish/link status (2026-06-29):** Only `@adhd/sox-memory-core@0.2.1` is published to npm. The data-layer packages above are `"private": false` and built in `dist/` but **never published** (no changeset run). Before this plan executes, one of:
+- **Publish**: run `npx changeset publish` from `sox-ecosystem` to ship `@adhd/sox-embedding-provider`, `@adhd/sox-vector-store`, `@adhd/sox-ingest`, `@adhd/sox-analysis` to npm
+- **Link**: `npm link` each package into adhd's `node_modules` so workspace resolution works
+- **Local path**: add `"@adhd/sox-embedding-provider": "file:../sox-ecosystem/libs/data/embed/embedding-provider"` to adhd's `package.json`
+
+Recorded as `[debt:sox-publish]` — see `docs/plan/agent-mcp-authoring/decisions.md`.
+
 ## Cross-cutting invariants
 
 - **[inv:no-slug-on-wire]** — no `slug` field in any MCP tool schema, tool output,

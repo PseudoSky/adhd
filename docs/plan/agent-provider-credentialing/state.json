@@ -4,42 +4,42 @@
   "dag": "dag.json",
   "states": {
     "unified-credential-contract": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
       "end_ref": null
     },
     "provider-credential-runtime": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
       "end_ref": null
     },
     "lmstudio-removal": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
       "end_ref": null
     },
     "dotenv-dual-load": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
       "end_ref": null
     },
     "backcompat-normalizer": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
       "end_ref": null
     },
     "audit-credentialing": {
-      "status": "pending",
+      "status": "superseded",
       "started_at": null,
       "done_at": null,
       "start_ref": null,
@@ -53,11 +53,11 @@
     "version": "0.8.23",
     "hash": "1e4130a84aed"
   },
-  "current_state": "unified-credential-contract",
+  "current_state": "audit-credentialing",
   "dod_provenance": {
     "confirmed_at": "2026-06-27T00:26:51.862Z",
     "by": "pseudosky",
-    "note": "DoD confirmed by team-lead at the dispatcher-approval gate (2026-06-26): structure + 8 clauses approved; call#1 live-test softening approved with teeth requirement; call#2 superseding pointer approved; call#3 only the lmstudio-credential blocker (NO key-rotation gate); zero-secrets must scrub docs/mcp-env/PROPOSAL.md.",
+    "note": "SUPERSEDED — credentialing runtime goals were implemented out-of-band by docs/mcp-env/SPEC.md (commit 9681e0c). All states marked superseded. The registry-seed clause (dod.1) was extracted to agent-registry-migration seed-provider-registry state. No further execution needed.",
     "dod_ids": [
       "dod.1",
       "dod.2",

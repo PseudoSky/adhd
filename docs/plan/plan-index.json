@@ -238,7 +238,7 @@
     {
       "plan": "agent-provider-credentialing",
       "dir": "agent-provider-credentialing",
-      "status": "published",
+      "status": "superseded",
       "mutate_set": [
         ".gitignore",
         "docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py",
@@ -324,7 +324,7 @@
     {
       "plan": "agent-registry-release",
       "dir": "agent-registry-release",
-      "status": "published",
+      "status": "superseded",
       "mutate_set": [
         ".gitignore",
         "docs/plan/agent-registry-release/MERGE_RUNBOOK.md",
