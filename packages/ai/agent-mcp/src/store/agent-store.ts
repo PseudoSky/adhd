@@ -91,6 +91,16 @@ export class AgentStore {
         const updated: AgentDefinition = {
             ...existing,
             ...definedPatch,
+            // Deep-merge mcpServers: only update/replace individual server entries
+            // instead of replacing the entire record (BUG-005)
+            mcpServers: input.patch.mcpServers
+                ? { ...existing.mcpServers, ...input.patch.mcpServers }
+                : existing.mcpServers,
+            // Deep-merge permissions: only update/replace individual fields
+            // instead of replacing the entire object (same class of bug as mcpServers)
+            permissions: input.patch.permissions
+                ? { ...existing.permissions, ...input.patch.permissions }
+                : existing.permissions,
             name: existing.name,      // name is immutable
             createdAt: existing.createdAt, // createdAt is immutable
             version: existing.version + 1,
