@@ -456,7 +456,11 @@ export class Orchestrator {
                         taskStore.appendEvent({
                             taskId,
                             type: "TOOL_CALL",
-                            payload: { tool: qualifiedToolName, callId: toolCall.id },
+                            payload: {
+                                tool: qualifiedToolName,
+                                callId: toolCall.id,
+                                arguments: JSON.stringify(toolCall.arguments).slice(0, 500),
+                            },
                         });
 
                         logger.info(
@@ -493,10 +497,19 @@ export class Orchestrator {
                             logger.warn({ taskId, tool: qualifiedToolName, error: toolResult }, "TOOL_RESULT error");
                         }
 
+                        const resultSummary = typeof toolResult === 'string'
+                            ? toolResult.slice(0, 500)
+                            : JSON.stringify(toolResult).slice(0, 500);
+
                         taskStore.appendEvent({
                             taskId,
                             type: "TOOL_RESULT",
-                            payload: { callId: toolCall.id, tool: qualifiedToolName, isError },
+                            payload: {
+                                callId: toolCall.id,
+                                tool: qualifiedToolName,
+                                isError,
+                                result: resultSummary,
+                            },
                         });
 
                         // Emit tool_result SSE event after result received
