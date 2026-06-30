@@ -179,7 +179,8 @@
     "@nx/rollup:rollup": {
       "cache": true,
       "dependsOn": [
-        "^build"
+        "^build",
+        "lint"
       ],
       "inputs": [
         "production",
@@ -189,7 +190,8 @@
     "@nx/js:tsc": {
       "cache": true,
       "dependsOn": [
-        "^build"
+        "^build",
+        "lint"
       ],
       "inputs": [
         "production",
@@ -198,7 +200,8 @@
     },
     "build": {
       "dependsOn": [
-        "^build"
+        "^build",
+        "lint"
       ],
       "inputs": [
         "production",
