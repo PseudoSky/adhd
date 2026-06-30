@@ -331,6 +331,75 @@ from them. **Author identity resolved from the running agent's SP context** (sam
 author). Schema + validator in `@adhd/workspace-standard`; ties to the `/reflection` provenance convention
 (`agent_id`, `subject_version`, model).
 
+## FEAT-ENV-001 — @adhd/environment — centralized configuration management — priority: HIGH
+**What:** Extract environment handling + configuration management into a shared `@adhd/environment` package
+that all other packages can use to define and manage their configs consistently.
+
+**Current state:** every package handles env/config ad-hoc — agent-mcp has its own `config.ts` with
+`loadEnvHierarchy` + Zod validation + deep-freeze singleton; other packages scatter `process.env` reads.
+There is no shared convention for config scoping (project vs global), path resolution, or namespace
+management.
+
+**Proposed API:**
+```typescript
+import { Configuration } from '@adhd/environment';
+
+export const agentMcpConfiguration = new Configuration<AgentMcpOptions, AgentMcpEnvVariables>({
+  org: "adhd",
+  namespace: "agent-mcp",
+  
+  defaults: {
+    "log-directory": { scope: "project", default: "logs/agent-mcp" },
+    "configuration": { scope: "global", default: "~/.adhd/agent-mcp/config.yaml" },
+    "db-path":       { scope: "global", default: "~/.adhd/agent-mcp/agents.db" },
+  },
+  
+  // Optional: Zod schemas per key for runtime validation
+  schemas: { ... },
+  
+  // Optional: env-var name overrides
+  env: {
+    "db-path":  "ADHD_AGENT_DATABASE_PATH",
+    "log-level": "ADHD_AGENT_LOG_LEVEL",
+  },
+})
+
+agentMcpConfiguration.getPath({ scope: "project", name: "log-directory" })
+agentMcpConfiguration.getPath({ scope: "global", name: "configuration" })
+agentMcpConfiguration.get({ scope: "global" })
+agentMcpConfiguration.get("db-path")
+```
+
+**Key design goals:**
+- **Scoped resolution:** `project` (relative to CWD or workspace root), `global` (user home: `~/.adhd/`), `system` (OS-level: `/etc/adhd/`). Scopes compose with fallback (project overrides global overrides defaults).
+- **Env-var integration:** each key can declare which env var overrides it. The resolution order is: env var → project config file → global config file → defaults.
+- **Namespace isolation:** configs are organized by `{org}/{namespace}` so `@adhd/agent-mcp` and `@adhd/apigen-core` don't collide.
+- **Path resolution:** `getPath()` returns resolved absolute paths (handles `~` expansion, relative-to-scope-root), so packages don't need their own path logic.
+- **Zero deps:** Pure TypeScript, `platform:shared`. No runtime dependencies beyond what the monorepo already uses.
+- **Backward-compatible:** Existing `ADHD_AGENT_*` env vars continue to work — the `env` map bridges them into the new system.
+
+**Deliverables:**
+1. `packages/shared/environment/` — scaffold via `generate-lib.sh lib environment data shared`
+2. Core `Configuration` class with scope resolution, env-var merging, path expansion
+3. Zod schema validation per key
+4. Config file loading (JSON/YAML support, with graceful fallback)
+5. Migration guide for existing packages to adopt `@adhd/environment`
+6. Integration tests: scope resolution order, env-var override, path expansion, config file merge
+
+**Migration targets:**
+- `@adhd/agent-mcp` — replace `config.ts` + `load-env.ts` with `Configuration<AgentMcpOptions, …>`
+- `@adhd/agent-mcp-budget` — replace ad-hoc env reads
+- `@adhd/agent-compiler` — replace ad-hoc env reads
+- `@adhd/dispatch-spec` — if it grows config needs
+- Any future ADHD package that needs configuration
+
+**Why this belongs in a shared package (not more ad-hoc workarounds):**
+Every package in the monorepo reinvents env loading, path resolution, and config validation.
+A shared `@adhd/environment` eliminates this duplication and ensures every ADHD package
+resolves paths and configs the same way — critical for agent-driven tooling where
+consistent config discovery is essential. Platform:shared means safe in both Node CLIs
+and browser contexts.
+
 ## DEBT-AGENTMCP-BUDGET-IMPORT-001 — `nx test agent-mcp` red: live-budget e2e can't resolve @adhd/agent-mcp-budget
 `src/__tests__/integration/live-budget.e2e.test.ts` top-level-imports `@adhd/agent-mcp-budget`, which fails vite resolution ("Failed to resolve entry for package … incorrect main/module/exports"), failing the whole suite at COLLECTION time — before its `describe.skipIf(!AGENT_MCP_BUDGET_LIVE)` gate can skip it. So default `nx test agent-mcp` is RED (1 file failed / 211 passed). Pre-existing (orthogonal to the openai.ts apiKey fallback + secret redaction). Fix: correct `agent-mcp-budget` package.json `main`/`module`/`exports` (or build it) so the import resolves; consider a lazy/dynamic import so a live-gated suite never fails collection. Deferred agent-mcp/agent-registry initiative.
 
