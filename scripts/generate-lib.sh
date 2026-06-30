@@ -62,7 +62,9 @@ PACKAGE_DIR="packages/$DIR/$NAME"
 
 # ── Post-generation patches ────────────────────────────────────────────────────
 #
-# Fix two systematic gaps in the Nx-generated scaffolding:
+# Fixes six systematic gaps in the Nx-generated scaffolding, derived by
+# comparing generated output against the patterns used in every mature
+# package in the repo (apigen-core, agent-provider, etc.).
 #
 # 1. vite.config.ts — add emptyOutDir:true
 #    Without this, the dist/ directory is never cleared between builds. When you
@@ -74,6 +76,21 @@ PACKAGE_DIR="packages/$DIR/$NAME"
 #    Without this, `nx release publish` runs directly against whatever is already
 #    in dist/ (possibly stale or untested). Adding dependsOn enforces a clean
 #    build + passing tests before every publish.
+#
+# 3. README.md — scaffold a starter README so the package ships one on npm.
+#
+# 4. .eslintrc.json — add vite.config.* to ignorePatterns
+#    The generated eslintrc applies the no-var-requires rule to vite configs,
+#    which use require() inside closeBundle() callbacks by convention. Every
+#    existing package in the repo excludes vite configs from this rule.
+#
+# 5. tsconfig.lib.json — add src/test/** to exclude list
+#    Test helper modules under src/test/ as plain .ts files would be included
+#    in the library build without this exclusion.
+#
+# 6. vite.config.ts — add inline copy-readme plugin
+#    @nx/vite:build ignores project.json 'assets', so README.md never reaches
+#    the npm tarball without this plugin.
 
 VITE_CONFIG="$PACKAGE_DIR/vite.config.ts"
 if [[ -f "$VITE_CONFIG" ]]; then
@@ -140,6 +157,28 @@ if (json.ignorePatterns && !json.ignorePatterns.some(p => p === 'vite.config.ts'
   console.log(`  ✅ patched ${path}: added vite.config.* to ignorePatterns`);
 } else {
   console.log(`  ℹ️  ${path}: vite exclusion already present, skipped`);
+}
+JSEOF
+fi
+
+# 3.6 tsconfig.lib.json — add src/test/** to exclude list.
+#      The Nx-generated scaffold excludes vite.config.ts and spec/test file
+#      patterns, but test helper modules often live under src/test/ as .ts
+#      files without .spec./.test. suffixes and would be included in the
+#      library build. Every mature package in the repo (apigen-core, etc.)
+#      excludes this directory explicitly.
+TSCOFIG_LIB="$PACKAGE_DIR/tsconfig.lib.json"
+if [[ -f "$TSCOFIG_LIB" ]]; then
+  node - "$TSCOFIG_LIB" <<'JSEOF'
+const fs = require('fs');
+const path = process.argv[2];
+const json = JSON.parse(fs.readFileSync(path, 'utf8'));
+if (json.exclude && !json.exclude.includes('src/test/**')) {
+  json.exclude.push('src/test/**');
+  fs.writeFileSync(path, JSON.stringify(json, null, 2) + '\n');
+  console.log(`  ✅ patched ${path}: added src/test/** to exclude`);
+} else {
+  console.log(`  ℹ️  ${path}: src/test/** exclusion already present, skipped`);
 }
 JSEOF
 fi
