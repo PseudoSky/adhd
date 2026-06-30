@@ -249,6 +249,56 @@ sessions and then deletes. Optionally reap sessions idle past a TTL on startup.
 > The follow-on "audit for other unhandled exceptions" spawned by BUG-001 is
 > tracked separately as **DEBT-001** (still open).
 
+### BUG-005 — `agent_update` with `mcpServers` in patch replaces ALL entries instead of merging
+- **Status:** confirmed (reproduced)
+- **Priority:** P2 · **Area:** tools/agent-crud, validation/agent
+- **Reported:** 2026-06-30
+
+**Problem / Description**
+When calling `agent_update` with only a `mcpServers` patch containing a single server,
+the entire `mcpServers` record is replaced — all existing servers are dropped.
+The expected behavior is a deep-merge: updating one server should preserve others.
+
+This happened during dispatch setup: updating the `shell` server on `dispatch-client`
+dropped both `filesystem` and `agent-mcp` from its MCP servers. The agent then
+started with only `shell` and couldn't read files or delegate.
+
+**Root cause:** The update schema (`agentUpdateInputSchema`) uses
+`mcpServers: z.record(z.string(), mcpServerConfigSchema).optional()`, which is a
+full-object replacement. There is no deep-merge logic in the CRUD handler.
+
+**Impact:** Any caller updating a single MCP server accidentally removes all others.
+The caller must read the current agent, merge manually, and send the complete object.
+
+**Proposed fix:** Either (a) implement deep-merge in the `agent_update` handler
+(iterate patch keys, merge with existing), or (b) document the full-replace behavior
+and provide a separate `mcpServersPatch` field for partial updates.
+
+### BUG-006 — TOOL_CALL / TOOL_RESULT task_events payloads omit arguments/result data
+- **Status:** confirmed (by design, but limits observability)
+- **Priority:** P3 · **Area:** engine/orchestrator, store/task-store
+- **Reported:** 2026-06-30
+
+**Problem / Description**
+The `task_events` table stores TOOL_CALL events with payload `{tool, callId}`
+and TOOL_RESULT events with `{tool, callId, isError}`. The actual tool arguments
+and result content are NOT included in the event payload — they live in the
+`messages` table's `tool_calls`/`tool_results` JSON columns, which are only
+available for session-based tasks (not ephemeral ones).
+
+This means the `agent-mcp-tail` script (and any other event consumer) cannot
+display tool arguments or results from `task_events` alone. It requires a
+separate join with `messages` that doesn't work for ephemeral tasks.
+
+**Impact:** Debugging tools (tail, logs) show `{}` for tool call arguments and
+empty results. Engineers must query `messages` separately and only for
+session-based tasks. Ephemeral task debugging is blind.
+
+**Proposed fix:** Store a limited preview of arguments/results in the event
+payload (e.g. first 500 chars of arguments, first 1000 chars of result).
+The orchestrator's `emitTaskEvent` calls have access to both the tool call
+details and the result content — include a summary in the payload.
+
 ---
 
 ## ✨ Features
