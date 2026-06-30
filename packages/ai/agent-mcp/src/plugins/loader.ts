@@ -84,7 +84,7 @@ interface PluginModule {
  *      or `ADHD_AGENT_CONFIG` singleton value — absolute path to any JSON file
  *   2. `{cwd}/agent-mcp.config.json` — project-local (next to package.json)
  *   3. `{cwd}/.adhd/agent-mcp/config.json` — project-local nested (recommended)
- *   4. `{HOME}/.agent-mcp/config.json` — global user config
+ *   4. `{HOME}/.adhd/agent-mcp/config.json` — global user config {}
  *
  * @param configPathOverride — explicit path that takes priority over the
  *   singleton value; pass `null` to force "no explicit path" (skip the env
@@ -111,8 +111,8 @@ export function findConfigFile(configPathOverride?: string | null): string | nul
     const nested = resolve(process.cwd(), ".adhd", "agent-mcp", "config.json");
     if (existsSync(nested)) return nested;
 
-    const global_ = resolve(homedir(), ".agent-mcp", "config.json");
-    if (existsSync(global_)) return global_;
+    const globalAdhd = resolve(homedir(), ".adhd", "agent-mcp", "config.json");
+    if (existsSync(globalAdhd)) return globalAdhd;
 
     return null;
 }

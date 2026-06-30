@@ -11,7 +11,8 @@
     "drizzle"
   ],
   "bin": {
-    "agent-mcp": "./src/index.js"
+    "agent-mcp": "./src/index.js",
+    "agent-mcp-tail": "./src/scripts/agent-mcp-tail.js"
   },
   "exports": {
     ".": {
