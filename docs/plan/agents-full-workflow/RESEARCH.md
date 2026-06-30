@@ -375,16 +375,107 @@ agent-mcp uses pino logger writing to stderr. Enable debug via:
 
 ---
 
+## Context Explosion — Root Cause & Fixes
+
+### The 710K DeepSeek Incident (2026-06-30)
+
+A `dispatch-optimizer-impl` agent running on DeepSeek consumed 710K input tokens
+(plus 510K, 565K, 342K in other tasks) doing what amounts to reading ~5 source files.
+Root cause: **the agent's system prompt had zero behavioral guardrails.**
+
+Comparison with the opencode `default.txt` system prompt showed the gap:
+
+| Guardrail | Opencode | Our agents (before fix) |
+|---|---|---|
+| Token economy | "minimize output tokens as much as possible" | ❌ |
+| Response length | "answer concisely with fewer than 4 lines" | ❌ |
+| Tool selection | "prefer Task tool to reduce context usage" | ❌ |
+| File reading | "Read files with offset/limit" | ❌ |
+| Planning | "think about what the code is supposed to do" | ❌ |
+| Cat | (no cat tool available) | `cat` in allowlist |
+| Directory dumps | `list_directory` only | `directory_tree` available |
+| Verbosity | "NEVER answer with preamble" | ❌ |
+
+**Execution trace of the 710K session:**
+
+```
+1. Agent calls directory_tree → 330K JSON returned → loaded verbatim into context
+2. Agent pivots to shell_exec: cat compiler.ts → 70K returned → loaded into context
+3. cat DECISIONS.md → 20K loaded into context
+4. cat types.ts → 19K loaded into context  
+5. cat validate.ts → 16K loaded into context
+6. Each subsequent model call re-sends ALL 470K of tool results
+7. 6 model calls at 100K+ context each = 710K total
+```
+
+The agent pivoted to `shell_exec: cat` because the filesystem MCP paths were wrong,
+but `cat` was in the shell allowlist and `directory_tree` was available. With zero
+instinct for context economy, the obvious tool choices were catastrophic.
+
+**Verified via `usage_query`:**
+- 45 tasks total, 3.27M input tokens, 253 tool calls
+- Top task: 710K (dispatch-optimizer-impl, DeepSeek)
+- Top task: 565K (dispatch-client, DeepSeek) 
+- Top task: 509K (dispatch-client, DeepSeek)
+- Average task: ~72K input tokens
+
+### Fixes Deployed (2026-06-30)
+
+| Layer | Fix | Status |
+|---|---|---|
+| Shell | `cat` removed from allowlist, `cat\s` blocked, `grep` added | ✅ |
+| Security.yaml | `max_execution_time: 300s`, `max_output_size: 5MB` | ✅ |
+| Agent prompts | `directory_tree` banned, `head -n 100` instructed, fail-fast rule | ✅ |
+| Agent prompts | CONTEXT MANAGEMENT section on all 4 agents | ✅ |
+| Env | `ADHD_AGENT_CONTEXT_LIMIT=30000` in `~/.adhd/.env` | ✅ |
+| Agent-mcp BACKLOG | FEAT-011 filed: reusable base system prompt + server-side enforcement | ✅ |
+
+### Structural Fix: Enable Budget Plugin
+
+The `@adhd/agent-mcp-budget` plugin ships with agent-mcp (version 1.1.3). It
+enforces per-task limits: `maxModelCalls`, `maxTotalTokens`, `maxWallClockMs`,
+`maxCostUSD`. Enabling it would have **prevented the 710K task** — the budget
+enforcement would have killed the task at 50K tokens instead of letting it burn
+to 710K.
+
+Activation requires adding the plugin to the agent-mcp config; the budget config
+for dispatch agents would set aggressive limits:
+
+```json
+{
+  "plugins": [
+    { "module": "@adhd/agent-mcp-budget",
+      "config": {
+        "maxTotalTokens": 50000,
+        "maxModelCalls": 10,
+        "maxWallClockMs": 120000
+      }
+    }
+  ]
+}
+```
+
+We will enable the budget plugin with these limits before any further dispatches.
+
+### Remaining Work
+
+- [ ] Enable `@adhd/agent-mcp-budget` plugin with dispatching limits
+- [ ] Implement FEAT-011 (reusable base system prompt)
+- [ ] Implement tool-result proxying (memory `01KWD5V03F3J66XFJDFBTBMFNY`)
+- [ ] Split `task_usage` into per-call rows for granular tail display
+
+---
+
 # Audit Log
 
 ## Agent Registry
 
 | Agent | Version | Created | MCP Servers | Permissions | Worktree |
 |---|---|---|---|---|---|
-| dispatch-client | v11 | 2026-06-30 | filesystem+sonirico-mcp-shell+agent-mcp | →reviewer | — |
-| dispatch-optimizer | v10 | 2026-06-30 | filesystem+sonirico-mcp-shell+agent-mcp | →client,reviewer | — |
-| dispatch-reviewer | v10 | 2026-06-30 | filesystem+sonirico-mcp-shell | none | — |
-| sessions & tasks | — | — | — | — | See Sessions & Tasks table below |
+| dispatch-client | v15 | 2026-06-30 | filesystem+sonirico-mcp-shell+agent-mcp | →reviewer | — |
+| dispatch-optimizer | v14 | 2026-06-30 | filesystem+sonirico-mcp-shell+agent-mcp | →client,reviewer | — |
+| dispatch-reviewer | v14 | 2026-06-30 | filesystem+sonirico-mcp-shell | none | — |
+| dispatch-optimizer-impl | v7 | 2026-06-30 | filesystem+sonirico-mcp-shell | none | .claude/worktrees/dispatch-optimizer |
 
 ## Tool Installations
 
@@ -439,3 +530,4 @@ agent-mcp uses pino logger writing to stderr. Enable debug via:
 | 2026-06-30 | MCP timeout | npx nx build timed out (120s default) | Need per-agent timeout + sonirico/mcp-shell max_execution_time |
 | 2026-06-30 | Permission denied | agent tried to delegate to "developer" | Removed agent-mcp MCP server from leaf agents, use allowedAgents |
 | 2026-06-30 | Not connected | agent-mcp connection lost after timeout | Connection restored, agent definitions updated with absolute paths |
+| 2026-06-30 | Context explosion — 710K tokens | agent called directory_tree (330K) + cat (70K+20K+19K+16K); no context limit; pathological retries | cat removed from allowlist, directory_tree banned, CONTEXT_LIMIT=30K, fail-fast rule, CONTEXT MANAGEMENT section, FEAT-011 filed, budget plugin pending |
