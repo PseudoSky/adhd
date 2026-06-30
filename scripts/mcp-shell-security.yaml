@@ -7,11 +7,11 @@ security:
     - yarn
     - echo
     - ls
-    - cat
     - which
     - head
     - tail
     - wc
+    - grep
     - pwd
     - true
     - false
@@ -27,6 +27,7 @@ security:
     - 'wget\s+'
     - 'kill\s+'
     - '>+\s+/'
+    - 'cat\s'
   max_execution_time: 300s
   max_output_size: 5242880
   working_directory: /Users/nix/dev/node/adhd

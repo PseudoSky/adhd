@@ -570,6 +570,53 @@ an actionable error rather than silently doing nothing.
 
 **References** — `src/providers/anthropic.ts` (`toAnthropicTools`), `docs/plan/agent-registry/RUNTIME_GAPS.md` (full analysis + recommended handoff), `docs/plan/agent-registry/{SCOPE,DATA_MODEL,SEED_DATA}.md`. (Surfaced during agent-registry plan review, 2026-06-22.)
 
+### FEAT-011 — Reusable base system prompt with behavioral guardrails — priority: HIGH
+- **Status:** backlog
+- **Priority:** P0
+- **Area:** engine, session-store, agent-crud
+- **Reported:** 2026-06-30
+
+**Problem / Description**
+Agent-mcp agents lack the behavioral guardrails that production coding agents (opencode, Claude Code) provide as part of their system prompt. Without them, agents exhibit pathological context usage: calling `directory_tree` on a full worktree (330K tokens), `cat`-ing 70K-line files, retrying failed operations 25+ times, and never truncating tool output.
+
+**Root cause analysis (from live debugging, 2026-06-30)**
+A `dispatch-optimizer-impl` agent consumed 710K input tokens doing the equivalent of reading a few source files. Comparing the agent's system prompt to the opencode `default.txt` (which powers the orchestrator LLM) revealed the gap:
+
+The agents had a purely procedural prompt — "You have tools X, Y, Z. Do task A, B, C." Every prompt engineering instinct that makes opencode agents economical was missing: token economy directives, conciseness mandates, tool selection guidance, "think before acting" instructions.
+
+**Impact**
+- 710K DeepSeek task — agent called directory_tree (330K), then cat-ed compiler.ts (70K), DECISIONS.md (20K), types.ts (19K), validate.ts (16K). Each result loaded verbatim into context and re-sent on every subsequent model call.
+- 565K + 509K dispatch-client tasks — exceeded tool loops retrying failed operations.
+- No context limit (`ADHD_AGENT_CONTEXT_LIMIT=0`, default) — old messages never truncated.
+- Token waste verified via `usage_query`: 3.27M input tokens across 45 tasks, mostly from pathological tool usage rather than productive work.
+
+**Mitigations already deployed (per-agent prompts):**
+1. `cat` removed from sonirico/mcp-shell allowlist, `cat\s` added to blocked_patterns
+2. `directory_tree` explicitly banned in agent system prompts
+3. `head -n 100` instruction added to agent system prompts
+4. `ADHD_AGENT_CONTEXT_LIMIT=30000` added to `.env`
+5. Fail-fast rule: stop on first error, don't retry
+
+**Proposed fix / Approach (structural, not per-agent):**
+1. **Reusable base system prompt** — a template that carries behavioral guardrails independent of task-specific instructions. Every agent inherits it at session start.
+2. **agent-mcp `baseSystemPrompt` feature** — admin/caller sets a "base system prompt" prepended to every agent's system prompt at session start. One copy per session, so it doesn't blow up token cost.
+3. **Server-side enforcement plugin** — caps tool result sizes, blocks known-wasteful tools, injects summary stubs into tool results that exceed configured limits (the idea in memory `01KWD5V03F3J66XFJDFBTBMFNY`).
+4. **Per-call token tracking** — split `task_usage` into per-call rows so the tail script shows actual per-request token counts, not just accumulated totals.
+
+**Desired outcome:** A new agent created via `agent_create` has behavioral guardrails at session start without the caller needing to know about them.
+
+**Acceptance criteria**
+- New agent definitions automatically include base behavioral guardrails at session start
+- Context explosion from large tool results is preventable at the server level
+- `usage_query` for equivalent tasks shows < 50K tokens (down from 710K)
+
+**References:**
+- `docs/plan/agents-full-workflow/RESEARCH.md` — full session log and agent definitions
+- `docs/ideas/tool-plugins.md` — tool plugin proposal for server-side enforcement
+- `scripts/mcp-shell-security.yaml` — current shell restrictions
+- Memory `01KWD5V03F3J66XFJDFBTBMFNY` — tool-result proxying idea
+- Opencode `packages/opencode/src/session/prompt/default.txt` — the behavioral prompt that inspired this entry
+
 ---
 
 ## 🔧 Tech Debt / Improvements
