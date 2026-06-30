@@ -214,6 +214,79 @@ describe("T2: ephemeral run with tool call emits TOOL_CALL + TOOL_RESULT events"
         expect(eventTypes).toContain("TOOL_CALL");
         expect(eventTypes).toContain("TOOL_RESULT");
     });
+
+    it("TOOL_CALL payload includes arguments, TOOL_RESULT includes result (BUG-006)", async () => {
+        h = await buildHarness({ skipOrphanScan: true });
+        const agentName = `agent-${generateId()}`;
+        // Agent needs mcpServers with "agent-mcp" entry so the in-process client routes tool calls
+        h.agentStore.create({
+            name: agentName,
+            provider: { type: "openai", model: "gpt-4o-mini" },
+            systemPrompt: "You are a helpful assistant.",
+            mcpServers: { "agent-mcp": { transport: "stdio", command: "node" } },
+            permissions: {},
+        });
+
+        const toolCallId = generateId();
+        const testArgs = { filePath: "/test/path", limit: 100 };
+        const provider = new ScriptedProvider([
+            {
+                type: "tool_calls",
+                toolCalls: [
+                    {
+                        id: toolCallId,
+                        server: "agent-mcp",
+                        tool: "agent_list",
+                        arguments: testArgs,
+                    },
+                ],
+            },
+            { type: "completed", content: "done" },
+        ]);
+
+        // Provide in-process descriptors+handler so agent_list routes to a real result
+        const patchedDeps: TaskDeps = {
+            ...h.taskDeps,
+            inProcessDescriptors: [
+                { name: "agent_list", description: "List agents", inputSchema: { type: "object", properties: {} } },
+            ],
+            inProcessHandler: async (toolName: string) => {
+                if (toolName === "agent_list") return [{ name: "found-agent" }];
+                throw new Error(`unexpected tool: ${toolName}`);
+            },
+            orchestrator: {
+                run: (input: Parameters<Orchestrator["run"]>[0]) =>
+                    h.orchestrator.run({ ...input, provider }),
+            } as Orchestrator,
+        };
+
+        const output = await taskTool(
+            { agent_name: agentName, prompt: "list agents" },
+            patchedDeps
+        );
+
+        expect(output.status).toBe("completed");
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const db = h.db as any;
+        const events = db
+            .select()
+            .from(taskEventsTable)
+            .where(eq(taskEventsTable.taskId, output.task_id))
+            .all();
+
+        const toolCall = events.find((e: { type: string }) => e.type === "TOOL_CALL");
+        expect(toolCall).toBeDefined();
+        const tcPayload = JSON.parse(toolCall.payload);
+        expect(tcPayload.arguments).toBeDefined();
+        expect(tcPayload.arguments).toContain("/test/path");
+
+        const toolResult = events.find((e: { type: string }) => e.type === "TOOL_RESULT");
+        expect(toolResult).toBeDefined();
+        const trPayload = JSON.parse(toolResult.payload);
+        expect(trPayload.result).toBeDefined();
+        expect(trPayload.result).toContain("found-agent");
+    });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

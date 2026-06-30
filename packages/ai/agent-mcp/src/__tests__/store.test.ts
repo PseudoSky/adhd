@@ -93,6 +93,43 @@ describe("AgentStore", () => {
         expect(updated.createdAt).toBe(original.createdAt);
     });
 
+    it("update deep-merges mcpServers instead of replacing (BUG-005)", () => {
+        store.create({
+            ...sampleAgentInput(),
+            mcpServers: {
+                filesystem: { transport: "stdio", command: "node", args: ["fs.js"] },
+                shell: { transport: "stdio", command: "sh" },
+            },
+        });
+        // Update with only one server — should not drop the other
+        const updated = store.update({
+            name: "test-agent",
+            patch: {
+                mcpServers: {
+                    shell: { transport: "stdio", command: "bash" },
+                },
+            },
+        });
+        // Both servers must still exist
+        expect(updated.mcpServers.filesystem).toBeDefined();
+        expect(updated.mcpServers.filesystem.command).toBe("node");
+        // Shell was updated
+        expect(updated.mcpServers.shell.command).toBe("bash");
+    });
+
+    it("update deep-merges permissions instead of replacing (BUG-005)", () => {
+        store.create({
+            ...sampleAgentInput(),
+            permissions: { allowedAgents: ["reviewer"] },
+        });
+        // Update with empty permissions — should not drop existing
+        const updated = store.update({
+            name: "test-agent",
+            patch: { permissions: {} },
+        });
+        expect(updated.permissions.allowedAgents).toEqual(["reviewer"]);
+    });
+
     it("lists all agents", () => {
         store.create(sampleAgentInput());
         store.create({ ...sampleAgentInput(), name: "agent-2" });
