@@ -34,9 +34,13 @@
     "serve": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "node dist/packages/ai/agent-mcp/src/index.js"
+        "command": "node dist/packages/ai/agent-mcp/src/index.js",
+        "cwd": "{workspaceRoot}"
       },
-      "dependsOn": ["build"]
+      "dependsOn": ["build"],
+      "metadata": {
+        "description": "Build + run the agent-mcp server, including the OpenAI-compatible chat gateway on the SSE host/port. Config (incl. ADHD_AGENT_* defaults) is loaded from .env / ~/.adhd/.env — see packages/ai/agent-mcp/.env.example. Run: `npx nx serve agent-mcp`."
+      }
     },
 
     "dev": {
