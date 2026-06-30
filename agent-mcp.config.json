@@ -1,0 +1,12 @@
+{
+  "plugins": [
+    {
+      "module": "@adhd/agent-mcp-budget",
+      "config": {
+        "maxTotalTokens": 50000,
+        "maxModelCalls": 8,
+        "maxWallClockMs": 120000
+      }
+    }
+  ]
+}
