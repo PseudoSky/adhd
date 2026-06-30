@@ -16,7 +16,12 @@ const MIGRATIONS: MigrationStep[] = [
     };
     if (!dag["effort_max_tokens"]||Object.keys(dag["effort_max_tokens"]as object).length===0) dag["effort_max_tokens"]={low:1024,medium:4096,high:8192,xhigh:16384,max:32768};
     if (!dag["optimization"]) dag["optimization"]={sentinel_fanout:{enabled:true,write_multiplier:1.25,read_multiplier:0.1,hit_probability:0.9},b_per_tier:{Haiku:8000,Sonnet:15000,Opus:27000},context_window_per_tier:{Haiku:16000,Sonnet:16000,Opus:32000},context_window_override:null,b_override:null};
-    const ops = Array.isArray(dag["operations"])?(dag["operations"]as unknown[]):dag["operations"]?Object.values(dag["operations"]as Record<string,unknown>):[];
+    let ops: unknown[] = [];
+    if (Array.isArray(dag["operations"])) {
+      ops = dag["operations"] as unknown[];
+    } else if (dag["operations"] && typeof dag["operations"] === "object") {
+      ops = Object.values(dag["operations"] as Record<string, unknown>);
+    }
     for (const op of ops) { if (typeof op==="object"&&op!==null) { const o=op as Record<string,unknown>; if (o["type"]===undefined) o["type"]="generative"; if (o["criteria"]===undefined) o["criteria"]=[]; if (o["tool"]===undefined) o["tool"]=null; if (o["args"]===undefined) o["args"]=null; }}
   }}
 ];

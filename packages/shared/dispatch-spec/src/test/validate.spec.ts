@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { validateDagJson, validateSnapshot } from "../lib/validate.js";
 import { migrateDag } from "../lib/migrate.js";
+import type { ValidationError } from "../lib/types.js";
 
 function miniDag(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -26,7 +27,7 @@ describe("validateDagJson", () => {
     });
     const r = validateDagJson(d);
     expect(r.valid).toBe(false);
-    expect(r.errors.some((e:any)=>e.message.includes("cycle"))).toBe(true);
+    expect(r.errors.some((e: ValidationError) => e.message.includes("cycle"))).toBe(true);
   });
   it("catches missing terminal ref", () => {
     expect(validateDagJson(miniDag({terminal:"nonexistent"})).valid).toBe(false);
@@ -69,7 +70,7 @@ describe("validateSnapshot", () => {
   it("validates correct snapshot", () => { expect(validateSnapshot(baseSnap).valid).toBe(true); });
   it("catches D-07 violation", () => {
     const b = JSON.parse(JSON.stringify(baseSnap)); b.milestones.a.pending="q";
-    expect(validateSnapshot(b).errors.some((e:any)=>e.message.includes("D-07"))).toBe(true);
+    expect(validateSnapshot(b).errors.some((e: ValidationError) => e.message.includes("D-07"))).toBe(true);
   });
   it("catches invalid status", () => {
     const b = JSON.parse(JSON.stringify(baseSnap)); b.milestones.a.status="bad";

@@ -29,7 +29,7 @@ function detectCycle(milestones: Record<string, { depends_on: string[] }>): { sl
   const queue = slugs.filter(s => (inDegree.get(s)??0)===0);
   const visited = new Set<string>();
   while (queue.length > 0) {
-    const slug = queue.shift()!; visited.add(slug);
+    const slug = queue.shift(); if (slug === undefined) continue; visited.add(slug);
     for (const child of children.get(slug)??[]) {
       const d = (inDegree.get(child)??1)-1; inDegree.set(child,d);
       if (d===0) queue.push(child);
