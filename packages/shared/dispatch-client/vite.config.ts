@@ -3,10 +3,12 @@ import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import fs from 'node:fs';
+import pathMod from 'node:path';
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/dispatch/dispatch-client',
+  cacheDir: '../../../node_modules/.vite/packages/shared/dispatch-client',
 
   plugins: [
     {
@@ -14,12 +16,11 @@ export default defineConfig({
       name: 'apigen-copy-readme',
       apply: 'build',
       closeBundle() {
-        const fs = require('node:fs'), p = require('node:path');
-        const src = p.resolve(__dirname, 'README.md');
-        if (!fs.existsSync(src)) return;
-        const out = p.resolve(__dirname, '../../../dist/packages/dispatch/dispatch-client');
-        fs.mkdirSync(out, { recursive: true });
-        fs.copyFileSync(src, p.join(out, 'README.md'));
+        const srcPath = pathMod.resolve(__dirname, 'README.md');
+        if (!fs.existsSync(srcPath)) return;
+        const outDir = pathMod.resolve(__dirname, '../../../dist/packages/shared/dispatch-client');
+        fs.mkdirSync(outDir, { recursive: true });
+        fs.copyFileSync(srcPath, pathMod.join(outDir, 'README.md'));
       },
     },
     nxViteTsPaths(),
