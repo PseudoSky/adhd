@@ -14,6 +14,7 @@ __metadata:
     "@babel/preset-react": "npm:^7.14.5"
     "@material-tailwind/react": "npm:^2.1.9"
     "@modelcontextprotocol/sdk": "npm:1.29.0"
+    "@modelcontextprotocol/server-filesystem": "npm:^2026.1.14"
     "@nx/cypress": "npm:18.3.4"
     "@nx/eslint": "npm:18.3.4"
     "@nx/eslint-plugin": "npm:18.3.4"
@@ -3470,7 +3471,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@modelcontextprotocol/sdk@npm:1.29.0":
+"@modelcontextprotocol/sdk@npm:1.29.0, @modelcontextprotocol/sdk@npm:^1.25.2":
   version: 1.29.0
   resolution: "@modelcontextprotocol/sdk@npm:1.29.0"
   dependencies:
@@ -3500,6 +3501,21 @@ __metadata:
     zod:
       optional: false
   checksum: 10c0/7c4bc339205b1652330cd4e6b121cc859079655f2b9c0506bbb15563ba0d07924bda3d949705530532db7f4d2cb86d633dc8f92bc32803d97c7bece2ac63e29f
+  languageName: node
+  linkType: hard
+
+"@modelcontextprotocol/server-filesystem@npm:^2026.1.14":
+  version: 2026.1.14
+  resolution: "@modelcontextprotocol/server-filesystem@npm:2026.1.14"
+  dependencies:
+    "@modelcontextprotocol/sdk": "npm:^1.25.2"
+    diff: "npm:^5.1.0"
+    glob: "npm:^10.5.0"
+    minimatch: "npm:^10.0.1"
+    zod-to-json-schema: "npm:^3.23.5"
+  bin:
+    mcp-server-filesystem: dist/index.js
+  checksum: 10c0/e36b54f10fb7e5482d6bd3bb36fa557b584fe4fe3a591065a2e89e4e913f65b5411c76284159f67068fed76bc5c36826476accdce89a6ef70cbd3dbb6e7152f3
   languageName: node
   linkType: hard
 
@@ -11868,6 +11884,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"diff@npm:^5.1.0":
+  version: 5.2.2
+  resolution: "diff@npm:5.2.2"
+  checksum: 10c0/52da594c54e9033423da26984b1449ae6accd782d5afc4431c9a192a8507ddc83120fe8f925d7220b9da5b5963c7b6f5e46add3660a00cb36df7a13420a09d4b
+  languageName: node
+  linkType: hard
+
 "diffable-html@npm:^4.1.0":
   version: 4.1.0
   resolution: "diffable-html@npm:4.1.0"
@@ -14909,7 +14932,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"glob@npm:^10.0.0, glob@npm:^10.2.2":
+"glob@npm:^10.0.0, glob@npm:^10.2.2, glob@npm:^10.5.0":
   version: 10.5.0
   resolution: "glob@npm:10.5.0"
   dependencies:
@@ -18989,7 +19012,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"minimatch@npm:^10.2.2":
+"minimatch@npm:^10.0.1, minimatch@npm:^10.2.2":
   version: 10.2.5
   resolution: "minimatch@npm:10.2.5"
   dependencies:
@@ -26741,7 +26764,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod-to-json-schema@npm:^3.25.1":
+"zod-to-json-schema@npm:^3.23.5, zod-to-json-schema@npm:^3.25.1":
   version: 3.25.2
   resolution: "zod-to-json-schema@npm:3.25.2"
   peerDependencies:

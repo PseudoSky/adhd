@@ -800,6 +800,53 @@ react without polling the `result` tool.
 
 ---
 
+## CLI tools
+
+agent-mcp ships two command-line tools:
+
+| Command | Description |
+|---|---|
+| `agent-mcp` | Start the MCP server (stdio or SSE) |
+| `agent-mcp-tail` | Tail live task events from the agent-mcp database |
+
+### agent-mcp-tail
+
+Live-tail tool calls, model requests, and task lifecycle events as they are
+written to the database. Shows humanized timestamps, agent name, session ID,
+event type, and a preview of the payload.
+
+```
+agent-mcp-tail
+
+🧵 agent-mcp-tail — watching ~/.adhd/agent-mcp/agents.db
+16:02:15.123 ─── started ───
+16:02:17.456 🤖 dispatch-client       abcdef12 MODEL_REQUEST    {"model":"deepseek-chat","tokens":1234}
+16:02:19.890 🔧 dispatch-client       abcdef12 TOOL_CALL        {"tool":"filesystem__read_file","args":{...}}
+16:02:20.123 📦 dispatch-client       abcdef12 TOOL_RESULT      {"tool":"filesystem__read_file","result":"..."}
+16:02:22.456 💬 dispatch-client       abcdef12 MODEL_RESPONSE   {"stop_reason":"tool_calls","tokens":567}
+```
+
+Point at a custom database path:
+
+```
+ADHD_AGENT_DATABASE_PATH=/custom/path/agents.db agent-mcp-tail
+```
+
+The tool polls the database every 500ms using SQLite WAL mode (safe to run
+concurrently with agent-mcp). No build step required — run directly with npx:
+
+```
+npx @adhd/agent-mcp agent-mcp-tail
+```
+
+or locally after building:
+
+```
+node dist/packages/ai/agent-mcp/src/scripts/agent-mcp-tail.js
+```
+
+---
+
 ## Error codes
 
 | Code | Meaning |

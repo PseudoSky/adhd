@@ -1,0 +1,33 @@
+security:
+  enabled: true
+  use_shell_execution: false
+  allowed_executables:
+    - npx
+    - npm
+    - yarn
+    - echo
+    - ls
+    - cat
+    - which
+    - head
+    - tail
+    - wc
+    - pwd
+    - true
+    - false
+  blocked_patterns:
+    - '(-e|--eval|--print|-p)\s+'
+    - 'rm\s+(-rf|-r|-f|-fr)?(\s|$)'
+    - 'sudo\s+'
+    - 'chmod\s+'
+    - 'chown\s+'
+    - 'mkfs'
+    - 'dd\s+'
+    - 'curl\s+'
+    - 'wget\s+'
+    - 'kill\s+'
+    - '>+\s+/'
+  max_execution_time: 300s
+  max_output_size: 5242880
+  working_directory: /Users/nix/dev/node/adhd
+  audit_log: true

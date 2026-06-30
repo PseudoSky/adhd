@@ -1,7 +1,7 @@
 {
   "name": "shared-dispatch-client",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/dispatch/dispatch-client/src",
+  "sourceRoot": "packages/shared/dispatch-client/src",
   "projectType": "library",
   "release": {
     "version": {
