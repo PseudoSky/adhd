@@ -1,0 +1,25 @@
+{
+  "name": "@adhd/agent-mcp-sanitize",
+  "version": "0.0.1",
+  "description": "Sub-agent output sanitization plugin for @adhd/agent-mcp — configurable strategies (prefix, wrap, none) to defend against prompt injection across agent boundaries",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "typings": "./index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./index.mjs",
+      "require": "./index.js",
+      "types": "./index.d.ts"
+    }
+  },
+  "peerDependencies": {
+    "@adhd/agent-mcp-types": "*"
+  },
+  "dependencies": {
+    "zod": "*"
+  }
+}

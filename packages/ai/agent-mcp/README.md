@@ -717,6 +717,89 @@ If you have Claude Code installed and authenticated, you can use the `claudecli`
 
 ---
 
+## Plugins
+
+The server supports external plugins that hook into the task lifecycle. Plugins are
+enabled via an `agent-mcp.config.json` file (project root or `~/.agent-mcp/config.json`,
+or pointed at by `ADHD_AGENT_CONFIG`):
+
+```json
+{
+  "plugins": [
+    { "module": "@adhd/agent-mcp-budget",  "config": { "maxTotalTokens": 50000 } },
+    { "module": "@adhd/agent-mcp-sanitize" }
+  ]
+}
+```
+
+Or via the `ADHD_AGENT_PLUGINS` environment variable (legacy shorthand):
+
+```
+ADHD_AGENT_PLUGINS="@adhd/agent-mcp-budget,@adhd/agent-mcp-sanitize"
+```
+
+Official plugins:
+
+| Package | Purpose |
+|---------|---------|
+| [`@adhd/agent-mcp-budget`](https://www.npmjs.com/package/@adhd/agent-mcp-budget) | Cap token spend, cost, wall-clock time per task/session/agent |
+| [`@adhd/agent-mcp-policy`](https://www.npmjs.com/package/@adhd/agent-mcp-policy) | Rate limits and delegation permissions |
+| [`@adhd/agent-mcp-sanitize`](https://www.npmjs.com/package/@adhd/agent-mcp-sanitize) | Sub-agent output sanitization (prompt-injection defence) |
+
+All failures are logged and skipped — a broken plugin never prevents the server from
+starting.
+
+### Writing a plugin
+
+A plugin is a package that exports a `createPlugin` factory (default or named) and
+optionally a `configSchema` (Zod-compatible). The factory receives `{ db, config }`
+and returns a `Plugin` with an `install(hooks)` method:
+
+```ts
+import type { Plugin, PluginContext } from "@adhd/agent-mcp-types";
+
+export const configSchema = z.object({ ... });
+
+export default function createPlugin({ config }: PluginContext): Plugin {
+  return {
+    name: "my-plugin",
+    install(hooks) {
+      hooks.register("transform:tool_result", (payload) => {
+        // mutate payload.result before it reaches the parent model
+      });
+    },
+  };
+}
+```
+
+Available hook events:
+
+| Event | Contract |
+|-------|----------|
+| `task:start` | Observational |
+| `pre:model_request` | **Enforcement** (throws fail the task) |
+| `post:model_response` | Observational |
+| `pre:tool_call` | Observational |
+| `post:tool_call` | Observational |
+| `transform:tool_result` | **Transform** (mutate `payload.result` in place) |
+| `message:appended` | Observational |
+| `task:completed` / `task:failed` / `task:cancelled` | Observational |
+
+Observational handlers have errors swallowed — a buggy plugin never kills a task.
+Enforcement handlers on `pre:model_request` can throw to fail the task (used by the
+budget plugin). Transform handlers on `transform:tool_result` mutate the tool result
+before it enters conversation history (used by the sanitize plugin).
+
+---
+
+## MCP notifications
+
+When a background task completes, the server pushes a `notifications/task/completed`
+notification over the connected transport. Hosts that support MCP notifications can
+react without polling the `result` tool.
+
+---
+
 ## Error codes
 
 | Code | Meaning |

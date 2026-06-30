@@ -36,5 +36,18 @@
     "owner": "executor environment",
     "how_to_provide": "Start LM Studio's local server with a model loaded; export LMSTUDIO_BASE_URL (e.g. http://localhost:1234/v1). Set AGENT_MCP_LIVE=1.",
     "blocks_at": "per-state"
+  },
+  "sox-package-publish": {
+    "type": "external-resource",
+    "description": "The @adhd/sox-embedding-provider, @adhd/sox-vector-store, @adhd/sox-ingest, and @adhd/sox-analysis packages must be available as npm deps (published, linked, or local path) before the embedding-substrate state can add them to package.json. Only @adhd/sox-memory-core is published; all others 404 on npm as of 2026-06-29. Decisions.md §D5 documents three options: publish, npm link, or local path reference.",
+    "required_by": [
+      "embedding-substrate",
+      "enrichment-pipeline"
+    ],
+    "verification": "node -e \"require('@adhd/sox-embedding-provider'); require('@adhd/sox-vector-store'); require('@adhd/sox-ingest'); console.log('ALL RESOLVE OK')\" 2>&1",
+    "status": "needed",
+    "owner": "executor environment",
+    "how_to_provide": "Run one of the three options in decisions.md §D5 (publish to npm, npm link, or add file: paths to adhd's package.json). Then verify all four packages resolve.",
+    "blocks_at": "state-start"
   }
 }

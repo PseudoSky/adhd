@@ -3,6 +3,20 @@
   "title": "Agent Registry — Migration & Removal (@adhd/agent-registry-migration)",
   "dag": "dag.json",
   "states": {
+    "seed-provider-registry": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
+    "artifact-cleanup": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    },
     "migration-design": {
       "status": "pending",
       "started_at": null,
@@ -99,7 +113,7 @@
   "dod_provenance": {
     "confirmed_at": "2026-06-26T04:18:33.555Z",
     "by": "pseudosky",
-    "note": "Owner human sign-off 2026-06-26: LLM-driven corpus ingestion — deterministic parser over full 18-type set -> haiku fan-out per component -> sonnet consolidation (dedup with teeth) -> dataset-build -> public importCorpus(); anchor backfill for Plan 8. Confirmed via plain-language DoD sheet.",
+    "note": "Owner human sign-off 2026-06-26: LLM-driven corpus ingestion — deterministic parser over full 18-type set -> haiku fan-out per component -> sonnet consolidation (dedup with teeth) -> dataset-build -> public importCorpus(); anchor backfill for Plan 8. Confirmed via plain-language DoD sheet. Inherited scope from superseded plans: seed-provider-registry (from agent-provider-credentialing), artifact-cleanup (from agent-registry-release).",
     "dod_ids": [
       "dod.1",
       "dod.2",

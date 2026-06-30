@@ -3,6 +3,7 @@
   "title": "Agent Registry — Migration & Removal (@adhd/agent-registry-migration)",
   "plan_kind": "brownfield",
   "phases": [
+    "superseded-scope",
     "architecture",
     "foundation",
     "parse",
@@ -14,6 +15,37 @@
   ],
   "terminal": "done",
   "nodes": {
+    "seed-provider-registry": {
+      "kind": "work",
+      "phase": "superseded-scope",
+      "depends_on": [],
+      "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+      "artifacts": [
+        "packages/ai/agent-provider/src/seed/providers.ts",
+        "packages/ai/agent-provider/src/seed/models.ts",
+        "packages/ai/agent-provider/src/seed/bindings.ts",
+        "packages/ai/agent-provider/src/seed/index.ts",
+        "packages/ai/agent-provider/src/store/provider-store.ts",
+        "packages/ai/agent-provider/src/store/model-store.ts",
+        "packages/ai/agent-provider/src/store/tool-format-store.ts"
+      ],
+      "context": "contexts/seed-provider-registry.md",
+      "notes": "Inherited from agent-provider-credentialing dod.1 registry-seed clause — the credentialing runtime was implemented out-of-band by docs/mcp-env/SPEC.md, but the registry seed rows (provider_providers, provider_models, platform-bindings, tool-formats) were never populated."
+    },
+    "artifact-cleanup": {
+      "kind": "work",
+      "phase": "superseded-scope",
+      "depends_on": [],
+      "guard": "python3 docs/plan/agent-registry-migration/scripts/audit_migration.py --phase cleanup",
+      "artifacts": [
+        "docs/plan/agent-registry/CLOSEOUT.md",
+        "docs/plan/agent-registry/COVERAGE.md",
+        "docs/plan/agent-registry/DEMO.md",
+        "docs/plan/agent-registry/demo/"
+      ],
+      "context": "contexts/artifact-cleanup.md",
+      "notes": "Inherited from agent-registry-release dod.4 artifact-cleanup — the merge and publish happened out-of-band, but untracked initiative artifacts under docs/plan/agent-registry/ were never committed/relocated/removed."
+    },
     "migration-design": {
       "kind": "work",
       "phase": "architecture",
@@ -93,7 +125,9 @@
       "kind": "audit",
       "phase": "audit",
       "depends_on": [
-        "code-review"
+        "code-review",
+        "seed-provider-registry",
+        "artifact-cleanup"
       ],
       "guard": "python3 docs/plan/agent-registry-migration/scripts/audit_migration.py --phase final",
       "artifacts": [
