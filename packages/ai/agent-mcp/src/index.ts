@@ -31,6 +31,7 @@ import { UsagePlugin } from "./plugins/index.js";
 import { loadExternalPlugins } from "./plugins/loader.js";
 import { startServer } from "./server.js";
 import { startSseServer } from "./streaming/sse-server.js";
+import type { GatewayDepsRef } from "./streaming/chat-gateway.js";
 import { enqueueExistingTask } from "./tools/task.js";
 import { tasksTable } from "./db/schema.js";
 import { eq } from "drizzle-orm";
@@ -288,7 +289,12 @@ async function main() {
     }
 
     // Start SSE server alongside MCP server — shares taskStore for terminal-on-connect checks.
-    const sseServer = startSseServer(taskStore);
+    // The chat gateway deps (agentStore, sessionStore, taskDeps) are wired via a ref-box
+    // that is populated after startServer resolves, mirroring the taskDepsRef pattern.
+    // This avoids any circular/early-init issue: startSseServer starts the HTTP server
+    // immediately, but gateway routes return 503 until the ref is populated below.
+    const gatewayDepsRef: GatewayDepsRef = { value: undefined };
+    const sseServer = startSseServer(taskStore, config.sse.port, config.sse.host, gatewayDepsRef);
 
     const { close } = await startServer({
         agentStore,
@@ -331,6 +337,15 @@ async function main() {
         },
         db: dbAny,
         dagEngine,
+    };
+
+    // Wire the chat gateway now that all deps are available.
+    // Routes return 503 before this point; normal operation begins here.
+    gatewayDepsRef.value = {
+        agentStore,
+        sessionStore,
+        taskStore,
+        taskDeps: taskDepsRef.value,
     };
 
     const orphanedPending = dbAny

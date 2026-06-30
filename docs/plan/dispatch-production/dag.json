@@ -1,0 +1,1299 @@
+{
+  "schema_version": 4,
+  "plan_kind": "brownfield",
+  "description": "Extract the dispatch-optimizer idea into a production-grade library ecosystem: spec, client/serializer, optimizer, plugins, tools, orchestrator, and CLI",
+  "problem": "The dispatch-optimizer (docs/plan/dispatch-optimizer) is a 3,132-line proof-of-concept in a docs directory with no package boundary, no tests, no DI, stubbed features, and no consumer-facing surface. It cannot be consumed as a library, dispatched by the orchestrator, or integrated with agent-mcp in production.",
+  "approach": "Decompose into 7 layered packages + 1 CLI app following the existing monorepo architecture. The key structural decisions: (1) serialization adapter pattern (IDagSerializer) keeps the client unaware of storage; (2) DagClient is the single CRUD authority — agents never read dag.json raw; (3) optimizer is pure computation with injected dependencies; (4) plugins (IO, gitnexus) enrich snapshots post-hoc; (5) MCP tools wrap the client for agent-safe dag manipulation.",
+
+  "executor": "workflow:plan-orchestrator",
+  "executor_model": "Sonnet",
+  "executor_effort": "high",
+  "phases": ["foundation", "client", "optimizer", "plugins", "tools-and-orchestrator", "cli", "hardening"],
+  "terminal": "hardening-complete",
+  "assumed_baseline": ["dispatch-optimizer", "agent-compiler"],
+
+  "optimization": {
+    "sentinel_fanout": {
+      "enabled": true,
+      "write_multiplier": 1.25,
+      "read_multiplier": 0.1,
+      "hit_probability": 0.9
+    },
+    "b_per_tier": {
+      "Haiku": 8000,
+      "Sonnet": 15000,
+      "Opus": 27000
+    },
+    "context_window_per_tier": {
+      "Haiku": 16000,
+      "Sonnet": 16000,
+      "Opus": 32000
+    },
+    "context_window_override": null,
+    "b_override": null
+  },
+
+  "providers": {
+    "Haiku": {
+      "type": "claudecli",
+      "model_id": "claude-haiku-4-5",
+      "env_secret": null,
+      "base_url": null,
+      "timeout_ms": 60000,
+      "retry_config": { "retries": 3, "min_timeout": 1000, "max_timeout": 30000, "factor": 2 }
+    },
+    "Sonnet": {
+      "type": "claudecli",
+      "model_id": "claude-sonnet-4-5",
+      "env_secret": null,
+      "base_url": null,
+      "timeout_ms": 120000,
+      "retry_config": { "retries": 3, "min_timeout": 1000, "max_timeout": 30000, "factor": 2 }
+    },
+    "Opus": {
+      "type": "claudecli",
+      "model_id": "claude-opus-4-5",
+      "env_secret": null,
+      "base_url": null,
+      "timeout_ms": 300000,
+      "retry_config": { "retries": 2, "min_timeout": 2000, "max_timeout": 60000, "factor": 2 }
+    }
+  },
+
+  "effort_max_tokens": {
+    "low": 1024,
+    "medium": 4096,
+    "high": 8192,
+    "xhigh": 16384,
+    "max": 32768
+  },
+
+  "milestones": {
+
+    "spec-types": {
+      "description": "@adhd/dispatch-spec ships: TypeScript types (DagJson, DagSnapshot, DispatchUnit, Shape, Operation, Milestone, DispatchLog, all sub-types) from the current types.ts; JSON Schema documents for dag.json v4 and dag-snapshot.json; schema_version field enforcement; a migrateDag() function that accepts (fromVersion, toVersion, dag) and returns the upgraded dag",
+      "rationale": "Types are the data contract. Every other package imports from @adhd/dispatch-spec. Must be platform:shared, zero dependencies, no I/O. The existing types.ts (660 lines) is the source; extract into a proper Nx package with index.ts barrel export. JSON Schema documents enable non-TS consumers (Python orchestrator, Go agent) to validate dag.json without a TS runtime.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "foundation",
+      "depends_on": [],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Sonnet",
+      "effort": "medium",
+      "two_stage": false,
+      "read_only": [
+        "docs/plan/dispatch-optimizer/PROPOSED_DAG_STRUCTURE.md",
+        "docs/plan/dispatch-optimizer/src/dag/types.ts",
+        "docs/plan/dispatch-optimizer/DECISIONS.md"
+      ],
+      "guard": "npx nx build dispatch-spec && npx nx typecheck dispatch-spec"
+    },
+
+    "spec-validate": {
+      "description": "@adhd/dispatch-spec exports: validateDagJson(dag) → { valid, errors[] } covering: cycle detection in depends_on, no orphan ops (operation.milestone must exist), D-07 invariant (eligible implies pending==null), guard op id convention (<slug>.guard), shape.kind valid enum, all required fields present; validateSnapshot(snap) → { valid, errors[] } covering: all derived fields populated, no null waves, status is valid enum, pairwise_overlap keys are sorted slug pairs, open_questions have valid blocking references",
+      "rationale": "Validation is pure structural logic — no I/O, no filesystem. Lives in spec alongside types because validation is part of the data contract: a dag.json that passes validateDagJson() is a valid input to any compliant implementation. The current validate.ts (325 lines) is a partial implementation; this milestone completes it.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "foundation",
+      "depends_on": ["spec-types"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Sonnet",
+      "effort": "medium",
+      "two_stage": false,
+      "read_only": [
+        "docs/plan/dispatch-optimizer/src/dag/validate.ts",
+        "docs/plan/dispatch-optimizer/PROPOSED_DAG_STRUCTURE.md",
+        "docs/plan/dispatch-optimizer/DECISIONS.md"
+      ],
+      "guard": "npx nx test dispatch-spec"
+    },
+
+    "client-core": {
+      "description": "@adhd/dispatch-client ships: (1) IDagSerializer interface — read(), write(), appendDispatchLog(), onExternalWrite?() — the serialization adapter contract; (2) IDagClient interface — milestone_add/get/list/update/delete, operation_add/get/list/update/delete, pending_set/clear, dispatch_log_append/get, field_get/set, full_dag(), validate(), create(); (3) DagClient(options: { serializer, validate }) implementation — validates after every mutation, enforces that operations reference existing milestones, dispatch_log_append is append-only, full_dag() returns the cached in-memory copy; (4) createDagClient() factory function",
+      "rationale": "DagClient is the single CRUD authority. No agent, CLI, or orchestrator reads dag.json raw — they call DagClient methods. The adapter pattern (IDagSerializer) is modeled on the existing HostAdapter pattern from @adhd/apigen-gateway (factory function → object literal implementing interface). The client itself is platform:shared (no I/O — the serializer does I/O). Validation injection keeps the client decoupled from schema version: pass in the validator from @adhd/dispatch-spec.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "client",
+      "depends_on": ["spec-validate"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Sonnet",
+      "effort": "high",
+      "two_stage": false,
+      "read_only": [
+        "packages/apigen/gateway/src/lib/gateway.ts",
+        "docs/plan/dispatch-optimizer/PROPOSED_DAG_STRUCTURE.md",
+        "docs/plan/dispatch-optimizer/src/dag/io.ts"
+      ],
+      "guard": "npx nx build dispatch-client && npx nx typecheck dispatch-client && npx nx test dispatch-client"
+    },
+
+    "serializer-json": {
+      "description": "@adhd/dispatch-serializer-json ships: createJsonFileSerializer(filePath) → IDagSerializer. Atomic writes via temp-file + rename (same as current io.ts). read() reads and parses JSON (returns null if file doesn't exist, which triggers client.create()). appendDispatchLog() reads, appends, writes atomically. onExternalWrite() uses fs.watch. Platform: node (uses fs, path).",
+      "rationale": "This is the canonical local serializer — dag.json on disk. Extracted from the current io.ts (114 lines). By implementing IDagSerializer, it's swappable: the orchestrator can use this locally, a remote version for server-managed plans, or a SQLite serializer for embedded use.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "client",
+      "depends_on": ["client-core"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Haiku",
+      "effort": "low",
+      "two_stage": false,
+      "read_only": [
+        "docs/plan/dispatch-optimizer/src/dag/io.ts",
+        "packages/apigen/gateway/src/lib/gateway.ts"
+      ],
+      "guard": "npx nx build dispatch-serializer-json && npx nx test dispatch-serializer-json"
+    },
+
+    "optimizer-core": {
+      "description": "@adhd/dispatch-optimizer ships: (1) IOptimizerDeps interface — { bPerTier, contextWindowPerTier, fileSizes?, dispatchLog? } — injected dependencies, none required beyond bPerTier and contextWindow (cold-start defaults); (2) snapshot(dag: DagJson, deps: IOptimizerDeps): DagSnapshot — pure computation, no I/O, ported from compiler.ts §snapshot(); (3) optimize(snapshot: DagSnapshot, deps: IOptimizerDeps): DispatchUnit[] — pure computation, ported from compiler.ts §optimize() with all 4 algorithms; (4) remove snapshotWithDag() — the dag-provider/effort injection goes into the orchestrator, not the optimizer. Platform: shared. Dependencies: @adhd/dispatch-spec only.",
+      "rationale": "The optimizer is the crown jewel — the 4-algorithm cascade (Bitmask DP, Tree DP, SA, HLFET) with automatic DAG structure detection. Must be pure computation: no I/O, no side effects, no agent-mcp knowledge. The current compiler.ts (2,033 lines) calls fs.statSync internally — this must be replaced with injected fileSizes() so the optimizer works with any byte provider (real FS, virtual FS, SQLite blob store, zero for cold-start).",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "optimizer",
+      "depends_on": ["spec-validate"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Sonnet",
+      "effort": "high",
+      "two_stage": false,
+      "read_only": [
+        "docs/plan/dispatch-optimizer/src/compiler.ts",
+        "docs/plan/dispatch-optimizer/SCOPE.md",
+        "docs/plan/dispatch-optimizer/PROPOSED_DAG_STRUCTURE.md",
+        "docs/plan/dispatch-optimizer/src/dag/types.ts"
+      ],
+      "guard": "npx nx build dispatch-optimizer && npx nx typecheck dispatch-optimizer && npx nx test dispatch-optimizer"
+    },
+
+    "plugin-io": {
+      "description": "@adhd/dispatch-plugin-io ships: createIOPlugin(rootDir: string) → { fileSizes(paths: string[]): Map<string, number>, readFiles(paths: string[]): Map<string, string> }. Wraps fs.statSync and fs.readFileSync. Injected into the optimizer's IOptimizerDeps.fileSizes. Also provides siBytesAsTokens(bytes, fileExt) → number (extracted from compiler.ts CHARS_PER_TOKEN). Platform: node.",
+      "rationale": "IO is the most basic plugin — without it, si_bytes=0 and pairwise_overlap actual stays at 0 (prospective only). Separating it into a plugin lets the optimizer run in browser/memory/test contexts where file I/O is impossible or undesirable.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "plugins",
+      "depends_on": ["optimizer-core"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Haiku",
+      "effort": "low",
+      "two_stage": false,
+      "read_only": [
+        "docs/plan/dispatch-optimizer/src/compiler.ts"
+      ],
+      "guard": "npx nx build dispatch-plugin-io && npx nx test dispatch-plugin-io"
+    },
+
+    "plugin-gitnexus": {
+      "description": "@adhd/dispatch-plugin-gitnexus ships: enrichWithGitnexus(snapshot: DagSnapshot, repoRoot: string): DagSnapshot. Reads the repo via gitnexus MCP to populate: blast_radius[] (upstream consumers per symbol), from/breaking/severity (AST read for current state of each file:symbol), conflict (same-wave op-key collision scan). Returns a new snapshot with these fields enriched. Does NOT modify the optimizer — runs post-snapshot, pre-optimize in the orchestrator pipeline.",
+      "rationale": "gitnexus enrichment is the highest-value plugin but the most optional — it requires a gitnexus MCP server running. The optimizer works without it (all enriched fields stay null/[]). Making it a separate plugin keeps the optimizer pristine and lets consumers opt in when gitnexus is available.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "plugins",
+      "depends_on": ["optimizer-core"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Sonnet",
+      "effort": "medium",
+      "two_stage": false,
+      "read_only": [
+        "docs/plan/dispatch-optimizer/PROPOSED_DAG_STRUCTURE.md",
+        "docs/plan/dispatch-optimizer/DECISIONS.md"
+      ],
+      "guard": "npx nx build dispatch-plugin-gitnexus && npx nx test dispatch-plugin-gitnexus"
+    },
+
+    "tools-mcp": {
+      "description": "@adhd/dispatch-tools ships: an MCP server that wraps IDagClient. Tools exposed: dag.milestone_add/get/list/update/delete, dag.operation_add/get/list/update/delete, dag.pending_get/set/clear, dag.field_get/set, dag.dispatch_log_append/get/list, dag.snapshot (read-only summary), dag.validate (structural). Does NOT expose full_dag() to agents — agents get scoped query methods only. Safety: validates after every mutation, atomic writes, no deletion without confirm:true, audit trail via dispatch_log notes on every tool call.",
+      "rationale": "D-13 specifies that dag-mutation actions are tool-call operations. This MCP server is the tool-call executor for dag mutations. The critical invariant: no agent ever reads dag.json into its context window. The planning agent calls dag.milestone_add() to author plan structure; the replan agent calls dag.pending_clear() + dag.operation_add() to fill in research results. The tools enforce referential integrity (operations reference existing milestones), structural validity (no cycles), and D-07 eligibility invariants.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "tools-and-orchestrator",
+      "depends_on": ["client-core", "serializer-json"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Sonnet",
+      "effort": "high",
+      "two_stage": false,
+      "read_only": [
+        "docs/plan/dispatch-optimizer/DECISIONS.md",
+        "docs/plan/dispatch-optimizer/PROPOSED_DAG_STRUCTURE.md",
+        "packages/ai/agent-mcp/README.md"
+      ],
+      "guard": "npx nx build dispatch-tools && npx nx test dispatch-tools"
+    },
+
+    "serializer-sqlite": {
+      "description": "@adhd/dispatch-serializer-sqlite ships: createSqliteSerializer(db: BetterSQLite3Database) → IDagSerializer. Stores dag.json as a JSON blob in a single-row table. read() queries and parses; write() serializes and upserts; appendDispatchLog() reads, appends, writes atomically in a transaction. Enables embedded use in agent-mcp or browser contexts. Platform: shared (BetterSQLite3 works in both).",
+      "rationale": "The serializer adapter pattern proves itself here — the same DagClient works identically whether dag.json lives on disk or in SQLite. This enables an agent-mcp instance to manage plans without filesystem access, or a browser-based plan viewer to operate on in-memory dags.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "tools-and-orchestrator",
+      "depends_on": ["client-core"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Haiku",
+      "effort": "low",
+      "two_stage": false,
+      "read_only": [
+        "packages/ai/agent-provider/src/store/model-store.ts",
+        "packages/ai/agent-mcp/src/store/agent-store.ts"
+      ],
+      "guard": "npx nx build dispatch-serializer-sqlite && npx nx test dispatch-serializer-sqlite"
+    },
+
+    "orchestrator-core": {
+      "description": "@adhd/dispatch-orchestrator ships: (1) OrchestratorDeps interface — { client: IDagClient, optimizer: { snapshot, optimize }, plugins?: { io?, gitnexus? }, agentMcp?: IDispatchAgentRunner, calibration?: ICalibrationStore }; (2) orchestrateCycle(deps): Promise<CycleResult> — runs one scheduling cycle: client.full_dag() → optimizer.snapshot(dag, resolvedDeps) → apply plugin enrichments → optimizer.optimize(snapshot) → apply sentinel fanout grouping → for each DispatchUnit, resolve provider + create agent + fire task + store remote_task_id; (3) orchestrate(deps): AsyncIterable<CycleResult> — runs cycles until terminal; (4) handle guard-only milestones, replan injection (triggered_by), correction milestones, pending-surfaced gate, dispatch_log appending after each task completes",
+      "rationale": "The orchestrator is the state machine loop — the bridge between the pure optimizer and the real world. It wires: client (for reading/writing dag.json), optimizer (for computing assignments), plugins (for enrichment), agent-mcp (for firing tasks), and calibration (for tracking B values). It's the only package that knows about all of them. The cycle design: snapshot → enrich → optimize → dispatch → poll → record → repeat — is a fixed pipeline that can be paused, resumed, and inspected.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "tools-and-orchestrator",
+      "depends_on": ["optimizer-core", "client-core", "plugin-io", "plugin-gitnexus"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Sonnet",
+      "effort": "high",
+      "two_stage": false,
+      "read_only": [
+        "docs/plan/dispatch-optimizer/SCOPE.md",
+        "docs/plan/dispatch-optimizer/DECISIONS.md",
+        "docs/plan/dispatch-optimizer/WORKFLOW.md",
+        "docs/plan/dispatch-optimizer/src/compiler.ts",
+        "packages/ai/agent-mcp/README.md"
+      ],
+      "guard": "npx nx build dispatch-orchestrator && npx nx typecheck dispatch-orchestrator"
+    },
+
+    "cli": {
+      "description": "apps/dispatch-cli ships: (1) dispatch snapshot <plan-slug> — client.full_dag() → optimizer.snapshot() + plugin enrichments → write dag-snapshot.json; (2) dispatch optimize <plan-slug> — full compile: snapshot + optimize → print dispatch plan summary; (3) dispatch run <plan-slug> — orchestrator loop, streams progress; (4) dispatch status <plan-slug> — renders open_questions, eligible milestones, wave progress; (5) dispatch calibrate <model-tier> — fires a null-task dispatch via agent-mcp to measure B, writes to ~/.adhd/dispatch-calibration.json; (6) dispatch validate <plan-slug> — validateDagJson() + print errors",
+      "rationale": "The CLI is the human entrypoint. It wires: JsonFileSerializer → DagClient → (Optimizer + Plugins + AgentMcpRunner) → Orchestrator. Each subcommand is self-contained. The CLI does no business logic — it's a thin command router.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "cli",
+      "depends_on": ["orchestrator-core", "tools-mcp", "serializer-sqlite"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Sonnet",
+      "effort": "medium",
+      "two_stage": false,
+      "read_only": [
+        "docs/plan/dispatch-optimizer/src/run.ts"
+      ],
+      "guard": "npx nx build dispatch-cli && dispatch --help"
+    },
+
+    "tests-golden": {
+      "description": "tests/goldens/dispatch-production/snapshot.golden.json and dispatch-units.golden.json exist. tests/harness.ts compares current compiler output against goldens — exit 0 on match, exit 1 on divergence. GOLDEN_HISTORY.md records each regen. Covers the full pipeline: dag.json → snapshot() → optimize() → DispatchUnit[] — compared byte-identical on all non-timestamp fields across two runs (snapshot determinism).",
+      "rationale": "SCOPE.md §F1 defines L1 success: compiler correctness. Golden files are the pre-commit gate. Without them, a refactor of the optimizer can silently change dispatch decisions. The golden is committed alongside code changes — git log on the golden recovers full metric history.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "hardening",
+      "depends_on": ["cli"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Sonnet",
+      "effort": "medium",
+      "two_stage": false,
+      "read_only": [
+        "docs/plan/dispatch-optimizer/SCOPE.md",
+        "docs/plan/dispatch-optimizer/run-output.txt"
+      ],
+      "guard": "npx tsx tests/harness.ts --project dispatch-production"
+    },
+
+    "tests-algorithms": {
+      "description": "dispatch-optimizer test suite covers: (1) Bitmask DP — 5 known-optimal fixtures at N=3,5,8,12,15 with verified minimal cost; (2) Tree DP — 3 forest fixtures at N=5,10,20; (3) Simulated Annealing — 3 general DAG fixtures at N=8,15,30, asserting result cost ≤ 1.15 × CP-SAT known optimal; (4) HLFET — 2 large fixtures at N=60,150, asserting all precedence constraints hold and no context window violation; (5) Algorithm selection — N≤20 selects Bitmask DP, forest selects Tree DP, general ≤50 selects SA, >50 selects HLFET; (6) Edge cases: empty plan, single milestone, cycle detection throws, guard-only milestone produces null prompt, all tool-call unit produces null prompt",
+      "rationale": "The 4 algorithms are the optimizer's core value. Zero tests exist. Known-optimal fixtures verify correctness against published solutions (or CP-SAT for SA's tolerance band). Edge cases ensure the system degrades gracefully, never crashes.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "hardening",
+      "depends_on": ["tests-golden"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Sonnet",
+      "effort": "high",
+      "two_stage": false,
+      "read_only": [
+        "docs/plan/dispatch-optimizer/SCOPE.md",
+        "docs/plan/dispatch-optimizer/src/compiler.ts"
+      ],
+      "guard": "npx nx test dispatch-optimizer"
+    },
+
+    "backlog-fill": {
+      "description": "All 7 stubs from BL-105 closed: (1) attempt_count counts dispatch_ids; (2) tokens_actual per-op prorated from dispatch turn totals by ki_estimate share; (3) mcp_servers resolved from agent catalog via injected IAgentCatalog interface; (4) blast_radius stubbed as empty (requires gitnexus — covered by plugin-gitnexus); (5) from/breaking/severity stubbed as null (requires AST — covered by plugin-gitnexus); (6) conflict stubbed as empty (requires same-wave scan — covered by plugin-gitnexus); (7) raised_at_dispatch/raised_at_turn populated from dispatch_log entry where pending was first set. BL-106 (b_per_tier cold-start) seeded from SCOPE.md §Open Decisions #2 defaults. BL-107 (backward-compat patches) moved into readDag() normalization pass in serializer-json.",
+      "rationale": "These stubs block real dispatch: mcp_servers=null means the orchestrator can't create agent-mcp agent definitions (BL-105 HIGH). Cold-start B values mean tokens_estimated is null on fresh plans (BL-106). Backward-compat in run.ts means every consumer must replicate 50 lines of patches (BL-107). Closing these makes DispatchUnit fully self-contained per D-17.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "hardening",
+      "depends_on": ["tests-algorithms"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Sonnet",
+      "effort": "high",
+      "two_stage": false,
+      "read_only": [
+        "docs/plan/dispatch-optimizer/LOG.md",
+        "docs/plan/dispatch-optimizer/src/compiler.ts",
+        "docs/plan/dispatch-optimizer/DECISIONS.md"
+      ],
+      "guard": "npx nx test dispatch-optimizer && npx nx test dispatch-orchestrator"
+    },
+
+    "tests-real-e2e": {
+      "description": "tests/integration/real-e2e.ts exercises the full product lifecycle end-to-end with 8 real-world scenarios — no mocks beyond the agent-mcp task runner boundary. Each scenario is a self-contained test case that creates a dag.json from nothing through a DagClient, drives dispatch via the orchestrator, and asserts consumer-visible outcomes. Every scenario has teeth: reverting the code under test must cause it to fail.\n\nScenario 1 — Cold start from empty directory: no dag.json exists; dispatch init --plan test-e2e creates a skeleton; dispatch status shows 0 milestones, 0 eligible; exit 0.\n\nScenario 2 — Author plan via MCP tools: an agent (driven programmatically) calls dag.milestone_add for 3 milestones (research → interface → implement, with depends_on edges), then dag.operation_add for 5 generative ops, then dag.validate → valid: true. The CLI dispatch status now shows 3 milestones, 1 eligible (research), 5 open_questions (none — pending is null on all). Assert the dag.json file on disk is structurally valid (cycle-free, no orphans).\n\nScenario 3 — Snapshot + optimize on authored plan: the CLI dispatch optimize test-e2e produces DispatchUnit[1] (only research is eligible), prompt is non-null (generative ops), fits_context_window: true, sentinel_role: solo (N=1, no fanout). Assert the compiled prompt contains all 3 milestone descriptions and all 5 op specs. Assert tokens_estimated is a positive integer (B cold-start seeded).\n\nScenario 4 — Dispatch via orchestrator → agent-mcp: the orchestrator fires the research milestone through a real Haiku agent-mcp dispatch (the 'real model' exception — gated behind DISPATCH_E2E_LIVE=1 env flag documented in README + CLAUDE.md + test file header). The Haiku agent produces a context file at tmp/test-e2e/contexts/embedding-research.md. After the dispatch closes: the milestone status transitions to complete; dispatch_log has 1 new entry with kind:execution, turns populated; a replay of snapshot() shows the milestone eligible=false and status=complete. Assert the dispatched agent's guard command passes.\n\nScenario 5 — Second cycle: replan triggers: after research completes, snapshot() shows the interface milestone is now eligible (dep satisfied, pending=null). The orchestrator injects no replan milestone because pending was already null at authoring time — the interface milestone was always fully specified. The second cycle dispatches the interface milestone. Assert two dispatch_log entries now, the interface guard passes (npx nx typecheck), and the snapshot shows 2 complete, 1 pending (implementation still blocked on interface).\n\nScenario 6 — Guard failure and correction injection: the implementation milestone's guard is crafted to fail on first attempt (e.g., test assertion expects a field the AI hasn't authored yet). The orchestrator detects the guard failure, injects a review milestone (triggered_by the failing dispatch), and marks implementation as pending-surfaced. Assert: (a) open_questions[] contains the injected question with surfaced=true; (b) implementation eligibility is false despite deps being complete (guard failed); (c) the review milestone is now eligible and has triggered_by set to the failing dispatch UUID.\n\nScenario 7 — Correction resolves and retry succeeds: the review milestone dispatches (simple doc op → writes a correction note). A replan clears implementation.pending and adds the missing operation. The orchestrator re-dispatches implementation with the added op. Guard passes. Assert: (a) implementation.status=complete; (b) terminal milestone (the plan itself) is now eligible; (c) dispatch_log contains 4 entries (research, interface, review, implementation) + 1 for the failed attempt; (d) total tokens_actual across all dispatches is recorded and non-zero.\n\nScenario 8 — CLI resume and status: kill the process mid-cycle. Re-run dispatch run test-e2e. Assert the orchestrator resumes from the last dispatch_log entry — it does NOT re-dispatch completed milestones. dispatch status shows correct progress. dispatch calibrate Sonnet fires a null-task and writes ~/.adhd/dispatch-calibration.json. Assert the file exists and contains a 'Sonnet' key with a positive integer.",
+      "rationale": "The integration test must prove the system works at the seams that fail in real use — the orchestrator-to-agent-mcp boundary, the replan injection, the guard failure recovery, the process-resume path. Green unit tests on mocked interfaces cannot prove these. Each scenario is a consumer-observable outcome driven through the real entrypoints (dispatch init, dispatch status, dispatch optimize, dispatch run, dispatch calibrate). The only mock is the agent-mcp task boundary (the LLM/code-generation step), and even that gets one live run in scenario 4 behind the documented env gate.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "hardening",
+      "depends_on": ["backlog-fill"],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Sonnet",
+      "effort": "high",
+      "two_stage": false,
+      "read_only": [
+        "docs/plan/dispatch-optimizer/WORKFLOW.md",
+        "docs/plan/dispatch-optimizer/DECISIONS.md",
+        "docs/plan/dispatch-optimizer/SCOPE.md",
+        "packages/ai/agent-mcp/README.md"
+      ],
+      "guard": "npx nx build dispatch-cli && npx tsx tests/integration/real-e2e.ts"
+    },
+
+    "hardening-complete": {
+      "description": "All packages build. All package tests pass (dispatch-spec, dispatch-client, dispatch-optimizer, dispatch-serializer-json, dispatch-serializer-sqlite, dispatch-plugin-io, dispatch-plugin-gitnexus, dispatch-tools, dispatch-orchestrator). Golden files match. Algorithm test suite passes all 5 categories. All 7 BL-105 stubs closed. All 8 real-world e2e scenarios pass (scenario 4 gated behind DISPATCH_E2E_LIVE=1 per the live-test policy). CLI dispatch --help renders. The plan dag.json itself passes strict validation.",
+      "rationale": "Terminal validation. Guard-only — all work is done by the preceding milestones. This milestone gates on the union of all package tests + golden tests + algorithm tests + e2e scenarios + structural validation of the plan dag itself.",
+      "authored_by": "workflow:plan-builder",
+      "pending": null,
+      "triggered_by": null,
+      "phase": "hardening",
+      "depends_on": ["tests-real-e2e"],
+      "agent": null,
+      "model": null,
+      "effort": null,
+      "two_stage": false,
+      "read_only": [],
+      "guard": "node scripts/validate-dag.js --strict docs/plan/dispatch-production/dag.json && npx nx test dispatch-spec && npx nx test dispatch-client && npx nx test dispatch-optimizer && npx nx test dispatch-serializer-json && npx nx test dispatch-serializer-sqlite && npx nx test dispatch-plugin-io && npx nx test dispatch-plugin-gitnexus && npx nx test dispatch-tools && npx nx test dispatch-orchestrator && npx tsx tests/integration/real-e2e.ts"
+    }
+
+  },
+
+  "operations": [
+    {
+      "id": "tests-golden.1",
+      "milestone": "tests-golden",
+      "depends_on": ["cli.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "tests/goldens/dispatch-production/snapshot.golden.json",
+      "symbol": null,
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "snapshot golden", "to": "byte-identical non-timestamp fields across two snapshot() calls", "required": true },
+          { "op": "add-export", "target": "dispatch units golden", "to": "optimize() output compared against committed golden", "required": true },
+          { "op": "add-export", "target": "harness.ts", "to": "hard pass/fail gate — exit 0 on match, 1 on divergence", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 1200,
+      "ki_source": "estimate"
+    },
+    {
+      "id": "tests-algorithms.1",
+      "milestone": "tests-algorithms",
+      "depends_on": ["tests-golden.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-optimizer/src/test/bitmask.test.ts",
+      "symbol": null,
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "bitmask 5 fixtures", "to": "N=3,5,8,12,15 known-optimal solutions", "required": true },
+          { "op": "add-export", "target": "treeDP 3 fixtures", "to": "N=5,10,20 forest DAGs", "required": true },
+          { "op": "add-export", "target": "SA 3 fixtures", "to": "N=8,15,30 cost ≤1.15×CP-SAT optimal", "required": true },
+          { "op": "add-export", "target": "HLFET 2 fixtures", "to": "N=60,150 precedence+window constraints", "required": true },
+          { "op": "add-export", "target": "edge cases 6", "to": "empty, single, cycle, guard-only, all-tool-call, no-eligible", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 3200,
+      "ki_source": "estimate"
+    },
+    {
+      "id": "backlog-fill.1",
+      "milestone": "backlog-fill",
+      "depends_on": ["tests-algorithms.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-optimizer/src/lib/calibration.ts",
+      "symbol": null,
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "attempt_count real", "to": "counts dispatch_ids", "required": true },
+          { "op": "add-export", "target": "tokens_actual prorated", "to": "per-op from dispatch totals by ki_estimate share", "required": true },
+          { "op": "add-export", "target": "mcp_servers resolved", "to": "via IAgentCatalog interface injection", "required": true },
+          { "op": "add-export", "target": "B cold-start seeded", "to": "Haiku:8000, Sonnet:15000, Opus:27000", "required": true },
+          { "op": "add-export", "target": "raised_at_dispatch populated", "to": "from dispatch_log entry where pending first set", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 2400,
+      "ki_source": "estimate"
+    },
+    {
+      "id": "tests-real-e2e.1",
+      "milestone": "tests-real-e2e",
+      "depends_on": ["cli.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "tests/integration/real-e2e.ts",
+      "symbol": null,
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "8 e2e scenarios", "to": "cold start, author, snapshot, dispatch, cycle, guard-failure, correction, resume", "required": true },
+          { "op": "add-export", "target": "test harness", "to": "setupTestEnv, createTestOrchestrator, readDagOnDisk, cli helpers", "required": true },
+          { "op": "add-export", "target": "mock agent runner", "to": "IDispatchAgentRunner with fire/poll/cancel/ensureAgent", "required": true },
+          { "op": "add-export", "target": "live gate scenario 4", "to": "DISPATCH_E2E_LIVE=1 gated behind env var per CLAUDE.md §6", "required": false }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 3200,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "spec-types.0",
+      "milestone": "spec-types",
+      "depends_on": [],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-spec/src/lib/types.ts",
+      "symbol": null,
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "OperationType", "to": "type 'automated' | 'tool-call' | 'generative'", "required": true },
+          { "op": "add-export", "target": "OperationAction", "to": "type union of 22 action literals", "required": true },
+          { "op": "add-export", "target": "WRITE_CLASS_ACTIONS", "to": "const ReadonlySet<OperationAction>", "required": true },
+          { "op": "add-export", "target": "CodeKind", "to": "type 'function' | 'interface' | 'type' | 'class' | 'enum' | 'const' | 'script'", "required": true },
+          { "op": "add-export", "target": "ConfigKind", "to": "type 'config' | 'env' | 'schema' | 'manifest'", "required": true },
+          { "op": "add-export", "target": "ShapeKind", "to": "type CodeKind | ConfigKind | 'doc' | 'structured-output'", "required": true },
+          { "op": "add-export", "target": "KindFamily", "to": "type 'code-config' | 'doc' | 'structured' | 'tool-call'", "required": true },
+          { "op": "add-export", "target": "MilestoneStatus", "to": "type 'pending' | 'pending-surfaced' | 'in_progress' | 'complete' | 'failed' | 'skipped'", "required": true },
+          { "op": "add-export", "target": "DispatchUnitStatus", "to": "type 'pending' | 'in_progress' | 'complete' | 'failed'", "required": true },
+          { "op": "add-export", "target": "OperationStatus", "to": "type 'pending' | 'in_progress' | 'complete' | 'failed' | 'skipped'", "required": true },
+          { "op": "add-export", "target": "GuardResult", "to": "type 'pass' | 'fail'", "required": true },
+          { "op": "add-export", "target": "MilestoneGuardResult", "to": "type 'pass' | 'fail' | 'pending'", "required": true },
+          { "op": "add-export", "target": "Provenance", "to": "type 'gitnexus' | 'manual' | 'assumed' | 'vendored'", "required": true },
+          { "op": "add-export", "target": "Confidence", "to": "type 'verified' | 'vendored' | 'documented' | 'assumed'", "required": true },
+          { "op": "add-export", "target": "KiSource", "to": "type 'estimate' | 'calibrated' | 'actual'", "required": true },
+          { "op": "add-export", "target": "DispatchKind", "to": "type 'planning' | 'execution'", "required": true },
+          { "op": "add-export", "target": "ProviderType", "to": "type 'anthropic' | 'openai' | 'claudecli'", "required": true },
+          { "op": "add-export", "target": "SentinelRole", "to": "type 'prewarm' | 'payload'", "required": true },
+          { "op": "add-export", "target": "ModelTier", "to": "type 'Haiku' | 'Sonnet' | 'Opus'", "required": true },
+          { "op": "add-export", "target": "EffortTier", "to": "type 'low' | 'medium' | 'high' | 'xhigh' | 'max'", "required": true },
+          { "op": "add-export", "target": "PlanKind", "to": "type 'brownfield' | 'greenfield'", "required": true },
+          { "op": "add-export", "target": "ShapeOpType", "to": "type union of 48 structural operation literals", "required": true },
+          { "op": "add-export", "target": "ShapeOpDag", "to": "interface { op: ShapeOpType; target: string | null; to: string | null; position: number | null; required: boolean | null }", "required": true },
+          { "op": "add-field", "target": "ShapeOpDag.op", "to": "ShapeOpType", "required": true },
+          { "op": "add-field", "target": "ShapeOpDag.target", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "ShapeOpDag.to", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "ShapeOpDag.position", "to": "number | null", "required": true },
+          { "op": "add-field", "target": "ShapeOpDag.required", "to": "boolean | null", "required": true },
+          { "op": "add-export", "target": "ShapeOpSnapshot", "to": "interface extends ShapeOpDag { from, breaking, severity }", "required": true },
+          { "op": "add-field", "target": "ShapeOpSnapshot.from", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "ShapeOpSnapshot.breaking", "to": "boolean | null", "required": true },
+          { "op": "add-field", "target": "ShapeOpSnapshot.severity", "to": "'error' | 'warning' | 'info' | null", "required": true },
+          { "op": "add-export", "target": "ShapeCode", "to": "interface { kind: CodeKind; ops: ShapeOpDag[] }", "required": true },
+          { "op": "add-field", "target": "ShapeCode.kind", "to": "CodeKind", "required": true },
+          { "op": "add-field", "target": "ShapeCode.ops", "to": "ShapeOpDag[]", "required": true },
+          { "op": "add-export", "target": "ShapeConfig", "to": "interface { kind: ConfigKind; ops: ShapeOpDag[] }", "required": true },
+          { "op": "add-field", "target": "ShapeConfig.kind", "to": "ConfigKind", "required": true },
+          { "op": "add-field", "target": "ShapeConfig.ops", "to": "ShapeOpDag[]", "required": true },
+          { "op": "add-export", "target": "ShapeDoc", "to": "interface { kind: 'doc'; description: string; objective: string; required_sections: string[] }", "required": true },
+          { "op": "add-field", "target": "ShapeDoc.kind", "to": "'doc'", "required": true },
+          { "op": "add-field", "target": "ShapeDoc.description", "to": "string", "required": true },
+          { "op": "add-field", "target": "ShapeDoc.objective", "to": "string", "required": true },
+          { "op": "add-field", "target": "ShapeDoc.required_sections", "to": "string[]", "required": true },
+          { "op": "add-export", "target": "ShapeStructuredOutput", "to": "interface { kind: 'structured-output'; schema: Record<string, unknown> }", "required": true },
+          { "op": "add-field", "target": "ShapeStructuredOutput.kind", "to": "'structured-output'", "required": true },
+          { "op": "add-field", "target": "ShapeStructuredOutput.schema", "to": "Record<string, unknown>", "required": true },
+          { "op": "add-export", "target": "ShapeNull", "to": "interface { kind: null }", "required": true },
+          { "op": "add-export", "target": "Shape", "to": "type ShapeCode | ShapeConfig | ShapeDoc | ShapeStructuredOutput | ShapeNull", "required": true },
+          { "op": "add-export", "target": "ShapeCodeSnapshot", "to": "interface extends Omit<ShapeCode, 'ops'> { ops: ShapeOpSnapshot[] }", "required": true },
+          { "op": "add-export", "target": "ShapeConfigSnapshot", "to": "interface extends Omit<ShapeConfig, 'ops'> { ops: ShapeOpSnapshot[] }", "required": true },
+          { "op": "add-export", "target": "ShapeSnapshot", "to": "type ShapeCodeSnapshot | ShapeConfigSnapshot | ShapeDoc | ShapeStructuredOutput | ShapeNull", "required": true },
+          { "op": "add-export", "target": "BlastRadiusEntry", "to": "interface { file: string; symbol: string; impact: 'implements' | 'calls' | 'imports' | 'extends' | 're-exports' | 'overrides'; consumer: 'current' | 'future' }", "required": true },
+          { "op": "add-field", "target": "BlastRadiusEntry.file", "to": "string", "required": true },
+          { "op": "add-field", "target": "BlastRadiusEntry.symbol", "to": "string", "required": true },
+          { "op": "add-field", "target": "BlastRadiusEntry.impact", "to": "'implements' | 'calls' | 'imports' | 'extends' | 're-exports' | 'overrides'", "required": true },
+          { "op": "add-field", "target": "BlastRadiusEntry.consumer", "to": "'current' | 'future'", "required": true },
+          { "op": "add-export", "target": "OperationConflict", "to": "interface { detected: boolean; competing_op: string | null; op_key: string | null; resolution: 'safe-merge' | 'warning' | 'error' | null }", "required": true },
+          { "op": "add-field", "target": "OperationConflict.detected", "to": "boolean", "required": true },
+          { "op": "add-field", "target": "OperationConflict.competing_op", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "OperationConflict.op_key", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "OperationConflict.resolution", "to": "'safe-merge' | 'warning' | 'error' | null", "required": true },
+          { "op": "add-export", "target": "RetryConfig", "to": "interface { retries: number; min_timeout: number; max_timeout: number; factor: number }", "required": true },
+          { "op": "add-field", "target": "RetryConfig.retries", "to": "number", "required": true },
+          { "op": "add-field", "target": "RetryConfig.min_timeout", "to": "number", "required": true },
+          { "op": "add-field", "target": "RetryConfig.max_timeout", "to": "number", "required": true },
+          { "op": "add-field", "target": "RetryConfig.factor", "to": "number", "required": true },
+          { "op": "add-export", "target": "ProviderConfig", "to": "interface { type: ProviderType; model_id: string; env_secret: string | null; base_url: string | null; timeout_ms: number; retry_config: RetryConfig }", "required": true },
+          { "op": "add-field", "target": "ProviderConfig.type", "to": "ProviderType", "required": true },
+          { "op": "add-field", "target": "ProviderConfig.model_id", "to": "string", "required": true },
+          { "op": "add-field", "target": "ProviderConfig.env_secret", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "ProviderConfig.base_url", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "ProviderConfig.timeout_ms", "to": "number", "required": true },
+          { "op": "add-field", "target": "ProviderConfig.retry_config", "to": "RetryConfig", "required": true },
+          { "op": "add-export", "target": "Turn", "to": "interface { turn: number; input_tokens: number; output_tokens: number; t: string }", "required": true },
+          { "op": "add-field", "target": "Turn.turn", "to": "number", "required": true },
+          { "op": "add-field", "target": "Turn.input_tokens", "to": "number", "required": true },
+          { "op": "add-field", "target": "Turn.output_tokens", "to": "number", "required": true },
+          { "op": "add-field", "target": "Turn.t", "to": "string", "required": true },
+          { "op": "add-export", "target": "DispatchResult", "to": "interface { op_id: string; status: 'complete' | 'failed' | 'skipped'; guard_result: GuardResult | null; guard_output: string | null; guard_ran_at: string | null }", "required": true },
+          { "op": "add-field", "target": "DispatchResult.op_id", "to": "string", "required": true },
+          { "op": "add-field", "target": "DispatchResult.status", "to": "'complete' | 'failed' | 'skipped'", "required": true },
+          { "op": "add-field", "target": "DispatchResult.guard_result", "to": "GuardResult | null", "required": true },
+          { "op": "add-field", "target": "DispatchResult.guard_output", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "DispatchResult.guard_ran_at", "to": "string | null", "required": true },
+          { "op": "add-export", "target": "DispatchNote", "to": "interface { level: 'info' | 'warn' | 'error'; text: string }", "required": true },
+          { "op": "add-field", "target": "DispatchNote.level", "to": "'info' | 'warn' | 'error'", "required": true },
+          { "op": "add-field", "target": "DispatchNote.text", "to": "string", "required": true },
+          { "op": "add-export", "target": "DispatchLogEntry", "to": "interface { id: string; kind: DispatchKind; provider: string; model: string | null; agent: string; effort: EffortTier | null; started_at: string; completed_at: string | null; operations: string[]; turns: Turn[]; results: DispatchResult[]; notes: DispatchNote[] }", "required": true },
+          { "op": "add-field", "target": "DispatchLogEntry.id", "to": "string", "required": true },
+          { "op": "add-field", "target": "DispatchLogEntry.kind", "to": "DispatchKind", "required": true },
+          { "op": "add-field", "target": "DispatchLogEntry.provider", "to": "'anthropic' | 'openai' | 'deepseek' | 'google' | 'local'", "required": true },
+          { "op": "add-field", "target": "DispatchLogEntry.model", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "DispatchLogEntry.agent", "to": "string", "required": true },
+          { "op": "add-field", "target": "DispatchLogEntry.effort", "to": "EffortTier | null", "required": true },
+          { "op": "add-field", "target": "DispatchLogEntry.started_at", "to": "string", "required": true },
+          { "op": "add-field", "target": "DispatchLogEntry.completed_at", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "DispatchLogEntry.operations", "to": "string[]", "required": true },
+          { "op": "add-field", "target": "DispatchLogEntry.turns", "to": "Turn[]", "required": true },
+          { "op": "add-field", "target": "DispatchLogEntry.results", "to": "DispatchResult[]", "required": true },
+          { "op": "add-field", "target": "DispatchLogEntry.notes", "to": "DispatchNote[]", "required": true },
+          { "op": "add-export", "target": "OperationDag", "to": "interface { id, milestone, depends_on, type, action, file, symbol, provenance, confidence, audit_check, criteria, tool, args, guard, to_file, to_symbol, ki_estimate, ki_source, authored_by, status, shape }", "required": true },
+          { "op": "add-field", "target": "OperationDag.id", "to": "string", "required": true },
+          { "op": "add-field", "target": "OperationDag.milestone", "to": "string", "required": true },
+          { "op": "add-field", "target": "OperationDag.depends_on", "to": "string[]", "required": true },
+          { "op": "add-field", "target": "OperationDag.type", "to": "OperationType", "required": true },
+          { "op": "add-field", "target": "OperationDag.action", "to": "OperationAction", "required": true },
+          { "op": "add-field", "target": "OperationDag.file", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "OperationDag.symbol", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "OperationDag.provenance", "to": "Provenance | null", "required": true },
+          { "op": "add-field", "target": "OperationDag.confidence", "to": "Confidence | null", "required": true },
+          { "op": "add-field", "target": "OperationDag.audit_check", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "OperationDag.criteria", "to": "string[]", "required": true },
+          { "op": "add-field", "target": "OperationDag.tool", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "OperationDag.args", "to": "Record<string, unknown> | null", "required": true },
+          { "op": "add-field", "target": "OperationDag.guard", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "OperationDag.to_file", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "OperationDag.to_symbol", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "OperationDag.ki_estimate", "to": "number | null", "required": true },
+          { "op": "add-field", "target": "OperationDag.ki_source", "to": "KiSource | null", "required": true },
+          { "op": "add-field", "target": "OperationDag.authored_by", "to": "string", "required": true },
+          { "op": "add-field", "target": "OperationDag.status", "to": "OperationStatus", "required": true },
+          { "op": "add-field", "target": "OperationDag.shape", "to": "Shape | null", "required": true },
+          { "op": "add-export", "target": "OperationSnapshot", "to": "interface extends Omit<OperationDag, 'shape'> { shape: ShapeSnapshot | null; dispatch_ids: string[]; attempt_count: number; guard_result/guard_output/guard_ran_at; blast_radius: BlastRadiusEntry[]; conflict: OperationConflict; tokens_actual: number | null }", "required": true },
+          { "op": "add-field", "target": "OperationSnapshot.shape", "to": "ShapeSnapshot | null", "required": true },
+          { "op": "add-field", "target": "OperationSnapshot.dispatch_ids", "to": "string[]", "required": true },
+          { "op": "add-field", "target": "OperationSnapshot.attempt_count", "to": "number", "required": true },
+          { "op": "add-field", "target": "OperationSnapshot.guard_result", "to": "GuardResult | null", "required": true },
+          { "op": "add-field", "target": "OperationSnapshot.guard_output", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "OperationSnapshot.guard_ran_at", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "OperationSnapshot.blast_radius", "to": "BlastRadiusEntry[]", "required": true },
+          { "op": "add-field", "target": "OperationSnapshot.conflict", "to": "OperationConflict", "required": true },
+          { "op": "add-field", "target": "OperationSnapshot.tokens_actual", "to": "number | null", "required": true },
+          { "op": "add-export", "target": "MilestoneDag", "to": "interface { description, rationale?, authored_by, pending, triggered_by, phase, depends_on, agent, model, effort, two_stage, read_only, guard }", "required": true },
+          { "op": "add-field", "target": "MilestoneDag.description", "to": "string", "required": true },
+          { "op": "add-field", "target": "MilestoneDag.rationale", "to": "string | undefined", "required": false },
+          { "op": "add-field", "target": "MilestoneDag.authored_by", "to": "string", "required": true },
+          { "op": "add-field", "target": "MilestoneDag.pending", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "MilestoneDag.triggered_by", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "MilestoneDag.phase", "to": "string", "required": true },
+          { "op": "add-field", "target": "MilestoneDag.depends_on", "to": "string[]", "required": true },
+          { "op": "add-field", "target": "MilestoneDag.agent", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "MilestoneDag.model", "to": "ModelTier | null", "required": true },
+          { "op": "add-field", "target": "MilestoneDag.effort", "to": "EffortTier | null", "required": true },
+          { "op": "add-field", "target": "MilestoneDag.two_stage", "to": "boolean", "required": true },
+          { "op": "add-field", "target": "MilestoneDag.read_only", "to": "string[]", "required": true },
+          { "op": "add-field", "target": "MilestoneDag.guard", "to": "string | null", "required": true },
+          { "op": "add-export", "target": "CrossPlanDep", "to": "interface { plan: string; milestone: string }", "required": true },
+          { "op": "add-field", "target": "CrossPlanDep.plan", "to": "string", "required": true },
+          { "op": "add-field", "target": "CrossPlanDep.milestone", "to": "string", "required": true },
+          { "op": "add-export", "target": "PairwiseOverlapMap", "to": "type Record<string, number>", "required": true },
+          { "op": "add-export", "target": "OpenQuestion", "to": "interface { id, text, blocking, surfaced, raised_at_dispatch, raised_at_turn, answered, answer }", "required": true },
+          { "op": "add-field", "target": "OpenQuestion.id", "to": "string", "required": true },
+          { "op": "add-field", "target": "OpenQuestion.text", "to": "string", "required": true },
+          { "op": "add-field", "target": "OpenQuestion.blocking", "to": "string", "required": true },
+          { "op": "add-field", "target": "OpenQuestion.surfaced", "to": "boolean", "required": true },
+          { "op": "add-field", "target": "OpenQuestion.raised_at_dispatch", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "OpenQuestion.raised_at_turn", "to": "number | null", "required": true },
+          { "op": "add-field", "target": "OpenQuestion.answered", "to": "boolean", "required": true },
+          { "op": "add-field", "target": "OpenQuestion.answer", "to": "string | null", "required": true },
+          { "op": "add-export", "target": "MilestoneSnapshot", "to": "interface extends MilestoneDag { context, wave, eligible, status, started_at, completed_at, guard_result, guard_output, artifacts, si_bytes, ki_estimate, tokens_estimated, tokens_actual }", "required": true },
+          { "op": "add-field", "target": "MilestoneSnapshot.context", "to": "string", "required": true },
+          { "op": "add-field", "target": "MilestoneSnapshot.wave", "to": "number", "required": true },
+          { "op": "add-field", "target": "MilestoneSnapshot.eligible", "to": "boolean", "required": true },
+          { "op": "add-field", "target": "MilestoneSnapshot.status", "to": "MilestoneStatus", "required": true },
+          { "op": "add-field", "target": "MilestoneSnapshot.started_at", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "MilestoneSnapshot.completed_at", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "MilestoneSnapshot.guard_result", "to": "MilestoneGuardResult | null", "required": true },
+          { "op": "add-field", "target": "MilestoneSnapshot.guard_output", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "MilestoneSnapshot.artifacts", "to": "string[]", "required": true },
+          { "op": "add-field", "target": "MilestoneSnapshot.si_bytes", "to": "number", "required": true },
+          { "op": "add-field", "target": "MilestoneSnapshot.ki_estimate", "to": "number | null", "required": true },
+          { "op": "add-field", "target": "MilestoneSnapshot.tokens_estimated", "to": "number | null", "required": true },
+          { "op": "add-field", "target": "MilestoneSnapshot.tokens_actual", "to": "number | null", "required": true },
+          { "op": "add-export", "target": "SentinelFanoutConfig", "to": "interface { enabled: boolean; write_multiplier: number; read_multiplier: number; hit_probability: number }", "required": true },
+          { "op": "add-field", "target": "SentinelFanoutConfig.enabled", "to": "boolean", "required": true },
+          { "op": "add-field", "target": "SentinelFanoutConfig.write_multiplier", "to": "number", "required": true },
+          { "op": "add-field", "target": "SentinelFanoutConfig.read_multiplier", "to": "number", "required": true },
+          { "op": "add-field", "target": "SentinelFanoutConfig.hit_probability", "to": "number", "required": true },
+          { "op": "add-export", "target": "OptimizationConfig", "to": "interface { sentinel_fanout, b_per_tier, context_window_per_tier, context_window_override, b_override }", "required": true },
+          { "op": "add-field", "target": "OptimizationConfig.sentinel_fanout", "to": "SentinelFanoutConfig", "required": true },
+          { "op": "add-field", "target": "OptimizationConfig.b_per_tier", "to": "Record<string, number | null>", "required": true },
+          { "op": "add-field", "target": "OptimizationConfig.context_window_per_tier", "to": "Record<string, number>", "required": true },
+          { "op": "add-field", "target": "OptimizationConfig.context_window_override", "to": "Record<string, number> | null", "required": true },
+          { "op": "add-field", "target": "OptimizationConfig.b_override", "to": "Record<string, number> | null", "required": true },
+          { "op": "add-export", "target": "DagJson", "to": "interface { schema_version, plan_kind, description, problem, approach, executor, executor_model?, executor_effort?, phases, terminal, assumed_baseline?, cross_plan_deps?, optimization, providers, effort_max_tokens, milestones, operations, dispatch_log }", "required": true },
+          { "op": "add-field", "target": "DagJson.schema_version", "to": "number", "required": true },
+          { "op": "add-field", "target": "DagJson.plan_kind", "to": "PlanKind", "required": true },
+          { "op": "add-field", "target": "DagJson.description", "to": "string", "required": true },
+          { "op": "add-field", "target": "DagJson.problem", "to": "string", "required": true },
+          { "op": "add-field", "target": "DagJson.approach", "to": "string", "required": true },
+          { "op": "add-field", "target": "DagJson.executor", "to": "string", "required": true },
+          { "op": "add-field", "target": "DagJson.executor_model", "to": "ModelTier | undefined", "required": false },
+          { "op": "add-field", "target": "DagJson.executor_effort", "to": "EffortTier | undefined", "required": false },
+          { "op": "add-field", "target": "DagJson.phases", "to": "string[]", "required": true },
+          { "op": "add-field", "target": "DagJson.terminal", "to": "string | string[]", "required": true },
+          { "op": "add-field", "target": "DagJson.assumed_baseline", "to": "string[] | Record<string, unknown> | undefined", "required": false },
+          { "op": "add-field", "target": "DagJson.cross_plan_deps", "to": "CrossPlanDep[] | undefined", "required": false },
+          { "op": "add-field", "target": "DagJson.optimization", "to": "OptimizationConfig", "required": true },
+          { "op": "add-field", "target": "DagJson.providers", "to": "Record<string, ProviderConfig>", "required": true },
+          { "op": "add-field", "target": "DagJson.effort_max_tokens", "to": "Record<string, number>", "required": true },
+          { "op": "add-field", "target": "DagJson.milestones", "to": "Record<string, MilestoneDag>", "required": true },
+          { "op": "add-field", "target": "DagJson.operations", "to": "OperationDag[] | Record<string, OperationDag>", "required": true },
+          { "op": "add-field", "target": "DagJson.dispatch_log", "to": "DispatchLogEntry[]", "required": true },
+          { "op": "add-export", "target": "SnapshotOptimization", "to": "interface extends OptimizationConfig with b_eff_per_tier", "required": true },
+          { "op": "add-field", "target": "SnapshotOptimization.b_eff_per_tier", "to": "Record<string, number | null>", "required": true },
+          { "op": "add-export", "target": "DagSnapshot", "to": "interface { snapshot_at, snapshot_version, plan, ...DagJson fields, milestones: Record<string, MilestoneSnapshot>, operations: OperationSnapshot[], pairwise_overlap, dispatch_units?, open_questions }", "required": true },
+          { "op": "add-field", "target": "DagSnapshot.snapshot_at", "to": "string", "required": true },
+          { "op": "add-field", "target": "DagSnapshot.snapshot_version", "to": "number", "required": true },
+          { "op": "add-field", "target": "DagSnapshot.plan", "to": "string", "required": true },
+          { "op": "add-field", "target": "DagSnapshot.optimization", "to": "SnapshotOptimization", "required": true },
+          { "op": "add-field", "target": "DagSnapshot.milestones", "to": "Record<string, MilestoneSnapshot>", "required": true },
+          { "op": "add-field", "target": "DagSnapshot.operations", "to": "OperationSnapshot[]", "required": true },
+          { "op": "add-field", "target": "DagSnapshot.pairwise_overlap", "to": "PairwiseOverlapMap", "required": true },
+          { "op": "add-field", "target": "DagSnapshot.dispatch_units", "to": "DispatchUnit[] | undefined", "required": false },
+          { "op": "add-field", "target": "DagSnapshot.open_questions", "to": "OpenQuestion[]", "required": true },
+          { "op": "add-export", "target": "DispatchUnit", "to": "interface { id, milestones, operations, model, effort, two_stage, provider, agent_name, mcp_servers, resolved_max_tokens, background, prompt, context_files, si_bytes, tokens_estimated, fits_context_window, sentinel_role, dispatch_log_id, remote_task_id, result, status, started_at, completed_at, tokens_actual }", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.id", "to": "string", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.milestones", "to": "string[]", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.operations", "to": "string[]", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.model", "to": "ModelTier | null", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.effort", "to": "EffortTier | null", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.two_stage", "to": "boolean", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.provider", "to": "ProviderConfig | null", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.agent_name", "to": "string", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.mcp_servers", "to": "Record<string, unknown> | null", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.resolved_max_tokens", "to": "number | null", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.background", "to": "true", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.prompt", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.context_files", "to": "string[]", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.si_bytes", "to": "number", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.tokens_estimated", "to": "number | null", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.fits_context_window", "to": "boolean", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.sentinel_role", "to": "SentinelRole | null", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.dispatch_log_id", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.remote_task_id", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.result", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.status", "to": "DispatchUnitStatus", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.started_at", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.completed_at", "to": "string | null", "required": true },
+          { "op": "add-field", "target": "DispatchUnit.tokens_actual", "to": "number | null", "required": true },
+          { "op": "add-export", "target": "ValidationError", "to": "interface { path: string; message: string; value?: unknown }", "required": true },
+          { "op": "add-field", "target": "ValidationError.path", "to": "string", "required": true },
+          { "op": "add-field", "target": "ValidationError.message", "to": "string", "required": true },
+          { "op": "add-field", "target": "ValidationError.value", "to": "unknown | undefined", "required": false },
+          { "op": "add-export", "target": "ValidationResult", "to": "interface { valid: boolean; errors: ValidationError[] }", "required": true },
+          { "op": "add-field", "target": "ValidationResult.valid", "to": "boolean", "required": true },
+          { "op": "add-field", "target": "ValidationResult.errors", "to": "ValidationError[]", "required": true },
+          { "op": "add-export", "target": "IOptimizerDeps", "to": "interface { bPerTier, contextWindowPerTier, fileSizes?, readFiles?, dispatchLog? }", "required": true },
+          { "op": "add-field", "target": "IOptimizerDeps.bPerTier", "to": "Record<string, number>", "required": true },
+          { "op": "add-field", "target": "IOptimizerDeps.contextWindowPerTier", "to": "Record<string, number>", "required": true },
+          { "op": "add-field", "target": "IOptimizerDeps.fileSizes", "to": "(paths: string[]) => Map<string, number> | undefined", "required": false },
+          { "op": "add-field", "target": "IOptimizerDeps.readFiles", "to": "(paths: string[]) => Map<string, string> | undefined", "required": false },
+          { "op": "add-field", "target": "IOptimizerDeps.dispatchLog", "to": "DispatchLogEntry[] | undefined", "required": false }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 4800,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "spec-types.1",
+      "milestone": "spec-types",
+      "depends_on": ["spec-types.0"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-spec/src/index.ts",
+      "symbol": null,
+      "provenance": null,
+      "confidence": null,
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "all types from ./lib/types.js", "to": "re-export barrel", "required": true },
+          { "op": "add-export", "target": "WRITE_CLASS_ACTIONS", "to": "from ./lib/types.js", "required": true },
+          { "op": "add-export", "target": "validateDagJson, validateSnapshot, assertValidDagJson, assertValidSnapshot", "to": "from ./lib/validate.js", "required": true },
+          { "op": "add-export", "target": "migrateDag", "to": "from ./lib/migrate.js", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 400,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "spec-types.2",
+      "milestone": "spec-types",
+      "depends_on": ["spec-types.0"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-spec/project.json",
+      "symbol": null,
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "config",
+        "ops": [
+          { "op": "set-key", "target": "name", "to": "shared-dispatch-spec", "required": true },
+          { "op": "set-key", "target": "sourceRoot", "to": "packages/shared/dispatch-spec/src", "required": true },
+          { "op": "set-key", "target": "projectType", "to": "library", "required": true },
+          { "op": "set-key", "target": "tags[0]", "to": "layer:shared", "required": true },
+          { "op": "set-key", "target": "tags[1]", "to": "platform:shared", "required": true },
+          { "op": "set-key", "target": "targets.test", "to": null, "required": false },
+          { "op": "set-key", "target": "targets.build", "to": null, "required": false },
+          { "op": "set-key", "target": "targets.nx-release-publish", "to": null, "required": false }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 300,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "spec-types.3",
+      "milestone": "spec-types",
+      "depends_on": ["spec-types.0"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-spec/package.json",
+      "symbol": null,
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "config",
+        "ops": [
+          { "op": "set-key", "target": "name", "to": "@adhd/dispatch-spec", "required": true },
+          { "op": "set-key", "target": "version", "to": "0.0.1", "required": true },
+          { "op": "set-key", "target": "dependencies", "to": "{}", "required": true },
+          { "op": "set-key", "target": "main", "to": "./index.js", "required": true },
+          { "op": "set-key", "target": "module", "to": "./index.mjs", "required": true },
+          { "op": "set-key", "target": "typings", "to": "./index.d.ts", "required": true },
+          { "op": "set-key", "target": "publishConfig.access", "to": "public", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 200,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "spec-validate.1",
+      "milestone": "spec-validate",
+      "depends_on": ["spec-types.0"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-spec/src/lib/validate.ts",
+      "symbol": "validateDagJson",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "validateDagJson", "to": "function (dag: unknown): ValidationResult", "required": true },
+          { "op": "add-param", "target": "validateDagJson.dag", "to": "unknown", "required": true },
+          { "op": "add-export", "target": "validateSnapshot", "to": "function (snapshot: unknown): ValidationResult", "required": true },
+          { "op": "add-param", "target": "validateSnapshot.snapshot", "to": "unknown", "required": true },
+          { "op": "add-export", "target": "assertValidDagJson", "to": "function asserts dag is DagJson", "required": true },
+          { "op": "add-export", "target": "assertValidSnapshot", "to": "function asserts snapshot is DagSnapshot", "required": true },
+          { "op": "add-export", "target": "validateDagJson.detects cycle", "to": "Kahn's algorithm BFS", "required": true },
+          { "op": "add-export", "target": "validateDagJson.checks D-07", "to": "eligible implies pending==null", "required": true },
+          { "op": "add-export", "target": "validateSnapshot.checks D-07", "to": "eligible milestones must not have pending", "required": true },
+          { "op": "add-export", "target": "validateSnapshot.checks wave", "to": "non-negative integer", "required": true },
+          { "op": "add-export", "target": "validateSnapshot.checks fits_context_window", "to": "boolean", "required": true },
+          { "op": "add-export", "target": "validateSnapshot.checks operation refs", "to": "milestone must exist", "required": true },
+          { "op": "add-export", "target": "validateSnapshot.checks blast_radius", "to": "must be array", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 1600,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "spec-validate.2",
+      "milestone": "spec-validate",
+      "depends_on": ["spec-types.0"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-spec/src/lib/migrate.ts",
+      "symbol": "migrateDag",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "migrateDag", "to": "function (fromVersion: number, toVersion: number, dag: Record<string, unknown>): void", "required": true },
+          { "op": "add-param", "target": "migrateDag.fromVersion", "to": "number", "required": true },
+          { "op": "add-param", "target": "migrateDag.toVersion", "to": "number", "required": true },
+          { "op": "add-param", "target": "migrateDag.dag", "to": "Record<string, unknown>", "required": true },
+          { "op": "add-export", "target": "v2→v3 migration", "to": "nodes→milestones, operations object→array", "required": true },
+          { "op": "add-export", "target": "v3→v4 migration", "to": "providers, effort_max_tokens, optimization defaults, op type/normalization", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 800,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "spec-validate.3",
+      "milestone": "spec-validate",
+      "depends_on": ["spec-validate.1", "spec-validate.2"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-spec/src/test/validate.spec.ts",
+      "symbol": null,
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "validateDagJson tests", "to": "12 cases: valid plan, non-object, missing fields, invalid plan_kind, cycle, missing terminal, orphan op, invalid model, invalid shape kind, missing op dep, cross_plan_deps, empty plan", "required": true },
+          { "op": "add-export", "target": "validateSnapshot tests", "to": "6 cases: valid snapshot, D-07 violation, invalid status, negative wave, missing fields, dispatch_units present", "required": true },
+          { "op": "add-export", "target": "migrateDag tests", "to": "2 cases: v2→v4, no-op", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 1200,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "client-core.1",
+      "milestone": "client-core",
+      "depends_on": ["spec-validate.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-client/src/lib/serializer.ts",
+      "symbol": "IDagSerializer",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "IDagSerializer", "to": "interface { readonly format: string; read(): Promise<DagJson | null>; write(dag: DagJson): Promise<void>; appendDispatchLog(entry: DispatchLogInput): Promise<void>; onExternalWrite?(listener: () => void): () => void }", "required": true },
+          { "op": "add-export", "target": "IDagClient", "to": "interface { milestone_add, milestone_get, milestone_list, milestone_update, milestone_delete, operation_add, operation_get, operation_list, operation_update, operation_delete, pending_set, pending_clear, dispatch_log_append, dispatch_log_get, field_get, field_set, full_dag, validate, create }", "required": true },
+          { "op": "add-export", "target": "DagClientOptions", "to": "interface { serializer: IDagSerializer; validate: (dag: DagJson) => ValidationResult }", "required": true },
+          { "op": "add-export", "target": "createDagClient", "to": "function (opts: DagClientOptions): IDagClient", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 2400,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "serializer-json.1",
+      "milestone": "serializer-json",
+      "depends_on": ["client-core.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/node-tools/dispatch-serializer-json/src/index.ts",
+      "symbol": "createJsonFileSerializer",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "createJsonFileSerializer", "to": "function (filePath: string): IDagSerializer", "required": true },
+          { "op": "add-param", "target": "createJsonFileSerializer.filePath", "to": "string", "required": true },
+          { "op": "add-export", "target": "atomic write", "to": "temp-file + rename for read()/write()/appendDispatchLog()", "required": true },
+          { "op": "add-export", "target": "onExternalWrite", "to": "fs.watch implementation", "required": true },
+          { "op": "add-export", "target": "normalizeDag", "to": "backward-compat normalization injected after read", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 1200,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "optimizer-core.1",
+      "milestone": "optimizer-core",
+      "depends_on": ["spec-validate.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-optimizer/src/lib/snapshot.ts",
+      "symbol": "snapshot",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "snapshot", "to": "function (dag: DagJson, deps: IOptimizerDeps): DagSnapshot", "required": true },
+          { "op": "add-param", "target": "snapshot.dag", "to": "DagJson", "required": true },
+          { "op": "add-param", "target": "snapshot.deps", "to": "IOptimizerDeps", "required": true },
+          { "op": "add-export", "target": "topoSortMilestones", "to": "Kahn's algorithm, returns { order, waves }", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 800,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "optimizer-core.2",
+      "milestone": "optimizer-core",
+      "depends_on": ["optimizer-core.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-optimizer/src/lib/optimize.ts",
+      "symbol": "optimize",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "optimize", "to": "function (snapshot: DagSnapshot): DispatchUnit[]", "required": true },
+          { "op": "add-export", "target": "partitionByKindFamily", "to": "function grouping milestones by shape.kind family + model tier", "required": true },
+          { "op": "add-export", "target": "selectAlgorithm", "to": "function (N, DAG structure) → BitmaskDP | TreeDP | SA | HLFET", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 600,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "optimizer-core.3",
+      "milestone": "optimizer-core",
+      "depends_on": ["optimizer-core.2"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-optimizer/src/lib/algorithms/bitmask.ts",
+      "symbol": "bitmaskDP",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "bitmaskDP", "to": "function (slugs, milestones, opsByMilestone, bEff, W): string[][] — exact O(3^N) subset DP", "required": true },
+          { "op": "add-export", "target": "treeDP", "to": "function (slugs, milestones, opsByMilestone, bEff, W): string[][] — exact O(N²W) bottom-up for forest/SP DAGs", "required": true },
+          { "op": "add-export", "target": "simulatedAnnealing", "to": "function (slugs, milestones, opsByMilestone, bEff, W): string[][] — SA with cooling schedule", "required": true },
+          { "op": "add-export", "target": "hlfet", "to": "function (slugs, milestones, opsByMilestone, bEff, W): string[][] — critical-path priority list O(N log N)", "required": true },
+          { "op": "add-export", "target": "isForest", "to": "function detects if eligible subgraph has ≤1 parent per node", "required": true },
+          { "op": "add-export", "target": "isSeriesParallel", "to": "function Valdes-Tarjan-Lawler SP reduction", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 3200,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "plugin-io.1",
+      "milestone": "plugin-io",
+      "depends_on": ["optimizer-core.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/node-tools/dispatch-plugin-io/src/index.ts",
+      "symbol": "createIOPlugin",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "createIOPlugin", "to": "function (rootDir: string): { fileSizes, readFiles, siBytesAsTokens }", "required": true },
+          { "op": "add-export", "target": "siBytesAsTokens", "to": "function (bytes: number, filePath?: string): number — chars_per_token lookup", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 600,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "plugin-gitnexus.1",
+      "milestone": "plugin-gitnexus",
+      "depends_on": ["optimizer-core.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/node-tools/dispatch-plugin-gitnexus/src/index.ts",
+      "symbol": "enrichWithGitnexus",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "enrichWithGitnexus", "to": "function (snapshot: DagSnapshot, repoRoot: string): DagSnapshot", "required": true },
+          { "op": "add-param", "target": "enrichWithGitnexus.snapshot", "to": "DagSnapshot", "required": true },
+          { "op": "add-param", "target": "enrichWithGitnexus.repoRoot", "to": "string", "required": true },
+          { "op": "add-export", "target": "populates blast_radius", "to": "via gitnexus_impact for upstream consumers", "required": true },
+          { "op": "add-export", "target": "populates from/breaking/severity", "to": "via AST read at HEAD + deterministic lookup table", "required": true },
+          { "op": "add-export", "target": "populates conflict", "to": "via same-wave op-key collision scan", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 1600,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "tools-mcp.1",
+      "milestone": "tools-mcp",
+      "depends_on": ["client-core.1", "serializer-json.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/ai/dispatch-tools/src/server.ts",
+      "symbol": null,
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "MCP server wrapping IDagClient", "to": "tools: dag.milestone_add/get/list/update/delete, dag.operation_add/get/list/update/delete, dag.pending_get/set/clear, dag.field_get/set, dag.dispatch_log_append/get/list, dag.snapshot (summary only), dag.validate", "required": true },
+          { "op": "add-export", "target": "safety: no full_dag exposed", "to": "agents only get scoped query methods", "required": true },
+          { "op": "add-export", "target": "safety: validates after every mutation", "to": "via injected validateDagJson", "required": true },
+          { "op": "add-export", "target": "safety: atomic writes", "to": "via serializer's atomic write", "required": true },
+          { "op": "add-export", "target": "safety: audit trail", "to": "every mutation appends dispatch_log note", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 2400,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "serializer-sqlite.1",
+      "milestone": "serializer-sqlite",
+      "depends_on": ["client-core.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/shared/dispatch-serializer-sqlite/src/index.ts",
+      "symbol": "createSqliteSerializer",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "createSqliteSerializer", "to": "function (db: BetterSQLite3Database): IDagSerializer", "required": true },
+          { "op": "add-param", "target": "createSqliteSerializer.db", "to": "BetterSQLite3Database<Record<string, never>>", "required": true },
+          { "op": "add-export", "target": "atomic appendDispatchLog", "to": "transactional read-modify-write", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 1000,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "orchestrator-core.1",
+      "milestone": "orchestrator-core",
+      "depends_on": ["optimizer-core.1", "client-core.1", "plugin-io.1", "plugin-gitnexus.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/node-tools/dispatch-orchestrator/src/orchestrator.ts",
+      "symbol": "orchestrateCycle",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "OrchestratorDeps", "to": "interface { client: IDagClient; optimizer: { snapshot, optimize }; plugins?: { io?, gitnexus? }; agentMcp?: IDispatchAgentRunner; calibration?: ICalibrationStore }", "required": true },
+          { "op": "add-export", "target": "orchestrateCycle", "to": "function (deps: OrchestratorDeps): Promise<CycleResult> — one scheduling cycle", "required": true },
+          { "op": "add-export", "target": "orchestrate", "to": "function (deps: OrchestratorDeps): AsyncIterable<CycleResult> — cycles until terminal", "required": true },
+          { "op": "add-export", "target": "pipeline: snapshot→enrich→optimize→dispatch→poll→record", "to": "fixed pipeline, each step with DI", "required": true },
+          { "op": "add-export", "target": "guard handling", "to": "type:automated + action:guard routed to in-process exec", "required": true },
+          { "op": "add-export", "target": "replan injection", "to": "guard failure → inject correction milestone with triggered_by", "required": true },
+          { "op": "add-export", "target": "resumption", "to": "reads dispatch_log to skip completed milestones on restart", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 2800,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "cli.1",
+      "milestone": "cli",
+      "depends_on": ["orchestrator-core.1", "tools-mcp.1", "serializer-sqlite.1"],
+      "type": "generative",
+      "action": "create",
+      "file": "apps/dispatch-cli/src/main.ts",
+      "symbol": null,
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          { "op": "add-export", "target": "dispatch snapshot <plan-slug>", "to": "command: snapshot + enrich → write dag-snapshot.json", "required": true },
+          { "op": "add-export", "target": "dispatch optimize <plan-slug>", "to": "command: full compile → print summary", "required": true },
+          { "op": "add-export", "target": "dispatch run <plan-slug>", "to": "command: orchestrator loop → stream progress", "required": true },
+          { "op": "add-export", "target": "dispatch status <plan-slug>", "to": "command: print open_questions, eligible, wave progress", "required": true },
+          { "op": "add-export", "target": "dispatch calibrate <model-tier>", "to": "command: fire null-task to measure B → write calibration.json", "required": true },
+          { "op": "add-export", "target": "dispatch validate <plan-slug>", "to": "command: validateDagJson → print errors", "required": true }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 1800,
+      "ki_source": "estimate"
+    },
+
+    {
+      "id": "hardening-complete.1",
+      "milestone": "hardening-complete",
+      "depends_on": ["tests-real-e2e.1"],
+      "type": "automated",
+      "action": "guard",
+      "file": null,
+      "symbol": null,
+      "provenance": null,
+      "confidence": null,
+      "audit_check": null,
+      "criteria": [],
+      "tool": null,
+      "args": null,
+      "authored_by": "workflow:plan-builder",
+      "status": "pending",
+      "shape": null,
+      "guard": "node scripts/validate-dag.js --strict docs/plan/dispatch-production/dag.json && npx nx test dispatch-spec && npx nx test dispatch-client && npx nx test dispatch-optimizer && npx nx test dispatch-serializer-json && npx nx test dispatch-serializer-sqlite && npx nx test dispatch-plugin-io && npx nx test dispatch-plugin-gitnexus && npx nx test dispatch-tools && npx nx test dispatch-orchestrator && npx tsx tests/integration/real-e2e.ts",
+      "ki_estimate": 0,
+      "ki_source": null
+    }
+
+  ],
+
+  "dispatch_log": []
+}

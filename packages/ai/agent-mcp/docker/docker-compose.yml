@@ -1,0 +1,79 @@
+# agent-mcp chat stack — chat with your agent-mcp agents through LibreChat.
+#
+# Brings up the OpenAI-compatible chat gateway (agent-mcp) + LibreChat + its deps,
+# all on one compose network. LibreChat reaches the gateway at http://agent-mcp:3010/v1.
+#
+#   cp .env.example .env        # fill ADHD_AGENT_*_SECRET + generate the LibreChat secrets
+#   docker compose up -d
+#   open http://localhost:3080  # register a local account → pick the "agent-mcp" endpoint
+#
+# REQUIRES @adhd/agent-mcp >= 2.1.0 on npm (the version that ships the chat gateway).
+# Until 2.1.0 is published, run the gateway from your local build on the HOST instead —
+# see README.md → "Run the gateway from a local build (pre-2.1.0)".
+name: agent-mcp-chat
+
+services:
+  # ── The chat gateway (OpenAI-compatible) ────────────────────────────────────
+  agent-mcp:
+    image: node:20            # full image: has the toolchain better-sqlite3 may need
+    working_dir: /app
+    command: ["npx", "-y", "@adhd/agent-mcp@latest"]   # pin @2.1.0 once published
+    stdin_open: true          # keep stdin open so the stdio MCP transport doesn't EOF-exit
+    environment:
+      ADHD_AGENT_SSE_HOST: "0.0.0.0"            # reachable from other compose services
+      ADHD_AGENT_SSE_PORT: "3010"
+      ADHD_AGENT_DATABASE_PATH: "/data/agents.db"
+    env_file:
+      - .env                                     # ADHD_AGENT_*_SECRET (+ optional *_BASE_URL/_MODEL)
+    volumes:
+      - agentmcp_data:/data
+      # To chat with the agents you already created, bind-mount the SQLite file instead
+      # (the file is portable; the native driver is installed in-container):
+      # - ../../../../data/agent-mcp/agents-dev.db:/data/agents.db
+    expose:
+      - "3010"
+    restart: unless-stopped
+
+  # ── LibreChat (the chat UI) ─────────────────────────────────────────────────
+  # NOTE: image tag + env are version-sensitive — confirm against docs.librechat.ai.
+  librechat:
+    image: ghcr.io/danny-avila/librechat:latest
+    ports:
+      - "3080:3080"
+    depends_on:
+      - agent-mcp
+      - mongodb
+      - meilisearch
+    extra_hosts:
+      - "host.docker.internal:host-gateway"      # for the host-build fallback (see README)
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "3080"
+      MONGO_URI: "mongodb://mongodb:27017/LibreChat"
+      MEILI_HOST: "http://meilisearch:7700"
+      CONFIG_PATH: "/app/librechat.yaml"
+    env_file:
+      - .env                                     # CREDS_KEY/IV, JWT_*, MEILI_MASTER_KEY, ALLOW_REGISTRATION
+    volumes:
+      - ./librechat.yaml:/app/librechat.yaml:ro
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:7
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    environment:
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_MASTER_KEY: "${MEILI_MASTER_KEY}"
+    volumes:
+      - meili_data:/meili_data
+    restart: unless-stopped
+
+volumes:
+  agentmcp_data:
+  mongo_data:
+  meili_data:

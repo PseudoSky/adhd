@@ -1,0 +1,57 @@
+{
+  "name": "shared-dispatch-spec",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/shared/dispatch-spec/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "layer:shared",
+    "platform:shared"
+  ],
+  "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/shared/dispatch-spec"
+      ],
+      "options": {
+        "configFile": "packages/shared/dispatch-spec/vite.config.ts"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/packages/shared/dispatch-spec",
+        "main": "packages/shared/dispatch-spec/src/index.ts",
+        "tsConfig": "packages/shared/dispatch-spec/tsconfig.lib.json",
+        "assets": [
+          "packages/shared/dispatch-spec/*.md",
+          {
+            "input": "packages/shared/dispatch-spec/src",
+            "glob": "*.json",
+            "output": "/"
+          }
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": [
+        "build",
+        "test"
+      ]
+    }
+  }
+}
