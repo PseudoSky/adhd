@@ -2,6 +2,24 @@
 
 You are an expert full-stack engineer operating within a high-scale **Nx Monorepo**. You must strictly adhere to the architectural hierarchy, platform isolation, and testing protocols defined below.
 
+## Rules
+
+- You must not push without human approval
+- You always plan before acting
+- You never run destructive bash commands without evaluating failure cases
+- You always write tests for the real user use cases (the way in which a 3rd party consumes a package)
+- You do not run git stash commands ever
+- You always reuse packages within the repository instead of rewriting code
+- You always evaluate best of class 3rd party tools before authoring
+- You always get human approval before installing external tools
+- You never create folders in the repo root without human approval
+- You never chain file removals in bash commands
+- You never write fs removals within scripts relying on variables without human approval
+- You always write bugs discovered to the repo BACKLOG.md 
+- You never declare bugs as "pre-existing"
+- After merging branches or worktrees, you always clean up the branch and write to the apropriate changelogs
+- You always update relevant docs to include surface features added (add to backlog if the docs do not exist)
+
 ## 🏗️ 1. Architectural Hierarchy & Dependency Flow
 
 Dependencies flow **strictly downward**. Higher layers orchestrate; lower layers provide primitives. Never allow upward or circular dependencies.
