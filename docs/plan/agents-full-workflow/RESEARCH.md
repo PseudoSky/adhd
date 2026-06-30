@@ -398,7 +398,10 @@ agent-mcp uses pino logger writing to stderr. Enable debug via:
 | 2026-06-30 | Memory write (tool-result-proxy) | — | memory-server | Idea: auto-proxy large tool responses to storage, return stubs |
 | 2026-06-30 | Memory write (git-plugin) | — | memory-server | Idea: agent-mcp plugin for auto git workflow scaffolding |
 | 2026-06-30 | Memory write (virtual-pr) | — | memory-server | Idea: virtual PR process for dispatch DAG handoffs |
-| 2026-06-30 | agent-mcp-tail | packages/ai/agent-mcp/src/scripts/agent-mcp-tail.ts | primary | Live DB tailer — tool calls, model requests, task events |
+| 2026-06-30 | agent-mcp-tail | packages/ai/agent-mcp/src/scripts/agent-mcp-tail.ts | primary | Live DB tailer — token ctx size, agent filter, include-history, limit |
+| 2026-06-30 | sonirico/mcp-shell security.yaml | scripts/mcp-shell-security.yaml | primary | Per-worktree shell config, AST-secure |
+| 2026-06-30 | agent-mcp providers | dispatch-* agents | agent-mcp_agent_update | Switched all agents to openai+LM Studio (ADHD_AGENT_OPENAI_*) |
+| 2026-06-30 | BACKLOG.md | FEAT-ENV-001 | primary | Added @adhd/environment feature request |
 
 ## Worktrees
 
