@@ -155,23 +155,19 @@ function poll(): void {
         const model = row.model ?? p["model"] ?? "?";
         const mc = p["messageCount"] ?? p["messagesCount"] ?? p["message_count"] ?? "?";
         const tc = p["toolCount"] ?? p["tool_count"] ?? "?";
-        const inRaw = row.inputTokens ?? 0;
-        const inStr = inRaw >= 1000 ? `${(inRaw / 1000).toFixed(1)}K` : `${inRaw}`;
-        detail = `model=${model} in=${inStr} messages=${mc} tools=${tc}`;
+        detail = `model=${model} messages=${mc} tools=${tc}`;
         break;
       }
       case "MODEL_RESPONSE": {
         const stop = p["stopReason"] ?? p["stop_reason"] ?? p["stop"] ?? "?";
-        const outRaw = row.outputTokens ?? 0;
-        const outStr = outRaw >= 1000 ? `${(outRaw / 1000).toFixed(1)}K` : `${outRaw}`;
         let content = msgContent ?? "";
         if (content) {
           if (!verbose && content.length > 500) content = content.slice(0, 500) + "...";
-          detail = `${stop} out=${outStr} ${content}`;
+          detail = `${stop} ${content}`;
         } else {
           const msgCount = p["messageCount"] ?? p["messagesCount"] ?? p["message_count"] ?? "?";
           const toolCount = p["toolCount"] ?? p["tool_count"] ?? "?";
-          detail = `${stop} out=${outStr} msgs=${msgCount} tools=${toolCount}`;
+          detail = `${stop} msgs=${msgCount} tools=${toolCount}`;
         }
         break;
       }
@@ -217,10 +213,14 @@ function poll(): void {
     }
 
     let tokenDisplay = "";
-    if (row.taskId && row.inputTokens != null) {
-      const inS = row.inputTokens >= 1000 ? `${(row.inputTokens / 1000).toFixed(1)}K` : `${row.inputTokens}`;
-      const outS = row.outputTokens != null && row.outputTokens >= 1000 ? `${(row.outputTokens / 1000).toFixed(1)}K` : `${row.outputTokens ?? 0}`;
-      tokenDisplay = `${inS}/${outS}`;
+    if (row.taskId && row.inputTokens != null && row.inputTokens > 0) {
+      if (row.type === "MODEL_REQUEST") {
+        const s = row.inputTokens >= 1000 ? `${(row.inputTokens / 1000).toFixed(1)}K` : `${row.inputTokens}`;
+        tokenDisplay = `in=${s}`;
+      } else if (row.type === "MODEL_RESPONSE" && row.outputTokens != null && row.outputTokens > 0) {
+        const s = row.outputTokens >= 1000 ? `${(row.outputTokens / 1000).toFixed(1)}K` : `${row.outputTokens}`;
+        tokenDisplay = `out=${s}`;
+      }
     }
 
     const line = `${time} ${agent.padEnd(18)} ${sess.padEnd(8)} ${row.type.padEnd(15)} ${tokenDisplay.padStart(12)} ${detail}`;
