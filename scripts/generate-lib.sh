@@ -123,6 +123,27 @@ RMEOF
   echo "  ✅ scaffolded $README_FILE"
 fi
 
+# 3.5 .eslintrc.json — add vite.config.* exclusion to ignorePatterns.
+#     The Nx-generated scaffold does not exclude vite config files, so the
+#     @typescript-eslint/no-var-requires rule fires on every require('node:fs')
+#     inside the README-copy plugin. Every existing package in the repo already
+#     ignores these files. This patch brings new scaffolds into parity.
+ESLINTRC="$PACKAGE_DIR/.eslintrc.json"
+if [[ -f "$ESLINTRC" ]]; then
+  node - "$ESLINTRC" <<'JSEOF'
+const fs = require('fs');
+const path = process.argv[2];
+const json = JSON.parse(fs.readFileSync(path, 'utf8'));
+if (json.ignorePatterns && !json.ignorePatterns.some(p => p === 'vite.config.ts' || p === 'vite.config.*')) {
+  json.ignorePatterns.push('vite.config.js', 'vite.config.ts', 'vite.config.mjs', 'vite.config.mts');
+  fs.writeFileSync(path, JSON.stringify(json, null, 2) + '\n');
+  console.log(`  ✅ patched ${path}: added vite.config.* to ignorePatterns`);
+} else {
+  console.log(`  ℹ️  ${path}: vite exclusion already present, skipped`);
+}
+JSEOF
+fi
+
 # 4. vite.config.ts — ship README.md into dist.
 #    @nx/vite:build ignores the project.json 'assets' option, and packages are published
 #    from dist/{projectRoot}, so without this the README never reaches npm. This inline
