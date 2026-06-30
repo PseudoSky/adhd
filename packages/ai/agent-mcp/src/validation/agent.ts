@@ -194,6 +194,15 @@ export const agentDefinitionSchema = z.object({
      * Has no effect on ephemeral tasks (no DB row → no resume token).
      */
     allowHumanInput: z.boolean().optional(),
+    /**
+     * Strategy for sanitizing sub-agent output before the parent model sees it.
+     * - "none": raw pass-through
+     * - "prefix" (default): prepend a structured boundary label
+     * - "wrap": surround with start/end delimiters
+     *
+     * Absent/undefined defaults to "prefix" at runtime.
+     */
+    sanitization: z.enum(["none", "prefix", "wrap"]).optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
 });
@@ -260,6 +269,7 @@ const agentPatchSchema = z.object({
     permissions: agentPermissionsSchema.optional(),
     maxToolLoops: z.number().int().positive().optional(),
     allowHumanInput: z.boolean().optional(),
+    sanitization: z.enum(["none", "prefix", "wrap"]).optional(),
 });
 
 export const agentUpdateInputSchema = z

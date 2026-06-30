@@ -18,6 +18,15 @@ export interface HookEventMap {
   "post:model_response":  PostModelResponsePayload;
   "pre:tool_call":        PreToolCallPayload;
   "post:tool_call":       PostToolCallPayload;
+  /**
+   * Same shape as post:tool_call, but with a transform contract: handlers
+   * registered on this event may MUTATE the payload (passed by reference).
+   * The orchestrator reads the mutated values after emit() returns.
+   * Observational hooks on "post:tool_call" fire first in Phase 2;
+   * transform hooks on this event fire in Phase 3 before the result is
+   * appended to the conversation history.
+   */
+  "transform:tool_result": PostToolCallPayload;
   "message:appended":     MessageAppendedPayload;
   "task:completed":       TaskCompletedPayload;
   "task:failed":          TaskFailedPayload;

@@ -106,7 +106,7 @@
   "dod_provenance": {
     "confirmed_at": "2026-06-26T04:18:33.450Z",
     "by": "pseudosky",
-    "note": "Owner human sign-off 2026-06-26: authoring/discovery lane over MCP; live-provider matrix (anthropic OAuth/Claude Max, claudecli, lmstudio) — NO mocks on the run path; name-keyed identity; agent-mcp byte-back-out guarantee. Confirmed via plain-language DoD sheet.",
+    "note": "Owner human sign-off 2026-06-26: authoring/discovery lane over MCP; live-provider matrix (anthropic OAuth/Claude Max, claudecli, lmstudio) — NO mocks on the run path; name-keyed identity; agent-mcp byte-back-out guarantee. Confirmed via plain-language DoD sheet. Updated 2026-06-29: embedding-substrate and enrichment-pipeline now consume @adhd/sox-* packages instead of building from scratch (D5). See _shared.md §sox-ecosystem and human-blocker sox-package-publish.",
     "dod_ids": [
       "dod.1",
       "dod.2",

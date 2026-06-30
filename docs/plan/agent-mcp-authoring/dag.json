@@ -34,13 +34,15 @@
       ],
       "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts",
       "artifacts": [
+        "packages/ai/agent-registry/package.json",
         "packages/ai/agent-registry/src/enrich/embedding.ts",
         "packages/ai/agent-registry/src/enrich/usecase-anchors.ts",
+        "packages/ai/agent-registry/src/enrich/cosine.ts",
         "packages/ai/agent-registry/src/index.ts",
         "packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts"
       ],
       "context": "contexts/embedding-substrate.md",
-      "notes": ""
+      "notes": "Consumes @adhd/sox-embedding-provider + @adhd/sox-vector-store instead of building custom hash. See context for publish/link prerequisite."
     },
     "enrichment-pipeline": {
       "kind": "work",
@@ -50,6 +52,7 @@
       ],
       "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts",
       "artifacts": [
+        "packages/ai/agent-registry/package.json",
         "packages/ai/agent-registry/src/enrich/enrich-component.ts",
         "packages/ai/agent-registry/src/enrich/summarize.ts",
         "packages/ai/agent-registry/src/store/usecase-store.ts",
@@ -57,7 +60,7 @@
         "packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts"
       ],
       "context": "contexts/enrichment-pipeline.md",
-      "notes": ""
+      "notes": "Consumes @adhd/sox-ingest extractiveSummary + @adhd/sox-embedding-provider embed + @adhd/sox-vector-store knn instead of building from scratch."
     },
     "name-slug-seam": {
       "kind": "work",

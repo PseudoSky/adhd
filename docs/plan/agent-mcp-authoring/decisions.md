@@ -9,44 +9,42 @@
 
 ---
 
-## D1. Embedding source — deterministic in-package embedding `[def:embedding-source]`
+## D1. Embedding source — consume `@adhd/sox-embedding-provider` `[def:embedding-source]`
 
-**Decision: stand up a deterministic, dependency-free in-package embedding in
-`@adhd/agent-registry`; do NOT couple to the memory-server embedding path.**
+**Decision: consume `@adhd/sox-embedding-provider` for embedding and
+`@adhd/sox-vector-store` for vector persistence; build only a thin registry
+wrapper + seed anchors. Do NOT couple to the memory-server embedding path.**
 
 Rationale (grounded against the real tree):
 
-- **No embedding infrastructure exists anywhere in the workspace today.** There is
-  no `sqlite-vec`, `@xenova/transformers`, `fastembed`, `onnxruntime`, or any
-  embedding dependency in any `packages/ai/*/package.json` or the root
-  `package.json`. `UseCaseStore.linkComponent(componentSlug, useCaseSlug, weight?)`
-  is a **manual** weighted insert — there is no auto-resolution. SCOPE.md §"Out of
-  Scope" explicitly excluded "Embedding-based similarity search for component
-  deduplication" from Plans 1–7, which is exactly why this is net-new (SPEC §10.1).
-- **The memory-server is not a local importable workspace path** (`~/.memory`), and
-  coupling the registry's enrichment to an external MCP server would (a) make
-  `component_define` non-deterministic and network-bound, violating SPEC §5.3's
-  "cached/deterministic, idempotent re-define must NOT churn the index," and (b)
-  break the `platform:shared` purity rule for `@adhd/agent-registry`.
-- A **deterministic lexical/hashing embedding** (e.g. a fixed-dimension hashed
-  bag-of-character-n-grams with L2 normalization, or a small deterministic
-  token-hash projection) is pure TypeScript, has zero external deps, is identical
-  across Node/CI, and makes idempotent re-define trivially provable (same input →
-  identical vector → identical use-case links → no index churn). Cosine similarity
-  over these vectors is sufficient for the SPEC §7 "rank a matching component above
-  an unrelated one" bar — the enrichment only needs *relative* ordering, not SOTA
-  semantic recall.
+- **The sox-ecosystem (FEAT-008) now provides what D1 originally proposed
+  building from scratch.** `@adhd/sox-embedding-provider` ships a deterministic
+  hash provider (SHA-256 seeded Box-Muller, config `type:'hash'`), a real ONNX
+  provider (`type:'fastembed'` in a worker thread), and a remote API adapter
+  (`type:'remote'`). `@adhd/sox-vector-store` provides sqlite-vec-backed kNN
+  cosine search with multi-space isolation. Both are MIT-licensed, tested, and
+  built.
+- **Publishing prerequisite.** At time of writing (2026-06-29) these packages are
+  built but NOT published to npm — see `[def:sox-publish]`. The plan execution
+  must either publish them, link them, or reference by local path.
+- **The memory-server is still NOT coupled** (`~/.memory`), satisfying the same
+  determinism and `platform:shared` constraints. The sox packages are pure TS data
+  libraries, not a runtime MCP server.
+- **`sqlite-vec` is a transitive dep** through `@adhd/sox-vector-store`. This is
+  acceptable — the registry already depends on `better-sqlite3`, and `sqlite-vec`
+  is a compatible extension. No `onnxruntime-node` or worker thread runs on the
+  main thread unless `type:'fastembed'` is explicitly configured (default stays
+  `type:'hash'` during Plan 8 execution).
 
-**Seam for future upgrade (kept open, not built):** the embedding function is a
-single injectable interface `EmbedFn = (text: string) => Float32Array` with a
+**Seam for future upgrade (kept open):** the `EmbeddingProvider` interface is
 deterministic default. A later plan MAY swap in a model-backed embedder behind the
 same interface without touching `enrichComponent` or the discovery tools. This is a
 generalization seam, not scope here.
 
-**What this requires (SPEC §10.1/§10.2):** `enrich/embedding.ts` (the `EmbedFn` +
-deterministic default + cosine), `enrich/usecase-anchors.ts` (embed each seeded
-use-case's name+description into an anchor vector at seed time), and the
-`enrichment-pipeline` write path.
+**What this requires (SPEC §10.1/§10.2):** `@adhd/sox-embedding-provider` as a dep,
+`@adhd/sox-vector-store` as a dep, `enrich/embedding.ts` (registry wrapper +
+cosine), `enrich/usecase-anchors.ts` (embed each seeded use-case's name+description
+into an anchor vector at seed time), and the `enrichment-pipeline` write path.
 
 ---
 
@@ -151,3 +149,65 @@ fails if any agent-mcp src file outside this manifest is changed (dod.8).
 - **Errors:** `COMPONENT_NOT_FOUND`, `TOOL_NOT_FOUND`, `POLICY_NOT_FOUND`,
   `MODEL_NOT_FOUND` are raised by resolving each referenced name through the
   discovery stores before the transaction commits.
+
+---
+
+## D5. sox-ecosystem dependency (FEAT-008 consumable) `[def:sox-publish]`
+
+**Decision: consume `@adhd/sox-embedding-provider`, `@adhd/sox-vector-store`,
+`@adhd/sox-ingest`, and `@adhd/sox-analysis` as workspace dependencies instead
+of building embedding/enrichment infrastructure from scratch.**
+
+Rationale:
+
+- The sox-ecosystem's `libs/data/` already ships the exact primitives this plan
+  needs (deterministic hash embedding, real fastembed ONNX provider, sqlite-vec
+  vector store with kNN/cosine search, extractive summary, near-dup detection).
+- Building a redundant in-package implementation would duplicate code and bypass
+  the FEAT-008 seam that was intentionally left open for this exact consumption.
+- The `@adhd/sox-*` packages are MIT-licensed, non-private (except `@adhd/sox-ingest`),
+  built to `dist/` with proper `exports`, and tested.
+
+**Publish/link prerequisite (must be resolved before `embedding-substrate` starts):**
+
+| Package | Published? | Action |
+|---------|-----------|--------|
+| `@adhd/sox-embedding-provider@0.1.0` | No (404), `private: false` | Publish to npm or link |
+| `@adhd/sox-vector-store@0.1.0` | No (404), `private: false` | Publish to npm or link |
+| `@adhd/sox-ingest@0.1.0` | No, `private: true` | Either make public + publish, or use local path |
+| `@adhd/sox-analysis@0.1.0` | No (404), `private: false` | Publish to npm or link |
+| `@adhd/sox-memory-core@0.2.1` | **Yes** (published) | Direct npm dep |
+| `@adhd/sox-hybrid-search@0.1.0` | No (404), `private: false` | Optional — for discovery-tools |
+
+**Option A — Publish:**
+```bash
+cd /Users/nix/dev/ai/sox-ecosystem
+# Add changeset entries for affected packages
+npx changeset add --type minor    # for each un-published package
+npx changeset version
+npx changeset publish
+```
+
+**Option B — Link (development-only):**
+```bash
+cd /Users/nix/dev/ai/sox-ecosystem/libs/data/embed/embedding-provider && npm link
+cd /Users/nix/dev/ai/sox-ecosystem/libs/data/vectors/vector-store && npm link
+cd /Users/nix/dev/ai/sox-ecosystem/libs/data/ingest/ingest && npm link
+cd /Users/nix/dev/ai/sox-ecosystem/libs/data/analysis/analysis && npm link
+cd /Users/nix/dev/node/adhd && npm link @adhd/sox-embedding-provider @adhd/sox-vector-store @adhd/sox-ingest @adhd/sox-analysis
+```
+
+**Option C — Local path (simplest, no npm registry):**
+```json
+// add to /Users/nix/dev/node/adhd/package.json
+"@adhd/sox-embedding-provider": "file:../sox-ecosystem/libs/data/embed/embedding-provider",
+"@adhd/sox-vector-store": "file:../sox-ecosystem/libs/data/vectors/vector-store",
+"@adhd/sox-ingest": "file:../sox-ecosystem/libs/data/ingest/ingest",
+"@adhd/sox-analysis": "file:../sox-ecosystem/libs/data/analysis/analysis"
+```
+
+**Note:** `@adhd/sox-ingest` is `private: true` — Option C (local path) works for
+development but it cannot be resolved from npm. If publish is the chosen path,
+it must first be made `"private": false` and the sox-ecosystem owners must approve
+making it public. If local-only suffices (the `extractiveSummary` function is small
+and stable), Option C avoids the governance question entirely.
