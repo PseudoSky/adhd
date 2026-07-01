@@ -51,8 +51,24 @@ export interface IEnforcementError {
   readonly message: string;
 }
 
+/**
+ * A soft tool-level warning that blocks the tool call but returns a diagnostic
+ * message to the agent instead of failing the task.
+ *
+ * Budget plugins with `mode: "warning"` throw this from a `pre:tool_call`
+ * enforcement handler. The orchestrator catches it, skips tool execution,
+ * and injects the warning as a tool error result — the agent sees the error
+ * and can adapt.
+ */
+export interface IToolWarning {
+  readonly isToolWarning: true;
+  readonly toolName: string;
+  readonly message: string;
+  readonly callId: string;
+}
+
 /** Only these events support enforcement handlers (throws propagate). */
-export type EnforcementEvent = "pre:model_request";
+export type EnforcementEvent = "pre:model_request" | "pre:tool_call";
 
 export type EnforcementHandler<E extends EnforcementEvent> =
   (payload: HookEventMap[E]) => void | Promise<void>;
