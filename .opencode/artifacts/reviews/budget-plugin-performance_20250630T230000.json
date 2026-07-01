@@ -1,0 +1,98 @@
+{
+  "$schema": "review-report-v1",
+  "reviewer": "adhd-reviewer-flash",
+  "task_id": "budget-plugin-performance-audit",
+  "label": "agent-mcp-budget performance and correctness audit",
+  "reviewed_at": "2026-06-30T23:00:00.000Z",
+  "files_reviewed": [
+    "packages/ai/agent-mcp-budget/src/index.ts",
+    "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+    "packages/ai/agent-mcp/src/engine/hooks.ts",
+    "packages/ai/agent-mcp/src/runtime/usage-client.ts",
+    "packages/ai/agent-mcp-budget/src/__tests__/budget-plugin.test.ts"
+  ],
+  "verification": {
+    "build": "passed",
+    "test": { "passed": 23, "failed": 0 },
+    "platform_isolation": "passed"
+  },
+  "findings": [
+    {
+      "severity": "high",
+      "category": "correctness",
+      "file": "packages/ai/agent-mcp-budget/src/index.ts",
+      "line": 464,
+      "decision_ref": null,
+      "description": "Double-counting of historical tokens when a cap has both scope AND window. getSnapshotValue adds both scope-prefixed totals (queryScopeTotals: ALL historical tokens) AND window totals (queryWindowTokens: window-filtered historical tokens excluding current). This means the 24h-window tokens within the scope are counted TWICE.",
+      "fix_sketch": "In getSnapshotValue (line 514), when cap.window is present and scope !== 'task', the scope-prefixed values should not include queryScopeTotals. Either: (1) use snap['inputTokens']/snap['outputTokens'] (in-memory only) for the base when a window is present, or (2) subtract queryScopeTotals from the base when adding window totals. The simplest fix: if (cap.window && (cap.scope ?? dimScope ?? 'task') !== 'task') { base = snap['inputTokens'] + snap['outputTokens'] + snap['cacheTokens']; } before the window addition at line 550.",
+      "repro": "Config: { caps: [{ field: 'tokens', maximum: 100000, window: 'PT24H', scope: 'session' }] }. Real DB has 80k historical tokens (all within 24h). Current task: 10k tokens. Enforcement calculates 170k vs 100k limit -> false positive BLOCK. Actual 24h total is 90k -> should PASS."
+    },
+    {
+      "severity": "medium",
+      "category": "spec-compliance",
+      "file": "packages/ai/agent-mcp-budget/src/index.ts",
+      "line": 96,
+      "decision_ref": null,
+      "description": "Flat config maxTokensPer24h loses its agent scope. FIELD_MAP maps maxTokensPer24h to { field: 'tokens', window: 'PT24H' } without a scope. This creates a cap with implicit scope='task' (via dimScope fallback). queryWindowTokens returns 0 for scope='task' (no branch matches), so the 24h window DB query is effectively dead. Only the in-memory accumulator counts, meaning the cap silently applies only to the current task — a regression from the previous behavior where maxTokensPer24h was an agent-scoped rolling window.",
+      "fix_sketch": "Two options: (1) Add scope property to FIELD_MAP type and set maxTokensPer24h scope to 'agent'. (2) Hardcode scope:'agent' in flatFieldsToDimension for this specific key. Option 2 is simpler: check key === 'maxTokensPer24h' in flatFieldsToDimension and set cap.scope = 'agent'. Note: no test covers this path; the existing test at line 685 uses structured config with explicit scope: 'agent'."
+    },
+    {
+      "severity": "medium",
+      "category": "correctness",
+      "file": "packages/ai/agent-mcp-budget/src/index.ts",
+      "line": 526,
+      "decision_ref": null,
+      "description": "Cache tokens excluded from time-window DB queries. In getSnapshotValue for field='tokens' with a scope+window combination, snap['cacheTokens'] always reads the in-memory (current-task-only) value. The window query (queryWindowTokens at line 394) sums only input_tokens + output_tokens, excluding cache tokens entirely. This means cache tokens from historical tasks within the window are never counted against the budget cap.",
+      "fix_sketch": "Add cache_read_input_tokens + cache_creation_input_tokens to the SUM in queryWindowTokens (lines 415, 427, 438) for all three scope branches, similar to how queryScopeTotals already includes them."
+    },
+    {
+      "severity": "medium",
+      "category": "test-coverage",
+      "file": "packages/ai/agent-mcp-budget/src/__tests__/budget-plugin.test.ts",
+      "line": 663,
+      "decision_ref": null,
+      "description": "No test for combined scope+window caps with real DB responses for BOTH queries. The existing maxTokensPer24h test (line 685) uses a mock DB that returns undefined for queryScopeTotals (no 'created_at' in SQL), so it never exercises the double-counting path. A real DB would return historical tokens from both queries, causing the double-counting bug described above.",
+      "fix_sketch": "Add a test with a mock DB that returns non-undefined for ALL queries (both scope totals and window totals), verifying that a cap with scope+window doesn't overcount."
+    },
+    {
+      "severity": "medium",
+      "category": "test-coverage",
+      "file": "packages/ai/agent-mcp-budget/src/__tests__/budget-plugin.test.ts",
+      "line": 370,
+      "decision_ref": null,
+      "description": "Accumulator cleanup tested only for task:completed; no tests for task:failed or task:cancelled paths. The onTerminal handler (line 263) dispatches to all three, and the orchestrator emits all three (lines 656, 683, 705), but only task:completed has a test (line 370).",
+      "fix_sketch": "Add test cases: emit task:failed / task:cancelled, then verify a new task with the same taskId creates a fresh accumulator (same pattern as line 370-399)."
+    },
+    {
+      "severity": "low",
+      "category": "test-coverage",
+      "file": "packages/ai/agent-mcp-budget/src/__tests__/budget-plugin.test.ts",
+      "line": 1,
+      "decision_ref": null,
+      "description": "No test for the global scope ('global') in any cap. The schema supports scope='global' and queryWindowTokens has a branch for it (line 432), but there's no test coverage for cross-agent caps.",
+      "fix_sketch": "Add a test with scope='global' using the mock DB, confirming the DB query excludes the current task and sums across all tasks."
+    },
+    {
+      "severity": "low",
+      "category": "correctness",
+      "file": "packages/ai/agent-mcp-budget/src/index.ts",
+      "line": 85,
+      "decision_ref": null,
+      "description": "Named + default export warning. The build emits: 'Entry module is using named and default exports together.' createPlugin is both a named export and the default export (line 623-624). Consumers using ESM may import it as `import createPlugin from '...'` or `import { createPlugin } from '...'`. The default in CJS becomes `agent-mcp-budget.default.createPlugin`, which is unexpected.",
+      "fix_sketch": "Remove the named export on line 624: keep only `export default createPlugin;` or only `export { createPlugin };` but not both."
+    }
+  ],
+  "summary": {
+    "critical": 0,
+    "high": 1,
+    "medium": 4,
+    "low": 2,
+    "info": 0
+  },
+  "backlog_entries": [
+    "BL-xxx — agent-mcp-budget: combined scope+window caps double-count historical tokens (HIGH). Fix: scope-prefixed totals should not include queryScopeTotals when a window is also present.",
+    "BL-xxx — agent-mcp-budget: flat-format maxTokensPer24h loses scope (MEDIUM). FIELD_MAP should set scope:'agent' for backward compatibility.",
+    "BL-xxx — agent-mcp-budget: cache tokens excluded from historical window queries (MEDIUM). queryWindowTokens only sums input_tokens + output_tokens.",
+    "BL-xxx — agent-mcp-budget: missing test coverage for scope+window double-counting, global scope, and failed/cancelled cleanup (MEDIUM/LOW)."
+  ]
+}
