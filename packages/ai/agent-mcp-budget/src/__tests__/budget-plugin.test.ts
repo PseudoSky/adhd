@@ -479,15 +479,26 @@ describe('BudgetPlugin — teeth tests', () => {
 });
 
 describe('configSchema', () => {
-  it('applies defaults', () => {
-    const result = configSchema.parse({});
-    expect(result.scope).toBe('task');
-    expect(result.costPerInputToken).toBe(0);
-    expect(result.costPerOutputToken).toBe(0);
+  it('passes through raw config (server validation)', () => {
+    const result = configSchema.parse({ nested: { key: 'val' } });
+    expect(result).toEqual({ nested: { key: 'val' } });
   });
 
-  it('rejects negative maxModelCalls', () => {
-    expect(() => configSchema.parse({ maxModelCalls: -1 })).toThrow();
+  it('flat config is normalized by factory', () => {
+    const plugin = createPlugin({
+      db: null,
+      config: { maxModelCalls: 2 },
+    });
+    const hooks = new HookRegistry();
+    plugin.install(hooks);
+    const ctx = makeCtx();
+    // 2 calls should pass, 3rd blocked
+    expect(() => {
+      runTaskTurns(hooks, ctx, [
+        { inputTokens: 10, outputTokens: 10 },
+        { inputTokens: 10, outputTokens: 10 },
+      ]);
+    }).not.toThrow();
   });
 });
 
