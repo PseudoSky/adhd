@@ -301,6 +301,39 @@ details and the result content — include a summary in the payload.
 
 ---
 
+### BUG-007 — Provider tool-call arguments as JSON string → plugin transform handler can't read agent name
+- **Status:** open
+- **Priority:** P2
+- **Area:** engine (orchestrator), providers, plugins (agent-mcp-sanitize)
+- **Reported:** 2026-06-30
+
+**Problem.** OpenAI-compatible providers (DeepSeek, etc.) return tool call
+arguments as a **JSON string** (`'{"agent_name":"worker"}'`) rather than a
+parsed object. The orchestrator's Phase 3 passes `tc.arguments` as
+`toolInput` to the `transform:tool_result` payload. When the sanitize
+plugin's `getAgentName()` reads `toolInput["agent_name"]` on a JSON string,
+bracket-index returns `undefined`, so the agent name defaults to the generic
+`"Sub-agent output"` label instead of `Sub-agent output from "worker"`.
+
+**Impact.** Sanitized delegation output shows `── Sub-agent output ──`
+instead of `── Agent "worker" output ──`. The protection still applies
+(structural wrapping works), but the agent-identification UX is degraded.
+
+**Root cause.** The `tc` tool call in `assistantMessage.toolCalls` carries
+`arguments` in whatever form the provider returned. OpenAI-compatible APIs
+emit arguments as a JSON-encoded string; Anthropic emits them as a parsed
+object. The orchestrator doesn't normalize this before Phase 3, so
+transform handlers receive inconsistently-typed inputs.
+
+**Proposed fix.** Normalize `tc.arguments` to a parsed object before Phase
+3, or provide a helper that extracts the agent name regardless of whether
+`toolInput` is a string or object.
+
+**References** — `packages/ai/agent-mcp/src/engine/orchestrator.ts` (Phase 3),
+`packages/ai/agent-mcp-sanitize/src/index.ts` (`getAgentName`).
+
+---
+
 ## ✨ Features
 
 ### FEAT-001 — Per-token (incremental) streaming
