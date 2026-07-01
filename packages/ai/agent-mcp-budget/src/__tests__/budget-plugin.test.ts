@@ -614,7 +614,7 @@ describe('per-tool overrides', () => {
       db: null,
       config: pluginConfigSchema.parse({
         defaults: {},
-        tool: { default: {}, overrides: { 'expensive_search': { maxCalls: 0, mode: 'warning' } } },
+        tool: { default: {}, overrides: { 'expensive_search': { maxCalls: 1, mode: 'warning' } } },
       }),
     });
     await plugin.install(hooks);
@@ -622,17 +622,20 @@ describe('per-tool overrides', () => {
 
     await hooks.emit('task:start', { executionContext: ctx, messages: [] });
 
-    // First call is blocked immediately (maxCalls: 0)
+    // First call — counter is 0, 0 < 1 → passes
+    await enforcePreTool(hooks, ctx, 'expensive_search', 'call-1');
+
+    // Second call — counter is 1, 1 >= 1 → warns
     let caught: unknown;
     try {
-      await enforcePreTool(hooks, ctx, 'expensive_search', 'call-1');
+      await enforcePreTool(hooks, ctx, 'expensive_search', 'call-2');
     } catch (e) {
       caught = e;
     }
     expect(caught).toMatchObject({
       isToolWarning: true,
       toolName: 'expensive_search',
-      callId: 'call-1',
+      callId: 'call-2',
       message: expect.stringContaining('maxCalls'),
     });
   });
@@ -655,6 +658,144 @@ describe('per-tool overrides', () => {
     ).rejects.toMatchObject({
       isEnforcementError: true,
       message: expect.stringContaining('blocked_tool'),
+    });
+  });
+});
+
+describe('maxTokensPer24h — mock DB', () => {
+  let hooks: HookRegistry;
+  let lastQuery: { sql: string; params: unknown[] } | undefined;
+  const mockDb = {
+    prepare(sql: string) {
+      return {
+        get(...params: unknown[]) {
+          lastQuery = { sql, params };
+          if (sql.includes('created_at')) {
+            return { total: 150_000 };
+          }
+          return undefined;
+        },
+      };
+    },
+  };
+
+  beforeEach(() => {
+    hooks = new HookRegistry();
+    lastQuery = undefined;
+  });
+
+  it('blocks when 24h total + current exceeds maxTokensPer24h', async () => {
+    const plugin = createPlugin({
+      db: mockDb,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          scope: 'agent',
+          maxTotalTokens: 1_000_000,
+          maxTokensPer24h: 200_000,
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+
+    // First call uses 60K tokens — 60K current + 150K 24h = 210K > 200K limit
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 30_000, outputTokens: 30_000 },
+    });
+
+    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await expect(
+      hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] })
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('maxTokensPer24h'),
+    });
+  });
+
+  it('passes when 24h total + current is under maxTokensPer24h', async () => {
+    const lowMockDb = {
+      prepare(sql: string) {
+        return {
+          get(...params: unknown[]) {
+            if (sql.includes('created_at')) return { total: 10_000 };
+            return undefined;
+          },
+        };
+      },
+    };
+    const plugin = createPlugin({
+      db: lowMockDb,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          scope: 'agent',
+          maxTotalTokens: 1_000_000,
+          maxTokensPer24h: 200_000,
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+
+    // 60K current + 10K 24h = 70K < 200K → passes
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 30_000, outputTokens: 30_000 },
+    });
+
+    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await expect(
+      hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] })
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe('tool maxTotalTokens override', () => {
+  let hooks: HookRegistry;
+
+  beforeEach(() => {
+    hooks = new HookRegistry();
+  });
+
+  it('blocks tool call when tool maxTotalTokens is exceeded', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { maxTotalTokens: 1_000_000 },
+        tool: { default: {}, overrides: { 'big_output': { maxTotalTokens: 50, mode: 'block' } } },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    // Accumulate 60 tokens
+    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'tool_calls',
+      toolCallCount: 1,
+      tokenUsage: { inputTokens: 30, outputTokens: 30 },
+    });
+
+    // Calling big_output → 60 total > 50 limit
+    await expect(
+      enforcePreTool(hooks, ctx, 'big_output', 'call-1')
+    ).rejects.toMatchObject({
+      message: expect.stringContaining('big_output'),
     });
   });
 });
