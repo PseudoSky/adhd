@@ -23,10 +23,7 @@ export const agentsTable = sqliteTable("agents", {
 export const sessionsTable = sqliteTable("sessions", {
     id: text("id").primaryKey(),
     agentName: text("agent_name")
-        .notNull()
-        .references(() => agentsTable.name, {
-            onDelete: "cascade"
-        }),
+        .notNull(),
     agentVersion: integer("agent_version").notNull(),
     // Full JSON snapshot of AgentDefinition at session creation time.
     // Not exposed in the public Session type — accessed only via

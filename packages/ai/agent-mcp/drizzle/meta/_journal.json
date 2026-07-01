@@ -50,6 +50,13 @@
       "when": 1781497706486,
       "tag": "0006_composed_prompts_cache",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1782874595963,
+      "tag": "0007_smart_callisto",
+      "breakpoints": true
     }
   ]
 }
