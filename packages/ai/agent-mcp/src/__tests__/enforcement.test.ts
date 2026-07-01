@@ -10,7 +10,7 @@
 
 import { describe, it, expect } from "vitest";
 import { HookRegistry } from "../engine/hooks.js";
-import type { IEnforcementError } from "@adhd/agent-mcp-types";
+import type { IEnforcementError, IToolWarning } from "@adhd/agent-mcp-types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -273,6 +273,157 @@ describe("Orchestrator — BUDGET_EXCEEDED via BudgetPlugin", () => {
 
             // Task completes — throw was swallowed by emit()
             expect(completed).toBeDefined();
+        } finally {
+            await harness.teardown();
+        }
+    }, 15_000);
+});
+
+describe("Orchestrator — pre:tool_call enforcement", () => {
+    it("block mode: task fails with BUDGET_EXCEEDED when tool enforcement throws IEnforcementError", async () => {
+        const {
+            buildHarness, drainQueue, createSessionAndAgent,
+        } = await import("./integration/harness.js");
+        const { ScriptedProvider } = await import("./integration/scripted-provider.js");
+        const { Orchestrator } = await import("../engine/orchestrator.js");
+        const { taskTool } = await import("../tools/task.js");
+        const { tasksTable } = await import("../db/schema.js");
+        const { eq } = await import("drizzle-orm");
+
+        const provider = new ScriptedProvider([
+            { type: "tool_calls", toolCalls: [{ server: "noop", tool: "noop_tool", arguments: {} }] },
+        ]);
+
+        const harness = await buildHarness({ skipOrphanScan: true });
+
+        try {
+            let toolCallCount = 0;
+            harness.hooks.registerEnforcement("pre:tool_call", () => {
+                toolCallCount++;
+                if (toolCallCount >= 1) {
+                    const err: IEnforcementError = {
+                        isEnforcementError: true,
+                        code: "BUDGET_EXCEEDED",
+                        message: "BUDGET_EXCEEDED: tool maxCalls limit is 0, current value is 0",
+                    };
+                    throw err;
+                }
+            });
+
+            const { sessionId } = await createSessionAndAgent(harness, provider);
+
+            const stubRegistry = makeNoopRegistry();
+
+            const patchedDeps = {
+                ...harness.taskDeps,
+                orchestrator: {
+                    run: (input: Parameters<typeof harness.orchestrator.run>[0]) =>
+                        harness.orchestrator.run({
+                            ...input,
+                            provider,
+                            registry: stubRegistry as Parameters<typeof harness.orchestrator.run>[0]["registry"],
+                        }),
+                } as Orchestrator,
+            };
+
+            await taskTool(
+                { session_id: sessionId, prompt: "call tools once", background: true },
+                patchedDeps,
+            );
+            await drainQueue(harness.queue);
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const allTasks = (harness.db as any).select().from(tasksTable).where(eq(tasksTable.sessionId, sessionId)).all();
+            expect(allTasks.length).toBeGreaterThan(0);
+
+            const failed = allTasks.find((t: { status: string }) => t.status === "failed");
+            expect(failed).toBeDefined();
+            // Error must be a string, not "[object Object]"
+            expect(typeof failed.error).toBe("string");
+            expect(failed.error).toContain("BUDGET_EXCEEDED");
+        } finally {
+            await harness.teardown();
+        }
+    }, 15_000);
+
+    it("warning mode: task continues and tool result contains warning", async () => {
+        const {
+            buildHarness, drainQueue, createSessionAndAgent,
+        } = await import("./integration/harness.js");
+        const { ScriptedProvider } = await import("./integration/scripted-provider.js");
+        const { Orchestrator } = await import("../engine/orchestrator.js");
+        const { taskTool } = await import("../tools/task.js");
+        const { tasksTable, messagesTable } = await import("../db/schema.js");
+        const { eq } = await import("drizzle-orm");
+
+        const provider = new ScriptedProvider([
+            { type: "tool_calls", toolCalls: [{ server: "noop", tool: "noop_tool", arguments: {} }] },
+            { type: "completed", content: "done after warning" },
+        ]);
+
+        const harness = await buildHarness({ skipOrphanScan: true });
+
+        try {
+            let toolCallCount = 0;
+            harness.hooks.registerEnforcement("pre:tool_call", (p) => {
+                toolCallCount++;
+                if (toolCallCount >= 1) {
+                    const warn: IToolWarning = {
+                        isToolWarning: true,
+                        toolName: p.toolName,
+                        callId: p.callId,
+                        message: "tool blocked by budget: maxCalls exceeded",
+                    };
+                    throw warn;
+                }
+            });
+
+            const { sessionId } = await createSessionAndAgent(harness, provider);
+
+            const stubRegistry = makeNoopRegistry();
+
+            const patchedDeps = {
+                ...harness.taskDeps,
+                orchestrator: {
+                    run: (input: Parameters<typeof harness.orchestrator.run>[0]) =>
+                        harness.orchestrator.run({
+                            ...input,
+                            provider,
+                            registry: stubRegistry as Parameters<typeof harness.orchestrator.run>[0]["registry"],
+                        }),
+                } as Orchestrator,
+            };
+
+            await taskTool(
+                { session_id: sessionId, prompt: "call tools and handle warning", background: true },
+                patchedDeps,
+            );
+            await drainQueue(harness.queue);
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const allTasks = (harness.db as any).select().from(tasksTable).where(eq(tasksTable.sessionId, sessionId)).all();
+            const completed = allTasks.find((t: { status: string }) => t.status === "completed");
+            expect(completed).toBeDefined();
+
+            // Verify the warning was stored as a tool result
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const messages = (harness.db as any).select().from(messagesTable).where(eq(messagesTable.sessionId, sessionId)).all();
+            const toolMessages = messages.filter((m: { role: string }) => m.role === "tool");
+            expect(toolMessages.length).toBeGreaterThan(0);
+
+            // The first tool result should contain the warning text
+            const warningMsg = toolMessages.find((m: { toolResults?: string }) => {
+                if (!m.toolResults) return false;
+                try {
+                    const parsed = JSON.parse(m.toolResults);
+                    return Array.isArray(parsed) && parsed.some((r: { result?: { text?: string } }) =>
+                        r.result?.text?.includes?.("tool blocked by budget")
+                    );
+                } catch {
+                    return false;
+                }
+            });
+            expect(warningMsg).toBeDefined();
         } finally {
             await harness.teardown();
         }

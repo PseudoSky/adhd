@@ -285,13 +285,12 @@ class BudgetPlugin implements Plugin {
     agentName: string,
     providerType: string,
     toolName?: string,
-  ): { caps: Cap[]; mode?: string } {
+  ): { caps: Cap[]; mode?: string; scope?: string } {
     const base = this.cfg.defaults;
     const agentDim = this.cfg.agent;
     const provDim = this.cfg.provider;
     const toolDim = this.cfg.tool;
 
-    // Tool-specific path: only tool.default + tool.override (no agent/provider)
     if (toolName) {
       const toolOverride = toolDim?.overrides?.[toolName];
       const merged = this.mergeDim([
@@ -299,10 +298,9 @@ class BudgetPlugin implements Plugin {
         toolDim?.default,
         toolOverride,
       ]);
-      return { caps: merged.caps ?? [], mode: merged.mode };
+      return { caps: merged.caps ?? [], mode: merged.mode, scope: merged.scope };
     }
 
-    // Model-level path: agent + provider defaults and overrides
     const agentOverride = agentDim?.overrides?.[agentName];
     const provOverride = provDim?.overrides?.[providerType];
     const merged = this.mergeDim([
@@ -312,7 +310,7 @@ class BudgetPlugin implements Plugin {
       provDim?.default,
       provOverride,
     ]);
-    return { caps: merged.caps ?? [], mode: merged.mode };
+    return { caps: merged.caps ?? [], mode: merged.mode, scope: merged.scope };
   }
 
   // ── Scope-aware DB queries ────────────────────────────────────────────────
@@ -469,6 +467,7 @@ class BudgetPlugin implements Plugin {
     taskId: string,
     sessionId: string | undefined,
     agentName: string,
+    dimScope?: string,
   ): Record<string, number> {
     const snap: Record<string, number> = {};
 
@@ -485,7 +484,7 @@ class BudgetPlugin implements Plugin {
     const uniqueScopes = new Set<string>();
     const uniqueWindows = new Map<string, { scope: string; windowMs: number }>();
     for (const cap of caps) {
-      const scope = cap.scope ?? 'task';
+      const scope = cap.scope ?? dimScope ?? 'task';
       if (scope !== 'task') uniqueScopes.add(scope);
       if (cap.window) {
         const key = `${scope}:${cap.window}`;
@@ -512,8 +511,8 @@ class BudgetPlugin implements Plugin {
     return snap;
   }
 
-  private getSnapshotValue(snap: Record<string, number>, cap: Cap, toolName?: string): number {
-    const scope = cap.scope ?? 'task';
+  private getSnapshotValue(snap: Record<string, number>, cap: Cap, dimScope?: string, toolName?: string): number {
+    const scope = cap.scope ?? dimScope ?? 'task';
     const scopeKey = scope !== 'task' ? `${scope}:` : '';
 
     let base: number;
@@ -555,10 +554,10 @@ class BudgetPlugin implements Plugin {
     return base;
   }
 
-  private evaluateCap(cap: Cap, snap: Record<string, number>, acc?: BudgetAccumulator, toolName?: string): void {
+  private evaluateCap(cap: Cap, snap: Record<string, number>, dimScope?: string, acc?: BudgetAccumulator, toolName?: string): void {
     const current = cap.field === 'toolCalls'
       ? (acc?.toolCalls.get(toolName ?? '') ?? 0)
-      : this.getSnapshotValue(snap, cap, toolName);
+      : this.getSnapshotValue(snap, cap, dimScope, toolName);
     if (current >= cap.maximum) {
       throw makeEnforcementError(cap.field, cap.maximum, current);
     }
@@ -572,12 +571,12 @@ class BudgetPlugin implements Plugin {
     const acc = this.accumulators.get(taskId);
     if (!acc) return;
 
-    const { caps } = this.resolveCaps(agentName, providerType);
+    const { caps, scope: dimScope } = this.resolveCaps(agentName, providerType);
     const modelCaps = caps.filter(c => c.field !== 'toolCalls');
     if (modelCaps.length === 0) return;
 
     // One snapshot, one DB round-trip per unique scope/window
-    const snap = this.buildSnapshot(modelCaps, acc, taskId, sessionId, agentName);
+    const snap = this.buildSnapshot(modelCaps, acc, taskId, sessionId, agentName, dimScope);
     for (const cap of modelCaps) {
       this.evaluateCap(cap, snap);
     }
@@ -587,19 +586,19 @@ class BudgetPlugin implements Plugin {
 
   private enforcePreTool(p: PreToolCallPayload): void {
     const { toolName, callId, executionContext } = p;
-    const { caps, mode } = this.resolveCaps(executionContext.agentName, '', toolName);
+    const { caps, mode, scope: dimScope } = this.resolveCaps(executionContext.agentName, '', toolName);
     const acc = this.accumulators.get(executionContext.taskId);
     if (!acc) return;
 
     if (caps.length === 0) return;
 
     const currentToolCalls = acc.toolCalls.get(toolName) ?? 0;
-    const snap = this.buildSnapshot(caps, acc, executionContext.taskId, undefined, executionContext.agentName);
+    const snap = this.buildSnapshot(caps, acc, executionContext.taskId, executionContext.sessionId, executionContext.agentName, dimScope);
 
     for (const cap of caps) {
       const current = cap.field === 'toolCalls'
         ? currentToolCalls
-        : this.getSnapshotValue(snap, cap, toolName);
+        : this.getSnapshotValue(snap, cap, dimScope, toolName);
       if (current >= cap.maximum) {
         const msg = `tool "${toolName}": ${cap.field} limit is ${cap.maximum}, current value is ${Math.round(current)}`;
         const capMode = cap.mode ?? mode ?? 'warning';

@@ -436,6 +436,9 @@ export class Orchestrator {
                             });
                             continue;
                         }
+                        if (isEnforcementError(err)) {
+                            throw new ToolError("BUDGET_EXCEEDED", err.message);
+                        }
                         throw err;
                     }
 
