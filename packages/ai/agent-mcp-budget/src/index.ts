@@ -125,6 +125,8 @@ interface BudgetAccumulator {
   modelCalls: number;
   totalModelMs: number;
   modelCallStartMs?: number;
+  /** Per-qualified-tool-name call count for this task. */
+  toolCalls: Map<string, number>;
 }
 
 // ── Plugin class ─────────────────────────────────────────────────────────────
@@ -149,6 +151,7 @@ class BudgetPlugin implements Plugin {
     hooks.register('post:model_response', (p) => {
       try { this.onPostModelResponse(p); } catch { /* observational */ }
     });
+
     hooks.register('task:completed', (p) => {
       try { this.onTerminal(p.executionContext.taskId); } catch { /**/ }
     });
@@ -179,6 +182,7 @@ class BudgetPlugin implements Plugin {
       cacheTokens: 0,
       modelCalls: 0,
       totalModelMs: 0,
+      toolCalls: new Map(),
     });
   }
 
@@ -303,30 +307,30 @@ class BudgetPlugin implements Plugin {
   private enforcePreTool(p: PreToolCallPayload): void {
     const { toolName, callId } = p;
     const c = this.resolveToolConfig(toolName);
+    const acc = this.accumulators.get(p.executionContext.taskId);
 
-    if (c.maxCalls !== undefined) {
-      // Count tool calls from the accumulator and DB
-      const toolCallCount = this.countToolCalls(p.executionContext.taskId, toolName);
-      if (toolCallCount >= c.maxCalls) {
-        const msg = `tool "${toolName}": maxCalls limit is ${c.maxCalls}, current value is ${toolCallCount}`;
+    // Read current tool call count (pre-increment)
+    const currentToolCalls = acc ? (acc.toolCalls.get(toolName) ?? 0) : 0;
+
+    if (c.maxCalls !== undefined && currentToolCalls >= c.maxCalls) {
+      const msg = `tool "${toolName}": maxCalls limit is ${c.maxCalls}, current value is ${currentToolCalls}`;
+      if (c.mode === 'warning') {
+        throw makeToolWarning(toolName, callId, msg);
+      }
+      throw makeEnforcementError(`tool:${toolName}:maxCalls`, c.maxCalls, currentToolCalls);
+    }
+
+    // Check passed — increment tool call counter
+    acc?.toolCalls.set(toolName, currentToolCalls + 1);
+
+    if (c.maxTotalTokens !== undefined && acc) {
+      const totalTokens = acc.inputTokens + acc.outputTokens + acc.cacheTokens;
+      if (totalTokens >= c.maxTotalTokens) {
+        const msg = `tool "${toolName}": maxTotalTokens limit is ${c.maxTotalTokens}`;
         if (c.mode === 'warning') {
           throw makeToolWarning(toolName, callId, msg);
         }
-        throw makeEnforcementError(`tool:${toolName}:maxCalls`, c.maxCalls, toolCallCount);
-      }
-    }
-
-    if (c.maxTotalTokens !== undefined) {
-      const acc = this.accumulators.get(p.executionContext.taskId);
-      if (acc) {
-        const totalTokens = acc.inputTokens + acc.outputTokens + acc.cacheTokens;
-        if (totalTokens >= c.maxTotalTokens) {
-          const msg = `tool "${toolName}": maxTotalTokens limit is ${c.maxTotalTokens}`;
-          if (c.mode === 'warning') {
-            throw makeToolWarning(toolName, callId, msg);
-          }
-          throw makeEnforcementError(`tool:${toolName}:maxTotalTokens`, c.maxTotalTokens, totalTokens);
-        }
+        throw makeEnforcementError(`tool:${toolName}:maxTotalTokens`, c.maxTotalTokens, totalTokens);
       }
     }
   }
@@ -337,15 +341,6 @@ class BudgetPlugin implements Plugin {
    * Count how many times a tool has been called in the current task.
    * In-memory only for now (task scope).
    */
-  private countToolCalls(
-    _taskId: string,
-    _toolName: string,
-  ): number {
-    // TODO: add proper per-tool call tracking (extend accumulator or query
-    // task_events for TOOL_CALL events).
-    return 0;
-  }
-
   // ── 24h rolling window query ─────────────────────────────────────────────
 
   private queryTokens24h(
