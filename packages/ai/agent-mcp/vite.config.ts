@@ -58,8 +58,10 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      // External packages that should not be bundled into your library.
-      external: [],
+      // Externalize workspace @adhd packages so dynamic imports (plugin loader,
+      // optional deps) can resolve them at runtime via node_modules.
+      // Third-party deps (sdk, better-sqlite3, openai, etc.) remain bundled.
+      external: [/@adhd\/.*/],
     },
   },
 
