@@ -6,6 +6,12 @@
 > recorded the recommended resolution for each open question; the `refactor-design`
 > executor confirms or amends (with a planner amendment) — it does not silently
 > diverge.
+>
+> **⚠️ POST-EXECUTION ADDENDA.** Decision 6 (runtime store extraction) was added
+> after the original plan states executed. It reflects architectural decisions
+> discovered during implementation — specifically the need for public client
+> interfaces (`UsageClient`, `RuntimeClient`) and the extraction of
+> `@adhd/agent-runtime`. This decision was NOT part of the original plan review.
 
 ## Decision 1 — AgentStore: thin cache (not removed)
 
