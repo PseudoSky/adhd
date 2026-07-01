@@ -175,7 +175,8 @@ function verifyAgentEnvRefs(agents: AgentDefinition[]): void {
 
     if (names.length === 0) return;
 
-    const { missing, disallowed } = config.verifyEnvRefs(names);
+    const uniqueNames = [...new Set(names)];
+    const { missing, disallowed } = config.verifyEnvRefs(uniqueNames);
 
     if (missing.length > 0) {
         logger.warn(
