@@ -60,10 +60,11 @@ export const pluginConfigSchema = z.object({
 export type PluginConfig = z.infer<typeof pluginConfigSchema>;
 
 /**
- * Backward-compatible config schema: accepts flat top-level fields (legacy)
- * as well as the new dimension-based format.
+ * Config schema for server-side validation.
+ * Accepts any object — the raw config is passed through to the factory where
+ * normalizeConfig handles both flat (legacy) and multi-dimension formats.
  */
-export const configSchema: z.ZodType<BudgetFields> = budgetFieldsSchema;
+export const configSchema = z.object({}).passthrough();
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
