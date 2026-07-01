@@ -305,32 +305,75 @@ details and the result content — include a summary in the payload.
 - **Status:** open
 - **Priority:** P2
 - **Area:** engine (orchestrator), providers, plugins (agent-mcp-sanitize)
-- **Reported:** 2026-06-30
+- **Reported:** 2026-06-30 · **Enriched:** 2026-07-01 (architect analysis)
 
 **Problem.** OpenAI-compatible providers (DeepSeek, etc.) return tool call
 arguments as a **JSON string** (`'{"agent_name":"worker"}'`) rather than a
-parsed object. The orchestrator's Phase 3 passes `tc.arguments` as
-`toolInput` to the `transform:tool_result` payload. When the sanitize
-plugin's `getAgentName()` reads `toolInput["agent_name"]` on a JSON string,
-bracket-index returns `undefined`, so the agent name defaults to the generic
-`"Sub-agent output"` label instead of `Sub-agent output from "worker"`.
+parsed object. Both existing providers already normalize inbound arguments
+(`openai.ts:144` → `JSON.parse()`, `anthropic.ts:270` → passes through
+already-parsed `block.input`), but `ToolCall.arguments` is typed `unknown` —
+any future or third-party provider that skips normalization leaves string-typed
+arguments in the pipeline. The orchestrator passes raw `tc.arguments` as
+`toolInput` at **5 sites** in hook payload construction: lines 417, 428, 555,
+599 for hook events, plus line 447 for the agent-name policy gate (see
+BUG-008). When the sanitize plugin's `getAgentName()` bracket-indexes on a
+JSON string, it returns `undefined`.
 
 **Impact.** Sanitized delegation output shows `── Sub-agent output ──`
-instead of `── Agent "worker" output ──`. The protection still applies
-(structural wrapping works), but the agent-identification UX is degraded.
+instead of `── Agent "worker" output ──`. The line 447 policy gate
+`(tc.arguments as { name?: string })?.name` would also silently fail on a
+string-typed argument, allowing a sub-agent to bypass the agent-name
+allowlist check. Both failures are **silent** — bracket-index on a string
+returns `undefined` without throwing.
 
-**Root cause.** The `tc` tool call in `assistantMessage.toolCalls` carries
-`arguments` in whatever form the provider returned. OpenAI-compatible APIs
-emit arguments as a JSON-encoded string; Anthropic emits them as a parsed
-object. The orchestrator doesn't normalize this before Phase 3, so
-transform handlers receive inconsistently-typed inputs.
+**Root cause.** `ToolCall.arguments` is typed `unknown`. The orchestrator
+constructs hook payloads from `tc.arguments` directly without normalizing.
+Existing providers normalize at their own boundary, but the gap is at the
+orchestrator level — any provider that doesn't normalize (or message
+serialization that round-trips through string form) reintroduces the bug.
 
-**Proposed fix.** Normalize `tc.arguments` to a parsed object before Phase
-3, or provide a helper that extracts the agent name regardless of whether
-`toolInput` is a string or object.
+**Proposed fix.** Add a module-level `normalizeToolInput(input: unknown):
+Record<string, unknown>` in the orchestrator and wrap all 5 call sites where
+`tc.arguments` / `toolCall.arguments` is passed as `toolInput`. Add a
+defensive parse in `getAgentName` as a second line of defense.
 
-**References** — `packages/ai/agent-mcp/src/engine/orchestrator.ts` (Phase 3),
-`packages/ai/agent-mcp-sanitize/src/index.ts` (`getAgentName`).
+**References** — `packages/ai/agent-mcp/src/engine/orchestrator.ts:417,428,447,555,599`,
+`packages/ai/agent-mcp-sanitize/src/index.ts:54-59`,
+`packages/ai/agent-mcp/src/providers/openai.ts:144` (existing normalization),
+`packages/ai/agent-mcp/src/providers/anthropic.ts:270` (existing normalization).
+
+---
+
+### BUG-008 — Agent-name policy gate casts `tc.arguments` directly on line 447 without normalization
+- **Status:** open
+- **Priority:** P2
+- **Area:** engine (orchestrator), policy
+- **Reported:** 2026-07-01 (architect analysis of BUG-007)
+
+**Problem.** Orchestrator line 447 reads `(tc.arguments as { name?: string
+})?.name` to extract the agent name for the policy allowlist check. This cast
+is applied to raw `tc.arguments` — outside any hook payload construction. If
+`tc.arguments` is a JSON string (from a provider that doesn't normalize),
+`(string as { name?: string })?.name` returns `undefined` without throwing.
+This means a sub-agent whose name would otherwise be rejected by the
+`allowedAgents` gate can silently pass through.
+
+**Impact.** Policy bypass — the agent-name allowlist gate fails silently on
+string-typed arguments. Combined with BUG-007's UX degradation, this means
+both the security check and the UX labeling break from the same root cause.
+
+**Root cause.** Same as BUG-007 — `ToolCall.arguments` is typed `unknown`.
+Unlike the hook payload sites (lines 417, 428, 555, 599), line 447 is NOT in
+a hook payload — it's a direct inline access during Phase 1 tool dispatch. A
+`normalizeToolInput` call at this site fixes both the security gate and the
+stylistic inconsistency.
+
+**Proposed fix.** Replace `(tc.arguments as { name?: string })?.name` with
+`(normalizeToolInput(tc.arguments) as { name?: string })?.name`. Depends on
+BUG-007's `normalizeToolInput` helper being added first.
+
+**References** — `packages/ai/agent-mcp/src/engine/orchestrator.ts:447`,
+`packages/ai/agent-mcp/src/engine/policy.ts` (allowedAgents enforcement).
 
 ---
 

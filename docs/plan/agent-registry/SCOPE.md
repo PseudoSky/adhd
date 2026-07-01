@@ -60,13 +60,14 @@ or communicate through an in-process API — requires a dedicated architecture d
 boundary sketch is not a contract.
 
 | Package | Responsibility | DB domain |
-|---|---|---|
+|---|---|---|---|
 | `@adhd/agent-registry` | Agents, prompt components, composition, context rules, use cases | agents, prompt_components, agent_components, context_rules, use_cases, composed_prompts |
 | `@adhd/agent-tool-registry` | Canonical tool catalog, platform definitions, tool-platform bindings, MCP servers | tools, platforms, tool_platform_bindings, mcp_servers, agent_tools |
 | `@adhd/agent-provider` | Provider runtimes, model catalog, model-platform bindings, provider tool format schemas | providers, models, model_platform_bindings, provider_tool_formats |
 | `@adhd/agent-policy` | Policy templates, agent policy assignments, inheritance | policy_types, policy_templates, agent_policy |
 | `@adhd/agent-compiler` | Composition engine: reads registry + tool + provider + policy, emits header + body | (consumer; writes composed_prompt cache to runtime DB) |
-| `@adhd/agent-mcp` | Orchestrator only: sessions, tool dispatch, DAG, HITL, streaming — delegates provider calls to agent-provider adapters | sessions, tasks, task_usage, task_events, messages, experiment_assignments |
+| `@adhd/agent-runtime` | Runtime stores: session/task lifecycle, usage accumulation, rolling time windows | sessions, tasks, task_usage, task_events, messages, experiment_assignments |
+| `@adhd/agent-mcp` | Thin MCP transport: tool dispatch, DAG, HITL, streaming — delegates to agent-runtime and agent-provider | agents (runtime cache), composed_prompts (runtime cache) |
 | `@adhd/agent-mcp-types` | Shared interfaces: `ProviderAdapter`, `IHookRegistry`, `AgentDefinition`, `StreamChunk`, `ComposedPrompt` | (no DB) |
 
 The plugin architecture already present in agent-mcp (the `createPlugin` / `IHookRegistry`
