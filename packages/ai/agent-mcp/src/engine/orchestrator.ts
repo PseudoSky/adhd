@@ -2,7 +2,7 @@ import { logger } from "../logger.js";
 import { config } from "../config.js";
 import type { LLMProvider } from "../providers/types.js";
 import type { ExecutionContext, Message } from "../validation/index.js";
-import type { IHookRegistry, IEnforcementError, PostToolCallPayload } from "@adhd/agent-mcp-types";
+import type { IHookRegistry, IEnforcementError, IToolWarning, PostToolCallPayload } from "@adhd/agent-mcp-types";
 import { ToolError } from "../validation/errors.js";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";
@@ -339,6 +339,7 @@ export class Orchestrator {
                 // HITL intercept: `request_human_input` is intercepted here (before Phase 2)
                 // and never reaches the MCP client. [inv:request-human-input-intercept]
                 const hitlResults = new Map<string, string>(); // toolCall.id → userInput
+                const warningResults = new Map<string, { result: unknown; isError: boolean }>();
                 for (const tc of toolCalls) {
                     if (signal.aborted) {
                         throw new ToolError("PROVIDER_ERROR", "Task was cancelled before tool call");
@@ -415,6 +416,29 @@ export class Orchestrator {
                         callId: tc.id,
                         toolInput: tc.arguments,
                     });
+
+                    // Enforcement: tool-level budget limits
+                    // "block" mode → IEnforcementError → propagates as BUDGET_EXCEEDED
+                    // "warning" mode → IToolWarning → tool skipped, warning injected in Phase 3
+                    try {
+                        await hooks.enforce("pre:tool_call", {
+                            executionContext,
+                            toolName: qualifiedToolName,
+                            callId: tc.id,
+                            toolInput: tc.arguments,
+                        });
+                    } catch (err: unknown) {
+                        const tw = err as IToolWarning;
+                        if (tw?.isToolWarning === true) {
+                            warningResults.set(tc.id, {
+                                result: { type: "text", text: tw.message },
+                                isError: true,
+                            });
+                            continue;
+                        }
+                        throw err;
+                    }
+
                     policy.check({
                         executionContext,
                         targetTool: qualifiedToolName,
@@ -436,7 +460,9 @@ export class Orchestrator {
                 // Phase 2 — Promise.all concurrent execution.
                 // HITL calls are excluded (already handled in Phase 1 — their results
                 // are in hitlResults and will be injected in Phase 3).
-                const nonHitlToolCalls = toolCalls.filter(tc => tc.tool !== HITL_TOOL_NAME);
+                const nonHitlToolCalls = toolCalls.filter(
+                    tc => tc.tool !== HITL_TOOL_NAME && !warningResults.has(tc.id)
+                );
                 const toolResults = await Promise.all(
                     nonHitlToolCalls.map(async (toolCall) => {
                         const resolved =
@@ -546,6 +572,11 @@ export class Orchestrator {
                     if (hitlResults.has(tc.id)) {
                         // HITL tool: inject userInput as the result
                         toolResult = hitlResults.get(tc.id);
+                    } else if (warningResults.has(tc.id)) {
+                        // Budget-warned tool: inject warning diagnostic as tool error
+                        const w = warningResults.get(tc.id)!;
+                        toolResult = w.result;
+                        isError = w.isError;
                     } else {
                         const r = toolResultByCallId.get(tc.id);
                         if (!r) continue; // should not happen
