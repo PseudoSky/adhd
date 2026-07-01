@@ -178,35 +178,55 @@ export class UsageClient {
         return inMem;
     }
 
-    // ── 24h rolling window ────────────────────────────────────────────
+    // ── Time-window query ──────────────────────────────────────────────
 
-    getUsageInWindow(scope: Scope, id: string): number {
+    /**
+     * Sum of input+output tokens across tasks in a rolling time window.
+     *
+     * @param scope - scope dimension ("session" or "agent"; "task" returns 0)
+     * @param id    - session ID or agent name
+     * @param windowMs - window length in ms (default: 24h)
+     * @param excludeTaskId - optional task to exclude (avoids double-counting
+     *   when the caller also holds in-memory totals for the running task)
+     */
+    getUsageInWindow(
+        scope: Scope,
+        id: string,
+        windowMs: number = 24 * 60 * 60 * 1000,
+        excludeTaskId?: string,
+    ): number {
         if (!this.db) return 0;
         try {
             const db = this.db as {
                 prepare: (sql: string) => { get: (...args: unknown[]) => { total: number } | undefined };
             };
-            const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const since = new Date(Date.now() - windowMs).toISOString();
 
             let row: { total: number } | undefined;
 
             if (scope === "session") {
+                const excludeClause = excludeTaskId ? " AND tu.task_id != ?" : "";
+                const params: unknown[] = [id, since];
+                if (excludeTaskId) params.push(excludeTaskId);
                 row = db
                     .prepare(
-                        `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
+                        `SELECT COALESCE(SUM(tu.input_tokens + tu.output_tokens), 0) AS total
                          FROM task_usage tu
                          JOIN tasks t ON tu.task_id = t.id
-                         WHERE t.session_id = ? AND tu.created_at >= ?`,
+                         WHERE t.session_id = ? AND tu.created_at >= ?${excludeClause}`,
                     )
-                    .get(id, since) as typeof row;
+                    .get(...params) as typeof row;
             } else if (scope === "agent") {
+                const excludeClause = excludeTaskId ? " AND task_id != ?" : "";
+                const params: unknown[] = [id, since];
+                if (excludeTaskId) params.push(excludeTaskId);
                 row = db
                     .prepare(
                         `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
                          FROM task_usage
-                         WHERE agent_name = ? AND created_at >= ?`,
+                         WHERE agent_name = ? AND created_at >= ?${excludeClause}`,
                     )
-                    .get(id, since) as typeof row;
+                    .get(...params) as typeof row;
             }
 
             return row?.total ?? 0;
