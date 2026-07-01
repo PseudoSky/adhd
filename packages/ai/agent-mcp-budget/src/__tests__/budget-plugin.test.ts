@@ -375,14 +375,12 @@ describe('BudgetPlugin — task scope', () => {
     await plugin.install(hooks);
     const ctx = makeCtx();
 
-    // Run a task that would hit the limit
     await runTaskTurns(hooks, ctx, [{ inputTokens: 10, outputTokens: 10 }]);
     await hooks.emit('task:completed', {
       executionContext: ctx,
       result: 'done',
     });
 
-    // New task with the same taskId — accumulator should be reset; limit not hit
     await hooks.emit('task:start', { executionContext: ctx, messages: [] });
     await hooks.emit('pre:model_request', {
       executionContext: ctx,
@@ -395,6 +393,110 @@ describe('BudgetPlugin — task scope', () => {
         messages: [],
         tools: [],
       })
+    ).resolves.toBeUndefined();
+  });
+
+  it('cleans up accumulator after task:failed', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: configSchema.parse({ maxModelCalls: 1 }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await runTaskTurns(hooks, ctx, [{ inputTokens: 10, outputTokens: 10 }]);
+    await hooks.emit('task:failed', {
+      executionContext: ctx,
+      error: 'something broke',
+    });
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await hooks.emit('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
+    await expect(
+      hooks.enforce('pre:model_request', {
+        executionContext: ctx,
+        messages: [],
+        tools: [],
+      })
+    ).resolves.toBeUndefined();
+  });
+
+  it('cleans up accumulator after task:cancelled', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: configSchema.parse({ maxModelCalls: 1 }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await runTaskTurns(hooks, ctx, [{ inputTokens: 10, outputTokens: 10 }]);
+    await hooks.emit('task:cancelled', { executionContext: ctx });
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await hooks.emit('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
+    await expect(
+      hooks.enforce('pre:model_request', {
+        executionContext: ctx,
+        messages: [],
+        tools: [],
+      })
+    ).resolves.toBeUndefined();
+  });
+
+  it('scope + window cap does not double-count historical tokens', async () => {
+    const mockDb = {
+      prepare(sql: string) {
+        return {
+          get(...params: unknown[]) {
+            if (sql.includes('input_tokens, 0) AS input')) {
+              return { input: 40_000, output: 40_000, cache: 0, calls: 5 };
+            }
+            if (sql.includes('created_at')) {
+              return { total: 80_000 };
+            }
+            return undefined;
+          },
+        };
+      },
+    };
+
+    const plugin = createPlugin({
+      db: mockDb,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          scope: 'agent',
+          caps: [
+            { field: 'tokens', maximum: 100_000, window: 'PT24H', scope: 'agent' },
+          ],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+
+    // 10K in-memory + 80K window = 90K < 100K → passes
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: { inputTokens: 5_000, outputTokens: 5_000 },
+    });
+
+    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await expect(
+      hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] })
     ).resolves.toBeUndefined();
   });
 
