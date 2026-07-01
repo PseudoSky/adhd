@@ -95,6 +95,40 @@ tables distinguished by a package-name prefix:
 **DAG impact: NONE.** This is the recommended option and the assumption every
 downstream plan was authored against. No planner-class amendment.
 
+## Decision 1 §5 (addendum) — Runtime cascade semantics: logical-only FKs from sessions to agents
+
+**Question (post-execution discovery).** `sessions.agent_name` has a Drizzle `.references()`
+FK with `ON DELETE CASCADE` into `agents.name`. This means deleting an agent definition
+cascade-deletes every session, message, task, event, and usage row for that agent — destroying
+audit history. The same issue applies to `sessions.composed_prompt_id`, though its cascade
+impact is narrower.
+
+**Decision.** `sessions.agent_name` and `sessions.composed_prompt_id` MUST be **logical-only**
+text columns with no `.references()` FK and no `ON DELETE CASCADE`.
+
+**Binding sub-rules:**
+
+1. **No `.references()` on `sessions.agent_name`.** The column carries the agent name as a
+   plain string identifier. Referential integrity is maintained at the application/store layer.
+2. **No cascade.** Deleting an `agents` row (or a `composed_prompts` row) never cascades to
+   sessions, messages, tasks, or usage. History survives agent deletion.
+3. **Future-proofing.** An agent may move to a different DB file (e.g. agent-registry's shared
+   file) in a future state. A logical FK is the only option once that happens — SQLite cannot
+   enforce cross-file FKs.
+
+**Rationale.**
+
+- Audit requires that usage history outlives the agent definition that produced it.
+  A cascade from `agents` to `sessions` silently destroys the evidence of what ran.
+- Decision 1 §2 already forbids cross-package FKs. Making `agent_name` a logical FK now
+  removes the only blocker to moving the `agents` table into agent-registry's DB later.
+- The in-package FKs that ARE correct (`messages.session_id → sessions.id` with cascade,
+  `task_events.task_id → tasks.id` with cascade) remain unchanged — the child table's
+  rows are meaningless without the parent.
+
+**DAG impact: NONE.** No schema-phase state is added or removed. The migration simply removes
+two `.references()` calls from the existing table definitions. No planner-class amendment.
+
 ---
 
 ## Decision 2 — Context-condition evaluation semantics: ALL-INCLUDED, deterministic order

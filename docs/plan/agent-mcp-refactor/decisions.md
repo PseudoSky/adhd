@@ -153,3 +153,53 @@ wired: a legacy agent with no registry composition gets its stored systemPrompt 
 
 **Constrains:** `session-e2e` (composed_prompt_id FK proof), `compiler-integration`
 (live server wiring now ACTIVE for registry-backed agents).
+
+---
+
+## Decision 6 — Runtime store extraction: public client interfaces for usage queries
+
+**Decision (addendum 2026-06-30).** The runtime stores (`task_usage`, `tasks`, `sessions`,
+`messages`, `task_events`) are extracted into a new `@adhd/agent-runtime` package at
+`packages/shared/agent-runtime/` (`layer:data`, `platform:shared`). This package exports:
+
+| Export | Responsibility |
+|---|---|
+| `RuntimeClient` | Session/task lifecycle: create, read, list, cancel |
+| `UsageClient` | Token-usage queries: per-task, per-session, per-agent, rolling 24h window |
+| `schema` | Drizzle table definitions for the runtime DB |
+| `migrations` | Drizzle migration files |
+
+**Dependency graph:**
+
+```
+@adhd/agent-mcp          → @adhd/agent-runtime (thin MCP transport)
+@adhd/agent-mcp-budget   → @adhd/agent-runtime (UsageClient, no raw SQL)
+@adhd/agent-compiler     → @adhd/agent-runtime (reads composed_prompts cache)
+@adhd/agent-registry     — no dependency on agent-runtime
+```
+
+**What moves from `@adhd/agent-mcp/src/` into the new package:**
+
+```
+  store/
+    agent-store.ts       → stays in agent-mcp (runtime cache, Plan 6 Decision 1)
+    session-store.ts     → agent-runtime session-store.ts
+    task-store.ts        → agent-runtime task-store.ts
+  db/
+    schema.ts            → agent-runtime schema.ts (agents table stays in agent-mcp)
+  plugins/
+    usage-plugin.ts      → agent-runtime usage-client.ts (UsageClient class)
+```
+
+**What stays in `@adhd/agent-mcp`:**
+- MCP tool handlers (`server.ts`, `tools/`)
+- Orchestrator and policy engine (delegated to by tools)
+- Provider implementations (delegated to by orchestrator)
+- `agents` table (runtime cache, per Plan 6 Decision 1)
+
+**Non-goal (deferred):** Moving provider implementations into `@adhd/agent-provider` and
+making agent-mcp a pure MCP shell. That extraction is a larger refactor gated on the
+FK removal in `agent-registry-schema/decisions.md` Decision 1 §5.
+
+**Constrains:** `runtime-client-publish` (the extraction state), `budget-plugin-migration`
+(switch from raw SQL to UsageClient).
