@@ -12,61 +12,109 @@ import type {
   PreToolCallPayload,
 } from '@adhd/agent-mcp-types';
 
-// ── Budget-fields schema (shared by all dimensions) ──────────────────────────
+// ── ISO8601 duration parser ──────────────────────────────────────────────────
 
-const budgetFieldsSchema = z.object({
-  scope: z.enum(['task', 'session', 'agent']).default('task'),
-  maxInputTokens: z.number().int().positive().optional(),
-  maxOutputTokens: z.number().int().positive().optional(),
-  maxTotalTokens: z.number().int().positive().optional(),
-  maxModelCalls: z.number().int().positive().optional(),
-  maxWallClockMs: z.number().int().positive().optional(),
-  maxModelMs: z.number().int().positive().optional(),
-  maxCostUSD: z.number().positive().optional(),
-  costPerInputToken: z.number().min(0).default(0),
-  costPerOutputToken: z.number().min(0).default(0),
-  maxTokensPer24h: z.number().int().positive().optional(),
+// Supported tokens: P[n]Y[n]M[n]DT[n]H[n]M[n]S
+// e.g. PT24H, PT1H30M, P1DT6H
+function parseIsoDuration(dur: string): number {
+  const re = /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/;
+  const m = dur.match(re);
+  if (!m) throw new Error(`invalid ISO 8601 duration: ${dur}`);
+  const [, y, M, d, h, min, s] = m;
+  let ms = 0;
+  if (y) ms += parseInt(y) * 365.25 * 86400_000;
+  if (M) ms += parseInt(M) * 30.44 * 86400_000;
+  if (d) ms += parseInt(d) * 86400_000;
+  if (h) ms += parseInt(h) * 3600_000;
+  if (min) ms += parseInt(min) * 60_000;
+  if (s) ms += parseFloat(s) * 1000;
+  return Math.round(ms);
+}
+
+// ── Cap schema ───────────────────────────────────────────────────────────────
+
+const FIELD_NAMES = [
+  'tokens', 'inputTokens', 'outputTokens',
+  'calls', 'wallClock', 'modelMs', 'cost',
+  'toolCalls',
+] as const;
+
+const capSchema = z.object({
+  field: z.enum(FIELD_NAMES),
+  maximum: z.number().min(0),
+  window: z.string().optional(),
+  scope: z.enum(['task', 'session', 'agent', 'global']).optional(),
+  mode: z.enum(['warning', 'block']).optional(),
 });
 
-export type BudgetFields = z.infer<typeof budgetFieldsSchema>;
+export type Cap = z.infer<typeof capSchema>;
 
-// ── Tool-specific fields (extends budget fields with mode + maxCalls) ────────
+// ── Dimension config ─────────────────────────────────────────────────────────
 
-const toolFieldsSchema = budgetFieldsSchema.extend({
-  mode: z.enum(['warning', 'block']).default('warning'),
-  maxCalls: z.number().int().min(0).optional(),
+const dimensionSchema = z.object({
+  caps: z.array(capSchema).optional(),
+  mode: z.enum(['warning', 'block']).optional(),
+  costPerInputToken: z.number().min(0).optional(),
+  costPerOutputToken: z.number().min(0).optional(),
+  scope: z.enum(['task', 'session', 'agent', 'global']).optional(),
 });
 
-type ToolFields = z.infer<typeof toolFieldsSchema>;
+type DimensionConfig = z.infer<typeof dimensionSchema>;
 
 // ── Full plugin config ───────────────────────────────────────────────────────
 
 export const pluginConfigSchema = z.object({
-  defaults: budgetFieldsSchema.optional(),
+  defaults: dimensionSchema.optional(),
   agent: z.object({
-    default: budgetFieldsSchema.partial().optional(),
-    overrides: z.record(z.string(), budgetFieldsSchema.partial()).optional().default({}),
+    default: dimensionSchema.optional(),
+    overrides: z.record(z.string(), dimensionSchema.partial()).optional().default({}),
   }).optional(),
   provider: z.object({
-    default: budgetFieldsSchema.partial().optional(),
-    overrides: z.record(z.string(), budgetFieldsSchema.partial()).optional().default({}),
+    default: dimensionSchema.optional(),
+    overrides: z.record(z.string(), dimensionSchema.partial()).optional().default({}),
   }).optional(),
   tool: z.object({
-    default: toolFieldsSchema.partial().optional(),
-    overrides: z.record(z.string(), toolFieldsSchema.partial()).optional().default({}),
+    default: dimensionSchema.optional(),
+    overrides: z.record(z.string(), dimensionSchema.partial()).optional().default({}),
   }).optional(),
 });
 
-export type PluginConfig = z.infer<typeof pluginConfigSchema>;
+export type PluginConfig = z.input<typeof pluginConfigSchema>;
 
-/**
- * Config schema for server-side validation.
- * Accepts any object — the raw config is passed through to the factory where
- * normalizeConfig handles both flat (legacy) and multi-dimension formats.
- */
 export const configSchema = z.object({}).passthrough();
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Backward compat: flat fields → caps ──────────────────────────────────────
+
+const FIELD_MAP: Record<string, { field: Cap['field']; window?: string }> = {
+  maxInputTokens:  { field: 'inputTokens' },
+  maxOutputTokens: { field: 'outputTokens' },
+  maxTotalTokens:  { field: 'tokens' },
+  maxModelCalls:   { field: 'calls' },
+  maxWallClockMs:  { field: 'wallClock' },
+  maxModelMs:      { field: 'modelMs' },
+  maxCostUSD:      { field: 'cost' },
+  maxTokensPer24h: { field: 'tokens', window: 'PT24H' },
+  maxCalls:        { field: 'toolCalls' },
+};
+
+function flatFieldsToDimension(raw: Record<string, unknown>): DimensionConfig {
+  const caps: Cap[] = [];
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(raw)) {
+    const mapping = FIELD_MAP[key];
+    if (mapping && typeof value === 'number') {
+      const cap: Cap = { field: mapping.field, maximum: value };
+      if (mapping.window) cap.window = mapping.window;
+      caps.push(cap);
+    } else if (key === 'scope' || key === 'mode' || key === 'costPerInputToken' || key === 'costPerOutputToken') {
+      result[key] = value;
+    }
+  }
+
+  if (caps.length > 0) result['caps'] = caps;
+  return dimensionSchema.parse(result);
+}
 
 function normalizeConfig(raw: unknown): PluginConfig {
   const obj = raw as Record<string, unknown>;
@@ -78,19 +126,22 @@ function normalizeConfig(raw: unknown): PluginConfig {
   ) {
     const parsed = pluginConfigSchema.parse(raw);
     return {
-      defaults: parsed.defaults ?? budgetFieldsSchema.parse({}),
-      agent: parsed.agent ?? { default: undefined, overrides: {} },
-      provider: parsed.provider ?? { default: undefined, overrides: {} },
-      tool: parsed.tool ?? { default: undefined, overrides: {} },
+      defaults: parsed.defaults ?? dimensionSchema.parse({}),
+      agent: parsed.agent ?? { overrides: {} },
+      provider: parsed.provider ?? { overrides: {} },
+      tool: parsed.tool ?? { overrides: {} },
     };
   }
+  // Flat format → dimension
   return {
-    defaults: budgetFieldsSchema.parse(raw),
-    agent: { default: undefined, overrides: {} },
-    provider: { default: undefined, overrides: {} },
-    tool: { default: undefined, overrides: {} },
+    defaults: flatFieldsToDimension(obj),
+    agent: { overrides: {} },
+    provider: { overrides: {} },
+    tool: { overrides: {} },
   };
 }
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeEnforcementError(limitName: string, limit: number, current: number): IEnforcementError {
   return {
@@ -102,13 +153,6 @@ function makeEnforcementError(limitName: string, limit: number, current: number)
 
 function makeToolWarning(toolName: string, callId: string, message: string): IToolWarning {
   return { isToolWarning: true, toolName, callId, message };
-}
-
-interface UsageTotals {
-  inputTokens: number;
-  outputTokens: number;
-  cacheTokens: number;
-  modelCalls: number;
 }
 
 // ── In-memory accumulator ────────────────────────────────────────────────────
@@ -125,8 +169,14 @@ interface BudgetAccumulator {
   modelCalls: number;
   totalModelMs: number;
   modelCallStartMs?: number;
-  /** Per-qualified-tool-name call count for this task. */
   toolCalls: Map<string, number>;
+}
+
+interface UsageTotals {
+  inputTokens: number;
+  outputTokens: number;
+  cacheTokens: number;
+  modelCalls: number;
 }
 
 // ── Plugin class ─────────────────────────────────────────────────────────────
@@ -139,6 +189,8 @@ class BudgetPlugin implements Plugin {
   constructor(
     private readonly db: unknown,
     private readonly cfg: PluginConfig,
+    private readonly costPerInput = 0,
+    private readonly costPerOutput = 0,
   ) {}
 
   install(hooks: IHookRegistry): void {
@@ -214,195 +266,80 @@ class BudgetPlugin implements Plugin {
 
   // ── Config resolution ─────────────────────────────────────────────────────
 
-  private resolveAgentConfig(agentName: string): BudgetFields {
-    const agentCfg = this.cfg.agent!;
-    const base = this.cfg.defaults!;
-    const dim = agentCfg.default;
-    const override = agentCfg.overrides[agentName];
-    let merged = { ...base };
-    if (dim) merged = { ...merged, ...dim };
-    if (override) merged = { ...merged, ...override };
-    return merged as BudgetFields;
+  private mergeDim(dims: (DimensionConfig | undefined)[]): DimensionConfig {
+    let merged: DimensionConfig = { caps: [] };
+    for (const d of dims) {
+      if (!d) continue;
+      merged = {
+        caps: [...(merged.caps ?? []), ...(d.caps ?? [])],
+        mode: d.mode ?? merged.mode,
+        costPerInputToken: d.costPerInputToken ?? merged.costPerInputToken,
+        costPerOutputToken: d.costPerOutputToken ?? merged.costPerOutputToken,
+        scope: d.scope ?? merged.scope,
+      };
+    }
+    return merged;
   }
 
-  private resolveProviderConfig(providerType: string): BudgetFields {
-    const provCfg = this.cfg.provider!;
-    const base = this.cfg.defaults!;
-    const dim = provCfg.default;
-    const override = provCfg.overrides[providerType];
-    let merged = { ...base };
-    if (dim) merged = { ...merged, ...dim };
-    if (override) merged = { ...merged, ...override };
-    return merged as BudgetFields;
-  }
-
-  private resolveToolConfig(toolName: string): ToolFields {
-    const toolCfg = this.cfg.tool!;
-    const base = this.cfg.defaults!;
-    const dim = toolCfg.default;
-    const override = toolCfg.overrides[toolName];
-    let merged = { ...base };
-    if (dim) merged = { ...merged, ...dim };
-    if (override) merged = { ...merged, ...override };
-    return merged as ToolFields;
-  }
-
-  // ── Enforcement: pre:model_request (agent / provider / time) ──────────────
-
-  private enforcePreModel(p: PreModelRequestPayload): void {
-    const { taskId, sessionId, agentName } = p.executionContext;
-    const providerType = p.executionContext.agentDefinition?.provider?.type ?? 'unknown';
-    const acc = this.accumulators.get(taskId);
-    if (!acc) return;
-
-    const agentCfg = this.resolveAgentConfig(agentName);
-    const providerCfg = this.resolveProviderConfig(providerType);
-
-    // Check agent-level limits
-    this.checkLimits(agentCfg, acc, taskId, sessionId, agentName);
-
-    // Check provider-level limits (merged atop agent + defaults)
-    this.checkLimits(providerCfg, acc, taskId, sessionId, agentName);
-  }
-
-  private checkLimits(
-    c: BudgetFields,
-    acc: BudgetAccumulator,
-    taskId: string,
-    sessionId: string | undefined,
+  private resolveCaps(
     agentName: string,
-  ): void {
-    const totals = this.resolveTotals(acc, taskId, sessionId, agentName, c.scope);
-    const wallClockMs = Date.now() - acc.startedAtMs;
-    const totalTokens = totals.inputTokens + totals.outputTokens + totals.cacheTokens;
-    const estimatedCost =
-      totals.inputTokens * c.costPerInputToken +
-      totals.outputTokens * c.costPerOutputToken;
+    providerType: string,
+    toolName?: string,
+  ): { caps: Cap[]; mode?: string } {
+    const base = this.cfg.defaults;
+    const agentDim = this.cfg.agent;
+    const provDim = this.cfg.provider;
+    const toolDim = this.cfg.tool;
 
-    if (c.maxInputTokens !== undefined && totals.inputTokens >= c.maxInputTokens)
-      throw makeEnforcementError('maxInputTokens', c.maxInputTokens, totals.inputTokens);
-    if (c.maxOutputTokens !== undefined && totals.outputTokens >= c.maxOutputTokens)
-      throw makeEnforcementError('maxOutputTokens', c.maxOutputTokens, totals.outputTokens);
-    if (c.maxTotalTokens !== undefined && totalTokens >= c.maxTotalTokens)
-      throw makeEnforcementError('maxTotalTokens', c.maxTotalTokens, totalTokens);
-    if (c.maxModelCalls !== undefined && totals.modelCalls >= c.maxModelCalls)
-      throw makeEnforcementError('maxModelCalls', c.maxModelCalls, totals.modelCalls);
-    if (c.maxWallClockMs !== undefined && wallClockMs >= c.maxWallClockMs)
-      throw makeEnforcementError('maxWallClockMs', c.maxWallClockMs, wallClockMs);
-    if (c.maxModelMs !== undefined && acc.totalModelMs >= c.maxModelMs)
-      throw makeEnforcementError('maxModelMs', c.maxModelMs, acc.totalModelMs);
-    if (c.maxCostUSD !== undefined && estimatedCost >= c.maxCostUSD)
-      throw makeEnforcementError('maxCostUSD', c.maxCostUSD, estimatedCost);
-
-    // 24h rolling window
-    if (c.maxTokensPer24h !== undefined && this.db) {
-      const tokens24h = this.queryTokens24h(agentName, sessionId, c.scope);
-      if (totalTokens + tokens24h >= c.maxTokensPer24h)
-        throw makeEnforcementError('maxTokensPer24h', c.maxTokensPer24h, totalTokens + tokens24h);
+    // Tool-specific path: only tool.default + tool.override (no agent/provider)
+    if (toolName) {
+      const toolOverride = toolDim?.overrides?.[toolName];
+      const merged = this.mergeDim([
+        base,
+        toolDim?.default,
+        toolOverride,
+      ]);
+      return { caps: merged.caps ?? [], mode: merged.mode };
     }
+
+    // Model-level path: agent + provider defaults and overrides
+    const agentOverride = agentDim?.overrides?.[agentName];
+    const provOverride = provDim?.overrides?.[providerType];
+    const merged = this.mergeDim([
+      base,
+      agentDim?.default,
+      agentOverride,
+      provDim?.default,
+      provOverride,
+    ]);
+    return { caps: merged.caps ?? [], mode: merged.mode };
   }
 
-  // ── Enforcement: pre:tool_call (tool-level limits) ───────────────────────
+  // ── Scope-aware DB queries ────────────────────────────────────────────────
 
-  private enforcePreTool(p: PreToolCallPayload): void {
-    const { toolName, callId } = p;
-    const c = this.resolveToolConfig(toolName);
-    const acc = this.accumulators.get(p.executionContext.taskId);
-
-    // Read current tool call count (pre-increment)
-    const currentToolCalls = acc ? (acc.toolCalls.get(toolName) ?? 0) : 0;
-
-    if (c.maxCalls !== undefined && currentToolCalls >= c.maxCalls) {
-      const msg = `tool "${toolName}": maxCalls limit is ${c.maxCalls}, current value is ${currentToolCalls}`;
-      if (c.mode === 'warning') {
-        throw makeToolWarning(toolName, callId, msg);
-      }
-      throw makeEnforcementError(`tool:${toolName}:maxCalls`, c.maxCalls, currentToolCalls);
-    }
-
-    // Check passed — increment tool call counter
-    acc?.toolCalls.set(toolName, currentToolCalls + 1);
-
-    if (c.maxTotalTokens !== undefined && acc) {
-      const totalTokens = acc.inputTokens + acc.outputTokens + acc.cacheTokens;
-      if (totalTokens >= c.maxTotalTokens) {
-        const msg = `tool "${toolName}": maxTotalTokens limit is ${c.maxTotalTokens}`;
-        if (c.mode === 'warning') {
-          throw makeToolWarning(toolName, callId, msg);
-        }
-        throw makeEnforcementError(`tool:${toolName}:maxTotalTokens`, c.maxTotalTokens, totalTokens);
-      }
-    }
-  }
-
-  // ── Tool call counting ───────────────────────────────────────────────────
-
-  /**
-   * Count how many times a tool has been called in the current task.
-   * In-memory only for now (task scope).
-   */
-  // ── 24h rolling window query ─────────────────────────────────────────────
-
-  private queryTokens24h(
-    agentName: string,
-    sessionId: string | undefined,
-    scope: string,
-  ): number {
-    try {
-      const db = this.db as { prepare: (sql: string) => { get: (...args: unknown[]) => unknown } };
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
-      let row: { total: number } | undefined;
-
-      if (scope === 'session' && sessionId) {
-        row = db
-          .prepare(
-            `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
-             FROM task_usage
-             WHERE session_id = ? AND created_at >= ?`
-          )
-          .get(sessionId, since) as { total: number } | undefined;
-      } else if (scope === 'agent') {
-        row = db
-          .prepare(
-            `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
-             FROM task_usage
-             WHERE agent_name = ? AND created_at >= ?`
-          )
-          .get(agentName, since) as { total: number } | undefined;
-      }
-
-      return row?.total ?? 0;
-    } catch {
-      return 0;
-    }
-  }
-
-  // ── Scope-aware totals ───────────────────────────────────────────────────
-
-  private resolveTotals(
-    acc: BudgetAccumulator,
+  private queryScopeTotals(
     taskId: string,
     sessionId: string | undefined,
     agentName: string,
     scope: string,
   ): UsageTotals {
-    if (scope === 'task' || !this.db) {
-      return {
-        inputTokens: acc.inputTokens,
-        outputTokens: acc.outputTokens,
-        cacheTokens: acc.cacheTokens,
-        modelCalls: acc.modelCalls,
-      };
-    }
+    const acc = this.accumulators.get(taskId);
+    const inMem = acc
+      ? {
+          inputTokens: acc.inputTokens,
+          outputTokens: acc.outputTokens,
+          cacheTokens: acc.cacheTokens,
+          modelCalls: acc.modelCalls,
+        }
+      : { inputTokens: 0, outputTokens: 0, cacheTokens: 0, modelCalls: 0 };
+
+    if (scope === 'task' || !this.db) return inMem;
 
     try {
       const db = this.db as {
         prepare: (sql: string) => { get: (...args: unknown[]) => { input: number; output: number; cache: number; calls: number } | undefined };
       };
-      let row:
-        | { input: number; output: number; cache: number; calls: number }
-        | undefined;
+      let row: { input: number; output: number; cache: number; calls: number } | undefined;
 
       if (scope === 'session' && sessionId) {
         row = db
@@ -429,26 +366,251 @@ class BudgetPlugin implements Plugin {
              WHERE agent_name = ? AND task_id != ?`
           )
           .get(agentName, taskId) as typeof row;
+      } else if (scope === 'global') {
+        row = db
+          .prepare(
+            `SELECT
+               COALESCE(SUM(input_tokens), 0) AS input,
+               COALESCE(SUM(output_tokens), 0) AS output,
+               COALESCE(SUM(COALESCE(cache_read_input_tokens,0) + COALESCE(cache_creation_input_tokens,0)), 0) AS cache,
+               COALESCE(SUM(model_calls), 0) AS calls
+             FROM task_usage
+             WHERE task_id != ?`
+          )
+          .get(taskId) as typeof row;
       }
 
       if (row) {
         return {
-          inputTokens: (row.input ?? 0) + acc.inputTokens,
-          outputTokens: (row.output ?? 0) + acc.outputTokens,
-          cacheTokens: (row.cache ?? 0) + acc.cacheTokens,
-          modelCalls: (row.calls ?? 0) + acc.modelCalls,
+          inputTokens: (row.input ?? 0) + inMem.inputTokens,
+          outputTokens: (row.output ?? 0) + inMem.outputTokens,
+          cacheTokens: (row.cache ?? 0) + inMem.cacheTokens,
+          modelCalls: (row.calls ?? 0) + inMem.modelCalls,
         };
       }
+    } catch { /* fall through */ }
+
+    return inMem;
+  }
+
+  private queryWindowTokens(
+    scope: string,
+    id: string,
+    windowMs: number,
+    excludeTaskId?: string,
+  ): number {
+    if (!this.db) return 0;
+    try {
+      const db = this.db as {
+        prepare: (sql: string) => { get: (...args: unknown[]) => { total: number } | undefined };
+      };
+      const since = new Date(Date.now() - windowMs).toISOString();
+
+      let row: { total: number } | undefined;
+
+      if (scope === 'session') {
+        const excl = excludeTaskId ? ' AND tu.task_id != ?' : '';
+        const params: unknown[] = [id, since];
+        if (excludeTaskId) params.push(excludeTaskId);
+        row = db
+          .prepare(
+            `SELECT COALESCE(SUM(tu.input_tokens + tu.output_tokens), 0) AS total
+             FROM task_usage tu
+             JOIN tasks t ON tu.task_id = t.id
+             WHERE t.session_id = ? AND tu.created_at >= ?${excl}`
+          )
+          .get(...params) as typeof row;
+      } else if (scope === 'agent') {
+        const excl = excludeTaskId ? ' AND task_id != ?' : '';
+        const params: unknown[] = [id, since];
+        if (excludeTaskId) params.push(excludeTaskId);
+        row = db
+          .prepare(
+            `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
+             FROM task_usage
+             WHERE agent_name = ? AND created_at >= ?${excl}`
+          )
+          .get(...params) as typeof row;
+      } else if (scope === 'global') {
+        const excl = excludeTaskId ? ' AND task_id != ?' : '';
+        const params: unknown[] = [since];
+        if (excludeTaskId) params.push(excludeTaskId);
+        row = db
+          .prepare(
+            `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
+             FROM task_usage
+             WHERE created_at >= ?${excl}`
+          )
+          .get(...params) as typeof row;
+      }
+
+      return row?.total ?? 0;
     } catch {
-      // DB query failed — fall back to in-memory
+      return 0;
+    }
+  }
+
+  // ── Generic cap evaluation ────────────────────────────────────────────────
+
+  // ── Single-shot usage snapshot ──────────────────────────────────────────
+
+  /**
+   * Build a complete usage snapshot for the current enforcement event.
+   *
+   * Makes exactly `U + W` DB queries where:
+   *   U = number of unique non-task scopes across all caps (0..3)
+   *   W = number of unique (scope, window) pairs across all caps
+   *
+   * Independent of cap count, agent count, session count, or history depth.
+   */
+  private buildSnapshot(
+    caps: Cap[],
+    acc: BudgetAccumulator,
+    taskId: string,
+    sessionId: string | undefined,
+    agentName: string,
+  ): Record<string, number> {
+    const snap: Record<string, number> = {};
+
+    snap['inputTokens'] = acc.inputTokens;
+    snap['outputTokens'] = acc.outputTokens;
+    snap['cacheTokens'] = acc.cacheTokens;
+    snap['calls'] = acc.modelCalls;
+    snap['wallClock'] = Date.now() - acc.startedAtMs;
+    snap['modelMs'] = acc.totalModelMs;
+    snap['cost'] =
+      acc.inputTokens * this.costPerInput +
+      acc.outputTokens * this.costPerOutput;
+
+    const uniqueScopes = new Set<string>();
+    const uniqueWindows = new Map<string, { scope: string; windowMs: number }>();
+    for (const cap of caps) {
+      const scope = cap.scope ?? 'task';
+      if (scope !== 'task') uniqueScopes.add(scope);
+      if (cap.window) {
+        const key = `${scope}:${cap.window}`;
+        if (!uniqueWindows.has(key)) {
+          uniqueWindows.set(key, { scope, windowMs: parseIsoDuration(cap.window) });
+        }
+      }
     }
 
-    return {
-      inputTokens: acc.inputTokens,
-      outputTokens: acc.outputTokens,
-      cacheTokens: acc.cacheTokens,
-      modelCalls: acc.modelCalls,
-    };
+    for (const scope of uniqueScopes) {
+      const t = this.queryScopeTotals(taskId, sessionId, agentName, scope);
+      snap[`${scope}:inputTokens`] = t.inputTokens;
+      snap[`${scope}:outputTokens`] = t.outputTokens;
+      snap[`${scope}:calls`] = t.modelCalls;
+    }
+
+    for (const [key, { scope, windowMs }] of uniqueWindows) {
+      let scopeId = '';
+      if (scope === 'session') scopeId = sessionId ?? '';
+      else if (scope === 'agent') scopeId = agentName ?? '';
+      snap[key] = this.queryWindowTokens(scope, scopeId, windowMs, taskId);
+    }
+
+    return snap;
+  }
+
+  private getSnapshotValue(snap: Record<string, number>, cap: Cap, toolName?: string): number {
+    const scope = cap.scope ?? 'task';
+    const scopeKey = scope !== 'task' ? `${scope}:` : '';
+
+    let base: number;
+    switch (cap.field) {
+      case 'inputTokens':
+        base = snap[`${scopeKey}inputTokens`] ?? snap['inputTokens'];
+        break;
+      case 'outputTokens':
+        base = snap[`${scopeKey}outputTokens`] ?? snap['outputTokens'];
+        break;
+      case 'tokens':
+        base = (snap[`${scopeKey}inputTokens`] ?? snap['inputTokens'])
+            + (snap[`${scopeKey}outputTokens`] ?? snap['outputTokens'])
+            + snap['cacheTokens'];
+        break;
+      case 'calls':
+        base = snap[`${scopeKey}calls`] ?? snap['calls'];
+        break;
+      case 'wallClock':
+        base = snap['wallClock'];
+        break;
+      case 'modelMs':
+        base = snap['modelMs'];
+        break;
+      case 'cost':
+        base = snap['cost'];
+        break;
+      case 'toolCalls':
+        base = 0; // resolved at enforcement time via toolName
+        break;
+      default:
+        base = 0;
+    }
+
+    if (cap.window) {
+      base += snap[`${scope}:${cap.window}`] ?? 0;
+    }
+
+    return base;
+  }
+
+  private evaluateCap(cap: Cap, snap: Record<string, number>, acc?: BudgetAccumulator, toolName?: string): void {
+    const current = cap.field === 'toolCalls'
+      ? (acc?.toolCalls.get(toolName ?? '') ?? 0)
+      : this.getSnapshotValue(snap, cap, toolName);
+    if (current >= cap.maximum) {
+      throw makeEnforcementError(cap.field, cap.maximum, current);
+    }
+  }
+
+  // ── Enforcement: pre:model_request ────────────────────────────────────────
+
+  private enforcePreModel(p: PreModelRequestPayload): void {
+    const { taskId, sessionId, agentName } = p.executionContext;
+    const providerType = p.executionContext.agentDefinition?.provider?.type ?? 'unknown';
+    const acc = this.accumulators.get(taskId);
+    if (!acc) return;
+
+    const { caps } = this.resolveCaps(agentName, providerType);
+    const modelCaps = caps.filter(c => c.field !== 'toolCalls');
+    if (modelCaps.length === 0) return;
+
+    // One snapshot, one DB round-trip per unique scope/window
+    const snap = this.buildSnapshot(modelCaps, acc, taskId, sessionId, agentName);
+    for (const cap of modelCaps) {
+      this.evaluateCap(cap, snap);
+    }
+  }
+
+  // ── Enforcement: pre:tool_call ────────────────────────────────────────────
+
+  private enforcePreTool(p: PreToolCallPayload): void {
+    const { toolName, callId, executionContext } = p;
+    const { caps, mode } = this.resolveCaps(executionContext.agentName, '', toolName);
+    const acc = this.accumulators.get(executionContext.taskId);
+    if (!acc) return;
+
+    if (caps.length === 0) return;
+
+    const currentToolCalls = acc.toolCalls.get(toolName) ?? 0;
+    const snap = this.buildSnapshot(caps, acc, executionContext.taskId, undefined, executionContext.agentName);
+
+    for (const cap of caps) {
+      const current = cap.field === 'toolCalls'
+        ? currentToolCalls
+        : this.getSnapshotValue(snap, cap, toolName);
+      if (current >= cap.maximum) {
+        const msg = `tool "${toolName}": ${cap.field} limit is ${cap.maximum}, current value is ${Math.round(current)}`;
+        const capMode = cap.mode ?? mode ?? 'warning';
+        if (capMode === 'warning') {
+          throw makeToolWarning(toolName, callId, msg);
+        }
+        throw makeEnforcementError(`tool:${toolName}:${cap.field}`, cap.maximum, current);
+      }
+    }
+
+    acc.toolCalls.set(toolName, currentToolCalls + 1);
   }
 }
 
@@ -456,7 +618,9 @@ class BudgetPlugin implements Plugin {
 
 const createPlugin: PluginFactory = ({ db, config }: PluginContext): Plugin => {
   const pluginCfg = normalizeConfig(config);
-  return new BudgetPlugin(db, pluginCfg);
+  const costIn = pluginCfg.defaults?.costPerInputToken ?? 0;
+  const costOut = pluginCfg.defaults?.costPerOutputToken ?? 0;
+  return new BudgetPlugin(db, pluginCfg, costIn, costOut);
 };
 
 export default createPlugin;
