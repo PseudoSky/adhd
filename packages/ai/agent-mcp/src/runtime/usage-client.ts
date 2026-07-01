@@ -210,7 +210,7 @@ export class UsageClient {
                 if (excludeTaskId) params.push(excludeTaskId);
                 row = db
                     .prepare(
-                        `SELECT COALESCE(SUM(tu.input_tokens + tu.output_tokens), 0) AS total
+                        `SELECT COALESCE(SUM(tu.input_tokens + tu.output_tokens + COALESCE(tu.cache_read_input_tokens,0) + COALESCE(tu.cache_creation_input_tokens,0)), 0) AS total
                          FROM task_usage tu
                          JOIN tasks t ON tu.task_id = t.id
                          WHERE t.session_id = ? AND tu.created_at >= ?${excludeClause}`,
@@ -222,7 +222,7 @@ export class UsageClient {
                 if (excludeTaskId) params.push(excludeTaskId);
                 row = db
                     .prepare(
-                        `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
+                        `SELECT COALESCE(SUM(input_tokens + output_tokens + COALESCE(cache_read_input_tokens,0) + COALESCE(cache_creation_input_tokens,0)), 0) AS total
                          FROM task_usage
                          WHERE agent_name = ? AND created_at >= ?${excludeClause}`,
                     )
