@@ -6,6 +6,14 @@
 > implementation begins. Any part of this proposal should be remodeled more effectively when
 > the time comes — the goal here is to represent the idea clearly enough that individual parts
 > can be handed off for proper design.
+>
+> **⚠️ POST-EXECUTION ADDENDUM (2026-06-30).** The package boundaries table below
+> has been updated to include `@adhd/agent-runtime`, extracted from agent-mcp's
+> internal stores. `@adhd/agent-mcp` has been resigned to "thin MCP transport" —
+> the runtime stores and provider calls now live in agent-runtime and agent-provider
+> respectively. This change was NOT part of the original scope review; see
+> `docs/plan/agent-registry-schema/decisions.md` §5 and
+> `docs/plan/agent-mcp-refactor/decisions.md` Decision 6 for the binding decisions.
 
 ---
 

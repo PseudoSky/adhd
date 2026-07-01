@@ -10,6 +10,12 @@
 >
 > Source requirements: `docs/plan/agent-registry/DATA_MODEL.md` (Domain 1 +
 > "Cross-Domain Design Decisions (Open)").
+>
+> **⚠️ POST-EXECUTION ADDENDA.** This file has been amended after the original plan
+> states executed. Check for sections marked with "§X (addendum)" — they represent
+> binding decisions discovered during implementation and were NOT part of the
+> original plan review. Every addendum is documented as a separate section with its
+> own rationale and DAG-impact note. See §5 (runtime cascade semantics).
 
 These four packages are FLAT siblings under `packages/ai/`:
 `agent-registry`, `agent-tool-registry`, `agent-provider`, `agent-policy`. Each is
