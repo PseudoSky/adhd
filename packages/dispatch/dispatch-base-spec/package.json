@@ -1,9 +1,7 @@
 {
-  "name": "@adhd/dispatch-client",
+  "name": "@adhd/dispatch-base-spec",
   "version": "0.0.1",
-  "dependencies": {
-    "@adhd/dispatch-spec": "0.0.1"
-  },
+  "dependencies": {},
   "main": "./index.js",
   "module": "./index.mjs",
   "typings": "./index.d.ts",
@@ -11,4 +9,3 @@
     "access": "public"
   }
 }
-

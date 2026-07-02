@@ -34,10 +34,7 @@ import type {
 } from '@adhd/dispatch-spec';
 import * as fs from 'fs';
 
-import {
-  WRITE_CLASS_ACTIONS,
-  validateSnapshot,
-} from '@adhd/dispatch-spec';
+import { WRITE_CLASS_ACTIONS, validateSnapshot } from '@adhd/dispatch-spec';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -238,7 +235,7 @@ function topoSortMilestones(milestones: Record<string, MilestoneDag>): {
     const cycle = slugs.filter((s) => !visited.has(s));
     throw new Error(
       `snapshot(): cycle detected in milestone depends_on graph. ` +
-      `Nodes involved: [${cycle.join(', ')}]`
+        `Nodes involved: [${cycle.join(', ')}]`
     );
   }
 
@@ -1705,10 +1702,10 @@ function compilePrompt(
         } else if (shape.kind === 'structured-output') {
           parts.push(
             '  Schema:\n' +
-            JSON.stringify(shape.schema, null, 2)
-              .split('\n')
-              .map((l) => `    ${l}`)
-              .join('\n')
+              JSON.stringify(shape.schema, null, 2)
+                .split('\n')
+                .map((l) => `    ${l}`)
+                .join('\n')
           );
         } else if ('ops' in shape && Array.isArray(shape.ops)) {
           for (const sop of shape.ops) {

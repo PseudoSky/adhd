@@ -29,7 +29,7 @@ function normalizeDag(dag: DagJson): DagJson {
 export class DagClient implements IDagClient {
   private _dag: DagJson | null = null;
 
-  constructor(private readonly serializer: IDagSerializer) { }
+  constructor(private readonly serializer: IDagSerializer) {}
 
   async load(): Promise<DagJson> {
     const dag = await this.serializer.readDag();
