@@ -84,6 +84,23 @@ Everything else (`plugin-io`, `plugin-gitnexus`, `serializer-sqlite`, `tools-mcp
 `cli`, `tests-golden`, `tests-algorithms`, `optimizer-algorithms`, `backlog-fill`)
 is re-sequenced behind `tests-real-e2e` — build the proof first, enrich after.
 
+### Added 2026-07-02 — `stepwise-dispatch` (A/B experiment)
+
+New milestone testing **op-granular dispatch with context reset + agent-emitted
+forward context**: instead of one long conversation where every tool result rides
+along for all remaining turns (~1 + 0.1×(T−k) cost per token under caching), the
+runner dispatches one operation per ephemeral task; the agent ends each completion
+report with a bounded fenced-JSON `ForwardContext` block (`{ completed_op,
+artifacts, exports, decisions, warnings }`, ≤2,000 chars) which the runner persists
+to `dispatch_log` and injects into the next step's prompt. Grounding: the measured
+spec-types run re-sent a 20k reference read across ~10 turns that only 1 of 4 ops
+needed, and cross-task prefix caching (measured live) makes each step's prefix cost
+~0.1×. This is the split-side of the PoC SCOPE §A4 merge-vs-split crossover — the
+milestone's A/B experiment (`tests/integration/stepwise-ab.ts`) decides it with
+data: packed vs stepwise on the same sandbox work order, per-turn tokens from
+`task_events`, artifact-equivalence assertion. A negative result is recorded here
+and becomes a packing input to the optimizer instead of a default.
+
 ## Key design decisions
 
 1. **Serialization adapter pattern** — `IDagSerializer` interface with factory functions
