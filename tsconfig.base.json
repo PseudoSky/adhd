@@ -142,8 +142,8 @@
       "@adhd/data-core-structures-query-engine": [
         "./packages/data/data-core-structures/data-query-engine/src/index.ts"
       ],
-      "@adhd/decompile": [
-        "./packages/decompile/src/index.ts"
+      "@adhd/decompile-cli": [
+        "./entrypoint/decompile-cli/src/index.ts"
       ],
       "@adhd/dispatch-base-spec": [
         "./packages/dispatch/dispatch-base-spec/src/index.ts"
