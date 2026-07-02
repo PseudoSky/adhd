@@ -2,15 +2,15 @@
 """
 check_manifest.py — enforce the agent-mcp back-out guarantee (Plan 8 [dod.8]).
 
-The owner retains the right to back out agent-mcp/agent-mcp-types because that
+The owner retains the right to back out agent-mcp/agent-base-types because that
 system works today. This plan is the FIRST sanctioned modifier, and only under an
 explicit, reversible, enumerated manifest recorded in decisions.md.
 
 This script proves the guarantee mechanically:
   1. Parse the modification manifest from decisions.md — the fenced block tagged
-     `def:agent-mcp-modification-manifest` lists every agent-mcp{,-types} src path
+     `def:agent-mcp-modification-manifest` lists every agent-mcp{,-base-types} src path
      this plan is allowed to touch, plus a `baseline-ref:` line.
-  2. Compute the set of agent-mcp{,-types}/src files that DIFFER from baseline-ref
+  2. Compute the set of agent-mcp{,-base-types}/src files that DIFFER from baseline-ref
      (committed + working-tree changes).
   3. PASS iff that change set is a SUBSET of the manifest. Any changed src file
      not enumerated in the manifest is a back-out-guarantee violation -> FAIL.
@@ -29,7 +29,7 @@ import sys
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 DECISIONS = os.path.join(REPO_ROOT, "docs/plan/agent-mcp-authoring/decisions.md")
-GUARDED_PREFIXES = ("packages/ai/agent-mcp/src", "packages/ai/agent-mcp-types/src")
+GUARDED_PREFIXES = ("packages/ai/agent-mcp/src", "packages/agent/agent-base-types/src")
 
 
 def run(cmd):
@@ -63,7 +63,7 @@ def parse_manifest():
 
 
 def changed_guarded_files(baseline):
-    """agent-mcp{,-types}/src files differing from baseline (or empty if no baseline yet)."""
+    """agent-mcp{,-base-types}/src files differing from baseline (or empty if no baseline yet)."""
     files = set()
     # Committed changes vs baseline.
     if baseline:
