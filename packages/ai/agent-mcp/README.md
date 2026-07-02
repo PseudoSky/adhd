@@ -596,8 +596,12 @@ are enforced *before* dispatch.
 By default (`"names"`), the API `tools` array carries **name-only** definitions —
 name, a one-line description, and a permissive input schema — while the full tool
 documentation (descriptions + parameter schemas) is **prepended to the system
-message**, where it forms a stable, provider-cacheable prefix instead of ~3k tokens
-of JSON schema re-tokenized every turn (measured: `docs/provider-call-audit.md`).
+message** as a byte-stable, provider-cacheable prefix. Note this *relocates* schema
+tokens rather than removing them (measured on DeepSeek: total input within ±5% of
+full-schema mode, turn-2 cache hit ≥96% in both). The value is (a) a stable text
+prefix on providers that don't cache the tools array, (b) argument construction
+guided by richer prose docs, and (c) the prerequisite for tool pruning and
+omit-tools-after-turn-1 optimizations (`docs/provider-call-audit.md` §4).
 Set `toolAdvertisement: "full"` on an agent to restore complete JSON-schema
 definitions on the wire (useful for models that construct arguments poorly from
 prose docs). `claudecli` providers always behave as `"full"` — they run their own
