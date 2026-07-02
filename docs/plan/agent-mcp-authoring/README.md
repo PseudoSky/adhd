@@ -37,7 +37,7 @@ path and the agent-mcp byte-back-out guarantee both hold.
 > `CLOSEOUT.md` §sequencing, not a `depends_on_plans` edge.
 >
 > **HARD CONSTRAINT — agent-mcp back-out guarantee.** `packages/ai/agent-mcp/`
-> and `packages/ai/agent-mcp-types/` work today and the owner retains the right
+> and `packages/agent/agent-base-types/` work today and the owner retains the right
 > to back them out. This plan is the FIRST sanctioned modifier and only under the
 > opt-in, reversible **modification manifest** recorded in `decisions.md`
 > (`def:agent-mcp-modification-manifest`). Every state touching agent-mcp src
@@ -182,7 +182,7 @@ out the whole definition lane and restore agent-mcp to its pre-plan bytes.
   - negative-control: `a test that counts delegation-surface tools fails if any *_define/*_list/*_search tool leaks into the runtime delegation set`
   - delivered-by: `compat-shim, versioning`
 
-- `[dod.8]` **agent-mcp/agent-mcp-types source is modified ONLY under this plan's explicit opt-in states and the change is reversible; no modification occurs before the `authoring-design` gate records the modification manifest. (structural)** — honors the owner's byte-identical back-out guarantee.
+- `[dod.8]` **agent-mcp/agent-base-types source is modified ONLY under this plan's explicit opt-in states and the change is reversible; no modification occurs before the `authoring-design` gate records the modification manifest. (structural)** — honors the owner's byte-identical back-out guarantee.
   - entrypoint: `git diff against the pre-plan baseline ref recorded in decisions.md (def:agent-mcp-modification-manifest) + the agent-mcp non-regression guard (nx test agent-mcp)`
   - observable: `every touched agent-mcp src file is listed in decisions.md's modification manifest; the full pre-existing agent-mcp test suite stays green at every state; check_manifest.py reports the change set is a subset of the manifest (reverting this plan's commits restores agent-mcp to the baseline ref byte-for-byte)`
   - negative-control: `touching an agent-mcp src file not in the recorded manifest makes check_manifest.py's manifest-diff check fail`

@@ -77,8 +77,8 @@ is **additive** to the stores (a new module), preserving the stores byte-for-byt
 
 ## D3. agent-mcp modification manifest — the opt-in reversible gate `[def:agent-mcp-modification-manifest]`
 
-**The owner retains the right to back out agent-mcp/agent-mcp-types. This plan is
-the FIRST sanctioned modifier. Every agent-mcp{,-types} src file this plan may
+**The owner retains the right to back out agent-mcp/agent-base-types. This plan is
+the FIRST sanctioned modifier. Every agent-mcp{,-base-types} src file this plan may
 touch is enumerated here; nothing outside this list may change.**
 
 ```text
@@ -111,7 +111,7 @@ packages/ai/agent-mcp/src/__tests__/systemprompt-compat.test.ts
 packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts
 packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts
 
-# agent-mcp-types: NONE expected. If a shared type is genuinely required, it must
+# agent-base-types: NONE expected. If a shared type is genuinely required, it must
 # be ADDED here by amendment BEFORE the change, never silently.
 ```
 
