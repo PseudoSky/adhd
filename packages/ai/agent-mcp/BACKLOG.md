@@ -696,6 +696,35 @@ an actionable error rather than silently doing nothing.
 
 **References** — `src/providers/anthropic.ts` (`toAnthropicTools`), `docs/plan/agent-registry/RUNTIME_GAPS.md` (full analysis + recommended handoff), `docs/plan/agent-registry/{SCOPE,DATA_MODEL,SEED_DATA}.md`. (Surfaced during agent-registry plan review, 2026-06-22.)
 
+### FEAT-012 — Reasoning/thinking token support (breakout + content handling)
+- **Status:** backlog
+- **Priority:** P2
+- **Area:** providers, usage tracking
+- **Reported:** 2026-07-02 (found while auditing per-turn usage storage)
+
+**Problem / Description**
+Providers have zero reasoning/thinking handling. Three consequences:
+1. **Counting:** reasoning tokens ARE billed inside `completion_tokens`/
+   `output_tokens`, so `task_usage.outputTokens` silently includes them with no
+   breakout. As of the rawUsage change (2026-07-02) the verbatim breakdown
+   (`completion_tokens_details.reasoning_tokens` on OpenAI-compatible reasoners)
+   lands in `task_events.MODEL_RESPONSE.payload.rawUsage` — but the normalized
+   `TokenUsage` has no `reasoningTokens` field and `usage_query` can't aggregate it.
+2. **Content (OpenAI-compatible):** `openai.ts` maps only `message.content` +
+   `tool_calls`; a DeepSeek-reasoner `reasoning_content` field is dropped — correct
+   for the wire (DeepSeek forbids re-sending it) but the reasoning text is lost to
+   the event log, where it would be valuable for debugging.
+3. **Content (Anthropic):** extended thinking is not enableable (no `thinking`
+   provider config), and if it were, `anthropic.ts` dropping thinking blocks would
+   break Anthropic's requirement that thinking blocks be preserved in assistant
+   turns during tool use.
+
+**Proposed fix / Approach** Add `reasoningTokens?: number` to `TokenUsage` +
+extraction in both providers + a `usage_query` column; persist dropped
+`reasoning_content` into the MODEL_RESPONSE event payload (bounded); Anthropic
+extended-thinking support is a separate, larger work item (thinking param +
+block preservation through the message mapper).
+
 ### FEAT-011 — Reusable base system prompt with behavioral guardrails — priority: HIGH
 - **Status:** backlog
 - **Priority:** P0
