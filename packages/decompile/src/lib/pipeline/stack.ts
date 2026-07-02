@@ -1,4 +1,4 @@
-import { Transform } from '@adhd/transform';
+import { Transform } from '@adhd/data-core-structures-base-transforms';
 import { RawSourceMap } from 'source-map';
 /**
  * Pipeline stack for tracking decompiled objects by type.
@@ -6,7 +6,7 @@ import { RawSourceMap } from 'source-map';
  * Counter tracks active items in the stack by type.
  */
 const { Stack, Counter } = Transform;
-export type StackItem = { path: string; data: string; mapping?: RawSourceMap }
+export type StackItem = { path: string; data: string; mapping?: RawSourceMap };
 
 export class PipelineStack {
   private _stack: InstanceType<typeof Stack<[string, StackItem]>>;
@@ -20,7 +20,9 @@ export class PipelineStack {
 
     this._stack = new Stack<[string, StackItem]>({
       onPush: (value): void => this._counter.increment(value),
-      onPop: (value): void => { value !== undefined && this._counter.decrement(value); },
+      onPop: (value): void => {
+        value !== undefined && this._counter.decrement(value);
+      },
       onClear: (): void => this._counter.clear(),
     });
   }

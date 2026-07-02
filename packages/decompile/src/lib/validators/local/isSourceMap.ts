@@ -16,7 +16,7 @@
  *  file: Optional. The generated filename this source map is associated with.
  */
 
-import { Transform } from '@adhd/transform';
+import { Transform } from '@adhd/data-core-structures-base-transforms';
 import isBase64 from './isBase64.js';
 
 type MapType = {
@@ -25,9 +25,9 @@ type MapType = {
   names: unknown[];
   mappings: string;
   file?: string;
-  sourceRoot?: unknown[]
-  sourcesContent?: unknown[]
-}
+  sourceRoot?: unknown[];
+  sourcesContent?: unknown[];
+};
 
 const MapShape = {
   version: ({ version }: MapType) => Transform.isInt(version),
@@ -35,13 +35,15 @@ const MapShape = {
   names: ({ names }: MapType) => Transform.isArray(names),
   mappings: ({ mappings }: MapType) => isBase64(mappings),
   file: ({ file }: MapType) => !file || Transform.isString(file),
-  sourceRoot: ({ sourceRoot }: MapType) => !sourceRoot || Transform.isArray(sourceRoot),
-  sourcesContent: ({ sourcesContent }: MapType) => !sourcesContent || Transform.isArray(sourcesContent),
+  sourceRoot: ({ sourceRoot }: MapType) =>
+    !sourceRoot || Transform.isArray(sourceRoot),
+  sourcesContent: ({ sourcesContent }: MapType) =>
+    !sourcesContent || Transform.isArray(sourcesContent),
 };
 
 const tryReadJson = (s: unknown) => {
   if (!Transform.isString(s)) {
-    return false
+    return false;
   }
   try {
     return JSON.parse(s as string);
@@ -53,7 +55,7 @@ const tryReadJson = (s: unknown) => {
 const isSourceMap = (_data: string | MapType) => {
   console.log('Parser(SourceMap:validate)');
   let data = _data;
-  if (typeof (data) === 'string') {
+  if (typeof data === 'string') {
     if (data.length < 30) return false;
     data = tryReadJson(data) as MapType;
     if (!data) return false;

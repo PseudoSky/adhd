@@ -1,4 +1,4 @@
-import { Transform } from '@adhd/transform';
+import { Transform } from '@adhd/data-core-structures-base-transforms';
 import Stack from '../pipeline/stack.js';
 import Store from '../store/index.js';
 import extractLocal from './local-file.js';
@@ -6,14 +6,15 @@ import { extractMapLink, extractSource } from './map.js';
 import { extractRawHtml, isHtml } from './raw-html.js';
 import extractSite from './site.js';
 
-
 export const extract = async (callStack: Stack) => {
   const item = callStack.pop();
   if (!callStack.hasMore() || item === null) return;
 
   const [type, input] = item;
   if (input === null) return;
-  console.log(`Extract[${type}]`, { input: input.path && input.path?.includes('.js') ? input : input.path });
+  console.log(`Extract[${type}]`, {
+    input: input.path && input.path?.includes('.js') ? input : input.path,
+  });
   try {
     if (!!callStack && input) {
       let r;
@@ -24,13 +25,17 @@ export const extract = async (callStack: Stack) => {
          */
         try {
           const res = await extractSite(input.path);
-          console.log({ site: res })
+          console.log({ site: res });
           if (res) {
-
             if (res.path.endsWith('.js')) {
               callStack.push('link', res);
-            } if (res.path.endsWith('.map')) {
-              callStack.push('map', { path: res.path, data: "", mapping: res.data });
+            }
+            if (res.path.endsWith('.map')) {
+              callStack.push('map', {
+                path: res.path,
+                data: '',
+                mapping: res.data,
+              });
             } else {
               callStack.push('raw', res);
             }
@@ -47,7 +52,11 @@ export const extract = async (callStack: Stack) => {
         if (r?.path.endsWith('.html')) {
           callStack.push('raw', r);
         } else if (r?.path.endsWith('.map')) {
-          callStack.push('map', { path: r.path, data: "", mapping: r.data as unknown as RawSourceMap });
+          callStack.push('map', {
+            path: r.path,
+            data: '',
+            mapping: r.data as unknown as RawSourceMap,
+          });
         } else if (r) {
           callStack.push('source', r);
         }
@@ -60,7 +69,7 @@ export const extract = async (callStack: Stack) => {
         r = extractRawHtml(input);
         console.log({ links: r });
         r.forEach((l) => {
-          callStack.push('link', { path: l, data: "" });
+          callStack.push('link', { path: l, data: '' });
         });
       } else if (type === 'link') {
         /*
@@ -73,7 +82,11 @@ export const extract = async (callStack: Stack) => {
           if (r) {
             // console.log({ res: r })
             if (input.path.endsWith('.map')) {
-              callStack.push('map', { path: r.path, data: "", mapping: r.data });
+              callStack.push('map', {
+                path: r.path,
+                data: '',
+                mapping: r.data,
+              });
             } else {
               callStack.push('source', r);
             }
@@ -89,7 +102,7 @@ export const extract = async (callStack: Stack) => {
         r = extractMapLink(input);
         if (r && r.length) {
           console.log('EXTRACT[source] map link', r);
-          r.forEach((l) => callStack.push('link', { path: l, data: "" }));
+          r.forEach((l) => callStack.push('link', { path: l, data: '' }));
         } else {
           callStack.push('write', { path: input.path, data: input.data });
         }
@@ -99,12 +112,11 @@ export const extract = async (callStack: Stack) => {
          * input: json
          */
         try {
-          if (!input.mapping) throw Error("Mapping missing");
+          if (!input.mapping) throw Error('Mapping missing');
           r = await extractSource(input.mapping).then((res) => {
-            res?.forEach(src => {
-
+            res?.forEach((src) => {
               callStack.push('write', src);
-            })
+            });
           });
           // console.log({ map: r })
         } catch (e) {
@@ -118,8 +130,6 @@ export const extract = async (callStack: Stack) => {
         Store.addToImports(input.path);
         Store.addFile(input.path, input.data);
         // if(Transform.isArray(input)){
-
-
 
         // fs.writeJSONSync(f.name, f.data)
         // });
@@ -142,25 +152,25 @@ const run = async (callStack: Stack) => {
 };
 
 export const testpipeline = (files: string[], prefix: string) => {
-  console.log({ files, prefix })
+  console.log({ files, prefix });
   return Promise.all(
     files.map((f) => {
       console.log(`pipeline started: ${f}`);
       return pipeline(f, prefix);
-    }),
+    })
   ).then((r) => {
     console.log('complete');
-    return r
+    return r;
     // console.log('finalizing package.json + index.js');
     // return Store.finalize()
-  })
+  });
   // .then(() => {
   // });
   // return argz
 };
 
-import { constants } from "fs";
-import { access } from "fs/promises";
+import { constants } from 'fs';
+import { access } from 'fs/promises';
 import { RawSourceMap } from 'source-map';
 
 async function fileExists(path: string): Promise<boolean> {
@@ -172,7 +182,6 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
-
 /* EXAMPLE:
  *
  * pipeline('./maps/bitbucket/app.f606c0f20e8744e93489.js.map',
@@ -183,16 +192,16 @@ export const pipeline = async (input: string, prefix = './build/src') => {
   Store.setPrefix(prefix);
   // pkg="test"
   // Store.package=pkg
-  if (typeof (input) === 'string' && input.startsWith('http')) {
+  if (typeof input === 'string' && input.startsWith('http')) {
     if (input.endsWith('js')) {
-      callStack.push('link', { path: input, data: "" });
+      callStack.push('link', { path: input, data: '' });
     } else {
-      callStack.push('site', { path: input, data: "" });
+      callStack.push('site', { path: input, data: '' });
     }
   } else if (await fileExists(input)) {
-    callStack.push('local', { path: input, data: "" });
+    callStack.push('local', { path: input, data: '' });
   } else if (isHtml(input)) {
-    callStack.push('raw', { path: input, data: "" });
+    callStack.push('raw', { path: input, data: '' });
   } else {
     console.log('couldnt find ' + input);
   }
@@ -207,4 +216,3 @@ const Extractors = {
 };
 
 export default Extractors;
-

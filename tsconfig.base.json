@@ -133,8 +133,14 @@
       "@adhd/apigen-python-env": [
         "./packages/apigen/python-env/src/index.ts"
       ],
-      "@adhd/data": [
-        "./packages/data/src/index.ts"
+      "@adhd/data-core-structures": [
+        "./packages/data/data-core-structures/src/index.ts"
+      ],
+      "@adhd/data-core-structures-base-transforms": [
+        "./packages/data/data-core-structures/data-base-transforms/src/index.ts"
+      ],
+      "@adhd/data-core-structures-query-engine": [
+        "./packages/data/data-core-structures/data-query-engine/src/index.ts"
       ],
       "@adhd/decompile": [
         "./packages/decompile/src/index.ts"
@@ -157,17 +163,11 @@
       "@adhd/dispatch-spec": [
         "./packages/dispatch/dispatch-spec/src/index.ts"
       ],
-      "@adhd/query": [
-        "./packages/query/src/index.ts"
-      ],
       "@adhd/react-hooks": [
         "./packages/react-hooks/src/index.ts"
       ],
       "@adhd/storybook": [
         "./packages/storybook/src/index.ts"
-      ],
-      "@adhd/transform": [
-        "./packages/transform/src/index.ts"
       ],
       "@adhd/workspace-base-tools": [
         "./packages/workspace/workspace-base-tools/src/index.ts"
