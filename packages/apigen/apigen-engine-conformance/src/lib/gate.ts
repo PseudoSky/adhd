@@ -31,14 +31,14 @@ import {
   uuidCodec,
   numberSpecialCodec,
   registerWellKnown,
-} from '@adhd/apigen-logical';
+} from '@adhd/apigen-base-logical';
 import type {
   LogicalTypeCodec,
   LogicalTypeId,
   Wire,
   SchemaNode,
   TranscodeCtx,
-} from '@adhd/apigen-logical';
+} from '@adhd/apigen-base-logical';
 
 import { logicalTypeVectors } from './vectors';
 import type { LogicalTypeVector } from './vectors';

@@ -37,7 +37,7 @@
 
 import * as readline from 'node:readline';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import type { OutputPlugin, RunInput } from '@adhd/apigen-core';
+import type { OutputPlugin, RunInput } from '@adhd/apigen-core-client;
 import { ensurePythonEnv } from '@adhd/apigen-python-env';
 
 // ---------------------------------------------------------------------------

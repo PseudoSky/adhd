@@ -20,7 +20,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createInvoker, LayerContext } from '../lib/invoke';
 import { makeValidateLayer } from '../lib/validate-layer';
-import { ApiError } from '@adhd/apigen-errors';
+import { ApiError } from '@adhd/apigen-base-errors';
 import type { Call } from '../lib/invoke';
 import type { ComposedSchemas } from '../lib/types';
 

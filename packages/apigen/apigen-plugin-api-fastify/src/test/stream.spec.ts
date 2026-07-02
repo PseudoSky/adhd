@@ -21,7 +21,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import EventEmitter from 'node:events';
 import { sendStreamSse } from '../lib/stream';
 import { createStream } from '@adhd/apigen-engine-runtime';
-import { ApiError } from '@adhd/apigen-errors';
+import { ApiError } from '@adhd/apigen-base-errors';
 
 // ---------------------------------------------------------------------------
 // Mock infrastructure

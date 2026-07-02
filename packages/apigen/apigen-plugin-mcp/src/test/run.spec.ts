@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { run } from '../lib/run';
 import { dispatch } from '@adhd/apigen-engine-runtime';
-import type { RunInput } from '@adhd/apigen-core';
+import type { RunInput } from '@adhd/apigen-core-client;
 import * as net from 'node:net';
 
 /** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */

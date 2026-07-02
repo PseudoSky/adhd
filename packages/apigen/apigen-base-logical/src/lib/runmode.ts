@@ -1,5 +1,5 @@
 /**
- * @stable Run-mode closure builder for `@adhd/apigen-logical`.
+ * @stable Run-mode closure builder for `@adhd/apigen-base-logical`.
  *
  * This module provides the **in-process** (run-mode) path that does NOT generate
  * files. It is the compile-once alternative to the generate-time emitter

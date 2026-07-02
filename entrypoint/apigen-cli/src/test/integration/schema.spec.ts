@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { generateSchemas } from '@adhd/apigen-core';
+import { generateSchemas } from '@adhd/apigen-core-client;
 import { createApiPackage } from '@adhd/apigen-engine-runtime';
 import type { GeneratedSchemas, MiddlewareDef } from '@adhd/apigen-engine-runtime';
 

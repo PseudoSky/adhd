@@ -1,7 +1,7 @@
-import type { PluginInput, PluginOutput } from '@adhd/apigen-core';
+import type { PluginInput, PluginOutput } from '@adhd/apigen-core-client;
 import { needsEnvelopeField, dataParamNames } from '@adhd/apigen-engine-runtime';
 import { envelopeCliFlag, envelopeEnvVar } from '@adhd/apigen-naming';
-import { CLI_EXIT_CODE } from '@adhd/apigen-errors';
+import { CLI_EXIT_CODE } from '@adhd/apigen-base-errors';
 
 // ---------------------------------------------------------------------------
 // §9.1 — envelope field binding for CLI (flag + env var per field)

@@ -1,6 +1,6 @@
 // Export-shape matrix — proves F28/F29 closed (dod.9).
 //
-// Drives the REAL v2 extractor (`@adhd/apigen-core`'s `extract`) over one fixture
+// Drives the REAL v2 extractor (`@adhd/apigen-core-client's `extract`) over one fixture
 // per export shape and asserts that EVERY operation is named by its EXPORTED
 // symbol — never the local declaration name. The per-transport projections
 // (`@adhd/apigen-naming`'s `project`) are derived from the same operations, so
@@ -17,9 +17,9 @@
 
 import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
-import { extract } from '@adhd/apigen-core';
+import { extract } from '@adhd/apigen-core-client;
 import { project } from '@adhd/apigen-naming';
-import type { Operation } from '@adhd/apigen-core';
+import type { Operation } from '@adhd/apigen-core-client;
 
 const shapesDir = path.join(__dirname, '..', 'fixtures', 'shapes');
 

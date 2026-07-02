@@ -1,5 +1,5 @@
 /**
- * @adhd/apigen-errors
+ * @adhd/apigen-base-errors
  *
  * Canonical error taxonomy for apigen — §9.1 of the apigen SPEC.
  *

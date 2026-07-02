@@ -11,7 +11,7 @@
 //   - The uniqueness / collision check is a hard extract-time error — never silent.
 //   - All `x-<pluginId>-<field>` key conventions (§9.1) are centralised here.
 
-import type { Segment, Operation } from '@adhd/apigen-core';
+import type { Segment, Operation } from '@adhd/apigen-core-client;
 
 // ---------------------------------------------------------------------------
 // Casing projectors — consume Segment.words

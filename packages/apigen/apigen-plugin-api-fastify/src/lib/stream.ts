@@ -32,7 +32,7 @@
  */
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { ApiError } from '@adhd/apigen-errors';
+import { ApiError } from '@adhd/apigen-base-errors';
 import type { ApiStream } from '@adhd/apigen-engine-runtime';
 
 // ---------------------------------------------------------------------------
@@ -144,7 +144,7 @@ export async function sendStreamSse(
 }
 
 // ---------------------------------------------------------------------------
-// Internal: map ApiErrorCode to HTTP status (mirrors @adhd/apigen-errors HTTP_STATUS)
+// Internal: map ApiErrorCode to HTTP status (mirrors @adhd/apigen-base-errors HTTP_STATUS)
 // ---------------------------------------------------------------------------
 
 const _STATUS_MAP: Record<string, number> = {

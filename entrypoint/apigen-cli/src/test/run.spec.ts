@@ -12,7 +12,7 @@ import type {
   OutputPlugin,
   RunInput,
   ComposedSchemas,
-} from '@adhd/apigen-core';
+} from '@adhd/apigen-core-client;
 import mcpPlugin from '@adhd/apigen-plugin-mcp';
 
 /** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */

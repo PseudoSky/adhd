@@ -1,5 +1,5 @@
 /**
- * @adhd/apigen-errors — test suite (§9.1 transport status maps + §11 streaming carrier)
+ * @adhd/apigen-base-errors — test suite (§9.1 transport status maps + §11 streaming carrier)
  *
  * Guard: `npx nx test apigen-errors`
  *

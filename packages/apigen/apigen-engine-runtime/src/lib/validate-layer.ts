@@ -34,7 +34,7 @@
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import type { ErrorObject } from 'ajv';
-import { ApiError } from '@adhd/apigen-errors';
+import { ApiError } from '@adhd/apigen-base-errors';
 import type { Layer, Call, Next } from './invoke';
 import type { LayerResult } from './invoke';
 import type { InvokeOptions } from './invoke';

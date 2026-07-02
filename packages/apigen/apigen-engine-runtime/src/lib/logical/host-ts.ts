@@ -14,7 +14,7 @@
  *   union   — via `createUnionCodec`   (DESIGN §4.4 / §4 Phase 4)
  */
 
-import type { LogicalTypeCodec, LogicalTypeId } from '@adhd/apigen-logical';
+import type { LogicalTypeCodec, LogicalTypeId } from '@adhd/apigen-base-logical';
 import {
   LOGICAL_TYPE_VERSION,
   dateTimeCodec,
@@ -23,13 +23,13 @@ import {
   byteCodec,
   uuidCodec,
   numberSpecialCodec,
-} from '@adhd/apigen-logical';
+} from '@adhd/apigen-base-logical';
 import { createNominalCodec } from './nominal-codec';
 import { createUnionCodec } from './union-codec';
 
 // ---------------------------------------------------------------------------
 // HostBinding interface — DESIGN.md §4.6
-// (Not yet in @adhd/apigen-logical; defined here matching the spec exactly.)
+// (Not yet in @adhd/apigen-base-logical; defined here matching the spec exactly.)
 // ---------------------------------------------------------------------------
 
 /**
@@ -38,7 +38,7 @@ import { createUnionCodec } from './union-codec';
  *
  * - `host`               — identifies the language/runtime.
  * - `logicalTypeVersion` — pinned to `LOGICAL_TYPE_VERSION` from
- *                          `@adhd/apigen-logical`; bumped on any wire-table
+ *                          `@adhd/apigen-base-logical`; bumped on any wire-table
  *                          or pinned-lib-version change (DESIGN §8.6).
  * - `codecs`             — frozen ReadonlyMap keyed by LogicalTypeId. Must
  *                          cover every well-known id (DESIGN §4.6 "Must cover
@@ -59,7 +59,7 @@ export interface HostBinding {
 /**
  * @stable Ordered array of all well-known scalar codec instances for the TS
  * host. Derived from the same import list used by `registerWellKnown` in
- * `@adhd/apigen-logical`; kept in sync by importing the exact same named
+ * `@adhd/apigen-base-logical`; kept in sync by importing the exact same named
  * exports (a future addition to that barrel automatically lands here).
  */
 export const WELL_KNOWN_TS_CODECS: ReadonlyArray<LogicalTypeCodec> = [
@@ -143,11 +143,11 @@ function buildCodecMap(): ReadonlyMap<LogicalTypeId, LogicalTypeCodec> {
  *
  * A frozen object exposing all TS codec instances keyed by their
  * `LogicalTypeId`. Consumers obtain a per-surface registry by calling
- * `registerWellKnown(registry)` from `@adhd/apigen-logical`, then
+ * `registerWellKnown(registry)` from `@adhd/apigen-base-logical`, then
  * registering the generated nominal/union codecs on top.
  *
  * `logicalTypeVersion` is pinned to `LOGICAL_TYPE_VERSION` exported by
- * `@adhd/apigen-logical` (`descriptor-ext.ts`) — `'0.1.0'` at authoring time.
+ * `@adhd/apigen-base-logical` (`descriptor-ext.ts`) — `'0.1.0'` at authoring time.
  * Any wire-table or pinned-lib-version change bumps that constant and this
  * binding automatically reflects the new version.
  */

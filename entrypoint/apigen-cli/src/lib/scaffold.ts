@@ -8,7 +8,7 @@ import * as path from 'node:path';
  *
  * The generated entrypoints (`server.ts`, `cli.ts`) import:
  *   - real npm packages   — `@modelcontextprotocol/sdk/*`, `commander`
- *   - workspace packages  — `@adhd/apigen-engine-runtime`, `@adhd/apigen-core`, …
+ *   - workspace packages  — `@adhd/apigen-engine-runtime`, `@adhd/apigen-core-client, …
  *   - the source fixture   — via an absolute path (already resolvable)
  *
  * When run from a directory with no `node_modules` ancestry and no tsconfig path

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generate } from '../lib/generate';
 import { mcpPlugin } from '../lib/plugin';
-import type { PluginInput } from '@adhd/apigen-core';
+import type { PluginInput } from '@adhd/apigen-core-client;
 
 // ---------- fixture ----------
 // Simple domain functions — schemas follow ComposedSchemas shape (data-wrapped).

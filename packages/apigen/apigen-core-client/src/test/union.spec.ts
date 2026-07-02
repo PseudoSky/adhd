@@ -25,7 +25,7 @@ import {
   type UnionInfo,
   type UnionVariant,
 } from '../lib/schema-builders/union';
-import { X_APIGEN_LOGICAL } from '@adhd/apigen-logical';
+import { X_APIGEN_LOGICAL } from '@adhd/apigen-base-logical';
 
 // ---------------------------------------------------------------------------
 // Shared fixture helpers

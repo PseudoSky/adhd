@@ -19,7 +19,7 @@ import type {
   Descriptor,
   MountedOperation,
   Call,
-} from '@adhd/apigen-core';
+} from '@adhd/apigen-core-client;
 import { toOpenApi } from '@adhd/apigen-codegen-openapi';
 
 // ---------------------------------------------------------------------------

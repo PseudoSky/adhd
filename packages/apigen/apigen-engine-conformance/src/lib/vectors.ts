@@ -13,7 +13,7 @@
 //   E. Validation necessary-not-sufficient — schema-valid-but-domain-wrong passes the validator (SPEC §6)
 //   F. Logical type wire spec  — canonical wire encodings for well-known scalar types (DESIGN §3/§4.7)
 
-import type { Operation, Segment } from '@adhd/apigen-core';
+import type { Operation, Segment } from '@adhd/apigen-core-client;
 import {
   project,
   checkCollisions,
@@ -30,7 +30,7 @@ import {
   CLI_EXIT_CODE,
   MCP_ERROR_KIND,
   type ApiErrorCode,
-} from '@adhd/apigen-errors';
+} from '@adhd/apigen-base-errors';
 
 // ---------------------------------------------------------------------------
 // Shared fixture builders
@@ -641,7 +641,7 @@ export function minimalSchemaValidate(
 //   number-special — NaN / ±Infinity → string sentinel
 // ---------------------------------------------------------------------------
 
-import type { LogicalTypeId, Wire } from '@adhd/apigen-logical';
+import type { LogicalTypeId, Wire } from '@adhd/apigen-base-logical';
 
 /**
  * @stable The cross-language wire contract. Each host harness MUST:

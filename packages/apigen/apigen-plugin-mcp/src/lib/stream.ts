@@ -29,7 +29,7 @@
 
 import { collectWithPhase } from '@adhd/apigen-engine-runtime';
 import type { ApiStream } from '@adhd/apigen-engine-runtime';
-import { ApiError } from '@adhd/apigen-errors';
+import { ApiError } from '@adhd/apigen-base-errors';
 
 // ---------------------------------------------------------------------------
 // MCP chunk / result envelope shapes

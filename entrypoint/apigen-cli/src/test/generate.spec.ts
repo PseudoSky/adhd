@@ -10,12 +10,12 @@ import {
   collectLogicalTypeDeps,
   patchPackageJsonDeps,
 } from '../lib/commands/generate';
-import { tsDepMap } from '@adhd/apigen-logical';
+import { tsDepMap } from '@adhd/apigen-base-logical';
 import { registerGenerateRegistryCommand } from '../lib/commands/generate-registry';
 import { discoverPackages } from '../lib/registry';
 import jsonschemaPlugin from '@adhd/apigen-plugin-jsonschema';
-import { generateSchemas, composeSchemas } from '@adhd/apigen-core';
-import type { OutputPlugin } from '@adhd/apigen-core';
+import { generateSchemas, composeSchemas } from '@adhd/apigen-core-client;
+import type { OutputPlugin } from '@adhd/apigen-core-client;
 
 const fixturesDir = path.join(__dirname, 'fixtures');
 const registryDir = path.join(fixturesDir, 'registry');
@@ -391,7 +391,7 @@ describe('collectLogicalTypeDeps (unit)', () => {
 });
 
 // DEBT-LT-005: TS_LOGICAL_TYPE_DEP_MAP removed; tests now drive tsDepMap()
-// from @adhd/apigen-logical which is the authoritative source.
+// from @adhd/apigen-base-logical which is the authoritative source.
 describe('tsDepMap() (replaces inline TS_LOGICAL_TYPE_DEP_MAP — DEBT-LT-005)', () => {
   it('maps decimal format to decimal.js ^10', () => {
     expect(tsDepMap()['decimal']).toEqual({

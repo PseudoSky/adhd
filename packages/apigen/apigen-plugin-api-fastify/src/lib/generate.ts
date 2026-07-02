@@ -1,6 +1,6 @@
-import type { PluginInput, PluginOutput } from '@adhd/apigen-core';
+import type { PluginInput, PluginOutput } from '@adhd/apigen-core-client;
 import { envelopeKey } from '@adhd/apigen-naming';
-import { HTTP_STATUS } from '@adhd/apigen-errors';
+import { HTTP_STATUS } from '@adhd/apigen-base-errors';
 import type { ProjectionConfig } from '@adhd/apigen-naming';
 
 // ---------------------------------------------------------------------------

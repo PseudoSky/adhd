@@ -18,8 +18,8 @@ import type {
   RunInput,
   ComposedSchemas,
   Plugin,
-} from '@adhd/apigen-core';
-import { effectiveLanguage } from '@adhd/apigen-core';
+} from '@adhd/apigen-core-client;
+import { effectiveLanguage } from '@adhd/apigen-core-client;
 // Built-in `--use` plugins. Statically imported so the vite-bundled CLI inlines
 // them (a runtime dynamic `import('@adhd/apigen-plugin-health')` would NOT be in
 // the standalone bundle). A bare slug (`--use health`) resolves here; an
