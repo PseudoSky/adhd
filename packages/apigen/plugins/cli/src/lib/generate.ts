@@ -47,6 +47,24 @@ function envelopeBindings(schema: Record<string, unknown>): EnvelopeFieldBinding
   return bindings
 }
 
+/**
+ * Sanitizes a package id into a valid TypeScript identifier for use as a
+ * generated import-namespace / fn-table variable name (e.g. `dispatch-cli` →
+ * `dispatch_cli`). BUG-APIGEN-CLI-001: `pkg.id` is derived verbatim from a
+ * source directory name (resolveNamespace in apigen-cli), so a hyphenated
+ * (repo-convention) package dir produced `import * as dispatch-cli_ns from …`
+ * — an invalid identifier, a hard TS parse error.
+ *
+ * Only the emitted *identifier* positions need sanitizing — `pkg.id` still
+ * appears verbatim as the schema-key namespace (`'dispatch-cli:validate'`)
+ * and anywhere else it's a string literal, not code.
+ */
+function sanitizeIdentifier(id: string): string {
+  let s = id.replace(/[^a-zA-Z0-9_$]/g, '_')
+  if (s === '' || /^[0-9]/.test(s)) s = `_${s}`
+  return s
+}
+
 export function generate(input: PluginInput): PluginOutput {
   const cliName = (input.options['name'] as string) ?? 'cli'
   const version = (input.options['version'] as string) ?? '0.1.0'
@@ -58,8 +76,9 @@ export function generate(input: PluginInput): PluginOutput {
     `import { dispatch, buildFnTable } from '@adhd/apigen-runtime'`,
   ]
   for (const pkg of input.packages) {
-    lines.push(`import * as ${pkg.id}_ns from '${pkg.importPath}'`)
-    lines.push(`const ${pkg.id}_fns = buildFnTable(${pkg.id}_ns as Record<string, unknown>)`)
+    const varName = sanitizeIdentifier(pkg.id)
+    lines.push(`import * as ${varName}_ns from '${pkg.importPath}'`)
+    lines.push(`const ${varName}_fns = buildFnTable(${varName}_ns as Record<string, unknown>)`)
   }
   lines.push(``)
   lines.push(
@@ -78,6 +97,7 @@ export function generate(input: PluginInput): PluginOutput {
   lines.push(``)
 
   for (const pkg of input.packages) {
+    const varName = sanitizeIdentifier(pkg.id)
     for (const [fnName, fnSchema] of Object.entries(pkg.schemas)) {
       const paramNames = dataParamNames(fnSchema)
       // Backwards-compatible: keep `needsEnvelopeField` check for legacy 'session' field;
@@ -162,7 +182,7 @@ export function generate(input: PluginInput): PluginOutput {
       }
 
       lines.push(
-        `    const result = await dispatch(${pkg.id}_fns as any, undefined, schemas['${pkg.id}:${fnName}'] as any, '${fnName}', envelope, domainArgs)`,
+        `    const result = await dispatch(${varName}_fns as any, undefined, schemas['${pkg.id}:${fnName}'] as any, '${fnName}', envelope, domainArgs)`,
       )
       // Print the result as single-line JSON so consumers (and tooling) can
       // parse the last stdout line unambiguously; pretty-printing would split
