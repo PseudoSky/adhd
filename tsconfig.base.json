@@ -88,6 +88,9 @@
       "@adhd/apigen-core": [
         "./packages/apigen/core/src/index.ts"
       ],
+      "@adhd/apigen-core-client": [
+        "packages/apigen/apigen-core-client/src/index.ts"
+      ],
       "@adhd/apigen-errors": [
         "./packages/apigen/errors/src/index.ts"
       ],
