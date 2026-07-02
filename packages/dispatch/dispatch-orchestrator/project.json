@@ -1,0 +1,52 @@
+{
+  "name": "dispatch-orchestrator",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/dispatch/dispatch-orchestrator/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
+  "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/dispatch/dispatch-orchestrator"
+      ],
+      "options": {
+        "configFile": "packages/dispatch/dispatch-orchestrator/vite.config.ts"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/packages/dispatch/dispatch-orchestrator",
+        "main": "packages/dispatch/dispatch-orchestrator/src/index.ts",
+        "tsConfig": "packages/dispatch/dispatch-orchestrator/tsconfig.lib.json",
+        "assets": [
+          "packages/dispatch/dispatch-orchestrator/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": [
+        "build",
+        "test"
+      ]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@adhd/dispatch-orchestrator",
+  "version": "0.0.1",
+  "dependencies": {
+    "@adhd/dispatch-spec": "0.0.1",
+    "@modelcontextprotocol/sdk": "1.29.0"
+  },
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "typings": "./index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  }
+}
