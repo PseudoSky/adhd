@@ -2718,7 +2718,7 @@
       "audit_check": null,
       "criteria": [],
       "authored_by": "workflow:plan-builder",
-      "status": "pending",
+      "status": "complete",
       "shape": {
         "kind": "script",
         "ops": [
@@ -3698,6 +3698,35 @@
       "notes": [
         "BACKFILL: executed in prior sessions before dispatch_log discipline existed; no original telemetry",
         "evidence: all artifact files exist on disk; milestone guard exit 0 on 2026-07-02"
+      ]
+    },
+    {
+      "id": "log-serializer-json-2026-07-02",
+      "kind": "execution",
+      "provider": "anthropic",
+      "model": "claude-haiku-4-5",
+      "agent": "claude-code-teammate:wave2-serializer",
+      "effort": null,
+      "started_at": "2026-07-02T08:48:51.069739+00:00",
+      "completed_at": "2026-07-02T08:48:51.069739+00:00",
+      "operations": [
+        "serializer-json.1"
+      ],
+      "turns": [],
+      "results": [
+        {
+          "op_id": "serializer-json.1",
+          "status": "complete",
+          "guard_result": "pass",
+          "guard_output": "nx build+test dispatch-serializer-json exit 0 (18/18); negative control by orchestrator: error-swallowing readDag -> 2 red -> byte-identical restore (cache hit) -> green",
+          "guard_ran_at": "2026-07-02T08:48:51.069739+00:00"
+        }
+      ],
+      "notes": [
+        "deviation: op shape listed appendDispatchLog/onExternalWrite but shipped IDagSerializer (client-core) has neither; client owns log-append, watching deferred until a consumer needs it",
+        "orchestrator fixes applied post-agent: test TMP_DIR session-path -> repo tmp/<package>/",
+        "telemetry: unavailable (teammate mailbox agent; no usage on idle notification)",
+        "code commit: dcd6c82"
       ]
     }
   ]
