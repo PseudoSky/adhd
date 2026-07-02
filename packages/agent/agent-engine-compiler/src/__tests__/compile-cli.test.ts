@@ -70,32 +70,32 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
  * Migration folders relative to this test file (same pattern as
  * compile-agent.test.ts — ascending timestamp order).
  *
- * test file: packages/ai/agent-compiler/src/__tests__/
- *   ../../.. = packages/ai/
+ * test file: packages/agent/agent-engine-compiler/src/__tests__/
+ *   ../../.. = packages/agent/
  */
-const AI_SRC = path.resolve(__dirname, '../../../');
+const AGENT_SRC = path.resolve(__dirname, '../../../');
 
-const PROVIDER_MIGRATIONS = path.join(AI_SRC, 'agent-provider/drizzle');
-const REGISTRY_MIGRATIONS = path.join(AI_SRC, 'agent-registry/drizzle');
+const PROVIDER_MIGRATIONS = path.join(AGENT_SRC, 'agent-core-provider/drizzle');
+const REGISTRY_MIGRATIONS = path.join(AGENT_SRC, 'agent-store-prompts/drizzle');
 const TOOL_REGISTRY_MIGRATIONS = path.join(
-  AI_SRC,
-  'agent-tool-registry/drizzle'
+  AGENT_SRC,
+  'agent-store-tools/drizzle'
 );
-const POLICY_MIGRATIONS = path.join(AI_SRC, 'agent-policy/drizzle');
+const POLICY_MIGRATIONS = path.join(AGENT_SRC, 'agent-core-policy/drizzle');
 
 /**
  * Layout:
- *   REPO_ROOT      = adhd-agent-registry/
- *   AI_DIST        = dist/packages/ai/
- *   COMPILER_DIST  = dist/packages/ai/agent-compiler/
- *   BIN            = dist/packages/ai/agent-compiler/src/cli/compile.js
+ *   REPO_ROOT      = adhd/
+ *   DIST_ROOT      = dist/packages/
+ *   COMPILER_DIST  = dist/packages/agent/agent-engine-compiler/
+ *   BIN            = dist/packages/agent/agent-engine-compiler/src/cli/compile.js
  *
- * Relative to packages/ai/agent-compiler/src/__tests__/:
+ * Relative to packages/agent/agent-engine-compiler/src/__tests__/:
  *   ../../../../../  = repo root (5 levels up)
  */
 const REPO_ROOT = path.resolve(__dirname, '../../../../../');
-const AI_DIST = path.join(REPO_ROOT, 'dist/packages/ai');
-const COMPILER_DIST = path.join(AI_DIST, 'agent-compiler');
+const DIST_ROOT = path.join(REPO_ROOT, 'dist/packages');
+const COMPILER_DIST = path.join(DIST_ROOT, 'agent/agent-engine-compiler');
 const BIN = path.join(COMPILER_DIST, 'src/cli/compile.js');
 
 /**
@@ -104,11 +104,11 @@ const BIN = path.join(COMPILER_DIST, 'src/cli/compile.js');
  * resolution finds them when executing the bin from dist/.
  */
 const ADHD_DIST_DEPS: Record<string, string> = {
-  'agent-registry': path.join(AI_DIST, 'agent-registry'),
-  'agent-tool-registry': path.join(AI_DIST, 'agent-tool-registry'),
-  'agent-provider': path.join(AI_DIST, 'agent-provider'),
-  'agent-policy': path.join(AI_DIST, 'agent-policy'),
-  'agent-mcp-types': path.join(AI_DIST, 'agent-mcp-types'),
+  'agent-store-prompts': path.join(DIST_ROOT, 'agent/agent-store-prompts'),
+  'agent-store-tools': path.join(DIST_ROOT, 'agent/agent-store-tools'),
+  'agent-core-provider': path.join(DIST_ROOT, 'agent/agent-core-provider'),
+  'agent-core-policy': path.join(DIST_ROOT, 'agent/agent-core-policy'),
+  'agent-base-types': path.join(DIST_ROOT, 'agent/agent-base-types'),
 };
 
 /** Path where we write @adhd symlinks for the spawned bin's resolution. */
@@ -182,7 +182,7 @@ describe('compile CLI bin — child-process behavioral tests', () => {
   beforeAll(() => {
     // ── 1. Build the package so the CLI bin exists at BIN ─────────────────
     // The build runs nx tsc which emits to dist/.  nx cache makes reruns fast.
-    const build = spawnSync('npx', ['--yes', 'nx', 'build', 'agent-compiler'], {
+    const build = spawnSync('npx', ['--yes', 'nx', 'build', 'agent-engine-compiler'], {
       encoding: 'utf8',
       cwd: REPO_ROOT,
       timeout: 120_000,
@@ -190,7 +190,7 @@ describe('compile CLI bin — child-process behavioral tests', () => {
     });
     if (build.status !== 0) {
       throw new Error(
-        `nx build agent-compiler failed (exit ${build.status ?? '?'}):\n` +
+        `nx build agent-engine-compiler failed (exit ${build.status ?? '?'}):\n` +
           `stdout: ${build.stdout}\nstderr: ${build.stderr}`
       );
     }

@@ -19,7 +19,7 @@ import { createHash } from "node:crypto";
 
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
-import type { CompileInput, CompiledAgent } from "@adhd/agent-compiler";
+import type { CompileInput, CompiledAgent } from "@adhd/agent-engine-compiler";
 import type { ComposedPromptStore } from "../store/composed-prompt-store.js";
 import { logger } from "../logger.js";
 

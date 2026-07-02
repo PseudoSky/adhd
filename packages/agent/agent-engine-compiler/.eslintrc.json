@@ -1,21 +1,38 @@
 {
-  "extends": ["../../../.eslintrc.base.json"],
-  "ignorePatterns": ["!**/*"],
+  "extends": [
+    "../../../.eslintrc.base.json"
+  ],
+  "ignorePatterns": [
+    "!**/*"
+  ],
   "overrides": [
     {
-      "files": ["*.ts", "*.tsx", "*.js", "*.jsx"],
+      "files": [
+        "*.ts",
+        "*.tsx",
+        "*.js",
+        "*.jsx"
+      ],
       "rules": {}
     },
     {
-      "files": ["*.ts", "*.tsx"],
+      "files": [
+        "*.ts",
+        "*.tsx"
+      ],
       "rules": {}
     },
     {
-      "files": ["*.js", "*.jsx"],
+      "files": [
+        "*.js",
+        "*.jsx"
+      ],
       "rules": {}
     },
     {
-      "files": ["*.json"],
+      "files": [
+        "*.json"
+      ],
       "parser": "jsonc-eslint-parser",
       "rules": {
         "@nx/dependency-checks": [
@@ -25,7 +42,13 @@
               "{projectRoot}/vite.config.{js,ts,mjs,mts}",
               "{projectRoot}/drizzle.config.{js,ts,mjs,mts}"
             ],
-            "ignoredDependencies": ["tslib"]
+            "ignoredDependencies": [
+              "tslib",
+              "@adhd/agent-store-prompts",
+              "@adhd/agent-store-tools",
+              "@adhd/agent-core-provider",
+              "@adhd/agent-core-policy"
+            ]
           }
         ]
       }

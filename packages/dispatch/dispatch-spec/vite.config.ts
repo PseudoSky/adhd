@@ -6,7 +6,7 @@ import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/shared/dispatch-spec',
+  cacheDir: '../../../node_modules/.vite/packages/dispatch/dispatch-spec',
 
   plugins: [
     {
@@ -19,7 +19,7 @@ export default defineConfig({
         if (!fs.existsSync(src)) return;
         const out = p.resolve(
           __dirname,
-          '../../../dist/packages/shared/dispatch-spec'
+          '../../../dist/packages/dispatch/dispatch-spec'
         );
         fs.mkdirSync(out, { recursive: true });
         fs.copyFileSync(src, p.join(out, 'README.md'));
@@ -33,7 +33,7 @@ export default defineConfig({
           p = require('node:path');
         const out = p.resolve(
           __dirname,
-          '../../../dist/packages/shared/dispatch-spec'
+          '../../../dist/packages/dispatch/dispatch-spec'
         );
         fs.mkdirSync(out, { recursive: true });
         for (const f of ['dag-v4.schema.json', 'valid-ops-by-kind.json']) {
@@ -50,13 +50,13 @@ export default defineConfig({
   ],
 
   build: {
-    outDir: '../../../dist/packages/shared/dispatch-spec',
+    outDir: '../../../dist/packages/dispatch/dispatch-spec',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: { transformMixedEsModules: true },
     lib: {
       entry: 'src/index.ts',
-      name: 'shared-dispatch-spec',
+      name: 'dispatch-spec',
       fileName: 'index',
       formats: ['es', 'cjs'],
     },
@@ -70,7 +70,7 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../../coverage/packages/shared/dispatch-spec',
+      reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec',
       provider: 'v8',
     },
   },
