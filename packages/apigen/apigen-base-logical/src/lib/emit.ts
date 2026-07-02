@@ -1,8 +1,4 @@
-import type {
-  LogicalTypeId,
-  SchemaNode,
-  TemplateCell,
-} from './contracts';
+import type { LogicalTypeId, SchemaNode, TemplateCell } from './contracts';
 import { ENVELOPE_KEY } from './contracts';
 import type { LogicalTypeRegistry } from './registry';
 
@@ -111,7 +107,7 @@ function decodePointerToken(token: string): string {
 export function createEmitCtx(
   registry: LogicalTypeRegistry,
   table: TemplateTable,
-  opts: { root?: SchemaNode; resolve?: (ref: string) => SchemaNode } = {},
+  opts: { root?: SchemaNode; resolve?: (ref: string) => SchemaNode } = {}
 ): EmitCtx {
   const resolve =
     opts.resolve ?? (opts.root ? rootRefResolver(opts.root) : missingResolver);
@@ -129,7 +125,7 @@ export function createEmitCtx(
 function missingResolver(ref: string): never {
   throw new EmitError(
     `E_EMIT: $ref "${ref}" encountered but no resolver/root was provided`,
-    '',
+    ''
   );
 }
 
@@ -144,7 +140,7 @@ function missingResolver(ref: string): never {
 export function emitEncode(
   valueExpr: string,
   node: SchemaNode,
-  ctx: EmitCtx,
+  ctx: EmitCtx
 ): string {
   return walk('encode', valueExpr, node, ctx);
 }
@@ -160,7 +156,7 @@ export function emitEncode(
 export function emitDecode(
   wireExpr: string,
   node: SchemaNode,
-  ctx: EmitCtx,
+  ctx: EmitCtx
 ): string {
   return walk('decode', wireExpr, node, ctx);
 }
@@ -191,7 +187,7 @@ function walk(dir: Dir, expr: string, node: SchemaNode, ctx: EmitCtx): string {
     if (ctx.seenRefs.has(ref)) {
       throw new EmitError(
         `E_EMIT: cyclic $ref "${ref}" cannot be lowered to a finite expression`,
-        ctx.path,
+        ctx.path
       );
     }
     const target = ctx.resolve(ref);
@@ -223,9 +219,7 @@ function walk(dir: Dir, expr: string, node: SchemaNode, ctx: EmitCtx): string {
 
   // 5. object: rebuild an object literal over declared properties.
   if (type === 'object') {
-    const props = node['properties'] as
-      | Record<string, SchemaNode>
-      | undefined;
+    const props = node['properties'] as Record<string, SchemaNode> | undefined;
     if (props && Object.keys(props).length > 0) {
       return emitObject(dir, expr, props, ctx);
     }
@@ -248,13 +242,13 @@ function spliceCell(
   dir: Dir,
   expr: string,
   id: LogicalTypeId,
-  ctx: EmitCtx,
+  ctx: EmitCtx
 ): string {
   const cell = ctx.table[id];
   if (!cell) {
     throw new EmitError(
       `E_EMIT: no template cell for logical type "${id}" in the active table`,
-      ctx.path,
+      ctx.path
     );
   }
   return substituteDollar(cell[dir], expr);
@@ -314,7 +308,7 @@ function emitObject(
   dir: Dir,
   expr: string,
   props: Record<string, SchemaNode>,
-  ctx: EmitCtx,
+  ctx: EmitCtx
 ): string {
   // Bind the source once so we don't re-evaluate `expr` per property.
   const src = ctx.mint();
@@ -335,7 +329,7 @@ function emitOneOf(
   expr: string,
   node: SchemaNode,
   branches: SchemaNode[],
-  ctx: EmitCtx,
+  ctx: EmitCtx
 ): string {
   const disc = discriminatorProp(node);
   const src = ctx.mint();
@@ -351,7 +345,9 @@ function emitOneOf(
   let chain = arms.length > 0 ? arms[arms.length - 1].expr : src;
   for (let i = arms.length - 2; i >= 0; i--) {
     const a = arms[i];
-    chain = `${src}${memberAccess(disc)} === ${JSON.stringify(a.tag)} ? ${a.expr} : (${chain})`;
+    chain = `${src}${memberAccess(disc)} === ${JSON.stringify(a.tag)} ? ${
+      a.expr
+    } : (${chain})`;
   }
   return `((${src}) => (${chain}))(${expr})`;
 }
@@ -359,7 +355,11 @@ function emitOneOf(
 /** The discriminator property name for a `oneOf` (default `"kind"`). */
 function discriminatorProp(node: SchemaNode): string {
   const d = node['discriminator'];
-  if (d && typeof d === 'object' && typeof (d as Record<string, unknown>)['propertyName'] === 'string') {
+  if (
+    d &&
+    typeof d === 'object' &&
+    typeof (d as Record<string, unknown>)['propertyName'] === 'string'
+  ) {
     return (d as Record<string, string>)['propertyName'];
   }
   return 'kind';
@@ -397,11 +397,15 @@ function emitEnvelope(dir: Dir, expr: string): string {
 export const ENVELOPE_HELPER_SOURCE = `
 function __apigenEnvelopeEncode(v) {
   // Schema-less position: pass typed JSON through unchanged. A richer host
-  // prelude may wrap recognized runtime types as { ${JSON.stringify(ENVELOPE_KEY)}: id, v }.
+  // prelude may wrap recognized runtime types as { ${JSON.stringify(
+    ENVELOPE_KEY
+  )}: id, v }.
   return v;
 }
 function __apigenEnvelopeDecode(w) {
-  return w != null && typeof w === 'object' && ${JSON.stringify(ENVELOPE_KEY)} in w
+  return w != null && typeof w === 'object' && ${JSON.stringify(
+    ENVELOPE_KEY
+  )} in w
     ? w.v
     : w;
 }

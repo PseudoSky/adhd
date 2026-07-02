@@ -20,7 +20,12 @@
 import { describe, expect, it } from 'vitest';
 import { createRegistry } from '../registry';
 import { registerWellKnown } from './index';
-import type { LogicalTypeCodec, TranscodeCtx, SchemaNode, Wire } from '../contracts';
+import type {
+  LogicalTypeCodec,
+  TranscodeCtx,
+  SchemaNode,
+  Wire,
+} from '../contracts';
 
 // ---------------------------------------------------------------------------
 // Inlined conformance vectors (DESIGN §3 / vectors.ts §F)
@@ -35,7 +40,10 @@ interface LogicalTypeVector {
   readonly seed: Wire | { $construct: string; args: Wire[] };
   readonly wire: Wire;
   readonly invariants?: ReadonlyArray<{ pointer: string; equals: Wire }>;
-  readonly negativeControl: { mutate: 'wire' | 'schema' | 'codec'; to: unknown };
+  readonly negativeControl: {
+    mutate: 'wire' | 'schema' | 'codec';
+    to: unknown;
+  };
 }
 
 const SCALAR_VECTORS: LogicalTypeVector[] = [
@@ -86,8 +94,13 @@ const SCALAR_VECTORS: LogicalTypeVector[] = [
     schema: { type: 'string', format: 'uuid' },
     seed: '550e8400-e29b-41d4-a716-446655440000',
     wire: '550e8400-e29b-41d4-a716-446655440000',
-    invariants: [{ pointer: '/value', equals: '550e8400-e29b-41d4-a716-446655440000' }],
-    negativeControl: { mutate: 'wire', to: '550E8400-E29B-41D4-A716-446655440000' },
+    invariants: [
+      { pointer: '/value', equals: '550e8400-e29b-41d4-a716-446655440000' },
+    ],
+    negativeControl: {
+      mutate: 'wire',
+      to: '550E8400-E29B-41D4-A716-446655440000',
+    },
   },
   // ---- number-special: NaN ----
   {
@@ -137,7 +150,10 @@ function makeCtx(overrides: Partial<TranscodeCtx> = {}): TranscodeCtx {
 // $construct seed builder
 // ---------------------------------------------------------------------------
 
-function buildSeed(seed: LogicalTypeVector['seed'], logicalType: string): unknown {
+function buildSeed(
+  seed: LogicalTypeVector['seed'],
+  logicalType: string
+): unknown {
   if (
     seed !== null &&
     typeof seed === 'object' &&
@@ -159,7 +175,7 @@ function buildSeed(seed: LogicalTypeVector['seed'], logicalType: string): unknow
       }
       default:
         throw new Error(
-          `buildSeed: unknown $construct "${recipe.$construct}" for type "${logicalType}"`,
+          `buildSeed: unknown $construct "${recipe.$construct}" for type "${logicalType}"`
         );
     }
   }
@@ -212,10 +228,15 @@ function evalInvariant(decoded: unknown, pointer: string): unknown {
 describe('well-known scalar codecs — conformance vectors', () => {
   for (const vector of SCALAR_VECTORS) {
     describe(`vector: ${vector.id}`, () => {
-      const codec = frozenRegistry.get(vector.logicalType) as LogicalTypeCodec | undefined;
+      const codec = frozenRegistry.get(vector.logicalType) as
+        | LogicalTypeCodec
+        | undefined;
 
       it('codec is registered for this logical type', () => {
-        expect(codec, `no codec registered for "${vector.logicalType}"`).toBeDefined();
+        expect(
+          codec,
+          `no codec registered for "${vector.logicalType}"`
+        ).toBeDefined();
       });
 
       if (!codec) return; // narrowing; below only executes when codec is defined
@@ -235,7 +256,9 @@ describe('well-known scalar codecs — conformance vectors', () => {
 
       if (vector.invariants && vector.invariants.length > 0) {
         for (const inv of vector.invariants) {
-          it(`decode(wire) invariant ${inv.pointer} === ${JSON.stringify(inv.equals)}`, () => {
+          it(`decode(wire) invariant ${inv.pointer} === ${JSON.stringify(
+            inv.equals
+          )}`, () => {
             const decoded = codec.decode(vector.wire, schema, ctx);
             const actual = evalInvariant(decoded, inv.pointer);
             expect(actual).toStrictEqual(inv.equals);
@@ -308,7 +331,9 @@ describe('registerWellKnown', () => {
   it('resolve() dispatches to date-time codec for format:date-time node', () => {
     const reg = createRegistry();
     registerWellKnown(reg);
-    expect(reg.resolve({ type: 'string', format: 'date-time' })?.id).toBe('date-time');
+    expect(reg.resolve({ type: 'string', format: 'date-time' })?.id).toBe(
+      'date-time'
+    );
   });
 
   it('resolve() dispatches to int64 codec for format:int64 node', () => {
@@ -320,7 +345,9 @@ describe('registerWellKnown', () => {
   it('resolve() dispatches to decimal codec for format:decimal node', () => {
     const reg = createRegistry();
     registerWellKnown(reg);
-    expect(reg.resolve({ type: 'string', format: 'decimal' })?.id).toBe('decimal');
+    expect(reg.resolve({ type: 'string', format: 'decimal' })?.id).toBe(
+      'decimal'
+    );
   });
 
   it('resolve() dispatches to byte codec for format:byte node', () => {
@@ -370,11 +397,15 @@ describe('DEBT-LT-001 — date-time codec: strict-mode invalid-date guard', () =
   it('decode("not-a-date") THROWS in strict mode (DEBT-LT-001 teeth)', () => {
     // Before the fix: returned an Invalid Date (getTime()===NaN) silently.
     // After the fix: throws TypeError.  Reverting the NaN guard turns this red.
-    expect(() => codec.decode('not-a-date', schema, strictCtx)).toThrow(TypeError);
+    expect(() => codec.decode('not-a-date', schema, strictCtx)).toThrow(
+      TypeError
+    );
   });
 
   it('decode("not-a-date") throws with an informative message', () => {
-    expect(() => codec.decode('not-a-date', schema, strictCtx)).toThrow(/invalid date-time string/);
+    expect(() => codec.decode('not-a-date', schema, strictCtx)).toThrow(
+      /invalid date-time string/
+    );
   });
 
   it('decode("not-a-date") does NOT throw in lossy mode (falls through to Invalid Date)', () => {
@@ -438,7 +469,9 @@ describe('DEBT-LT-002 — int64 codec: lossy non-numeric string handling', () =>
   });
 
   it('decode valid string succeeds in strict mode', () => {
-    expect(codec.decode('9007199254740993', schema, strictCtx)).toBe(BigInt('9007199254740993'));
+    expect(codec.decode('9007199254740993', schema, strictCtx)).toBe(
+      BigInt('9007199254740993')
+    );
   });
 });
 
@@ -464,7 +497,7 @@ describe('dateTimeCodec', () => {
   it('encode in strict mode throws for non-Date', () => {
     // Date codec encode calls .toISOString(); passing a non-Date throws a TypeError.
     expect(() =>
-      codec.encode('not-a-date' as unknown as never, schema, ctx),
+      codec.encode('not-a-date' as unknown as never, schema, ctx)
     ).toThrow();
   });
 });
@@ -485,7 +518,9 @@ describe('int64Codec', () => {
   });
 
   it('strict mode throws on numeric wire (precision loss)', () => {
-    expect(() => codec.decode(Number('9007199254740993') as unknown as Wire, schema, ctx)).toThrow();
+    expect(() =>
+      codec.decode(Number('9007199254740993') as unknown as Wire, schema, ctx)
+    ).toThrow();
   });
 });
 
@@ -515,13 +550,13 @@ describe('uuidCodec', () => {
   it('normalizes uppercase UUID to lowercase on encode', () => {
     const upper = '550E8400-E29B-41D4-A716-446655440000';
     expect(codec.encode(upper as never, schema, ctx)).toBe(
-      '550e8400-e29b-41d4-a716-446655440000',
+      '550e8400-e29b-41d4-a716-446655440000'
     );
   });
 
   it('strict mode rejects uppercase UUID on decode', () => {
     expect(() =>
-      codec.decode('550E8400-E29B-41D4-A716-446655440000' as Wire, schema, ctx),
+      codec.decode('550E8400-E29B-41D4-A716-446655440000' as Wire, schema, ctx)
     ).toThrow();
   });
 });

@@ -35,7 +35,9 @@ export class CodecRegistryError extends Error {
  * `matches(node)` so the spine is internally consistent, and `wellKnown` is
  * accepted but not yet populated.
  */
-export function createRegistry(opts?: { wellKnown?: boolean }): LogicalTypeRegistry {
+export function createRegistry(opts?: {
+  wellKnown?: boolean;
+}): LogicalTypeRegistry {
   // `wellKnown` is part of the stable signature; loading the well-known scalar
   // codecs is a later state. Reference it so the option is not flagged unused.
   void opts?.wellKnown;
@@ -46,7 +48,7 @@ export function createRegistry(opts?: { wellKnown?: boolean }): LogicalTypeRegis
     register(codec, registerOpts) {
       if (byId.has(codec.id) && !registerOpts?.override) {
         throw new CodecRegistryError(
-          `E_DUP_CODEC: a codec is already registered for id "${codec.id}"`,
+          `E_DUP_CODEC: a codec is already registered for id "${codec.id}"`
         );
       }
       byId.set(codec.id, codec);
@@ -69,7 +71,7 @@ export function createRegistry(opts?: { wellKnown?: boolean }): LogicalTypeRegis
       const frozen: LogicalTypeRegistry = {
         register() {
           throw new CodecRegistryError(
-            'E_DUP_CODEC: registry is frozen and cannot accept new codecs',
+            'E_DUP_CODEC: registry is frozen and cannot accept new codecs'
           );
         },
         resolve(node) {

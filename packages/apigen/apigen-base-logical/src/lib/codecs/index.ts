@@ -22,7 +22,7 @@ import { uuidCodec } from './uuid';
 import { numberSpecialCodec } from './number-special';
 
 export { dateTimeCodec } from './date-time';
-export type { } from './date-time';           // re-export side carries the file for tree-shaking
+export type {} from './date-time'; // re-export side carries the file for tree-shaking
 export { int64Codec } from './int64';
 export { decimalCodec, makeDecimal } from './decimal';
 export type { DecimalString } from './decimal';
@@ -53,7 +53,7 @@ const WELL_KNOWN_CODECS = [
  */
 export function registerWellKnown(
   registry: LogicalTypeRegistry,
-  opts: { override?: boolean } = {},
+  opts: { override?: boolean } = {}
 ): void {
   for (const codec of WELL_KNOWN_CODECS) {
     registry.register(codec, { override: opts.override ?? false });
