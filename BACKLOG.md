@@ -567,6 +567,7 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 - **Where:** SCOPE.md D-07, dispatch-spec, dispatch-client, dispatch-optimizer
 - **Description:** SCOPE.md D-07 defines a snapshot milestone's `eligible` purely from its own `pending` field and upstream dependency statuses — never its own completion — so a complete milestone reads eligible: true forever. Same root cause as BUG-DISPATCH-008 (fixed client-side in 5e967a0). optimize() independently guards its candidate selection with status === 'pending' (documented in selectPackableMilestones). Promote own-completion into the spec'd eligible definition so every consumer inherits the guard instead of each reimplementing it.
 - **Status:** OPEN — found 2026-07-02 by the agent-runner builder.
+- 2026-07-02 real-e2e finding: the same D-07 semantics also mean MilestoneSnapshot.eligible NEVER flips to false after completion — a sharp edge for any consumer treating `eligible` as a 'still needs work' signal; the correct signals are optimize()'s candidate list or the derived status. Worth a callout in dispatch-spec's type docs when the spec-level fix lands.
 
 ### DEBT-DISPATCH-014 — Latent Infinity in per-tier B/context-window resolution breaks JSON round-trip
 - **Where:** dispatch-optimizer src/lib/snapshot.ts:166, src/lib/optimize.ts:247
@@ -603,6 +604,7 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 - **Where:** dispatch-orchestrator orchestrator.ts:489-568
 - **Description:** injectCorrectionMilestone re-fires the same agent/model/effort/guard with a natural-language fix instruction; it cannot target a truly at-fault upstream milestone (WORKFLOW.md's richer example needs plan-authoring judgment), and downstream milestones depending on the failed slug do not automatically pick up the correction. Guard-only milestones deliberately get a note instead of a correction (D-12 rationale, behaviorally tested). Fix direction: causally-aware replan as a dedicated milestone/plugin.
 - **Status:** OPEN — found 2026-07-02 by the orchestrator-core builder.
+- 2026-07-02: now consumer-visible in dispatch-cli's real-e2e scenario 7 — after a correction milestone completes, the original permanently reads 'failed', downstream depends_on never rewires onto the correction, and a subsequent resume cycle terminates with 'no-eligible-work'.
 
 ### DEBT-DISPATCH-021 — dispatch-cli package.json omits @modelcontextprotocol/sdk (runtime require on the non-dry-run path)
 - **Where:** packages/dispatch/dispatch-cli, dist bundle
