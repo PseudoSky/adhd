@@ -162,6 +162,116 @@ describe('validateDagJson', () => {
   it('validates minimal correct dag', () => {
     expect(validateDagJson(miniDag()).valid).toBe(true);
   });
+
+  describe('dispatch_log turns (DEBT-DISPATCH-008: Turn.model_calls)', () => {
+    function dagWithTurns(turns: unknown[]): Record<string, unknown> {
+      return miniDag({
+        dispatch_log: [
+          {
+            id: 'd-1',
+            kind: 'execution',
+            provider: 'anthropic',
+            model: 'claude-sonnet-5',
+            agent: 'test-agent',
+            effort: 'medium',
+            started_at: '2026-01-01T00:00:00Z',
+            completed_at: '2026-01-01T00:05:00Z',
+            operations: ['a.guard'],
+            turns,
+            results: [],
+            notes: [],
+          },
+        ],
+      });
+    }
+
+    it('accepts a turn without model_calls (backward compatible with every pre-existing dag.json)', () => {
+      const r = validateDagJson(
+        dagWithTurns([
+          { turn: 1, input_tokens: 100, output_tokens: 50, t: '2026-01-01T00:01:00Z' },
+        ])
+      );
+      expect(r.valid).toBe(true);
+    });
+
+    it('accepts a turn with model_calls set', () => {
+      const r = validateDagJson(
+        dagWithTurns([
+          {
+            turn: 1,
+            input_tokens: 100,
+            output_tokens: 50,
+            t: '2026-01-01T00:01:00Z',
+            model_calls: 3,
+          },
+        ])
+      );
+      expect(r.valid).toBe(true);
+    });
+
+    it('accepts a turn with model_calls: null', () => {
+      const r = validateDagJson(
+        dagWithTurns([
+          {
+            turn: 1,
+            input_tokens: 100,
+            output_tokens: 50,
+            t: '2026-01-01T00:01:00Z',
+            model_calls: null,
+          },
+        ])
+      );
+      expect(r.valid).toBe(true);
+    });
+
+    it('rejects a non-numeric model_calls', () => {
+      const r = validateDagJson(
+        dagWithTurns([
+          {
+            turn: 1,
+            input_tokens: 100,
+            output_tokens: 50,
+            t: '2026-01-01T00:01:00Z',
+            model_calls: 'three',
+          },
+        ])
+      );
+      expect(r.valid).toBe(false);
+      expect(r.errors.some((e) => e.path.includes('model_calls'))).toBe(true);
+    });
+
+    it('rejects a malformed turn (missing input_tokens) independent of model_calls', () => {
+      const r = validateDagJson(
+        dagWithTurns([{ turn: 1, output_tokens: 50, t: '2026-01-01T00:01:00Z' }])
+      );
+      expect(r.valid).toBe(false);
+      expect(r.errors.some((e) => e.path.includes('input_tokens'))).toBe(true);
+    });
+
+    it('rejects a non-array turns field', () => {
+      const d = miniDag({
+        dispatch_log: [
+          {
+            id: 'd-1',
+            kind: 'execution',
+            provider: 'anthropic',
+            model: 'claude-sonnet-5',
+            agent: 'test-agent',
+            effort: 'medium',
+            started_at: '2026-01-01T00:00:00Z',
+            completed_at: '2026-01-01T00:05:00Z',
+            operations: ['a.guard'],
+            turns: 'not-an-array',
+            results: [],
+            notes: [],
+          },
+        ],
+      });
+      const r = validateDagJson(d);
+      expect(r.valid).toBe(false);
+      expect(r.errors.some((e) => e.path.includes('.turns'))).toBe(true);
+    });
+  });
 });
 
 const baseSnap = {

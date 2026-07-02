@@ -403,6 +403,17 @@ export interface Turn {
   input_tokens: number;
   output_tokens: number;
   t: string;
+  /**
+   * Number of real model calls this synthesized turn represents. Added for
+   * DEBT-DISPATCH-008: agent-mcp's MCP surface exposes only aggregate usage
+   * per task (no per-turn breakdown — see agent-runner.ts `SynthesizedTurn`/
+   * `DispatchUsageReport`), so a dispatcher collapses a task's entire usage
+   * into ONE `Turn` and needs somewhere to carry `modelCalls` through.
+   * Optional and nullable for backward compatibility: every dag.json written
+   * before this field existed — and any producer that doesn't track model
+   * call counts — remains valid without it.
+   */
+  model_calls?: number | null;
 }
 export interface DispatchResult {
   op_id: string;

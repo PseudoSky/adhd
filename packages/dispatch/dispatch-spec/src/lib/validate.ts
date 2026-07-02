@@ -89,6 +89,67 @@ function detectCycle(
   return null;
 }
 
+/**
+ * Validates `dispatch_log[].turns[]` shape. Additive per DEBT-DISPATCH-008:
+ * `model_calls` is optional/nullable, so every dag.json written before that
+ * field existed remains valid — this only rejects entries that are
+ * malformed independent of `model_calls` (wrong types, missing required
+ * fields), never a turn that simply omits `model_calls`.
+ */
+function validateDispatchLogTurns(
+  entries: unknown[],
+  errors: ValidationError[]
+): void {
+  for (const entry of entries) {
+    if (!isObject(entry)) continue;
+    const entryId = isString(entry['id']) ? entry['id'] : '?';
+    const turns = entry['turns'];
+    if (!Array.isArray(turns)) {
+      errors.push(
+        err(`dispatch_log[${entryId}].turns`, 'must be an array', turns)
+      );
+      continue;
+    }
+    for (let i = 0; i < turns.length; i++) {
+      const t = (turns as unknown[])[i];
+      const path = `dispatch_log[${entryId}].turns[${i}]`;
+      if (!isObject(t)) {
+        errors.push(err(path, 'must be an object', t));
+        continue;
+      }
+      if (
+        typeof t['turn'] !== 'number' ||
+        !Number.isInteger(t['turn']) ||
+        (t['turn'] as number) < 1
+      )
+        errors.push(err(`${path}.turn`, 'must be a positive integer', t['turn']));
+      if (typeof t['input_tokens'] !== 'number')
+        errors.push(
+          err(`${path}.input_tokens`, 'must be a number', t['input_tokens'])
+        );
+      if (typeof t['output_tokens'] !== 'number')
+        errors.push(
+          err(`${path}.output_tokens`, 'must be a number', t['output_tokens'])
+        );
+      if (!isString(t['t']))
+        errors.push(err(`${path}.t`, 'must be a string', t['t']));
+      const modelCalls = t['model_calls'];
+      if (
+        modelCalls !== undefined &&
+        modelCalls !== null &&
+        typeof modelCalls !== 'number'
+      )
+        errors.push(
+          err(
+            `${path}.model_calls`,
+            'must be a number or null if present',
+            modelCalls
+          )
+        );
+    }
+  }
+}
+
 export function validateDagJson(dag: unknown): ValidationResult {
   const errors: ValidationError[] = [];
   if (!isObject(dag))
@@ -113,8 +174,11 @@ export function validateDagJson(dag: unknown): ValidationResult {
   const term = dag['terminal'];
   if (!isString(term) && !Array.isArray(term))
     errors.push(err('terminal', 'must be a string or array', term));
-  if (!Array.isArray(dag['dispatch_log']))
+  if (!Array.isArray(dag['dispatch_log'])) {
     errors.push(err('dispatch_log', 'must be an array', dag['dispatch_log']));
+  } else {
+    validateDispatchLogTurns(dag['dispatch_log'] as unknown[], errors);
+  }
   if (!isObject(dag['optimization']))
     errors.push(err('optimization', 'must be an object', dag['optimization']));
   if (!isObject(dag['providers']))
