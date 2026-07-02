@@ -1,24 +1,28 @@
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
-  stopReason?: string;        // normalised stop reason (see [ref:normalised-stop-reason])
-  maxTokens?: number;         // configured max_tokens from agent provider config
-  cacheReadTokens?: number;   // Anthropic cache_read_input_tokens (undefined for other providers)
+  stopReason?: string; // normalised stop reason (see [ref:normalised-stop-reason])
+  maxTokens?: number; // configured max_tokens from agent provider config
+  cacheReadTokens?: number; // Anthropic cache_read_input_tokens (undefined for other providers)
   cacheCreationTokens?: number; // Anthropic cache_creation_input_tokens (undefined for other providers)
 }
 
 export type TaskStatus =
-  | "pending"
-  | "running"
-  | "completed"
-  | "failed"
-  | "cancelled"
-  | "waiting"         // blocked on depends_on; DagEngine dispatches when all deps complete
-  | "awaiting_input"; // suspended in HITL Promise; task_resume resolves it
+  | 'pending'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'waiting' // blocked on depends_on; DagEngine dispatches when all deps complete
+  | 'awaiting_input'; // suspended in HITL Promise; task_resume resolves it
 export type TaskEventType =
-  | "MODEL_REQUEST" | "MODEL_RESPONSE"
-  | "TOOL_CALL" | "TOOL_RESULT"
-  | "TASK_COMPLETED" | "TASK_FAILED" | "TASK_CANCELLED";
+  | 'MODEL_REQUEST'
+  | 'MODEL_RESPONSE'
+  | 'TOOL_CALL'
+  | 'TOOL_RESULT'
+  | 'TASK_COMPLETED'
+  | 'TASK_FAILED'
+  | 'TASK_CANCELLED';
 
 export interface Task {
   id: string;
@@ -38,7 +42,7 @@ export interface Task {
   cancelledAt?: string;
   // Dependency DAG fields
   dependsOn?: string[] | null;
-  onUpstreamFailure?: "fail" | "skip" | null;
+  onUpstreamFailure?: 'fail' | 'skip' | null;
   inputs?: Record<string, string> | null;
   // HITL suspension field
   resumeToken?: string | null;
@@ -52,7 +56,7 @@ export interface TaskEvent {
   createdAt: string;
 }
 
-export type SessionStatus = "active" | "closed";
+export type SessionStatus = 'active' | 'closed';
 
 export interface Session {
   id: string;
@@ -64,7 +68,7 @@ export interface Session {
   closedAt?: string;
 }
 
-export type MessageRole = "system" | "user" | "assistant" | "tool";
+export type MessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
 export interface ToolCall {
   id: string;
@@ -119,7 +123,7 @@ export type ProviderEnvBlock = {
 
 export type ProviderConfig =
   | {
-      type: "anthropic";
+      type: 'anthropic';
       /** Inline model id — may also be supplied via env.model. */
       model?: string;
       /** Env-var pointers (ADHD_AGENT_*-prefixed names only). */
@@ -130,7 +134,7 @@ export type ProviderConfig =
       retryConfig?: RetryConfig;
     }
   | {
-      type: "openai";
+      type: 'openai';
       /** Inline model id — may also be supplied via env.model. */
       model?: string;
       /** Env-var pointers (ADHD_AGENT_*-prefixed names only). */
@@ -149,7 +153,7 @@ export type ProviderConfig =
    *  `mcpServers` are available. Use `allowedBuiltinTools` to selectively re-enable
    *  specific built-ins (e.g. `["WebFetch"]`). */
   | {
-      type: "claudecli";
+      type: 'claudecli';
       model?: string;
       claudePath?: string;
       timeoutMs?: number;
@@ -178,9 +182,25 @@ export type ProviderConfig =
     };
 
 type McpServerTransportConfig =
-  | { transport: "stdio"; command: string; args?: string[]; env?: Record<string, string>; timeoutMs?: number }
-  | { transport: "http";  url: string; headers?: Record<string, string>; timeoutMs?: number }
-  | { transport: "sse";   url: string; headers?: Record<string, string>; timeoutMs?: number };
+  | {
+      transport: 'stdio';
+      command: string;
+      args?: string[];
+      env?: Record<string, string>;
+      timeoutMs?: number;
+    }
+  | {
+      transport: 'http';
+      url: string;
+      headers?: Record<string, string>;
+      timeoutMs?: number;
+    }
+  | {
+      transport: 'sse';
+      url: string;
+      headers?: Record<string, string>;
+      timeoutMs?: number;
+    };
 
 export type McpServerConfig = McpServerTransportConfig & {
   /** Allowlist: if set, only these tool names are exposed. Tools in this list are also checked against disallowedTools. */
@@ -283,8 +303,8 @@ export interface ToolDefinition {
  * Discriminated union — add variants as new delta kinds are needed.
  */
 export type StreamChunk =
-  | { type: "text";      text: string }
-  | { type: "tool_call"; id: string; name: string; arguments: string };
+  | { type: 'text'; text: string }
+  | { type: 'tool_call'; id: string; name: string; arguments: string };
 
 /**
  * Adapter interface that wraps a single AI provider.

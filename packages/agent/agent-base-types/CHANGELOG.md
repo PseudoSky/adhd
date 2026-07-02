@@ -9,6 +9,7 @@ All notable changes to `@adhd/agent-mcp-types`. Format based on
 ## [1.1.0] — 2026-06-17
 
 ### Added
+
 - **Enforcement hook API.** `IHookRegistry` gains two new methods:
   `registerEnforcement<E extends EnforcementEvent>(event, handler)` and
   `enforce<E extends EnforcementEvent>(event, payload): Promise<void>`. Unlike
@@ -35,13 +36,14 @@ All notable changes to `@adhd/agent-mcp-types`. Format based on
   `engine/hooks.ts` for backwards compatibility.
 - **`passWithNoTests: true`** in `vite.config.ts`. The package ships only types and a
   pure-TypeScript class — no test files by design. Without this flag `npx nx test
-  agent-mcp-types` would exit 1 ("No test files found").
+agent-mcp-types` would exit 1 ("No test files found").
 
 ---
 
 ## [1.0.0] — 2026-06-15
 
 ### Added
+
 - Initial release alongside `@adhd/agent-mcp@1.0.0`.
 - `IHookRegistry` interface with `register()` and `emit()` across 11 lifecycle hooks
   (`task:start`, `pre:model_request`, `post:model_response`, `pre:tool_call`,
