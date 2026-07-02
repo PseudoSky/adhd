@@ -95,6 +95,11 @@ export class DagClient implements IDagClient {
     for (const slug of Object.keys(milestones)) {
       const ms = milestones[slug];
       if (ms.pending !== null) continue;
+      // A milestone whose own operations are already complete per
+      // dispatch_log has nothing left to dispatch — listing it would make
+      // the orchestrator re-dispatch finished work (BUG-DISPATCH-008,
+      // caught 2026-07-02 by the generated CLI driving the real dag).
+      if (this.isMilestoneComplete(slug)) continue;
       const depsSatisfied = ms.depends_on.every((dep: string) =>
         this.isMilestoneComplete(dep)
       );
