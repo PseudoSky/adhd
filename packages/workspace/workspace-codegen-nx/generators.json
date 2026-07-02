@@ -1,0 +1,9 @@
+{
+  "generators": {
+    "scaffold": {
+      "factory": "./src/generators/scaffold/generator",
+      "schema": "./src/generators/scaffold/schema.json",
+      "description": "Scaffold a golden-path @adhd/workspace-* package with proper naming convention, tags, files, and README."
+    }
+  }
+}
