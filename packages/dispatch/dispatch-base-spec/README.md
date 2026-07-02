@@ -1,10 +1,10 @@
-# @adhd/dispatch-spec
+# @adhd/dispatch-base-spec
 
 TypeScript types, JSON Schema documents, cross-language structural validators,
 and operation vocabulary for the dispatch plan ecosystem.
 
 ```bash
-npm install @adhd/dispatch-spec
+npm install @adhd/dispatch-base-spec
 ```
 
 ---
