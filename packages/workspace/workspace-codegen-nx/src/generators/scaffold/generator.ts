@@ -56,20 +56,29 @@ export async function scaffoldGenerator(tree: Tree, schema: ScaffoldGeneratorSch
 
   logger.info(`Scaffolding ${projectName} at ${dir} (${importPath})`);
 
-  // Generate base library via @nx/js:library
-  await libraryGenerator(tree, {
-    name: projectName,
-    directory: dir,
-    importPath,
-    publishable: true,
-    bundler: 'vite',
-    skipFormat: true,
-  });
+  // Generate the package
+  let projectRoot: string;
+  if (type === 'entrypoint') {
+    projectRoot = dir;
+    scaffoldEntrypoint(tree, projectRoot, projectName);
+  } else {
+    await libraryGenerator(tree, {
+      name: projectName,
+      directory: dir,
+      importPath,
+      publishable: true,
+      bundler: 'vite',
+      skipFormat: true,
+    });
+    projectRoot = joinPathFragments(dir, projectName);
+  }
 
-  // Update project.json with correct tags
-  const projectRoot = joinPathFragments(dir, projectName); const projectJsonPath = joinPathFragments(projectRoot, 'project.json');
+  // Fix project name and tags
+  const projectJsonPath = joinPathFragments(projectRoot, 'project.json');
   if (tree.exists(projectJsonPath)) {
     const projectJson = readJson(tree, projectJsonPath);
+    projectJson.name = projectName;
+    projectJson.sourceRoot = `${projectRoot}/src`;
     const pkgClass = TYPE_TO_CLASS[type] || 'foundation';
     projectJson.tags = [
       `domain:${group}`,
@@ -156,6 +165,25 @@ function patchEslintrc(tree: Tree, dir: string) {
     eslint.ignorePatterns.push('vite.config.js', 'vite.config.ts', 'vite.config.mjs', 'vite.config.mts');
     writeJson(tree, eslintPath, eslint);
   }
+}
+
+function scaffoldEntrypoint(tree: Tree, root: string, name: string) {
+  tree.write(joinPathFragments(root, 'src/index.ts'), `// Entrypoint: @adhd/${name}\n`);
+  tree.write(joinPathFragments(root, 'project.json'), JSON.stringify({
+    name,
+    $schema: '../../node_modules/nx/schemas/project-schema.json',
+    sourceRoot: `${root}/src`,
+    projectType: 'application',
+    tags: [`entrypoint:${name}`, 'pkg-class:entrypoint', 'platform:node'],
+    targets: {
+      build: {
+        executor: 'nx:run-commands',
+        options: { command: `tsc -p ${root}/tsconfig.json` },
+      },
+    },
+  }, null, 2) + '\n');
+  tree.write(joinPathFragments(root, 'package.json'), JSON.stringify({ name: `@adhd/${name}`, version: '0.0.1', private: true }, null, 2) + '\n');
+  tree.write(joinPathFragments(root, 'tsconfig.json'), JSON.stringify({ extends: '../../tsconfig.base.json', compilerOptions: { outDir: '../../dist/entrypoint' }, include: ['src'] }, null, 2) + '\n');
 }
 
 function patchTsconfigLib(tree: Tree, dir: string) {
