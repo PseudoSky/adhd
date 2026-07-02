@@ -405,4 +405,91 @@ and browser contexts.
 
 ## DEBT-WORKSPACE-DEPCHECK-001 — workspace lint must verify each package.json declares every imported workspace dep
 **Belongs in the workspace plan** — fold into **FEAT-WORKSPACE-001**'s "custom workspace lint (the gate)" / `@adhd/workspace-standard` (`docs/workspace-base/SCOPE.md`). No check currently fails a project whose source imports a workspace `@adhd/*` package it does **not** declare in its own `package.json`. This is a real, shipped failure mode: `@adhd/agent-mcp` imported `@adhd/agent-compiler`/`agent-policy`/`agent-mcp-budget` (+ provider/registry/tool-registry in tests) while declaring only `@adhd/agent-mcp-types`, so nx's `build.dependsOn:["^build"]` never built those deps; on a **clean** checkout their `.d.ts` were absent and `vite-plugin-dts` fell through the tsconfig `@adhd→src` paths into dependency **source** outside the consumer's `rootDir` → **`TS6059`**, silently breaking `nx build agent-mcp` for everyone but the dev worktree (which had built the dep dists incrementally). Fixed ad-hoc by declaring the deps (commit `08bbdda`) — but nothing prevents recurrence (agent-registry/agent-tool-registry declare nothing today; their cross-package imports are currently test-only — one import away from the same trap).
+## FOLLOW-UP: nx mv workspace rename prerequisite (workspace-cleanup)
+
+**Discovered:** 2026-07-01, during workspace-cleanup planning.
+
+**Finding:** `nx g @nx/workspace:move` correctly renames packages, moves files, and rewrites all TypeScript imports across the workspace — **but only if `tsconfig.base.json` compilerOptions.paths values omit the `./` prefix**. Our tsconfig currently has `./` on all 41 path entries (e.g. `"./packages/..."`), which breaks Nx's source-root matching algorithm in `update-imports.js` (it looks for values starting with `<sourceRoot>/` but finds `./<sourceRoot>/` instead).
+
+**Prerequisite before any rename:** strip `./` from all tsconfig.base.json path values:
+```jsonc
+// Before: "@adhd/foo": ["./packages/group/foo/src/index.ts"]
+// After:  "@adhd/foo": ["packages/group/foo/src/index.ts"]
+```
+
+**Verified command syntax (works after fix):**
+```bash
+nx g @nx/workspace:move \
+  --destination packages/<group>/<new-name> \
+  --projectName <old-name> \
+  --newProjectName <new-name> \
+  --importPath @adhd/<new-name> \
+  --projectNameAndRootFormat as-provided
+```
+
+**What it does automatically:** git mv directory, update project.json (name, sourceRoot, all path refs), update package.json (name, internal deps), rewrite all import/export/references across workspace, update tsconfig.base.json paths.
+
+**Verified with:** `dispatch-spec` → `dispatch-base-spec` — 15 source files across `dispatch-client` and `dispatch-optimizer` updated correctly. Belongs to `docs/plan/workspace-cleanup/SCOPE.md`.
+
+---
+
 **Fix:** enable the **`@nx/dependency-checks` ESLint rule** (`@nx/eslint-plugin`) on every package's `package.json` lint — it diffs declared deps against actual imports and flags **both** missing and extraneous deps, and runs in CI. (Equivalent fallback: `eslint-plugin-import`'s `no-extraneous-dependencies`, but `@nx/dependency-checks` is workspace-aware.) This makes the standard *enforced*, not merely generated.
+
+---
+
+## dispatch-production — re-plan review findings (2026-07-01)
+
+Found by the two-agent plan-vs-code review that restructured
+`docs/plan/dispatch-production/dag.json`. Bugs 001–003 are scheduled for fix by the
+plan's new `client-fixes` milestone; recorded here per disclosure policy until fixed.
+
+### BUG-DISPATCH-001 — `DagClient.getEligibleMilestones()` ignores milestone completion
+- **Where:** `packages/dispatch/dispatch-client/src/lib/client.ts`
+- **Symptom:** eligibility derives from `pending !== null` alone; a milestone whose dependency is dispatched-but-incomplete (or failed) is reported eligible. Only accidentally correct for wave 0.
+- **Correct semantics:** eligible iff `pending == null` AND every `depends_on` milestone is complete (PoC `compiler.ts:770`). On the e2e critical path — the orchestrator calls this every cycle.
+- **Status:** OPEN — `client-fixes.1` in dispatch-production dag.json.
+
+### BUG-DISPATCH-002 — `plan.spec.ts` silently skips its only assertion via a stale path
+- **Where:** `packages/dispatch/dispatch-spec/src/test/plan.spec.ts`
+- **Symptom:** derives `repoRoot` by splitting `__dirname` on `'packages/shared/dispatch-spec'` — a path removed by the workspace refactor — then `if (!repoRoot) return` instead of failing. The dag.json-against-validator test has never actually run. Violates the loud-prerequisite-failure rule (CLAUDE.md §6).
+- **Status:** OPEN — `client-fixes.2`.
+
+### BUG-DISPATCH-003 — `dispatch-client` re-exports optimizer surface (layering leak)
+- **Where:** `packages/dispatch/dispatch-client/src/index.ts`
+- **Symptom:** re-exports `snapshot`/`optimize` from `@adhd/dispatch-optimizer`, letting consumers import optimizer surface through the client layer.
+- **Status:** OPEN — `client-fixes.3`.
+
+### DEBT-DISPATCH-004 — `@adhd/dispatch-optimizer` published surface is stubs
+- **Where:** `packages/dispatch/dispatch-optimizer/src/lib/` — `snapshot()` returns `{} as DagSnapshot`, `optimize()` returns `[]`, all 4 algorithm files return `[]`; built bundle is 0.11 kB. The real implementation is `docs/plan/dispatch-optimizer/src/compiler.ts` (2,038 lines), never ported.
+- **Status:** OPEN — re-scoped `optimizer-core` milestone (snapshot port + greedy packer); algorithm cascade data-gated behind `optimizer-algorithms`.
+
+### DEBT-DISPATCH-005 — BL-101..BL-107 identifiers exist only in the PoC LOG.md
+- **Where:** `docs/plan/dispatch-optimizer/LOG.md` (outstanding table); referenced by both dispatch plans but absent from this BACKLOG.
+- **Summary:** BL-101 fixed; BL-102 guard-only milestones lack `execution_mode` in DispatchUnit (MEDIUM); BL-103 `snapshot_version` never increments (LOW); BL-104 `compilePrompt()` doesn't inline nested interface sub-shapes (MEDIUM); BL-105 `mcp_servers: null` blocks real dispatch (HIGH — now *bypassed* by the `agent-runner` milestone's `mcpServers: {}` fallback for claudecli agents; catalog lookup still unbuilt, tracked by `backlog-fill`); BL-106 `b_per_tier` cold-start not seeded (LOW); BL-107 back-compat patches live in `run.ts` not `readDag()` (LOW).
+- **Status:** OPEN — deferred `backlog-fill` milestone covers BL-102..107 residue.
+
+## DEBT-WORKSPACE-VITE-PATHS-001 — Vite configs hardcode relative paths to dist/, coverage/, cacheDir/ instead of resolving from project config
+
+**Discovered:** 2026-07-01, during workspace-cleanup renames.
+
+**Where:** Every `vite.config.ts` in the repo. Example from `packages/dispatch/dispatch-spec/vite.config.ts`:
+```ts
+cacheDir: '../../../node_modules/.vite/packages/dispatch/dispatch-spec',
+outDir: '../../../dist/packages/dispatch/dispatch-spec',
+coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec' }
+```
+
+**Problem:** These paths encode the package's position in the directory tree relative to the workspace root. When a package is renamed or moved (e.g., `packages/shared/dispatch-spec` → `packages/dispatch/dispatch-spec`), every path in `vite.config.ts` breaks and must be updated manually — `nx mv` doesn't touch them because they're string literals, not import paths. This is the root cause behind the `Can't find meta/_journal.json` and stale-dist-path bugs encountered during workspace-cleanup.
+
+**Fix direction:** Inject workspace-root and package-root paths dynamically so they survive renames:
+- Use a shared vite plugin or helper that reads `process.cwd()` or `__dirname` and resolves relative to the workspace root at build time
+- Example: `import { workspaceRoot, projectRoot } from '@adhd/workspace-vite'` → resolves to correct paths regardless of package location
+- Alternatively: read from `project.json` / `nx.json` via `@nx/devkit` during the vite config build phase
+- The helper should provide: `projectDist()`, `projectCoverage()`, `projectCacheDir()`, `workspaceNodeModules()` at minimum
+
+**Status:** OPEN — deferred workspace-enablement milestone.
+
+### DEBT-DISPATCH-006 — agent-mcp exposes no per-turn token usage on the MCP surface
+- **Where:** `packages/ai/agent-mcp/src/validation/usage.ts:84-108` — public shape is aggregate `TaskUsageReport.direct`; per-turn `MODEL_RESPONSE` events exist in the internal `task_events` table (`schema.ts:101-121`) but no tool exposes them.
+- **Impact:** dispatch `dispatch_log[].turns[]` is synthesized as a single aggregate entry; per-turn calibration (PoC SCOPE §C4) is not possible until agent-mcp grows a per-turn query. Not e2e-blocking.
+- **Status:** OPEN — candidate FEAT for agent-mcp (expose per-turn events via `usage_query`).

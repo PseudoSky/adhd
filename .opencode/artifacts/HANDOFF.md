@@ -46,14 +46,14 @@ Build order (respect dependency graph):
 ```bash
 # Batch 1: Client (depends on spec)
 # Write src/lib/serializer.ts, src/lib/client.ts, src/test/client.spec.ts, src/index.ts
-npx nx build shared-dispatch-client && npx nx test shared-dispatch-client
+npx nx build dispatch-client && npx nx test dispatch-client
 
 # Batch 2: Optimizer (depends on spec, NOT on client)
 ./scripts/generate-lib.sh lib dispatch-optimizer logic shared
 # Port snapshot() + optimize() from /Users/nix/dev/ai/sox-ecosystem/docs/plan/dispatch-optimizer/src/compiler.ts
 # Remove ALL I/O — inject fileSizes/readFiles via IOptimizerDeps
 # Keep 4 algorithms: Bitmask DP, Tree DP, Simulated Annealing, HLFET
-npx nx build shared-dispatch-optimizer && npx nx test shared-dispatch-optimizer
+npx nx build dispatch-optimizer && npx nx test dispatch-optimizer
 
 # Batch 3: IO Plugin (depends on optimizer) + JSON Serializer (depends on client)
 ./scripts/generate-lib.sh lib dispatch-plugin-io logic node
