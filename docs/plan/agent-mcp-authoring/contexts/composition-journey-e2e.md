@@ -32,7 +32,7 @@ removed from the run path entirely; `live-model-e2e` then extends this to the fu
 
 **The tooth:** the test carries a static import-scan assertion — it imports NO
 `packages/ai/**/src/**` path (only the MCP wire client + the compiler CLI bin at
-`dist/packages/ai/agent-compiler/src/cli/compile.js`). Reintroducing a deep src
+`dist/packages/agent/agent-engine-compiler/src/cli/compile.js`). Reintroducing a deep src
 import (the exact author-perspective gap the team-lead flagged) flips it red.
 
 ---

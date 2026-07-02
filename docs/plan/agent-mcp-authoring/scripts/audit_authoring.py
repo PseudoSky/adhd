@@ -20,7 +20,7 @@ in-memory state). Vitest checks trust the EXIT CODE, never `grep -q passed`
 (better-sqlite3 can segfault on teardown — project memory).
 
 HARD CONSTRAINT (the owner's agent-mcp back-out guarantee): agent-mcp /
-agent-mcp-types source is touched ONLY under this plan's opt-in states, listed in
+agent-base-types source is touched ONLY under this plan's opt-in states, listed in
 decisions.md's modification manifest. The final phase asserts (a) the manifest
 exists, (b) the full pre-existing agent-mcp test suite stays green
 (non-regression), and (c) no agent-mcp src file outside the manifest was touched.
@@ -60,7 +60,7 @@ MCP = "packages/ai/agent-mcp"
 REG = "packages/ai/agent-registry"
 MCP_TESTS = f"{MCP}/src/__tests__"
 REG_TESTS = f"{REG}/src/__tests__"
-TYPES = "packages/ai/agent-mcp-types"
+TYPES = "packages/agent/agent-base-types"
 
 
 @dataclass
@@ -236,7 +236,7 @@ def phase_final() -> list:
     # (c) agent-mcp builds clean at 2.0.0.
     r.append(check("dod.8.build", "agent-mcp builds clean", "npx --yes nx build agent-mcp"))
     # (d) The byte-back-out check: every changed agent-mcp src file is listed in the manifest.
-    #     Driven by a vendored helper that diffs `git` changes under packages/ai/agent-mcp{,-types}/src
+    #     Driven by a vendored helper that diffs `git` changes under packages/ai/agent-mcp{,-base-types}/src
     #     against the manifest's enumerated paths; PASS iff the change set is a subset of the manifest.
     r.append(check("dod.8.manifest-diff", "no agent-mcp src file changed outside the recorded manifest",
                    f"python3 {PLAN}/scripts/check_manifest.py"))

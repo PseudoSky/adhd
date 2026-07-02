@@ -65,7 +65,7 @@ Recorded as `[debt:sox-publish]` — see `docs/plan/agent-mcp-authoring/decision
 | `ComponentStore.create / list / readType` | `packages/ai/agent-registry/src/store/component-store.ts` | consumed by `component_define` + `component_search` (speaks `slug`) |
 | `AgentStore.read / update / list` | `packages/ai/agent-registry/src/store/agent-store.ts` | consumed by `agent_define`/`agent_read` (speaks `slug`) |
 | `CompositionStore.attach / resolveComposition` | `packages/ai/agent-registry/src/store/composition-store.ts` | consumed by `agent_define` (junction writes) |
-| `compileAgent` + `composed_prompts` cache | Plan 6 (`@adhd/agent-compiler` + agent-mcp runtime sink) | the compiled preview returned by `agent_define`/`agent_compile` |
+| `compileAgent` + `composed_prompts` cache | Plan 6 (`@adhd/agent-engine-compiler` + agent-mcp runtime sink) | the compiled preview returned by `agent_define`/`agent_compile` |
 | `server.ts` tool registry | `packages/ai/agent-mcp/src/server.ts` | registers discovery+authoring tools OUTSIDE the delegation surface |
 | `agent-crud.ts` `agentCreate` | `packages/ai/agent-mcp/src/tools/agent-crud.ts` | the `systemPrompt → inline component` compat shim |
 | `validation/agent.ts` | `packages/ai/agent-mcp/src/validation/agent.ts` | systemPrompt+components mutual-exclusion |
