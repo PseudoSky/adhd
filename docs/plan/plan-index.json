@@ -714,6 +714,16 @@
       "updated_at": "2026-06-27T00:46:45.668Z"
     },
     {
+      "plan": "workspace-cleanup",
+      "dir": "workspace-cleanup",
+      "status": "planned",
+      "mutate_set": [],
+      "references": [],
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-01T00:00:00.000Z"
+    },
+    {
       "plan": "usage-tracking",
       "dir": "usage-tracking",
       "status": "complete",

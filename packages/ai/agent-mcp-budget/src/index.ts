@@ -8,6 +8,7 @@ import type {
   PluginFactory,
   PreModelRequestPayload,
   PostModelResponsePayload,
+  PostToolCallPayload,
   TaskStartPayload,
   PreToolCallPayload,
 } from '@adhd/agent-mcp-types';
@@ -36,7 +37,7 @@ function parseIsoDuration(dur: string): number {
 const FIELD_NAMES = [
   'tokens', 'inputTokens', 'outputTokens',
   'calls', 'wallClock', 'modelMs', 'cost',
-  'toolCalls',
+  'toolCalls', 'responseSize',
 ] as const;
 
 const capSchema = z.object({
@@ -45,6 +46,7 @@ const capSchema = z.object({
   window: z.string().optional(),
   scope: z.enum(['task', 'session', 'agent', 'global']).optional(),
   mode: z.enum(['warning', 'block']).optional(),
+  message: z.string().optional(),
 });
 
 export type Cap = z.infer<typeof capSchema>;
@@ -107,7 +109,7 @@ function flatFieldsToDimension(raw: Record<string, unknown>): DimensionConfig {
       const cap: Cap = { field: mapping.field, maximum: value };
       if (mapping.window) cap.window = mapping.window;
       caps.push(cap);
-    } else if (key === 'scope' || key === 'mode' || key === 'costPerInputToken' || key === 'costPerOutputToken') {
+    } else if (key === 'scope' || key === 'mode' || key === 'costPerInputToken' || key === 'costPerOutputToken' || key === 'message') {
       result[key] = value;
     }
   }
@@ -143,11 +145,11 @@ function normalizeConfig(raw: unknown): PluginConfig {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeEnforcementError(limitName: string, limit: number, current: number): IEnforcementError {
+function makeEnforcementError(limitName: string, limit: number, current: number, message?: string): IEnforcementError {
   return {
     isEnforcementError: true as const,
     code: 'BUDGET_EXCEEDED',
-    message: `${limitName} limit is ${limit}, current value is ${Math.round(current)}`,
+    message: message ?? `${limitName} limit is ${limit}, current value is ${Math.round(current)}`,
   };
 }
 
@@ -216,6 +218,9 @@ class BudgetPlugin implements Plugin {
 
     hooks.registerEnforcement('pre:model_request', (p) => this.enforcePreModel(p));
     hooks.registerEnforcement('pre:tool_call', (p) => this.enforcePreTool(p));
+    hooks.register('transform:tool_result', (p) => {
+      try { this.enforceResponseSize(p); } catch { /* observational — mutate only */ }
+    });
   }
 
   // ── Observational handlers ────────────────────────────────────────────────
@@ -565,7 +570,7 @@ class BudgetPlugin implements Plugin {
   private evaluateCap(cap: Cap, snap: Record<string, number>, dimScope?: string): void {
     const current = this.getSnapshotValue(snap, cap, dimScope);
     if (current >= cap.maximum) {
-      throw makeEnforcementError(cap.field, cap.maximum, current);
+      throw makeEnforcementError(cap.field, cap.maximum, current, cap.message);
     }
   }
 
@@ -606,16 +611,77 @@ class BudgetPlugin implements Plugin {
         ? currentToolCalls
         : this.getSnapshotValue(snap, cap, dimScope);
       if (current >= cap.maximum) {
-        const msg = `tool "${toolName}": ${cap.field} limit is ${cap.maximum}, current value is ${Math.round(current)}`;
+        const msg = cap.message ?? `tool "${toolName}": ${cap.field} limit is ${cap.maximum}, current value is ${Math.round(current)}`;
         const capMode = cap.mode ?? mode ?? 'warning';
         if (capMode === 'warning') {
           throw makeToolWarning(toolName, callId, msg);
         }
-        throw makeEnforcementError(`tool:${toolName}:${cap.field}`, cap.maximum, current);
+        throw makeEnforcementError(`tool:${toolName}:${cap.field}`, cap.maximum, current, cap.message);
       }
     }
 
     acc.toolCalls.set(toolName, currentToolCalls + 1);
+  }
+
+  // ── Enforcement: transform:tool_result (response size) ────────────────────
+
+  private enforceResponseSize(p: PostToolCallPayload): void {
+    const { toolName, result } = p;
+    if (typeof result !== 'object' || result === null) return;
+
+    const { caps, mode } = this.resolveCaps('', '', toolName);
+    const sizeCaps = caps.filter(c => c.field === 'responseSize');
+    if (sizeCaps.length === 0) return;
+
+    // Flatten text content from tool result
+    const resultObj = result as Record<string, unknown>;
+    const content = resultObj['content'];
+    if (!Array.isArray(content)) return;
+
+    let totalChars = 0;
+    for (const part of content) {
+      if (typeof part === 'object' && part !== null) {
+        const p = part as Record<string, unknown>;
+        if (p['type'] === 'text') {
+          totalChars += ((p['text'] as string) ?? '').length;
+        }
+      }
+    }
+
+    for (const cap of sizeCaps) {
+      if (totalChars <= cap.maximum) continue;
+
+      const capMode = cap.mode ?? mode ?? 'warning';
+      if (capMode === 'block') {
+        resultObj['content'] = [{
+          type: 'text',
+          text: cap.message ?? `Response size (${totalChars} chars) exceeds limit of ${cap.maximum}. Use offset/limit or shell paging tools instead.`,
+        }];
+        p.isError = true;
+      } else {
+        let remaining = cap.maximum;
+        const truncated: unknown[] = [];
+        for (const part of content) {
+          if (typeof part !== 'object' || part === null) { truncated.push(part); continue; }
+          const p2 = part as Record<string, unknown>;
+          if (p2['type'] !== 'text') { truncated.push(part); continue; }
+          const text = (p2['text'] as string) ?? '';
+          if (text.length <= remaining) {
+            truncated.push(part);
+            remaining -= text.length;
+          } else {
+            truncated.push({ type: 'text', text: text.slice(0, remaining) });
+            break;
+          }
+        }
+        truncated.push({
+          type: 'text',
+          text: `\n\n[truncated: response was ${totalChars} chars, limited to ${cap.maximum}. ${cap.message ?? 'Use offset/limit or shell paging tools for full content.'}]`,
+        });
+        resultObj['content'] = truncated;
+      }
+      break;
+    }
   }
 }
 

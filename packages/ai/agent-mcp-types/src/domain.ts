@@ -177,10 +177,17 @@ export type ProviderConfig =
       systemPromptIsAgentSpec?: boolean;
     };
 
-export type McpServerConfig =
+type McpServerTransportConfig =
   | { transport: "stdio"; command: string; args?: string[]; env?: Record<string, string>; timeoutMs?: number }
   | { transport: "http";  url: string; headers?: Record<string, string>; timeoutMs?: number }
   | { transport: "sse";   url: string; headers?: Record<string, string>; timeoutMs?: number };
+
+export type McpServerConfig = McpServerTransportConfig & {
+  /** Allowlist: if set, only these tool names are exposed. Tools in this list are also checked against disallowedTools. */
+  allowedTools?: string[];
+  /** Denylist: tools to hide from listing and reject at runtime. Takes precedence over allowedTools. */
+  disallowedTools?: string[];
+};
 
 export interface AgentPermissions {
   allowedAgents?: string[];

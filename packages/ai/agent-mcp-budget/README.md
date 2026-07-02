@@ -28,7 +28,7 @@ Place at `.adhd/agent-mcp/config.json` (auto-discovered by the plugin loader):
 Each cap defines one limit. Fields:
 
 | Field | Unit | Scope | Description |
-|---|---|---|---|
+|---|---|---|---|---|
 | `tokens` | count | all | Sum of input + output + cache tokens |
 | `inputTokens` | count | all | Input tokens only |
 | `outputTokens` | count | all | Output tokens only |
@@ -37,6 +37,16 @@ Each cap defines one limit. Fields:
 | `modelMs` | ms | task only | Cumulative model response time |
 | `cost` | USD | all | Estimated cost (requires `costPerInputToken` / `costPerOutputToken`) |
 | `toolCalls` | count | tool only | Per-tool call count |
+| `responseSize` | chars | tool only | Raw response character length. Enforced at `transform:tool_result` — truncates (warning) or replaces with error (block) |
+
+### Custom message
+
+Each cap supports an optional `message` that overrides the auto-generated enforcement message. Use it to give the agent actionable guidance:
+
+```json
+{ "field": "toolCalls", "maximum": 5, "mode": "block",
+  "message": "Search is expensive. Use the index: query__search first" }
+```
 
 ### Scopes
 
@@ -75,21 +85,36 @@ When a cap has both `scope` and `window`, the window query provides the historic
 
 ### Tool-level caps
 
-Tool caps enforce at `pre:tool_call` and support `warning` or `block` mode:
+Tool caps enforce at `pre:tool_call` (toolCalls) or `transform:tool_result` (responseSize):
 
 ```json
 {
   "tool": {
     "default": { "caps": [{ "field": "toolCalls", "maximum": 100 }], "mode": "warning" },
     "overrides": {
-      "web_search": { "caps": [{ "field": "toolCalls", "maximum": 20 }], "mode": "block" }
+      "web_search": {
+        "caps": [{ "field": "toolCalls", "maximum": 20 }],
+        "mode": "block"
+      },
+      "filesystem__read_text_file": {
+        "caps": [
+          { "field": "responseSize", "maximum": 500, "mode": "warning",
+            "message": "File too large. Use read_text_file with head:100 to preview, search_files for pattern matching, or read_multiple_files to batch-read small files" },
+          { "field": "toolCalls", "maximum": 100, "mode": "warning",
+            "message": "Too many file reads. Use search_files or get_file_info first" }
+        ]
+      }
     }
   }
 }
 ```
 
-- `warning` — tool call is blocked, but the agent receives a diagnostic message and the task continues
-- `block` — tool call is blocked and the task fails with `BUDGET_EXCEEDED`
+- `toolCalls` field — enforced at `pre:tool_call`
+  - `warning` — tool call is blocked, agent receives a diagnostic, task continues
+  - `block` — tool call is blocked, task fails with `BUDGET_EXCEEDED`
+- `responseSize` field — enforced at `transform:tool_result` (after the tool runs)
+  - `warning` — tool result is **truncated** to `maximum` chars, task continues
+  - `block` — tool result is replaced with an error message (task continues, agent sees the error)
 
 ## Dimensions
 
@@ -104,7 +129,9 @@ Caps are merged from three dimensions in this order:
   "agent": {
     "default": { "caps": [{ "field": "calls", "maximum": 5 }] },
     "overrides": {
-      "cheap-agent": { "caps": [{ "field": "calls", "maximum": 1 }] }
+      "cheap-agent": {
+        "caps": [{ "field": "calls", "maximum": 1, "message": "Cheap agents get 1 call max" }]
+      }
     }
   },
   "provider": {
@@ -116,7 +143,16 @@ Caps are merged from three dimensions in this order:
   "tool": {
     "default": { "caps": [{ "field": "toolCalls", "maximum": 100 }], "mode": "warning" },
     "overrides": {
-      "web_search": { "caps": [{ "field": "toolCalls", "maximum": 20 }], "mode": "block" }
+      "web_search": {
+        "caps": [{ "field": "toolCalls", "maximum": 20, "message": "Consider caching search results" }],
+        "mode": "block"
+      },
+      "filesystem__read_file": {
+        "caps": [
+          { "field": "responseSize", "maximum": 500, "mode": "warning",
+            "message": "Raw file content is too large. Use shell tools instead: head -n 100, wc -l, grep for patterns" }
+        ]
+      }
     }
   }
 }
@@ -165,6 +201,21 @@ Converts internally to:
     { "field": "wallClock", "maximum": 120000 }
   ],
   "scope": "agent"
+}
+```
+
+### Custom messages in flat format
+
+The `message` key is also passed through in flat format — it applies to all caps in the dimension:
+
+```json
+{
+  "config": {
+    "maxTotalTokens": 50000,
+    "maxModelCalls": 8,
+    "mode": "warning",
+    "message": "Budget limit hit"
+  }
 }
 ```
 

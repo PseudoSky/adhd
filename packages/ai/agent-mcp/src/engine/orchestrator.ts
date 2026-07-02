@@ -216,6 +216,7 @@ export class Orchestrator {
                         // their own internal tool loop. Standard providers (anthropic,
                         // openai) return stopReason "tool_calls" and ignore this.
                         executeTool: async (server, tool, args) => {
+                            registry.assertToolAllowed?.(server, tool);
                             const client = await registry.getClient(server);
                             try {
                                 const result = await client.callTool(tool, args, composedSignal);
@@ -496,6 +497,9 @@ export class Orchestrator {
                             { taskId, agentName: executionContext.agentName, tool: qualifiedToolName, callId: toolCall.id },
                             "TOOL_CALL"
                         );
+
+                        // Runtime enforcement: reject calls to tools disabled via allowedTools/disallowedTools
+                        registry.assertToolAllowed?.(resolved.server, resolved.tool);
 
                         let toolResult: unknown;
                         let isError = false;

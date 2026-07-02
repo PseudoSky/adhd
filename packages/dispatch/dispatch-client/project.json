@@ -1,0 +1,52 @@
+{
+  "name": "dispatch-client",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/dispatch/dispatch-client/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "layer:data",
+    "platform:shared"
+  ],
+  "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/dispatch/dispatch-client"
+      ],
+      "options": {
+        "configFile": "packages/dispatch/dispatch-client/vite.config.ts"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/packages/dispatch/dispatch-client",
+        "main": "packages/dispatch/dispatch-client/src/index.ts",
+        "tsConfig": "packages/dispatch/dispatch-client/tsconfig.lib.json",
+        "assets": [
+          "packages/dispatch/dispatch-client/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": [
+        "build",
+        "test"
+      ]
+    }
+  }
+}

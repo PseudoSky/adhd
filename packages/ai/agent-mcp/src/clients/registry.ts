@@ -119,6 +119,21 @@ export class McpClientRegistry {
      * List all tools across all configured servers.
      * Prefixes each tool name with "<server>__<tool>" for disambiguation.
      */
+    private isToolHidden(serverName: string, toolName: string): boolean {
+        const config = this.mcpServers[serverName];
+        if (!config) return false;
+        if (config.allowedTools && !config.allowedTools.includes(toolName)) return true;
+        if (config.disallowedTools?.includes(toolName)) return true;
+        return false;
+    }
+
+    assertToolAllowed(serverName: string, toolName: string): void {
+        if (this.isToolHidden(serverName, toolName)) {
+            const quoted = `${serverName}__${toolName}`;
+            throw new Error(`Tool "${quoted}" is disallowed by server config and cannot be called`);
+        }
+    }
+
     async listAllTools(): Promise<ToolDefinition[]> {
         const allTools: ToolDefinition[] = [];
 
@@ -128,6 +143,9 @@ export class McpClientRegistry {
                 const tools = await client.listTools();
 
                 for (const tool of tools) {
+                    if (this.isToolHidden(serverName, tool.name)) {
+                        continue;
+                    }
                     const advertised = `${serverName}${TOOL_NAME_SEPARATOR}${tool.name}`;
                     const target = { server: serverName, tool: tool.name };
                     // Index both the advertised name and its normalized form so a

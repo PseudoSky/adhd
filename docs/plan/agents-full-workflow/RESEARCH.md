@@ -430,36 +430,48 @@ instinct for context economy, the obvious tool choices were catastrophic.
 | Env | `ADHD_AGENT_CONTEXT_LIMIT=30000` in `~/.adhd/.env` | ✅ |
 | Agent-mcp BACKLOG | FEAT-011 filed: reusable base system prompt + server-side enforcement | ✅ |
 
-### Structural Fix: Enable Budget Plugin
+### Structural Fix: Budget Plugin (Generic Caps Model)
 
-The `@adhd/agent-mcp-budget` plugin ships with agent-mcp (version 1.1.3). It
-enforces per-task limits: `maxModelCalls`, `maxTotalTokens`, `maxWallClockMs`,
-`maxCostUSD`. Enabling it would have **prevented the 710K task** — the budget
-enforcement would have killed the task at 50K tokens instead of letting it burn
-to 710K.
+The `@adhd/agent-mcp-budget` plugin (v1.1.3+) was rewritten to use a **generic caps
+model** — single `{ field, maximum, window?, scope?, mode? }` replaces 8+ named
+fields. Caps are additive across dimensions, not shadowing. Supported fields:
+`tokens`, `inputTokens`, `outputTokens`, `calls`, `wallClock`, `modelMs`,
+`cost`, `toolCalls`, with ISO8601 time windows (`PT24H`, `PT1H30M`) and scopes
+(`task`, `session`, `agent`, `global`). Enforcement has warning mode (block tool,
+return diagnostic) and block mode (`BUDGET_EXCEEDED`, fail task).
 
-Activation requires adding the plugin to the agent-mcp config; the budget config
-for dispatch agents would set aggressive limits:
+**Live-verified** 2026-06-30: a task with `calc` tool failed at model call 2 with
+`"BUDGET_EXCEEDED: maxModelCalls limit is 1, current value is 1"` against real
+LM Studio. Also verified: pre:tool_call enforcement (wires `IEnforcementError` →
+`ToolError("BUDGET_EXCEEDED", ...)` in the orchestrator), per-agent/provider/tool
+overrides, single-shot `buildSnapshot` (U+W DB queries per enforcement event),
+maximum `maxCalls: 0` (block all calls).
+
+Enabling it would have **prevented the 710K task** — budget enforcement kills
+unbounded context growth at the configured caps. Currently enabled in
+`.adhd/agent-mcp/config.json` with:
 
 ```json
 {
   "plugins": [
     { "module": "@adhd/agent-mcp-budget",
       "config": {
-        "maxTotalTokens": 50000,
-        "maxModelCalls": 10,
-        "maxWallClockMs": 120000
+        "defaults": { "calls": 10, "tokens": 50000, "wallClock": 120000 },
+        "agent": {
+          "dispatch-client": { "calls": 5, "tokens": 25000 },
+          "dispatch-optimizer": { "calls": 5, "tokens": 25000 }
+        }
       }
     }
   ]
 }
 ```
 
-We will enable the budget plugin with these limits before any further dispatches.
+Total: 26 tests (caps, scopes, windows, overrides, cleanup, double-count regression).
 
 ### Remaining Work
 
-- [ ] Enable `@adhd/agent-mcp-budget` plugin with dispatching limits
+- [x] Enable `@adhd/agent-mcp-budget` plugin with dispatching limits
 - [ ] Implement FEAT-011 (reusable base system prompt)
 - [ ] Implement tool-result proxying (memory `01KWD5V03F3J66XFJDFBTBMFNY`)
 - [ ] Split `task_usage` into per-call rows for granular tail display
@@ -493,6 +505,11 @@ We will enable the budget plugin with these limits before any further dispatches
 | 2026-06-30 | sonirico/mcp-shell security.yaml | scripts/mcp-shell-security.yaml | primary | Per-worktree shell config, AST-secure |
 | 2026-06-30 | agent-mcp providers | dispatch-* agents | agent-mcp_agent_update | Switched all agents to openai+LM Studio (ADHD_AGENT_OPENAI_*) |
 | 2026-06-30 | BACKLOG.md | FEAT-ENV-001 | primary | Added @adhd/environment feature request |
+| 2026-07-01 | allowedTools/disallowedTools | McpServerConfig type + schema + registry | agent-mcp-types + agent-mcp | Proactive tool filtering: hide from listAllTools(), reject at runtime via assertToolAllowed() in orchestrator |
+| 2026-07-01 | responseSize cap | budget plugin FIELD_NAMES + enforceResponseSize | agent-mcp-budget | Caps tool response char length at transform:tool_result; warning truncates, block replaces with error |
+| 2026-07-01 | custom cap message | capSchema.message | agent-mcp-budget | Optional string on any cap overrides auto-generated enforcement message |
+| 2026-07-01 | config update | .adhd/agent-mcp/config.json | primary | Added filesystem__read_text_file responseSize/toolCalls caps + filesystem__directory_tree block + custom messages |
+| 2026-07-01 | RESEARCH.md update | docs/plan/agents-full-workflow/RESEARCH.md | primary | Updated Structural Fix (generic caps model) + Remaining Work (budget plugin done) + audit log entries |
 
 ## Worktrees
 
@@ -531,3 +548,5 @@ We will enable the budget plugin with these limits before any further dispatches
 | 2026-06-30 | Permission denied | agent tried to delegate to "developer" | Removed agent-mcp MCP server from leaf agents, use allowedAgents |
 | 2026-06-30 | Not connected | agent-mcp connection lost after timeout | Connection restored, agent definitions updated with absolute paths |
 | 2026-06-30 | Context explosion — 710K tokens | agent called directory_tree (330K) + cat (70K+20K+19K+16K); no context limit; pathological retries | cat removed from allowlist, directory_tree banned, CONTEXT_LIMIT=30K, fail-fast rule, CONTEXT MANAGEMENT section, FEAT-011 filed, budget plugin pending |
+| 2026-07-01 | directory_tree still visible to provider | budget plugin blocked it reactively but tool still listed → context waste | added allowedTools/disallowedTools to McpServerConfig: proactive hide at listAllTools() + runtime assertToolAllowed() in orchestrator |
+| 2026-07-01 | file reads blow up context on large files | agent called read_text_file on 20K+ char files, burning tokens | added responseSize field to budget plugin caps (chars, enforced at transform:tool_result) + custom message on caps to guide agent toward head:100 params |

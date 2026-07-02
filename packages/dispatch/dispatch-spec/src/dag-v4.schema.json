@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://adhd.dev/schemas/dag-v4.schema.json",
+  "title": "DagJson v4",
+  "description": "Authored plan document — intent + execution log. Schema version 4.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "plan_kind",
+    "description",
+    "problem",
+    "approach",
+    "executor",
+    "phases",
+    "terminal",
+    "optimization",
+    "providers",
+    "effort_max_tokens",
+    "milestones",
+    "operations",
+    "dispatch_log"
+  ],
+  "properties": {
+    "schema_version": { "const": 4 },
+    "plan_kind": { "enum": ["brownfield", "greenfield"] },
+    "description": { "type": "string", "minLength": 1 },
+    "problem": { "type": "string" },
+    "approach": { "type": "string" },
+    "executor": { "type": "string" },
+    "executor_model": { "enum": ["Haiku", "Sonnet", "Opus"] },
+    "executor_effort": { "enum": ["low", "medium", "high", "xhigh", "max"] },
+    "phases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "terminal": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ]
+    },
+    "assumed_baseline": {
+      "oneOf": [
+        { "type": "array", "items": { "type": "string" } },
+        { "type": "object" }
+      ]
+    },
+    "optimization": {
+      "type": "object",
+      "required": ["sentinel_fanout", "b_per_tier", "context_window_per_tier"],
+      "properties": {
+        "sentinel_fanout": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "write_multiplier",
+            "read_multiplier",
+            "hit_probability"
+          ],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "write_multiplier": { "type": "number" },
+            "read_multiplier": { "type": "number" },
+            "hit_probability": { "type": "number" }
+          }
+        },
+        "b_per_tier": { "type": "object" },
+        "context_window_per_tier": { "type": "object" },
+        "context_window_override": {
+          "oneOf": [{ "type": "object" }, { "type": "null" }]
+        },
+        "b_override": { "oneOf": [{ "type": "object" }, { "type": "null" }] }
+      }
+    },
+    "providers": { "type": "object" },
+    "effort_max_tokens": { "type": "object" },
+    "milestones": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["description", "authored_by", "phase", "depends_on"],
+        "properties": {
+          "description": { "type": "string" },
+          "rationale": { "type": "string" },
+          "authored_by": { "type": "string" },
+          "pending": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+          "triggered_by": {
+            "oneOf": [{ "type": "string" }, { "type": "null" }]
+          },
+          "phase": { "type": "string" },
+          "depends_on": { "type": "array", "items": { "type": "string" } },
+          "agent": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+          "model": {
+            "oneOf": [
+              { "enum": ["Haiku", "Sonnet", "Opus"] },
+              { "type": "null" }
+            ]
+          },
+          "effort": {
+            "oneOf": [
+              { "enum": ["low", "medium", "high", "xhigh", "max"] },
+              { "type": "null" }
+            ]
+          },
+          "two_stage": { "type": "boolean" },
+          "read_only": { "type": "array", "items": { "type": "string" } },
+          "guard": { "oneOf": [{ "type": "string" }, { "type": "null" }] }
+        }
+      }
+    },
+    "operations": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/operation" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/operation" }
+        }
+      ]
+    },
+    "dispatch_log": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/dispatchLogEntry" }
+    },
+    "cross_plan_deps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["plan", "milestone"],
+        "properties": {
+          "plan": { "type": "string" },
+          "milestone": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "operation": {
+      "type": "object",
+      "required": [
+        "id",
+        "milestone",
+        "depends_on",
+        "type",
+        "action",
+        "authored_by",
+        "status"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "milestone": { "type": "string" },
+        "depends_on": { "type": "array", "items": { "type": "string" } },
+        "type": { "enum": ["automated", "tool-call", "generative"] },
+        "action": { "type": "string" },
+        "file": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+        "symbol": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+        "provenance": {
+          "oneOf": [
+            { "enum": ["gitnexus", "manual", "assumed", "vendored"] },
+            { "type": "null" }
+          ]
+        },
+        "confidence": {
+          "oneOf": [
+            { "enum": ["verified", "vendored", "documented", "assumed"] },
+            { "type": "null" }
+          ]
+        },
+        "audit_check": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+        "criteria": { "type": "array", "items": { "type": "string" } },
+        "tool": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+        "args": { "oneOf": [{ "type": "object" }, { "type": "null" }] },
+        "guard": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+        "to_file": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+        "to_symbol": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+        "ki_estimate": { "oneOf": [{ "type": "integer" }, { "type": "null" }] },
+        "ki_source": {
+          "oneOf": [
+            { "enum": ["estimate", "calibrated", "actual"] },
+            { "type": "null" }
+          ]
+        },
+        "authored_by": { "type": "string" },
+        "status": {
+          "enum": ["pending", "in_progress", "complete", "failed", "skipped"]
+        },
+        "shape": { "$ref": "#/$defs/shape" }
+      }
+    },
+    "shape": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind"],
+          "properties": {
+            "kind": {
+              "enum": [
+                "function",
+                "interface",
+                "type",
+                "class",
+                "enum",
+                "const",
+                "config",
+                "env",
+                "schema",
+                "manifest",
+                "script"
+              ]
+            },
+            "ops": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/shapeOp" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "description", "objective"],
+          "properties": {
+            "kind": { "const": "doc" },
+            "description": { "type": "string" },
+            "objective": { "type": "string" },
+            "required_sections": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "schema"],
+          "properties": {
+            "kind": { "const": "structured-output" },
+            "schema": { "type": "object" }
+          }
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "type": "null" }
+          }
+        }
+      ]
+    },
+    "shapeOp": {
+      "type": "object",
+      "required": ["op"],
+      "properties": {
+        "op": { "type": "string" },
+        "target": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+        "to": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+        "position": { "oneOf": [{ "type": "integer" }, { "type": "null" }] },
+        "required": { "oneOf": [{ "type": "boolean" }, { "type": "null" }] }
+      }
+    },
+    "dispatchLogEntry": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "provider",
+        "agent",
+        "started_at",
+        "operations"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "enum": ["planning", "execution"] },
+        "provider": {
+          "enum": ["anthropic", "openai", "deepseek", "google", "local"]
+        },
+        "model": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+        "agent": { "type": "string" },
+        "effort": {
+          "oneOf": [
+            { "enum": ["low", "medium", "high", "xhigh", "max"] },
+            { "type": "null" }
+          ]
+        },
+        "started_at": { "type": "string" },
+        "completed_at": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+        "operations": { "type": "array", "items": { "type": "string" } },
+        "turns": { "type": "array" },
+        "results": { "type": "array" },
+        "notes": { "type": "array" }
+      }
+    }
+  }
+}
