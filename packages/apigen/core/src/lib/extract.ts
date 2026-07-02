@@ -28,9 +28,15 @@
 // skipped + warned.
 
 import path from 'node:path'
-import { Project, type SourceFile, SyntaxKind } from 'ts-morph'
+import { type Project, type SourceFile } from 'ts-morph'
 import type { Operation, Segment } from './descriptor'
 import { buildSchema } from './schema-builders/ts-json-schema'
+import {
+  createExtractionSession,
+  internalSession,
+  type ExtractionSession,
+  type InternalExtractionSession,
+} from './extraction-session'
 
 // ---------------------------------------------------------------------------
 // Public entry-point
@@ -46,6 +52,14 @@ export interface ExtractOptions {
   namespace?: string
   /** Absolute path to a tsconfig.json for type resolution. Optional. */
   tsconfig?: string
+  /**
+   * Optional per-run shared cache (see {@link createExtractionSession}).
+   * When supplied, the ts-morph Project, built schema generators, and computed
+   * schemas are shared with every other extraction call in the same run — and
+   * released together by `session.dispose()`. When absent, a private session is
+   * created and disposed before returning (previous behaviour, no retention).
+   */
+  session?: ExtractionSession
 }
 
 /**
@@ -58,12 +72,23 @@ export interface ExtractOptions {
  * @returns Resolved array of canonical operations.
  */
 export async function extract(opts: ExtractOptions): Promise<Operation[]> {
+  const ownsSession = opts.session === undefined
+  const session = internalSession(opts.session ?? createExtractionSession())
+  try {
+    return await extractWithSession(opts, session)
+  } finally {
+    if (ownsSession) session.dispose()
+  }
+}
+
+async function extractWithSession(
+  opts: ExtractOptions,
+  session: InternalExtractionSession,
+): Promise<Operation[]> {
   const { sourceFile: filePath, namespace = '', tsconfig } = opts
 
-  const project = tsconfig
-    ? new Project({ tsConfigFilePath: tsconfig, skipAddingFilesFromTsConfig: true })
-    : new Project({ skipAddingFilesFromTsConfig: true })
-  const sf: SourceFile = project.addSourceFileAtPath(filePath)
+  const project = session.projectFor(tsconfig)
+  const sf: SourceFile = session.sourceFileFor(filePath, tsconfig)
 
   const fileName = path.basename(filePath)
   // Per SPEC §5: strip extension; dots/underscores → hyphens.
@@ -97,7 +122,7 @@ export async function extract(opts: ExtractOptions): Promise<Operation[]> {
     const returnText = sig.getReturnType().getText()
 
     ops.push(
-      await buildActionOp(project, sf, namespaceSeg, fileSegment, name, params, returnText, fn.isAsync(), tsconfig),
+      await buildActionOp(project, sf, namespaceSeg, fileSegment, name, params, returnText, fn.isAsync(), tsconfig, session),
     )
   }
 
@@ -128,7 +153,7 @@ export async function extract(opts: ExtractOptions): Promise<Operation[]> {
         : (init as import('ts-morph').FunctionExpression).isAsync()
 
       ops.push(
-        await buildActionOp(project, sf, namespaceSeg, fileSegment, name, params, returnText, isAsync, tsconfig),
+        await buildActionOp(project, sf, namespaceSeg, fileSegment, name, params, returnText, isAsync, tsconfig, session),
       )
     } else if (['ObjectLiteralExpression'].includes(kindName)) {
       // Shape 3: named-object export — `export const api = { foo, bar }`
@@ -147,14 +172,14 @@ export async function extract(opts: ExtractOptions): Promise<Operation[]> {
 
         // Path: [file, objectName, propName]
         const propPath: Segment[] = [fileSegment, makeSeg(name), makeSeg(propName)]
-        ops.push(await buildActionOpAtPath(project, sf, namespaceSeg, propPath, propName, params, returnText, false, tsconfig))
+        ops.push(await buildActionOpAtPath(project, sf, namespaceSeg, propPath, propName, params, returnText, false, tsconfig, session))
       }
     } else {
       // May be a serializable-data const (kind=query) — check serializability
       const constType = decl.getType()
       const typeText = constType.getText()
       if (isSerializableType(typeText)) {
-        const schema = await buildSchema(project, sf, typeText, tsconfig)
+        const schema = await buildSchema(project, sf, typeText, tsconfig, session)
         ops.push(buildQueryOp(namespaceSeg, fileSegment, name, schema))
       } else {
         // Non-serializable, non-callable — skip + warn
@@ -189,7 +214,7 @@ export async function extract(opts: ExtractOptions): Promise<Operation[]> {
           // But symbol is anonymous — we use the synthesized name as raw
           const anonSeg: Segment = { raw: anonName, words: tokenize(anonName) }
           ops.push(
-            await buildActionOpAtPath(project, sf, namespaceSeg, [anonSeg], anonName, params, returnText, isAsync, tsconfig),
+            await buildActionOpAtPath(project, sf, namespaceSeg, [anonSeg], anonName, params, returnText, isAsync, tsconfig, session),
           )
         }
       } else {
@@ -206,7 +231,7 @@ export async function extract(opts: ExtractOptions): Promise<Operation[]> {
           const returnText = sig.getReturnType().getText()
           // SPEC §5: default object → path=[file,"default",…keys]
           const propPath: Segment[] = [fileSegment, makeSeg('default'), makeSeg(propName)]
-          ops.push(await buildActionOpAtPath(project, sf, namespaceSeg, propPath, propName, params, returnText, false, tsconfig))
+          ops.push(await buildActionOpAtPath(project, sf, namespaceSeg, propPath, propName, params, returnText, false, tsconfig, session))
         }
       }
     } else {
@@ -224,7 +249,7 @@ export async function extract(opts: ExtractOptions): Promise<Operation[]> {
         const params = rawParams(sig)
         const returnText = sig.getReturnType().getText()
         ops.push(
-          await buildActionOp(project, sf, namespaceSeg, fileSegment, symName, params, returnText, fnDecl.isAsync(), tsconfig),
+          await buildActionOp(project, sf, namespaceSeg, fileSegment, symName, params, returnText, fnDecl.isAsync(), tsconfig, session),
         )
       }
     }
@@ -258,7 +283,7 @@ export async function extract(opts: ExtractOptions): Promise<Operation[]> {
           const params = rawParams(sig)
           const returnText = sig.getReturnType().getText()
           ops.push(
-            await buildActionOp(project, sf, namespaceSeg, fileSegment, exportedName, params, returnText, fnDecl.isAsync(), tsconfig),
+            await buildActionOp(project, sf, namespaceSeg, fileSegment, exportedName, params, returnText, fnDecl.isAsync(), tsconfig, session),
           )
           seenExportNames.add(exportedName)
           break
@@ -279,7 +304,7 @@ export async function extract(opts: ExtractOptions): Promise<Operation[]> {
             isAsync = (init as import('ts-morph').FunctionExpression).isAsync()
           }
           ops.push(
-            await buildActionOp(project, sf, namespaceSeg, fileSegment, exportedName, params, returnText, isAsync, tsconfig),
+            await buildActionOp(project, sf, namespaceSeg, fileSegment, exportedName, params, returnText, isAsync, tsconfig, session),
           )
           seenExportNames.add(exportedName)
           break
@@ -298,7 +323,7 @@ export async function extract(opts: ExtractOptions): Promise<Operation[]> {
       const returnText = sig.getReturnType().getText()
       // Synthesise stable id from filename + symbol — CJS module scope
       const cjsPath: Segment[] = [fileSegment, makeSeg(propName)]
-      ops.push(await buildActionOpAtPath(project, sf, namespaceSeg, cjsPath, propName, params, returnText, false, tsconfig))
+      ops.push(await buildActionOpAtPath(project, sf, namespaceSeg, cjsPath, propName, params, returnText, false, tsconfig, session))
     }
   }
 
@@ -321,10 +346,11 @@ async function buildActionOp(
   returnText: string,
   isAsync: boolean,
   tsconfig?: string,
+  session?: InternalExtractionSession,
 ): Promise<Operation> {
   const exportSeg = makeSeg(exportName)
   const opPath: Segment[] = [fileSeg, exportSeg]
-  return buildActionOpAtPath(project, sf, ns, opPath, exportName, params, returnText, isAsync, tsconfig)
+  return buildActionOpAtPath(project, sf, ns, opPath, exportName, params, returnText, isAsync, tsconfig, session)
 }
 
 async function buildActionOpAtPath(
@@ -337,6 +363,7 @@ async function buildActionOpAtPath(
   returnText: string,
   isAsync: boolean,
   tsconfig?: string,
+  session?: InternalExtractionSession,
 ): Promise<Operation> {
   // [inv:ctx-name-only] — exclude ctx by name, no type checking
   const domainParams = params.filter(p => p.name !== 'ctx')
@@ -344,12 +371,12 @@ async function buildActionOpAtPath(
 
   const properties: Record<string, unknown> = {}
   for (const p of domainParams) {
-    properties[p.name] = await buildSchema(project, sf, p.type, tsconfig)
+    properties[p.name] = await buildSchema(project, sf, p.type, tsconfig, session)
   }
 
   // Unwrap Promise<T> → T for output schema
   const resolvedReturn = returnText.replace(/^Promise<(.+)>$/, '$1').trim()
-  const outputSchema = await buildSchema(project, sf, resolvedReturn, tsconfig)
+  const outputSchema = await buildSchema(project, sf, resolvedReturn, tsconfig, session)
 
   const inputSchema: Record<string, unknown> = { type: 'object', properties, required }
 

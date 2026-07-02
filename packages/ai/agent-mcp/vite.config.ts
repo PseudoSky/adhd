@@ -9,7 +9,7 @@ export default defineConfig({
   cacheDir: '../../../node_modules/.vite/packages/ai/agent-mcp',
 
   // Resolve workspace @adhd deps imported DYNAMICALLY (e.g. the optional budget
-  // plugin via `await import("@adhd/agent-mcp-budget")`) to their SOURCE.
+  // plugin via `await import("@adhd/agent-plugin-budget")`) to their SOURCE.
   // nxViteTsPaths aliases static imports, but a bare dynamic-import specifier
   // falls through to node resolution → the package's `exports` (pointing at an
   // unbuilt path like `./index.mjs` or `./src/index.js`) → "failed to resolve
@@ -17,13 +17,13 @@ export default defineConfig({
   // step required.
   //
   // Entries here:
-  //   @adhd/agent-mcp-budget — optional plugin; dynamically imported in loader.ts
-  //   @adhd/agent-compiler   — optional dep; dynamically imported in index.ts
+  //   @adhd/agent-plugin-budget — optional plugin; dynamically imported in loader.ts
+  //   @adhd/agent-engine-compiler — optional dep; dynamically imported in index.ts
   //                            (and top-level awaited in integration test files)
   resolve: {
     alias: {
-      '@adhd/agent-mcp-budget': path.join(__dirname, '../agent-mcp-budget/src/index.ts'),
-      '@adhd/agent-compiler':   path.join(__dirname, '../agent-compiler/src/index.ts'),
+      '@adhd/agent-plugin-budget': path.join(__dirname, '../agent-mcp-budget/src/index.ts'),
+      '@adhd/agent-engine-compiler': path.join(__dirname, '../../agent/agent-engine-compiler/src/index.ts'),
     },
   },
 

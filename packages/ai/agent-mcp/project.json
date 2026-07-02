@@ -12,7 +12,11 @@
     }
   },
   "tags": ["layer:ai", "platform:node"],
-  "implicitDependencies": ["agent-mcp-budget", "agent-policy", "agent-mcp-sanitize"],
+  "implicitDependencies": [
+    "agent-plugin-budget",
+    "agent-core-policy",
+    "agent-plugin-sanitize"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
@@ -31,7 +35,6 @@
         ]
       }
     },
-
     "serve": {
       "executor": "nx:run-commands",
       "options": {
@@ -43,21 +46,18 @@
         "description": "Build + run the agent-mcp server, including the OpenAI-compatible chat gateway on the SSE host/port. Config (incl. ADHD_AGENT_* defaults) is loaded from .env / ~/.adhd/.env — see packages/ai/agent-mcp/.env.example. Run: `npx nx serve agent-mcp`."
       }
     },
-
     "dev": {
       "executor": "nx:run-commands",
       "options": {
         "command": "nx build agent-mcp --watch"
       }
     },
-
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
         "command": "tsc -p packages/ai/agent-mcp/tsconfig.json --noEmit"
       }
     },
-
     "clean": {
       "executor": "nx:run-commands",
       "options": {
@@ -70,7 +70,6 @@
         "packageRoot": "dist/{projectRoot}"
       }
     },
-
     "test": {
       "executor": "@nx/vite:test",
       "outputs": ["{workspaceRoot}/coverage/packages/ai/agent-mcp"],

@@ -2,7 +2,7 @@
  * Guard test for compiler-integration state.
  *
  * Invariants proven here:
- * - [compiler-integration.1] prompt-resolver imports compileAgent from @adhd/agent-compiler
+ * - [compiler-integration.1] prompt-resolver imports compileAgent from @adhd/agent-engine-compiler
  *   (proven by type-level import of CompileAgentFn + structural shape check)
  * - [compiler-integration.2] resolver caches/looks up the composed prompt and writes
  *   composed_prompt_id (proven by: MISS calls stub, id written to session row;

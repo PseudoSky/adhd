@@ -69,6 +69,17 @@
         "build",
         "test"
       ]
+    },
+    "bench": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node --expose-gc --import tsx packages/apigen/tools/bench-extract.ts",
+        "cwd": "{workspaceRoot}",
+        "env": {
+          "TSX_TSCONFIG_PATH": "tsconfig.base.json"
+        }
+      },
+      "cache": false
     }
   }
 }

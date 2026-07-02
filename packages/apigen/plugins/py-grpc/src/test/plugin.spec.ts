@@ -24,8 +24,12 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import * as readline from 'node:readline'
 import * as path from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { ensurePythonEnv } from '@adhd/apigen-python-env'
 
-const PYTHON_PKG_DIR = path.resolve(__dirname, '..', '..', '..', '..', 'python')
+// Managed interpreter — provisioned from apigen-python's own pyproject.toml
+// (grpc extra), exactly like the plugin's run() path. Never bare `python3`.
+const PYENV = ensurePythonEnv({ extras: ['grpc'] })
+const PYTHON_PKG_DIR = PYENV.pythonPkgDir
 const FIXTURE_MODULE = path.resolve(__dirname, 'fixtures', 'grpc_api.py')
 const PORT = 49381  // deterministic high port, avoids clashes
 const NS = 'pkg'
@@ -45,7 +49,7 @@ interface LiveServer {
 
 async function startServer(): Promise<LiveServer> {
   const proc = spawn(
-    'python3',
+    PYENV.python,
     [
       '-m', 'apigen_python.grpc_server',
       '--module', FIXTURE_MODULE,

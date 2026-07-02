@@ -60,7 +60,7 @@ describe.skipIf(!isLive)(
             const { buildHarness, drainQueue } = await import("./harness.js");
             const { agentTool } = await import("../../tools/session.js");
             const { taskTool, resultTool } = await import("../../tools/task.js");
-            const { createPlugin, configSchema } = await import("@adhd/agent-mcp-budget");
+            const { createPlugin, configSchema } = await import("@adhd/agent-plugin-budget");
             const { generateId } = await import("../../utils/ids.js");
             const { tasksTable, taskEventsTable } = await import("../../db/schema.js");
             const { eq } = await import("drizzle-orm");

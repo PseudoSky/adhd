@@ -6,5 +6,8 @@
   "typings": "./index.d.ts",
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@adhd/apigen-python-env": "^0.1.0"
   }
 }

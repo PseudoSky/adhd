@@ -1,14 +1,18 @@
-import { eq } from "drizzle-orm";
+import { eq } from 'drizzle-orm';
 
-import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
+import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
-import { agentsTable, sessionsTable } from "../db/schema.js";
-import { logger } from "../logger.js";
-import type { AgentCreateInput, AgentDefinition, AgentUpdateInput } from "../validation/index.js";
-import { agentDefinitionStoredSchema } from "../validation/index.js";
-import { ToolError } from "../validation/errors.js";
-import { nowIso } from "../utils/timestamps.js";
-import type { IHookRegistry } from "@adhd/agent-mcp-types";
+import { agentsTable, sessionsTable } from '../db/schema.js';
+import { logger } from '../logger.js';
+import type {
+  AgentCreateInput,
+  AgentDefinition,
+  AgentUpdateInput,
+} from '../validation/index.js';
+import { agentDefinitionStoredSchema } from '../validation/index.js';
+import { ToolError } from '../validation/errors.js';
+import { nowIso } from '../utils/timestamps.js';
+import type { IHookRegistry } from '@adhd/agent-base-types';
 
 /**
  * Thin compiled-agent cache (Plan 6 wave 3 — agent-store-retire).
@@ -24,136 +28,141 @@ import type { IHookRegistry } from "@adhd/agent-mcp-types";
  * the field is an optional computed compat shim populated from compiler output.
  */
 export class AgentStore {
-    constructor(
-        private readonly db: BetterSQLite3Database<Record<string, never>>,
-        private readonly hooks?: IHookRegistry
-    ) {}
+  constructor(
+    private readonly db: BetterSQLite3Database<Record<string, never>>,
+    private readonly hooks?: IHookRegistry
+  ) {}
 
-    create(input: AgentCreateInput): AgentDefinition {
-        const now = nowIso();
-        const definition: AgentDefinition = {
-            ...input,
-            version: 1,
-            createdAt: now,
-            updatedAt: now,
-        };
+  create(input: AgentCreateInput): AgentDefinition {
+    const now = nowIso();
+    const definition: AgentDefinition = {
+      ...input,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
 
-        const existing = this.db
-            .select()
-            .from(agentsTable)
-            .where(eq(agentsTable.name, input.name))
-            .get();
+    const existing = this.db
+      .select()
+      .from(agentsTable)
+      .where(eq(agentsTable.name, input.name))
+      .get();
 
-        if (existing) {
-            throw new ToolError(
-                "AGENT_ALREADY_EXISTS",
-                `Agent '${input.name}' already exists`
-            );
-        }
-
-        this.db.insert(agentsTable).values({
-            name: definition.name,
-            version: definition.version,
-            data: JSON.stringify(definition),
-            createdAt: now,
-            updatedAt: now,
-        }).run();
-
-        logger.info({ agentName: input.name }, "Agent created");
-        return definition;
+    if (existing) {
+      throw new ToolError(
+        'AGENT_ALREADY_EXISTS',
+        `Agent '${input.name}' already exists`
+      );
     }
 
-    read(name: string): AgentDefinition {
-        const row = this.db
-            .select()
-            .from(agentsTable)
-            .where(eq(agentsTable.name, name))
-            .get();
+    this.db
+      .insert(agentsTable)
+      .values({
+        name: definition.name,
+        version: definition.version,
+        data: JSON.stringify(definition),
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
 
-        if (!row) {
-            throw new ToolError(
-                "AGENT_NOT_FOUND",
-                `Agent '${name}' not found`
-            );
-        }
+    logger.info({ agentName: input.name }, 'Agent created');
+    return definition;
+  }
 
-        return agentDefinitionStoredSchema.parse(JSON.parse(row.data));
+  read(name: string): AgentDefinition {
+    const row = this.db
+      .select()
+      .from(agentsTable)
+      .where(eq(agentsTable.name, name))
+      .get();
+
+    if (!row) {
+      throw new ToolError('AGENT_NOT_FOUND', `Agent '${name}' not found`);
     }
 
-    update(input: AgentUpdateInput): AgentDefinition {
-        const existing = this.read(input.name); // throws AGENT_NOT_FOUND if missing
+    return agentDefinitionStoredSchema.parse(JSON.parse(row.data));
+  }
 
-        // Strip undefined values so absent patch fields don't clobber existing ones
-        const definedPatch = Object.fromEntries(
-            Object.entries(input.patch).filter(([, v]) => v !== undefined)
-        );
+  update(input: AgentUpdateInput): AgentDefinition {
+    const existing = this.read(input.name); // throws AGENT_NOT_FOUND if missing
 
-        const updated: AgentDefinition = {
-            ...existing,
-            ...definedPatch,
-            // Deep-merge mcpServers: only update/replace individual server entries
-            // instead of replacing the entire record (BUG-005)
-            mcpServers: input.patch.mcpServers
-                ? { ...existing.mcpServers, ...input.patch.mcpServers }
-                : existing.mcpServers,
-            // Deep-merge permissions: only update/replace individual fields
-            // instead of replacing the entire object (same class of bug as mcpServers)
-            permissions: input.patch.permissions
-                ? { ...existing.permissions, ...input.patch.permissions }
-                : existing.permissions,
-            name: existing.name,      // name is immutable
-            createdAt: existing.createdAt, // createdAt is immutable
-            version: existing.version + 1,
-            updatedAt: nowIso(),
-        };
+    // Strip undefined values so absent patch fields don't clobber existing ones
+    const definedPatch = Object.fromEntries(
+      Object.entries(input.patch).filter(([, v]) => v !== undefined)
+    );
 
-        this.db
-            .update(agentsTable)
-            .set({
-                version: updated.version,
-                data: JSON.stringify(updated),
-                updatedAt: updated.updatedAt,
-            })
-            .where(eq(agentsTable.name, input.name))
-            .run();
+    const updated: AgentDefinition = {
+      ...existing,
+      ...definedPatch,
+      // Deep-merge mcpServers: only update/replace individual server entries
+      // instead of replacing the entire record (BUG-005)
+      mcpServers: input.patch.mcpServers
+        ? { ...existing.mcpServers, ...input.patch.mcpServers }
+        : existing.mcpServers,
+      // Deep-merge permissions: only update/replace individual fields
+      // instead of replacing the entire object (same class of bug as mcpServers)
+      permissions: input.patch.permissions
+        ? { ...existing.permissions, ...input.patch.permissions }
+        : existing.permissions,
+      name: existing.name, // name is immutable
+      createdAt: existing.createdAt, // createdAt is immutable
+      version: existing.version + 1,
+      updatedAt: nowIso(),
+    };
 
-        logger.info(
-            { agentName: input.name, version: updated.version },
-            "Agent updated"
-        );
-        void this.hooks?.emit("agent:mutated", { agent: updated, operation: "update" });
-        return updated;
+    this.db
+      .update(agentsTable)
+      .set({
+        version: updated.version,
+        data: JSON.stringify(updated),
+        updatedAt: updated.updatedAt,
+      })
+      .where(eq(agentsTable.name, input.name))
+      .run();
+
+    logger.info(
+      { agentName: input.name, version: updated.version },
+      'Agent updated'
+    );
+    void this.hooks?.emit('agent:mutated', {
+      agent: updated,
+      operation: 'update',
+    });
+    return updated;
+  }
+
+  delete(name: string): void {
+    // Read definition BEFORE the DELETE so we have it for the hook
+    const definition = this.read(name); // throws AGENT_NOT_FOUND if missing
+
+    const activeSessionCheck = this.db
+      .select()
+      .from(sessionsTable)
+      .where(eq(sessionsTable.agentName, name))
+      .all()
+      .find((s) => s.status === 'active');
+
+    if (activeSessionCheck) {
+      throw new ToolError(
+        'AGENT_HAS_ACTIVE_SESSIONS',
+        `Agent '${name}' has active sessions and cannot be deleted`
+      );
     }
 
-    delete(name: string): void {
-        // Read definition BEFORE the DELETE so we have it for the hook
-        const definition = this.read(name); // throws AGENT_NOT_FOUND if missing
+    this.db.delete(agentsTable).where(eq(agentsTable.name, name)).run();
 
-        const activeSessionCheck = this.db
-            .select()
-            .from(sessionsTable)
-            .where(eq(sessionsTable.agentName, name))
-            .all()
-            .find(s => s.status === "active");
+    logger.info({ agentName: name }, 'Agent deleted');
+    void this.hooks?.emit('agent:mutated', {
+      agent: definition,
+      operation: 'delete',
+    });
+  }
 
-        if (activeSessionCheck) {
-            throw new ToolError(
-                "AGENT_HAS_ACTIVE_SESSIONS",
-                `Agent '${name}' has active sessions and cannot be deleted`
-            );
-        }
-
-        this.db
-            .delete(agentsTable)
-            .where(eq(agentsTable.name, name))
-            .run();
-
-        logger.info({ agentName: name }, "Agent deleted");
-        void this.hooks?.emit("agent:mutated", { agent: definition, operation: "delete" });
-    }
-
-    list(): AgentDefinition[] {
-        const rows = this.db.select().from(agentsTable).all();
-        return rows.map(row => agentDefinitionStoredSchema.parse(JSON.parse(row.data)));
-    }
+  list(): AgentDefinition[] {
+    const rows = this.db.select().from(agentsTable).all();
+    return rows.map((row) =>
+      agentDefinitionStoredSchema.parse(JSON.parse(row.data))
+    );
+  }
 }

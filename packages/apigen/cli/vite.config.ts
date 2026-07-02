@@ -87,6 +87,14 @@ export default defineConfig({
     },
     environment: 'node',
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    // perf.spec.ts asserts heap flatness across repeated buildDescriptor runs;
+    // it needs a real global.gc so heap measurements are deterministic.
+    // worker_threads reject V8 flags in execArgv (ERR_WORKER_INVALID_EXEC_ARGV),
+    // so the suite runs in the forks pool, where --expose-gc is legal.
+    pool: 'forks',
+    poolOptions: {
+      forks: { execArgv: ['--expose-gc'] },
+    },
 
     reporters: ['default'],
     coverage: {

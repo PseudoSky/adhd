@@ -2,7 +2,7 @@
  * live-wiring.test.ts — SEAM integration test for Plan 6 F-P6-8.
  *
  * Proves that the agentTool SEAM routes every `agent` tool call through
- * compileAgent from @adhd/agent-compiler when `promptResolver` is present in
+ * compileAgent from @adhd/agent-engine-compiler when `promptResolver` is present in
  * SessionDeps.  Drives the REAL `agentTool` (the same function that both
  * `agentTool` callsites in server.ts invoke) against a real on-disk SQLite
  * registry DB seeded with real rows — only the LLM provider boundary is NOT
@@ -59,16 +59,16 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 // ── Registry seed APIs ────────────────────────────────────────────────────────
 import {
     seed as seedRegistry,
-} from "@adhd/agent-registry";
-import { seed as seedToolRegistry } from "@adhd/agent-tool-registry";
-import { seed as seedProvider } from "@adhd/agent-provider";
-import { seed as seedPolicy } from "@adhd/agent-policy";
+} from "@adhd/agent-store-prompts";
+import { seed as seedToolRegistry } from "@adhd/agent-store-tools";
+import { seed as seedProvider } from "@adhd/agent-core-provider";
+import { seed as seedPolicy } from "@adhd/agent-core-policy";
 
 // ── Fixture seeder + real compileAgent (live production boundary under test) ──
-// Dynamic import required: @adhd/agent-compiler is an optional dep in this package
+// Dynamic import required: @adhd/agent-engine-compiler is an optional dep in this package
 // (lazily loaded via dynamic import in production index.ts);
 // @nx/enforce-module-boundaries forbids static imports of lazy-loaded libraries.
-const { seedFixtureAgent, compileAgent } = await import("@adhd/agent-compiler");
+const { seedFixtureAgent, compileAgent } = await import("@adhd/agent-engine-compiler");
 
 /** Slug of the seeded fixture agent — mirrors FIXTURE_AGENT_SLUG from fixtures.ts. */
 const FIXTURE_AGENT_SLUG = "api-design-reviewer-e2e";
@@ -88,15 +88,15 @@ import type { SessionDeps } from "../tools/session.js";
 //
 // test file is at:    packages/ai/agent-mcp/src/__tests__/    (__dirname)
 // registry packages:  packages/ai/agent-{provider,registry,tool-registry,policy}/
-// Relative path from __dirname: ../../../<package>/drizzle
+// Relative path from __dirname: ../../../<package>/drizzle (agent packages now under packages/agent/)
 //   (go up: __tests__ → src → agent-mcp → ai, then into sibling)
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
-const PROVIDER_MIGRATIONS      = path.resolve(__dirname, "../../../agent-provider/drizzle");
-const REGISTRY_MIGRATIONS      = path.resolve(__dirname, "../../../agent-registry/drizzle");
-const TOOL_REGISTRY_MIGRATIONS = path.resolve(__dirname, "../../../agent-tool-registry/drizzle");
-const POLICY_MIGRATIONS        = path.resolve(__dirname, "../../../agent-policy/drizzle");
+const PROVIDER_MIGRATIONS      = path.resolve(__dirname, "../../../../agent/agent-core-provider/drizzle");
+const REGISTRY_MIGRATIONS      = path.resolve(__dirname, "../../../../agent/agent-store-prompts/drizzle");
+const TOOL_REGISTRY_MIGRATIONS = path.resolve(__dirname, "../../../../agent/agent-store-tools/drizzle");
+const POLICY_MIGRATIONS        = path.resolve(__dirname, "../../../../agent/agent-core-policy/drizzle");
 
 // ── Flat-only agent fixture ───────────────────────────────────────────────────
 

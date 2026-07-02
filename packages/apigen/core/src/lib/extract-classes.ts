@@ -24,10 +24,16 @@
 //   included.
 
 import path from 'node:path'
-import { Project, type SourceFile, Scope } from 'ts-morph'
+import { type Project, type SourceFile, Scope } from 'ts-morph'
 import type { Operation, Segment } from './descriptor'
 import { buildSchema } from './schema-builders/ts-json-schema'
 import { tokenize } from './extract'
+import {
+  createExtractionSession,
+  internalSession,
+  type ExtractionSession,
+  type InternalExtractionSession,
+} from './extraction-session'
 
 // ---------------------------------------------------------------------------
 // Public entry-point
@@ -48,6 +54,12 @@ export interface ExtractClassesOptions {
    * method ops. Off by default (opt-in per SPEC §10).
    */
   includeInstances?: boolean
+  /**
+   * Optional per-run shared cache (see `createExtractionSession` in
+   * `@adhd/apigen-core`). When absent, a private session is created and
+   * disposed before returning (previous behaviour, no retention).
+   */
+  session?: ExtractionSession
 }
 
 /**
@@ -62,12 +74,23 @@ export interface ExtractClassesOptions {
  *   constructor + instance-method ops).
  */
 export async function extractClasses(opts: ExtractClassesOptions): Promise<Operation[]> {
+  const ownsSession = opts.session === undefined
+  const session = internalSession(opts.session ?? createExtractionSession())
+  try {
+    return await extractClassesWithSession(opts, session)
+  } finally {
+    if (ownsSession) session.dispose()
+  }
+}
+
+async function extractClassesWithSession(
+  opts: ExtractClassesOptions,
+  session: InternalExtractionSession,
+): Promise<Operation[]> {
   const { sourceFile: filePath, namespace = '', tsconfig, includeInstances = false } = opts
 
-  const project = tsconfig
-    ? new Project({ tsConfigFilePath: tsconfig, skipAddingFilesFromTsConfig: true })
-    : new Project({ skipAddingFilesFromTsConfig: true })
-  const sf: SourceFile = project.addSourceFileAtPath(filePath)
+  const project = session.projectFor(tsconfig)
+  const sf: SourceFile = session.sourceFileFor(filePath, tsconfig)
 
   const fileName = path.basename(filePath)
   const fileSegment = makeSeg(normalizeFileName(fileName))
@@ -103,7 +126,7 @@ export async function extractClasses(opts: ExtractClassesOptions): Promise<Opera
       // Path: [file, ClassName, methodName]
       const opPath: Segment[] = [fileSegment, classSeg, makeSeg(methodName)]
       ops.push(
-        await buildActionOpAtPath(project, sf, namespaceSeg, opPath, params, returnText, isAsync, tsconfig),
+        await buildActionOpAtPath(project, sf, namespaceSeg, opPath, params, returnText, isAsync, tsconfig, session),
       )
     }
 
@@ -130,7 +153,7 @@ export async function extractClasses(opts: ExtractClassesOptions): Promise<Opera
       const required = domainParams.filter(p => !p.optional).map(p => p.name)
       const properties: Record<string, unknown> = {}
       for (const p of domainParams) {
-        properties[p.name] = await buildSchema(project, sf, p.type, tsconfig)
+        properties[p.name] = await buildSchema(project, sf, p.type, tsconfig, session)
       }
 
       ops.push({
@@ -177,12 +200,12 @@ export async function extractClasses(opts: ExtractClassesOptions): Promise<Opera
       const required = domainParams.filter(p => !p.optional).map(p => p.name)
       const properties: Record<string, unknown> = {}
       for (const p of domainParams) {
-        properties[p.name] = await buildSchema(project, sf, p.type, tsconfig)
+        properties[p.name] = await buildSchema(project, sf, p.type, tsconfig, session)
       }
 
       // Unwrap Promise<T> → T
       const resolvedReturn = returnText.replace(/^Promise<(.+)>$/, '$1').trim()
-      const outputSchema = await buildSchema(project, sf, resolvedReturn, tsconfig)
+      const outputSchema = await buildSchema(project, sf, resolvedReturn, tsconfig, session)
 
       ops.push({
         id,
@@ -227,6 +250,7 @@ async function buildActionOpAtPath(
   returnText: string,
   isAsync: boolean,
   tsconfig?: string,
+  session?: InternalExtractionSession,
 ): Promise<Operation> {
   // [inv:ctx-name-only] — exclude ctx by name, no type checking
   const domainParams = params.filter(p => p.name !== 'ctx')
@@ -234,12 +258,12 @@ async function buildActionOpAtPath(
 
   const properties: Record<string, unknown> = {}
   for (const p of domainParams) {
-    properties[p.name] = await buildSchema(project, sf, p.type, tsconfig)
+    properties[p.name] = await buildSchema(project, sf, p.type, tsconfig, session)
   }
 
   // Unwrap Promise<T> → T for output schema
   const resolvedReturn = returnText.replace(/^Promise<(.+)>$/, '$1').trim()
-  const outputSchema = await buildSchema(project, sf, resolvedReturn, tsconfig)
+  const outputSchema = await buildSchema(project, sf, resolvedReturn, tsconfig, session)
 
   const id = buildId(ns, opPath)
 

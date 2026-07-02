@@ -21,8 +21,9 @@
 
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import { extract, composeSchemas, generateSchemas } from '@adhd/apigen-core'
+import { extract, composeSchemas, generateSchemas, createExtractionSession } from '@adhd/apigen-core'
 import type {
+  ExtractionSession,
   Operation,
   Descriptor,
   ComposedSchemas,
@@ -219,6 +220,7 @@ export function loadOverrideConfig(
 async function extractSource(
   entry: SourceEntry,
   logger?: Logger,
+  session?: ExtractionSession,
 ): Promise<Operation[]> {
   const lang = detectLang(entry.file)
 
@@ -228,7 +230,7 @@ async function extractSource(
       resolveNamespace(entry.file, { tsconfig: entry.tsconfig })
 
     logger?.info(`extracting ${entry.file} (host: ts, ns: ${namespace})`)
-    const ops = await extract({ sourceFile: entry.file, namespace, tsconfig })
+    const ops = await extract({ sourceFile: entry.file, namespace, tsconfig, session })
     logger?.info(`extracted ${ops.length} operations from ${path.basename(entry.file)}`)
     logger?.debug({ ops: ops.map(o => o.id) }, 'operation ids')
     return ops
@@ -272,9 +274,17 @@ export async function buildDescriptor(
     throw new Error('apigen-orchestrator: at least one source must be provided')
   }
 
+  // One shared extraction session for the whole run: one ts-morph Project per
+  // tsconfig (lib.d.ts parses once, not twice per source), one built schema
+  // generator per file, and every (file, typeText) schema computed once — the
+  // step-5 generateSchemas pass below re-reads the exact types extract()
+  // already resolved, so with the shared session it is nearly free.
+  // Disposed in `finally` so a one-shot CLI run retains nothing.
+  const session = createExtractionSession()
+  try {
   // --- Step 1+2: detect + extract per source -------------------------------
   const perSourceOps: Operation[][] = await Promise.all(
-    sources.map(entry => extractSource(entry, logger))
+    sources.map(entry => extractSource(entry, logger, session))
   )
 
   // --- Step 3: merge -------------------------------------------------------
@@ -314,6 +324,7 @@ export async function buildDescriptor(
       exportMode: entry.exportMode ?? { type: 'named' },
       namespace,
       tsconfig,
+      session,
     })
     const schemas = composeSchemas(generated, [], {})
 
@@ -325,6 +336,9 @@ export async function buildDescriptor(
   }
 
   return { operations, packageSchemas }
+  } finally {
+    session.dispose()
+  }
 }
 
 // ---------------------------------------------------------------------------
