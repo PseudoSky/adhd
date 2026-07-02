@@ -101,6 +101,26 @@ data: packed vs stepwise on the same sandbox work order, per-turn tokens from
 `task_events`, artifact-equivalence assertion. A negative result is recorded here
 and becomes a packing input to the optimizer instead of a default.
 
+### Added 2026-07-02 — `cli-entrypoint` (apigen-generated dispatcher CLI)
+
+User decisions (2026-07-02): the dispatcher gets a CLI, integration tests live in
+that entrypoint package (no repo-root `tests/` dir), and the CLI is **generated via
+apigen** from the dispatch base client rather than hand-written. New milestone
+`cli-entrypoint` (deps: `orchestrator-core`; before `tests-real-e2e`, which now
+depends on it): `packages/dispatch/dispatch-cli` (tags `layer:entrypoints,
+platform:node` — precedent `packages/decompile`) exposes a plain-functions surface
+`src/api.ts` (`validate`/`snapshot`/`optimize`/`eligible`/`status`/`run`) wiring the
+real stack — `createDagClient(createJsonFileSerializer(…))`, optimizer, orchestrator
+cycle — and the `@adhd/apigen-nx:generate` cache-aware executor projects it to a
+Commander CLI (`type: 'cli'`, `@adhd/apigen-plugin-cli-output`). Proof standard: a
+default-running smoke test **spawns the generated artifact** (exit codes + payloads;
+never imports generated code). Harnesses repointed here: `tests-real-e2e.1` →
+`packages/dispatch/dispatch-cli/src/test/integration/real-e2e.ts`,
+`stepwise-dispatch.3` → `…/stepwise-ab.ts`. First in-repo consumer of the
+cli-output plugin — plugin gaps get recorded in `packages/apigen/BACKLOG.md` with a
+thin hand-written commander wrapper over the same `api.ts` as the sanctioned
+fallback.
+
 ## Key design decisions
 
 1. **Serialization adapter pattern** — `IDagSerializer` interface with factory functions
