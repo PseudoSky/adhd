@@ -32,6 +32,15 @@ export interface ProviderChatResponse {
   message: Message;
   stopReason: 'completed' | 'tool_calls';
   usage?: TokenUsage;
+  /**
+   * The provider's usage object exactly as returned by the SDK, unnormalized.
+   * Persisted per-turn into task_events MODEL_RESPONSE payloads so
+   * provider-specific fields (DeepSeek `prompt_cache_hit_tokens`, OpenAI
+   * `completion_tokens_details.reasoning_tokens`, Anthropic cache breakdowns)
+   * remain queryable ground truth even when the normalized TokenUsage view
+   * doesn't carry them.
+   */
+  rawUsage?: unknown;
 }
 
 export interface LLMProvider {

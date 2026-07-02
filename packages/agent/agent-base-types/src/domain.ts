@@ -240,6 +240,17 @@ export interface AgentDefinition {
    * Has no effect on ephemeral tasks (no DB row to persist the resume token).
    */
   allowHumanInput?: boolean;
+  /**
+   * How tools are advertised to the provider API.
+   * - "names" (default when absent): slim definitions (name + one-line
+   *   description + permissive schema) go in the API tools array; the full
+   *   documentation including parameter schemas is prepended to the system
+   *   message as a stable, provider-cacheable prefix.
+   * - "full": complete JSON-schema definitions in the API tools array.
+   * claudecli providers always behave as "full" — they run their own internal
+   * tool loop and never serialize tools to a chat-completions API.
+   */
+  toolAdvertisement?: 'names' | 'full';
   createdAt: string;
   updatedAt: string;
 }
