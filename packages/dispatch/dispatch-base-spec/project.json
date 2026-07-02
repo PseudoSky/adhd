@@ -1,7 +1,7 @@
 {
-  "name": "dispatch-spec",
+  "name": "dispatch-base-spec",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/dispatch/dispatch-spec/src",
+  "sourceRoot": "packages/dispatch/dispatch-base-spec/src",
   "projectType": "library",
   "release": {
     "version": {
@@ -15,22 +15,24 @@
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
-      "outputs": ["{workspaceRoot}/coverage/packages/dispatch/dispatch-spec"],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/dispatch/dispatch-base-spec"
+      ],
       "options": {
-        "configFile": "packages/dispatch/dispatch-spec/vite.config.ts"
+        "configFile": "packages/dispatch/dispatch-base-spec/vite.config.ts"
       }
     },
     "build": {
       "executor": "@nx/vite:build",
       "outputs": ["{options.outputPath}"],
       "options": {
-        "outputPath": "dist/packages/dispatch/dispatch-spec",
-        "main": "packages/dispatch/dispatch-spec/src/index.ts",
-        "tsConfig": "packages/dispatch/dispatch-spec/tsconfig.lib.json",
+        "outputPath": "dist/packages/dispatch/dispatch-base-spec",
+        "main": "packages/dispatch/dispatch-base-spec/src/index.ts",
+        "tsConfig": "packages/dispatch/dispatch-base-spec/tsconfig.lib.json",
         "assets": [
-          "packages/dispatch/dispatch-spec/*.md",
+          "packages/dispatch/dispatch-base-spec/*.md",
           {
-            "input": "packages/dispatch/dispatch-spec/src",
+            "input": "packages/dispatch/dispatch-base-spec/src",
             "glob": "*.json",
             "output": "/"
           }

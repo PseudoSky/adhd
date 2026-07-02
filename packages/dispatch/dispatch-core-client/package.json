@@ -1,7 +1,9 @@
 {
-  "name": "@adhd/dispatch-spec",
+  "name": "@adhd/dispatch-core-client",
   "version": "0.0.1",
-  "dependencies": {},
+  "dependencies": {
+    "@adhd/dispatch-spec": "0.0.1"
+  },
   "main": "./index.js",
   "module": "./index.mjs",
   "typings": "./index.d.ts",

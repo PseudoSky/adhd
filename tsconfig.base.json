@@ -139,8 +139,17 @@
       "@adhd/decompile": [
         "./packages/decompile/src/index.ts"
       ],
+      "@adhd/dispatch-base-spec": [
+        "./packages/dispatch/dispatch-base-spec/src/index.ts"
+      ],
       "@adhd/dispatch-client": [
         "./packages/dispatch/dispatch-client/src/index.ts"
+      ],
+      "@adhd/dispatch-core-client": [
+        "./packages/dispatch/dispatch-core-client/src/index.ts"
+      ],
+      "@adhd/dispatch-core-optimizer": [
+        "./packages/dispatch/dispatch-core-optimizer/src/index.ts"
       ],
       "@adhd/dispatch-optimizer": [
         "./packages/dispatch/dispatch-optimizer/src/index.ts"
