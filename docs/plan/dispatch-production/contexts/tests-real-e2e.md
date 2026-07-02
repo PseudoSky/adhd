@@ -175,6 +175,13 @@ assert: the Haiku agent created contexts/embedding-research.md at the expected p
 assert: the file has ≥ 2 sections (## Decision, ## Performance)
 
 // Verify dispatch_log was appended correctly
+// CONTRACT NOTE (re-plan 2026-07-01): agent-mcp exposes ONLY aggregate usage
+// (TaskUsageReport.direct — packages/ai/agent-mcp/src/validation/usage.ts:84-108).
+// The runner synthesizes turns[] as a SINGLE entry from usage.direct
+// { input_tokens: direct.inputTokens, output_tokens: direct.outputTokens,
+//   model_calls: direct.modelCalls }. The assertions below are written against
+// that contract — do NOT extend them to assert a per-turn breakdown, and do NOT
+// build per-turn plumbing to satisfy them; it does not exist on the MCP surface.
 const dag = readDagOnDisk()
 const lastEntry = dag.dispatch_log[dag.dispatch_log.length - 1]
 assert: lastEntry.kind === "execution"

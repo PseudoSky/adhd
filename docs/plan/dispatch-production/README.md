@@ -45,6 +45,45 @@ library ecosystem.
 | `@adhd/dispatch-orchestrator` | workflows | node | optimizer, client, plugins |
 | `apps/dispatch-cli` | entrypoints | node | orchestrator, tools, serializer-sqlite |
 
+## Re-plan 2026-07-01 — fast path to first real dispatch
+
+A two-agent review (plan-vs-code audit + agent-mcp integration spec) found the plan's
+sequencing inverted relative to its value gate. Findings that drove the restructure:
+
+1. **`optimizer-core` was stubs.** The production package built to 0.11 kB —
+   `snapshot()` returned `{} as DagSnapshot`, `optimize()` returned `[]`. The real
+   2,038-line implementation exists only in `docs/plan/dispatch-optimizer/src/compiler.ts`.
+2. **The sole e2e-blocking stub is `mcp_servers: null`** (PoC compiler.ts:1788, BL-105).
+   It is bypassed, not solved: the new `agent-runner` milestone supplies `mcpServers: {}`
+   at `agent_create` time, which is valid for `claudecli` agents. The other 6 stubs are
+   enrichment-only and deferred to `backlog-fill`.
+3. **agent-mcp exposes only aggregate token usage** (`TaskUsageReport.direct`:
+   `inputTokens`/`outputTokens`/`modelCalls` — `packages/ai/agent-mcp/src/validation/usage.ts`).
+   The `dispatch_log[].turns[]` per-turn assumption was unimplementable as written;
+   turns are now synthesized as a single aggregate entry.
+4. **No duplication with agent-mcp's `DagEngine`** — audited; it resolves `depends_on`
+   between agent-mcp task UUIDs and knows nothing of plan milestones. `orchestrator-core`
+   remains necessary.
+5. **Three real bugs in shipped packages** → new `client-fixes` milestone:
+   `getEligibleMilestones()` ignores milestone completion (only correct for wave 0);
+   `plan.spec.ts` silently bails on a stale `packages/shared/` path so it never validates
+   anything; `dispatch-client` re-exports optimizer surface (layering leak).
+6. **Algorithms are now data-gated.** New `optimizer-algorithms` milestone holds the
+   4-algorithm cascade with an explicit unblock condition: ≥3 real cycles of
+   `tokens_actual` showing greedy leaves >15% savings vs the recorded naive baseline.
+   `optimize()` ships as a greedy packer (kind-family partition, ki-ascending fill,
+   hard window constraint, naive-baseline emission).
+7. **Stale paths fixed throughout** — all op file targets and read_only paths updated
+   from removed `packages/shared/` / `packages/node-tools/` to `packages/dispatch/`.
+
+**New critical path (5 work items, 2 already done):**
+`spec-types ✅ → spec-validate ✅ → client-fixes → optimizer-core (snapshot port +
+greedy) ∥ serializer-json ∥ agent-runner → orchestrator-core → tests-real-e2e`
+
+Everything else (`plugin-io`, `plugin-gitnexus`, `serializer-sqlite`, `tools-mcp`,
+`cli`, `tests-golden`, `tests-algorithms`, `optimizer-algorithms`, `backlog-fill`)
+is re-sequenced behind `tests-real-e2e` — build the proof first, enrich after.
+
 ## Key design decisions
 
 1. **Serialization adapter pattern** — `IDagSerializer` interface with factory functions
@@ -89,36 +128,39 @@ library ecosystem.
 ## Milestone graph
 
 ```
-foundation:         spec-types ──► spec-validate
+FAST PATH (to first real dispatch):
+
+  spec-types ✅ ──► spec-validate ✅
+                        │
+        ┌───────────────┼────────────────┐
+        │               │                │
+   client-core ✅   optimizer-core   agent-runner
+        │           (snapshot port      (IDispatchAgentRunner
+   client-fixes      + greedy packer)    over agent-mcp tools)
+        │               │                │
+   serializer-json      │                │
+        └───────────────┼────────────────┘
+                        │
+               orchestrator-core
+        (load → snapshot → greedy → fire → poll
+         → guard → record aggregate tokens)
+                        │
+             tests-real-e2e (8 scenarios,
+              S4 live-gated; value gate)
+
+DEFERRED TRACK (unblocked by tests-real-e2e):
+
+  plugin-io   plugin-gitnexus   serializer-sqlite   tools-mcp
+        └───────┬───────┘              │                │
+                │                     cli ◄─────────────┘
+     optimizer-algorithms              │
+     (data-gated: >15% greedy     tests-golden
+      shortfall over ≥3 cycles)        │
+                └──────────► tests-algorithms
                                        │
-client:                 ┌──────────────┤
-                        │              │
-                   client-core    optimizer-core
-                        │              │
-                   ┌────┤         ┌────┴────┐
-                   │    │         │         │
-          serializer-json |  plugin-io  plugin-gitnexus
-                   │    │         │         │
-tools+orch:   ┌────┤    │         └────┬────┘
-              │    │    │              │
-         tools-mcp │ serializer-sqlite │
-              │    │    │              │
-              │    └────┼──────────────┤
-              │         │     orchestrator-core
-              │         │              │
-cli:          └────┬────┘              │
-                   │                   │
-                 cli ◄─────────────────┘
-                   │
-hardening:    tests-golden
-                   │
-            tests-algorithms
-                   │
-              backlog-fill
-                   │
-            tests-real-e2e (8 scenarios)
-                   │
-          hardening-complete (guard-only terminal)
+                                 backlog-fill
+                                       │
+                            hardening-complete (terminal)
 ```
 
 ## Real-world E2E test coverage
@@ -130,7 +172,7 @@ hardening:    tests-golden
 | S1 | Cold start: empty directory → `dispatch init` | dag.json skeleton exists, validate passes, status shows 0/0 |
 | S2 | Author plan via DagClient (MCP tools simulation) | 3 milestones, 5 ops, 1 eligible, no orphans, no cycles |
 | S3 | Snapshot + optimize on authored plan | 1 DispatchUnit, prompt non-null, tokens_est > 0, snapshot deterministic |
-| S4 | Real dispatch via agent-mcp Haiku | LIVE-gated. Agent produces file, guard passes, dispatch_log appended, tokens tracked |
+| S4 | Real dispatch via agent-mcp Haiku | LIVE-gated. Agent produces file, guard passes, dispatch_log appended, tokens recorded from aggregate `TaskUsageReport.direct` (per-turn breakdown is not exposed by agent-mcp — no scenario may assert it) |
 | S5 | Second cycle: next milestone eligible | 2 dispatch_log entries, no replan injection (plan was complete), 3rd milestone now eligible |
 | S6 | Guard failure → correction injection | dispatch_log has warn note, correction milestone injected with triggered_by, pending-surfaced surfaced in open_questions |
 | S7 | Correction resolves → retry succeeds | Implementation retried + passes, terminal reached, 4+ dispatch_log entries, total tokens > 0 |
@@ -174,5 +216,5 @@ operations call `@adhd/dispatch-tools` MCP tools to author instance dag.json
 documents. Building and dispatching that meta-plan is the next layer —
 bootstrapping the system that plans itself.
 
-See `packages/shared/dispatch-spec/README.md` for the six design tenets that
+See `packages/dispatch/dispatch-spec/README.md` for the six design tenets that
 govern every package in this ecosystem.
