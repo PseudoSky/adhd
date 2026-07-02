@@ -71,14 +71,17 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
  * its migrations look "already applied" and are silently skipped.
  * Correct order: provider (1750*) → store (1782*) → policy (1782*).
  */
+// @adhd/agent-core-provider/drizzle
 const PROVIDER_MIGRATIONS = path.resolve(
   __dirname,
   '../../../agent-core-provider/drizzle'
 );
+// @adhd/agent-store-prompts/drizzle
 const REGISTRY_MIGRATIONS = path.resolve(
   __dirname,
   '../../../agent-store-prompts/drizzle'
 );
+// @adhd/agent-core-policy/drizzle
 const POLICY_MIGRATIONS = path.resolve(
   __dirname,
   '../../../agent-core-policy/drizzle'

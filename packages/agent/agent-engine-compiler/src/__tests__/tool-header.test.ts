@@ -45,6 +45,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
  * tool-header.test.ts lives at packages/agent/agent-engine-compiler/src/__tests__/
  * agent-store-tools drizzle lives at packages/agent/agent-store-tools/drizzle/
  */
+// @adhd/agent-store-tools/drizzle
 const TOOL_REGISTRY_MIGRATIONS = path.resolve(
   __dirname,
   '../../../agent-store-tools/drizzle'
