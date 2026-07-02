@@ -1,0 +1,100 @@
+import type { Logger } from 'pino';
+import type { ExtractionSession } from './extraction-session';
+
+// Output of generateSchemas() — domain schemas only, no middleware envelope
+export interface GeneratedSchemas {
+  metadata: { namespace: string; phase: string };
+  schemas: Record<
+    string,
+    {
+      input: Record<string, unknown>;
+      output: Record<string, unknown>;
+      // True when the source fn's first param is named `ctx` (filtered from
+      // `input.properties` by [inv:ctx-name-only], but still injected at dispatch).
+      hasCtx?: boolean;
+    }
+  >;
+}
+
+// Output of composeSchemas() — domain + middleware envelope merged
+// data: {} wrapper is ALWAYS present, even for zero-param functions
+export type ComposedSchemas = Record<
+  string,
+  {
+    input: Record<string, unknown>;
+    output: Record<string, unknown>;
+    // Carried through from GeneratedSchemas — see above. dispatch() injects ctx
+    // as the first arg whenever this is true, independent of session middleware.
+    hasCtx?: boolean;
+  }
+>;
+
+// Three mutually exclusive extraction modes
+export type ExportMode =
+  | { type: 'named' }
+  | { type: 'default' }
+  | { type: 'named-object'; name: string };
+
+// Options for generateSchemas()
+export interface GenerateSchemasOptions {
+  sourceFile: string; // absolute path to .ts source file
+  exportMode?: ExportMode; // default: { type: 'named' }
+  namespace?: string; // written to metadata (informational)
+  phase?: string; // written to metadata (informational)
+  tsconfig?: string; // absolute path to a tsconfig.json driving type resolution
+  // Optional per-run shared cache (createExtractionSession). When absent, a
+  // private session is created and disposed before returning.
+  session?: ExtractionSession;
+}
+
+// Plugin system — language-agnostic: files[] can contain any language
+export interface PluginInput {
+  packages: Array<{
+    id: string;
+    schemas: ComposedSchemas;
+    importPath: string;
+    fns?: Record<string, (...args: unknown[]) => unknown>;
+    createClient?: (envelope: Record<string, unknown>) => Promise<unknown>;
+  }>;
+  outputDir: string;
+  options: Record<string, unknown>;
+  /**
+   * Shared structured logger (pino). Built once by the CLI and threaded through
+   * the pipeline + plugins. Always targets stderr or a file — never stdout —
+   * so the MCP stdio JSON-RPC channel stays clean. Plugins should fall back to
+   * a default stderr logger when this is absent.
+   */
+  logger?: Logger;
+}
+
+export interface PluginOutput {
+  files: Array<{ path: string; content: string }>;
+  postCommands?: string[];
+}
+
+export interface RunInput extends PluginInput {
+  signal?: AbortSignal;
+}
+
+/** Source-language tags understood by apigen's routing layer. */
+export type PluginLanguage = 'ts' | 'py' | 'rust' | 'go' | 'java';
+
+export interface OutputPlugin {
+  id: string;
+  description: string;
+  /**
+   * The source language this plugin consumes.
+   *
+   * Used by the `serve` command to route each source file to the plugin(s)
+   * whose `language` matches its extension (`.ts`/`.tsx`/`.mts`/`.cts` → `'ts'`,
+   * `.py` → `'py'`, etc.).
+   *
+   * Defaults to `'ts'` when omitted for backward-compatibility with plugins
+   * authored before this field was introduced.  All first-party plugins
+   * explicitly declare `language: 'ts'`.
+   */
+  language?: PluginLanguage;
+  optionsSchema?: Record<string, unknown>;
+  generate(input: PluginInput): PluginOutput | Promise<PluginOutput>;
+  run?(input: RunInput): Promise<void>;
+}
