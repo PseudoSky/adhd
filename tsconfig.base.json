@@ -76,6 +76,9 @@
       "@adhd/apigen-base-schema": [
         "./packages/apigen/apigen-base-schema/src/index.ts"
       ],
+      "@adhd/apigen-base-types": [
+        "./packages/apigen/apigen-base-types/src/index.ts"
+      ],
       "@adhd/apigen-cli": [
         "./entrypoint/apigen-cli/src/index.ts"
       ],
@@ -147,6 +150,9 @@
       ],
       "@adhd/dispatch-base-spec": [
         "./packages/dispatch/dispatch-base-spec/src/index.ts"
+      ],
+      "@adhd/dispatch-base-types": [
+        "./packages/dispatch/dispatch-base-types/src/index.ts"
       ],
       "@adhd/dispatch-client": [
         "./packages/dispatch/dispatch-client/src/index.ts"
