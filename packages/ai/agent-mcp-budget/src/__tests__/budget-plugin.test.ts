@@ -1,9 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 // Import HookRegistry from @adhd/agent-mcp-types (not @adhd/agent-mcp) to avoid
 // a circular Nx build-graph dependency: agent-mcp-budget → agent-mcp → agent-mcp-budget.
-import { HookRegistry } from '@adhd/agent-mcp-types';
+import { HookRegistry } from '@adhd/agent-base-types';
 import { createPlugin, configSchema, pluginConfigSchema } from '../index.js';
-import type { ExecutionContext, PostToolCallPayload, PreToolCallPayload } from '@adhd/agent-mcp-types';
+import type {
+  ExecutionContext,
+  PostToolCallPayload,
+  PreToolCallPayload,
+} from '@adhd/agent-base-types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -474,7 +478,12 @@ describe('BudgetPlugin — task scope', () => {
         defaults: {
           scope: 'agent',
           caps: [
-            { field: 'tokens', maximum: 100_000, window: 'PT24H', scope: 'agent' },
+            {
+              field: 'tokens',
+              maximum: 100_000,
+              window: 'PT24H',
+              scope: 'agent',
+            },
           ],
         },
       }),
@@ -483,8 +492,16 @@ describe('BudgetPlugin — task scope', () => {
     const ctx = makeCtx();
 
     await hooks.emit('task:start', { executionContext: ctx, messages: [] });
-    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
-    await hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await hooks.emit('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
+    await hooks.enforce('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
 
     // 10K in-memory + 80K window = 90K < 100K → passes
     await hooks.emit('post:model_response', {
@@ -494,9 +511,17 @@ describe('BudgetPlugin — task scope', () => {
       tokenUsage: { inputTokens: 5_000, outputTokens: 5_000 },
     });
 
-    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await hooks.emit('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
     await expect(
-      hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] })
+      hooks.enforce('pre:model_request', {
+        executionContext: ctx,
+        messages: [],
+        tools: [],
+      })
     ).resolves.toBeUndefined();
   });
 
@@ -613,7 +638,9 @@ describe('per-agent overrides', () => {
     hooks = new HookRegistry();
   });
 
-  const capsCalls = (n: number) => ({ caps: [{ field: 'calls' as const, maximum: n }] });
+  const capsCalls = (n: number) => ({
+    caps: [{ field: 'calls' as const, maximum: n }],
+  });
 
   it('applies agent override when agent name matches', async () => {
     const plugin = createPlugin({
@@ -628,9 +655,9 @@ describe('per-agent overrides', () => {
 
     await runTaskTurns(hooks, ctx, [{ inputTokens: 10, outputTokens: 10 }]);
 
-    await expect(
-      enforcePreModel(hooks, ctx)
-    ).rejects.toMatchObject({ message: expect.stringContaining('calls') });
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      message: expect.stringContaining('calls'),
+    });
   });
 
   it('falls back to agent default for unknown agent', async () => {
@@ -649,9 +676,9 @@ describe('per-agent overrides', () => {
       { inputTokens: 10, outputTokens: 10 },
     ]);
 
-    await expect(
-      enforcePreModel(hooks, ctx)
-    ).rejects.toMatchObject({ message: expect.stringContaining('calls') });
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      message: expect.stringContaining('calls'),
+    });
   });
 
   it('flat config still works (backward compat)', async () => {
@@ -667,9 +694,9 @@ describe('per-agent overrides', () => {
       { inputTokens: 10, outputTokens: 10 },
     ]);
 
-    await expect(
-      enforcePreModel(hooks, ctx)
-    ).rejects.toMatchObject({ message: expect.stringContaining('calls') });
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      message: expect.stringContaining('calls'),
+    });
   });
 });
 
@@ -685,7 +712,10 @@ describe('per-provider overrides', () => {
       db: null,
       config: pluginConfigSchema.parse({
         defaults: { caps: [{ field: 'calls', maximum: 10 }] },
-        provider: { default: {}, overrides: { 'openai': { caps: [{ field: 'calls', maximum: 1 }] } } },
+        provider: {
+          default: {},
+          overrides: { openai: { caps: [{ field: 'calls', maximum: 1 }] } },
+        },
       }),
     });
     await plugin.install(hooks);
@@ -698,9 +728,9 @@ describe('per-provider overrides', () => {
 
     await runTaskTurns(hooks, ctx, [{ inputTokens: 10, outputTokens: 10 }]);
 
-    await expect(
-      enforcePreModel(hooks, ctx)
-    ).rejects.toMatchObject({ message: expect.stringContaining('calls') });
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      message: expect.stringContaining('calls'),
+    });
   });
 });
 
@@ -716,7 +746,15 @@ describe('per-tool overrides', () => {
       db: null,
       config: pluginConfigSchema.parse({
         defaults: {},
-        tool: { default: {}, overrides: { 'expensive_search': { caps: [{ field: 'toolCalls', maximum: 1 }], mode: 'warning' } } },
+        tool: {
+          default: {},
+          overrides: {
+            expensive_search: {
+              caps: [{ field: 'toolCalls', maximum: 1 }],
+              mode: 'warning',
+            },
+          },
+        },
       }),
     });
     await plugin.install(hooks);
@@ -745,7 +783,15 @@ describe('per-tool overrides', () => {
       db: null,
       config: pluginConfigSchema.parse({
         defaults: {},
-        tool: { default: {}, overrides: { 'blocked_tool': { caps: [{ field: 'toolCalls', maximum: 0 }], mode: 'block' } } },
+        tool: {
+          default: {},
+          overrides: {
+            blocked_tool: {
+              caps: [{ field: 'toolCalls', maximum: 0 }],
+              mode: 'block',
+            },
+          },
+        },
       }),
     });
     await plugin.install(hooks);
@@ -766,10 +812,22 @@ describe('per-tool overrides', () => {
       db: null,
       config: pluginConfigSchema.parse({
         defaults: {},
-        tool: { default: {}, overrides: { 'expensive_search': {
-          caps: [{ field: 'toolCalls', maximum: 0, mode: 'block',
-            message: 'Use the index-based search tool instead: search__query' }],
-        } } },
+        tool: {
+          default: {},
+          overrides: {
+            expensive_search: {
+              caps: [
+                {
+                  field: 'toolCalls',
+                  maximum: 0,
+                  mode: 'block',
+                  message:
+                    'Use the index-based search tool instead: search__query',
+                },
+              ],
+            },
+          },
+        },
       }),
     });
     await plugin.install(hooks);
@@ -790,10 +848,21 @@ describe('per-tool overrides', () => {
       db: null,
       config: pluginConfigSchema.parse({
         defaults: {},
-        tool: { default: {}, overrides: { 'expensive_search': {
-          caps: [{ field: 'toolCalls', maximum: 1, mode: 'warning',
-            message: 'Consider using a cheaper alternative' }],
-        } } },
+        tool: {
+          default: {},
+          overrides: {
+            expensive_search: {
+              caps: [
+                {
+                  field: 'toolCalls',
+                  maximum: 1,
+                  mode: 'warning',
+                  message: 'Consider using a cheaper alternative',
+                },
+              ],
+            },
+          },
+        },
       }),
     });
     await plugin.install(hooks);
@@ -821,8 +890,16 @@ describe('per-tool overrides', () => {
     const plugin = createPlugin({
       db: null,
       config: pluginConfigSchema.parse({
-        defaults: { caps: [{ field: 'calls', maximum: 0, mode: 'block',
-          message: 'Task-level model call limit reached' }] },
+        defaults: {
+          caps: [
+            {
+              field: 'calls',
+              maximum: 0,
+              mode: 'block',
+              message: 'Task-level model call limit reached',
+            },
+          ],
+        },
       }),
     });
     await plugin.install(hooks);
@@ -831,7 +908,11 @@ describe('per-tool overrides', () => {
     await hooks.emit('task:start', { executionContext: ctx, messages: [] });
 
     await expect(
-      hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] })
+      hooks.enforce('pre:model_request', {
+        executionContext: ctx,
+        messages: [],
+        tools: [],
+      })
     ).rejects.toMatchObject({
       isEnforcementError: true,
       message: 'Task-level model call limit reached',
@@ -842,10 +923,20 @@ describe('per-tool overrides', () => {
     const plugin = createPlugin({
       db: null,
       config: pluginConfigSchema.parse({
-        tool: { overrides: { 'read_file': {
-          caps: [{ field: 'responseSize', maximum: 50, mode: 'block',
-            message: 'File too large, use head -n 100 via shell' }],
-        } } },
+        tool: {
+          overrides: {
+            read_file: {
+              caps: [
+                {
+                  field: 'responseSize',
+                  maximum: 50,
+                  mode: 'block',
+                  message: 'File too large, use head -n 100 via shell',
+                },
+              ],
+            },
+          },
+        },
       }),
     });
     await plugin.install(hooks);
@@ -863,7 +954,9 @@ describe('per-tool overrides', () => {
 
     expect(payload.isError).toBe(true);
     expect(payload.result).toMatchObject({
-      content: [{ type: 'text', text: expect.stringContaining('File too large') }],
+      content: [
+        { type: 'text', text: expect.stringContaining('File too large') },
+      ],
     });
   });
 
@@ -871,13 +964,21 @@ describe('per-tool overrides', () => {
     const plugin = createPlugin({
       db: null,
       config: pluginConfigSchema.parse({
-        tool: { overrides: { 'read_file': {
-          caps: [{ field: 'responseSize', maximum: 30, mode: 'warning' }],
-        } } },
+        tool: {
+          overrides: {
+            read_file: {
+              caps: [{ field: 'responseSize', maximum: 30, mode: 'warning' }],
+            },
+          },
+        },
       }),
     });
     await plugin.install(hooks);
-    const result = { content: [{ type: 'text', text: 'hello world, this is a long file content' }] };
+    const result = {
+      content: [
+        { type: 'text', text: 'hello world, this is a long file content' },
+      ],
+    };
     const payload: PostToolCallPayload = {
       executionContext: makeCtx(),
       toolName: 'read_file',
@@ -890,7 +991,9 @@ describe('per-tool overrides', () => {
     await hooks.emit('transform:tool_result', payload);
 
     expect(payload.isError).toBe(false);
-    const text = (payload.result as any).content.map((c: any) => c.text).join('');
+    const text = (payload.result as any).content
+      .map((c: any) => c.text)
+      .join('');
     expect(text).toContain('[truncated');
     expect(text).toContain('limited to 30');
   });
@@ -899,9 +1002,13 @@ describe('per-tool overrides', () => {
     const plugin = createPlugin({
       db: null,
       config: pluginConfigSchema.parse({
-        tool: { overrides: { 'read_file': {
-          caps: [{ field: 'responseSize', maximum: 500 }],
-        } } },
+        tool: {
+          overrides: {
+            read_file: {
+              caps: [{ field: 'responseSize', maximum: 500 }],
+            },
+          },
+        },
       }),
     });
     await plugin.install(hooks);
@@ -952,7 +1059,12 @@ describe('maxTokensPer24h — mock DB', () => {
           scope: 'agent',
           caps: [
             { field: 'tokens', maximum: 1_000_000 },
-            { field: 'tokens', maximum: 200_000, window: 'PT24H', scope: 'agent' },
+            {
+              field: 'tokens',
+              maximum: 200_000,
+              window: 'PT24H',
+              scope: 'agent',
+            },
           ],
         },
       }),
@@ -961,8 +1073,16 @@ describe('maxTokensPer24h — mock DB', () => {
     const ctx = makeCtx();
 
     await hooks.emit('task:start', { executionContext: ctx, messages: [] });
-    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
-    await hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await hooks.emit('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
+    await hooks.enforce('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
 
     await hooks.emit('post:model_response', {
       executionContext: ctx,
@@ -971,9 +1091,17 @@ describe('maxTokensPer24h — mock DB', () => {
       tokenUsage: { inputTokens: 30_000, outputTokens: 30_000 },
     });
 
-    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await hooks.emit('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
     await expect(
-      hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] })
+      hooks.enforce('pre:model_request', {
+        executionContext: ctx,
+        messages: [],
+        tools: [],
+      })
     ).rejects.toMatchObject({
       message: expect.stringContaining('tokens'),
     });
@@ -997,7 +1125,12 @@ describe('maxTokensPer24h — mock DB', () => {
           scope: 'agent',
           caps: [
             { field: 'tokens', maximum: 1_000_000 },
-            { field: 'tokens', maximum: 200_000, window: 'PT24H', scope: 'agent' },
+            {
+              field: 'tokens',
+              maximum: 200_000,
+              window: 'PT24H',
+              scope: 'agent',
+            },
           ],
         },
       }),
@@ -1006,8 +1139,16 @@ describe('maxTokensPer24h — mock DB', () => {
     const ctx = makeCtx();
 
     await hooks.emit('task:start', { executionContext: ctx, messages: [] });
-    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
-    await hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await hooks.emit('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
+    await hooks.enforce('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
 
     await hooks.emit('post:model_response', {
       executionContext: ctx,
@@ -1016,9 +1157,17 @@ describe('maxTokensPer24h — mock DB', () => {
       tokenUsage: { inputTokens: 30_000, outputTokens: 30_000 },
     });
 
-    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await hooks.emit('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
     await expect(
-      hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] })
+      hooks.enforce('pre:model_request', {
+        executionContext: ctx,
+        messages: [],
+        tools: [],
+      })
     ).resolves.toBeUndefined();
   });
 });
@@ -1035,7 +1184,15 @@ describe('tool maxTotalTokens override', () => {
       db: null,
       config: pluginConfigSchema.parse({
         defaults: { caps: [{ field: 'tokens', maximum: 1_000_000 }] },
-        tool: { default: {}, overrides: { 'big_output': { caps: [{ field: 'tokens', maximum: 50 }], mode: 'block' } } },
+        tool: {
+          default: {},
+          overrides: {
+            big_output: {
+              caps: [{ field: 'tokens', maximum: 50 }],
+              mode: 'block',
+            },
+          },
+        },
       }),
     });
     await plugin.install(hooks);
@@ -1043,8 +1200,16 @@ describe('tool maxTotalTokens override', () => {
 
     await hooks.emit('task:start', { executionContext: ctx, messages: [] });
 
-    await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
-    await hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+    await hooks.emit('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
+    await hooks.enforce('pre:model_request', {
+      executionContext: ctx,
+      messages: [],
+      tools: [],
+    });
     await hooks.emit('post:model_response', {
       executionContext: ctx,
       stopReason: 'tool_calls',
@@ -1063,16 +1228,27 @@ describe('tool maxTotalTokens override', () => {
 
 // ── Helpers for new tests ───────────────────────────────────────────────────
 
-async function enforcePreModel(hooks: HookRegistry, ctx: ExecutionContext): Promise<void> {
-  await hooks.emit('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
-  await hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] });
+async function enforcePreModel(
+  hooks: HookRegistry,
+  ctx: ExecutionContext
+): Promise<void> {
+  await hooks.emit('pre:model_request', {
+    executionContext: ctx,
+    messages: [],
+    tools: [],
+  });
+  await hooks.enforce('pre:model_request', {
+    executionContext: ctx,
+    messages: [],
+    tools: [],
+  });
 }
 
 async function enforcePreTool(
   hooks: HookRegistry,
   ctx: ExecutionContext,
   toolName: string,
-  callId: string,
+  callId: string
 ): Promise<void> {
   const payload: PreToolCallPayload = {
     executionContext: ctx,
