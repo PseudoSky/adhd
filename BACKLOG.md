@@ -520,7 +520,55 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 
 **Status:** OPEN — deferred workspace-enablement milestone.
 
+## DEBT-WORKSPACE-TYPECHECK-001 — No `typecheck` target exists in the workspace, but dispatch-production dag.json guards invoke it
+
+**Discovered:** 2026-07-02, during dispatch-production execution verification.
+
+**Where:** docs/plan/dispatch-production/dag.json (multiple milestone guards); entire workspace (no typecheck target defined anywhere).
+
+**Problem:** Multiple milestone guard strings in docs/plan/dispatch-production/dag.json (at minimum client-core, optimizer-core, orchestrator-core) include `npx nx typecheck <project>`, but no project and no plugin defines a typecheck target anywhere — nx reports "Cannot find configuration for task <project>:typecheck" — the guards are unrunnable as literally written and will fail the moment an orchestrator executes them mechanically. Verification to date substituted `npx tsc -p <project>/tsconfig.lib.json --noEmit` (clean).
+
+**Fix direction:** Add a cached per-project typecheck target (tsc --noEmit against tsconfig.lib.json) to the dispatch packages — or a workspace-level inferred target — rather than editing guard strings; then prove each dag guard runs end-to-end.
+
+**Status:** OPEN — found 2026-07-02 by the optimizer-core verifier.
+
 ### DEBT-DISPATCH-006 — agent-mcp exposes no per-turn token usage on the MCP surface
 - **Where:** `packages/ai/agent-mcp/src/validation/usage.ts:84-108` — public shape is aggregate `TaskUsageReport.direct`; per-turn `MODEL_RESPONSE` events exist in the internal `task_events` table (`schema.ts:101-121`) but no tool exposes them.
 - **Impact:** dispatch `dispatch_log[].turns[]` is synthesized as a single aggregate entry; per-turn calibration (PoC SCOPE §C4) is not possible until agent-mcp grows a per-turn query. Not e2e-blocking.
 - **Status:** OPEN — candidate FEAT for agent-mcp (expose per-turn events via `usage_query`).
+
+### DEBT-DISPATCH-008 — dispatch-spec `Turn` lacks `model_calls` (dag agent-runner.1 drift)
+- **Where:** dispatch-spec, dispatch-orchestrator
+- **Description:** dag.json operation agent-runner.1 specifies usageToTurns emitting {input_tokens, output_tokens, model_calls}, but dispatch-spec's Turn is {turn, input_tokens, output_tokens, t} — no model_calls. dispatch-orchestrator ships a local exported SynthesizedTurn matching the dag verbatim rather than mislabeling it as Turn. Reconciliation (assigning turn index + t timestamp, deciding whether model_calls survives into DispatchLogEntry) belongs to the orchestrator-core milestone, which constructs DispatchLogEntry and whose guard covers dispatch-spec.
+- **Status:** OPEN — found 2026-07-02 by the agent-runner builder.
+
+### DEBT-DISPATCH-009 — dispatch-spec `SentinelRole` lacks `'solo'` (tests-real-e2e drift)
+- **Where:** dispatch-spec, tests-real-e2e.md
+- **Description:** tests-real-e2e.md scenario 3 asserts unit.sentinel_role === 'solo', but the shipped type is 'prewarm' | 'payload' only — a hard TS compile error when building DispatchUnit fixtures. Either extend the union or amend the scenario doc before the tests-real-e2e milestone executes.
+- **Status:** OPEN — found 2026-07-02 by the agent-runner builder.
+
+### DEBT-DISPATCH-010 — dispatch-spec `SnapshotOptimization` lacks `tokens_naive`
+- **Where:** dispatch-spec, optimizer-core.2
+- **Description:** optimizer-core.2 says to emit tokens_naive into the snapshot's optimization block, but SnapshotOptimization has no such field; dispatch-optimizer exports computeTokensNaive(snapshot, deps) instead (SCOPE.md §F4 formula, raw b_per_tier, Sentinel-Fanout scaling excluded, covered by a dedicated test). Add tokens_naive: number | null to dispatch-spec and wire optimize() to persist it.
+- **Status:** OPEN — found 2026-07-02 by the optimizer-core builder.
+
+### DEBT-DISPATCH-011 — dispatch-optimizer orphaned stub scaffolding from 1e63f8d
+- **Where:** src/lib/optimize/{bitmask-dp,hlfet,sentinel,simulated-annealing,tree-dp}.ts and src/lib/snapshot/{clone,eligibility,overlap,size-estimate,topology}.ts
+- **Description:** dead `return [] as X` stubs from commit 1e63f8d ("save before large refactor"), referenced by no dag.json operation (optimizer-algorithms.1 targets src/lib/algorithms/bitmask.ts, a different path). Wire them up or delete them during the optimizer-algorithms milestone.
+- **Status:** OPEN — found 2026-07-02 by the optimizer-core builder.
+- **Amended 2026-07-02 (verifier finding):** the same commit 1e63f8d also left src/lib/compiler.ts — a 2087-line near-duplicate of the PoC reference docs/plan/dispatch-optimizer/src/compiler.ts (differs only in import order/quote style), unreachable from the build (index.ts imports the flat snapshot.js/optimize.js, and nx build reports only 6 modules transformed). It imports node:fs, which would violate the package's platform constraints if ever wired in, and the build's 10 eslint warnings all live in these orphaned files. Delete compiler.ts alongside the stub dirs.
+
+### DEBT-DISPATCH-012 — DispatchUnit has no systemPrompt/prompt split — double token cost per dispatch
+- **Where:** DispatchUnit, AgentMcpRunner
+- **Description:** DispatchUnit carries only `prompt`, so AgentMcpRunner.ensureAgent bakes the full compiled prompt into the agent's static systemPrompt at agent_create AND the same text is resent as the per-task user-turn prompt on every fire(). Needs a compiled-prompt preamble/body split — an orchestrator-core / prompt-compiler design decision, not a runner fix.
+- **Status:** OPEN — found 2026-07-02 by the agent-runner builder.
+
+### DEBT-DISPATCH-013 — D-07 `eligible` semantics permit re-dispatch of complete milestones (spec-level BUG-DISPATCH-008)
+- **Where:** SCOPE.md D-07, dispatch-spec, dispatch-client, dispatch-optimizer
+- **Description:** SCOPE.md D-07 defines a snapshot milestone's `eligible` purely from its own `pending` field and upstream dependency statuses — never its own completion — so a complete milestone reads eligible: true forever. Same root cause as BUG-DISPATCH-008 (fixed client-side in 5e967a0). optimize() independently guards its candidate selection with status === 'pending' (documented in selectPackableMilestones). Promote own-completion into the spec'd eligible definition so every consumer inherits the guard instead of each reimplementing it.
+- **Status:** OPEN — found 2026-07-02 by the agent-runner builder.
+
+### DEBT-DISPATCH-014 — Latent Infinity in per-tier B/context-window resolution breaks JSON round-trip
+- **Where:** dispatch-optimizer src/lib/snapshot.ts:166, src/lib/optimize.ts:247
+- **Description:** resolveContextWindowPerTier and resolveContextWindow default to Number.POSITIVE_INFINITY when a model tier is absent from both the dag and deps. JSON.stringify(Infinity) serializes to null, so persisting such a snapshot would silently turn a number field into null, violating SnapshotOptimization.context_window_per_tier: Record<string, number>. Inert today: IOptimizerDeps.bPerTier/contextWindowPerTier are required and every real caller supplies all three ModelTier entries. Fix direction: reject absent tiers at snapshot() entry (validation error) or clamp to a documented finite sentinel, plus a JSON round-trip test.
+- **Status:** OPEN — found 2026-07-02 by the optimizer-core verifier.
