@@ -1,0 +1,13 @@
+{
+  "name": "@adhd/apigen-engine-conformance",
+  "version": "0.1.1",
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "typings": "./index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@adhd/apigen-python-env": "^0.1.0"
+  }
+}
