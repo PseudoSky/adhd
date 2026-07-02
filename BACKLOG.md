@@ -530,7 +530,7 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 
 **Fix direction:** Add a cached per-project typecheck target (tsc --noEmit against tsconfig.lib.json) to the dispatch packages — or a workspace-level inferred target — rather than editing guard strings; then prove each dag guard runs end-to-end.
 
-**Status:** OPEN — found 2026-07-02 by the optimizer-core verifier.
+**Status:** FIXED (2026-07-02) — cached typecheck targets added to the five dispatch packages; guard strings run as written.
 
 ### DEBT-DISPATCH-006 — agent-mcp exposes no per-turn token usage on the MCP surface
 - **Where:** `packages/ai/agent-mcp/src/validation/usage.ts:84-108` — public shape is aggregate `TaskUsageReport.direct`; per-turn `MODEL_RESPONSE` events exist in the internal `task_events` table (`schema.ts:101-121`) but no tool exposes them.
