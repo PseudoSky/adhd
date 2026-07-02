@@ -18,6 +18,11 @@ import type { PolicyEngine } from './policy.js';
 import type { TaskStore } from '../store/task-store.js';
 import type { SessionStore } from '../store/session-store.js';
 import { windowMessages } from '../store/session-store.js';
+import {
+  renderToolPromptDoc,
+  toNameOnlyTools,
+  type ToolAdvertisementMode,
+} from './tool-advertisement.js';
 
 // ── HITL (Human-in-the-Loop) support ─────────────────────────────────────────
 
@@ -156,6 +161,56 @@ export class Orchestrator {
 
       let finalContent = '';
 
+      // Gather available tools ONCE per task. The tool set is fixed for the
+      // lifetime of the per-task McpClientRegistry, and re-listing on every
+      // loop iteration cost one MCP `tools/list` round-trip per turn for
+      // identical results (provider-call-audit.md, opportunity #1).
+      const tools = await registry.listAllTools();
+
+      // Append the built-in HITL tool when the agent opts in AND the
+      // task is durable (non-ephemeral has a DB row for the resume token).
+      if (
+        executionContext.agentDefinition.allowHumanInput === true &&
+        !isEphemeral
+      ) {
+        tools.push(HITL_BUILTIN_TOOL_DEFINITION);
+      }
+
+      // Tool advertisement — "names" (default): slim name-only definitions go
+      // to the provider API while the full documentation (descriptions +
+      // parameter schemas) is prepended to the system message, where it forms
+      // a stable, provider-cacheable prefix instead of ~3k tokens of JSON
+      // schema re-sent every turn. "full" restores complete schema
+      // advertisement. claudecli always gets "full": it runs its own internal
+      // tool loop and never serializes tools to a chat-completions API.
+      const advertisementMode: ToolAdvertisementMode =
+        executionContext.agentDefinition.provider.type === 'claudecli'
+          ? 'full'
+          : (executionContext.agentDefinition.toolAdvertisement ?? 'names');
+      const advertisedTools =
+        advertisementMode === 'names' ? toNameOnlyTools(tools) : tools;
+      // Computed once so the derived system message is byte-identical across
+      // turns (prompt-cache stability). Never persisted — sessionStore history
+      // stays clean; this exists only on the wire.
+      const toolDocSystemMessage: Message | null = (() => {
+        if (advertisementMode !== 'names' || tools.length === 0) return null;
+        const doc = renderToolPromptDoc(tools);
+        const existing = currentMessages[0];
+        if (existing && existing.role === 'system') {
+          return {
+            ...existing,
+            content: `${doc}\n\n---\n\n${existing.content}`,
+          };
+        }
+        return {
+          id: generateId(),
+          sessionId: executionContext.sessionId,
+          role: 'system',
+          content: doc,
+          createdAt: nowIso(),
+        };
+      })();
+
       // Tool-use loop — break on "completed" stop reason, throw on cancellation/policy
       let looping = true;
       while (looping) {
@@ -172,18 +227,6 @@ export class Orchestrator {
           ),
         ]);
 
-        // Gather available tools from the registry
-        const tools = await registry.listAllTools();
-
-        // Append the built-in HITL tool when the agent opts in AND the
-        // task is durable (non-ephemeral has a DB row for the resume token).
-        if (
-          executionContext.agentDefinition.allowHumanInput === true &&
-          !isEphemeral
-        ) {
-          tools.push(HITL_BUILTIN_TOOL_DEFINITION);
-        }
-
         // Emit MODEL_REQUEST event
         taskStore.appendEvent({
           taskId,
@@ -191,6 +234,7 @@ export class Orchestrator {
           payload: {
             messageCount: currentMessages.length,
             toolCount: tools.length,
+            toolAdvertisement: advertisementMode,
           },
         });
 
@@ -228,13 +272,23 @@ export class Orchestrator {
         // Call the LLM provider
         let providerResponse;
         try {
-          const messagesToSend =
+          const baseMessages =
             contextLimit > 0
               ? windowMessages(currentMessages, contextLimit)
               : currentMessages;
+          // "names" mode: swap in the doc-carrying system message (derived,
+          // never persisted). windowMessages preserves the system message at
+          // index 0, so replacing/prepending here is stable across turns.
+          let messagesToSend = baseMessages;
+          if (toolDocSystemMessage) {
+            messagesToSend =
+              baseMessages[0]?.role === 'system'
+                ? [toolDocSystemMessage, ...baseMessages.slice(1)]
+                : [toolDocSystemMessage, ...baseMessages];
+          }
           providerResponse = await provider.chat({
             messages: messagesToSend,
-            tools: tools.length > 0 ? tools : undefined,
+            tools: advertisedTools.length > 0 ? advertisedTools : undefined,
             signal: composedSignal,
             // executeTool is used by providers (e.g. claudecli) that manage
             // their own internal tool loop. Standard providers (anthropic,
@@ -356,6 +410,9 @@ export class Orchestrator {
             outputTokens: providerResponse.usage?.outputTokens,
             cacheReadTokens: providerResponse.usage?.cacheReadTokens,
             cacheCreationTokens: providerResponse.usage?.cacheCreationTokens,
+            // Provider usage verbatim — ground truth for provider-specific
+            // fields the normalized view above doesn't carry.
+            rawUsage: providerResponse.rawUsage,
           },
         });
 

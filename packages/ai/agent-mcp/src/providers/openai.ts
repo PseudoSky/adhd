@@ -164,6 +164,7 @@ export class OpenAIProvider implements LLMProvider {
             return {
                 message,
                 stopReason: toolCalls.length > 0 ? "tool_calls" : "completed",
+                rawUsage: sdkUsage,
                 usage: sdkUsage
                     ? {
                         inputTokens: sdkUsage.prompt_tokens,

@@ -289,6 +289,7 @@ export class AnthropicProvider implements LLMProvider {
             return {
                 message,
                 stopReason: toolCalls.length > 0 ? "tool_calls" : "completed",
+                rawUsage: sdkUsage,
                 usage: {
                     inputTokens: sdkUsage.input_tokens,
                     outputTokens: sdkUsage.output_tokens,

@@ -160,14 +160,24 @@ agent-mcp sends every tool from every connected MCP server on every turn.
 
 ## 4. Opportunities
 
+> **Status update (2026-07-02):** #1, #2, and #3 are SHIPPED. `listAllTools()` is
+> hoisted out of the loop; MODEL_RESPONSE events carry the normalized per-turn
+> token fields plus `rawUsage` (the provider usage object verbatim); and tool
+> advertisement defaults to `"names"` — slim name-only definitions on the wire
+> with full documentation prepended to the system message as a cacheable prefix
+> (per-agent override: `toolAdvertisement: "full"`; claudecli always full). See
+> `engine/tool-advertisement.ts` and `__tests__/tool-advertisement.test.ts`
+> (includes negative control). Remaining: registry-backed tool docs (Plan 8).
+
 ### Immediate (low effort, high impact)
 
 1. **Pull `listAllTools()` out of the loop** — tools don't change mid-task. Call it
    once before the while-loop and reuse the array. Eliminates MCP `tools/list`
-   round-trips on every turn.
+   round-trips on every turn. **DONE.**
 
 2. **Add `inputTokens/outputTokens/cacheReadTokens/cacheCreationTokens` to
-   MODEL_RESPONSE payloads** — fix applied to source, pending build.
+   MODEL_RESPONSE payloads** — fix applied to source, pending build. **DONE, plus
+   `rawUsage` verbatim.**
 
 ### Medium (requires design)
 

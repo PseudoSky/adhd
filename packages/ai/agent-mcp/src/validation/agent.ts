@@ -206,6 +206,13 @@ export const agentDefinitionSchema = z.object({
    * Absent/undefined defaults to "prefix" at runtime.
    */
   sanitization: z.enum(['none', 'prefix', 'wrap']).optional(),
+  /**
+   * Tool advertisement mode — "names" (default at runtime when absent):
+   * name-only definitions to the provider API + full tool documentation
+   * prepended to the system message. "full": complete JSON-schema tool
+   * definitions on the wire. See engine/tool-advertisement.ts.
+   */
+  toolAdvertisement: z.enum(['names', 'full']).optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
