@@ -70,6 +70,9 @@
       "@adhd/agent-registry": [
         "./packages/ai/agent-registry/src/index.ts"
       ],
+      "@adhd/agent-store-prompts": [
+        "packages/agent/agent-store-prompts/src/index.ts"
+      ],
       "@adhd/agent-tool-registry": [
         "./packages/ai/agent-tool-registry/src/index.ts"
       ],
