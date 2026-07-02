@@ -49,6 +49,7 @@ import { resolveBody } from '../resolve/composition.js';
  * Path from packages/agent/agent-engine-compiler/src/__tests__/:
  *   ../../../agent-store-prompts/drizzle → packages/agent/agent-store-prompts/drizzle
  */
+// @adhd/agent-store-prompts/drizzle
 const REGISTRY_MIGRATIONS = path.resolve(
   new URL('../../../agent-store-prompts/drizzle', import.meta.url).pathname
 );

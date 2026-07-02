@@ -61,18 +61,22 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 // Migration paths — same ordering as compile-agent.test.ts (ascending timestamp).
 // provider (1750*) → registry (1782193*) → tool-registry (1782250*) → policy (1782256*)
+// @adhd/agent-core-provider/drizzle
 const PROVIDER_MIGRATIONS = path.resolve(
   __dirname,
   '../../../agent-core-provider/drizzle'
 );
+// @adhd/agent-store-prompts/drizzle
 const REGISTRY_MIGRATIONS = path.resolve(
   __dirname,
   '../../../agent-store-prompts/drizzle'
 );
+// @adhd/agent-store-tools/drizzle
 const TOOL_REGISTRY_MIGRATIONS = path.resolve(
   __dirname,
   '../../../agent-store-tools/drizzle'
 );
+// @adhd/agent-core-policy/drizzle
 const POLICY_MIGRATIONS = path.resolve(
   __dirname,
   '../../../agent-core-policy/drizzle'
