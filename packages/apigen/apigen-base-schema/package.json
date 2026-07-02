@@ -1,5 +1,5 @@
 {
-  "name": "@adhd/apigen-schema",
+  "name": "@adhd/apigen-base-schema",
   "version": "0.1.1",
   "main": "./index.js",
   "module": "./index.mjs",

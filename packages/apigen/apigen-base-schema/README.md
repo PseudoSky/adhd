@@ -1,4 +1,4 @@
-# @adhd/apigen-schema
+# @adhd/apigen-base-schema
 
 JSON Schema support for the apigen toolchain. Pure TypeScript (**platform: shared**).
 

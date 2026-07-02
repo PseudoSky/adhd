@@ -15,11 +15,11 @@ export const __apigen_pkg = '@adhd/apigen-schema';
  * A schema may declare a `type`, `properties`, and `required` list.
  */
 export interface ApigenSchema {
-  type?: string
-  properties?: Record<string, ApigenSchema>
-  required?: string[]
-  items?: ApigenSchema
-  [key: string]: unknown
+  type?: string;
+  properties?: Record<string, ApigenSchema>;
+  required?: string[];
+  items?: ApigenSchema;
+  [key: string]: unknown;
 }
 
 /**
@@ -34,11 +34,7 @@ export interface ApigenSchema {
  * isJsonSchema('string')           // false
  */
 export function isJsonSchema(value: unknown): value is ApigenSchema {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value)
-  )
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -47,10 +43,10 @@ export function isJsonSchema(value: unknown): value is ApigenSchema {
  * `required` field or when `value` is not a valid schema object.
  */
 export function requiredFields(schema: unknown): string[] {
-  if (!isJsonSchema(schema)) return []
-  const req = schema['required']
-  if (!Array.isArray(req)) return []
-  return req.filter((f): f is string => typeof f === 'string')
+  if (!isJsonSchema(schema)) return [];
+  const req = schema['required'];
+  if (!Array.isArray(req)) return [];
+  return req.filter((f): f is string => typeof f === 'string');
 }
 
 /**
@@ -58,7 +54,7 @@ export function requiredFields(schema: unknown): string[] {
  * Narrows to `string` so callers can compare without casting.
  */
 export function schemaType(schema: unknown): string | undefined {
-  if (!isJsonSchema(schema)) return undefined
-  const t = schema['type']
-  return typeof t === 'string' ? t : undefined
+  if (!isJsonSchema(schema)) return undefined;
+  const t = schema['type'];
+  return typeof t === 'string' ? t : undefined;
 }

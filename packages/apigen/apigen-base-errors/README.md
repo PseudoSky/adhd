@@ -1,4 +1,4 @@
-# @adhd/apigen-errors
+# @adhd/apigen-base-errors
 
 Canonical error model for apigen — one set of error codes mapped to each transport's status
 convention (HTTP, gRPC, CLI exit, MCP), plus streaming-error phase helpers. Pure TypeScript
@@ -9,10 +9,7 @@ Part of [apigen](../README.md).
 ## Public API
 
 ```ts
-import {
-  ERROR_CODES, HTTP_STATUS, GRPC_CODE, CLI_EXIT_CODE, MCP_ERROR_KIND, statusMaps,
-  ApiError, toStreamingError, isBeforeFirstChunk, isAfterFirstChunk,
-} from '@adhd/apigen-errors'
+import { ERROR_CODES, HTTP_STATUS, GRPC_CODE, CLI_EXIT_CODE, MCP_ERROR_KIND, statusMaps, ApiError, toStreamingError, isBeforeFirstChunk, isAfterFirstChunk } from '@adhd/apigen-base-errors';
 ```
 
 - **`ERROR_CODES` / `ApiErrorCode`** — the canonical code set.
