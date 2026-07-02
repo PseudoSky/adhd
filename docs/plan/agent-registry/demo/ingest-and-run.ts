@@ -44,22 +44,22 @@ import {
     AgentStore,
     ComponentStore,
     CompositionStore,
-} from '@adhd/agent-registry';
+} from '@adhd/agent-store-prompts';
 import {
     seed as seedToolRegistry,
     ToolStore,
     BindingStore,
     AgentToolStore,
-} from '@adhd/agent-tool-registry';
+} from '@adhd/agent-store-tools';
 import {
     seed as seedProvider,
     ModelStore,
-} from '@adhd/agent-provider';
+} from '@adhd/agent-core-provider';
 import {
     seed as seedPolicy,
     PolicyTemplateStore,
     AgentPolicyStore,
-} from '@adhd/agent-policy';
+} from '@adhd/agent-core-policy';
 import { compileAgent } from '@adhd/agent-compiler';
 
 // ── paths ──────────────────────────────────────────────────────────────────

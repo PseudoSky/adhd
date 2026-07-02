@@ -4,7 +4,7 @@ import {
   AgentToolStore,
   BindingStore,
   type ToolPlatformBinding,
-} from '@adhd/agent-tool-registry';
+} from '@adhd/agent-store-tools';
 
 // ──────────────────────────────────────────────
 // resolveTools — build the platform tools: header for an agent.

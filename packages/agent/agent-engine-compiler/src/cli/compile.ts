@@ -39,8 +39,8 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
-import { AgentStore } from '@adhd/agent-registry';
-import type { CompositionContext } from '@adhd/agent-registry';
+import { AgentStore } from '@adhd/agent-store-prompts';
+import type { CompositionContext } from '@adhd/agent-store-prompts';
 
 import { compileAgent } from '../compile.js';
 

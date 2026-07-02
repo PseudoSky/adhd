@@ -3,7 +3,7 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import {
   CompositionStore,
   type CompositionContext,
-} from '@adhd/agent-registry';
+} from '@adhd/agent-store-prompts';
 
 // ──────────────────────────────────────────────
 // resolveBody — assemble a flat prompt body in junction order.

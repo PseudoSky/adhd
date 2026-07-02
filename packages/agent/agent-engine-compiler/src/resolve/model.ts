@@ -1,7 +1,7 @@
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
-import { AgentStore } from '@adhd/agent-registry';
-import { ModelStore, ModelStoreError } from '@adhd/agent-provider';
+import { AgentStore } from '@adhd/agent-store-prompts';
+import { ModelStore, ModelStoreError } from '@adhd/agent-core-provider';
 
 // ──────────────────────────────────────────────
 // resolveModel — resolve an agent's model_hint to a platform-specific model id.

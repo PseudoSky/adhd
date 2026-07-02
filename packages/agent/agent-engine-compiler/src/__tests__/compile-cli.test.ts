@@ -54,13 +54,13 @@ import {
   ComponentStore,
   CompositionStore,
   TaxonomyStore,
-} from '@adhd/agent-registry';
+} from '@adhd/agent-store-prompts';
 import {
   seed as seedToolRegistry,
   AgentToolStore,
-} from '@adhd/agent-tool-registry';
-import { seed as seedProvider } from '@adhd/agent-provider';
-import { seed as seedPolicy, AgentPolicyStore } from '@adhd/agent-policy';
+} from '@adhd/agent-store-tools';
+import { seed as seedProvider } from '@adhd/agent-core-provider';
+import { seed as seedPolicy, AgentPolicyStore } from '@adhd/agent-core-policy';
 
 // ── constants ─────────────────────────────────────────────────────────────
 

@@ -8,7 +8,7 @@
  * Usage:
  *   import Database from 'better-sqlite3';
  *   import { drizzle } from 'drizzle-orm/better-sqlite3';
- *   import { runMigrationsOn } from '@adhd/agent-tool-registry';
+ *   import { runMigrationsOn } from '@adhd/agent-store-tools';
  *   import { seed } from '@adhd/agent-tool-registry/seed';
  *
  *   const sqlite = new Database('/path/to/registry.db');
