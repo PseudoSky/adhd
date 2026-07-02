@@ -40,9 +40,6 @@
       "@adhd/agent-base-types": [
         "./packages/agent/agent-base-types/src/index.ts"
       ],
-      "@adhd/agent-compiler": [
-        "./packages/ai/agent-compiler/src/index.ts"
-      ],
       "@adhd/agent-core-policy": [
         "./packages/agent/agent-core-policy/src/index.ts"
       ],
@@ -58,38 +55,17 @@
       "@adhd/agent-mcp": [
         "./packages/ai/agent-mcp/src/index.ts"
       ],
-      "@adhd/agent-mcp-budget": [
-        "./packages/ai/agent-mcp-budget/src/index.ts"
-      ],
-      "@adhd/agent-mcp-sanitize": [
-        "./packages/ai/agent-mcp-sanitize/src/index.ts"
-      ],
-      "@adhd/agent-nx": [
-        "./packages/ai/agent-nx/src/index.ts"
-      ],
       "@adhd/agent-plugin-budget": [
         "./packages/agent/agent-plugin-budget/src/index.ts"
       ],
       "@adhd/agent-plugin-sanitize": [
         "./packages/agent/agent-plugin-sanitize/src/index.ts"
       ],
-      "@adhd/agent-policy": [
-        "./packages/ai/agent-policy/src/index.ts"
-      ],
-      "@adhd/agent-provider": [
-        "./packages/ai/agent-provider/src/index.ts"
-      ],
-      "@adhd/agent-registry": [
-        "./packages/ai/agent-registry/src/index.ts"
-      ],
       "@adhd/agent-store-prompts": [
         "./packages/agent/agent-store-prompts/src/index.ts"
       ],
       "@adhd/agent-store-tools": [
         "./packages/agent/agent-store-tools/src/index.ts"
-      ],
-      "@adhd/agent-tool-registry": [
-        "./packages/ai/agent-tool-registry/src/index.ts"
       ],
       "@adhd/apigen-cli": [
         "./packages/apigen/cli/src/index.ts"
@@ -150,6 +126,9 @@
       ],
       "@adhd/apigen-plugin-py-grpc": [
         "./packages/apigen/plugins/py-grpc/src/index.ts"
+      ],
+      "@adhd/apigen-python-env": [
+        "./packages/apigen/python-env/src/index.ts"
       ],
       "@adhd/apigen-runtime": [
         "./packages/apigen/runtime/src/index.ts"

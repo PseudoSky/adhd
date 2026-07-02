@@ -10,7 +10,7 @@ import { ModelStore } from '../store/model-store.js';
 // ──────────────────────────────────────────────────────────────────────────────
 // ProviderAdapter — thin implementation
 //
-// The class IMPLEMENTS `ProviderAdapter` (from @adhd/agent-mcp-types) — it
+// The class IMPLEMENTS `ProviderAdapter` (from @adhd/agent-base-types) — it
 // does NOT re-declare the interface here.  Dependency direction:
 //   agent-mcp-types ← agent-provider ← agent-mcp
 //

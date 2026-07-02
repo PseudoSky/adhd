@@ -28,7 +28,7 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "optionalDependencies": {
-    "@adhd/agent-compiler": "0.0.1"
+    "@adhd/agent-engine-compiler": "0.0.1"
   },
   "dependencies": {
     "@adhd/agent-base-types": "2.0.0",

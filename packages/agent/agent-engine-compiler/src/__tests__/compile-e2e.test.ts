@@ -1,5 +1,5 @@
 /**
- * compile-e2e.test.ts — convergence proof for @adhd/agent-compiler
+ * compile-e2e.test.ts — convergence proof for @adhd/agent-engine-compiler
  *
  * Drives compileAgent against a REAL on-disk SQLite DB seeded via the upstream
  * packages' seed + store APIs — never :memory:, never mocks

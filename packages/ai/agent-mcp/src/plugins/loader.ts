@@ -14,7 +14,7 @@
  *   {
  *     "plugins": [
  *       { "module": "@adhd/agent-mcp-metrics" },
- *       { "module": "@adhd/agent-mcp-budget", "config": { "maxUSD": 10 } }
+ *       { "module": "@adhd/agent-plugin-budget", "config": { "maxUSD": 10 } }
  *     ]
  *   }
  *

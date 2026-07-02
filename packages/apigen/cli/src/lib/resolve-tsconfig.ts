@@ -22,7 +22,16 @@ const BUILTIN_DEFAULT = {
  * (e.g. running from source under a test runner) we write {@link BUILTIN_DEFAULT}
  * to a temp file so callers always receive a real path.
  */
+/**
+ * Memoized result — the builtin default is immutable for the process lifetime,
+ * so resolve (and, in the temp-file fallback, write) it exactly once. Without
+ * this, every resolveTsconfig() call in a long-running serve/watch process
+ * sprayed a new never-cleaned mkdtemp dir into the OS temp directory.
+ */
+let _builtinTsconfigPath: string | undefined
+
 function builtinTsconfigPath(): string {
+  if (_builtinTsconfigPath) return _builtinTsconfigPath
   // `__dirname` is defined in the CJS bundle that backs the published bin.
   const dir = typeof __dirname !== 'undefined' ? __dirname : ''
   if (dir) {
@@ -32,7 +41,10 @@ function builtinTsconfigPath(): string {
       path.join(dir, '..', 'default-tsconfig.json'),
     ]
     for (const c of candidates) {
-      if (fs.existsSync(c)) return c
+      if (fs.existsSync(c)) {
+        _builtinTsconfigPath = c
+        return c
+      }
     }
   }
   const tmp = path.join(
@@ -40,6 +52,7 @@ function builtinTsconfigPath(): string {
     'tsconfig.json'
   )
   fs.writeFileSync(tmp, JSON.stringify(BUILTIN_DEFAULT, null, 2))
+  _builtinTsconfigPath = tmp
   return tmp
 }
 

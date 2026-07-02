@@ -1,11 +1,33 @@
 import type { MiddlewareDef, MiddlewareEvent } from './types'
 
-export class EventBus {
-  private handlers: Map<string, Array<(event: MiddlewareEvent) => void | Promise<void>>> = new Map()
+type EventHandler = (event: MiddlewareEvent) => void | Promise<void>
 
-  on(selector: string, handler: (event: MiddlewareEvent) => void | Promise<void>): void {
+export class EventBus {
+  private handlers: Map<string, EventHandler[]> = new Map()
+
+  /**
+   * Register a handler. Returns an unsubscribe function — handlers registered
+   * per-request/per-package MUST be removed (via the returned fn, {@link off},
+   * or {@link clear}) or they accumulate for the bus's lifetime.
+   */
+  on(selector: string, handler: EventHandler): () => void {
     const existing = this.handlers.get(selector) ?? []
     this.handlers.set(selector, [...existing, handler])
+    return () => this.off(selector, handler)
+  }
+
+  /** Remove a previously registered handler (no-op if absent). */
+  off(selector: string, handler: EventHandler): void {
+    const existing = this.handlers.get(selector)
+    if (!existing) return
+    const next = existing.filter(h => h !== handler)
+    if (next.length === 0) this.handlers.delete(selector)
+    else this.handlers.set(selector, next)
+  }
+
+  /** Remove every handler — call on package/server teardown. */
+  clear(): void {
+    this.handlers.clear()
   }
 
   async emit(event: MiddlewareEvent): Promise<void> {

@@ -45,6 +45,8 @@ export type {
 
 export type { Logger } from 'pino'
 
+export { createExtractionSession, clearPersistentProjectCache } from './lib/extraction-session'
+export type { ExtractionSession, ISessionStats } from './lib/extraction-session'
 export { generateSchemas } from './lib/generate-schemas'
 export { composeSchemas } from './lib/compose-schemas'
 export { extract, tokenize } from './lib/extract'

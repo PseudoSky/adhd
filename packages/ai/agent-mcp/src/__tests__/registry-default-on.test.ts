@@ -156,9 +156,9 @@ describe("registry ON-by-default + graceful fallback [F-P6-11]", () => {
 
         // buildPromptResolver opens the file successfully (it exists) and the
         // compiler is available, so it returns a PromptResolverDeps.
-        // Dynamic import: @adhd/agent-compiler is optional in this package;
+        // Dynamic import: @adhd/agent-engine-compiler is optional in this package;
         // @nx/enforce-module-boundaries forbids static imports of lazy-loaded libs.
-        const { compileAgent } = await import("@adhd/agent-compiler");
+        const { compileAgent } = await import("@adhd/agent-engine-compiler");
         const resolver = buildPromptResolver({
             registryDbPath: emptyRegistryPath,
             agentMcpDb: dbAny,

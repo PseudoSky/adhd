@@ -1,7 +1,7 @@
 /**
  * enforcement-plugin.test.ts
  *
- * Drives the REAL HookRegistry from @adhd/agent-mcp-types (not a mock) with the
+ * Drives the REAL HookRegistry from @adhd/agent-base-types (not a mock) with the
  * RatePolicyPlugin from @adhd/agent-policy.  Proves:
  *   [enforcement-plugin.1] configSchema exported + valid
  *   [enforcement-plugin.2] createPlugin registers via hooks.registerEnforcement("pre:model_request")

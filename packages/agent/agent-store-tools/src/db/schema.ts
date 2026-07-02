@@ -115,7 +115,7 @@ export const toolPlatformBindingsTable = sqliteTable(
 // ([inv:lookup-not-enum] principle applies: seeded text value, never enum).
 // provided_tool_ids is a JSON array of canonical tool NAMES (logical references
 // to tools.name — [inv:no-cross-pkg-fk]: no FK on a JSON column; resolution is
-// a compile-time join in @adhd/agent-compiler).
+// a compile-time join in @adhd/agent-engine-compiler).
 // config_schema is a JSON-Schema object stored as text with mode:'json'.
 // Read by the compiler to build the mcpServers block when a binding has
 // requires_mcp = true.
@@ -143,7 +143,7 @@ export const mcpServersTable = sqliteTable('mcp_servers', {
 // [def:agent-tool-grant]: PK is (agent_slug, tool_name). agent_slug is a
 // LOGICAL key into the agent-registry package's `agents` table — it MUST NOT
 // be a SQLite FK ([inv:no-cross-pkg-fk]: there is no `agents` table in this
-// package; the linkage is resolved at compile time by @adhd/agent-compiler).
+// package; the linkage is resolved at compile time by @adhd/agent-engine-compiler).
 // tool_name → tools.name IS a real within-package FK.
 //
 // permission is a plain text column: full | read_only | restricted.

@@ -19,7 +19,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { execSync, spawnSync } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
+import { ensurePythonEnv } from '@adhd/apigen-python-env'
 
 import {
   LOGICAL_TYPE_VERSION,
@@ -594,7 +594,10 @@ export function runPythonMatrix(
     fs.writeFileSync(scriptFile, PYTHON_MATRIX_SCRIPT, 'utf-8')
     fs.writeFileSync(vectorsFile, JSON.stringify(vectors), 'utf-8')
 
-    const result = spawnSync('python3', [scriptFile, vectorsFile, pythonPkgDir], {
+    // Managed interpreter (venv provisioned from apigen-python's pyproject) —
+    // guarantees the >=3.11 runtime the package declares, never bare PATH python3.
+    const python = ensurePythonEnv().python
+    const result = spawnSync(python, [scriptFile, vectorsFile, pythonPkgDir], {
       cwd: workspaceRoot,
       timeout: 30_000,
       encoding: 'utf-8',
@@ -833,12 +836,24 @@ export function runConformanceMatrix(workspaceRoot: string): HostMatrixResult[] 
  *   0 = all hosts conformant
  *   1 = one or more failures
  */
+/** Walk up from `start` to the first ancestor containing nx.json (workspace root). */
+function findWorkspaceRoot(start: string): string {
+  let dir = start
+  for (let i = 0; i < 20; i++) {
+    if (fs.existsSync(path.join(dir, 'nx.json'))) return dir
+    const parent = path.dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return start
+}
+
 export function main(workspaceRootOverride?: string): void {
-  // Resolve workspace root: parent of packages/apigen/conformance/src/lib
-  const here = typeof __dirname !== 'undefined'
-    ? __dirname
-    : path.dirname(fileURLToPath(import.meta.url))
-  const workspaceRoot = workspaceRootOverride ?? path.resolve(here, '..', '..', '..', '..', '..')
+  // Resolve workspace root: walk up from this file (CJS) or cwd (ESM) to the
+  // first ancestor containing nx.json. `import.meta` cannot be used here — the
+  // package type-checks under module=commonjs, where TS rejects it (TS1343).
+  const start = typeof __dirname !== 'undefined' ? __dirname : process.cwd()
+  const workspaceRoot = workspaceRootOverride ?? findWorkspaceRoot(start)
 
   console.log(`\n${'─'.repeat(60)}`)
   console.log('  apigen-conformance gate')

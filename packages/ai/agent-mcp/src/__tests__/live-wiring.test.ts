@@ -2,7 +2,7 @@
  * live-wiring.test.ts — SEAM integration test for Plan 6 F-P6-8.
  *
  * Proves that the agentTool SEAM routes every `agent` tool call through
- * compileAgent from @adhd/agent-compiler when `promptResolver` is present in
+ * compileAgent from @adhd/agent-engine-compiler when `promptResolver` is present in
  * SessionDeps.  Drives the REAL `agentTool` (the same function that both
  * `agentTool` callsites in server.ts invoke) against a real on-disk SQLite
  * registry DB seeded with real rows — only the LLM provider boundary is NOT
@@ -65,10 +65,10 @@ import { seed as seedProvider } from "@adhd/agent-core-provider";
 import { seed as seedPolicy } from "@adhd/agent-core-policy";
 
 // ── Fixture seeder + real compileAgent (live production boundary under test) ──
-// Dynamic import required: @adhd/agent-compiler is an optional dep in this package
+// Dynamic import required: @adhd/agent-engine-compiler is an optional dep in this package
 // (lazily loaded via dynamic import in production index.ts);
 // @nx/enforce-module-boundaries forbids static imports of lazy-loaded libraries.
-const { seedFixtureAgent, compileAgent } = await import("@adhd/agent-compiler");
+const { seedFixtureAgent, compileAgent } = await import("@adhd/agent-engine-compiler");
 
 /** Slug of the seeded fixture agent — mirrors FIXTURE_AGENT_SLUG from fixtures.ts. */
 const FIXTURE_AGENT_SLUG = "api-design-reviewer-e2e";
