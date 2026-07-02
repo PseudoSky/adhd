@@ -76,6 +76,9 @@
       "@adhd/apigen-base-schema": [
         "packages/apigen/apigen-base-schema/src/index.ts"
       ],
+      "@adhd/apigen-cli": [
+        "entrypoint/apigen-cli/src/index.ts"
+      ],
       "@adhd/apigen-core-client": [
         "packages/apigen/apigen-core-client/src/index.ts"
       ],
