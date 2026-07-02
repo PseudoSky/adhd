@@ -1,0 +1,33 @@
+{
+  "name": "agent-plugin-sanitize",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/agent/agent-plugin-sanitize/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:logic", "platform:node"],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/agent/agent-plugin-sanitize",
+        "main": "packages/agent/agent-plugin-sanitize/src/index.ts",
+        "tsConfig": "packages/agent/agent-plugin-sanitize/tsconfig.lib.json",
+        "assets": ["packages/agent/agent-plugin-sanitize/*.md"]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": ["build", "test"]
+    }
+  }
+}

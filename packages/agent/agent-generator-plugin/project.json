@@ -1,0 +1,58 @@
+{
+  "name": "agent-generator-plugin",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/agent/agent-generator-plugin/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:logic", "platform:node"],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/agent/agent-generator-plugin",
+        "main": "packages/agent/agent-generator-plugin/src/index.ts",
+        "tsConfig": "packages/agent/agent-generator-plugin/tsconfig.lib.json",
+        "assets": [
+          "packages/agent/agent-generator-plugin/*.md",
+          {
+            "input": "packages/agent/agent-generator-plugin",
+            "glob": "generators.json",
+            "output": "."
+          },
+          {
+            "input": "packages/agent/agent-generator-plugin/src/generators",
+            "glob": "**/__files__/**/*",
+            "output": "./src/generators"
+          },
+          {
+            "input": "packages/agent/agent-generator-plugin/src/generators",
+            "glob": "**/schema.json",
+            "output": "./src/generators"
+          }
+        ]
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": ["{options.reportsDirectory}"],
+      "options": {
+        "configFile": "packages/agent/agent-generator-plugin/vite.config.ts",
+        "reportsDirectory": "../../../coverage/packages/agent/agent-generator-plugin"
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": ["build", "test"]
+    }
+  }
+}

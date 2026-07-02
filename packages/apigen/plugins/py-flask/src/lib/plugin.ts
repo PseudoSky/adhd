@@ -16,50 +16,19 @@
  *   apigen run --source my_api.py --type py-flask --opt port=8000 --opt namespace=myapi
  */
 
-import * as fs from 'node:fs'
-import * as path from 'node:path'
 import * as readline from 'node:readline'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import type { OutputPlugin, RunInput } from '@adhd/apigen-core'
+import { ensurePythonEnv } from '@adhd/apigen-python-env'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Resolve the directory containing the apigen Python package (`apigen_python/`).
- *
- * When running from the compiled source tree (`packages/apigen/plugins/py-flask/src/lib/`),
- * `__dirname` resolves correctly via four `..` steps to `packages/apigen/python`.
- *
- * When running inside the vite-bundled CLI (`dist/packages/apigen/cli/index.js`),
- * `__dirname` points at the bundle output dir, so the four-step path lands in
- * `dist/python` (does not exist). In that case we walk up from `__dirname`
- * looking for the first ancestor that contains `packages/apigen/python`.
- */
-function resolvePythonPkgDir(): string {
-  // Primary: source-relative path (works in direct source execution and tests).
-  const primary = path.resolve(__dirname, '..', '..', '..', '..', 'python')
-  if (fs.existsSync(path.join(primary, 'apigen_python'))) return primary
-
-  // Fallback: walk up from __dirname searching for `packages/apigen/python`.
-  let dir = __dirname
-  for (let i = 0; i < 20; i++) {
-    const candidate = path.join(dir, 'packages', 'apigen', 'python')
-    if (fs.existsSync(path.join(candidate, 'apigen_python'))) return candidate
-    const parent = path.dirname(dir)
-    if (parent === dir) break
-    dir = parent
-  }
-
-  // Last resort: return the primary candidate and let spawn fail with a clear
-  // message about the missing directory (better than a misleading ENOENT on
-  // the python3 executable itself).
-  return primary
-}
-
-/** The directory containing the Python apigen package sources. */
-const PYTHON_PKG_DIR = resolvePythonPkgDir()
+// Python package dir + interpreter resolution now lives in
+// @adhd/apigen-python-env (ensurePythonEnv) — the interpreter is a managed
+// venv provisioned from apigen-python's own pyproject.toml, so the spawned
+// server never depends on the ambient PATH python having grpcio installed.
 
 /**
  * Wait until the Python subprocess emits `{"ready":true}` on stdout
@@ -131,8 +100,12 @@ async function run(input: RunInput): Promise<void> {
     )
   }
 
+  // Provision (or reuse) the managed interpreter — deps come from
+  // apigen-python's own pyproject.toml, never the ambient PATH python.
+  const pyenv = ensurePythonEnv({})
+
   const proc = spawn(
-    'python3',
+    pyenv.python,
     [
       '-m', 'apigen_python.flask_server',
       '--module', modulePath,
@@ -141,8 +114,8 @@ async function run(input: RunInput): Promise<void> {
       '--port', String(port),
     ],
     {
-      cwd: PYTHON_PKG_DIR,
-      env: { ...process.env, PYTHONPATH: PYTHON_PKG_DIR },
+      cwd: pyenv.pythonPkgDir,
+      env: { ...process.env, PYTHONPATH: pyenv.pythonPkgDir },
       stdio: ['pipe', 'pipe', 'pipe'],
     },
   ) as ChildProcessWithoutNullStreams

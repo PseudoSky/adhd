@@ -1,5 +1,5 @@
-import { z } from "zod";
-import { agentDefinitionSchema } from "./agent.js";
+import { z } from 'zod';
+import { agentDefinitionSchema } from './agent.js';
 
 // ExecutionContext is constructed at runtime and threaded through the
 // orchestrator. It is never persisted directly.
@@ -33,4 +33,4 @@ export const executionContextSchema = z.object({
   inputs: z.record(z.string(), z.string()).optional(),
 });
 
-export type { ExecutionContext } from "@adhd/agent-mcp-types";
+export type { ExecutionContext } from '@adhd/agent-base-types';

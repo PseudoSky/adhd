@@ -60,5 +60,5 @@ export function createApiPackage<M extends readonly MiddlewareDef[]>(
     return buildContext(middlewares, envelope, bus)
   }
 
-  return { schemas, createClient }
+  return { schemas, createClient, dispose: () => bus.clear() }
 }
