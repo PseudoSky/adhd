@@ -488,6 +488,28 @@
         "docs/plan/dispatch-optimizer/SCOPE.md"
       ],
       "guard": "npx nx test dispatch-optimizer"
+    },
+    "stepwise-dispatch": {
+      "description": "Stepwise execution mode: dispatch a DispatchUnit one operation at a time, resetting model context between steps, with the agent emitting FORWARD CONTEXT that the runner threads into the next step. Motivation (measured, 2026-07-02): in a packed run every tool result rides along for all remaining turns (~1 + 0.1×(T−k) cost per token under caching); the spec-types 20k reference read was needed by 1 of 4 ops but was re-sent for ~10 turns. Stepwise pays the byte-stable prefix at ~0.1× per step (cross-task prefix caching measured live: 2,560 cached tokens on a fresh task) and drops step-local history entirely. CONTRACT: (a) DispatchUnit gains execution_mode: 'packed' | 'stepwise' (default 'packed'); (b) the stepwise runner appends a FORWARD CONTEXT instruction to each step prompt — the agent must end its completion report with a fenced JSON block { completed_op, artifacts: [{path, lines}], exports: [], decisions: [], warnings: [] } capped at 2,000 chars (runner truncates oversize + records a warn note); (c) the runner parses the block, persists it on the step's dispatch_log entry as forward_context, and injects it into the next step's prompt under 'PRIOR STEP CONTEXT'; (d) per-step tokens recorded from aggregate usage as usual. A/B EXPERIMENT (the point of this milestone): re-run the spec-types sandbox work order in both modes against the same agent (deepseek-flash-implementer), record sent/paid tokens per mode from agent-mcp task_events (per-turn inputTokens + rawUsage cache fields), assert artifact equivalence (same file set, tsc-clean both), and write the raw usage JSON to tmp/dispatch/stepwise-ab/. Success = stepwise total sent tokens strictly below the packed baseline AND forward context demonstrably threaded (step i prompt contains step i−1's forward_context). If stepwise does NOT win, record the negative result in the plan README — the crossover condition (per-step tool output large and step-local) is then encoded in the optimizer as a packing input rather than a default.",
+      "rationale": "This is the split-side of the merge-vs-split crossover the PoC SCOPE §A4 derives: caching reverses the always-merge heuristic (B_eff ≈ 0.1×B). dag.json ops already carry op-level depends_on and file targets, so op-granular dispatch needs no schema redesign — and independent ops (spec-types.2/.3) become parallelizable, applying the optimizer's DAG scheduling one level down. Agent-emitted forward context replaces implicit conversation memory with an explicit, bounded, persisted seam — auditable in dispatch_log rather than lost in a context window.",
+      "authored_by": "claude-fable-5-replan",
+      "pending": null,
+      "triggered_by": "stepwise-hypothesis-2026-07-02",
+      "phase": "tools-and-orchestrator",
+      "depends_on": [
+        "orchestrator-core",
+        "tests-real-e2e"
+      ],
+      "agent": "workflow:plan-orchestrator",
+      "model": "Sonnet",
+      "effort": "high",
+      "two_stage": false,
+      "read_only": [
+        "packages/ai/agent-mcp/docs/provider-call-audit.md",
+        "docs/plan/dispatch-optimizer/SCOPE.md",
+        "packages/dispatch/dispatch-spec/src/lib/types.ts"
+      ],
+      "guard": "npx nx test dispatch-orchestrator dispatch-spec"
     }
   },
   "operations": [
@@ -3430,6 +3452,136 @@
       },
       "guard": null,
       "ki_estimate": 400,
+      "ki_source": "estimate"
+    },
+    {
+      "id": "stepwise-dispatch.1",
+      "milestone": "stepwise-dispatch",
+      "depends_on": [
+        "orchestrator-core.1"
+      ],
+      "type": "generative",
+      "action": "modify-body",
+      "file": "packages/dispatch/dispatch-spec/src/lib/types.ts",
+      "symbol": "DispatchUnit",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "claude-fable-5-replan",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          {
+            "op": "add-field",
+            "target": "DispatchUnit.execution_mode",
+            "to": "'packed' | 'stepwise' — default 'packed'; stepwise dispatches one op per context-reset task",
+            "required": true
+          },
+          {
+            "op": "add-field",
+            "target": "DispatchLogEntry.forward_context",
+            "to": "ForwardContext | null — agent-emitted state summary parsed from the completion report (stepwise mode)",
+            "required": true
+          },
+          {
+            "op": "add-export",
+            "target": "ForwardContext",
+            "to": "interface { completed_op: string; artifacts: { path: string; lines: number }[]; exports: string[]; decisions: string[]; warnings: string[] }",
+            "required": true
+          }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 400,
+      "ki_source": "estimate"
+    },
+    {
+      "id": "stepwise-dispatch.2",
+      "milestone": "stepwise-dispatch",
+      "depends_on": [
+        "stepwise-dispatch.1"
+      ],
+      "type": "generative",
+      "action": "create",
+      "file": "packages/dispatch/dispatch-orchestrator/src/lib/stepwise.ts",
+      "symbol": "runStepwise",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "claude-fable-5-replan",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          {
+            "op": "add-export",
+            "target": "runStepwise",
+            "to": "function (unit: DispatchUnit, deps: { runner: IDispatchAgentRunner; client: IDagClient }): Promise<StepwiseResult> — per-op ephemeral dispatch loop: prompt = stable prefix + op spec + PRIOR STEP CONTEXT; parse trailing fenced-JSON forward context (cap 2000 chars, truncate + warn on oversize); persist forward_context per step; independent ops (op-level depends_on satisfied) MAY dispatch in parallel",
+            "required": true
+          },
+          {
+            "op": "add-export",
+            "target": "parseForwardContext",
+            "to": "function (report: string): { context: ForwardContext | null; warning: string | null } — pure, tested against malformed/oversize/missing blocks",
+            "required": true
+          }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 1500,
+      "ki_source": "estimate"
+    },
+    {
+      "id": "stepwise-dispatch.3",
+      "milestone": "stepwise-dispatch",
+      "depends_on": [
+        "stepwise-dispatch.2",
+        "tests-real-e2e.1"
+      ],
+      "type": "generative",
+      "action": "create",
+      "file": "tests/integration/stepwise-ab.ts",
+      "symbol": "stepwiseAbExperiment",
+      "provenance": "manual",
+      "confidence": "documented",
+      "audit_check": null,
+      "criteria": [],
+      "authored_by": "claude-fable-5-replan",
+      "status": "pending",
+      "shape": {
+        "kind": "script",
+        "ops": [
+          {
+            "op": "add-export",
+            "target": "A/B harness",
+            "to": "run the spec-types sandbox work order packed vs stepwise on the same agent; pull per-turn tokens from agent-mcp task_events (inputTokens + rawUsage cache fields); write raw JSON to tmp/dispatch/stepwise-ab/",
+            "required": true
+          },
+          {
+            "op": "add-export",
+            "target": "assertion: token win",
+            "to": "stepwise total sent tokens < packed baseline (hard assert; on failure the experiment records the negative result — see milestone description)",
+            "required": true
+          },
+          {
+            "op": "add-export",
+            "target": "assertion: threading",
+            "to": "step i prompt contains step i-1 forward_context JSON (proves the seam, goes red if threading breaks)",
+            "required": true
+          },
+          {
+            "op": "add-export",
+            "target": "assertion: artifact equivalence",
+            "to": "both modes produce the same file set and pass tsc; live-model gate documented per repo policy (paid third-party model)",
+            "required": true
+          }
+        ]
+      },
+      "guard": null,
+      "ki_estimate": 1800,
       "ki_source": "estimate"
     }
   ],
