@@ -42,10 +42,13 @@ model calls. `calibrate` *always* fires one real model call.
 
 **CLI caveat:** the apigen `cli-output` plugin emits boolean flags as
 presence-only (`--dry-run` sets `true`; there is no `--no-dry-run` negation),
-so the *generated* CLI can only ever request the safe default — it cannot
-reach `dryRun: false`. Reaching the real path today requires calling `run()`
-directly from TypeScript. See the cli milestone completion report
-(`docs/plan/dispatch-production`) for the tracked follow-up.
+so the apigen-*generated* CLI can only ever request the safe default — it
+cannot reach `dryRun: false`. `bin/cli.ts` (the hand-written fallback — see
+"Generate + run the CLI" above) uses Commander's native `--no-dry-run`
+negation instead, so it *does* reach the real path from the command line
+today — no TypeScript call-site needed — proven by `cli-smoke.spec.ts`'s
+`run --no-dry-run` test. See the cli milestone completion report
+(`docs/plan/dispatch-production`) for the tracked apigen-core follow-up.
 
 Neither path is exercised by this package's default-running tests, which
 call the DI'd `lib/core.ts` functions directly with an injected
@@ -60,3 +63,57 @@ Run `nx build dispatch-cli` to build the library.
 Run `nx test dispatch-cli` to execute the unit tests via [Vitest](https://vitest.dev/)
 — includes a default-running smoke test that generates the real CLI and
 spawns it as a child process.
+
+## Real end-to-end lifecycle test
+
+`src/test/integration/real-e2e.ts` is a self-executing `tsx` script (NOT a
+Vitest spec — it lives outside `src/**/*.{spec,test}.ts` on purpose, so `nx
+test dispatch-cli` never picks it up) that drives the FULL
+`docs/plan/dispatch-production` product lifecycle through real components:
+a real `DagClient` + `createJsonFileSerializer` writing an actual `dag.json`
+under `tmp/dispatch-cli/e2e/`, `@adhd/dispatch-optimizer`'s real
+`snapshot()`/`optimize()`, `@adhd/dispatch-orchestrator`'s real
+`orchestrateCycle()`, and this package's own `bin/cli.ts` spawned as a real
+child process for every CLI-facing assertion. Eight required scenarios run
+by default (cold start, author, snapshot+optimize, dispatch, a second cycle,
+a guard failure, its correction, and a simulated process-resume) —
+deterministic and free, using `MockAgentRunner` as the sole test double (the
+agent-mcp task-runner boundary). Run it with:
+
+```bash
+npx nx build dispatch-cli && npx tsx --tsconfig tsconfig.base.json \
+  packages/dispatch/dispatch-cli/src/test/integration/real-e2e.ts
+```
+
+It prints a per-scenario result table and exits 0 iff every required
+scenario passes.
+
+### Live e2e gate
+
+One additional, fully independent scenario is gated behind
+`DISPATCH_E2E_LIVE=1` and is **skipped by default** with a loud console
+notice. When enabled, it fires **one real, billed agent-mcp dispatch** (a
+`claudecli`-provider agent — i.e. whatever model the local `claude` CLI
+resolves to) through the real `AgentMcpRunner` (`npx -y @adhd/agent-mcp`),
+asks it to write a real file to disk, and verifies via a real shell guard
+(`test -f <file>`) that it did.
+
+This is the repo's single legitimate env-gate exception (CLAUDE.md §6,
+"Live testing is mandatory" — a real model is a paid third-party service).
+The gate is disclosed here, in the test file's own header, and in the
+repo-root `CLAUDE.md`:
+
+- **Gate:** `DISPATCH_E2E_LIVE=1`
+- **Approved by (named owner):** the repo owner/maintainer, git user
+  `pseudosky` (skywinstonsk@gmail.com)
+- **Cost/requirement:** real money/quota per run; requires local
+  `claude auth status` to already be configured (no API key needed —
+  `claudecli` drives the local Claude Code CLI directly, it is not gated on
+  an Anthropic API key)
+
+Run it explicitly with:
+
+```bash
+DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json \
+  packages/dispatch/dispatch-cli/src/test/integration/real-e2e.ts
+```
