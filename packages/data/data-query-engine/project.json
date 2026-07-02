@@ -1,7 +1,7 @@
 {
-  "name": "data-base-transforms",
+  "name": "data-query-engine",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/data/data-base-transforms/src",
+  "sourceRoot": "packages/data/data-query-engine/src",
   "projectType": "library",
   "release": {
     "version": {
@@ -11,16 +11,26 @@
       }
     }
   },
-  "tags": ["platform:shared", "layer:shared"],
+  "tags": [
+    "platform:shared",
+    "layer:data"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "dependsOn": [
+        "^build"
+      ],
       "options": {
-        "outputPath": "dist/packages/data/data-base-transforms",
-        "main": "packages/data/data-base-transforms/src/index.ts",
-        "tsConfig": "packages/data/data-base-transforms/tsconfig.lib.json",
-        "assets": ["packages/data/data-base-transforms/*.md"]
+        "outputPath": "dist/packages/data/data-query-engine",
+        "main": "packages/data/data-query-engine/src/index.ts",
+        "tsConfig": "packages/data/data-query-engine/tsconfig.lib.json",
+        "assets": [
+          "packages/data/data-query-engine/*.md"
+        ]
       }
     },
     "version": {
@@ -28,7 +38,7 @@
       "options": {
         "parallel": false,
         "commands": [
-          "scripts/version-packages.sh transform packages/data/data-base-transforms"
+          "scripts/version-packages.sh query packages/data/data-query-engine"
         ]
       }
     },
@@ -37,23 +47,28 @@
       "options": {
         "parallel": false,
         "commands": [
-          "scripts/version-packages.sh transform packages/data/data-base-transforms @adhd -prerelease"
+          "scripts/version-packages.sh query packages/data/data-query-engine @adhd -prerelease"
         ]
       }
     },
     "publish": {
+      "dependsOn": [
+        "^version"
+      ],
       "executor": "nx:run-commands",
       "options": {
         "parallel": false,
         "commands": [
           "echo 'Running npm publish dry run'",
-          "npm publish --dry-run dist/packages/data/data-base-transforms"
+          "npm publish --dry-run dist/packages/data/data-query-engine"
         ]
       },
       "configurations": {
         "production": {
           "parallel": false,
-          "commands": ["npm publish dist/packages/data/data-base-transforms"]
+          "commands": [
+            "npm publish dist/packages/data/data-query-engine"
+          ]
         }
       }
     },
