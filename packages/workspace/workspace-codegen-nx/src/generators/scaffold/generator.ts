@@ -61,7 +61,7 @@ export async function scaffoldGenerator(tree: Tree, schema: ScaffoldGeneratorSch
     name: projectName,
     directory: dir,
     importPath,
-    publishable: publish,
+    publishable: true,
     bundler: 'vite',
     skipFormat: true,
   });
@@ -101,6 +101,7 @@ export async function scaffoldGenerator(tree: Tree, schema: ScaffoldGeneratorSch
   patchReleasePublish(tree, projectRoot);
   ensureReadme(tree, projectRoot, projectName);
   patchEslintrc(tree, projectRoot);
+  patchTsconfigLib(tree, projectRoot);
 
   await formatFiles(tree);
 }
@@ -154,6 +155,16 @@ function patchEslintrc(tree: Tree, dir: string) {
   if (eslint.ignorePatterns && !eslint.ignorePatterns.some((p: string) => p.includes('vite.config'))) {
     eslint.ignorePatterns.push('vite.config.js', 'vite.config.ts', 'vite.config.mjs', 'vite.config.mts');
     writeJson(tree, eslintPath, eslint);
+  }
+}
+
+function patchTsconfigLib(tree: Tree, dir: string) {
+  const tsconfigLibPath = joinPathFragments(dir, 'tsconfig.lib.json');
+  if (!tree.exists(tsconfigLibPath)) return;
+  const tsconfigLib = readJson(tree, tsconfigLibPath);
+  if (tsconfigLib.exclude && !tsconfigLib.exclude.includes('src/test/**')) {
+    tsconfigLib.exclude.push('src/test/**');
+    writeJson(tree, tsconfigLibPath, tsconfigLib);
   }
 }
 
