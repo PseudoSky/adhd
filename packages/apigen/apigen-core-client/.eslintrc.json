@@ -3,7 +3,7 @@
   "ignorePatterns": [
     "!**/*",
     "vite.config.js",
-    "vite.config.ts",
+    "vite.config.*",
     "vite.config.mjs",
     "vite.config.mts"
   ],
