@@ -540,7 +540,7 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 ### DEBT-DISPATCH-008 — dispatch-spec `Turn` lacks `model_calls` (dag agent-runner.1 drift)
 - **Where:** dispatch-spec, dispatch-orchestrator
 - **Description:** dag.json operation agent-runner.1 specifies usageToTurns emitting {input_tokens, output_tokens, model_calls}, but dispatch-spec's Turn is {turn, input_tokens, output_tokens, t} — no model_calls. dispatch-orchestrator ships a local exported SynthesizedTurn matching the dag verbatim rather than mislabeling it as Turn. Reconciliation (assigning turn index + t timestamp, deciding whether model_calls survives into DispatchLogEntry) belongs to the orchestrator-core milestone, which constructs DispatchLogEntry and whose guard covers dispatch-spec.
-- **Status:** OPEN — found 2026-07-02 by the agent-runner builder.
+- **Status:** FIXED (2026-07-02) — Turn.model_calls shipped as an optional additive field in dispatch-spec (types.ts + validateDispatchLogTurns in validate.ts + 6 bidirectional tests); dispatch-orchestrator's reconcileTurns() maps SynthesizedTurn[] → Turn[] with 1-based turn index, injected-clock t, and model_calls carried through.
 
 ### DEBT-DISPATCH-009 — dispatch-spec `SentinelRole` lacks `'solo'` (tests-real-e2e drift)
 - **Where:** dispatch-spec, tests-real-e2e.md
@@ -572,3 +572,34 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 - **Where:** dispatch-optimizer src/lib/snapshot.ts:166, src/lib/optimize.ts:247
 - **Description:** resolveContextWindowPerTier and resolveContextWindow default to Number.POSITIVE_INFINITY when a model tier is absent from both the dag and deps. JSON.stringify(Infinity) serializes to null, so persisting such a snapshot would silently turn a number field into null, violating SnapshotOptimization.context_window_per_tier: Record<string, number>. Inert today: IOptimizerDeps.bPerTier/contextWindowPerTier are required and every real caller supplies all three ModelTier entries. Fix direction: reject absent tiers at snapshot() entry (validation error) or clamp to a documented finite sentinel, plus a JSON round-trip test.
 - **Status:** OPEN — found 2026-07-02 by the optimizer-core verifier.
+
+### DEBT-DISPATCH-015 — orchestrateCycle has no error boundary around runner/persist calls
+- **Where:** dispatch-orchestrator orchestrator.ts:457, 628, 629, 871
+- **Description:** runner.ensureAgent, runner.fire, runner.poll inside pollUntilTerminal, and client.saveDag are awaited with no try/catch, so a transport or disk failure mid-unit propagates uncaught out of orchestrateCycle and the failed unit leaves zero forensic trace in dispatch_log (prior units in the cycle are already persisted, so nothing is lost — but nothing is recorded either). Inconsistent with defaultGuardExec's deliberate never-rejects seam in the same file. Fix direction: per-unit try/catch that records a 'failed' result entry with an error note, plus an explicit continue-vs-abort policy knob.
+- **Status:** OPEN — found 2026-07-02 by the orchestrator-core verifier.
+
+### DEBT-DISPATCH-016 — Operation-level type:'automated'/action:'guard' is never routed by the orchestrator
+- **Where:** dispatch-orchestrator orchestrator.ts:651-664
+- **Description:** orchestrator.ts never reads op.guard, op.type, or op.action (grep-confirmed zero matches). The plan's sole instance (hardening-complete.1, dag.json:3269-3291) is masked because its milestone duplicates the identical guard string at milestone level (dag.json:415-431), which the orchestrator does execute. A future automated/guard operation without that duplication would be marked 'skipped' — via the tool-call-only branch, whose note text also mislabels such ops — and its verification command would silently never run. Fix direction: route op-level guards through the same GuardExecFn seam and correct the branch labeling.
+- **Status:** OPEN — found 2026-07-02 by the orchestrator-core verifier.
+
+### DEBT-DISPATCH-017 — capOutput can split a multi-byte UTF-8 character at the 8KB guard-output cap
+- **Where:** dispatch-orchestrator orchestrator.ts:256-260
+- **Description:** truncates by byte offset (buf.subarray(0, CAP)); a cut mid-character yields a replacement glyph at the boundary. Cosmetic only — no crash.
+- **Fix:** cut on a character boundary.
+- **Status:** OPEN — found 2026-07-02 by the orchestrator-core verifier.
+
+### DEBT-DISPATCH-018 — Formalize ICalibrationStore in dispatch-spec
+- **Where:** dispatch-spec, dispatch-orchestrator orchestrator.ts:124-137
+- **Description:** no ICalibrationStore export exists in @adhd/dispatch-spec (verified absent); dispatch-orchestrator ships a deliberate minimal ICalibrationPlaceholder per the orchestrator-core brief. The calibration milestone should define the real interface in dispatch-spec and replace the placeholder. Cold-start defaults (DEFAULT_B_PER_TIER etc.) are what feed the optimizer today.
+- **Status:** OPEN — found 2026-07-02 by the orchestrator-core verifier.
+
+### DEBT-DISPATCH-019 — DispatchLogEntry.provider enum predates real providers and is not enforced by validation
+- **Where:** dispatch-spec, dispatch-orchestrator orchestrator.ts:783-790, validate.ts
+- **Description:** the type-level enum ('anthropic'|'openai'|'deepseek'|'google'|'local') lacks agent-mcp's 'claudecli' (AgentMcpRunner records closest-fit 'anthropic', documented as a schema gap not paper-over) — and validate.ts does not enforce the enum at all (a 'teammate' value in the live dag.json passes 25/25 spec tests). Fix direction: extend the union with the real provider values ('claudecli', 'teammate', …) and decide whether validation should enforce it.
+- **Status:** OPEN — found 2026-07-02 by the orchestrator-core verifier.
+
+### DEBT-DISPATCH-020 — Replan injection is generic, not causally aware, and does not rewire downstream depends_on
+- **Where:** dispatch-orchestrator orchestrator.ts:489-568
+- **Description:** injectCorrectionMilestone re-fires the same agent/model/effort/guard with a natural-language fix instruction; it cannot target a truly at-fault upstream milestone (WORKFLOW.md's richer example needs plan-authoring judgment), and downstream milestones depending on the failed slug do not automatically pick up the correction. Guard-only milestones deliberately get a note instead of a correction (D-12 rationale, behaviorally tested). Fix direction: causally-aware replan as a dedicated milestone/plugin.
+- **Status:** OPEN — found 2026-07-02 by the orchestrator-core builder.
