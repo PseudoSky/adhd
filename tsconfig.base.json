@@ -68,67 +68,67 @@
         "./packages/agent/agent-store-tools/src/index.ts"
       ],
       "@adhd/apigen-base-errors": [
-        "packages/apigen/apigen-base-errors/src/index.ts"
+        "./packages/apigen/apigen-base-errors/src/index.ts"
       ],
       "@adhd/apigen-base-logical": [
-        "packages/apigen/apigen-base-logical/src/index.ts"
+        "./packages/apigen/apigen-base-logical/src/index.ts"
       ],
       "@adhd/apigen-base-schema": [
-        "packages/apigen/apigen-base-schema/src/index.ts"
+        "./packages/apigen/apigen-base-schema/src/index.ts"
       ],
       "@adhd/apigen-cli": [
-        "entrypoint/apigen-cli/src/index.ts"
+        "./entrypoint/apigen-cli/src/index.ts"
       ],
       "@adhd/apigen-core-client": [
-        "packages/apigen/apigen-core-client/src/index.ts"
+        "./packages/apigen/apigen-core-client/src/index.ts"
       ],
       "@adhd/apigen-engine-conformance": [
-        "packages/apigen/apigen-engine-conformance/src/index.ts"
+        "./packages/apigen/apigen-engine-conformance/src/index.ts"
       ],
       "@adhd/apigen-engine-gateway": [
-        "packages/apigen/apigen-engine-gateway/src/index.ts"
+        "./packages/apigen/apigen-engine-gateway/src/index.ts"
       ],
       "@adhd/apigen-engine-naming": [
-        "packages/apigen/apigen-engine-naming/src/index.ts"
+        "./packages/apigen/apigen-engine-naming/src/index.ts"
       ],
       "@adhd/apigen-engine-runtime": [
-        "packages/apigen/apigen-engine-runtime/src/index.ts"
+        "./packages/apigen/apigen-engine-runtime/src/index.ts"
       ],
       "@adhd/apigen-generator-nx": [
-        "packages/apigen/apigen-generator-nx/src/index.ts"
+        "./packages/apigen/apigen-generator-nx/src/index.ts"
       ],
       "@adhd/apigen-plugin-api-express": [
-        "./packages/apigen/plugins/api-express/src/index.ts"
+        "./packages/apigen/apigen-plugin-api-express/src/index.ts"
       ],
       "@adhd/apigen-plugin-api-fastify": [
-        "./packages/apigen/plugins/api-fastify/src/index.ts"
+        "./packages/apigen/apigen-plugin-api-fastify/src/index.ts"
       ],
       "@adhd/apigen-plugin-cli-output": [
-        "./packages/apigen/plugins/cli/src/index.ts"
+        "./packages/apigen/apigen-plugin-cli-output/src/index.ts"
       ],
       "@adhd/apigen-plugin-demo-plugin": [
         "./packages/apigen/plugins/demo-plugin/src/index.ts"
       ],
       "@adhd/apigen-plugin-health": [
-        "./packages/apigen/plugins/health/src/index.ts"
+        "./packages/apigen/apigen-plugin-health/src/index.ts"
       ],
       "@adhd/apigen-plugin-jsonschema": [
-        "./packages/apigen/plugins/jsonschema/src/index.ts"
+        "./packages/apigen/apigen-plugin-jsonschema/src/index.ts"
       ],
       "@adhd/apigen-plugin-logger": [
-        "./packages/apigen/plugins/logger/src/index.ts"
+        "./packages/apigen/apigen-plugin-logger/src/index.ts"
       ],
       "@adhd/apigen-plugin-mcp": [
-        "./packages/apigen/plugins/mcp/src/index.ts"
+        "./packages/apigen/apigen-plugin-mcp/src/index.ts"
       ],
       "@adhd/apigen-plugin-openapi": [
-        "./packages/apigen/plugins/openapi/src/index.ts"
+        "./packages/apigen/apigen-plugin-openapi/src/index.ts"
       ],
       "@adhd/apigen-plugin-py-flask": [
-        "./packages/apigen/plugins/py-flask/src/index.ts"
+        "./packages/apigen/apigen-plugin-py-flask/src/index.ts"
       ],
       "@adhd/apigen-plugin-py-grpc": [
-        "./packages/apigen/plugins/py-grpc/src/index.ts"
+        "./packages/apigen/apigen-plugin-py-grpc/src/index.ts"
       ],
       "@adhd/apigen-python-env": [
         "./packages/apigen/python-env/src/index.ts"
