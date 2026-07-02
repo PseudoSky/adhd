@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 // a circular Nx build-graph dependency: agent-mcp-budget → agent-mcp → agent-mcp-budget.
 import { HookRegistry } from '@adhd/agent-mcp-types';
 import { createPlugin, configSchema, pluginConfigSchema } from '../index.js';
-import type { ExecutionContext, PreToolCallPayload } from '@adhd/agent-mcp-types';
+import type { ExecutionContext, PostToolCallPayload, PreToolCallPayload } from '@adhd/agent-mcp-types';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -759,6 +759,166 @@ describe('per-tool overrides', () => {
       isEnforcementError: true,
       message: expect.stringContaining('blocked_tool'),
     });
+  });
+
+  it('custom cap message overrides default in block mode', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: {},
+        tool: { default: {}, overrides: { 'expensive_search': {
+          caps: [{ field: 'toolCalls', maximum: 0, mode: 'block',
+            message: 'Use the index-based search tool instead: search__query' }],
+        } } },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    await expect(
+      enforcePreTool(hooks, ctx, 'expensive_search', 'call-1')
+    ).rejects.toMatchObject({
+      isEnforcementError: true,
+      message: 'Use the index-based search tool instead: search__query',
+    });
+  });
+
+  it('custom cap message overrides default in warning mode', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: {},
+        tool: { default: {}, overrides: { 'expensive_search': {
+          caps: [{ field: 'toolCalls', maximum: 1, mode: 'warning',
+            message: 'Consider using a cheaper alternative' }],
+        } } },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    await enforcePreTool(hooks, ctx, 'expensive_search', 'call-1');
+
+    let caught: unknown;
+    try {
+      await enforcePreTool(hooks, ctx, 'expensive_search', 'call-2');
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toMatchObject({
+      isToolWarning: true,
+      toolName: 'expensive_search',
+      callId: 'call-2',
+      message: 'Consider using a cheaper alternative',
+    });
+  });
+
+  it('custom cap message on pre:model_request enforcement', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        defaults: { caps: [{ field: 'calls', maximum: 0, mode: 'block',
+          message: 'Task-level model call limit reached' }] },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+
+    await expect(
+      hooks.enforce('pre:model_request', { executionContext: ctx, messages: [], tools: [] })
+    ).rejects.toMatchObject({
+      isEnforcementError: true,
+      message: 'Task-level model call limit reached',
+    });
+  });
+
+  it('responseSize block mode replaces result with error', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        tool: { overrides: { 'read_file': {
+          caps: [{ field: 'responseSize', maximum: 50, mode: 'block',
+            message: 'File too large, use head -n 100 via shell' }],
+        } } },
+      }),
+    });
+    await plugin.install(hooks);
+    const result = { content: [{ type: 'text', text: 'x'.repeat(200) }] };
+    const payload: PostToolCallPayload = {
+      executionContext: makeCtx(),
+      toolName: 'read_file',
+      callId: 'call-1',
+      toolInput: {},
+      result,
+      isError: false,
+    };
+
+    await hooks.emit('transform:tool_result', payload);
+
+    expect(payload.isError).toBe(true);
+    expect(payload.result).toMatchObject({
+      content: [{ type: 'text', text: expect.stringContaining('File too large') }],
+    });
+  });
+
+  it('responseSize warning mode truncates result', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        tool: { overrides: { 'read_file': {
+          caps: [{ field: 'responseSize', maximum: 30, mode: 'warning' }],
+        } } },
+      }),
+    });
+    await plugin.install(hooks);
+    const result = { content: [{ type: 'text', text: 'hello world, this is a long file content' }] };
+    const payload: PostToolCallPayload = {
+      executionContext: makeCtx(),
+      toolName: 'read_file',
+      callId: 'call-1',
+      toolInput: {},
+      result,
+      isError: false,
+    };
+
+    await hooks.emit('transform:tool_result', payload);
+
+    expect(payload.isError).toBe(false);
+    const text = (payload.result as any).content.map((c: any) => c.text).join('');
+    expect(text).toContain('[truncated');
+    expect(text).toContain('limited to 30');
+  });
+
+  it('responseSize does not truncate when within limit', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: pluginConfigSchema.parse({
+        tool: { overrides: { 'read_file': {
+          caps: [{ field: 'responseSize', maximum: 500 }],
+        } } },
+      }),
+    });
+    await plugin.install(hooks);
+    const result = { content: [{ type: 'text', text: 'small file' }] };
+    const payload: PostToolCallPayload = {
+      executionContext: makeCtx(),
+      toolName: 'read_file',
+      callId: 'call-1',
+      toolInput: {},
+      result,
+      isError: false,
+    };
+
+    await hooks.emit('transform:tool_result', payload);
+
+    expect(payload.isError).toBe(false);
+    expect((payload.result as any).content[0].text).toBe('small file');
   });
 });
 

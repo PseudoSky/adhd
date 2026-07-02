@@ -3,7 +3,12 @@ import { z } from "zod";
 // McpServerConfig — matches standard MCP format (claude_desktop_config.json / .mcp.json)
 // Transport discriminator is at top level of each union member
 
-const mcpStdioConfigSchema = z.object({
+const toolFilterSchema = z.array(z.string()).optional();
+
+const transportOnly = <T extends z.ZodRawShape>(shape: T) =>
+  z.object({ ...shape, allowedTools: toolFilterSchema, disallowedTools: toolFilterSchema });
+
+const mcpStdioConfigSchema = transportOnly({
   transport: z.literal("stdio"),
   command: z.string(),
   args: z.array(z.string()).optional(),
@@ -11,14 +16,14 @@ const mcpStdioConfigSchema = z.object({
   timeoutMs: z.number().int().positive().optional(),
 });
 
-const mcpHttpConfigSchema = z.object({
+const mcpHttpConfigSchema = transportOnly({
   transport: z.literal("http"),
   url: z.string().url(),
   headers: z.record(z.string(), z.string()).optional(),
   timeoutMs: z.number().int().positive().optional(),
 });
 
-const mcpSseConfigSchema = z.object({
+const mcpSseConfigSchema = transportOnly({
   transport: z.literal("sse"),
   url: z.string().url(),
   headers: z.record(z.string(), z.string()).optional(),
