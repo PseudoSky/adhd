@@ -48,10 +48,7 @@ import {
   AgentToolStore,
 } from '@adhd/agent-tool-registry';
 import { seed as seedProvider } from '@adhd/agent-provider';
-import {
-  seed as seedPolicy,
-  AgentPolicyStore,
-} from '@adhd/agent-policy';
+import { seed as seedPolicy, AgentPolicyStore } from '@adhd/agent-policy';
 
 // Under test
 import { compileAgent } from '../compile.js';
@@ -76,16 +73,20 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
  * provider after the 1782* set would silently skip all its tables.
  */
 const PROVIDER_MIGRATIONS = path.resolve(
-  __dirname, '../../../agent-provider/drizzle'
+  __dirname,
+  '../../../agent-provider/drizzle'
 );
 const REGISTRY_MIGRATIONS = path.resolve(
-  __dirname, '../../../agent-registry/drizzle'
+  __dirname,
+  '../../../agent-registry/drizzle'
 );
 const TOOL_REGISTRY_MIGRATIONS = path.resolve(
-  __dirname, '../../../agent-tool-registry/drizzle'
+  __dirname,
+  '../../../agent-tool-registry/drizzle'
 );
 const POLICY_MIGRATIONS = path.resolve(
-  __dirname, '../../../agent-policy/drizzle'
+  __dirname,
+  '../../../agent-policy/drizzle'
 );
 
 interface OpenResult {
@@ -108,10 +109,10 @@ function openDb(dbPath: string): OpenResult {
   const db = drizzle(conn, { schema: {} as any });
   // Migrate in ascending timestamp order so Drizzle's journal bookkeeping
   // never skips a set.
-  migrate(db, { migrationsFolder: PROVIDER_MIGRATIONS    }); // 1750*
-  migrate(db, { migrationsFolder: REGISTRY_MIGRATIONS    }); // 1782193*–1782239*
+  migrate(db, { migrationsFolder: PROVIDER_MIGRATIONS }); // 1750*
+  migrate(db, { migrationsFolder: REGISTRY_MIGRATIONS }); // 1782193*–1782239*
   migrate(db, { migrationsFolder: TOOL_REGISTRY_MIGRATIONS }); // 1782250*–1782252*
-  migrate(db, { migrationsFolder: POLICY_MIGRATIONS      }); // 1782256*–1782350*
+  migrate(db, { migrationsFolder: POLICY_MIGRATIONS }); // 1782256*–1782350*
   conn.pragma('foreign_keys = ON');
   return { conn, db };
 }
@@ -124,16 +125,18 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
   let conn: Database.Database;
 
   // Test slugs
-  const AGENT_SLUG    = 'compile-test-agent';
-  const COMP_INTRO    = 'compile-intro';
-  const COMP_BODY     = 'compile-body';
-  const COMP_SECURE   = 'compile-secure-criteria';
+  const AGENT_SLUG = 'compile-test-agent';
+  const COMP_INTRO = 'compile-intro';
+  const COMP_BODY = 'compile-body';
+  const COMP_SECURE = 'compile-secure-criteria';
   const CATEGORY_SLUG = 'compile-test-category';
-  const MODEL_HINT    = 'claude_opus_4_8';
+  const MODEL_HINT = 'claude_opus_4_8';
 
   beforeAll(() => {
     // Real on-disk tmp file — never :memory: ([inv:real-rows-not-mocks])
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-compiler-compile-agent-'));
+    tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-compiler-compile-agent-')
+    );
     dbPath = path.join(tmpDir, 'compile-agent.db');
 
     const { conn: c, db } = openDb(dbPath);
@@ -153,16 +156,19 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
     // ── 4. Seed taxonomy category ───────────────────────────────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const taxonomyStore = new TaxonomyStore(db as any);
-    taxonomyStore.createCategory({ slug: CATEGORY_SLUG, name: 'Compile Test Category' });
+    taxonomyStore.createCategory({
+      slug: CATEGORY_SLUG,
+      name: 'Compile Test Category',
+    });
 
     // ── 5. Seed agent with model_hint ───────────────────────────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const agentStore = new AgentStore(db as any);
     agentStore.create({
-      slug:             AGENT_SLUG,
-      displayName:      'Compile Test Agent',
-      description:      'An agent used to test compileAgent end-to-end.',
-      modelHint:        MODEL_HINT,
+      slug: AGENT_SLUG,
+      displayName: 'Compile Test Agent',
+      description: 'An agent used to test compileAgent end-to-end.',
+      modelHint: MODEL_HINT,
       taxonomyCategory: CATEGORY_SLUG,
     });
 
@@ -170,27 +176,27 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const componentStore = new ComponentStore(db as any);
     componentStore.upsertType({
-      slug:        'system',
+      slug: 'system',
       description: 'System prompt section',
-      isSystem:    true,
+      isSystem: true,
     });
 
     const intro = componentStore.create({
-      slug:        COMP_INTRO,
-      type:        'system',
-      content:     '# Agent Overview\n\nThis agent reviews code.',
+      slug: COMP_INTRO,
+      type: 'system',
+      content: '# Agent Overview\n\nThis agent reviews code.',
     });
 
     const body = componentStore.create({
-      slug:        COMP_BODY,
-      type:        'system',
-      content:     '## Core Behaviour\n\nAlways be helpful.',
+      slug: COMP_BODY,
+      type: 'system',
+      content: '## Core Behaviour\n\nAlways be helpful.',
     });
 
     const secure = componentStore.create({
-      slug:        COMP_SECURE,
-      type:        'system',
-      content:     '## Security Criteria\n\nApply security checks.',
+      slug: COMP_SECURE,
+      type: 'system',
+      content: '## Security Criteria\n\nApply security checks.',
     });
 
     // ── 7. Wire agent → components via CompositionStore.attach ─────────────
@@ -205,21 +211,21 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
     const compositionStore = new CompositionStore(db as any);
 
     compositionStore.attach({
-      agentSlug:      AGENT_SLUG,
-      componentSlug:  COMP_INTRO,
-      position:       1,
+      agentSlug: AGENT_SLUG,
+      componentSlug: COMP_INTRO,
+      position: 1,
     });
 
     compositionStore.attach({
-      agentSlug:      AGENT_SLUG,
-      componentSlug:  COMP_BODY,
-      position:       2,
+      agentSlug: AGENT_SLUG,
+      componentSlug: COMP_BODY,
+      position: 2,
     });
 
     compositionStore.attach({
-      agentSlug:       AGENT_SLUG,
-      componentSlug:   COMP_SECURE,
-      position:        3,
+      agentSlug: AGENT_SLUG,
+      componentSlug: COMP_SECURE,
+      position: 3,
       contextCondition: JSON.stringify({ ticket_type: 'security' }),
     });
 
@@ -228,13 +234,21 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
     // web_search → WebSearch (claude_code) / web_search (claude_api)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const agentToolStore = new AgentToolStore(db as any);
-    agentToolStore.grant({ agentSlug: AGENT_SLUG, toolName: 'file_read',  permission: 'full'      });
-    agentToolStore.grant({ agentSlug: AGENT_SLUG, toolName: 'web_search', permission: 'full'      });
+    agentToolStore.grant({
+      agentSlug: AGENT_SLUG,
+      toolName: 'file_read',
+      permission: 'full',
+    });
+    agentToolStore.grant({
+      agentSlug: AGENT_SLUG,
+      toolName: 'web_search',
+      permission: 'full',
+    });
 
     // ── 9. Attach policy constraint to the agent ────────────────────────────
     const agentPolicyStore = new AgentPolicyStore(db);
     agentPolicyStore.attach({
-      agentSlug:  AGENT_SLUG,
+      agentSlug: AGENT_SLUG,
       policySlug: 'no-credentials',
     });
 
@@ -243,11 +257,31 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
   });
 
   afterAll(() => {
-    try { conn.close(); } catch { /* already closed */ }
-    try { fs.unlinkSync(dbPath);            } catch { /* ignore */ }
-    try { fs.unlinkSync(`${dbPath}-wal`);   } catch { /* ignore */ }
-    try { fs.unlinkSync(`${dbPath}-shm`);   } catch { /* ignore */ }
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      conn.close();
+    } catch {
+      /* already closed */
+    }
+    try {
+      fs.unlinkSync(dbPath);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(`${dbPath}-wal`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(`${dbPath}-shm`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   });
 
   // ── [platform-markdown-emit.1] compileAgent entrypoint exported ───────────
@@ -267,7 +301,11 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db,
+      });
 
       // CLI stdout invariant: frontmatter artifact STARTS with '---'
       // ([inv:platform-shaped-observable], Decision B.1)
@@ -283,11 +321,15 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db,
+      });
 
       // Extract the tools: line from the frontmatter block.
       const lines = result.content.split('\n');
-      const toolsLine = lines.find(l => l.startsWith('tools:'));
+      const toolsLine = lines.find((l) => l.startsWith('tools:'));
       expect(toolsLine).toBeDefined();
 
       // Aliases must be PascalCase claude_code names.
@@ -305,10 +347,14 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db,
+      });
 
       const lines = result.content.split('\n');
-      const modelLine = lines.find(l => l.startsWith('model:'));
+      const modelLine = lines.find((l) => l.startsWith('model:'));
       expect(modelLine).toBeDefined();
       // claude_code alias for claude_opus_4_8 is 'opus' (SEED_DATA.md §7).
       expect(modelLine).toBe('model: opus');
@@ -320,11 +366,17 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db,
+      });
 
       const lines = result.content.split('\n');
-      expect(lines.find(l => l.startsWith('name:'))).toBe(`name: ${AGENT_SLUG}`);
-      expect(lines.find(l => l.startsWith('description:'))).toBeDefined();
+      expect(lines.find((l) => l.startsWith('name:'))).toBe(
+        `name: ${AGENT_SLUG}`
+      );
+      expect(lines.find((l) => l.startsWith('description:'))).toBeDefined();
 
       conn.close();
     });
@@ -334,11 +386,15 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       conn = c;
 
       // Context without ticket_type → only intro + body sections included.
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db,
+      });
 
       // Intro must appear before body content in the artifact.
-      const introIdx  = result.content.indexOf('# Agent Overview');
-      const bodyIdx   = result.content.indexOf('## Core Behaviour');
+      const introIdx = result.content.indexOf('# Agent Overview');
+      const bodyIdx = result.content.indexOf('## Core Behaviour');
       expect(introIdx).toBeGreaterThan(-1);
       expect(bodyIdx).toBeGreaterThan(-1);
       // [def:junction-order]: intro (position=1) precedes body (position=2).
@@ -354,8 +410,8 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       // With context {ticket_type:"security"} → COMP_SECURE included.
       const result = compileAgent({
         agentSlug: AGENT_SLUG,
-        platform:  'claude_code',
-        context:   { ticket_type: 'security' },
+        platform: 'claude_code',
+        context: { ticket_type: 'security' },
         db,
       });
 
@@ -369,7 +425,11 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       conn = c;
 
       // No matching context → COMP_SECURE excluded.
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db,
+      });
       expect(result.content).not.toContain('## Security Criteria');
 
       conn.close();
@@ -381,7 +441,11 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db,
+      });
 
       // The no-credentials policy description must appear in content.
       // Template text matches /credential|leak/i (proven in model-policy.test.ts).
@@ -396,7 +460,11 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db,
+      });
 
       // tools[] is string[] for yaml_frontmatter platforms.
       expect(Array.isArray(result.tools)).toBe(true);
@@ -414,7 +482,11 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db,
+      });
 
       // componentVersions must record version for each included component.
       expect(result.componentVersions).toHaveProperty(COMP_INTRO);
@@ -430,7 +502,11 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db,
+      });
       // id is the registry_composed_prompts row id — positive integer after the
       // composed-prompt-caching state wired the cache write ([def:composed-output]).
       expect(typeof result.id).toBe('number');
@@ -443,7 +519,11 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db,
+      });
 
       // The intro section ends with its last line; next section starts after '\n\n'.
       // Verify the artifact has '\n\n' between the intro and body sections by
@@ -452,10 +532,13 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       // intro content ends with "This agent reviews code."
       // body content starts with "## Core Behaviour"
       // Decision B.1 mandates '\n\n' between them.
-      const introEnd  = result.content.indexOf('This agent reviews code.');
+      const introEnd = result.content.indexOf('This agent reviews code.');
       const bodyStart = result.content.indexOf('## Core Behaviour');
       // There must be at least 2 newlines between intro end and body start.
-      const between   = result.content.slice(introEnd + 'This agent reviews code.'.length, bodyStart);
+      const between = result.content.slice(
+        introEnd + 'This agent reviews code.'.length,
+        bodyStart
+      );
       expect(between).toContain('\n\n');
 
       conn.close();
@@ -469,7 +552,11 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_api', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_api',
+        db,
+      });
 
       // content must be parseable JSON (never YAML, no --- fence).
       expect(() => JSON.parse(result.content)).not.toThrow();
@@ -483,7 +570,11 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_api', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_api',
+        db,
+      });
       const parsed = JSON.parse(result.content) as Record<string, unknown>;
 
       expect(parsed).toHaveProperty('systemPrompt');
@@ -498,7 +589,11 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_api', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_api',
+        db,
+      });
       const parsed = JSON.parse(result.content) as Record<string, unknown>;
 
       // NEGATIVE-CONTROL: if tools were emitted as a comma string, this assertion
@@ -512,7 +607,11 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_api', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_api',
+        db,
+      });
       const parsed = JSON.parse(result.content) as Record<string, unknown>;
 
       // claude_api alias for claude_opus_4_8 is the full id (SEED_DATA.md §7).
@@ -525,7 +624,11 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_api', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_api',
+        db,
+      });
       const parsed = JSON.parse(result.content) as Record<string, unknown>;
       const sp = parsed['systemPrompt'] as string;
 
@@ -553,12 +656,20 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
     it('compiled content is identical across independent connections', () => {
       // First fresh connection.
       const { conn: c1, db: db1 } = openDb(dbPath);
-      const first = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db: db1 });
+      const first = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db: db1,
+      });
       c1.close();
 
       // Second independent connection from same file ([inv:reopen-proves-cache]).
       const { conn: c2, db: db2 } = openDb(dbPath);
-      const second = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db: db2 });
+      const second = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db: db2,
+      });
       conn = c2;
       c2.close();
 
@@ -577,7 +688,11 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db,
+      });
       const toolArr = result.tools as string[];
 
       // This is the canonical-name leak check: if resolveTools returned canonical

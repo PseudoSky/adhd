@@ -31,7 +31,11 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
-import { AgentStore, ComponentStore, CompositionStore } from '@adhd/agent-registry';
+import {
+  AgentStore,
+  ComponentStore,
+  CompositionStore,
+} from '@adhd/agent-registry';
 import { resolveBody } from '../resolve/composition.js';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -46,10 +50,7 @@ import { resolveBody } from '../resolve/composition.js';
  *   ../../../agent-registry/drizzle → packages/ai/agent-registry/drizzle
  */
 const REGISTRY_MIGRATIONS = path.resolve(
-  new URL(
-    '../../../agent-registry/drizzle',
-    import.meta.url
-  ).pathname
+  new URL('../../../agent-registry/drizzle', import.meta.url).pathname
 );
 
 interface OpenResult {
@@ -162,10 +163,26 @@ describe('resolveBody', () => {
 
   afterAll(() => {
     // Close before unlinking — avoids WAL teardown race
-    try { conn.close(); } catch { /* already closed */ }
-    try { fs.unlinkSync(dbPath); } catch { /* ignore */ }
-    try { fs.unlinkSync(`${dbPath}-wal`); } catch { /* ignore */ }
-    try { fs.unlinkSync(`${dbPath}-shm`); } catch { /* ignore */ }
+    try {
+      conn.close();
+    } catch {
+      /* already closed */
+    }
+    try {
+      fs.unlinkSync(dbPath);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(`${dbPath}-wal`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(`${dbPath}-shm`);
+    } catch {
+      /* ignore */
+    }
   });
 
   // ── [composition-resolve.1] + [composition-resolve.2] ─────────────────────
@@ -212,7 +229,9 @@ describe('resolveBody', () => {
       expect(result.body).toBe('INTRO TEXT\nBODY TEXT');
 
       // comp-secure must NOT appear in the version map.
-      expect(Object.keys(result.componentVersions)).not.toContain('comp-secure');
+      expect(Object.keys(result.componentVersions)).not.toContain(
+        'comp-secure'
+      );
       expect(result.componentVersions['comp-intro']).toBe(1);
       expect(result.componentVersions['comp-body']).toBe(1);
 

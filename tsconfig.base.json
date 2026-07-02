@@ -49,6 +49,9 @@
       "@adhd/agent-core-provider": [
         "packages/agent/agent-core-provider/src/index.ts"
       ],
+      "@adhd/agent-engine-compiler": [
+        "packages/agent/agent-engine-compiler/src/index.ts"
+      ],
       "@adhd/agent-mcp": [
         "./packages/ai/agent-mcp/src/index.ts"
       ],

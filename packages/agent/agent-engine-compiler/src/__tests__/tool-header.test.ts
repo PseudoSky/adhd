@@ -32,11 +32,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
-import {
-  AgentToolStore,
-  BindingStore,
-  seed,
-} from '@adhd/agent-tool-registry';
+import { AgentToolStore, BindingStore, seed } from '@adhd/agent-tool-registry';
 
 import { resolveTools } from '../resolve/tools.js';
 
@@ -91,7 +87,9 @@ describe('resolveTools — platform tools header', () => {
 
   beforeAll(() => {
     // Real on-disk tmp file — never :memory: ([inv:real-rows-not-mocks])
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-compiler-tool-header-'));
+    tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-compiler-tool-header-')
+    );
     dbPath = path.join(tmpDir, 'test-tool-header.db');
 
     const opened = openDb(dbPath);
@@ -106,23 +104,59 @@ describe('resolveTools — platform tools header', () => {
     // ── Grant tools to the test agent via AgentToolStore.grant() ────────────
     // Three grants: file_read, file_grep, web_search.
     // agent_slug is a logical reference — no agents table needed here.
-    opened.agentToolStore.grant({ agentSlug: 'test-agent', toolName: 'file_read',  permission: 'full'      });
-    opened.agentToolStore.grant({ agentSlug: 'test-agent', toolName: 'file_grep',  permission: 'read_only' });
-    opened.agentToolStore.grant({ agentSlug: 'test-agent', toolName: 'web_search', permission: 'full'      });
+    opened.agentToolStore.grant({
+      agentSlug: 'test-agent',
+      toolName: 'file_read',
+      permission: 'full',
+    });
+    opened.agentToolStore.grant({
+      agentSlug: 'test-agent',
+      toolName: 'file_grep',
+      permission: 'read_only',
+    });
+    opened.agentToolStore.grant({
+      agentSlug: 'test-agent',
+      toolName: 'web_search',
+      permission: 'full',
+    });
 
     // ── Also grant human_input to test the unavailable-drop on claude_api ───
-    opened.agentToolStore.grant({ agentSlug: 'test-agent', toolName: 'human_input', permission: 'full' });
+    opened.agentToolStore.grant({
+      agentSlug: 'test-agent',
+      toolName: 'human_input',
+      permission: 'full',
+    });
 
     // Close the write connection.  The tests below reopen to prove persistence.
     conn.close();
   });
 
   afterAll(() => {
-    try { conn.close(); } catch { /* already closed */ }
-    try { fs.unlinkSync(dbPath);           } catch { /* ignore */ }
-    try { fs.unlinkSync(`${dbPath}-wal`);  } catch { /* ignore */ }
-    try { fs.unlinkSync(`${dbPath}-shm`);  } catch { /* ignore */ }
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      conn.close();
+    } catch {
+      /* already closed */
+    }
+    try {
+      fs.unlinkSync(dbPath);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(`${dbPath}-wal`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(`${dbPath}-shm`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   });
 
   // ── [tool-header-emit.1] + [tool-header-emit.2] ────────────────────────────
@@ -140,7 +174,7 @@ describe('resolveTools — platform tools header', () => {
       // NEGATIVE-CONTROL: if the platform filter is absent, resolveTools would
       // emit canonical names ('file_read', 'file_grep', 'web_search'); these
       // assertions go red.
-      const aliases = results.map(r => r.platformAlias);
+      const aliases = results.map((r) => r.platformAlias);
       expect(aliases).toContain('Read');
       expect(aliases).toContain('Grep');
       expect(aliases).toContain('WebSearch');
@@ -151,7 +185,7 @@ describe('resolveTools — platform tools header', () => {
       expect(aliases).not.toContain('web_search');
 
       // canonicalName field is present for inspection
-      const canonicals = results.map(r => r.canonicalName);
+      const canonicals = results.map((r) => r.canonicalName);
       expect(canonicals).toContain('file_read');
       expect(canonicals).toContain('file_grep');
       expect(canonicals).toContain('web_search');
@@ -164,7 +198,7 @@ describe('resolveTools — platform tools header', () => {
       conn = c;
 
       const results = resolveTools(db, 'test-agent', 'claude_code');
-      const aliases = results.map(r => r.platformAlias);
+      const aliases = results.map((r) => r.platformAlias);
 
       // human_input is seeded as 'available' on claude_code → alias 'AskUserQuestion'
       expect(aliases).toContain('AskUserQuestion');
@@ -180,7 +214,7 @@ describe('resolveTools — platform tools header', () => {
 
       const results = resolveTools(db, 'test-agent', 'claude_api');
 
-      const aliases = results.map(r => r.platformAlias);
+      const aliases = results.map((r) => r.platformAlias);
 
       // file_read → read_file on claude_api
       expect(aliases).toContain('read_file');
@@ -205,8 +239,8 @@ describe('resolveTools — platform tools header', () => {
       const results = resolveTools(db, 'test-agent', 'claude_api');
 
       // Neither the alias ('') nor the canonical name ('human_input') should appear.
-      const aliases    = results.map(r => r.platformAlias);
-      const canonicals = results.map(r => r.canonicalName);
+      const aliases = results.map((r) => r.platformAlias);
+      const canonicals = results.map((r) => r.canonicalName);
       expect(aliases).not.toContain('');
       expect(canonicals).not.toContain('human_input');
 
@@ -218,12 +252,16 @@ describe('resolveTools — platform tools header', () => {
     it('results are identical across independent connections', () => {
       // First connection
       const { conn: c1, db: db1 } = openDb(dbPath);
-      const first = resolveTools(db1, 'test-agent', 'claude_code').map(r => r.platformAlias);
+      const first = resolveTools(db1, 'test-agent', 'claude_code').map(
+        (r) => r.platformAlias
+      );
       c1.close();
 
       // Second fresh connection from same file
       const { conn: c2, db: db2 } = openDb(dbPath);
-      const second = resolveTools(db2, 'test-agent', 'claude_code').map(r => r.platformAlias);
+      const second = resolveTools(db2, 'test-agent', 'claude_code').map(
+        (r) => r.platformAlias
+      );
       conn = c2;
       c2.close();
 

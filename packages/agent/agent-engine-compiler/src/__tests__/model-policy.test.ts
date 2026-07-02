@@ -85,9 +85,9 @@ const POLICY_MIGRATIONS = path.resolve(
 );
 
 interface OpenResult {
-  conn:   Database.Database;
+  conn: Database.Database;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db:     ReturnType<typeof drizzle<any>>;
+  db: ReturnType<typeof drizzle<any>>;
 }
 
 /**
@@ -121,13 +121,15 @@ describe('resolveModel + resolvePolicyConstraints', () => {
   let conn: Database.Database;
 
   // Test slugs
-  const AGENT_SLUG     = 'compiler-test-agent';
-  const CATEGORY_SLUG  = 'test-category';
-  const MODEL_HINT     = 'claude_opus_4_8';
+  const AGENT_SLUG = 'compiler-test-agent';
+  const CATEGORY_SLUG = 'test-category';
+  const MODEL_HINT = 'claude_opus_4_8';
 
   beforeAll(() => {
     // Real on-disk tmp file — never :memory: ([inv:real-rows-not-mocks])
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-compiler-model-policy-'));
+    tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-compiler-model-policy-')
+    );
     dbPath = path.join(tmpDir, 'test-model-policy.db');
 
     const { conn: c, db } = openDb(dbPath);
@@ -155,26 +157,26 @@ describe('resolveModel + resolvePolicyConstraints', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const agentStore = new AgentStore(db as any);
     agentStore.create({
-      slug:        AGENT_SLUG,
+      slug: AGENT_SLUG,
       displayName: 'Compiler Test Agent',
-      modelHint:   MODEL_HINT,
+      modelHint: MODEL_HINT,
       taxonomyCategory: CATEGORY_SLUG,
     });
 
     // ── 5. Attach no-credentials policy directly to the agent ───────────────
     const agentPolicyStore = new AgentPolicyStore(db);
     agentPolicyStore.attach({
-      agentSlug:  AGENT_SLUG,
+      agentSlug: AGENT_SLUG,
       policySlug: 'no-credentials',
     });
 
     // ── 6. Attach reviewer-posture to the CATEGORY (inherited-policy path) ──
     agentPolicyStore.attachToCategory({
       categorySlug: CATEGORY_SLUG,
-      policySlug:   'reviewer-posture',
+      policySlug: 'reviewer-posture',
     });
     agentPolicyStore.addAgentToCategory({
-      agentSlug:    AGENT_SLUG,
+      agentSlug: AGENT_SLUG,
       categorySlug: CATEGORY_SLUG,
     });
 
@@ -183,11 +185,31 @@ describe('resolveModel + resolvePolicyConstraints', () => {
   });
 
   afterAll(() => {
-    try { conn.close(); } catch { /* already closed */ }
-    try { fs.unlinkSync(dbPath);           } catch { /* ignore */ }
-    try { fs.unlinkSync(`${dbPath}-wal`);  } catch { /* ignore */ }
-    try { fs.unlinkSync(`${dbPath}-shm`);  } catch { /* ignore */ }
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      conn.close();
+    } catch {
+      /* already closed */
+    }
+    try {
+      fs.unlinkSync(dbPath);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(`${dbPath}-wal`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(`${dbPath}-shm`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   });
 
   // ── [model-and-policy-emit.1] resolves model_hint via model_platform_bindings ──
@@ -222,7 +244,7 @@ describe('resolveModel + resolvePolicyConstraints', () => {
       conn = c;
 
       const codeAlias = resolveModel(db, AGENT_SLUG, 'claude_code');
-      const apiId     = resolveModel(db, AGENT_SLUG, 'claude_api');
+      const apiId = resolveModel(db, AGENT_SLUG, 'claude_api');
 
       expect(codeAlias).not.toBe(apiId);
       expect(codeAlias).toBe('opus');
@@ -239,7 +261,7 @@ describe('resolveModel + resolvePolicyConstraints', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const agentStore = new AgentStore(db as any);
       agentStore.create({
-        slug:        'no-model-agent',
+        slug: 'no-model-agent',
         displayName: 'No Model Agent',
       });
 
@@ -261,7 +283,9 @@ describe('resolveModel + resolvePolicyConstraints', () => {
       const constraints = resolvePolicyConstraints(db, AGENT_SLUG);
 
       // Must include the no-credentials constraint.
-      const noCredentials = constraints.find(c => c.policySlug === 'no-credentials');
+      const noCredentials = constraints.find(
+        (c) => c.policySlug === 'no-credentials'
+      );
       expect(noCredentials).toBeDefined();
       // Constraint text must be non-empty — it's the human-readable description.
       expect(noCredentials?.text.length).toBeGreaterThan(0);
@@ -278,7 +302,9 @@ describe('resolveModel + resolvePolicyConstraints', () => {
       const constraints = resolvePolicyConstraints(db, AGENT_SLUG);
 
       // reviewer-posture was attached to the category, not directly to the agent.
-      const reviewer = constraints.find(c => c.policySlug === 'reviewer-posture');
+      const reviewer = constraints.find(
+        (c) => c.policySlug === 'reviewer-posture'
+      );
       expect(reviewer).toBeDefined();
       // inheritedFrom must be the category slug, not null.
       expect(reviewer?.inheritedFrom).toBe(CATEGORY_SLUG);
@@ -292,7 +318,9 @@ describe('resolveModel + resolvePolicyConstraints', () => {
       conn = c;
 
       const constraints = resolvePolicyConstraints(db, AGENT_SLUG);
-      const noCredentials = constraints.find(c => c.policySlug === 'no-credentials');
+      const noCredentials = constraints.find(
+        (c) => c.policySlug === 'no-credentials'
+      );
 
       // Direct-attach: inheritedFrom is null.
       expect(noCredentials?.inheritedFrom).toBeNull();
@@ -312,7 +340,7 @@ describe('resolveModel + resolvePolicyConstraints', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const agentStore = new AgentStore(db as any);
       agentStore.create({
-        slug:        'no-policy-agent',
+        slug: 'no-policy-agent',
         displayName: 'No Policy Agent',
       });
 
@@ -343,11 +371,15 @@ describe('resolveModel + resolvePolicyConstraints', () => {
 
     it('policy constraints are identical across independent connections', () => {
       const { conn: c1, db: db1 } = openDb(dbPath);
-      const first = resolvePolicyConstraints(db1, AGENT_SLUG).map(c => c.policySlug);
+      const first = resolvePolicyConstraints(db1, AGENT_SLUG).map(
+        (c) => c.policySlug
+      );
       c1.close();
 
       const { conn: c2, db: db2 } = openDb(dbPath);
-      const second = resolvePolicyConstraints(db2, AGENT_SLUG).map(c => c.policySlug);
+      const second = resolvePolicyConstraints(db2, AGENT_SLUG).map(
+        (c) => c.policySlug
+      );
       conn = c2;
       c2.close();
 

@@ -82,7 +82,8 @@ export interface JsonObjectInput {
  * @returns JSON string ready to pass as the API system prompt payload.
  */
 export function emitJsonObject(input: JsonObjectInput): string {
-  const { agentSlug, bodySections, constraints, structuredTools, model } = input;
+  const { agentSlug, bodySections, constraints, structuredTools, model } =
+    input;
 
   // ── systemPrompt: flat body with policy block folded in ──────────────────
   // Same composition logic as yaml_frontmatter body — sections '\n\n'-joined,
@@ -111,7 +112,7 @@ export function emitJsonObject(input: JsonObjectInput): string {
     model: string;
     tools: StructuredTool[];
   } = {
-    name:         agentSlug,
+    name: agentSlug,
     systemPrompt,
     model,
     tools: structuredTools,

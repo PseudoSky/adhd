@@ -28,8 +28,8 @@
  */
 
 import { createHash } from 'node:crypto';
-import fs   from 'node:fs';
-import os   from 'node:os';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -48,11 +48,11 @@ import {
   composedPromptsTable,
 } from '@adhd/agent-registry';
 import { seed as seedToolRegistry } from '@adhd/agent-tool-registry';
-import { seed as seedProvider }     from '@adhd/agent-provider';
-import { seed as seedPolicy }       from '@adhd/agent-policy';
+import { seed as seedProvider } from '@adhd/agent-provider';
+import { seed as seedPolicy } from '@adhd/agent-policy';
 
 // Under test
-import { compileAgent }      from '../compile.js';
+import { compileAgent } from '../compile.js';
 import { computeContextHash } from '../cache/composed-prompt-cache.js';
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -61,15 +61,27 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 // Migration paths — same ordering as compile-agent.test.ts (ascending timestamp).
 // provider (1750*) → registry (1782193*) → tool-registry (1782250*) → policy (1782256*)
-const PROVIDER_MIGRATIONS      = path.resolve(__dirname, '../../../agent-provider/drizzle');
-const REGISTRY_MIGRATIONS      = path.resolve(__dirname, '../../../agent-registry/drizzle');
-const TOOL_REGISTRY_MIGRATIONS = path.resolve(__dirname, '../../../agent-tool-registry/drizzle');
-const POLICY_MIGRATIONS        = path.resolve(__dirname, '../../../agent-policy/drizzle');
+const PROVIDER_MIGRATIONS = path.resolve(
+  __dirname,
+  '../../../agent-provider/drizzle'
+);
+const REGISTRY_MIGRATIONS = path.resolve(
+  __dirname,
+  '../../../agent-registry/drizzle'
+);
+const TOOL_REGISTRY_MIGRATIONS = path.resolve(
+  __dirname,
+  '../../../agent-tool-registry/drizzle'
+);
+const POLICY_MIGRATIONS = path.resolve(
+  __dirname,
+  '../../../agent-policy/drizzle'
+);
 
 interface OpenResult {
   conn: Database.Database;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db:   ReturnType<typeof drizzle<any>>;
+  db: ReturnType<typeof drizzle<any>>;
 }
 
 /**
@@ -84,17 +96,20 @@ function openDb(dbPath: string): OpenResult {
   conn.pragma('foreign_keys = OFF');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = drizzle(conn, { schema: {} as any });
-  migrate(db, { migrationsFolder: PROVIDER_MIGRATIONS      });
-  migrate(db, { migrationsFolder: REGISTRY_MIGRATIONS      });
+  migrate(db, { migrationsFolder: PROVIDER_MIGRATIONS });
+  migrate(db, { migrationsFolder: REGISTRY_MIGRATIONS });
   migrate(db, { migrationsFolder: TOOL_REGISTRY_MIGRATIONS });
-  migrate(db, { migrationsFolder: POLICY_MIGRATIONS        });
+  migrate(db, { migrationsFolder: POLICY_MIGRATIONS });
   conn.pragma('foreign_keys = ON');
   return { conn, db };
 }
 
 /** Count rows in registry_composed_prompts for a given agentSlug. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowCount(db: ReturnType<typeof drizzle<any>>, agentSlug: string): number {
+function rowCount(
+  db: ReturnType<typeof drizzle<any>>,
+  agentSlug: string
+): number {
   const rows = db
     .select({ n: sql<number>`count(*)`.as('n') })
     .from(composedPromptsTable)
@@ -108,18 +123,18 @@ function rowCount(db: ReturnType<typeof drizzle<any>>, agentSlug: string): numbe
 describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
   let tmpDir: string;
   let dbPath: string;
-  let conn:   Database.Database;
+  let conn: Database.Database;
 
   const AGENT_SLUG = 'cache-test-agent';
   const COMP_INTRO = 'cache-intro';
-  const COMP_BODY  = 'cache-body';
-  const CATEGORY   = 'cache-test-category';
+  const COMP_BODY = 'cache-body';
+  const CATEGORY = 'cache-test-category';
 
   // ── seed ──────────────────────────────────────────────────────────────────
   beforeAll(() => {
     // Real on-disk temp file — never :memory: ([inv:real-rows-not-mocks])
-    tmpDir  = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-compiler-cache-'));
-    dbPath  = path.join(tmpDir, 'cache-test.db');
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-compiler-cache-'));
+    dbPath = path.join(tmpDir, 'cache-test.db');
 
     const { conn: c, db } = openDb(dbPath);
     conn = c;
@@ -138,42 +153,85 @@ describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
     // 4. Taxonomy category
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const taxonomyStore = new TaxonomyStore(db as any);
-    taxonomyStore.createCategory({ slug: CATEGORY, name: 'Cache Test Category' });
+    taxonomyStore.createCategory({
+      slug: CATEGORY,
+      name: 'Cache Test Category',
+    });
 
     // 5. Agent (no model_hint — keeps it simple)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const agentStore = new AgentStore(db as any);
     agentStore.create({
-      slug:             AGENT_SLUG,
-      displayName:      'Cache Test Agent',
-      description:      'Agent used to test the composed_prompts cache.',
+      slug: AGENT_SLUG,
+      displayName: 'Cache Test Agent',
+      description: 'Agent used to test the composed_prompts cache.',
       taxonomyCategory: CATEGORY,
     });
 
     // 6. Components
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const componentStore = new ComponentStore(db as any);
-    componentStore.upsertType({ slug: 'system', description: 'System prompt', isSystem: true });
+    componentStore.upsertType({
+      slug: 'system',
+      description: 'System prompt',
+      isSystem: true,
+    });
 
-    componentStore.create({ slug: COMP_INTRO, type: 'system', content: '# Intro\n\nYou are a cache tester.' });
-    componentStore.create({ slug: COMP_BODY,  type: 'system', content: '## Body\n\nDo the caching.'          });
+    componentStore.create({
+      slug: COMP_INTRO,
+      type: 'system',
+      content: '# Intro\n\nYou are a cache tester.',
+    });
+    componentStore.create({
+      slug: COMP_BODY,
+      type: 'system',
+      content: '## Body\n\nDo the caching.',
+    });
 
     // 7. Attach components to agent (junction order: 1, 2)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const compositionStore = new CompositionStore(db as any);
-    compositionStore.attach({ agentSlug: AGENT_SLUG, componentSlug: COMP_INTRO, position: 1 });
-    compositionStore.attach({ agentSlug: AGENT_SLUG, componentSlug: COMP_BODY,  position: 2 });
+    compositionStore.attach({
+      agentSlug: AGENT_SLUG,
+      componentSlug: COMP_INTRO,
+      position: 1,
+    });
+    compositionStore.attach({
+      agentSlug: AGENT_SLUG,
+      componentSlug: COMP_BODY,
+      position: 2,
+    });
 
     // Close the seed connection — tests reopen to prove persistence.
     conn.close();
   });
 
   afterAll(() => {
-    try { conn.close(); } catch { /* already closed */ }
-    try { fs.unlinkSync(dbPath);          } catch { /* ignore */ }
-    try { fs.unlinkSync(`${dbPath}-wal`); } catch { /* ignore */ }
-    try { fs.unlinkSync(`${dbPath}-shm`); } catch { /* ignore */ }
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      conn.close();
+    } catch {
+      /* already closed */
+    }
+    try {
+      fs.unlinkSync(dbPath);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(`${dbPath}-wal`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(`${dbPath}-shm`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   });
 
   // ── [composed-prompt-caching.1] first compile WRITES the row ──────────────
@@ -183,7 +241,11 @@ describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
       const { conn: c, db } = openDb(dbPath);
       conn = c;
 
-      const result = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db });
+      const result = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db,
+      });
 
       // [def:composed-output] id is numeric (not null) after caching state.
       expect(typeof result.id).toBe('number');
@@ -225,7 +287,11 @@ describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
       const { conn: c1, db: db1 } = openDb(dbPath);
       conn = c1;
 
-      const first = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db: db1 });
+      const first = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db: db1,
+      });
       const firstId = first.id;
       expect(firstId).toBeGreaterThan(0);
 
@@ -238,10 +304,17 @@ describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
       // We spy on the prototype so we count real calls made by compileAgent's
       // internal extractBodyParts helper WITHOUT mocking the return value.
       // The spy records calls but forwards to the real implementation.
-      const resolveSpy = vi.spyOn(CompositionStore.prototype, 'resolveComposition');
+      const resolveSpy = vi.spyOn(
+        CompositionStore.prototype,
+        'resolveComposition'
+      );
 
       // ── Second compile: same parameters ───────────────────────────────────
-      const second = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db: db2 });
+      const second = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db: db2,
+      });
 
       // TOOTH 1: same id (served from cache, not newly inserted).
       expect(second.id).toEqual(firstId);
@@ -277,8 +350,8 @@ describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
 
       const result = compileAgent({
         agentSlug: AGENT_SLUG,
-        platform:  'claude_code',
-        context:   differentContext,
+        platform: 'claude_code',
+        context: differentContext,
         db,
       });
 
@@ -299,7 +372,7 @@ describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
         .all();
       expect(allRows).toHaveLength(2);
 
-      const hashes = allRows.map(r => r.contextHash);
+      const hashes = allRows.map((r) => r.contextHash);
       // The two hashes must be DIFFERENT (different context → different key).
       expect(hashes[0]).not.toEqual(hashes[1]);
 
@@ -379,10 +452,15 @@ describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
       ): string {
         // Sort keys and stringify an object with all-zero values — drops real values.
         const keysOnly = Object.fromEntries(
-          Object.keys(versions).sort().map(k => [k, 0] as const)
+          Object.keys(versions)
+            .sort()
+            .map((k) => [k, 0] as const)
         );
         return createHash('sha256')
-          .update(`${JSON.stringify(ctx)} ${JSON.stringify(keysOnly)} ${p}`, 'utf8')
+          .update(
+            `${JSON.stringify(ctx)} ${JSON.stringify(keysOnly)} ${p}`,
+            'utf8'
+          )
           .digest('hex');
       }
 
@@ -424,16 +502,21 @@ describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
 
       // Baseline: confirm exactly one row from prior suite tests (or recompile
       // here and confirm 1).  We compile fresh to get a known first-compile row.
-      const before = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db: db1 });
+      const before = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db: db1,
+      });
       const baselineCount = rowCount(db1, AGENT_SLUG);
       // Close; we'll reopen after the version bump to prevent handle reuse.
-      const baselineHash = db1
-        .select({ h: composedPromptsTable.contextHash })
-        .from(composedPromptsTable)
-        .where(eq(composedPromptsTable.agentSlug, AGENT_SLUG))
-        .orderBy(composedPromptsTable.id)
-        .limit(1)
-        .all()[0]?.h ?? '';
+      const baselineHash =
+        db1
+          .select({ h: composedPromptsTable.contextHash })
+          .from(composedPromptsTable)
+          .where(eq(composedPromptsTable.agentSlug, AGENT_SLUG))
+          .orderBy(composedPromptsTable.id)
+          .limit(1)
+          .all()[0]?.h ?? '';
       conn.close();
 
       // ── Bump the UNPINNED component to a new version ([inv:real-rows-not-mocks]) ──
@@ -454,7 +537,11 @@ describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
       const { conn: c2, db: db2 } = openDb(dbPath);
       conn = c2;
 
-      const after = compileAgent({ agentSlug: AGENT_SLUG, platform: 'claude_code', db: db2 });
+      const after = compileAgent({
+        agentSlug: AGENT_SLUG,
+        platform: 'claude_code',
+        db: db2,
+      });
 
       // TOOTH 1: new row was inserted (count increased by exactly 1).
       // If computeContextHash hashed only version keys (dropping values), the
@@ -465,7 +552,10 @@ describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
       // TOOTH 2: the new row has a DIFFERENT context_hash from the first compile.
       // Proves that the version VALUE (1 vs 2) changed the combined hash.
       const allRows = db2
-        .select({ h: composedPromptsTable.contextHash, content: composedPromptsTable.content })
+        .select({
+          h: composedPromptsTable.contextHash,
+          content: composedPromptsTable.content,
+        })
         .from(composedPromptsTable)
         .where(eq(composedPromptsTable.agentSlug, AGENT_SLUG))
         .orderBy(composedPromptsTable.id)

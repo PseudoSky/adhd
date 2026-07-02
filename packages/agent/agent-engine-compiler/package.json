@@ -1,5 +1,5 @@
 {
-  "name": "@adhd/agent-compiler",
+  "name": "@adhd/agent-engine-compiler",
   "version": "0.0.1",
   "description": "Registry-family store for agent-compiler: drizzle-backed SQLite tables sharing the one registry database.",
   "type": "module",

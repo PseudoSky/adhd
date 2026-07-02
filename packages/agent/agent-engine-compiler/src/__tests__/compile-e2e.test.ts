@@ -60,16 +60,13 @@ import {
   AgentStore,
   TaxonomyStore,
   CompositionStore,
-}                                   from '@adhd/agent-registry';
+} from '@adhd/agent-registry';
 import {
   seed as seedToolRegistry,
   AgentToolStore,
-}                                   from '@adhd/agent-tool-registry';
-import { seed as seedProvider }     from '@adhd/agent-provider';
-import {
-  seed as seedPolicy,
-  AgentPolicyStore,
-}                                   from '@adhd/agent-policy';
+} from '@adhd/agent-tool-registry';
+import { seed as seedProvider } from '@adhd/agent-provider';
+import { seed as seedPolicy, AgentPolicyStore } from '@adhd/agent-policy';
 
 // Fixture seeder
 import {
@@ -99,10 +96,22 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
  * ORDER MATTERS: timestamps must be ascending so Drizzle's journal never skips.
  *   provider (1750*)  →  registry (1782193*)  →  tool-registry (1782250*)  →  policy (1782256*)
  */
-const PROVIDER_MIGRATIONS      = path.resolve(__dirname, '../../../agent-provider/drizzle');
-const REGISTRY_MIGRATIONS      = path.resolve(__dirname, '../../../agent-registry/drizzle');
-const TOOL_REGISTRY_MIGRATIONS = path.resolve(__dirname, '../../../agent-tool-registry/drizzle');
-const POLICY_MIGRATIONS        = path.resolve(__dirname, '../../../agent-policy/drizzle');
+const PROVIDER_MIGRATIONS = path.resolve(
+  __dirname,
+  '../../../agent-provider/drizzle'
+);
+const REGISTRY_MIGRATIONS = path.resolve(
+  __dirname,
+  '../../../agent-registry/drizzle'
+);
+const TOOL_REGISTRY_MIGRATIONS = path.resolve(
+  __dirname,
+  '../../../agent-tool-registry/drizzle'
+);
+const POLICY_MIGRATIONS = path.resolve(
+  __dirname,
+  '../../../agent-policy/drizzle'
+);
 
 interface OpenResult {
   conn: Database.Database;
@@ -120,10 +129,10 @@ function openDb(dbPath: string): OpenResult {
   conn.pragma('foreign_keys = OFF');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = drizzle(conn, { schema: {} as any });
-  migrate(db, { migrationsFolder: PROVIDER_MIGRATIONS      }); // 1750*
-  migrate(db, { migrationsFolder: REGISTRY_MIGRATIONS      }); // 1782193*–1782239*
+  migrate(db, { migrationsFolder: PROVIDER_MIGRATIONS }); // 1750*
+  migrate(db, { migrationsFolder: REGISTRY_MIGRATIONS }); // 1782193*–1782239*
   migrate(db, { migrationsFolder: TOOL_REGISTRY_MIGRATIONS }); // 1782250*–1782252*
-  migrate(db, { migrationsFolder: POLICY_MIGRATIONS        }); // 1782256*–1782350*
+  migrate(db, { migrationsFolder: POLICY_MIGRATIONS }); // 1782256*–1782350*
   conn.pragma('foreign_keys = ON');
   return { conn, db };
 }
@@ -150,7 +159,8 @@ const SECURITY_CRITERIA_ANCHOR = 'Success Criteria — Security Audit';
  * Constraint text from the no-credentials policy template description.
  * resolvePolicyConstraints renders template.description as the constraint text.
  */
-const NO_CREDENTIALS_CONSTRAINT = 'Prevent credential leakage in files, task output, and handoff text';
+const NO_CREDENTIALS_CONSTRAINT =
+  'Prevent credential leakage in files, task output, and handoff text';
 
 // ── suite ──────────────────────────────────────────────────────────────────
 
@@ -186,11 +196,31 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
   });
 
   afterAll(() => {
-    try { conn.close(); } catch { /* already closed */ }
-    try { fs.unlinkSync(dbPath);            } catch { /* ignore */ }
-    try { fs.unlinkSync(`${dbPath}-wal`);   } catch { /* ignore */ }
-    try { fs.unlinkSync(`${dbPath}-shm`);   } catch { /* ignore */ }
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      conn.close();
+    } catch {
+      /* already closed */
+    }
+    try {
+      fs.unlinkSync(dbPath);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(`${dbPath}-wal`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(`${dbPath}-shm`);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   });
 
   // ── [dod.1] claude_code: tools: line equals claude_code aliases; body in order ─
@@ -203,12 +233,14 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_code',
+        platform: 'claude_code',
         db,
       });
 
       // Extract the tools: line from the YAML frontmatter.
-      const toolsLine = result.content.split('\n').find(l => l.startsWith('tools:'));
+      const toolsLine = result.content
+        .split('\n')
+        .find((l) => l.startsWith('tools:'));
       expect(toolsLine).toBeDefined();
 
       // POSITIVE: claude_code aliases MUST appear.
@@ -234,7 +266,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_code',
+        platform: 'claude_code',
         db,
       });
 
@@ -260,7 +292,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_code',
+        platform: 'claude_code',
         db,
       });
 
@@ -271,9 +303,9 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
       // Identity: "## Identity"
       // Rule:     "Default verdict: NEEDS-WORK." (exact string from seed components.ts)
       // Review criteria: "Success Criteria — Code Review"
-      const roleIdx     = content.indexOf('senior technical reviewer');
+      const roleIdx = content.indexOf('senior technical reviewer');
       const identityIdx = content.indexOf('## Identity');
-      const ruleIdx     = content.indexOf('Default verdict: NEEDS-WORK');
+      const ruleIdx = content.indexOf('Default verdict: NEEDS-WORK');
       const criteriaIdx = content.indexOf(REVIEW_CRITERIA_ANCHOR);
 
       expect(roleIdx).toBeGreaterThan(-1);
@@ -295,7 +327,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_code',
+        platform: 'claude_code',
         db,
       });
 
@@ -310,11 +342,13 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_code',
+        platform: 'claude_code',
         db,
       });
 
-      const modelLine = result.content.split('\n').find(l => l.startsWith('model:'));
+      const modelLine = result.content
+        .split('\n')
+        .find((l) => l.startsWith('model:'));
       expect(modelLine).toBeDefined();
       // SEED_DATA.md §7: claude_sonnet_4_6 → claude_code alias = 'sonnet'.
       expect(modelLine).toBe('model: sonnet');
@@ -336,8 +370,8 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_code',
-        context:   { ticket_type: 'security' },
+        platform: 'claude_code',
+        context: { ticket_type: 'security' },
         db,
       });
 
@@ -351,7 +385,9 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
       // security criteria is additionally present, and that the security-unique
       // text "All user inputs are validated at the boundary" appears (this phrase
       // only exists in security-audit-criteria, not code-review-criteria).
-      expect(result.content).toContain('All user inputs are validated at the boundary');
+      expect(result.content).toContain(
+        'All user inputs are validated at the boundary'
+      );
 
       conn.close();
     });
@@ -367,7 +403,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_code',
+        platform: 'claude_code',
         db, // no context → {}
       });
 
@@ -376,7 +412,9 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       // Security-specific content must NOT appear in the default-context compile.
       // "All user inputs are validated at the boundary" is security-audit-criteria only.
-      expect(result.content).not.toContain('All user inputs are validated at the boundary');
+      expect(result.content).not.toContain(
+        'All user inputs are validated at the boundary'
+      );
       // The security section header must also be absent.
       expect(result.content).not.toContain(SECURITY_CRITERIA_ANCHOR);
 
@@ -389,8 +427,8 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_code',
-        context:   { ticket_type: 'security' },
+        platform: 'claude_code',
+        context: { ticket_type: 'security' },
         db,
       });
 
@@ -409,14 +447,16 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_code',
+        platform: 'claude_code',
         db,
       });
 
       // code-review-criteria is always included.
       expect(result.componentVersions).toHaveProperty(COMP_REVIEW_CRITERIA);
       // security-audit-criteria is excluded by context filter.
-      expect(result.componentVersions).not.toHaveProperty(COMP_SECURITY_CRITERIA);
+      expect(result.componentVersions).not.toHaveProperty(
+        COMP_SECURITY_CRITERIA
+      );
 
       conn.close();
     });
@@ -433,7 +473,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_code',
+        platform: 'claude_code',
         db,
       });
 
@@ -451,7 +491,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_api',
+        platform: 'claude_api',
         db,
       });
 
@@ -475,7 +515,9 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
       //   - If the constraint text were hardcoded (not row-driven), it would still
       //     appear after we skip the attach → the toContain(..) in the "present" test
       //     above would pass on hardcoded text too, but THIS negative test would FAIL.
-      const noPolicyTmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-compiler-e2e-nopolicy-'));
+      const noPolicyTmpDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'agent-compiler-e2e-nopolicy-')
+      );
       const noPolicyDbPath = path.join(noPolicyTmpDir, 'no-policy.db');
 
       try {
@@ -495,32 +537,52 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
         // are imported at the top of this file).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const npTaxonomy = new TaxonomyStore(npDb as any);
-        npTaxonomy.createCategory({ slug: 'e2e-no-policy-cat', name: 'No Policy Cat', position: 98 });
+        npTaxonomy.createCategory({
+          slug: 'e2e-no-policy-cat',
+          name: 'No Policy Cat',
+          position: 98,
+        });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const npAgent = new AgentStore(npDb as any);
         npAgent.create({
-          slug:             'api-reviewer-no-policy',
-          displayName:      'API Reviewer No Policy',
-          description:      'Fixture agent with no policy attachment',
-          modelHint:        'claude_sonnet_4_6',
+          slug: 'api-reviewer-no-policy',
+          displayName: 'API Reviewer No Policy',
+          description: 'Fixture agent with no policy attachment',
+          modelHint: 'claude_sonnet_4_6',
           taxonomyCategory: 'e2e-no-policy-cat',
         });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const npComposition = new CompositionStore(npDb as any);
-        npComposition.attach({ agentSlug: 'api-reviewer-no-policy', componentSlug: 'generic-reviewer-role', position: 1 });
-        npComposition.attach({ agentSlug: 'api-reviewer-no-policy', componentSlug: 'code-review-criteria',  position: 2 });
+        npComposition.attach({
+          agentSlug: 'api-reviewer-no-policy',
+          componentSlug: 'generic-reviewer-role',
+          position: 1,
+        });
+        npComposition.attach({
+          agentSlug: 'api-reviewer-no-policy',
+          componentSlug: 'code-review-criteria',
+          position: 2,
+        });
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const npTools = new AgentToolStore(npDb as any);
-        npTools.grant({ agentSlug: 'api-reviewer-no-policy', toolName: 'file_read', permission: 'read_only' });
+        npTools.grant({
+          agentSlug: 'api-reviewer-no-policy',
+          toolName: 'file_read',
+          permission: 'read_only',
+        });
 
         npConn.close();
 
         // Reopen and compile — NO policy row should yield no constraint text.
         const { conn: roConn, db: roDb } = openDb(noPolicyDbPath);
-        const result = compileAgent({ agentSlug: 'api-reviewer-no-policy', platform: 'claude_code', db: roDb });
+        const result = compileAgent({
+          agentSlug: 'api-reviewer-no-policy',
+          platform: 'claude_code',
+          db: roDb,
+        });
         roConn.close();
 
         // The no-credentials constraint text must NOT appear — the policy was never attached.
@@ -528,10 +590,26 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
         // There should be no ## Policies section either.
         expect(result.content).not.toContain('## Policies');
       } finally {
-        try { fs.unlinkSync(noPolicyDbPath);            } catch { /* ignore */ }
-        try { fs.unlinkSync(`${noPolicyDbPath}-wal`);   } catch { /* ignore */ }
-        try { fs.unlinkSync(`${noPolicyDbPath}-shm`);   } catch { /* ignore */ }
-        try { fs.rmSync(noPolicyTmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+        try {
+          fs.unlinkSync(noPolicyDbPath);
+        } catch {
+          /* ignore */
+        }
+        try {
+          fs.unlinkSync(`${noPolicyDbPath}-wal`);
+        } catch {
+          /* ignore */
+        }
+        try {
+          fs.unlinkSync(`${noPolicyDbPath}-shm`);
+        } catch {
+          /* ignore */
+        }
+        try {
+          fs.rmSync(noPolicyTmpDir, { recursive: true, force: true });
+        } catch {
+          /* ignore */
+        }
       }
     });
   });
@@ -547,13 +625,15 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_api',
+        platform: 'claude_api',
         db,
       });
 
       // content must be parseable JSON, not YAML.
       let parsed: Record<string, unknown>;
-      expect(() => { parsed = JSON.parse(result.content); }).not.toThrow();
+      expect(() => {
+        parsed = JSON.parse(result.content);
+      }).not.toThrow();
       parsed = JSON.parse(result.content) as Record<string, unknown>;
 
       expect(parsed).toHaveProperty('systemPrompt');
@@ -573,7 +653,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_api',
+        platform: 'claude_api',
         db,
       });
 
@@ -593,8 +673,8 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_api',
-        context:   { ticket_type: 'security' },
+        platform: 'claude_api',
+        context: { ticket_type: 'security' },
         db,
       });
 
@@ -613,7 +693,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_api',
+        platform: 'claude_api',
         db,
       });
 
@@ -630,7 +710,7 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_api',
+        platform: 'claude_api',
         db,
       });
 
@@ -651,8 +731,8 @@ describe('compile-e2e — api-design-reviewer-e2e fixture, real rows, no mocks',
 
       const result = compileAgent({
         agentSlug: FIXTURE_AGENT_SLUG,
-        platform:  'claude_code',
-        context:   { ticket_type: 'security' },
+        platform: 'claude_code',
+        context: { ticket_type: 'security' },
         db,
       });
 
