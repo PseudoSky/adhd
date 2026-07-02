@@ -148,6 +148,12 @@
       "@adhd/dispatch-optimizer": [
         "./packages/dispatch/dispatch-optimizer/src/index.ts"
       ],
+      "@adhd/dispatch-orchestrator": [
+        "./packages/dispatch/dispatch-orchestrator/src/index.ts"
+      ],
+      "@adhd/dispatch-serializer-json": [
+        "./packages/dispatch/dispatch-serializer-json/src/index.ts"
+      ],
       "@adhd/dispatch-spec": [
         "./packages/dispatch/dispatch-spec/src/index.ts"
       ],
