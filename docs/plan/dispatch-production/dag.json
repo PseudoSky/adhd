@@ -305,25 +305,27 @@
       "guard": "npx nx build dispatch-orchestrator && npx nx typecheck dispatch-orchestrator"
     },
     "cli": {
-      "description": "apps/dispatch-cli ships: (1) dispatch snapshot <plan-slug> — client.full_dag() → optimizer.snapshot() + plugin enrichments → write dag-snapshot.json; (2) dispatch optimize <plan-slug> — full compile: snapshot + optimize → print dispatch plan summary; (3) dispatch run <plan-slug> — orchestrator loop, streams progress; (4) dispatch status <plan-slug> — renders open_questions, eligible milestones, wave progress; (5) dispatch calibrate <model-tier> — fires a null-task dispatch via agent-mcp to measure B, writes to ~/.adhd/dispatch-calibration.json; (6) dispatch validate <plan-slug> — validateDagJson() + print errors",
+      "description": "Dispatcher CLI (human side; the LLM side is tools-mcp) at packages/dispatch/dispatch-cli (NOT apps/ — creating a repo-root dir needs approval; precedent packages/decompile; tags layer:entrypoints, platform:node). GENERATED via apigen from a plain-functions surface (user decision 2026-07-02): src/api.ts exports JSDoc'd async functions wiring the REAL stack — validate/snapshot/optimize/eligible/status/run (+ calibrate: null-task dispatch via agent-mcp to measure B, writes ~/.adhd/dispatch-calibration.json) over createDagClient(createJsonFileSerializer(<dag path>)), @adhd/dispatch-optimizer, and the orchestrator cycle — projected to a Commander CLI by the @adhd/apigen-nx:generate cache-aware executor { source: 'src/api.ts', type: 'cli', outDir: 'dist/packages/dispatch/dispatch-cli/cli' }. SPIKE-VALIDATED 2026-07-02 (tmp/dispatchcli): generate + run work end-to-end; validate/eligible ran against the real dispatch-production dag.json (JSON envelope output, kebab-case flags, exit codes clean) and immediately surfaced BUG-DISPATCH-008. Known quirks: tsx needs --tsconfig tsconfig.base.json (no root tsconfig.json); generator namespace derives from source DIR name and breaks on hyphens (BUG-APIGEN-CLI-001, packages/apigen/BACKLOG.md) — package namespace must be sanitized or configured. This package also HOSTS the integration harnesses (user decision: no repo-root tests/): src/test/integration/real-e2e.ts and stepwise-ab.ts. Proof standard: a default-running smoke test SPAWNS the generated CLI (--help, validate, snapshot on a fixture dag under tmp/dispatch-cli/), asserts exit codes + payloads, never imports generated code. Fallback if the cli-output plugin can't express a command shape: record the gap in packages/apigen/BACKLOG.md and hand-write a thin commander wrapper over the same api.ts. Deps note: tools-mcp and serializer-sqlite dropped from deps — the LLM interface and sqlite store stay on the deferred track; the human CLI needs only the file serializer + orchestrator stack, and it must precede tests-real-e2e (the harness lives here).",
       "rationale": "The CLI is the human entrypoint. It wires: JsonFileSerializer → DagClient → (Optimizer + Plugins + AgentMcpRunner) → Orchestrator. Each subcommand is self-contained. The CLI does no business logic — it's a thin command router.",
       "authored_by": "workflow:plan-builder",
       "pending": null,
-      "triggered_by": null,
+      "triggered_by": "user-cli-decision-2026-07-02",
       "phase": "cli",
       "depends_on": [
-        "orchestrator-core",
-        "tools-mcp",
-        "serializer-sqlite"
+        "orchestrator-core"
       ],
       "agent": "workflow:plan-orchestrator",
       "model": "Sonnet",
       "effort": "medium",
       "two_stage": false,
       "read_only": [
-        "docs/plan/dispatch-optimizer/src/run.ts"
+        "packages/apigen/README.md",
+        "packages/apigen/nx/README.md",
+        "packages/apigen/plugins/cli/README.md",
+        "packages/dispatch/dispatch-client/src/index.ts",
+        "packages/dispatch/dispatch-serializer-json/src/index.ts"
       ],
-      "guard": "npx nx build dispatch-cli && dispatch --help"
+      "guard": "npx nx build dispatch-cli && npx nx test dispatch-cli"
     },
     "tests-golden": {
       "description": "tests/goldens/dispatch-production/snapshot.golden.json and dispatch-units.golden.json exist. tests/harness.ts compares current compiler output against goldens — exit 0 on match, exit 1 on divergence. GOLDEN_HISTORY.md records each regen. Covers the full pipeline: dag.json → snapshot() → optimize() → DispatchUnit[] — compared byte-identical on all non-timestamp fields across two runs (snapshot determinism).",
@@ -396,7 +398,7 @@
       "phase": "hardening",
       "depends_on": [
         "orchestrator-core",
-        "cli-entrypoint"
+        "cli"
       ],
       "agent": "workflow:plan-orchestrator",
       "model": "Sonnet",
@@ -511,29 +513,6 @@
         "packages/dispatch/dispatch-spec/src/lib/types.ts"
       ],
       "guard": "npx nx test dispatch-orchestrator dispatch-spec"
-    },
-    "cli-entrypoint": {
-      "description": "Dispatcher CLI entrypoint at packages/dispatch/dispatch-cli — GENERATED via apigen from a plain-functions surface over the dispatch stack (user decision 2026-07-02: the dispatcher needs a CLI; integration tests live in this entrypoint package, NOT a repo-root tests/ dir). Pattern: src/api.ts exports ordinary JSDoc'd async functions (validate/snapshot/optimize/eligible/status/run) that wire the REAL stack — createDagClient(createJsonFileSerializer(<dag path>)) + @adhd/dispatch-optimizer snapshot/optimize + the orchestrator cycle — and apigen projects that surface to a Commander CLI via the @adhd/apigen-nx:generate cache-aware executor (options: { source: 'src/api.ts', type: 'cli', outDir: 'dist/packages/dispatch/dispatch-cli/cli' }; @adhd/apigen-plugin-cli-output is the target plugin). The package carries tags layer:entrypoints, platform:node (precedent: packages/decompile — entrypoints live under packages/ in this repo). PROOF STANDARD: a default-running smoke test SPAWNS the generated CLI artifact (--help + validate + snapshot against a fixture dag under tmp/dispatch-cli/) and keys on exit codes — the CLI is the consumer seam, so the test drives the built artifact, never imports from it. The tests-real-e2e harness (real-e2e.ts) and the stepwise A/B harness live in src/test/integration/ here. apigen dogfooding note: this is the first in-repo consumer of the cli-output plugin; if the plugin cannot express a needed command shape, record the gap in packages/apigen/BACKLOG.md and fall back to a thin hand-written commander wrapper importing api.ts — the functions surface stays the single source of truth either way.",
-      "rationale": "The CLI is the real consumer seam for the whole dispatch stack (repo doctrine: prove features by driving the entrypoint/built artifact). Generating it from api.ts keeps zero hand-authored arg-parsing to maintain and reuses apigen (always-reuse rule) while exercising its cli-output plugin on a real internal consumer.",
-      "authored_by": "claude-fable-5",
-      "pending": null,
-      "triggered_by": "user-cli-decision-2026-07-02",
-      "phase": "tools-and-orchestrator",
-      "depends_on": [
-        "orchestrator-core"
-      ],
-      "agent": "workflow:plan-orchestrator",
-      "model": "Sonnet",
-      "effort": "high",
-      "two_stage": false,
-      "read_only": [
-        "packages/apigen/README.md",
-        "packages/apigen/nx/README.md",
-        "packages/apigen/plugins/cli/README.md",
-        "packages/dispatch/dispatch-client/src/index.ts",
-        "packages/dispatch/dispatch-serializer-json/src/index.ts"
-      ],
-      "guard": "npx nx build dispatch-cli && npx nx test dispatch-cli"
     }
   },
   "operations": [
@@ -696,7 +675,7 @@
       "depends_on": [
         "orchestrator-core.1",
         "agent-runner.2",
-        "cli-entrypoint.2"
+        "cli.2"
       ],
       "type": "generative",
       "action": "create",
@@ -754,7 +733,7 @@
       "audit_check": null,
       "criteria": [],
       "authored_by": "workflow:plan-builder",
-      "status": "pending",
+      "status": "complete",
       "shape": {
         "kind": "script",
         "ops": [
@@ -2297,7 +2276,7 @@
       "audit_check": null,
       "criteria": [],
       "authored_by": "workflow:plan-builder",
-      "status": "pending",
+      "status": "complete",
       "shape": {
         "kind": "script",
         "ops": [
@@ -2346,7 +2325,7 @@
       "audit_check": null,
       "criteria": [],
       "authored_by": "workflow:plan-builder",
-      "status": "pending",
+      "status": "complete",
       "shape": {
         "kind": "config",
         "ops": [
@@ -2419,7 +2398,7 @@
       "audit_check": null,
       "criteria": [],
       "authored_by": "workflow:plan-builder",
-      "status": "pending",
+      "status": "complete",
       "shape": {
         "kind": "config",
         "ops": [
@@ -3224,14 +3203,12 @@
       "id": "cli.1",
       "milestone": "cli",
       "depends_on": [
-        "orchestrator-core.1",
-        "tools-mcp.1",
-        "serializer-sqlite.1"
+        "orchestrator-core.1"
       ],
       "type": "generative",
       "action": "create",
-      "file": "apps/dispatch-cli/src/main.ts",
-      "symbol": null,
+      "file": "packages/dispatch/dispatch-cli/src/api.ts",
+      "symbol": "dispatchApi",
       "provenance": "manual",
       "confidence": "documented",
       "audit_check": null,
@@ -3243,44 +3220,50 @@
         "ops": [
           {
             "op": "add-export",
-            "target": "dispatch snapshot <plan-slug>",
-            "to": "command: snapshot + enrich → write dag-snapshot.json",
+            "target": "validate",
+            "to": "async (dagPath: string) => ValidationReport — validateDagJson over serializer read",
             "required": true
           },
           {
             "op": "add-export",
-            "target": "dispatch optimize <plan-slug>",
-            "to": "command: full compile → print summary",
+            "target": "snapshot",
+            "to": "async (dagPath: string) => DagSnapshot — real client + optimizer snapshot()",
             "required": true
           },
           {
             "op": "add-export",
-            "target": "dispatch run <plan-slug>",
-            "to": "command: orchestrator loop → stream progress",
+            "target": "optimize",
+            "to": "async (dagPath: string) => DispatchUnit[] — snapshot + greedy optimize()",
             "required": true
           },
           {
             "op": "add-export",
-            "target": "dispatch status <plan-slug>",
-            "to": "command: print open_questions, eligible, wave progress",
+            "target": "eligible",
+            "to": "async (dagPath: string) => string[] — DagClient.getEligibleMilestones (dispatch_log-derived completion)",
             "required": true
           },
           {
             "op": "add-export",
-            "target": "dispatch calibrate <model-tier>",
-            "to": "command: fire null-task to measure B → write calibration.json",
+            "target": "status",
+            "to": "async (dagPath: string) => per-milestone {status, logged ops, tokens} from dispatch_log",
             "required": true
           },
           {
             "op": "add-export",
-            "target": "dispatch validate <plan-slug>",
-            "to": "command: validateDagJson → print errors",
+            "target": "run",
+            "to": "async (dagPath: string, opts) => orchestrator cycle over IDispatchAgentRunner (dry-run flag uses MockAgentRunner)",
+            "required": true
+          },
+          {
+            "op": "add-export",
+            "target": "calibrate",
+            "to": "async (modelTier: string) => fires a null-task dispatch via agent-mcp to measure B; writes ~/.adhd/dispatch-calibration.json",
             "required": true
           }
         ]
       },
       "guard": null,
-      "ki_estimate": 1800,
+      "ki_estimate": 1200,
       "ki_source": "estimate"
     },
     {
@@ -3610,71 +3593,10 @@
       "ki_source": "estimate"
     },
     {
-      "id": "cli-entrypoint.1",
-      "milestone": "cli-entrypoint",
+      "id": "cli.2",
+      "milestone": "cli",
       "depends_on": [
-        "orchestrator-core.1"
-      ],
-      "type": "generative",
-      "action": "create",
-      "file": "packages/dispatch/dispatch-cli/src/api.ts",
-      "symbol": "dispatchApi",
-      "provenance": "manual",
-      "confidence": "documented",
-      "audit_check": null,
-      "criteria": [],
-      "authored_by": "claude-fable-5",
-      "status": "pending",
-      "shape": {
-        "kind": "script",
-        "ops": [
-          {
-            "op": "add-export",
-            "target": "validate",
-            "to": "async (dagPath: string) => ValidationReport — validateDagJson over serializer read",
-            "required": true
-          },
-          {
-            "op": "add-export",
-            "target": "snapshot",
-            "to": "async (dagPath: string) => DagSnapshot — real client + optimizer snapshot()",
-            "required": true
-          },
-          {
-            "op": "add-export",
-            "target": "optimize",
-            "to": "async (dagPath: string) => DispatchUnit[] — snapshot + greedy optimize()",
-            "required": true
-          },
-          {
-            "op": "add-export",
-            "target": "eligible",
-            "to": "async (dagPath: string) => string[] — DagClient.getEligibleMilestones (dispatch_log-derived completion)",
-            "required": true
-          },
-          {
-            "op": "add-export",
-            "target": "status",
-            "to": "async (dagPath: string) => per-milestone {status, logged ops, tokens} from dispatch_log",
-            "required": true
-          },
-          {
-            "op": "add-export",
-            "target": "run",
-            "to": "async (dagPath: string, opts) => orchestrator cycle over IDispatchAgentRunner (dry-run flag uses MockAgentRunner)",
-            "required": true
-          }
-        ]
-      },
-      "guard": null,
-      "ki_estimate": 1200,
-      "ki_source": "estimate"
-    },
-    {
-      "id": "cli-entrypoint.2",
-      "milestone": "cli-entrypoint",
-      "depends_on": [
-        "cli-entrypoint.1"
+        "cli.1"
       ],
       "type": "generative",
       "action": "create",
@@ -3856,6 +3778,57 @@
         "orchestrator fixes applied post-agent: test TMP_DIR session-path -> repo tmp/<package>/",
         "telemetry: unavailable (teammate mailbox agent; no usage on idle notification)",
         "code commit: dcd6c82"
+      ]
+    },
+    {
+      "id": "log-spec-types-backfill-2026-07-02",
+      "kind": "execution",
+      "provider": "local",
+      "model": null,
+      "agent": "backfill:pre-log-execution",
+      "effort": null,
+      "started_at": "2026-07-02T09:04:12.691991+00:00",
+      "completed_at": "2026-07-02T09:04:12.691991+00:00",
+      "operations": [
+        "spec-types.0",
+        "spec-types.1",
+        "spec-types.2",
+        "spec-types.3"
+      ],
+      "turns": [],
+      "results": [
+        {
+          "op_id": "spec-types.0",
+          "status": "complete",
+          "guard_result": "pass",
+          "guard_output": "npx nx test dispatch-spec exit 0 (19/19) 2026-07-02; artifact types.ts exists on disk",
+          "guard_ran_at": "2026-07-02T09:04:12.691991+00:00"
+        },
+        {
+          "op_id": "spec-types.1",
+          "status": "complete",
+          "guard_result": "pass",
+          "guard_output": "npx nx test dispatch-spec exit 0 (19/19) 2026-07-02; artifact types.ts exists on disk",
+          "guard_ran_at": "2026-07-02T09:04:12.691991+00:00"
+        },
+        {
+          "op_id": "spec-types.2",
+          "status": "complete",
+          "guard_result": "pass",
+          "guard_output": "npx nx test dispatch-spec exit 0 (19/19) 2026-07-02; artifact types.ts exists on disk",
+          "guard_ran_at": "2026-07-02T09:04:12.691991+00:00"
+        },
+        {
+          "op_id": "spec-types.3",
+          "status": "complete",
+          "guard_result": "pass",
+          "guard_output": "npx nx test dispatch-spec exit 0 (19/19) 2026-07-02; artifact types.ts exists on disk",
+          "guard_ran_at": "2026-07-02T09:04:12.691991+00:00"
+        }
+      ],
+      "notes": [
+        "BACKFILL: executed in prior sessions before dispatch_log discipline existed; no original telemetry",
+        "evidence: packages/dispatch/dispatch-spec/src/lib/types.ts exists; dispatch-spec guard green 2026-07-02"
       ]
     }
   ]
