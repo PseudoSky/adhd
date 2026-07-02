@@ -28,6 +28,53 @@ function makeRegistry(handler: InProcessToolHandler): McpClientRegistry {
 }
 
 describe("tool-naming", () => {
+    describe("exposeTools filtering", () => {
+        // Use "agent-mcp" key so the registry routes to InProcessMcpClient
+        // (self-referential), avoiding a real subprocess spawn.
+        it("lists only tools in allowedTools allowlist", async () => {
+            const reg = new McpClientRegistry(
+                { "agent-mcp": { transport: "stdio", command: "noop", allowedTools: ["agent"] } } as never,
+                undefined,
+                [{ name: "agent", description: "open a session", inputSchema: { type: "object", properties: {} } },
+                 { name: "task", description: "run a task", inputSchema: { type: "object", properties: {} } }],
+                async () => "ok",
+                ctx
+            );
+            const tools = await reg.listAllTools();
+            const names = tools.map(t => t.name);
+            expect(names).toContain("agent-mcp__agent");
+            expect(names).not.toContain("agent-mcp__task");
+        });
+
+        it("lists all tools when allowedTools/disallowedTools is not set", async () => {
+            const reg = new McpClientRegistry(
+                { "agent-mcp": { transport: "stdio", command: "noop" } } as never,
+                undefined,
+                [{ name: "agent", description: "", inputSchema: { type: "object", properties: {} } },
+                 { name: "task", description: "", inputSchema: { type: "object", properties: {} } }],
+                async () => "ok",
+                ctx
+            );
+            const tools = await reg.listAllTools();
+            expect(tools).toHaveLength(2);
+            expect(tools.map(t => t.name)).toEqual(["agent-mcp__agent", "agent-mcp__task"]);
+        });
+
+        it("filtered tools are not indexed in resolveToolName", async () => {
+            const reg = new McpClientRegistry(
+                { "agent-mcp": { transport: "stdio", command: "noop", allowedTools: ["agent"] } } as never,
+                undefined,
+                [{ name: "agent", description: "open a session", inputSchema: { type: "object", properties: {} } },
+                 { name: "task", description: "run a task", inputSchema: { type: "object", properties: {} } }],
+                async () => "ok",
+                ctx
+            );
+            await reg.listAllTools();
+            expect(reg.resolveToolName("agent-mcp__agent")).toEqual({ server: "agent-mcp", tool: "agent" });
+            // "task" was never indexed — falls through to __ split
+            expect(reg.resolveToolName("agent-mcp__task")).toEqual({ server: "agent-mcp", tool: "task" });
+        });
+    });
     it("normalizeToolName rewrites '-' and other non-[A-Za-z0-9_] chars to '_'", () => {
         expect(normalizeToolName("agent-mcp__agent")).toBe("agent_mcp__agent");
         expect(normalizeToolName("a.b-c__do")).toBe("a_b_c__do");

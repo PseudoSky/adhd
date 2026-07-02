@@ -427,6 +427,27 @@ task → { agent_name: "file-writer", prompt: "Write a file to /absolute/path/to
 // → { status: "completed", result: "File written to hello.txt." }
 ```
 
+### Controlling which MCP tools are visible and callable
+
+Use `allowedTools` (allowlist) or `disallowedTools` (denylist) on any `McpServerConfig` entry to control tool visibility and enforcement:
+
+```json
+"mcpServers": {
+  "filesystem": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/worktree"],
+    "allowedTools": ["read_text_file", "search_files", "write_file", "edit_file", "create_directory", "move_file"],
+    "disallowedTools": ["directory_tree"]
+  }
+}
+```
+
+- `allowedTools` — if set, **only** these tools are listed and callable. All others are hidden from the provider and rejected at runtime.
+- `disallowedTools` — tools in this list are hidden and rejected. All other tools from the server remain available.
+- Semantics: first apply `allowedTools`, then subtract `disallowedTools`.
+- Enforcement happens at two levels: `listAllTools()` hides them from the provider (zero context waste), and `assertToolAllowed()` in the orchestrator rejects calls at runtime if an agent discovers or crafts a call to a hidden tool.
+
 > **Tip:** Smaller local models (7B–9B range) are literal with paths — use the full absolute path in the prompt rather than a relative `./tmp/hello.txt`. The model calls `write_file` reliably when given an unambiguous target.
 
 ---
