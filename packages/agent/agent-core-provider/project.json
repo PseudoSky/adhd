@@ -1,7 +1,7 @@
 {
-  "name": "agent-provider",
+  "name": "agent-core-provider",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/ai/agent-provider/src",
+  "sourceRoot": "packages/agent/agent-core-provider/src",
   "projectType": "library",
   "release": {
     "version": {
@@ -17,55 +17,50 @@
       "executor": "@nx/js:tsc",
       "outputs": ["{options.outputPath}"],
       "options": {
-        "outputPath": "dist/packages/ai/agent-provider",
-        "main": "packages/ai/agent-provider/src/index.ts",
-        "tsConfig": "packages/ai/agent-provider/tsconfig.lib.json",
+        "outputPath": "dist/packages/agent/agent-core-provider",
+        "main": "packages/agent/agent-core-provider/src/index.ts",
+        "tsConfig": "packages/agent/agent-core-provider/tsconfig.lib.json",
         "clean": true,
         "assets": [
           {
-            "input": "packages/ai/agent-provider",
+            "input": "packages/agent/agent-core-provider",
             "glob": "drizzle/**/*",
             "output": "."
           }
         ]
       }
     },
-
     "serve": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "node dist/packages/ai/agent-provider/src/index.js"
+        "command": "node dist/packages/agent/agent-core-provider/src/index.js"
       },
       "dependsOn": ["build"]
     },
-
     "dev": {
       "executor": "nx:run-commands",
       "options": {
         "command": "nx build agent-provider --watch"
       }
     },
-
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "tsc -p packages/ai/agent-provider/tsconfig.json --noEmit"
+        "command": "tsc -p packages/agent/agent-core-provider/tsconfig.json --noEmit"
       }
     },
-
     "test": {
       "executor": "@nx/vite:test",
       "outputs": ["{options.reportsDirectory}"],
       "options": {
-        "configFile": "packages/ai/agent-provider/vite.config.ts",
-        "reportsDirectory": "../../../coverage/packages/ai/agent-provider"
+        "configFile": "packages/agent/agent-core-provider/vite.config.ts",
+        "reportsDirectory": "../../../coverage/packages/agent/agent-core-provider"
       }
     },
-
     "clean": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "rm -rf dist/packages/ai/agent-provider"
+        "command": "rm -rf dist/packages/agent/agent-core-provider"
       }
     },
     "nx-release-publish": {
