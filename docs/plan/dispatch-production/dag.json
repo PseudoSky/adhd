@@ -3147,7 +3147,7 @@
    "audit_check": null,
    "criteria": [],
    "authored_by": "workflow:plan-builder",
-   "status": "pending",
+   "status": "complete",
    "shape": {
     "kind": "script",
     "ops": [
@@ -3903,6 +3903,35 @@
     "token telemetry not captured: teammate-mode dispatch reports carry no usage data; started_at approximated to report time",
     "commit 2df11e5",
     "deviations disclosed: DEBT-DISPATCH-008/009/012"
+   ]
+  },
+  {
+   "id": "log-orchestrator-core-2026-07-02",
+   "kind": "execution",
+   "provider": "teammate",
+   "model": "sonnet",
+   "agent": "wave3-orchestrator",
+   "effort": "high",
+   "started_at": "2026-07-02T18:06:23+00:00",
+   "completed_at": "2026-07-02T18:06:23+00:00",
+   "operations": [
+    "orchestrator-core.1"
+   ],
+   "turns": [],
+   "results": [
+    {
+     "op_id": "orchestrator-core.1",
+     "status": "complete",
+     "guard_result": "pass",
+     "guard_output": "milestone guard verbatim: npx nx build dispatch-orchestrator && npx nx typecheck dispatch-orchestrator exit 0; blast radius: nx run-many test over 5 dispatch packages green (38/25/32/28/18); independent verifier negative control red/green (replan triggered_by)",
+     "guard_ran_at": "2026-07-02T18:06:23+00:00"
+    }
+   ],
+   "notes": [
+    "executed 2026-07-02 by teammate agent wave3-orchestrator (sonnet, high effort); builder report lost in transit - full disclosure reconstructed from inline code comments by independent verifier verify-wave3 (verdict SHIP)",
+    "commits: dispatch-spec 3e9f909 (additive Turn.model_calls, closes DEBT-DISPATCH-008), dispatch-orchestrator c13717b",
+    "disclosed gaps opened as DEBT-DISPATCH-015..020 (error boundary, op-level guard routing, capOutput UTF-8, ICalibrationStore, provider enum, non-causal replan)",
+    "token telemetry not captured: teammate-mode dispatch; started_at approximated to idle-notification time"
    ]
   }
  ]
