@@ -16,6 +16,14 @@
     "platform:shared"
   ],
   "targets": {
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["default", "^production", { "externalDependencies": ["typescript"] }],
+      "options": {
+        "command": "tsc -p packages/dispatch/dispatch-optimizer/tsconfig.lib.json --noEmit"
+      }
+    },
     "build": {
       "executor": "@nx/vite:build",
       "outputs": [

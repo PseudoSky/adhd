@@ -26,6 +26,14 @@
         "configFile": "packages/dispatch/dispatch-spec/vite.config.ts"
       }
     },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["default", "^production", { "externalDependencies": ["typescript"] }],
+      "options": {
+        "command": "tsc -p packages/dispatch/dispatch-spec/tsconfig.lib.json --noEmit"
+      }
+    },
     "build": {
       "executor": "@nx/vite:build",
       "outputs": ["{options.outputPath}"],
