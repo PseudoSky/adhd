@@ -16,3 +16,29 @@ export type {
   MockTaskResult,
 } from './test/helpers/mock-agent-runner.js';
 export { MockAgentRunner } from './test/helpers/mock-agent-runner.js';
+
+export type {
+  ClockFn,
+  IdFactoryFn,
+  SleepFn,
+  PollConfig,
+  GuardExecResult,
+  GuardExecFn,
+  IOrchestratorIoPlugin,
+  IOrchestratorGitnexusPlugin,
+  ICalibrationPlaceholder,
+  IOptimizerLike,
+  OrchestratorDeps,
+  MilestoneGuardOutcome,
+  DispatchedUnitSummary,
+  CycleResult,
+} from './lib/orchestrator.js';
+export {
+  orchestrateCycle,
+  orchestrate,
+  DEFAULT_B_PER_TIER,
+  DEFAULT_CONTEXT_WINDOW_PER_TIER,
+  DEFAULT_POLL,
+  DEFAULT_GUARD_TIMEOUT_MS,
+  DEFAULT_MAX_CYCLES,
+} from './lib/orchestrator.js';
