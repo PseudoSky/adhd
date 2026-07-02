@@ -1,1 +1,2 @@
-export { scaffoldGenerator } from './generators/scaffold/generator';
+export { scaffoldGenerator } from './generators/shared/generator';
+export type { ScaffoldGeneratorSchema } from './generators/shared/generator';
