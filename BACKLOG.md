@@ -405,37 +405,91 @@ and browser contexts.
 
 ## DEBT-WORKSPACE-DEPCHECK-001 — workspace lint must verify each package.json declares every imported workspace dep
 **Belongs in the workspace plan** — fold into **FEAT-WORKSPACE-001**'s "custom workspace lint (the gate)" / `@adhd/workspace-standard` (`docs/workspace-base/SCOPE.md`). No check currently fails a project whose source imports a workspace `@adhd/*` package it does **not** declare in its own `package.json`. This is a real, shipped failure mode: `@adhd/agent-mcp` imported `@adhd/agent-compiler`/`agent-policy`/`agent-mcp-budget` (+ provider/registry/tool-registry in tests) while declaring only `@adhd/agent-mcp-types`, so nx's `build.dependsOn:["^build"]` never built those deps; on a **clean** checkout their `.d.ts` were absent and `vite-plugin-dts` fell through the tsconfig `@adhd→src` paths into dependency **source** outside the consumer's `rootDir` → **`TS6059`**, silently breaking `nx build agent-mcp` for everyone but the dev worktree (which had built the dep dists incrementally). Fixed ad-hoc by declaring the deps (commit `08bbdda`) — but nothing prevents recurrence (agent-registry/agent-tool-registry declare nothing today; their cross-package imports are currently test-only — one import away from the same trap).
+## FOLLOW-UP: nx mv workspace rename prerequisite (workspace-cleanup)
+
+**Discovered:** 2026-07-01, during workspace-cleanup planning.
+
+**Finding:** `nx g @nx/workspace:move` correctly renames packages, moves files, and rewrites all TypeScript imports across the workspace — **but only if `tsconfig.base.json` compilerOptions.paths values omit the `./` prefix**. Our tsconfig currently has `./` on all 41 path entries (e.g. `"./packages/..."`), which breaks Nx's source-root matching algorithm in `update-imports.js` (it looks for values starting with `<sourceRoot>/` but finds `./<sourceRoot>/` instead).
+
+**Prerequisite before any rename:** strip `./` from all tsconfig.base.json path values:
+```jsonc
+// Before: "@adhd/foo": ["./packages/group/foo/src/index.ts"]
+// After:  "@adhd/foo": ["packages/group/foo/src/index.ts"]
+```
+
+**Verified command syntax (works after fix):**
+```bash
+nx g @nx/workspace:move \
+  --destination packages/<group>/<new-name> \
+  --projectName <old-name> \
+  --newProjectName <new-name> \
+  --importPath @adhd/<new-name> \
+  --projectNameAndRootFormat as-provided
+```
+
+**What it does automatically:** git mv directory, update project.json (name, sourceRoot, all path refs), update package.json (name, internal deps), rewrite all import/export/references across workspace, update tsconfig.base.json paths.
+
+**Verified with:** `dispatch-spec` → `dispatch-base-spec` — 15 source files across `dispatch-client` and `dispatch-optimizer` updated correctly. Belongs to `docs/plan/workspace-cleanup/SCOPE.md`.
+
+---
+
 **Fix:** enable the **`@nx/dependency-checks` ESLint rule** (`@nx/eslint-plugin`) on every package's `package.json` lint — it diffs declared deps against actual imports and flags **both** missing and extraneous deps, and runs in CI. (Equivalent fallback: `eslint-plugin-import`'s `no-extraneous-dependencies`, but `@nx/dependency-checks` is workspace-aware.) This makes the standard *enforced*, not merely generated.
 
+---
 
-## Extraction performance + memory-leak work (2026-07-02)
+## dispatch-production — re-plan review findings (2026-07-01)
 
-### PERF-APIGEN-001 — extraction rebuilt full TypeScript programs redundantly (≈2 ts-morph Projects per source per run) — RESOLVED 2026-07-02
-**Symptom:** `buildDescriptor` (the seam behind `apigen generate/run/serve`) took ~37.4s for a 6-file × 10-fn fixture, with ~1.0GB heap retained after GC; warm re-runs were no faster than cold.
-**Root cause (multi-part):** (1) `extract()`, `generateSchemas()`, and `extractClasses()` each built a fresh ts-morph `Project` per call (parse lib.d.ts + type-check, ~1–2s), and the orchestrator calls extract AND generateSchemas for the SAME file — two programs per source; (2) per-parameter `buildSchema()` results were never shared, so the orchestrator's second pass recomputed every schema; (3) the ts-json-schema-generator cache was module-global, keyed on mtime — every file edit in watch/serve added a new ~100–200MB entry, forever (unbounded leak); (4) `fs.statSync` + import-alias scans ran per `buildSchema` call.
-**Fix:** new `ExtractionSession` (`packages/apigen/core/src/lib/extraction-session.ts`) — one shared ts-morph Project per tsconfig per run, one generator per (file,tsconfig), memoized schemas/aliases/stats, threaded through extract/generateSchemas/extractClasses/orchestrator via an additive optional `session` option and disposed per run; plus a **bounded persistent tier** (process-lifetime, LRU-capped generator cache — `APIGEN_PROGRAM_CACHE`, default 8, 0 disables — and version-checked persistent Project + schema maps, refreshed in place on file edit).
-**Measured (6 files × 10 fns, `npx nx run apigen-cli:bench`):** cold 37.4s → 7.4s (**5x**); warm runs 37.4s → **6–11ms**; retained heap: unbounded growth (~180MB+/edit) → **capped plateau** (≤ cap × program size, configurable). apigen-core test suite wall time 64.6s → 8.4s.
-**Guards:** `packages/apigen/core/src/test/extraction-session.spec.ts` (work-count assertions, proven red under a negative control) + `packages/apigen/cli/src/test/perf.spec.ts` (descriptor deep-equality across cached runs, heap flatness with real gc, warm-run bound through the real orchestrator).
-**Deliberate perf choice (documented, NOT a bug):** per-parameter `buildSchema` loops stay sequential — the work is synchronous CPU under an async signature, so `Promise.all` gains nothing and would race morph-walk's shared-SourceFile probe aliases.
+Found by the two-agent plan-vs-code review that restructured
+`docs/plan/dispatch-production/dag.json`. Bugs 001–003 are scheduled for fix by the
+plan's new `client-fixes` milestone; recorded here per disclosure policy until fixed.
 
-### BUG-APIGEN-016 — py-grpc/py-flask spawned bare PATH `python3` and hoped grpcio was installed — RESOLVED 2026-07-02
-**Symptom:** `apigen run/serve --type py-grpc` (and the live serve spec) died with `ImportError: grpcio / grpcio-reflection is required` on any machine whose PATH python lacked the deps — the dependency lived outside the repo's packaging, so nothing in the repo could fix it. Failed identically at HEAD (verified via a pristine baseline worktree).
-**Fix:** new `@adhd/apigen-python-env` (`packages/apigen/python-env`) provisions a managed venv from `apigen-python`'s OWN `pyproject.toml` extras (`pip install <pkg>[grpc]` into `~/.adhd/apigen/pyvenv`, content-hash stamped, cross-process locked, extras are monotonic-union so concurrent flask/grpc consumers can't thrash the venv). Both py plugins, the plugin live specs, `serve` (pre-flight + `APIGEN_PYTHON` pinning for children), and the conformance gate now resolve the interpreter through it. Loud failure with exact remediation when no Python ≥3.11 exists.
-**Guards:** `packages/apigen/python-env/src/test/python-env.spec.ts` (real venv under `tmp/`, reuse, monotonic-extras, override semantics) + the always-on live py-grpc specs now passing.
+### BUG-DISPATCH-001 — `DagClient.getEligibleMilestones()` ignores milestone completion
+- **Where:** `packages/dispatch/dispatch-client/src/lib/client.ts`
+- **Symptom:** eligibility derives from `pending !== null` alone; a milestone whose dependency is dispatched-but-incomplete (or failed) is reported eligible. Only accidentally correct for wave 0.
+- **Correct semantics:** eligible iff `pending == null` AND every `depends_on` milestone is complete (PoC `compiler.ts:770`). On the e2e critical path — the orchestrator calls this every cycle.
+- **Status:** OPEN — `client-fixes.1` in dispatch-production dag.json.
 
-### BUG-APIGEN-017 — `packages/apigen/python/pyproject.toml` declared a non-existent build backend — RESOLVED 2026-07-02
-`build-backend = "setuptools.backends.legacy:build"` is not a real setuptools backend; any `pip install` of the package failed at build-backend import. Fixed to `setuptools.build_meta` (verified by the python-env venv provisioning tests, which pip-install the package for real).
+### BUG-DISPATCH-002 — `plan.spec.ts` silently skips its only assertion via a stale path
+- **Where:** `packages/dispatch/dispatch-spec/src/test/plan.spec.ts`
+- **Symptom:** derives `repoRoot` by splitting `__dirname` on `'packages/shared/dispatch-spec'` — a path removed by the workspace refactor — then `if (!repoRoot) return` instead of failing. The dag.json-against-validator test has never actually run. Violates the loud-prerequisite-failure rule (CLAUDE.md §6).
+- **Status:** OPEN — `client-fixes.2`.
 
-### Memory-leak fixes (runtime/cli) — RESOLVED 2026-07-02
-- **EventBus handlers unremovable** (`packages/apigen/runtime/src/lib/event-bus.ts`): `on()` accumulated forever. Added `off()`/`clear()`, `on()` returns an unsubscribe fn, and `createApiPackage()` results gained `dispose()`. Guard: `runtime/src/test/event-bus.spec.ts`.
-- **`builtinTsconfigPath()` mkdtemp spray** (`packages/apigen/cli/src/lib/resolve-tsconfig.ts`): wrote a new never-cleaned OS-temp dir per call in long-running serve/watch; now memoized per process.
-- **gRPC session hygiene** (`packages/apigen/cli/src/lib/commands/serve.ts`): cached h2c sessions now idle-evict after 60s (`setTimeout` → close) and `unref()` so they never hold the event loop open; stale entries from silent backend death no longer linger.
+### BUG-DISPATCH-003 — `dispatch-client` re-exports optimizer surface (layering leak)
+- **Where:** `packages/dispatch/dispatch-client/src/index.ts`
+- **Symptom:** re-exports `snapshot`/`optimize` from `@adhd/dispatch-optimizer`, letting consumers import optimizer surface through the client layer.
+- **Status:** OPEN — `client-fixes.3`.
 
-### BUG-APIGEN-018 — `apigen-conformance:build` failed to compile at all (TS1343: `import.meta` under module=commonjs) — RESOLVED 2026-07-02
-`gate.ts` `main()` used `import.meta.url` in its ESM fallback while the package type-checks under `module: commonjs` — the build target errored before emitting anything (reproduced identically on pristine gate.ts). Fixed with a `findWorkspaceRoot()` nx.json walk-up from `__dirname`/cwd. Verified: `npx nx run apigen-conformance:build` exit 0.
+### DEBT-DISPATCH-004 — `@adhd/dispatch-optimizer` published surface is stubs
+- **Where:** `packages/dispatch/dispatch-optimizer/src/lib/` — `snapshot()` returns `{} as DagSnapshot`, `optimize()` returns `[]`, all 4 algorithm files return `[]`; built bundle is 0.11 kB. The real implementation is `docs/plan/dispatch-optimizer/src/compiler.ts` (2,038 lines), never ported.
+- **Status:** OPEN — re-scoped `optimizer-core` milestone (snapshot port + greedy packer); algorithm cascade data-gated behind `optimizer-algorithms`.
 
-### DEBT-APIGEN-CACHE-001 — persistent cache invalidation tracks the ENTRY file only (OPEN)
-The persistent generator/schema tiers version on the entry file's mtime+size. A type imported from ANOTHER file that changes (while the entry file doesn't) is not detected — same semantics the generator cache always had, now inherited by the schema tier. Watch-mode consumers editing shared type files across sources may see stale schemas until the entry file is touched or the process restarts. Fix direction: track the program's dependency file set (ts-morph `sf.getReferencedSourceFiles()`) in the version stamp.
+### DEBT-DISPATCH-005 — BL-101..BL-107 identifiers exist only in the PoC LOG.md
+- **Where:** `docs/plan/dispatch-optimizer/LOG.md` (outstanding table); referenced by both dispatch plans but absent from this BACKLOG.
+- **Summary:** BL-101 fixed; BL-102 guard-only milestones lack `execution_mode` in DispatchUnit (MEDIUM); BL-103 `snapshot_version` never increments (LOW); BL-104 `compilePrompt()` doesn't inline nested interface sub-shapes (MEDIUM); BL-105 `mcp_servers: null` blocks real dispatch (HIGH — now *bypassed* by the `agent-runner` milestone's `mcpServers: {}` fallback for claudecli agents; catalog lookup still unbuilt, tracked by `backlog-fill`); BL-106 `b_per_tier` cold-start not seeded (LOW); BL-107 back-compat patches live in `run.ts` not `readDag()` (LOW).
+- **Status:** OPEN — deferred `backlog-fill` milestone covers BL-102..107 residue.
 
-### DEFER-APIGEN-PERF-001 — worker_threads parallel extraction (OPEN, stretch)
-Extraction is single-threaded CPU work; multi-source cold runs could parallelize per-source across workers (Operations are plain JSON — serializable). Deferred: real complexity in the bundled-CLI worker entry (vite multi-entry) vs. modest gains for typical 1–2-source runs, and the persistent tier already makes warm runs ~free.
+## DEBT-WORKSPACE-VITE-PATHS-001 — Vite configs hardcode relative paths to dist/, coverage/, cacheDir/ instead of resolving from project config
+
+**Discovered:** 2026-07-01, during workspace-cleanup renames.
+
+**Where:** Every `vite.config.ts` in the repo. Example from `packages/dispatch/dispatch-spec/vite.config.ts`:
+```ts
+cacheDir: '../../../node_modules/.vite/packages/dispatch/dispatch-spec',
+outDir: '../../../dist/packages/dispatch/dispatch-spec',
+coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec' }
+```
+
+**Problem:** These paths encode the package's position in the directory tree relative to the workspace root. When a package is renamed or moved (e.g., `packages/shared/dispatch-spec` → `packages/dispatch/dispatch-spec`), every path in `vite.config.ts` breaks and must be updated manually — `nx mv` doesn't touch them because they're string literals, not import paths. This is the root cause behind the `Can't find meta/_journal.json` and stale-dist-path bugs encountered during workspace-cleanup.
+
+**Fix direction:** Inject workspace-root and package-root paths dynamically so they survive renames:
+- Use a shared vite plugin or helper that reads `process.cwd()` or `__dirname` and resolves relative to the workspace root at build time
+- Example: `import { workspaceRoot, projectRoot } from '@adhd/workspace-vite'` → resolves to correct paths regardless of package location
+- Alternatively: read from `project.json` / `nx.json` via `@nx/devkit` during the vite config build phase
+- The helper should provide: `projectDist()`, `projectCoverage()`, `projectCacheDir()`, `workspaceNodeModules()` at minimum
+
+**Status:** OPEN — deferred workspace-enablement milestone.
+
+### DEBT-DISPATCH-006 — agent-mcp exposes no per-turn token usage on the MCP surface
+- **Where:** `packages/ai/agent-mcp/src/validation/usage.ts:84-108` — public shape is aggregate `TaskUsageReport.direct`; per-turn `MODEL_RESPONSE` events exist in the internal `task_events` table (`schema.ts:101-121`) but no tool exposes them.
+- **Impact:** dispatch `dispatch_log[].turns[]` is synthesized as a single aggregate entry; per-turn calibration (PoC SCOPE §C4) is not possible until agent-mcp grows a per-turn query. Not e2e-blocking.
+- **Status:** OPEN — candidate FEAT for agent-mcp (expose per-turn events via `usage_query`).
