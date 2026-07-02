@@ -459,6 +459,12 @@ plan's new `client-fixes` milestone; recorded here per disclosure policy until f
 - **Symptom:** re-exports `snapshot`/`optimize` from `@adhd/dispatch-optimizer`, letting consumers import optimizer surface through the client layer.
 - **Status:** INVALID 2026-07-02 — not present in current source. `index.ts` exports only client/serializer symbols and has never re-exported optimizer surface on this branch (`git blame` → single commit `1e63f8d`); `package.json` doesn't depend on `dispatch-optimizer`; zero `@adhd/dispatch-client` consumers repo-wide. The finding was recorded during the plan-vs-code audit against an intended-architecture diagram, not the actual file.
 
+### BUG-DISPATCH-008 — `getEligibleMilestones()` re-offered already-complete milestones
+
+- **Where:** `packages/dispatch/dispatch-client/src/lib/client.ts`.
+- **Symptom:** eligibility checked `pending == null` + dependency completion (post BUG-DISPATCH-001 fix) but never the milestone's *own* completion — completed milestones stayed listed forever, so the orchestrator would re-dispatch finished work. Caught 2026-07-02 by the apigen-generated CLI spike driving `eligible` against the real dispatch-production dag.json (first output listed `client-core`/`serializer-json`/`client-fixes`, all complete).
+- **Status:** FIXED 2026-07-02 — self-completion now excludes; regression test (`does NOT list an already-complete milestone as eligible`) + corrected the fixture assertion that encoded the old semantics; negative control: fix removed → 2 tests red → restored → 32/32 green (exit codes captured directly). Consumer-seam re-proof: the generated CLI now returns exactly the dispatch frontier.
+
 ### DEBT-DISPATCH-004 — `@adhd/dispatch-optimizer` published surface is stubs
 - **Where:** `packages/dispatch/dispatch-optimizer/src/lib/` — `snapshot()` returns `{} as DagSnapshot`, `optimize()` returns `[]`, all 4 algorithm files return `[]`; built bundle is 0.11 kB. The real implementation is `docs/plan/dispatch-optimizer/src/compiler.ts` (2,038 lines), never ported.
 - **Status:** OPEN — re-scoped `optimizer-core` milestone (snapshot port + greedy packer); algorithm cascade data-gated behind `optimizer-algorithms`.
