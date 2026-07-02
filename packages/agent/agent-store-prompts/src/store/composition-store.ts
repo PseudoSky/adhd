@@ -238,7 +238,7 @@ export class CompositionStore {
    * @param agentSlug - The agent whose composition to resolve.
    * @param ctx       - Runtime context key/value map.
    * @returns Ordered, filtered list of resolved components. NOT a rendered prompt.
-   *          Markdown assembly is @adhd/agent-compiler's responsibility.
+   *          Markdown assembly is @adhd/agent-engine-compiler's responsibility.
    */
   resolveComposition(
     agentSlug: string,

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-// Import HookRegistry from @adhd/agent-mcp-types (not @adhd/agent-mcp) to avoid
+// Import HookRegistry from @adhd/agent-base-types (not @adhd/agent-mcp) to avoid
 // a circular Nx build-graph dependency: agent-mcp-budget → agent-mcp → agent-mcp-budget.
 import { HookRegistry } from '@adhd/agent-base-types';
 import { createPlugin, configSchema, pluginConfigSchema } from '../index.js';

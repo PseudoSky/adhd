@@ -14,7 +14,7 @@ import { composedPromptsTable } from '../db/schema.js';
 // (Decision 2, decisions.md: the total-order assembly rule makes (agent, context)
 // → byte-identical output; the hash encodes the cache key for that output).
 //
-// This function is EXPORTED from the package barrel so @adhd/agent-compiler can
+// This function is EXPORTED from the package barrel so @adhd/agent-engine-compiler can
 // reuse the exact same algorithm (it must match — a different hash in the
 // compiler and the registry would produce permanent cache misses).
 //
@@ -28,7 +28,7 @@ import { composedPromptsTable } from '../db/schema.js';
  * Sorted-key JSON canonicalization → SHA-256 hex.
  * `{ b: "2", a: "1" }` and `{ a: "1", b: "2" }` both hash to the same value.
  *
- * This is the canonical implementation reused by @adhd/agent-compiler — import
+ * This is the canonical implementation reused by @adhd/agent-engine-compiler — import
  * it from `@adhd/agent-registry` rather than reimplementing.
  *
  * @param context - Runtime context key/value map.

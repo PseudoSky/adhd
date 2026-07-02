@@ -20,8 +20,12 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import * as readline from 'node:readline'
 import * as path from 'node:path'
+import { ensurePythonEnv } from '@adhd/apigen-python-env'
 
-const PYTHON_PKG_DIR = path.resolve(__dirname, '..', '..', '..', '..', 'python')
+// Managed interpreter — provisioned from apigen-python's own pyproject.toml,
+// exactly like the plugin's run() path. Never bare `python3`.
+const PYENV = ensurePythonEnv()
+const PYTHON_PKG_DIR = PYENV.pythonPkgDir
 const FIXTURE_MODULE = path.resolve(__dirname, 'fixtures', 'test_api.py')
 const PORT = 49271  // deterministic high port, avoids clashes
 const NS = 'testapi'
@@ -40,7 +44,7 @@ interface LiveServer {
 
 async function startServer(): Promise<LiveServer> {
   const proc = spawn(
-    'python3',
+    PYENV.python,
     [
       '-m', 'apigen_python.flask_server',
       '--module', FIXTURE_MODULE,

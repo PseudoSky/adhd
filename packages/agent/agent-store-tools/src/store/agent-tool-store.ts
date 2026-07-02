@@ -22,7 +22,7 @@ export type PermissionLevel = 'full' | 'read_only' | 'restricted';
  *
  * agent_slug is a LOGICAL key into agent-registry's `agents` table — it is
  * NOT a SQLite FK ([inv:no-cross-pkg-fk]). The linkage is resolved at compile
- * time by @adhd/agent-compiler. Accepts any string slug, even one with no
+ * time by @adhd/agent-engine-compiler. Accepts any string slug, even one with no
  * matching row in the agents table (there is no such table in this package).
  */
 export interface AgentToolGrant {

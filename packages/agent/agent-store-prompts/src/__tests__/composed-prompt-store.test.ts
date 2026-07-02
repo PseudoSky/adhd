@@ -229,7 +229,7 @@ describe('contextHash', () => {
   /**
    * Order-independence is the critical property of the cache key algorithm.
    * The same logical context in any key-insertion order MUST hash identically,
-   * because @adhd/agent-compiler and @adhd/agent-mcp may construct the context
+   * because @adhd/agent-engine-compiler and @adhd/agent-mcp may construct the context
    * map independently with differing key orders.
    *
    * TOOTH: if sorting is removed from contextHash(), this test goes red.

@@ -215,7 +215,7 @@ export class BindingStore {
 
   /**
    * List all bindings for a given platform.
-   * Used by @adhd/agent-compiler to build the platform's tools: header.
+   * Used by @adhd/agent-engine-compiler to build the platform's tools: header.
    */
   listForPlatform(platformId: string): ToolPlatformBinding[] {
     return this.db

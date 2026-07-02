@@ -168,6 +168,8 @@ export class OpenAIProvider implements LLMProvider {
                     ? {
                         inputTokens: sdkUsage.prompt_tokens,
                         outputTokens: sdkUsage.completion_tokens,
+                        cacheReadTokens: sdkUsage.prompt_tokens_details?.cached_tokens ?? undefined,
+                        cacheCreationTokens: undefined,
                         stopReason: normalisedStopReason,
                         maxTokens: this.providerConfig.maxTokens,
                     }

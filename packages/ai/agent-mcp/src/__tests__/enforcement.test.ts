@@ -236,7 +236,7 @@ describe('Orchestrator — BUDGET_EXCEEDED via BudgetPlugin', () => {
     const harness = await buildHarness({ skipOrphanScan: true });
 
     try {
-      // Hand-rolled enforcement handler (avoids importing @adhd/agent-mcp-budget
+      // Hand-rolled enforcement handler (avoids importing @adhd/agent-plugin-budget
       // which would create a circular Nx dependency with agent-mcp).
       // Counts completed model calls via post:model_response; throws on turn 2.
       let modelCallCount = 0;

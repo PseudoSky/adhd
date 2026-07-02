@@ -1,5 +1,4 @@
 import path from 'node:path'
-import fs from 'node:fs'
 import {
   createParser,
   createFormatter,
@@ -12,6 +11,12 @@ import type { Project, SourceFile } from 'ts-morph'
 import { morphFallback } from './morph-fallback'
 import { buildMapSetTupleSchema } from './map-set-tuple'
 import { withResolvedType, walkType } from './morph-walk'
+import {
+  fileVersion,
+  persistentSchemasFor,
+  type BuiltGenerator,
+  type InternalExtractionSession,
+} from '../extraction-session'
 
 /**
  * Maps npm module specifiers to the canonical SCALAR_SCHEMAS key for that module's
@@ -221,25 +226,58 @@ function getTsjsTs(): typeof import('typescript') {
  * (`createSchema(type)` is the cheap lookup). Caching the generator per source
  * file collapses N program builds into one, turning O(N) type-checks into O(1).
  *
- * Invalidation: the cache key includes the file's mtime+size so an edited file
- * rebuilds. Only the stable real source file (Path 1) is cached; the OS-temp
- * anonymous-type files (Path 2) pass `cacheable=false` so their single-use
+ * Invalidation & bounding: entries are keyed by `(path, tsconfig)` and store
+ * the file's mtime+size version IN the entry — a version mismatch REPLACES the
+ * entry (the old program becomes collectible), so the cache holds at most ONE
+ * generator per distinct file. The previous scheme keyed on the version too,
+ * which grew a new ~50–100MB entry on every file edit in watch/serve mode,
+ * forever. Only the stable real source file (Path 1) is cached; the
+ * anonymous-type path (Path 2) passes `cacheable=false` so its single-use
  * programs are never retained (caching them would OOM a many-export file).
+ *
+ * When an {@link InternalExtractionSession} is supplied, its per-run
+ * `generatorCache` + memoized `statVersion` are used instead of this
+ * module-global fallback, and `session.dispose()` releases everything.
  */
-type BuiltGenerator = { createSchema(type: string): unknown }
-const _generatorCache = new Map<string, BuiltGenerator>()
+const _generatorCache = new Map<string, { version: string; gen: BuiltGenerator }>()
 
-/** Stable cache key for a source program: path + tsconfig + file version (mtime-ns, size). */
-function generatorCacheKey(pathStr: string, tsconfig: string | undefined): string {
-  let version = '0'
-  try {
-    const st = fs.statSync(pathStr)
-    version = `${st.mtimeMs}:${st.size}`
-  } catch {
-    // File may not exist yet (caller will surface the real error); use a sentinel.
-    version = 'nostat'
+/**
+ * Max entries in the persistent (module-global) generator tier. Each entry
+ * holds a full TypeScript program (~100–200MB), so the tier is LRU-capped:
+ * memory stays proportional to the recent working set, not to every file the
+ * process ever extracted. Tune via APIGEN_PROGRAM_CACHE (0 disables the
+ * persistent tier entirely; per-run session caching still applies).
+ */
+function persistentGeneratorCap(): number {
+  const raw = process.env['APIGEN_PROGRAM_CACHE']
+  const n = raw === undefined ? NaN : Number(raw)
+  return Number.isFinite(n) && n >= 0 ? n : 8
+}
+
+function persistentGeneratorGet(key: string): { version: string; gen: BuiltGenerator } | undefined {
+  const entry = _generatorCache.get(key)
+  if (entry) {
+    // Refresh recency (Map preserves insertion order → oldest is first).
+    _generatorCache.delete(key)
+    _generatorCache.set(key, entry)
   }
-  return `${pathStr} ${tsconfig ?? ''} ${version}`
+  return entry
+}
+
+function persistentGeneratorSet(key: string, entry: { version: string; gen: BuiltGenerator }): void {
+  const cap = persistentGeneratorCap()
+  if (cap === 0) return
+  _generatorCache.delete(key)
+  _generatorCache.set(key, entry)
+  while (_generatorCache.size > cap) {
+    const oldest = _generatorCache.keys().next().value as string
+    _generatorCache.delete(oldest)
+  }
+}
+
+/** Identity key for a source program: path + tsconfig (version is stored IN the entry). */
+function generatorEntryKey(pathStr: string, tsconfig: string | undefined): string {
+  return `${pathStr}\u0000${tsconfig ?? ''}`
 }
 
 /**
@@ -261,16 +299,36 @@ function generatorCacheKey(pathStr: string, tsconfig: string | undefined): strin
  * many-export file). Only the stable real source file (Path 1) is cached, where
  * the amortisation turns O(N) program builds into O(1).
  */
-function runScalarAwareGenerator(config: Config, cacheable: boolean): Record<string, unknown> {
+function runScalarAwareGenerator(
+  config: Config,
+  cacheable: boolean,
+  session?: InternalExtractionSession,
+): Record<string, unknown> {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { DEFAULT_CONFIG } = require('ts-json-schema-generator/dist/src/Config.js') as {
     DEFAULT_CONFIG: CompletedConfig
   }
   const completedConfig: CompletedConfig = { ...DEFAULT_CONFIG, ...config }
   const pathStr = completedConfig.path as string
-  const key = cacheable ? generatorCacheKey(pathStr, completedConfig.tsconfig) : undefined
 
-  let gen = key !== undefined ? _generatorCache.get(key) : undefined
+  // Both tiers are keyed by (path, tsconfig) and store the file version IN
+  // the entry, so an edited file REPLACES its entry instead of accumulating a
+  // new one per edit (bounded: at most one program per distinct file).
+  // Sessions READ THROUGH to the module-global tier: repeated runs in one
+  // process (watch mode, serve rebuilds, test loops) reuse the built program
+  // across sessions, while session.dispose() still releases the per-run map.
+  const key = cacheable ? generatorEntryKey(pathStr, completedConfig.tsconfig) : undefined
+  let version: string | undefined
+  if (cacheable) {
+    // Within a session a run is a snapshot — stat each file once.
+    version = session ? session.statVersion(pathStr) : fileVersion(pathStr)
+  }
+
+  let gen: BuiltGenerator | undefined
+  if (key !== undefined) {
+    const entry = session?.generatorCache.get(key) ?? persistentGeneratorGet(key)
+    if (entry && entry.version === version) gen = entry.gen
+  }
   if (!gen) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { createProgram } = require('ts-json-schema-generator/dist/factory/program.js') as {
@@ -284,7 +342,12 @@ function runScalarAwareGenerator(config: Config, cacheable: boolean): Record<str
     const parser = createParser(program, completedConfig, augmentor as unknown as Parameters<typeof createParser>[2])
     const formatter = createFormatter(completedConfig)
     gen = new SchemaGenerator(program, parser, formatter, completedConfig) as BuiltGenerator
-    if (key !== undefined) _generatorCache.set(key, gen)
+    if (session) session.stats.generatorsBuilt++
+    if (key !== undefined && version !== undefined) {
+      const entry = { version, gen }
+      persistentGeneratorSet(key, entry) // persistent tier (LRU-capped)
+      session?.generatorCache.set(key, entry)
+    }
   }
 
   return gen.createSchema(completedConfig.type as string) as Record<string, unknown>
@@ -417,19 +480,72 @@ function applyAliasesToTypeText(typeText: string, aliases: ReadonlyMap<string, s
   return result
 }
 
-/** Attempts ts-json-schema-generator first; falls back to morphFallback for inline/anonymous types. */
+/**
+ * Attempts ts-json-schema-generator first; falls back to morphFallback for
+ * inline/anonymous types.
+ *
+ * When `session` is supplied, results are memoized per
+ * `(sourceFile, tsconfig, typeText)` for the session's lifetime — the
+ * orchestrator's extract + generateSchemas double pass over the same file, and
+ * repeated parameter types across functions, all become Map hits. Cached
+ * fragments are shared by reference; callers treat schemas as immutable.
+ */
 export async function buildSchema(
   _project: Project,
   sf: SourceFile,
   typeText: string,
-  tsconfig?: string
+  tsconfig?: string,
+  session?: InternalExtractionSession,
+): Promise<Record<string, unknown>> {
+  if (!session) return buildSchemaUncached(_project, sf, typeText, tsconfig, undefined)
+
+  const sfPath = sf.getFilePath()
+  const key = `${sfPath} ${tsconfig ?? ''} ${typeText}`
+  const hit = session.schemaCache.get(key)
+  if (hit !== undefined) {
+    session.stats.schemaCacheHits++
+    return hit
+  }
+
+  // Persistent tier: survives the session so repeated runs in one process
+  // (watch/serve rebuilds, test loops) skip recomputation while the file is
+  // unchanged (version-checked; an edit replaces the file's whole map).
+  const persistent = persistentSchemasFor(sfPath, tsconfig, session.statVersion(sfPath))
+  const persisted = persistent.get(typeText)
+  if (persisted !== undefined) {
+    session.stats.schemaCacheHits++
+    session.schemaCache.set(key, persisted)
+    return persisted
+  }
+
+  session.stats.schemaCacheMisses++
+  const schema = await buildSchemaUncached(_project, sf, typeText, tsconfig, session)
+  session.schemaCache.set(key, schema)
+  persistent.set(typeText, schema)
+  return schema
+}
+
+async function buildSchemaUncached(
+  _project: Project,
+  sf: SourceFile,
+  typeText: string,
+  tsconfig: string | undefined,
+  session: InternalExtractionSession | undefined,
 ): Promise<Record<string, unknown>> {
   if (['void', 'undefined', 'null', 'Promise<void>'].includes(typeText)) return { type: 'null' }
 
   // Build an alias map for this source file so that locally-aliased external scalar
   // types (e.g. `import { Decimal as D2 } from 'decimal.js'`) are resolved to their
-  // canonical SCALAR_SCHEMAS key at every nesting depth.
-  const aliases = extractScalarAliases(sf)
+  // canonical SCALAR_SCHEMAS key at every nesting depth. Memoized per SourceFile
+  // for the session's lifetime (the imports of an in-flight file don't change).
+  let aliases: ReadonlyMap<string, string>
+  if (session) {
+    const cached = session.aliasCache.get(sf)
+    aliases = cached ?? extractScalarAliases(sf)
+    if (!cached) session.aliasCache.set(sf, aliases)
+  } else {
+    aliases = extractScalarAliases(sf)
+  }
 
   // Normalise the type text before the SCALAR_SCHEMAS lookup so that
   // default-imported external types (e.g. `import Decimal from 'decimal.js'`
@@ -457,7 +573,7 @@ export async function buildSchema(
   // `[Date, number]`) still get their canonical `format`.
   // Element types are resolved against the SAME source file / tsconfig.
   const mapSetTuple = await buildMapSetTupleSchema(normalizedTypeText, (elemType) =>
-    buildSchema(_project, sf, elemType, tsconfig),
+    buildSchema(_project, sf, elemType, tsconfig, session),
   )
   if (mapSetTuple !== undefined) return mapSetTuple
 
@@ -474,7 +590,7 @@ export async function buildSchema(
       tsconfig,
     }
     // Path 1 keys off the stable real source file → cache the built program.
-    const schema = runScalarAwareGenerator(config, true)
+    const schema = runScalarAwareGenerator(config, true, session)
     return schema as Record<string, unknown>
   } catch {
     // Fall through to alias-injection path for anonymous / inline types.
@@ -502,7 +618,7 @@ export async function buildSchema(
   // flowing through their existing handlers — correctness is unchanged.
   try {
     const walked = await withResolvedType(_project, sf, normalizedTypeText, (resolved) =>
-      walkType(resolved, (elemType) => buildSchema(_project, sf, elemType, tsconfig), 0),
+      walkType(resolved, (elemType) => buildSchema(_project, sf, elemType, tsconfig, session), 0),
     )
     if (walked !== undefined) return walked
   } catch {

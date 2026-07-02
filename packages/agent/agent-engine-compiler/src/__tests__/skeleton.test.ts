@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 
 // ──────────────────────────────────────────────
-// Golden-path harness for @adhd/agent-compiler.
+// Golden-path harness for @adhd/agent-engine-compiler.
 //
 // This proves the registry-package test invariants on the empty skeleton:
 //   • real on-disk SQLite file (a tmp path), not an in-memory DB, not a mock;

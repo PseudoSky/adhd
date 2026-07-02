@@ -1,4 +1,4 @@
-// @adhd/agent-compiler — public barrel.
+// @adhd/agent-engine-compiler — public barrel.
 // Export each new store + schema table here as it is added (mirror the shipped
 // registry packages: every state that adds a table also extends this barrel).
 

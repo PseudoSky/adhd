@@ -150,7 +150,7 @@ describe('loadConfigFile', () => {
         JSON.stringify({
           plugins: [
             { module: '@adhd/agent-mcp-metrics' },
-            { module: '@adhd/agent-mcp-budget', config: { maxUSD: 10 } },
+            { module: '@adhd/agent-plugin-budget', config: { maxUSD: 10 } },
           ],
         })
       );
@@ -159,7 +159,7 @@ describe('loadConfigFile', () => {
       expect(result.plugins).toHaveLength(2);
       expect(result.plugins[0].module).toBe('@adhd/agent-mcp-metrics');
       expect(result.plugins[0].config).toEqual({}); // defaulted
-      expect(result.plugins[1].module).toBe('@adhd/agent-mcp-budget');
+      expect(result.plugins[1].module).toBe('@adhd/agent-plugin-budget');
       expect(result.plugins[1].config).toEqual({ maxUSD: 10 });
     } finally {
       rmSync(dir, { recursive: true });
@@ -529,7 +529,7 @@ describe('loadExternalPlugins — failure resilience', () => {
   });
 });
 
-// ── Real @adhd/agent-mcp-budget integration via config/env ───────────────────
+// ── Real @adhd/agent-plugin-budget integration via config/env ───────────────────
 //
 // These tests load the REAL built budget plugin (not a synthetic .mjs) via the
 // same paths the production server uses: agent-mcp.config.json or pluginEntries.
@@ -559,13 +559,13 @@ function makeCtx(taskId = 'task-budget-x'): ExecutionContext {
   };
 }
 
-/** Absolute path to the built @adhd/agent-mcp-budget dist file. */
+/** Absolute path to the built @adhd/agent-plugin-budget dist file. */
 const BUDGET_PLUGIN_DIST = resolve(
   fileURLToPath(import.meta.url),
   '../../../../../../dist/packages/ai/agent-mcp-budget/index.js'
 );
 
-describe('loadExternalPlugins — real @adhd/agent-mcp-budget integration', () => {
+describe('loadExternalPlugins — real @adhd/agent-plugin-budget integration', () => {
   it('loads budget plugin via config file and enforces maxModelCalls:1 on second model call', async () => {
     const dir = tempDir();
     try {

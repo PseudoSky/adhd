@@ -30,7 +30,7 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      external: ['@adhd/agent-mcp-types', 'better-sqlite3', 'zod', /^node:/],
+      external: ['@adhd/agent-base-types', 'better-sqlite3', 'zod', /^node:/],
     },
   },
 

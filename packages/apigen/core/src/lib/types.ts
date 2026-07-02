@@ -1,4 +1,5 @@
 import type { Logger } from 'pino'
+import type { ExtractionSession } from './extraction-session'
 
 // Output of generateSchemas() — domain schemas only, no middleware envelope
 export interface GeneratedSchemas {
@@ -35,6 +36,9 @@ export interface GenerateSchemasOptions {
   namespace?: string       // written to metadata (informational)
   phase?: string           // written to metadata (informational)
   tsconfig?: string        // absolute path to a tsconfig.json driving type resolution
+  // Optional per-run shared cache (createExtractionSession). When absent, a
+  // private session is created and disposed before returning.
+  session?: ExtractionSession
 }
 
 // Plugin system — language-agnostic: files[] can contain any language

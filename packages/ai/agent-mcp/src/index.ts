@@ -57,7 +57,7 @@ export interface BuildPromptResolverOpts {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     agentMcpDb: any;
     /**
-     * The compileAgent function from @adhd/agent-compiler.  When absent (the
+     * The compileAgent function from @adhd/agent-engine-compiler.  When absent (the
      * package is not installed), the resolver returns undefined and every agent
      * falls back to its flat systemPrompt — the same graceful path used when the
      * registry DB itself is absent.
@@ -76,7 +76,7 @@ export interface BuildPromptResolverOpts {
  * Returns `undefined` (flat-systemPrompt fallback) when ANY of the following is
  * true:
  * - `registryDbPath` is absent (undefined / empty string).
- * - `compileAgentFn` is absent — @adhd/agent-compiler is not installed.
+ * - `compileAgentFn` is absent — @adhd/agent-engine-compiler is not installed.
  * - The registry SQLite file cannot be opened (file missing, directory absent).
  *
  * When all three prerequisites are satisfied, opens the SQLite file in WAL mode,
@@ -88,7 +88,7 @@ export interface BuildPromptResolverOpts {
  *
  * @param opts.registryDbPath  - Path to the agent-registry SQLite file.
  * @param opts.agentMcpDb      - Drizzle handle for the agent-mcp DB.
- * @param opts.compileAgentFn  - Compile function from @adhd/agent-compiler (optional).
+ * @param opts.compileAgentFn  - Compile function from @adhd/agent-engine-compiler (optional).
  * @returns Wired {@link PromptResolverDeps} or `undefined`.
  */
 export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolverDeps | undefined {
@@ -102,7 +102,7 @@ export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolv
     // gracefully to the flat-systemPrompt path — same as when the registry DB is absent.
     if (!compileAgentFn) {
         logger.info(
-            "@adhd/agent-compiler not available — registry/compiler integration disabled; using flat system-prompts"
+            "@adhd/agent-engine-compiler not available — registry/compiler integration disabled; using flat system-prompts"
         );
         return undefined;
     }
@@ -255,7 +255,7 @@ async function main() {
     // Delegates to buildPromptResolver() — the exported factory that is also
     // exercised directly by index-wiring.test.ts (Plan 6 gap F-P6-8b).
     //
-    // @adhd/agent-compiler is an OPTIONAL dependency: the dynamic import below
+    // @adhd/agent-engine-compiler is an OPTIONAL dependency: the dynamic import below
     // succeeds only when the package is installed.  On failure (standalone install
     // without the compiler), the catch logs an info message and leaves
     // compileAgentFn undefined — buildPromptResolver then returns undefined and
@@ -270,7 +270,7 @@ async function main() {
         ({ compileAgent: compileAgentFn } = await import("@adhd/agent-engine-compiler"));
     } catch {
         logger.info(
-            "@adhd/agent-compiler not installed — registry/compiler integration disabled; using flat system-prompts"
+            "@adhd/agent-engine-compiler not installed — registry/compiler integration disabled; using flat system-prompts"
         );
     }
 

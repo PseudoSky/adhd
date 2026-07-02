@@ -8,7 +8,7 @@ import {
 } from 'drizzle-orm/sqlite-core';
 
 // ──────────────────────────────────────────────
-// @adhd/agent-compiler — table prefix: compiler_
+// @adhd/agent-engine-compiler — table prefix: compiler_
 //
 // Every table in THIS package MUST be named with the `compiler_` prefix.
 // All registry-family packages share ONE SQLite file, so the prefix is the only

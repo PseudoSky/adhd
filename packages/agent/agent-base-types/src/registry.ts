@@ -10,7 +10,7 @@ import type {
 /**
  * Concrete implementation of IHookRegistry.
  *
- * Lives in @adhd/agent-mcp-types (not @adhd/agent-mcp) so plugin packages
+ * Lives in @adhd/agent-base-types (not @adhd/agent-mcp) so plugin packages
  * can instantiate it in their own tests without creating a circular Nx
  * dependency on the full agent-mcp server package.
  *
