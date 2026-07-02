@@ -4,10 +4,10 @@ import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import * as fs from 'node:fs';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
-import { copyReadme } from '../tools/vite-copy-readme.mjs';
+import { copyReadme } from '../../tools/vite-copy-readme.mjs';
 import { builtinModules } from 'node:module';
 
-const OUT_DIR = path.resolve(__dirname, '../../dist/packages/apigen/cli');
+const OUT_DIR = path.resolve(__dirname, '../../dist/apigen-cli');
 
 /** Ships the builtin default tsconfig beside the bundled entry so resolve-tsconfig can find it. */
 function copyDefaultTsconfig(): Plugin {
@@ -23,7 +23,7 @@ function copyDefaultTsconfig(): Plugin {
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../node_modules/.vite/packages/apigen/cli',
+  cacheDir: '../../node_modules/.vite/apigen-cli',
 
   plugins: [
     copyReadme(__dirname),
@@ -36,7 +36,7 @@ export default defineConfig({
   ],
 
   build: {
-    outDir: '../../dist/packages/apigen/cli',
+    outDir: '../../dist/apigen-cli',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {
@@ -98,7 +98,7 @@ export default defineConfig({
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../coverage/packages/apigen/cli',
+      reportsDirectory: '../../coverage/apigen-cli',
       provider: 'v8',
     },
   },
