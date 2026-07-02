@@ -209,6 +209,31 @@ describe('DagClient', () => {
     it('returns beta after clearing its pending and alpha is resolved', async () => {
       await client.saveDag(makeTestDag());
       await client.clearPending('beta');
+      // "alpha is resolved" means alpha's operation must actually be
+      // recorded complete via dispatch_log — clearing beta's own
+      // `pending` field says nothing about whether alpha finished.
+      await client.appendDispatchLog({
+        id: 'log-alpha-complete',
+        kind: 'execution',
+        provider: 'local',
+        model: null,
+        agent: 'test-agent',
+        effort: null,
+        started_at: '2024-01-01T00:00:00Z',
+        completed_at: '2024-01-01T00:01:00Z',
+        operations: ['op-1'],
+        turns: [],
+        results: [
+          {
+            op_id: 'op-1',
+            status: 'complete',
+            guard_result: null,
+            guard_output: null,
+            guard_ran_at: null,
+          },
+        ],
+        notes: [],
+      });
       const eligible = await client.getEligibleMilestones();
       expect(eligible).toEqual(['alpha', 'beta']);
     });
@@ -220,6 +245,73 @@ describe('DagClient', () => {
       await client.saveDag(dag);
       const eligible = await client.getEligibleMilestones();
       expect(eligible).toEqual([]);
+    });
+
+    // BUG-DISPATCH-001 — eligibility must consult dependency *completion*,
+    // not just each milestone's own `pending` field. A milestone whose
+    // dependency was dispatched but did not complete (failed, or simply
+    // has no completing dispatch_log entry yet) must never be reported
+    // eligible.
+    it('does NOT mark a milestone eligible when its dependency was dispatched but not completed', async () => {
+      await client.saveDag(makeTestDag());
+      await client.clearPending('beta'); // beta's own gate is open
+      // alpha's operation was dispatched, but the guard failed — alpha's
+      // dependency was never actually completed.
+      await client.appendDispatchLog({
+        id: 'log-alpha-failed',
+        kind: 'execution',
+        provider: 'anthropic',
+        model: 'claude-3',
+        agent: 'test-agent',
+        effort: 'medium',
+        started_at: '2024-01-01T00:00:00Z',
+        completed_at: '2024-01-01T00:05:00Z',
+        operations: ['op-1'],
+        turns: [],
+        results: [
+          {
+            op_id: 'op-1',
+            status: 'failed',
+            guard_result: 'fail',
+            guard_output: 'guard check failed',
+            guard_ran_at: '2024-01-01T00:05:00Z',
+          },
+        ],
+        notes: [],
+      });
+
+      const eligible = await client.getEligibleMilestones();
+      expect(eligible).not.toContain('beta');
+    });
+
+    it('marks a milestone eligible once its dependency is complete per dispatch_log', async () => {
+      await client.saveDag(makeTestDag());
+      await client.clearPending('beta');
+      await client.appendDispatchLog({
+        id: 'log-alpha-complete-2',
+        kind: 'execution',
+        provider: 'anthropic',
+        model: 'claude-3',
+        agent: 'test-agent',
+        effort: 'medium',
+        started_at: '2024-01-01T00:00:00Z',
+        completed_at: '2024-01-01T00:05:00Z',
+        operations: ['op-1'],
+        turns: [],
+        results: [
+          {
+            op_id: 'op-1',
+            status: 'complete',
+            guard_result: 'pass',
+            guard_output: null,
+            guard_ran_at: '2024-01-01T00:05:00Z',
+          },
+        ],
+        notes: [],
+      });
+
+      const eligible = await client.getEligibleMilestones();
+      expect(eligible).toContain('beta');
     });
   });
 

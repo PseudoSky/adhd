@@ -95,13 +95,53 @@ export class DagClient implements IDagClient {
     for (const slug of Object.keys(milestones)) {
       const ms = milestones[slug];
       if (ms.pending !== null) continue;
-      const depsSatisfied = ms.depends_on.every((dep: string) => {
-        const depMs = milestones[dep];
-        return depMs && depMs.pending === null;
-      });
+      const depsSatisfied = ms.depends_on.every((dep: string) =>
+        this.isMilestoneComplete(dep)
+      );
       if (depsSatisfied) eligible.push(slug);
     }
     return eligible;
+  }
+
+  /**
+   * Derives whether a milestone has completed.
+   *
+   * `MilestoneDag` carries no `status` field of its own — a milestone's
+   * `pending` field only tells us whether *its own* dispatch is queued
+   * ("waiting to run"), not whether a milestone it depends on actually
+   * finished. Completion has to be derived from data the dag already
+   * records: the operations owned by the milestone
+   * (`OperationDag.milestone === slug`) and the `dispatch_log` entries
+   * appended via `appendDispatchLog()` as those operations are dispatched.
+   *
+   * A milestone is complete iff every operation it owns has at least one
+   * `DispatchResult` — across all `dispatch_log` entries — recording that
+   * operation's id with `status: 'complete'`. A milestone with zero
+   * operations is never considered complete (nothing has run to prove
+   * it), and a failed/skipped/in-flight result (or no result at all)
+   * correctly leaves the milestone — and anything depending on it —
+   * incomplete.
+   *
+   * This reads only `this.dag` (operations + dispatch_log), which
+   * `getEligibleMilestones()` has already loaded via `ensureLoaded()` —
+   * no extra I/O. A cached `DagSnapshot` (whose `MilestoneSnapshot.status`
+   * would be an equally valid, likely cheaper, completion signal) is not
+   * consulted here because `DagClient` does not currently cache one
+   * in-memory; `getSnapshot()` always re-reads from the serializer, and
+   * this method must stay synchronous with the already-loaded dag.
+   */
+  private isMilestoneComplete(slug: string): boolean {
+    const ops = (this.dag.operations as OperationDag[]).filter(
+      (op) => op.milestone === slug
+    );
+    if (ops.length === 0) return false;
+    const completedOpIds = new Set<string>();
+    for (const entry of this.dag.dispatch_log) {
+      for (const result of entry.results) {
+        if (result.status === 'complete') completedOpIds.add(result.op_id);
+      }
+    }
+    return ops.every((op) => completedOpIds.has(op.id));
   }
 
   private get dag(): DagJson {
