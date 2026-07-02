@@ -1,5 +1,5 @@
 // Streaming end-to-end (dod.14) — drives the REAL runtime streaming primitive
-// (`@adhd/apigen-runtime`'s `createStream`) projected onto a REAL transport
+// (`@adhd/apigen-engine-runtime`'s `createStream`) projected onto a REAL transport
 // (`@adhd/apigen-plugin-api-fastify`'s SSE projection `sendStreamSse`) over a
 // live Fastify server. We assert the CONSUMER-VISIBLE wire:
 //
@@ -21,7 +21,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { createStream } from '@adhd/apigen-runtime';
+import { createStream } from '@adhd/apigen-engine-runtime';
 import { sendStreamSse } from '@adhd/apigen-plugin-api-fastify';
 import { ApiError } from '@adhd/apigen-errors';
 

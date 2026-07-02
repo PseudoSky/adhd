@@ -8,7 +8,7 @@ import * as path from 'node:path';
  *
  * The generated entrypoints (`server.ts`, `cli.ts`) import:
  *   - real npm packages   — `@modelcontextprotocol/sdk/*`, `commander`
- *   - workspace packages  — `@adhd/apigen-runtime`, `@adhd/apigen-core`, …
+ *   - workspace packages  — `@adhd/apigen-engine-runtime`, `@adhd/apigen-core`, …
  *   - the source fixture   — via an absolute path (already resolvable)
  *
  * When run from a directory with no `node_modules` ancestry and no tsconfig path
@@ -26,9 +26,9 @@ import * as path from 'node:path';
 /** Runtime dep NAMES each plugin's generated output imports (versions resolved at emit time). */
 const PLUGIN_RUNTIME_DEP_NAMES: Record<string, string[]> = {
   // mcp emits server.ts (stdio/http) + index.ts.
-  mcp: ['@modelcontextprotocol/sdk', '@adhd/apigen-runtime'],
+  mcp: ['@modelcontextprotocol/sdk', '@adhd/apigen-engine-runtime'],
   // cli-output emits cli.ts.
-  cli: ['commander', '@adhd/apigen-runtime'],
+  cli: ['commander', '@adhd/apigen-engine-runtime'],
 };
 
 /**

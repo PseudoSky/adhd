@@ -5,7 +5,7 @@
 // `verb from safe with config override`.
 //
 // REAL components: `@adhd/apigen-plugin-api-fastify`'s `run` (a live Fastify
-// server), `@adhd/apigen-runtime`'s `dispatch`, `@adhd/apigen-naming`'s envelope
+// server), `@adhd/apigen-engine-runtime`'s `dispatch`, `@adhd/apigen-naming`'s envelope
 // key + projection-config. Only the domain fns are local — everything that
 // implements the contract under test is the real component.
 //
@@ -17,7 +17,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { run as runFastify } from '@adhd/apigen-plugin-api-fastify';
 import { envelopeKey } from '@adhd/apigen-naming';
 import type { RunInput } from '@adhd/apigen-core';
-import type { ComposedSchemas } from '@adhd/apigen-runtime';
+import type { ComposedSchemas } from '@adhd/apigen-engine-runtime';
 
 // ---------------------------------------------------------------------------
 // Server lifecycle — one abort controller per test, always torn down.

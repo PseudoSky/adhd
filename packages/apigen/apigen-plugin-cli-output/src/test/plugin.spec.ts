@@ -146,8 +146,8 @@ describe('generate()', () => {
     expect(content).toContain(".command('listUsers')");
   });
 
-  // [plugin-cli-output.5] dispatch is imported from @adhd/apigen-runtime — not inlined.
-  it('imports dispatch from @adhd/apigen-runtime, not inlined', () => {
+  // [plugin-cli-output.5] dispatch is imported from @adhd/apigen-engine-runtime — not inlined.
+  it('imports dispatch from @adhd/apigen-engine-runtime, not inlined', () => {
     const input = makeInput({
       packages: [
         {

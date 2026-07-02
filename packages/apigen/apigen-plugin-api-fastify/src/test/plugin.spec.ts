@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Fastify from 'fastify';
-import { dispatch } from '@adhd/apigen-runtime';
+import { dispatch } from '@adhd/apigen-engine-runtime';
 import { apiFastifyPlugin } from '../lib/plugin';
 import { generate } from '../lib/generate';
 import { run } from '../lib/run';
@@ -136,7 +136,7 @@ describe('generate()', () => {
     expect(content).toContain("app.post('/test-pkg/listUsers'");
   });
 
-  it('[plugin-api-fastify.2] generated routes.ts imports dispatch from @adhd/apigen-runtime', () => {
+  it('[plugin-api-fastify.2] generated routes.ts imports dispatch from @adhd/apigen-engine-runtime', () => {
     const out = generate(baseInput);
     expect(out.files[0].content).toMatch(
       /import \{[^}]*\bdispatch\b[^}]*\} from ['"]@adhd\/apigen-runtime['"]/
