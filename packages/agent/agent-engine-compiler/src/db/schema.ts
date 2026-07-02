@@ -23,7 +23,7 @@ import {
 //   • Bump-don't-delete: if you retain versions, never delete a prior version row.
 //
 // The drizzle-orm/sqlite-core helpers are re-exported so a downstream module can
-// `import { sqliteTable, text } from "@adhd/agent-compiler"` without re-importing the
+// `import { sqliteTable, text } from "@adhd/agent-engine-compiler"` without re-importing the
 // dependency directly, and so this skeleton's import is exercised before any table
 // exists. Define real tables here and add them to the barrel in ../index.ts.
 // ──────────────────────────────────────────────

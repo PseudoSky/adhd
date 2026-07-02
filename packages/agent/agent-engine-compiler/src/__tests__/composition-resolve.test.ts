@@ -41,16 +41,16 @@ import { resolveBody } from '../resolve/composition.js';
 // ── helpers ────────────────────────────────────────────────────────────────
 
 /**
- * Path to the agent-registry drizzle migrations folder.
- * The compiler test opens the SHARED registry DB (which lives under the
- * registry_ prefix) — all the tables resolveBody touches are there.
- * agent-compiler has no compiler_* tables yet, so only registry migrations run.
+ * Path to the agent-store-prompts drizzle migrations folder.
+ * The compiler test opens the SHARED store DB (which lives under the
+ * store_prompts prefix) — all the tables resolveBody touches are there.
+ * agent-engine-compiler has no compiler_* tables yet, so only store migrations run.
  *
- * Path from packages/ai/agent-compiler/src/__tests__/:
- *   ../../../agent-registry/drizzle → packages/ai/agent-registry/drizzle
+ * Path from packages/agent/agent-engine-compiler/src/__tests__/:
+ *   ../../../agent-store-prompts/drizzle → packages/agent/agent-store-prompts/drizzle
  */
 const REGISTRY_MIGRATIONS = path.resolve(
-  new URL('../../../agent-registry/drizzle', import.meta.url).pathname
+  new URL('../../../agent-store-prompts/drizzle', import.meta.url).pathname
 );
 
 interface OpenResult {

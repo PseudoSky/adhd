@@ -267,7 +267,7 @@ async function main() {
     // a composed_prompts cache look-up) before creating the session.
     let compileAgentFn: CompileAgentFn | undefined;
     try {
-        ({ compileAgent: compileAgentFn } = await import("@adhd/agent-compiler"));
+        ({ compileAgent: compileAgentFn } = await import("@adhd/agent-engine-compiler"));
     } catch {
         logger.info(
             "@adhd/agent-compiler not installed — registry/compiler integration disabled; using flat system-prompts"

@@ -88,29 +88,29 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
  * All four package migration sets share ONE SQLite file ([inv:one-db-handle]).
  *
  * test file: packages/ai/agent-compiler/src/__tests__/
- *   ../../../agent-provider/drizzle      → packages/ai/agent-provider/drizzle
- *   ../../../agent-registry/drizzle     → packages/ai/agent-registry/drizzle
- *   ../../../agent-tool-registry/drizzle → packages/ai/agent-tool-registry/drizzle
- *   ../../../agent-policy/drizzle       → packages/ai/agent-policy/drizzle
+ *   ../../../agent-core-provider/drizzle      → packages/agent/agent-core-provider/drizzle
+ *   ../../../agent-store-prompts/drizzle     → packages/agent/agent-store-prompts/drizzle
+ *   ../../../agent-store-tools/drizzle → packages/agent/agent-store-tools/drizzle
+ *   ../../../agent-core-policy/drizzle       → packages/agent/agent-core-policy/drizzle
  *
  * ORDER MATTERS: timestamps must be ascending so Drizzle's journal never skips.
  *   provider (1750*)  →  registry (1782193*)  →  tool-registry (1782250*)  →  policy (1782256*)
  */
 const PROVIDER_MIGRATIONS = path.resolve(
   __dirname,
-  '../../../agent-provider/drizzle'
+  '../../../agent-core-provider/drizzle'
 );
 const REGISTRY_MIGRATIONS = path.resolve(
   __dirname,
-  '../../../agent-registry/drizzle'
+  '../../../agent-store-prompts/drizzle'
 );
 const TOOL_REGISTRY_MIGRATIONS = path.resolve(
   __dirname,
-  '../../../agent-tool-registry/drizzle'
+  '../../../agent-store-tools/drizzle'
 );
 const POLICY_MIGRATIONS = path.resolve(
   __dirname,
-  '../../../agent-policy/drizzle'
+  '../../../agent-core-policy/drizzle'
 );
 
 interface OpenResult {

@@ -60,28 +60,28 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
  * Migration folder paths relative to this test file.
  * Packages share one SQLite file — all three prefix sets must be migrated.
  *
- * test file: packages/ai/agent-compiler/src/__tests__/
- *   ../../../agent-registry/drizzle  → packages/ai/agent-registry/drizzle
- *   ../../../agent-provider/drizzle  → packages/ai/agent-provider/drizzle
- *   ../../../agent-policy/drizzle    → packages/ai/agent-policy/drizzle
+ * test file: packages/agent/agent-engine-compiler/src/__tests__/
+ *   ../../../agent-store-prompts/drizzle  → packages/agent/agent-store-prompts/drizzle
+ *   ../../../agent-core-provider/drizzle  → packages/agent/agent-core-provider/drizzle
+ *   ../../../agent-core-policy/drizzle    → packages/agent/agent-core-policy/drizzle
  *
  * ORDER MATTERS: Drizzle's migrator skips files whose journal `when` timestamp
  * is <= the last recorded migration.  Provider journals use 1750* timestamps,
- * registry + policy use 1782* — so provider MUST migrate before registry or
+ * store + policy use 1782* — so provider MUST migrate before store or
  * its migrations look "already applied" and are silently skipped.
- * Correct order: provider (1750*) → registry (1782*) → policy (1782*).
+ * Correct order: provider (1750*) → store (1782*) → policy (1782*).
  */
 const PROVIDER_MIGRATIONS = path.resolve(
   __dirname,
-  '../../../agent-provider/drizzle'
+  '../../../agent-core-provider/drizzle'
 );
 const REGISTRY_MIGRATIONS = path.resolve(
   __dirname,
-  '../../../agent-registry/drizzle'
+  '../../../agent-store-prompts/drizzle'
 );
 const POLICY_MIGRATIONS = path.resolve(
   __dirname,
-  '../../../agent-policy/drizzle'
+  '../../../agent-core-policy/drizzle'
 );
 
 interface OpenResult {

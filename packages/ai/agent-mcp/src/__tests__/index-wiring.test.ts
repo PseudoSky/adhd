@@ -56,10 +56,10 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 
 // ── Registry seed APIs ────────────────────────────────────────────────────────
-import { seed as seedRegistry } from "@adhd/agent-registry";
-import { seed as seedToolRegistry } from "@adhd/agent-tool-registry";
-import { seed as seedProvider } from "@adhd/agent-provider";
-import { seed as seedPolicy } from "@adhd/agent-policy";
+import { seed as seedRegistry } from "@adhd/agent-store-prompts";
+import { seed as seedToolRegistry } from "@adhd/agent-store-tools";
+import { seed as seedProvider } from "@adhd/agent-core-provider";
+import { seed as seedPolicy } from "@adhd/agent-core-policy";
 
 // ── Fixture seeder + real compile function ───────────────────────────────────
 // Dynamic import required: @adhd/agent-compiler is an optional dep in this package
