@@ -101,25 +101,34 @@ data: packed vs stepwise on the same sandbox work order, per-turn tokens from
 `task_events`, artifact-equivalence assertion. A negative result is recorded here
 and becomes a packing input to the optimizer instead of a default.
 
-### Added 2026-07-02 — `cli-entrypoint` (apigen-generated dispatcher CLI)
+### Updated 2026-07-02 — `cli` pulled onto the fast path, apigen-generated
 
-User decisions (2026-07-02): the dispatcher gets a CLI, integration tests live in
-that entrypoint package (no repo-root `tests/` dir), and the CLI is **generated via
-apigen** from the dispatch base client rather than hand-written. New milestone
-`cli-entrypoint` (deps: `orchestrator-core`; before `tests-real-e2e`, which now
-depends on it): `packages/dispatch/dispatch-cli` (tags `layer:entrypoints,
-platform:node` — precedent `packages/decompile`) exposes a plain-functions surface
-`src/api.ts` (`validate`/`snapshot`/`optimize`/`eligible`/`status`/`run`) wiring the
-real stack — `createDagClient(createJsonFileSerializer(…))`, optimizer, orchestrator
-cycle — and the `@adhd/apigen-nx:generate` cache-aware executor projects it to a
-Commander CLI (`type: 'cli'`, `@adhd/apigen-plugin-cli-output`). Proof standard: a
-default-running smoke test **spawns the generated artifact** (exit codes + payloads;
-never imports generated code). Harnesses repointed here: `tests-real-e2e.1` →
-`packages/dispatch/dispatch-cli/src/test/integration/real-e2e.ts`,
-`stepwise-dispatch.3` → `…/stepwise-ab.ts`. First in-repo consumer of the
-cli-output plugin — plugin gaps get recorded in `packages/apigen/BACKLOG.md` with a
-thin hand-written commander wrapper over the same `api.ts` as the sanctioned
-fallback.
+The plan already carried both interface sides — `cli` (human) and `tools-mcp`
+(LLM). User decisions (2026-07-02) reshape `cli`: the dispatcher CLI is
+**generated via apigen** from the base client rather than hand-written, and the
+integration harnesses live in that entrypoint package (no repo-root `tests/`
+dir). A transient `cli-entrypoint` milestone briefly duplicated `cli` during
+this edit and was merged back — `cli` is the single CLI milestone.
+
+`cli` now: deps `orchestrator-core` only (`tools-mcp` + `serializer-sqlite`
+dropped — they stay deferred; the human CLI needs only the file serializer
+stack) and `tests-real-e2e` depends on it. Location
+`packages/dispatch/dispatch-cli` (`layer:entrypoints, platform:node`; precedent
+`packages/decompile` — no new repo-root `apps/`). `src/api.ts` exposes
+`validate`/`snapshot`/`optimize`/`eligible`/`status`/`run`/`calibrate` wiring the
+real stack; `@adhd/apigen-nx:generate` projects it to a Commander CLI
+(`type: 'cli'`). Proof standard: a default-running smoke test **spawns the
+generated artifact** (exit codes + payloads; never imports generated code).
+Harnesses live at `src/test/integration/{real-e2e,stepwise-ab}.ts`.
+
+**Spike-validated live (2026-07-02, `tmp/dispatchcli/`):** `apigen generate
+--type cli` from a 2-function surface over the real client worked end-to-end;
+`validate` and `eligible` ran against this very dag.json (JSON envelopes,
+kebab-case flags, clean exit codes) — and immediately surfaced
+**BUG-DISPATCH-008** (eligibility didn't exclude already-complete milestones).
+Quirks found: `tsx` needs `--tsconfig tsconfig.base.json` (repo root has no
+`tsconfig.json`), and the generator's namespace identifier breaks on hyphenated
+source dirs (BUG-APIGEN-CLI-001 in `packages/apigen/BACKLOG.md`).
 
 ## Key design decisions
 
