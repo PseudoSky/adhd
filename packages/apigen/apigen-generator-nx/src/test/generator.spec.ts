@@ -80,7 +80,7 @@ describe('plugin generator', () => {
       'packages/apigen/plugins/v2-check/src/lib/plugin.ts',
       'utf-8'
     )!;
-    expect(content).toContain('@adhd/apigen-core-client);
+    expect(content).toContain('@adhd/apigen-core-client');
     // must import Plugin (the v2 interface) — not the v1 OutputPlugin shape
     expect(content).toContain('Plugin');
     expect(content).not.toContain('OutputPlugin');
