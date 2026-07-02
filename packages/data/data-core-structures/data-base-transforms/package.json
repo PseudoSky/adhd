@@ -1,0 +1,12 @@
+{
+  "name": "@adhd/data-base-transforms",
+  "version": "2.2.1",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {},
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "typings": "./index.d.ts"
+}
