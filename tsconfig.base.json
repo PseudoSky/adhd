@@ -43,6 +43,9 @@
       "@adhd/agent-compiler": [
         "./packages/ai/agent-compiler/src/index.ts"
       ],
+      "@adhd/agent-core-policy": [
+        "packages/agent/agent-core-policy/src/index.ts"
+      ],
       "@adhd/agent-mcp": [
         "./packages/ai/agent-mcp/src/index.ts"
       ],

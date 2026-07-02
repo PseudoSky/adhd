@@ -1,5 +1,5 @@
-import { db, sqlite } from "./client.js";
-import { runMigrationsOn } from "./migrate-runner.js";
+import { db, sqlite } from './client.js';
+import { runMigrationsOn } from './migrate-runner.js';
 
 /**
  * Runs pending Drizzle migrations synchronously before the server starts.
@@ -9,5 +9,5 @@ import { runMigrationsOn } from "./migrate-runner.js";
  * why foreign-key enforcement must be toggled around the migration run).
  */
 export function runMigrations(): void {
-    runMigrationsOn(sqlite, db);
+  runMigrationsOn(sqlite, db);
 }

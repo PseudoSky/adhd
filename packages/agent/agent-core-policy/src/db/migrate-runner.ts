@@ -1,4 +1,4 @@
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
 /**
  * Folder holding the drizzle-kit generated migrations (../../drizzle relative
@@ -6,17 +6,15 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
  * harnesses can reuse the FK-safe runner without dragging in the production
  * singleton connection (which opens a DB file at import time).
  */
-export const MIGRATIONS_FOLDER = new URL(
-    "../../drizzle",
-    import.meta.url
-).pathname;
+export const MIGRATIONS_FOLDER = new URL('../../drizzle', import.meta.url)
+  .pathname;
 
 /**
  * Minimal structural type for the bits of a better-sqlite3 connection we need.
  * Avoids importing the better-sqlite3 type just to call `pragma`.
  */
 interface PragmaConn {
-    pragma(source: string, options?: { simple: boolean }): unknown;
+  pragma(source: string, options?: { simple: boolean }): unknown;
 }
 
 /**
@@ -30,22 +28,21 @@ interface PragmaConn {
  * we restore the prior setting afterwards.
  */
 export function runMigrationsOn(
-    conn: PragmaConn,
-    drizzleDb: Parameters<typeof migrate>[0],
-    migrationsFolder: string = MIGRATIONS_FOLDER
+  conn: PragmaConn,
+  drizzleDb: Parameters<typeof migrate>[0],
+  migrationsFolder: string = MIGRATIONS_FOLDER
 ): void {
-    const fkWasOn =
-        conn.pragma("foreign_keys", { simple: true }) === 1;
+  const fkWasOn = conn.pragma('foreign_keys', { simple: true }) === 1;
 
+  if (fkWasOn) {
+    conn.pragma('foreign_keys = OFF');
+  }
+
+  try {
+    migrate(drizzleDb, { migrationsFolder });
+  } finally {
     if (fkWasOn) {
-        conn.pragma("foreign_keys = OFF");
+      conn.pragma('foreign_keys = ON');
     }
-
-    try {
-        migrate(drizzleDb, { migrationsFolder });
-    } finally {
-        if (fkWasOn) {
-            conn.pragma("foreign_keys = ON");
-        }
-    }
+  }
 }

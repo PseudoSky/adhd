@@ -26,11 +26,12 @@
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyBetterSQLite3Database = import("drizzle-orm/better-sqlite3").BetterSQLite3Database<any>;
+type AnyBetterSQLite3Database =
+  import('drizzle-orm/better-sqlite3').BetterSQLite3Database<any>;
 
-import { policyTypesTable, policyTemplatesTable } from "../db/schema.js";
-import { POLICY_TYPES } from "./policy-types.js";
-import { POLICY_TEMPLATES } from "./policy-templates.js";
+import { policyTypesTable, policyTemplatesTable } from '../db/schema.js';
+import { POLICY_TYPES } from './policy-types.js';
+import { POLICY_TEMPLATES } from './policy-templates.js';
 
 /**
  * Idempotently insert all canonical policy types and system templates.
@@ -41,31 +42,28 @@ import { POLICY_TEMPLATES } from "./policy-templates.js";
  * @param db — a Drizzle `BetterSQLite3Database` instance with migrations applied.
  */
 export function seed(db: AnyBetterSQLite3Database): void {
-    // 1. Policy types first (templates FK into this table).
-    for (const typeRow of POLICY_TYPES) {
-        db.insert(policyTypesTable)
-            .values(typeRow)
-            .onConflictDoNothing()
-            .run();
-    }
+  // 1. Policy types first (templates FK into this table).
+  for (const typeRow of POLICY_TYPES) {
+    db.insert(policyTypesTable).values(typeRow).onConflictDoNothing().run();
+  }
 
-    // 2. Policy templates — one upsert per template.
-    for (const tmpl of POLICY_TEMPLATES) {
-        db.insert(policyTemplatesTable)
-            .values({
-                slug:        tmpl.slug,
-                type:        tmpl.type,
-                description: tmpl.description,
-                // drizzle `text({ mode: "json" })` serialises automatically.
-                rules:       tmpl.rules as unknown as string,
-                enforcement: tmpl.enforcement as unknown as string,
-                version:     tmpl.version,
-                isSystem:    tmpl.isSystem,
-            })
-            .onConflictDoNothing()
-            .run();
-    }
+  // 2. Policy templates — one upsert per template.
+  for (const tmpl of POLICY_TEMPLATES) {
+    db.insert(policyTemplatesTable)
+      .values({
+        slug: tmpl.slug,
+        type: tmpl.type,
+        description: tmpl.description,
+        // drizzle `text({ mode: "json" })` serialises automatically.
+        rules: tmpl.rules as unknown as string,
+        enforcement: tmpl.enforcement as unknown as string,
+        version: tmpl.version,
+        isSystem: tmpl.isSystem,
+      })
+      .onConflictDoNothing()
+      .run();
+  }
 }
 
-export { POLICY_TYPES } from "./policy-types.js";
-export { POLICY_TEMPLATES } from "./policy-templates.js";
+export { POLICY_TYPES } from './policy-types.js';
+export { POLICY_TEMPLATES } from './policy-templates.js';
