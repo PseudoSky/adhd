@@ -1,5 +1,5 @@
 {
-  "$schema": "./workspace-schema.json",
+  "$schema": "../packages/workspace/workspace-codegen-nx/src/generators/shared/workspace-schema.json",
   "scope": "@adhd",
   "groups": {
     "apigen":     { "description": "API generation toolchain — core, engine, plugins for TS->API" },
