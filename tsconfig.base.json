@@ -76,35 +76,23 @@
       "@adhd/apigen-base-schema": [
         "packages/apigen/apigen-base-schema/src/index.ts"
       ],
-      "@adhd/apigen-cli": [
-        "./packages/apigen/cli/src/index.ts"
-      ],
-      "@adhd/apigen-codegen-openapi": [
-        "./packages/apigen/codegen/openapi/src/index.ts"
-      ],
-      "@adhd/apigen-conformance": [
-        "./packages/apigen/conformance/src/index.ts"
-      ],
-      "@adhd/apigen-core": [
-        "./packages/apigen/core/src/index.ts"
-      ],
       "@adhd/apigen-core-client": [
         "packages/apigen/apigen-core-client/src/index.ts"
       ],
-      "@adhd/apigen-errors": [
-        "./packages/apigen/errors/src/index.ts"
+      "@adhd/apigen-engine-conformance": [
+        "packages/apigen/apigen-engine-conformance/src/index.ts"
       ],
-      "@adhd/apigen-gateway": [
-        "./packages/apigen/gateway/src/index.ts"
+      "@adhd/apigen-engine-gateway": [
+        "packages/apigen/apigen-engine-gateway/src/index.ts"
       ],
-      "@adhd/apigen-logical": [
-        "./packages/apigen/logical/src/index.ts"
+      "@adhd/apigen-engine-naming": [
+        "packages/apigen/apigen-engine-naming/src/index.ts"
       ],
-      "@adhd/apigen-naming": [
-        "./packages/apigen/naming/src/index.ts"
+      "@adhd/apigen-engine-runtime": [
+        "packages/apigen/apigen-engine-runtime/src/index.ts"
       ],
-      "@adhd/apigen-nx": [
-        "./packages/apigen/nx/src/index.ts"
+      "@adhd/apigen-generator-nx": [
+        "packages/apigen/apigen-generator-nx/src/index.ts"
       ],
       "@adhd/apigen-plugin-api-express": [
         "./packages/apigen/plugins/api-express/src/index.ts"
@@ -141,12 +129,6 @@
       ],
       "@adhd/apigen-python-env": [
         "./packages/apigen/python-env/src/index.ts"
-      ],
-      "@adhd/apigen-runtime": [
-        "./packages/apigen/runtime/src/index.ts"
-      ],
-      "@adhd/apigen-schema": [
-        "./packages/apigen/schema/src/index.ts"
       ],
       "@adhd/data": [
         "./packages/data/src/index.ts"
