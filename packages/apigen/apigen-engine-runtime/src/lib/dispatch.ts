@@ -1,9 +1,9 @@
-import type { SchemaNode } from '@adhd/apigen-logical';
+import type { SchemaNode } from '@adhd/apigen-base-logical';
 import {
   buildTranscoder,
   createRegistry,
   registerWellKnown,
-} from '@adhd/apigen-logical';
+} from '@adhd/apigen-base-logical';
 import type { ComposedSchemas } from './types';
 
 // ---------------------------------------------------------------------------
@@ -65,7 +65,7 @@ function paramSchemaNode(
  */
 function decodeArg(wire: unknown, node: SchemaNode | undefined): unknown {
   if (node === undefined) return wire;
-  return _transcoder.decode(wire as import('@adhd/apigen-logical').Wire, node);
+  return _transcoder.decode(wire as import('@adhd/apigen-base-logical').Wire, node);
 }
 
 /**

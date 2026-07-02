@@ -12,7 +12,7 @@
  *     chunk still delivers a terminal error via the normal AsyncIterator
  *     protocol (the `throw` method / a rejection from `next()`), matching
  *     Connect's streaming-error semantics.  Callers that need to distinguish
- *     the phase use `StreamingErrorCarrier` from `@adhd/apigen-errors`.
+ *     the phase use `StreamingErrorCarrier` from `@adhd/apigen-base-errors`.
  *
  * Layer wrappers follow the §11 generator pattern:
  *
@@ -29,11 +29,11 @@
  * ```
  */
 
-import { ApiError, toStreamingError } from '@adhd/apigen-errors';
+import { ApiError, toStreamingError } from '@adhd/apigen-base-errors';
 import type {
   AfterFirstChunkError,
   BeforeFirstChunkError,
-} from '@adhd/apigen-errors';
+} from '@adhd/apigen-base-errors';
 
 // ---------------------------------------------------------------------------
 // Core types

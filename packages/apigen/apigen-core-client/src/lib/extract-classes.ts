@@ -56,7 +56,7 @@ export interface ExtractClassesOptions {
   includeInstances?: boolean;
   /**
    * Optional per-run shared cache (see `createExtractionSession` in
-   * `@adhd/apigen-core`). When absent, a private session is created and
+   * `@adhd/apigen-core-client). When absent, a private session is created and
    * disposed before returning (previous behaviour, no retention).
    */
   session?: ExtractionSession;

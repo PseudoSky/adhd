@@ -14,13 +14,13 @@ import type {
   OutputPlugin,
   PluginInput,
   ComposedSchemas,
-} from '@adhd/apigen-core';
+} from '@adhd/apigen-core-client;
 import { emitResolutionScaffolding } from '../scaffold';
 // DEBT-LT-005: replaced the inline TS_LOGICAL_TYPE_DEP_MAP duplicate with the
-// authoritative source from @adhd/apigen-logical. tsDepMap() derives the map
+// authoritative source from @adhd/apigen-base-logical. tsDepMap() derives the map
 // from the same TemplateCell.dep fields that are the single source of truth
 // (hints.ts §14.1), so future type additions stay consistent automatically.
-import { tsDepMap } from '@adhd/apigen-logical';
+import { tsDepMap } from '@adhd/apigen-base-logical';
 
 // ---------------------------------------------------------------------------
 // Per-surface minimal dependency manifest (DESIGN §14.1, BUG-APIGEN-002)
@@ -74,7 +74,7 @@ export function collectFormats(
  * required to support the logical types actually used by its operations.
  *
  * Walks every input + output schema, unions their `format` annotations,
- * looks each up in the authoritative {@link tsDepMap} from `@adhd/apigen-logical`,
+ * looks each up in the authoritative {@link tsDepMap} from `@adhd/apigen-base-logical`,
  * and returns a `Record<name, version>` suitable for merging into `package.json`
  * `dependencies`.
  *

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { healthPlugin } from '../lib/plugin';
 import type { HealthResponse } from '../lib/plugin';
-import type { Descriptor, Operation, Extensions } from '@adhd/apigen-core';
+import type { Descriptor, Operation, Extensions } from '@adhd/apigen-core-client;
 
 // ---------------------------------------------------------------------------
 // Fixtures

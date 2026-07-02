@@ -1,5 +1,5 @@
 /**
- * @stable Well-known scalar codec barrel for `@adhd/apigen-logical`.
+ * @stable Well-known scalar codec barrel for `@adhd/apigen-base-logical`.
  *
  * Exports every built-in `LogicalTypeCodec` and the `registerWellKnown`
  * helper that loads them all into a registry in canonical order.

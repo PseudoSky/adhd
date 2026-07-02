@@ -63,7 +63,7 @@ import {
   envelopeMetaKey,
   envelopeEnvVar,
 } from '@adhd/apigen-naming';
-import { ApiError } from '@adhd/apigen-errors';
+import { ApiError } from '@adhd/apigen-base-errors';
 
 // ---------------------------------------------------------------------------
 // A. Descriptor round-trip (SPEC §4)

@@ -23,7 +23,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createStream } from '@adhd/apigen-engine-runtime';
 import { sendStreamSse } from '@adhd/apigen-plugin-api-fastify';
-import { ApiError } from '@adhd/apigen-errors';
+import { ApiError } from '@adhd/apigen-base-errors';
 
 let app: FastifyInstance | undefined;
 

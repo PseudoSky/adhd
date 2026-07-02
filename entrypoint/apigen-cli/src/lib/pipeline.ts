@@ -1,10 +1,10 @@
-import { generateSchemas, composeSchemas } from '@adhd/apigen-core';
+import { generateSchemas, composeSchemas } from '@adhd/apigen-core-client;
 import type {
   ComposedSchemas,
   ExportMode,
   GenerateSchemasOptions,
   Logger,
-} from '@adhd/apigen-core';
+} from '@adhd/apigen-core-client;
 import { resolveTsconfig } from './resolve-tsconfig';
 
 export interface PipelineOptions {

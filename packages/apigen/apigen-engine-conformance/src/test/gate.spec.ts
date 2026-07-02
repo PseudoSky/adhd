@@ -40,8 +40,8 @@ import {
   uuidCodec,
   numberSpecialCodec,
   LOGICAL_TYPE_VERSION,
-} from '@adhd/apigen-logical';
-import type { LogicalTypeCodec, LogicalTypeId } from '@adhd/apigen-logical';
+} from '@adhd/apigen-base-logical';
+import type { LogicalTypeCodec, LogicalTypeId } from '@adhd/apigen-base-logical';
 
 // ---------------------------------------------------------------------------
 // Helpers

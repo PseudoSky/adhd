@@ -20,9 +20,9 @@
 // already registers.
 //
 // Import chain (schema-builders layer only):
-//   union.ts → nominal.ts ($def key helper) → @adhd/apigen-logical (constants)
+//   union.ts → nominal.ts ($def key helper) → @adhd/apigen-base-logical (constants)
 
-import { X_APIGEN_LOGICAL } from '@adhd/apigen-logical';
+import { X_APIGEN_LOGICAL } from '@adhd/apigen-base-logical';
 
 // ---------------------------------------------------------------------------
 // Public types

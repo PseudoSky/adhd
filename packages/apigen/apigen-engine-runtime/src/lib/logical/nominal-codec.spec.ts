@@ -6,7 +6,7 @@ import {
   type SchemaNode,
   type TranscodeCtx,
   type Wire,
-} from '@adhd/apigen-logical';
+} from '@adhd/apigen-base-logical';
 import {
   createNominalCodec,
   NominalCodecError,

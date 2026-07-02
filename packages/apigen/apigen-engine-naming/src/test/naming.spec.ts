@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { Operation, Segment } from '@adhd/apigen-core';
+import type { Operation, Segment } from '@adhd/apigen-core-client;
 
 import {
   toKebab,

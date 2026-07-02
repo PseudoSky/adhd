@@ -26,7 +26,7 @@ import {
   composeSchemas,
   generateSchemas,
   createExtractionSession,
-} from '@adhd/apigen-core';
+} from '@adhd/apigen-core-client;
 import type {
   ExtractionSession,
   Operation,
@@ -37,7 +37,7 @@ import type {
   PluginInput,
   RunInput,
   OutputPlugin,
-} from '@adhd/apigen-core';
+} from '@adhd/apigen-core-client;
 import { checkCollisions, CollisionDetectedError } from '@adhd/apigen-naming';
 import type { ProjectionConfig } from '@adhd/apigen-naming';
 import { resolveTsconfig, resolveNamespace } from './resolve-tsconfig';
@@ -220,7 +220,7 @@ export function loadOverrideConfig(
 /**
  * Extract canonical `Operation[]` from a single source file.
  *
- * Uses `@adhd/apigen-core`'s v2 `extract()` function.
+ * Uses `@adhd/apigen-core-client's v2 `extract()` function.
  *
  * @param entry  - The source entry describing the file and extraction options.
  * @param logger - Optional logger.
@@ -473,7 +473,7 @@ export async function orchestrateRun(
 // ---------------------------------------------------------------------------
 // v2 Descriptor type alias (re-export for consumers that want the SPEC §4 shape)
 // ---------------------------------------------------------------------------
-// `Descriptor` from @adhd/apigen-core is the full SPEC §4 Descriptor.  The
+// `Descriptor` from @adhd/apigen-core-clientis the full SPEC §4 Descriptor.  The
 // `OrchestratorDescriptor` above is the *intermediate* form the orchestrator
 // builds; it carries both the neutral Operation[] and the v1-compat
 // ComposedSchemas.  Consumers that need only the neutral descriptor can work

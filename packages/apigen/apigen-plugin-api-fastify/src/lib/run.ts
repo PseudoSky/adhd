@@ -12,11 +12,11 @@ import type {
   Layer,
   ParamInfo,
 } from '@adhd/apigen-engine-runtime';
-import type { RunInput, ComposedSchemas } from '@adhd/apigen-core';
+import type { RunInput, ComposedSchemas } from '@adhd/apigen-core-client;
 import { envelopeKey } from '@adhd/apigen-naming';
-import { HTTP_STATUS, ApiError } from '@adhd/apigen-errors';
+import { HTTP_STATUS, ApiError } from '@adhd/apigen-base-errors';
 import type { ProjectionConfig } from '@adhd/apigen-naming';
-import type { ApiErrorCode } from '@adhd/apigen-errors';
+import type { ApiErrorCode } from '@adhd/apigen-base-errors';
 
 // ---------------------------------------------------------------------------
 // §5 — verb from safe

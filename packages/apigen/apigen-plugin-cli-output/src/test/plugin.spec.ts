@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { cliPlugin } from '../lib/plugin';
 import { generate } from '../lib/generate';
-import type { PluginInput } from '@adhd/apigen-core';
+import type { PluginInput } from '@adhd/apigen-core-client;
 
 // ---------------------------------------------------------------------------
 // Shared fixture builders

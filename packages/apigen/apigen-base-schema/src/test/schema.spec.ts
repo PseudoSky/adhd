@@ -29,7 +29,7 @@ describe('__apigen_pkg', () => {
   });
 
   it('(negative) does not equal a different package name', () => {
-    expect(__apigen_pkg).not.toBe('@adhd/apigen-core');
+    expect(__apigen_pkg).not.toBe('@adhd/apigen-core-client);
   });
 });
 

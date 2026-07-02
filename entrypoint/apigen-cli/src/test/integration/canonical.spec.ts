@@ -16,7 +16,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { run as runFastify } from '@adhd/apigen-plugin-api-fastify';
 import { envelopeKey } from '@adhd/apigen-naming';
-import type { RunInput } from '@adhd/apigen-core';
+import type { RunInput } from '@adhd/apigen-core-client;
 import type { ComposedSchemas } from '@adhd/apigen-engine-runtime';
 
 // ---------------------------------------------------------------------------

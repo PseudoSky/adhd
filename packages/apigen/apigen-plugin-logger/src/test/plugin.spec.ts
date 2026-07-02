@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { loggerPlugin, makeLoggerPlugin, Logger } from '../lib/plugin';
-import type { Call, Next, Extensions, Operation } from '@adhd/apigen-core';
+import type { Call, Next, Extensions, Operation } from '@adhd/apigen-core-client;
 
 // ---------------------------------------------------------------------------
 // Helpers — build a minimal Call with a real Extensions map so we can

@@ -7,7 +7,7 @@ import { importSource } from '../import-source';
 import { buildFnTable } from '@adhd/apigen-engine-runtime';
 import { resolveTsconfig } from '../resolve-tsconfig';
 import { buildCliLogger } from '../logging';
-import type { OutputPlugin, RunInput } from '@adhd/apigen-core';
+import type { OutputPlugin, RunInput } from '@adhd/apigen-core-client;
 
 /** Parse --opt key=value pairs into an options record. */
 function parseOptPairs(pairs: string[]): Record<string, unknown> {
