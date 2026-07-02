@@ -160,7 +160,9 @@ export interface AfterFirstChunkError {
 }
 
 /** Discriminated union of the two streaming error carrier shapes. */
-export type StreamingErrorCarrier = BeforeFirstChunkError | AfterFirstChunkError;
+export type StreamingErrorCarrier =
+  | BeforeFirstChunkError
+  | AfterFirstChunkError;
 
 /**
  * Factory: wrap an `ApiError` in the appropriate streaming carrier.
@@ -171,17 +173,17 @@ export type StreamingErrorCarrier = BeforeFirstChunkError | AfterFirstChunkError
  */
 export function toStreamingError(
   phase: 'before-first-chunk',
-  error: ApiError,
+  error: ApiError
 ): BeforeFirstChunkError;
 export function toStreamingError(
   phase: 'after-first-chunk',
   error: ApiError,
-  chunksDelivered: number,
+  chunksDelivered: number
 ): AfterFirstChunkError;
 export function toStreamingError(
   phase: StreamingPhase,
   error: ApiError,
-  chunksDelivered = 0,
+  chunksDelivered = 0
 ): StreamingErrorCarrier {
   if (phase === 'before-first-chunk') {
     return { phase, error } satisfies BeforeFirstChunkError;
@@ -192,13 +194,17 @@ export function toStreamingError(
 /**
  * Type guard: narrows a `StreamingErrorCarrier` to `BeforeFirstChunkError`.
  */
-export function isBeforeFirstChunk(c: StreamingErrorCarrier): c is BeforeFirstChunkError {
+export function isBeforeFirstChunk(
+  c: StreamingErrorCarrier
+): c is BeforeFirstChunkError {
   return c.phase === 'before-first-chunk';
 }
 
 /**
  * Type guard: narrows a `StreamingErrorCarrier` to `AfterFirstChunkError`.
  */
-export function isAfterFirstChunk(c: StreamingErrorCarrier): c is AfterFirstChunkError {
+export function isAfterFirstChunk(
+  c: StreamingErrorCarrier
+): c is AfterFirstChunkError {
   return c.phase === 'after-first-chunk';
 }

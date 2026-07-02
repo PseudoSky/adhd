@@ -1,0 +1,42 @@
+{
+  "name": "apigen-base-schema",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/apigen/apigen-base-schema/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:logic", "platform:shared"],
+  "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-base-schema"
+      ],
+      "options": {
+        "configFile": "packages/apigen/apigen-base-schema/vite.config.ts"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/apigen/apigen-base-schema",
+        "main": "packages/apigen/apigen-base-schema/src/index.ts",
+        "tsConfig": "packages/apigen/apigen-base-schema/tsconfig.lib.json",
+        "assets": ["packages/apigen/apigen-base-schema/*.md"]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": ["build", "test"]
+    }
+  }
+}

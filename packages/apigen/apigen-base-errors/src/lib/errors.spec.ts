@@ -35,7 +35,7 @@ describe('ERROR_CODES', () => {
         'not_found',
         'permission_denied',
         'unauthenticated',
-      ].sort(),
+      ].sort()
     );
   });
 });
@@ -251,7 +251,11 @@ describe('ApiError', () => {
 
   it('toJSON includes details when present', () => {
     const json = new ApiError('internal', 'fail', { trace: 'abc' }).toJSON();
-    expect(json).toEqual({ code: 'internal', message: 'fail', details: { trace: 'abc' } });
+    expect(json).toEqual({
+      code: 'internal',
+      message: 'fail',
+      details: { trace: 'abc' },
+    });
   });
 
   it('toJSON code is the canonical code — wrong code would fail', () => {
@@ -280,11 +284,15 @@ describe('toStreamingError / streaming carrier', () => {
     });
 
     it('isBeforeFirstChunk returns true', () => {
-      expect(isBeforeFirstChunk(toStreamingError('before-first-chunk', err))).toBe(true);
+      expect(
+        isBeforeFirstChunk(toStreamingError('before-first-chunk', err))
+      ).toBe(true);
     });
 
     it('isAfterFirstChunk returns false', () => {
-      expect(isAfterFirstChunk(toStreamingError('before-first-chunk', err))).toBe(false);
+      expect(
+        isAfterFirstChunk(toStreamingError('before-first-chunk', err))
+      ).toBe(false);
     });
 
     it('does NOT have chunksDelivered (wrong phase would fail)', () => {
@@ -311,11 +319,15 @@ describe('toStreamingError / streaming carrier', () => {
     });
 
     it('isAfterFirstChunk returns true', () => {
-      expect(isAfterFirstChunk(toStreamingError('after-first-chunk', err, 1))).toBe(true);
+      expect(
+        isAfterFirstChunk(toStreamingError('after-first-chunk', err, 1))
+      ).toBe(true);
     });
 
     it('isBeforeFirstChunk returns false', () => {
-      expect(isBeforeFirstChunk(toStreamingError('after-first-chunk', err, 1))).toBe(false);
+      expect(
+        isBeforeFirstChunk(toStreamingError('after-first-chunk', err, 1))
+      ).toBe(false);
     });
 
     it('wrong chunksDelivered would fail — negative control', () => {
