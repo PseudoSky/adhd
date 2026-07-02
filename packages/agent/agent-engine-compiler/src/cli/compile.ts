@@ -28,9 +28,9 @@
 // [inv:one-db-handle] — opens ONE better-sqlite3 handle for the shared DB.
 // ──────────────────────────────────────────────
 
-import fs     from 'node:fs';
-import os     from 'node:os';
-import path   from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
@@ -39,7 +39,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
-import { AgentStore }  from '@adhd/agent-registry';
+import { AgentStore } from '@adhd/agent-registry';
 import type { CompositionContext } from '@adhd/agent-registry';
 
 import { compileAgent } from '../compile.js';
@@ -62,27 +62,30 @@ import { compileAgent } from '../compile.js';
 // This mirrors the migration order in compile-agent.test.ts.
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const AI_DIST   = path.resolve(__dirname, '../../../');
+const AI_DIST = path.resolve(__dirname, '../../../');
 
-const PROVIDER_MIGRATIONS     = path.join(AI_DIST, 'agent-provider/drizzle');
-const REGISTRY_MIGRATIONS     = path.join(AI_DIST, 'agent-registry/drizzle');
-const TOOL_REGISTRY_MIGRATIONS = path.join(AI_DIST, 'agent-tool-registry/drizzle');
-const POLICY_MIGRATIONS       = path.join(AI_DIST, 'agent-policy/drizzle');
-const COMPILER_MIGRATIONS     = path.join(AI_DIST, 'agent-compiler/drizzle');
+const PROVIDER_MIGRATIONS = path.join(AI_DIST, 'agent-provider/drizzle');
+const REGISTRY_MIGRATIONS = path.join(AI_DIST, 'agent-registry/drizzle');
+const TOOL_REGISTRY_MIGRATIONS = path.join(
+  AI_DIST,
+  'agent-tool-registry/drizzle'
+);
+const POLICY_MIGRATIONS = path.join(AI_DIST, 'agent-policy/drizzle');
+const COMPILER_MIGRATIONS = path.join(AI_DIST, 'agent-compiler/drizzle');
 
 // ──────────────────────────────────────────────
 // Resolved args
 // ──────────────────────────────────────────────
 
 interface CliArgs {
-  slug:       string | null;  // null when --all is set
-  platform:   string;
-  context:    CompositionContext;
+  slug: string | null; // null when --all is set
+  platform: string;
+  context: CompositionContext;
   formatJson: boolean;
-  outDir:     string | null;
-  all:        boolean;
-  category:   string | null;
-  dbPath:     string;
+  outDir: string | null;
+  all: boolean;
+  category: string | null;
+  dbPath: string;
 }
 
 // ──────────────────────────────────────────────
@@ -101,14 +104,14 @@ function parseArgs(argv: string[]): CliArgs {
     die(`Expected sub-command 'compile', got: ${args[0] ?? '(nothing)'}`);
   }
 
-  let slug:       string | null = null;
-  let platform    = 'claude_code';
-  let context:    CompositionContext = {};
-  let formatJson  = false;
-  let outDir:     string | null = null;
-  let all         = false;
-  let category:   string | null = null;
-  let dbPath      =
+  let slug: string | null = null;
+  let platform = 'claude_code';
+  let context: CompositionContext = {};
+  let formatJson = false;
+  let outDir: string | null = null;
+  let all = false;
+  let category: string | null = null;
+  let dbPath =
     process.env['AGENT_REGISTRY_DB'] ??
     path.join(os.homedir(), '.agent-registry', 'registry.db');
 
@@ -191,9 +194,14 @@ function requireNext(flags: string[], i: number, flag: string): string {
  * journal does not skip any set.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function openDb(dbPath: string): { conn: Database.Database; db: BetterSQLite3Database<any> } {
+function openDb(dbPath: string): {
+  conn: Database.Database;
+  db: BetterSQLite3Database<any>;
+} {
   if (!fs.existsSync(dbPath)) {
-    die(`Registry DB not found at: ${dbPath}\nUse --db <path> or set AGENT_REGISTRY_DB.`);
+    die(
+      `Registry DB not found at: ${dbPath}\nUse --db <path> or set AGENT_REGISTRY_DB.`
+    );
   }
   const conn = new Database(dbPath);
   conn.pragma('journal_mode = WAL');
@@ -223,13 +231,17 @@ function openDb(dbPath: string): { conn: Database.Database; db: BetterSQLite3Dat
 // ──────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function compileSingle(slug: string, args: CliArgs, db: BetterSQLite3Database<any>): string {
+function compileSingle(
+  slug: string,
+  args: CliArgs,
+  db: BetterSQLite3Database<any>
+): string {
   let result;
   try {
     result = compileAgent({
       agentSlug: slug,
-      platform:  args.platform,
-      context:   args.context,
+      platform: args.platform,
+      context: args.context,
       db,
     });
   } catch (err) {
@@ -238,7 +250,9 @@ function compileSingle(slug: string, args: CliArgs, db: BetterSQLite3Database<an
     if (msg.includes('not found') || msg.includes('NOT_FOUND')) {
       die(`Error: ${msg}`);
     }
-    die(`Compilation failed for '${slug}' on platform '${args.platform}': ${msg}`);
+    die(
+      `Compilation failed for '${slug}' on platform '${args.platform}': ${msg}`
+    );
   }
 
   // --format json overrides the platform's default header format.
@@ -251,8 +265,8 @@ function compileSingle(slug: string, args: CliArgs, db: BetterSQLite3Database<an
       // Wrap markdown in a JSON envelope.
       return JSON.stringify(
         {
-          systemPrompt:      result.content,
-          tools:             result.tools,
+          systemPrompt: result.content,
+          tools: result.tools,
           componentVersions: result.componentVersions,
         },
         null,
@@ -278,7 +292,7 @@ function writeOutput(slug: string, content: string, args: CliArgs): void {
   }
 
   fs.mkdirSync(args.outDir, { recursive: true });
-  const ext  = args.formatJson ? 'json' : 'md';
+  const ext = args.formatJson ? 'json' : 'md';
   const dest = path.join(args.outDir, `${slug}.${ext}`);
   fs.writeFileSync(dest, content, 'utf8');
 }
@@ -297,15 +311,17 @@ function die(msg: string): never {
 // ──────────────────────────────────────────────
 
 function main(): void {
-  const args            = parseArgs(process.argv);
-  const { conn, db }    = openDb(args.dbPath);
+  const args = parseArgs(process.argv);
+  const { conn, db } = openDb(args.dbPath);
 
   try {
     if (args.all) {
       // Compile every agent in the registry, optionally filtered by category.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const agentStore = new AgentStore(db as any);
-      const agents     = agentStore.list(args.category ? { category: args.category } : {});
+      const agents = agentStore.list(
+        args.category ? { category: args.category } : {}
+      );
 
       if (agents.length === 0) {
         const scope = args.category ? ` in category '${args.category}'` : '';

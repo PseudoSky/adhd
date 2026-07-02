@@ -35,21 +35,21 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
 import { AgentStore, CompositionStore } from '@adhd/agent-registry';
 import type { CompositionContext } from '@adhd/agent-registry';
-import {
-  ToolStore,
-  BindingStore,
-} from '@adhd/agent-tool-registry';
+import { ToolStore, BindingStore } from '@adhd/agent-tool-registry';
 import { ToolFormatStore, emitToolsForProvider } from '@adhd/agent-provider';
 import type { ToolFormatLookup } from '@adhd/agent-provider';
 
-import { resolveTools }             from './resolve/tools.js';
-import { resolveModel }             from './resolve/model.js';
+import { resolveTools } from './resolve/tools.js';
+import { resolveModel } from './resolve/model.js';
 import { resolvePolicyConstraints } from './resolve/policy.js';
-import { emitYamlFrontmatter }      from './emit/markdown.js';
-import { emitJsonObject }           from './emit/json.js';
+import { emitYamlFrontmatter } from './emit/markdown.js';
+import { emitJsonObject } from './emit/json.js';
 import type { ComponentVersionMap } from './resolve/composition.js';
-import type { StructuredTool }      from './emit/json.js';
-import { lookup as cacheL, write as cacheW } from './cache/composed-prompt-cache.js';
+import type { StructuredTool } from './emit/json.js';
+import {
+  lookup as cacheL,
+  write as cacheW,
+} from './cache/composed-prompt-cache.js';
 
 // ──────────────────────────────────────────────
 // Public types ([def:compile-input] / [def:composed-output])
@@ -102,7 +102,10 @@ export interface CompiledAgent {
  * Returns the platform's `headerFormat` column, or 'none' if no row is found.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getPlatformHeaderFormat(db: BetterSQLite3Database<any>, platform: string): string {
+function getPlatformHeaderFormat(
+  db: BetterSQLite3Database<any>,
+  platform: string
+): string {
   const bindingStore = new BindingStore(db);
   // BindingStore.readPlatform throws PLATFORM_NOT_FOUND when absent — treat
   // an unknown platform as 'none' (body-only compile).
@@ -184,7 +187,11 @@ export function compileAgent(input: CompileInput): CompiledAgent {
   // NOTE: extractBodyParts is a cheap read; we run it before the cache check
   // so we have `componentVersions` to fold into the combined context_hash
   // (Decision D: the hash covers BOTH context AND resolved version set).
-  const { bodySections, componentVersions } = extractBodyParts(db, agentSlug, context);
+  const { bodySections, componentVersions } = extractBodyParts(
+    db,
+    agentSlug,
+    context
+  );
 
   // ── 3b. Cache lookup (BEFORE assembly — [dod.4] negative-control) ────────
   // Decision D: lookup by (agentSlug, platform, context, componentVersions).
@@ -198,30 +205,58 @@ export function compileAgent(input: CompileInput): CompiledAgent {
     // and do not require re-running the full assembly).
     const resolvedToolsForHit = resolveTools(db, agentSlug, platform);
     if (headerFormat === 'yaml_frontmatter') {
-      return { id: hit.id, content: hit.content, tools: resolvedToolsForHit.map(t => t.platformAlias), componentVersions: hit.componentVersions };
+      return {
+        id: hit.id,
+        content: hit.content,
+        tools: resolvedToolsForHit.map((t) => t.platformAlias),
+        componentVersions: hit.componentVersions,
+      };
     }
     if (headerFormat === 'json_object') {
       // For JSON platforms, tools is a structured array; reconstruct from the
       // same resolve path so the return shape is consistent.
       const toolStore = new ToolStore(db);
       const toolFormatStore = new ToolFormatStore(db);
-      const lookupFmt: ToolFormatLookup = (pid, ct) => toolFormatStore.getShape(pid, ct);
+      const lookupFmt: ToolFormatLookup = (pid, ct) =>
+        toolFormatStore.getShape(pid, ct);
       const platformToProvider: Record<string, string> = {
         claude_api: 'anthropic',
-        openai:     'openai',
-        bedrock:    'bedrock',
+        openai: 'openai',
+        bedrock: 'bedrock',
       };
       const providerId = platformToProvider[platform] ?? platform;
-      const toolDefs = resolvedToolsForHit.map(rt => {
+      const toolDefs = resolvedToolsForHit.map((rt) => {
         let description = '';
-        try { description = toolStore.read(rt.canonicalName).description; } catch { description = rt.canonicalName; }
-        return { name: rt.canonicalName, description, inputSchema: {} as Record<string, unknown> };
+        try {
+          description = toolStore.read(rt.canonicalName).description;
+        } catch {
+          description = rt.canonicalName;
+        }
+        return {
+          name: rt.canonicalName,
+          description,
+          inputSchema: {} as Record<string, unknown>,
+        };
       });
-      const emittedTools = emitToolsForProvider(toolDefs, providerId, lookupFmt) as unknown as StructuredTool[];
-      return { id: hit.id, content: hit.content, tools: emittedTools, componentVersions: hit.componentVersions };
+      const emittedTools = emitToolsForProvider(
+        toolDefs,
+        providerId,
+        lookupFmt
+      ) as unknown as StructuredTool[];
+      return {
+        id: hit.id,
+        content: hit.content,
+        tools: emittedTools,
+        componentVersions: hit.componentVersions,
+      };
     }
     // none format — no tools
-    return { id: hit.id, content: hit.content, tools: [], componentVersions: hit.componentVersions };
+    return {
+      id: hit.id,
+      content: hit.content,
+      tools: [],
+      componentVersions: hit.componentVersions,
+    };
   }
 
   // ── 4. Resolve tools (platform aliases) ─────────────────────────────────
@@ -240,17 +275,24 @@ export function compileAgent(input: CompileInput): CompiledAgent {
     const content = emitYamlFrontmatter({
       agentSlug,
       description: agent.description,
-      tools:        resolvedTools,
+      tools: resolvedTools,
       model,
       bodySections,
       constraints,
     });
 
     // Tools return: string[] of platform aliases for claude_code.
-    const toolAliases = resolvedTools.map(t => t.platformAlias);
+    const toolAliases = resolvedTools.map((t) => t.platformAlias);
 
     // ── 7a. Cache WRITE (MISS path) ────────────────────────────────────────
-    const written = cacheW(db, agentSlug, platform, context, componentVersions, content);
+    const written = cacheW(
+      db,
+      agentSlug,
+      platform,
+      context,
+      componentVersions,
+      content
+    );
     return { id: written.id, content, tools: toolAliases, componentVersions };
   }
 
@@ -271,13 +313,13 @@ export function compileAgent(input: CompileInput): CompiledAgent {
     // the platform id itself as the provider id.
     const platformToProvider: Record<string, string> = {
       claude_api: 'anthropic',
-      openai:     'openai',
-      bedrock:    'bedrock',
+      openai: 'openai',
+      bedrock: 'bedrock',
     };
     const providerId = platformToProvider[platform] ?? platform;
 
     // Build ToolDefinition[] from the resolved (available) tools.
-    const toolDefinitions = resolvedTools.map(rt => {
+    const toolDefinitions = resolvedTools.map((rt) => {
       let description = '';
       try {
         const catalogTool = toolStore.read(rt.canonicalName);
@@ -287,7 +329,7 @@ export function compileAgent(input: CompileInput): CompiledAgent {
         description = rt.canonicalName;
       }
       return {
-        name:        rt.canonicalName,
+        name: rt.canonicalName,
         description,
         inputSchema: {} as Record<string, unknown>,
       };
@@ -297,19 +339,30 @@ export function compileAgent(input: CompileInput): CompiledAgent {
     // Double-cast via unknown: EmittedTool[] (EmittedServerSideTool lacks an
     // index signature) → unknown[] → StructuredTool[].  Both types are
     // compatible at runtime — all EmittedTool shapes are plain objects.
-    const emittedTools = emitToolsForProvider(toolDefinitions, providerId, lookupFmt) as unknown as StructuredTool[];
+    const emittedTools = emitToolsForProvider(
+      toolDefinitions,
+      providerId,
+      lookupFmt
+    ) as unknown as StructuredTool[];
 
     const content = emitJsonObject({
       agentSlug,
       bodySections,
       constraints,
-      tools:          resolvedTools,
+      tools: resolvedTools,
       structuredTools: emittedTools,
       model,
     });
 
     // ── 7a. Cache WRITE (MISS path) ────────────────────────────────────────
-    const written = cacheW(db, agentSlug, platform, context, componentVersions, content);
+    const written = cacheW(
+      db,
+      agentSlug,
+      platform,
+      context,
+      componentVersions,
+      content
+    );
     return { id: written.id, content, tools: emittedTools, componentVersions };
   }
 
@@ -319,7 +372,9 @@ export function compileAgent(input: CompileInput): CompiledAgent {
   if (constraints.length > 0) {
     const policyLines = ['## Policies', ''];
     for (const c of constraints) {
-      const prefix = c.inheritedFrom ? `(inherited from ${c.inheritedFrom}) ` : '';
+      const prefix = c.inheritedFrom
+        ? `(inherited from ${c.inheritedFrom}) `
+        : '';
       policyLines.push(`- ${prefix}${c.text}`);
     }
     bodyParts.push(policyLines.join('\n'));
@@ -327,6 +382,13 @@ export function compileAgent(input: CompileInput): CompiledAgent {
   const content = bodyParts.join('\n\n') + '\n';
 
   // ── 7a. Cache WRITE (MISS path) ─────────────────────────────────────────
-  const written = cacheW(db, agentSlug, platform, context, componentVersions, content);
+  const written = cacheW(
+    db,
+    agentSlug,
+    platform,
+    context,
+    componentVersions,
+    content
+  );
   return { id: written.id, content, tools: [], componentVersions };
 }

@@ -1,6 +1,6 @@
-# @adhd/agent-compiler
+# @adhd/agent-engine-compiler
 
-Registry-family store for agent-compiler: drizzle-backed SQLite tables sharing the one registry database.
+Registry-family store for agent-engine-compiler: drizzle-backed SQLite tables sharing the one registry database.
 
 A `platform:node` registry-family package: a Drizzle-backed store over **one
 shared SQLite file** (`REGISTRY_DATABASE_PATH` / `DATABASE_PATH`, default
@@ -31,19 +31,19 @@ drizzle/              drizzle-kit generated migrations (shipped in the package)
 
 ```bash
 # Build (emits to dist/, ships the drizzle/ migrations as assets).
-nx build agent-compiler
+nx build agent-engine-compiler
 
 # Test (real on-disk SQLite + real migrations; gate on the EXIT CODE).
-nx test agent-compiler
+nx test agent-engine-compiler
 
 # Type-check without emitting.
-nx typecheck agent-compiler
+nx typecheck agent-engine-compiler
 
 # Generate a new migration from src/db/schema.ts into ./drizzle.
-nx db:generate agent-compiler
+nx db:generate agent-engine-compiler
 
 # Apply pending migrations to the database.
-nx db:migrate agent-compiler
+nx db:migrate agent-engine-compiler
 ```
 
 `build`, `test`, and `typecheck` inherit caching and the `^build` dependency
@@ -53,6 +53,6 @@ from the workspace `nx.json` `targetDefaults` — do not redefine `cache` or
 ## Adding a table
 
 1. Define it in `src/db/schema.ts` with the `compiler_` prefix.
-2. `nx db:generate agent-compiler` to write the migration into `drizzle/`.
+2. `nx db:generate agent-engine-compiler` to write the migration into `drizzle/`.
 3. Export the table (and any store class) from `src/index.ts`.
 4. Add a real-DB, close+reopen test under `src/__tests__/`.

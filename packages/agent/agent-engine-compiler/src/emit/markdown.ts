@@ -71,7 +71,8 @@ export interface YamlFrontmatterInput {
  *          stdout as the claude_code system prompt.
  */
 export function emitYamlFrontmatter(input: YamlFrontmatterInput): string {
-  const { agentSlug, description, tools, model, bodySections, constraints } = input;
+  const { agentSlug, description, tools, model, bodySections, constraints } =
+    input;
 
   // ── Frontmatter fields ────────────────────────────────────────────────────
   const lines: string[] = ['---'];
@@ -82,7 +83,7 @@ export function emitYamlFrontmatter(input: YamlFrontmatterInput): string {
   // tools: — only emitted when there is at least one resolved alias.
   // Decision B.1: "An agent with no grants emits no tools: line (NOT tools: empty)".
   if (tools.length > 0) {
-    const aliasLine = tools.map(t => t.platformAlias).join(', ');
+    const aliasLine = tools.map((t) => t.platformAlias).join(', ');
     lines.push(`tools: ${aliasLine}`);
   }
 

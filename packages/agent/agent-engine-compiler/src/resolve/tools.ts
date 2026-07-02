@@ -75,12 +75,13 @@ export function resolveTools(
 
   // Step 2: one platform-keyed query — reuses BindingStore ([ref:store-read]).
   // Index idx_bindings_platform keeps this O(catalog-size), not O(grants).
-  const platformBindings: ToolPlatformBinding[] = bindingStore.listForPlatform(platform);
+  const platformBindings: ToolPlatformBinding[] =
+    bindingStore.listForPlatform(platform);
 
   // Build a Map<canonicalToolName, binding> for O(1) grant lookups.
   // Platform is already baked in — the Map only holds bindings for THIS platform.
   const bindingByTool = new Map<string, ToolPlatformBinding>(
-    platformBindings.map(b => [b.toolName, b])
+    platformBindings.map((b) => [b.toolName, b])
   );
 
   // Step 3: walk grants in their stored order; de-duplicate by canonical name.

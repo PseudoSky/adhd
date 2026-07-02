@@ -77,9 +77,9 @@ export function resolvePolicyConstraints(
     const text = template.description;
 
     constraints.push({
-      policySlug:   row.policySlug,
+      policySlug: row.policySlug,
       text,
-      isMandatory:  row.isMandatory,
+      isMandatory: row.isMandatory,
       inheritedFrom: row.inheritedFrom,
     });
   }

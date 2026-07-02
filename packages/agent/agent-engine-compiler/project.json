@@ -1,9 +1,8 @@
 {
-  "name": "agent-compiler",
+  "name": "agent-engine-compiler",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/ai/agent-compiler/src",
+  "sourceRoot": "packages/agent/agent-engine-compiler/src",
   "projectType": "library",
-  "tags": ["layer:ai", "platform:node"],
   "release": {
     "version": {
       "generatorOptions": {
@@ -12,18 +11,19 @@
       }
     }
   },
+  "tags": ["layer:ai", "platform:node"],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
       "outputs": ["{options.outputPath}"],
       "options": {
-        "outputPath": "dist/packages/ai/agent-compiler",
-        "main": "packages/ai/agent-compiler/src/index.ts",
-        "tsConfig": "packages/ai/agent-compiler/tsconfig.lib.json",
+        "outputPath": "dist/packages/agent/agent-engine-compiler",
+        "main": "packages/agent/agent-engine-compiler/src/index.ts",
+        "tsConfig": "packages/agent/agent-engine-compiler/tsconfig.lib.json",
         "clean": true,
         "assets": [
           {
-            "input": "packages/ai/agent-compiler",
+            "input": "packages/agent/agent-engine-compiler",
             "glob": "drizzle/**/*",
             "output": "."
           }
@@ -34,34 +34,34 @@
       "executor": "@nx/vite:test",
       "outputs": ["{options.reportsDirectory}"],
       "options": {
-        "configFile": "packages/ai/agent-compiler/vite.config.ts",
-        "reportsDirectory": "../../../coverage/packages/ai/agent-compiler"
+        "configFile": "packages/agent/agent-engine-compiler/vite.config.ts",
+        "reportsDirectory": "../../../coverage/packages/agent/agent-engine-compiler"
       }
     },
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "tsc -p packages/ai/agent-compiler/tsconfig.json --noEmit"
+        "command": "tsc -p packages/agent/agent-engine-compiler/tsconfig.json --noEmit"
       }
     },
     "db:generate": {
       "executor": "nx:run-commands",
       "options": {
         "command": "drizzle-kit generate",
-        "cwd": "packages/ai/agent-compiler"
+        "cwd": "packages/agent/agent-engine-compiler"
       }
     },
     "db:migrate": {
       "executor": "nx:run-commands",
       "options": {
         "command": "drizzle-kit migrate",
-        "cwd": "packages/ai/agent-compiler"
+        "cwd": "packages/agent/agent-engine-compiler"
       }
     },
     "clean": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "rm -rf dist/packages/ai/agent-compiler"
+        "command": "rm -rf dist/packages/agent/agent-engine-compiler"
       }
     },
     "nx-release-publish": {

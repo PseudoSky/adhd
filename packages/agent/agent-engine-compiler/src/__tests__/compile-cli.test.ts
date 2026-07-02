@@ -37,8 +37,8 @@
  *   afterAll removes those symlinks.
  */
 
-import fs   from 'node:fs';
-import os   from 'node:os';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -59,7 +59,7 @@ import {
   seed as seedToolRegistry,
   AgentToolStore,
 } from '@adhd/agent-tool-registry';
-import { seed as seedProvider }               from '@adhd/agent-provider';
+import { seed as seedProvider } from '@adhd/agent-provider';
 import { seed as seedPolicy, AgentPolicyStore } from '@adhd/agent-policy';
 
 // ── constants ─────────────────────────────────────────────────────────────
@@ -75,10 +75,13 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
  */
 const AI_SRC = path.resolve(__dirname, '../../../');
 
-const PROVIDER_MIGRATIONS      = path.join(AI_SRC, 'agent-provider/drizzle');
-const REGISTRY_MIGRATIONS      = path.join(AI_SRC, 'agent-registry/drizzle');
-const TOOL_REGISTRY_MIGRATIONS = path.join(AI_SRC, 'agent-tool-registry/drizzle');
-const POLICY_MIGRATIONS        = path.join(AI_SRC, 'agent-policy/drizzle');
+const PROVIDER_MIGRATIONS = path.join(AI_SRC, 'agent-provider/drizzle');
+const REGISTRY_MIGRATIONS = path.join(AI_SRC, 'agent-registry/drizzle');
+const TOOL_REGISTRY_MIGRATIONS = path.join(
+  AI_SRC,
+  'agent-tool-registry/drizzle'
+);
+const POLICY_MIGRATIONS = path.join(AI_SRC, 'agent-policy/drizzle');
 
 /**
  * Layout:
@@ -90,10 +93,10 @@ const POLICY_MIGRATIONS        = path.join(AI_SRC, 'agent-policy/drizzle');
  * Relative to packages/ai/agent-compiler/src/__tests__/:
  *   ../../../../../  = repo root (5 levels up)
  */
-const REPO_ROOT      = path.resolve(__dirname, '../../../../../');
-const AI_DIST        = path.join(REPO_ROOT, 'dist/packages/ai');
-const COMPILER_DIST  = path.join(AI_DIST, 'agent-compiler');
-const BIN            = path.join(COMPILER_DIST, 'src/cli/compile.js');
+const REPO_ROOT = path.resolve(__dirname, '../../../../../');
+const AI_DIST = path.join(REPO_ROOT, 'dist/packages/ai');
+const COMPILER_DIST = path.join(AI_DIST, 'agent-compiler');
+const BIN = path.join(COMPILER_DIST, 'src/cli/compile.js');
 
 /**
  * @adhd packages that the CLI bin imports at runtime.
@@ -101,11 +104,11 @@ const BIN            = path.join(COMPILER_DIST, 'src/cli/compile.js');
  * resolution finds them when executing the bin from dist/.
  */
 const ADHD_DIST_DEPS: Record<string, string> = {
-  'agent-registry':      path.join(AI_DIST, 'agent-registry'),
+  'agent-registry': path.join(AI_DIST, 'agent-registry'),
   'agent-tool-registry': path.join(AI_DIST, 'agent-tool-registry'),
-  'agent-provider':      path.join(AI_DIST, 'agent-provider'),
-  'agent-policy':        path.join(AI_DIST, 'agent-policy'),
-  'agent-mcp-types':     path.join(AI_DIST, 'agent-mcp-types'),
+  'agent-provider': path.join(AI_DIST, 'agent-provider'),
+  'agent-policy': path.join(AI_DIST, 'agent-policy'),
+  'agent-mcp-types': path.join(AI_DIST, 'agent-mcp-types'),
 };
 
 /** Path where we write @adhd symlinks for the spawned bin's resolution. */
@@ -144,10 +147,14 @@ function openDb(dbPath: string): OpenResult {
  * Spawn the built CLI bin as a child process, keying on its EXIT CODE.
  * Returns { status, stdout, stderr } — never throws.
  */
-function spawnBin(args: string[]): { status: number; stdout: string; stderr: string } {
+function spawnBin(args: string[]): {
+  status: number;
+  stdout: string;
+  stderr: string;
+} {
   const result = spawnSync(process.execPath, [BIN, ...args], {
     encoding: 'utf8',
-    timeout:  30_000,
+    timeout: 30_000,
   });
   return {
     status: result.status ?? 1,
@@ -159,36 +166,32 @@ function spawnBin(args: string[]): { status: number; stdout: string; stderr: str
 // ── suite ─────────────────────────────────────────────────────────────────
 
 describe('compile CLI bin — child-process behavioral tests', () => {
-  let dbPath:  string;
-  let tmpDir:  string;
-  let conn:    Database.Database;
+  let dbPath: string;
+  let tmpDir: string;
+  let conn: Database.Database;
 
   // Test slugs and constants
-  const AGENT_SLUG    = 'cli-test-agent';
-  const COMP_INTRO    = 'cli-intro';
-  const COMP_BODY     = 'cli-body';
+  const AGENT_SLUG = 'cli-test-agent';
+  const COMP_INTRO = 'cli-intro';
+  const COMP_BODY = 'cli-body';
   const CATEGORY_SLUG = 'cli-test-category';
-  const MODEL_HINT    = 'claude_opus_4_8';
+  const MODEL_HINT = 'claude_opus_4_8';
 
   // ── beforeAll: build the package, wire symlinks, seed a real DB ───────
 
   beforeAll(() => {
     // ── 1. Build the package so the CLI bin exists at BIN ─────────────────
     // The build runs nx tsc which emits to dist/.  nx cache makes reruns fast.
-    const build = spawnSync(
-      'npx',
-      ['--yes', 'nx', 'build', 'agent-compiler'],
-      {
-        encoding: 'utf8',
-        cwd:      REPO_ROOT,
-        timeout:  120_000,
-        shell:    true,
-      }
-    );
+    const build = spawnSync('npx', ['--yes', 'nx', 'build', 'agent-compiler'], {
+      encoding: 'utf8',
+      cwd: REPO_ROOT,
+      timeout: 120_000,
+      shell: true,
+    });
     if (build.status !== 0) {
       throw new Error(
         `nx build agent-compiler failed (exit ${build.status ?? '?'}):\n` +
-        `stdout: ${build.stdout}\nstderr: ${build.stderr}`
+          `stdout: ${build.stdout}\nstderr: ${build.stderr}`
       );
     }
     if (!fs.existsSync(BIN)) {
@@ -234,62 +237,100 @@ describe('compile CLI bin — child-process behavioral tests', () => {
     // ── 5. Seed taxonomy category ────────────────────────────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const taxonomyStore = new TaxonomyStore(db as any);
-    taxonomyStore.createCategory({ slug: CATEGORY_SLUG, name: 'CLI Test Category' });
+    taxonomyStore.createCategory({
+      slug: CATEGORY_SLUG,
+      name: 'CLI Test Category',
+    });
 
     // ── 6. Seed agent ────────────────────────────────────────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const agentStore = new AgentStore(db as any);
     agentStore.create({
-      slug:             AGENT_SLUG,
-      displayName:      'CLI Test Agent',
-      description:      'An agent used to test the compile CLI bin.',
-      modelHint:        MODEL_HINT,
+      slug: AGENT_SLUG,
+      displayName: 'CLI Test Agent',
+      description: 'An agent used to test the compile CLI bin.',
+      modelHint: MODEL_HINT,
       taxonomyCategory: CATEGORY_SLUG,
     });
 
     // ── 7. Seed components ────────────────────────────────────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const componentStore = new ComponentStore(db as any);
-    componentStore.upsertType({ slug: 'system', description: 'System section', isSystem: true });
+    componentStore.upsertType({
+      slug: 'system',
+      description: 'System section',
+      isSystem: true,
+    });
 
     componentStore.create({
-      slug:    COMP_INTRO,
-      type:    'system',
+      slug: COMP_INTRO,
+      type: 'system',
       content: '# CLI Agent\n\nYou are a CLI test agent.',
     });
 
     componentStore.create({
-      slug:    COMP_BODY,
-      type:    'system',
+      slug: COMP_BODY,
+      type: 'system',
       content: '## Instructions\n\nAlways respond clearly.',
     });
 
     // ── 8. Wire agent → components ────────────────────────────────────────
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const compositionStore = new CompositionStore(db as any);
-    compositionStore.attach({ agentSlug: AGENT_SLUG, componentSlug: COMP_INTRO, position: 1 });
-    compositionStore.attach({ agentSlug: AGENT_SLUG, componentSlug: COMP_BODY,  position: 2 });
+    compositionStore.attach({
+      agentSlug: AGENT_SLUG,
+      componentSlug: COMP_INTRO,
+      position: 1,
+    });
+    compositionStore.attach({
+      agentSlug: AGENT_SLUG,
+      componentSlug: COMP_BODY,
+      position: 2,
+    });
 
     // ── 9. Grant tools ────────────────────────────────────────────────────
     // file_read → Read (claude_code), web_search → WebSearch (claude_code)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const agentToolStore = new AgentToolStore(db as any);
-    agentToolStore.grant({ agentSlug: AGENT_SLUG, toolName: 'file_read',  permission: 'full' });
-    agentToolStore.grant({ agentSlug: AGENT_SLUG, toolName: 'web_search', permission: 'full' });
+    agentToolStore.grant({
+      agentSlug: AGENT_SLUG,
+      toolName: 'file_read',
+      permission: 'full',
+    });
+    agentToolStore.grant({
+      agentSlug: AGENT_SLUG,
+      toolName: 'web_search',
+      permission: 'full',
+    });
 
     // ── 10. Attach policy ─────────────────────────────────────────────────
     const agentPolicyStore = new AgentPolicyStore(db);
-    agentPolicyStore.attach({ agentSlug: AGENT_SLUG, policySlug: 'no-credentials' });
+    agentPolicyStore.attach({
+      agentSlug: AGENT_SLUG,
+      policySlug: 'no-credentials',
+    });
 
     // Close write connection — bin spawns its own handle.
     conn.close();
   }, 180_000); // generous timeout for the nx build
 
   afterAll(() => {
-    try { conn.close(); }  catch { /* already closed */ }
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      conn.close();
+    } catch {
+      /* already closed */
+    }
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
     // Remove @adhd symlinks created in beforeAll.
-    try { fs.rmSync(ADHD_NM_DIR, { recursive: true, force: true }); } catch { /* ignore */ }
+    try {
+      fs.rmSync(ADHD_NM_DIR, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
   });
 
   // ── [compile-cli.1] CLI parses --platform/--context/--out-dir/--all ───
@@ -299,9 +340,12 @@ describe('compile CLI bin — child-process behavioral tests', () => {
       // [inv:platform-shaped-observable]: frontmatter starts with '---'.
       // This is the primary behavioral gate — a real child process, exit code.
       const { status, stdout, stderr } = spawnBin([
-        'compile', AGENT_SLUG,
-        '--platform', 'claude_code',
-        '--db', dbPath,
+        'compile',
+        AGENT_SLUG,
+        '--platform',
+        'claude_code',
+        '--db',
+        dbPath,
       ]);
 
       expect(status, `EXIT CODE (stderr: ${stderr})`).toBe(0);
@@ -310,15 +354,18 @@ describe('compile CLI bin — child-process behavioral tests', () => {
 
     it('stdout contains a resolved tools: line with platform aliases', () => {
       const { status, stdout, stderr } = spawnBin([
-        'compile', AGENT_SLUG,
-        '--platform', 'claude_code',
-        '--db', dbPath,
+        'compile',
+        AGENT_SLUG,
+        '--platform',
+        'claude_code',
+        '--db',
+        dbPath,
       ]);
 
       expect(status, `EXIT CODE (stderr: ${stderr})`).toBe(0);
 
       // Frontmatter must contain a tools: line.
-      const toolsLine = stdout.split('\n').find(l => l.startsWith('tools:'));
+      const toolsLine = stdout.split('\n').find((l) => l.startsWith('tools:'));
       expect(toolsLine, 'tools: line missing from stdout').toBeDefined();
 
       // Resolved PascalCase aliases (not canonical names).
@@ -333,10 +380,14 @@ describe('compile CLI bin — child-process behavioral tests', () => {
       const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-out-'));
       try {
         const { status, stdout, stderr } = spawnBin([
-          'compile', AGENT_SLUG,
-          '--platform', 'claude_code',
-          '--db', dbPath,
-          '--out-dir', outDir,
+          'compile',
+          AGENT_SLUG,
+          '--platform',
+          'claude_code',
+          '--db',
+          dbPath,
+          '--out-dir',
+          outDir,
         ]);
 
         expect(status, `EXIT CODE (stderr: ${stderr})`).toBe(0);
@@ -344,7 +395,10 @@ describe('compile CLI bin — child-process behavioral tests', () => {
         expect(stdout).toBe('');
 
         const outFile = path.join(outDir, `${AGENT_SLUG}.md`);
-        expect(fs.existsSync(outFile), `output file not found: ${outFile}`).toBe(true);
+        expect(
+          fs.existsSync(outFile),
+          `output file not found: ${outFile}`
+        ).toBe(true);
         const written = fs.readFileSync(outFile, 'utf8');
         expect(written).toMatch(/^---\n/);
       } finally {
@@ -358,17 +412,24 @@ describe('compile CLI bin — child-process behavioral tests', () => {
         const { status, stderr } = spawnBin([
           'compile',
           '--all',
-          '--category', CATEGORY_SLUG,
-          '--platform', 'claude_code',
-          '--db', dbPath,
-          '--out-dir', outDir,
+          '--category',
+          CATEGORY_SLUG,
+          '--platform',
+          'claude_code',
+          '--db',
+          dbPath,
+          '--out-dir',
+          outDir,
         ]);
 
         expect(status, `EXIT CODE (stderr: ${stderr})`).toBe(0);
 
         // The seeded category has one agent (AGENT_SLUG).
         const outFile = path.join(outDir, `${AGENT_SLUG}.md`);
-        expect(fs.existsSync(outFile), `output file not found: ${outFile}`).toBe(true);
+        expect(
+          fs.existsSync(outFile),
+          `output file not found: ${outFile}`
+        ).toBe(true);
         const written = fs.readFileSync(outFile, 'utf8');
         expect(written).toMatch(/^---\n/);
       } finally {
@@ -382,16 +443,19 @@ describe('compile CLI bin — child-process behavioral tests', () => {
   describe('[compile-cli.2] stdout content + JSON format', () => {
     it('stdout contains body content in junction order', () => {
       const { status, stdout, stderr } = spawnBin([
-        'compile', AGENT_SLUG,
-        '--platform', 'claude_code',
-        '--db', dbPath,
+        'compile',
+        AGENT_SLUG,
+        '--platform',
+        'claude_code',
+        '--db',
+        dbPath,
       ]);
 
       expect(status, `EXIT CODE (stderr: ${stderr})`).toBe(0);
 
       // Both body sections must appear in junction order.
       const introIdx = stdout.indexOf('# CLI Agent');
-      const bodyIdx  = stdout.indexOf('## Instructions');
+      const bodyIdx = stdout.indexOf('## Instructions');
       expect(introIdx).toBeGreaterThan(-1);
       expect(bodyIdx).toBeGreaterThan(-1);
       // [def:junction-order]: position=1 precedes position=2.
@@ -401,36 +465,49 @@ describe('compile CLI bin — child-process behavioral tests', () => {
     it('--platform claude_api → EXIT 0, stdout is valid JSON with systemPrompt + tools', () => {
       // [def:composed-output]: json_object emit for claude_api.
       const { status, stdout, stderr } = spawnBin([
-        'compile', AGENT_SLUG,
-        '--platform', 'claude_api',
-        '--db', dbPath,
+        'compile',
+        AGENT_SLUG,
+        '--platform',
+        'claude_api',
+        '--db',
+        dbPath,
       ]);
 
       expect(status, `EXIT CODE (stderr: ${stderr})`).toBe(0);
 
       let parsed: Record<string, unknown>;
-      expect(() => { parsed = JSON.parse(stdout); }, 'stdout must be valid JSON').not.toThrow();
+      expect(() => {
+        parsed = JSON.parse(stdout);
+      }, 'stdout must be valid JSON').not.toThrow();
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       expect(parsed!).toHaveProperty('systemPrompt');
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       expect(parsed!).toHaveProperty('tools');
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-      expect(Array.isArray(parsed!['tools']), 'tools must be an array').toBe(true);
+      expect(Array.isArray(parsed!['tools']), 'tools must be an array').toBe(
+        true
+      );
     });
 
     it('--format json → EXIT 0, JSON.parse succeeds, has systemPrompt key', () => {
       // --format json wraps any platform's output in a JSON envelope.
       const { status, stdout, stderr } = spawnBin([
-        'compile', AGENT_SLUG,
-        '--platform', 'claude_code',
-        '--format', 'json',
-        '--db', dbPath,
+        'compile',
+        AGENT_SLUG,
+        '--platform',
+        'claude_code',
+        '--format',
+        'json',
+        '--db',
+        dbPath,
       ]);
 
       expect(status, `EXIT CODE (stderr: ${stderr})`).toBe(0);
 
       let parsed: Record<string, unknown>;
-      expect(() => { parsed = JSON.parse(stdout); }, 'stdout must be valid JSON').not.toThrow();
+      expect(() => {
+        parsed = JSON.parse(stdout);
+      }, 'stdout must be valid JSON').not.toThrow();
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       expect(parsed!).toHaveProperty('systemPrompt');
     });
@@ -443,9 +520,12 @@ describe('compile CLI bin — child-process behavioral tests', () => {
       // NEGATIVE CONTROL WITH TEETH: if the bin ignored unknown slugs and
       // exited 0, this assertion would fail (status would be 0, not > 0).
       const { status, stderr } = spawnBin([
-        'compile', 'slug-that-does-not-exist-xyz',
-        '--platform', 'claude_code',
-        '--db', dbPath,
+        'compile',
+        'slug-that-does-not-exist-xyz',
+        '--platform',
+        'claude_code',
+        '--db',
+        dbPath,
       ]);
 
       // Key on EXIT CODE — not on grep.
