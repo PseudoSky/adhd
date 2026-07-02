@@ -139,11 +139,9 @@ describe('emitEncode / emitDecode — schema walk', () => {
       type: 'array',
       items: { type: 'string', format: 'date-time' },
     };
-    const decoded = run(
-      emitDecode('w', node, ctx()),
-      'w',
-      ['2024-01-15T12:00:00.000Z'],
-    ) as Date[];
+    const decoded = run(emitDecode('w', node, ctx()), 'w', [
+      '2024-01-15T12:00:00.000Z',
+    ]) as Date[];
     const wire = run(emitEncode('v', node, ctx()), 'v', decoded) as string[];
     expect(wire).toEqual(['2024-01-15T12:00:00.000Z']);
   });
@@ -183,9 +181,9 @@ describe('emit — failure modes (teeth)', () => {
 
   it('throws E_EMIT on a cyclic $ref (cannot be a finite expression)', () => {
     const root: SchemaNode = { $defs: { Loop: { $ref: '#/$defs/Loop' } } };
-    expect(() =>
-      emitDecode('w', { $ref: '#/$defs/Loop' }, ctx(root)),
-    ).toThrow(EmitError);
+    expect(() => emitDecode('w', { $ref: '#/$defs/Loop' }, ctx(root))).toThrow(
+      EmitError
+    );
   });
 
   it('NEGATIVE CONTROL: a wrong cell makes the decode produce the wrong value', () => {
@@ -193,10 +191,16 @@ describe('emit — failure modes (teeth)', () => {
     // Prove the assertion has teeth by deliberately mis-typing the table.
     const reg = createRegistry();
     reg.register(scalarCodec('date-time'));
-    const brokenTable = { 'date-time': { encode: '$', decode: '$', mode: 'native' as const } };
+    const brokenTable = {
+      'date-time': { encode: '$', decode: '$', mode: 'native' as const },
+    };
     const brokenCtx = createEmitCtx(reg, brokenTable);
     const node: SchemaNode = { type: 'string', format: 'date-time' };
-    const out = run(emitDecode('w', node, brokenCtx), 'w', '2024-01-15T12:00:00.000Z');
+    const out = run(
+      emitDecode('w', node, brokenCtx),
+      'w',
+      '2024-01-15T12:00:00.000Z'
+    );
     expect(out).not.toBeInstanceOf(Date); // broken table -> string passthrough
   });
 });

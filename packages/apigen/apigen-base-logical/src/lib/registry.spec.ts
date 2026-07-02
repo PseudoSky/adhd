@@ -67,7 +67,7 @@ describe('createRegistry (contract spine)', () => {
     expect(frozen.get('date-time')).toBeDefined();
     expect(frozen.ids()).toEqual(['date-time']);
     expect(() => frozen.register(fakeCodec('uuid', 'uuid'))).toThrow(
-      CodecRegistryError,
+      CodecRegistryError
     );
   });
 });

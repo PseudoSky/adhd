@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildTranscoder, tryRegister } from './runmode';
 import { createRegistry } from './registry';
-import type { LogicalTypeCodec, SchemaNode, TranscodeCtx, Wire } from './contracts';
+import type {
+  LogicalTypeCodec,
+  SchemaNode,
+  TranscodeCtx,
+  Wire,
+} from './contracts';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -11,7 +16,7 @@ import type { LogicalTypeCodec, SchemaNode, TranscodeCtx, Wire } from './contrac
 function makeStubCodec(
   id: string,
   format: string,
-  transform: { encode: (v: unknown) => Wire; decode: (w: Wire) => unknown },
+  transform: { encode: (v: unknown) => Wire; decode: (w: Wire) => unknown }
 ): LogicalTypeCodec {
   return {
     id,
@@ -26,10 +31,14 @@ function makeStubCodec(
 /** A codec that wraps/unwraps a value in a marker object so we can prove the
  *  transcoder path actually touched it. */
 const MARKED_FORMAT = 'x-test-marked';
-const markedCodec: LogicalTypeCodec = makeStubCodec(MARKED_FORMAT, MARKED_FORMAT, {
-  encode: (v) => `encoded(${String(v)})`,
-  decode: (w) => `decoded(${String(w)})`,
-});
+const markedCodec: LogicalTypeCodec = makeStubCodec(
+  MARKED_FORMAT,
+  MARKED_FORMAT,
+  {
+    encode: (v) => `encoded(${String(v)})`,
+    decode: (w) => `decoded(${String(w)})`,
+  }
+);
 
 // ---------------------------------------------------------------------------
 // buildTranscoder
@@ -54,7 +63,7 @@ describe('buildTranscoder', () => {
       // A "lossless" codec: encode prepends a tag, decode strips it.
       const codec = makeStubCodec('tagged', 'x-tagged', {
         encode: (v) => `T:${String(v)}`,
-        decode: (w) => String(w).slice(2),  // strip "T:"
+        decode: (w) => String(w).slice(2), // strip "T:"
       });
       const registry = createRegistry();
       registry.register(codec);
@@ -240,9 +249,9 @@ describe('buildTranscoder', () => {
       const registry = createRegistry();
       const transcoder = buildTranscoder(registry.freeze());
 
-      expect(() =>
-        transcoder.encode('x', { $ref: '#/$defs/Missing' }),
-      ).toThrow(/\$ref/);
+      expect(() => transcoder.encode('x', { $ref: '#/$defs/Missing' })).toThrow(
+        /\$ref/
+      );
     });
   });
 
@@ -253,10 +262,7 @@ describe('buildTranscoder', () => {
       const transcoder = buildTranscoder(registry.freeze());
 
       const schema: SchemaNode = {
-        oneOf: [
-          { $ref: '#/$defs/Dog' },
-          { $ref: '#/$defs/Cat' },
-        ],
+        oneOf: [{ $ref: '#/$defs/Dog' }, { $ref: '#/$defs/Cat' }],
         discriminator: {
           propertyName: 'kind',
           mapping: { dog: '#/$defs/Dog', cat: '#/$defs/Cat' },
@@ -280,7 +286,9 @@ describe('buildTranscoder', () => {
       };
 
       const resolve = (ref: string): SchemaNode => defs[ref] ?? {};
-      const dogWire = transcoder.encode({ kind: 'dog', name: 'Rex' }, schema, { resolve });
+      const dogWire = transcoder.encode({ kind: 'dog', name: 'Rex' }, schema, {
+        resolve,
+      });
       // Dog branch: name is MARKED_FORMAT so codec runs
       expect(dogWire).toEqual({ kind: 'dog', name: 'encoded(Rex)' });
     });
@@ -319,7 +327,9 @@ describe('buildTranscoder', () => {
         kind: 'scalar',
         schema: {},
         matches: () => false,
-        encode: () => { throw new Error('not my value'); },
+        encode: () => {
+          throw new Error('not my value');
+        },
         decode: (w) => w,
       };
       registry.register(picky);
@@ -348,7 +358,11 @@ describe('buildTranscoder', () => {
       registry.register(modeCapture);
       const transcoder = buildTranscoder(registry.freeze());
 
-      transcoder.encode('x', { type: 'string', format: 'x-capture' }, { mode: 'lossy' });
+      transcoder.encode(
+        'x',
+        { type: 'string', format: 'x-capture' },
+        { mode: 'lossy' }
+      );
       expect(capturedMode).toBe('lossy');
     });
   });
@@ -371,7 +385,9 @@ describe('tryRegister', () => {
     const notFound = Object.assign(new Error('Cannot find module'), {
       code: 'MODULE_NOT_FOUND',
     });
-    tryRegister(registry, 'decimal', () => { throw notFound; });
+    tryRegister(registry, 'decimal', () => {
+      throw notFound;
+    });
 
     // Registry must still be empty — no crash
     expect(registry.ids()).toHaveLength(0);
@@ -381,7 +397,11 @@ describe('tryRegister', () => {
     const registry = createRegistry();
     const boom = new Error('unexpected failure');
 
-    expect(() => tryRegister(registry, 'x', () => { throw boom; })).toThrow(boom);
+    expect(() =>
+      tryRegister(registry, 'x', () => {
+        throw boom;
+      })
+    ).toThrow(boom);
   });
 
   it('does not crash the process when multiple codecs are attempted and one is absent', () => {
@@ -390,8 +410,12 @@ describe('tryRegister', () => {
     // Codec A is present
     tryRegister(registry, MARKED_FORMAT, () => markedCodec);
     // Codec B is absent
-    const absent = Object.assign(new Error('Cannot find module'), { code: 'MODULE_NOT_FOUND' });
-    tryRegister(registry, 'absent-lib', () => { throw absent; });
+    const absent = Object.assign(new Error('Cannot find module'), {
+      code: 'MODULE_NOT_FOUND',
+    });
+    tryRegister(registry, 'absent-lib', () => {
+      throw absent;
+    });
 
     // Only A registered
     expect(registry.ids()).toEqual([MARKED_FORMAT]);
@@ -400,7 +424,9 @@ describe('tryRegister', () => {
   it('re-throws loader errors that are non-Error objects', () => {
     const registry = createRegistry();
     expect(() =>
-      tryRegister(registry, 'x', () => { throw 'string-error'; }),
+      tryRegister(registry, 'x', () => {
+        throw 'string-error';
+      })
     ).toThrow();
   });
 
@@ -421,9 +447,11 @@ describe('tryRegister', () => {
       const registry = createRegistry();
       const missingLib = Object.assign(
         new Error("Cannot find module 'decimal.js'"),
-        { code: 'MODULE_NOT_FOUND' },
+        { code: 'MODULE_NOT_FOUND' }
       );
-      tryRegister(registry, 'decimal', () => { throw missingLib; });
+      tryRegister(registry, 'decimal', () => {
+        throw missingLib;
+      });
 
       // Negative control: if tryRegister DID NOT swallow MODULE_NOT_FOUND,
       // the test would throw before reaching this assertion.
@@ -433,12 +461,18 @@ describe('tryRegister', () => {
     it('a transcoder built over an empty registry passes plain values through (no crash)', () => {
       const registry = createRegistry();
       // Simulate failed lazy-load
-      const missingLib = Object.assign(new Error('Cannot find module'), { code: 'MODULE_NOT_FOUND' });
-      tryRegister(registry, 'decimal', () => { throw missingLib; });
+      const missingLib = Object.assign(new Error('Cannot find module'), {
+        code: 'MODULE_NOT_FOUND',
+      });
+      tryRegister(registry, 'decimal', () => {
+        throw missingLib;
+      });
 
       const transcoder = buildTranscoder(registry.freeze());
       // No codec registered; plain string passthrough must not throw
-      expect(transcoder.encode('1.23', { type: 'string', format: 'decimal' })).toBe('1.23');
+      expect(
+        transcoder.encode('1.23', { type: 'string', format: 'decimal' })
+      ).toBe('1.23');
     });
   });
 });

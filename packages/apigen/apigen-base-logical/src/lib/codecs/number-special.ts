@@ -1,4 +1,9 @@
-import type { LogicalTypeCodec, SchemaNode, TranscodeCtx, Wire } from '../contracts';
+import type {
+  LogicalTypeCodec,
+  SchemaNode,
+  TranscodeCtx,
+  Wire,
+} from '../contracts';
 
 /**
  * String sentinels for the three non-finite IEEE 754 values.
@@ -9,7 +14,11 @@ const INF_WIRE = 'Infinity' as const;
 const NEG_INF_WIRE = '-Infinity' as const;
 
 /** The set of valid number-special wire sentinels. */
-const SENTINELS: ReadonlySet<string> = new Set([NAN_WIRE, INF_WIRE, NEG_INF_WIRE]);
+const SENTINELS: ReadonlySet<string> = new Set([
+  NAN_WIRE,
+  INF_WIRE,
+  NEG_INF_WIRE,
+]);
 
 /**
  * @stable Codec for non-finite JavaScript numbers: `NaN`, `Infinity`, and
@@ -63,8 +72,10 @@ export const numberSpecialCodec: LogicalTypeCodec<number> = {
     }
     if (ctx.mode === 'strict') {
       throw new TypeError(
-        `[number-special] unrecognized wire value at "${ctx.path}": ${JSON.stringify(wire)}. ` +
-          `Expected a number or one of ${[...SENTINELS].join(', ')}.`,
+        `[number-special] unrecognized wire value at "${
+          ctx.path
+        }": ${JSON.stringify(wire)}. ` +
+          `Expected a number or one of ${[...SENTINELS].join(', ')}.`
       );
     }
     return NaN;

@@ -9,7 +9,13 @@ export type LogicalTypeId = string;
 export type LogicalKind = 'scalar' | 'nominal' | 'union' | 'map' | 'set';
 
 /** @stable The wire alphabet — exactly JSON's value space. */
-export type Wire = string | number | boolean | null | Wire[] | { [k: string]: Wire };
+export type Wire =
+  | string
+  | number
+  | boolean
+  | null
+  | Wire[]
+  | { [k: string]: Wire };
 
 /** @stable A resolved (no-$ref-at-root) JSON Schema node. */
 export type SchemaNode = Readonly<Record<string, unknown>>;
@@ -17,10 +23,10 @@ export type SchemaNode = Readonly<Record<string, unknown>>;
 /** @stable Threaded through a transcode walk. */
 export interface TranscodeCtx {
   readonly registry: LogicalTypeRegistry;
-  readonly resolve: (ref: string) => SchemaNode;   // $ref -> $def resolver (root-bound)
-  readonly seen: WeakSet<object>;                   // cycle guard (encode side)
-  readonly path: string;                            // JSON Pointer, for diagnostics
-  readonly mode: 'strict' | 'lossy';                // strict: throw on unencodable; lossy: warn + best-effort
+  readonly resolve: (ref: string) => SchemaNode; // $ref -> $def resolver (root-bound)
+  readonly seen: WeakSet<object>; // cycle guard (encode side)
+  readonly path: string; // JSON Pointer, for diagnostics
+  readonly mode: 'strict' | 'lossy'; // strict: throw on unencodable; lossy: warn + best-effort
 }
 
 /** @stable Host-agnostic codec. One per logical type. Pure, deterministic, total over its domain. */
@@ -39,19 +45,22 @@ export interface LogicalTypeCodec<Host = unknown> {
 
 /** @stable A language's handling of one logical type (drives codegen). `$` = the value being transformed. */
 export interface TemplateCell {
-  encode: string;          // host value -> wire,  e.g. "$.toISOString()"
-  decode: string;          // wire -> host value,  e.g. "new Date($)"
-  imports?: string[];      // import/use statements the glue needs
-  dep?: { name: string; version: string };   // 3rd-party manifest entry (absent => stdlib)
-  mode: 'native' | 'lib' | 'branded';         // branded = zero-dep primitive wrapper
-  construct?: string;      // nominal only: build instance from decoded field bag, e.g. "new {T}({fields})"
-  toJSON?: string;         // nominal only: instance -> field bag, e.g. "{v}.toJSON()"
+  encode: string; // host value -> wire,  e.g. "$.toISOString()"
+  decode: string; // wire -> host value,  e.g. "new Date($)"
+  imports?: string[]; // import/use statements the glue needs
+  dep?: { name: string; version: string }; // 3rd-party manifest entry (absent => stdlib)
+  mode: 'native' | 'lib' | 'branded'; // branded = zero-dep primitive wrapper
+  construct?: string; // nominal only: build instance from decoded field bag, e.g. "new {T}({fields})"
+  toJSON?: string; // nominal only: instance -> field bag, e.g. "{v}.toJSON()"
 }
 
 /** @stable Used ONLY where the schema cannot disambiguate (type:{} / any). Plain JSON otherwise.
  *  Wire: { "$apigen": "<LogicalTypeId>", "v": <Wire> }. */
 export const ENVELOPE_KEY = '$apigen' as const;
-export interface ApigenEnvelope { readonly [ENVELOPE_KEY]: LogicalTypeId; readonly v: Wire; }
+export interface ApigenEnvelope {
+  readonly [ENVELOPE_KEY]: LogicalTypeId;
+  readonly v: Wire;
+}
 
 /** @stable Schema-walking transcoder (impl is a LATER state — interface only here). */
 export interface Transcoder {

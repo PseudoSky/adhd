@@ -25,7 +25,13 @@ const ALL_LANGUAGES: readonly HostLanguage[] = [
 ];
 
 /** The stdlib-only canonical ids in the TypeScript column (no dep entry). */
-const TS_STDLIB_IDS = ['date-time', 'int64', 'byte', 'uuid', 'number-special'] as const;
+const TS_STDLIB_IDS = [
+  'date-time',
+  'int64',
+  'byte',
+  'uuid',
+  'number-special',
+] as const;
 
 // ---------------------------------------------------------------------------
 // 1. Every canonical id has a filled TS cell AND a filled Python cell.
@@ -73,7 +79,7 @@ describe('TEMPLATE_CELLS completeness — scaffolded columns', () => {
         const cell = TEMPLATE_CELLS[lang][id as keyof LanguageTable];
         expect(
           cell,
-          `Language "${lang}" is missing a cell for canonical id "${id}"`,
+          `Language "${lang}" is missing a cell for canonical id "${id}"`
         ).toBeDefined();
       }
     });
@@ -127,7 +133,7 @@ describe('tsDepMap()', () => {
     for (const id of TS_STDLIB_IDS) {
       expect(
         map[id],
-        `tsDepMap() must not contain an entry for stdlib id "${id}"`,
+        `tsDepMap() must not contain an entry for stdlib id "${id}"`
       ).toBeUndefined();
     }
   });
@@ -151,7 +157,7 @@ describe('assertNoEmptyCells — negative control', () => {
     for (const lang of ALL_LANGUAGES) {
       expect(
         () => assertNoEmptyCells(lang),
-        `assertNoEmptyCells("${lang}") must not throw — column is complete`,
+        `assertNoEmptyCells("${lang}") must not throw — column is complete`
       ).not.toThrow();
     }
   });
@@ -174,7 +180,7 @@ describe('assertNoEmptyCells — negative control', () => {
 
     // The PRODUCTION assertNoEmptyCells must throw for the incomplete column.
     expect(() => assertNoEmptyCells('typescript', incomplete)).toThrow(
-      /missing cells for:.*decimal/,
+      /missing cells for:.*decimal/
     );
 
     // Negative control: a COMPLETE table must NOT throw — the guard only fires
@@ -205,8 +211,12 @@ describe('assertNoEmptyCells — negative control', () => {
     }
 
     // Drive the PRODUCTION assertNoEmptyCells — it must name both missing ids.
-    expect(() => assertNoEmptyCells('typescript', missingTwo)).toThrowError(/byte/);
-    expect(() => assertNoEmptyCells('typescript', missingTwo)).toThrowError(/uuid/);
+    expect(() => assertNoEmptyCells('typescript', missingTwo)).toThrowError(
+      /byte/
+    );
+    expect(() => assertNoEmptyCells('typescript', missingTwo)).toThrowError(
+      /uuid/
+    );
 
     // Negative control: a complete table must NOT throw.
     const complete: Partial<LanguageTable> = {};
@@ -227,7 +237,7 @@ describe('assertNoEmptyCells — negative control', () => {
     for (const lang of ALL_LANGUAGES) {
       expect(
         () => assertNoEmptyCells(lang),
-        `assertNoEmptyCells("${lang}") must not throw — column is complete`,
+        `assertNoEmptyCells("${lang}") must not throw — column is complete`
       ).not.toThrow();
     }
   });
@@ -244,7 +254,9 @@ describe('assertNoEmptyCells — negative control', () => {
       }
       if (missing.length > 0) {
         throw new Error(
-          `[hints] assertNoEmptyCells: language "synthetic" is missing cells for: ${missing.join(', ')}`,
+          `[hints] assertNoEmptyCells: language "synthetic" is missing cells for: ${missing.join(
+            ', '
+          )}`
         );
       }
     }
@@ -315,7 +327,7 @@ describe('depsForLogicalTypes()', () => {
   it('returns nothing for stdlib-only ids in TypeScript', () => {
     const deps = depsForLogicalTypes(
       ['date-time', 'int64', 'byte', 'uuid', 'number-special'],
-      'typescript',
+      'typescript'
     );
     expect(deps).toHaveLength(0);
   });
@@ -342,7 +354,9 @@ describe('depsForLogicalTypes()', () => {
 
 describe('TypeScript column — verbatim expressions from DESIGN §13.2', () => {
   it('date-time encode is "$.toISOString()"', () => {
-    expect(TEMPLATE_CELLS.typescript['date-time'].encode).toBe('$.toISOString()');
+    expect(TEMPLATE_CELLS.typescript['date-time'].encode).toBe(
+      '$.toISOString()'
+    );
   });
 
   it('date-time decode is "new Date($)"', () => {
@@ -379,12 +393,14 @@ describe('Python column — verbatim expressions from DESIGN §13.2', () => {
   });
 
   it('date-time decode is "datetime.fromisoformat($)"', () => {
-    expect(TEMPLATE_CELLS.python['date-time'].decode).toBe('datetime.fromisoformat($)');
+    expect(TEMPLATE_CELLS.python['date-time'].decode).toBe(
+      'datetime.fromisoformat($)'
+    );
   });
 
   it('date-time imports include "from datetime import datetime"', () => {
     expect(TEMPLATE_CELLS.python['date-time'].imports).toContain(
-      'from datetime import datetime',
+      'from datetime import datetime'
     );
   });
 
@@ -402,7 +418,7 @@ describe('Python column — verbatim expressions from DESIGN §13.2', () => {
 
   it('decimal imports include "from decimal import Decimal"', () => {
     expect(TEMPLATE_CELLS.python['decimal'].imports).toContain(
-      'from decimal import Decimal',
+      'from decimal import Decimal'
     );
   });
 
@@ -411,7 +427,9 @@ describe('Python column — verbatim expressions from DESIGN §13.2', () => {
   });
 
   it('uuid imports include "from uuid import UUID"', () => {
-    expect(TEMPLATE_CELLS.python['uuid'].imports).toContain('from uuid import UUID');
+    expect(TEMPLATE_CELLS.python['uuid'].imports).toContain(
+      'from uuid import UUID'
+    );
   });
 
   it('byte decode is "b64decode($)"', () => {
@@ -423,7 +441,7 @@ describe('Python column — verbatim expressions from DESIGN §13.2', () => {
       const cell = TEMPLATE_CELLS.python[id as keyof LanguageTable];
       expect(
         cell.dep,
-        `Python cell for "${id}" must have no dep (all stdlib)`,
+        `Python cell for "${id}" must have no dep (all stdlib)`
       ).toBeUndefined();
     }
   });
