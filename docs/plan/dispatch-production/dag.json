@@ -3296,7 +3296,7 @@
       "audit_check": null,
       "criteria": [],
       "authored_by": "claude-fable-5-replan",
-      "status": "pending",
+      "status": "complete",
       "shape": {
         "kind": "script",
         "ops": [
@@ -3333,7 +3333,7 @@
       "audit_check": null,
       "criteria": [],
       "authored_by": "claude-fable-5-replan",
-      "status": "pending",
+      "status": "complete",
       "shape": {
         "kind": "script",
         "ops": [
@@ -3364,7 +3364,7 @@
       "audit_check": null,
       "criteria": [],
       "authored_by": "claude-fable-5-replan",
-      "status": "pending",
+      "status": "complete",
       "shape": {
         "kind": "script",
         "ops": [
@@ -3585,5 +3585,50 @@
       "ki_source": "estimate"
     }
   ],
-  "dispatch_log": []
+  "dispatch_log": [
+    {
+      "id": "log-client-fixes-2026-07-02",
+      "kind": "execution",
+      "provider": "anthropic",
+      "model": "claude-sonnet-5",
+      "agent": "claude-code-background:general-purpose",
+      "effort": null,
+      "started_at": "2026-07-02T08:15:55.357306+00:00",
+      "completed_at": "2026-07-02T08:27:53.559306+00:00",
+      "operations": [
+        "client-fixes.1",
+        "client-fixes.2",
+        "client-fixes.3"
+      ],
+      "turns": [],
+      "results": [
+        {
+          "op_id": "client-fixes.1",
+          "status": "complete",
+          "guard_result": "pass",
+          "guard_output": "npx nx run-many -t test,build -p dispatch-client,dispatch-spec exit 0 (tests 31/31 + 19/19; dist 1.96kB/12.52kB); negative control: fix reverted -> exit 1 on failed-dep eligibility test",
+          "guard_ran_at": "2026-07-02T08:27:53.559306+00:00"
+        },
+        {
+          "op_id": "client-fixes.2",
+          "status": "complete",
+          "guard_result": "pass",
+          "guard_output": "npx nx run-many -t test,build -p dispatch-client,dispatch-spec exit 0 (tests 31/31 + 19/19; dist 1.96kB/12.52kB); negative control: fix reverted -> exit 1 on failed-dep eligibility test",
+          "guard_ran_at": "2026-07-02T08:27:53.559306+00:00"
+        },
+        {
+          "op_id": "client-fixes.3",
+          "status": "complete",
+          "guard_result": "pass",
+          "guard_output": "verified-not-present: index.ts never re-exported optimizer surface (git blame 1e63f8d); zero @adhd/dispatch-client consumers repo-wide; no edit made",
+          "guard_ran_at": "2026-07-02T08:27:53.559306+00:00"
+        }
+      ],
+      "notes": [
+        "out-of-band execution: Claude Code background agent (Sonnet), not dispatch runner",
+        "telemetry: subagent_tokens=150466 tool_uses=48 duration_ms=718202",
+        "code commit: 37441ef"
+      ]
+    }
+  ]
 }
