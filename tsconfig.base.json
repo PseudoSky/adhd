@@ -163,11 +163,11 @@
       "@adhd/dispatch-spec": [
         "./packages/dispatch/dispatch-spec/src/index.ts"
       ],
-      "@adhd/react-hooks": [
-        "./packages/react-hooks/src/index.ts"
+      "@adhd/ui-react-base-hooks": [
+        "./packages/ui-react/ui-react-base-hooks/src/index.ts"
       ],
-      "@adhd/storybook": [
-        "./packages/storybook/src/index.ts"
+      "@adhd/ui-react-base-storybook": [
+        "./packages/ui-react/ui-react-base-storybook/src/index.ts"
       ],
       "@adhd/workspace-base-tools": [
         "./packages/workspace/workspace-base-tools/src/index.ts"
