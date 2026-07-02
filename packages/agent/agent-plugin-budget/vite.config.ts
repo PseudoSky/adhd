@@ -6,7 +6,7 @@ import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/ai/agent-mcp-sanitize',
+  cacheDir: '../../../node_modules/.vite/packages/ai/agent-mcp-budget',
 
   plugins: [
     nxViteTsPaths(),
@@ -16,20 +16,31 @@ export default defineConfig({
     }),
   ],
 
+  // Uncomment this if you are using workers.
+  // worker: {
+  //  plugins: [ nxViteTsPaths() ],
+  // },
+
+  // Configuration for building your library.
+  // See: https://vitejs.dev/guide/build.html#library-mode
   build: {
-    outDir: '../../../dist/packages/ai/agent-mcp-sanitize',
+    outDir: '../../../dist/packages/ai/agent-mcp-budget',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {
       transformMixedEsModules: true,
     },
     lib: {
+      // Could also be a dictionary or array of multiple entry points.
       entry: 'src/index.ts',
-      name: 'agent-mcp-sanitize',
+      name: 'agent-mcp-budget',
       fileName: 'index',
+      // Change this to the formats you want to support.
+      // Don't forget to update your package.json as well.
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
+      // Never bundle peer/native deps — the host server provides them.
       external: ['@adhd/agent-mcp-types', 'better-sqlite3', 'zod', /^node:/],
     },
   },
@@ -41,10 +52,10 @@ export default defineConfig({
     },
     environment: 'node',
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+
     reporters: ['default'],
     coverage: {
-      reportsDirectory:
-        '../../../coverage/packages/ai/agent-mcp-sanitize',
+      reportsDirectory: '../../../coverage/packages/ai/agent-mcp-budget',
       provider: 'v8',
     },
   },

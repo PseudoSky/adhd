@@ -1,7 +1,7 @@
 {
-  "name": "agent-nx",
+  "name": "agent-generator-plugin",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/ai/agent-nx/src",
+  "sourceRoot": "packages/agent/agent-generator-plugin/src",
   "projectType": "library",
   "release": {
     "version": {
@@ -17,23 +17,23 @@
       "executor": "@nx/vite:build",
       "outputs": ["{options.outputPath}"],
       "options": {
-        "outputPath": "dist/packages/ai/agent-nx",
-        "main": "packages/ai/agent-nx/src/index.ts",
-        "tsConfig": "packages/ai/agent-nx/tsconfig.lib.json",
+        "outputPath": "dist/packages/agent/agent-generator-plugin",
+        "main": "packages/agent/agent-generator-plugin/src/index.ts",
+        "tsConfig": "packages/agent/agent-generator-plugin/tsconfig.lib.json",
         "assets": [
-          "packages/ai/agent-nx/*.md",
+          "packages/agent/agent-generator-plugin/*.md",
           {
-            "input": "packages/ai/agent-nx",
+            "input": "packages/agent/agent-generator-plugin",
             "glob": "generators.json",
             "output": "."
           },
           {
-            "input": "packages/ai/agent-nx/src/generators",
+            "input": "packages/agent/agent-generator-plugin/src/generators",
             "glob": "**/__files__/**/*",
             "output": "./src/generators"
           },
           {
-            "input": "packages/ai/agent-nx/src/generators",
+            "input": "packages/agent/agent-generator-plugin/src/generators",
             "glob": "**/schema.json",
             "output": "./src/generators"
           }
@@ -44,8 +44,8 @@
       "executor": "@nx/vite:test",
       "outputs": ["{options.reportsDirectory}"],
       "options": {
-        "configFile": "packages/ai/agent-nx/vite.config.ts",
-        "reportsDirectory": "../../../coverage/packages/ai/agent-nx"
+        "configFile": "packages/agent/agent-generator-plugin/vite.config.ts",
+        "reportsDirectory": "../../../coverage/packages/agent/agent-generator-plugin"
       }
     },
     "nx-release-publish": {

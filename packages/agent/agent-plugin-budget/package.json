@@ -1,5 +1,5 @@
 {
-  "name": "@adhd/agent-mcp-budget",
+  "name": "@adhd/agent-plugin-budget",
   "version": "0.0.2",
   "description": "Budget enforcement plugin for @adhd/agent-mcp — caps token spend, cost, wall-clock time, and model calls per task/session/agent",
   "type": "module",

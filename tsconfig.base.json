@@ -52,6 +52,9 @@
       "@adhd/agent-engine-compiler": [
         "packages/agent/agent-engine-compiler/src/index.ts"
       ],
+      "@adhd/agent-generator-plugin": [
+        "packages/agent/agent-generator-plugin/src/index.ts"
+      ],
       "@adhd/agent-mcp": [
         "./packages/ai/agent-mcp/src/index.ts"
       ],
@@ -63,6 +66,12 @@
       ],
       "@adhd/agent-nx": [
         "./packages/ai/agent-nx/src/index.ts"
+      ],
+      "@adhd/agent-plugin-budget": [
+        "packages/agent/agent-plugin-budget/src/index.ts"
+      ],
+      "@adhd/agent-plugin-sanitize": [
+        "packages/agent/agent-plugin-sanitize/src/index.ts"
       ],
       "@adhd/agent-policy": [
         "./packages/ai/agent-policy/src/index.ts"
