@@ -30,30 +30,26 @@ import {
   ComponentStore,
   CompositionStore,
 } from '@adhd/agent-registry';
-import {
-  AgentToolStore,
-} from '@adhd/agent-tool-registry';
-import {
-  AgentPolicyStore,
-} from '@adhd/agent-policy';
+import { AgentToolStore } from '@adhd/agent-tool-registry';
+import { AgentPolicyStore } from '@adhd/agent-policy';
 
 // ── exported fixture constants ─────────────────────────────────────────────
 
 /** Slug of the seeded fixture agent. */
-export const FIXTURE_AGENT_SLUG     = 'api-design-reviewer-e2e';
-export const FIXTURE_CATEGORY_SLUG  = 'e2e-api-specialists';
+export const FIXTURE_AGENT_SLUG = 'api-design-reviewer-e2e';
+export const FIXTURE_CATEGORY_SLUG = 'e2e-api-specialists';
 
 // Component slugs from the shared registry seed (SEED_DATA.md §8).
 // These must exist after seedRegistry() has run against the same DB.
-export const COMP_ROLE              = 'generic-reviewer-role';      // position 1
-export const COMP_IDENTITY          = 'reviewer-identity';          // position 2
-export const COMP_RULE              = 'default-skeptic';            // position 3
-export const COMP_REVIEW_CRITERIA   = 'code-review-criteria';       // position 4 – general
-export const COMP_SECURITY_CRITERIA = 'security-audit-criteria';    // position 5 – {ticket_type:security}
+export const COMP_ROLE = 'generic-reviewer-role'; // position 1
+export const COMP_IDENTITY = 'reviewer-identity'; // position 2
+export const COMP_RULE = 'default-skeptic'; // position 3
+export const COMP_REVIEW_CRITERIA = 'code-review-criteria'; // position 4 – general
+export const COMP_SECURITY_CRITERIA = 'security-audit-criteria'; // position 5 – {ticket_type:security}
 
 // Tool slugs granted to the fixture agent.
-export const TOOL_FILE_READ  = 'file_read';
-export const TOOL_FILE_GREP  = 'file_grep';
+export const TOOL_FILE_READ = 'file_read';
+export const TOOL_FILE_GREP = 'file_grep';
 export const TOOL_WEB_SEARCH = 'web_search';
 
 // ── seedFixtureAgent ───────────────────────────────────────────────────────
@@ -79,8 +75,8 @@ export function seedFixtureAgent(db: BetterSQLite3Database<any>): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const taxonomyStore = new TaxonomyStore(db as any);
   taxonomyStore.createCategory({
-    slug:     FIXTURE_CATEGORY_SLUG,
-    name:     'E2E API Specialists',
+    slug: FIXTURE_CATEGORY_SLUG,
+    name: 'E2E API Specialists',
     position: 99,
   });
 
@@ -88,10 +84,11 @@ export function seedFixtureAgent(db: BetterSQLite3Database<any>): void {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const agentStore = new AgentStore(db as any);
   agentStore.create({
-    slug:             FIXTURE_AGENT_SLUG,
-    displayName:      'API Design Reviewer (E2E Fixture)',
-    description:      'Reviews REST and GraphQL API designs for correctness, security, and usability',
-    modelHint:        'claude_sonnet_4_6',
+    slug: FIXTURE_AGENT_SLUG,
+    displayName: 'API Design Reviewer (E2E Fixture)',
+    description:
+      'Reviews REST and GraphQL API designs for correctness, security, and usability',
+    modelHint: 'claude_sonnet_4_6',
     taxonomyCategory: FIXTURE_CATEGORY_SLUG,
   });
 
@@ -109,37 +106,37 @@ export function seedFixtureAgent(db: BetterSQLite3Database<any>): void {
   const compositionStore = new CompositionStore(db as any);
 
   compositionStore.attach({
-    agentSlug:     FIXTURE_AGENT_SLUG,
+    agentSlug: FIXTURE_AGENT_SLUG,
     componentSlug: COMP_ROLE,
-    position:      1,
+    position: 1,
   });
 
   compositionStore.attach({
-    agentSlug:     FIXTURE_AGENT_SLUG,
+    agentSlug: FIXTURE_AGENT_SLUG,
     componentSlug: COMP_IDENTITY,
-    position:      2,
+    position: 2,
   });
 
   compositionStore.attach({
-    agentSlug:     FIXTURE_AGENT_SLUG,
+    agentSlug: FIXTURE_AGENT_SLUG,
     componentSlug: COMP_RULE,
-    position:      3,
+    position: 3,
   });
 
   // General success criteria — no context condition (always included).
   // This is the "review" path: present when context is empty OR {ticket_type:"review"}.
   compositionStore.attach({
-    agentSlug:        FIXTURE_AGENT_SLUG,
-    componentSlug:    COMP_REVIEW_CRITERIA,
-    position:         4,
+    agentSlug: FIXTURE_AGENT_SLUG,
+    componentSlug: COMP_REVIEW_CRITERIA,
+    position: 4,
     contextCondition: null,
   });
 
   // Security success criteria — only included when {ticket_type:"security"}.
   compositionStore.attach({
-    agentSlug:        FIXTURE_AGENT_SLUG,
-    componentSlug:    COMP_SECURITY_CRITERIA,
-    position:         5,
+    agentSlug: FIXTURE_AGENT_SLUG,
+    componentSlug: COMP_SECURITY_CRITERIA,
+    position: 5,
     contextCondition: JSON.stringify({ ticket_type: 'security' }),
   });
 
@@ -148,20 +145,20 @@ export function seedFixtureAgent(db: BetterSQLite3Database<any>): void {
   const agentToolStore = new AgentToolStore(db as any);
 
   agentToolStore.grant({
-    agentSlug:  FIXTURE_AGENT_SLUG,
-    toolName:   TOOL_FILE_READ,
+    agentSlug: FIXTURE_AGENT_SLUG,
+    toolName: TOOL_FILE_READ,
     permission: 'read_only',
   });
 
   agentToolStore.grant({
-    agentSlug:  FIXTURE_AGENT_SLUG,
-    toolName:   TOOL_FILE_GREP,
+    agentSlug: FIXTURE_AGENT_SLUG,
+    toolName: TOOL_FILE_GREP,
     permission: 'read_only',
   });
 
   agentToolStore.grant({
-    agentSlug:  FIXTURE_AGENT_SLUG,
-    toolName:   TOOL_WEB_SEARCH,
+    agentSlug: FIXTURE_AGENT_SLUG,
+    toolName: TOOL_WEB_SEARCH,
     permission: 'full',
   });
 
@@ -171,8 +168,8 @@ export function seedFixtureAgent(db: BetterSQLite3Database<any>): void {
   const agentPolicyStore = new AgentPolicyStore(db);
 
   agentPolicyStore.attach({
-    agentSlug:   FIXTURE_AGENT_SLUG,
-    policySlug:  'no-credentials',
+    agentSlug: FIXTURE_AGENT_SLUG,
+    policySlug: 'no-credentials',
     isMandatory: true,
   });
 }

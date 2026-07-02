@@ -28,7 +28,10 @@ import { createHash } from 'node:crypto';
 
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
-import { ComposedPromptStore, contextHash as registryContextHash } from '@adhd/agent-registry';
+import {
+  ComposedPromptStore,
+  contextHash as registryContextHash,
+} from '@adhd/agent-registry';
 import type { ComposedPrompt } from '@adhd/agent-registry';
 import type { ComponentVersionMap } from '../resolve/composition.js';
 
@@ -57,16 +60,18 @@ import type { ComponentVersionMap } from '../resolve/composition.js';
  * @returns 64-character lowercase hex SHA-256 string.
  */
 export function computeContextHash(
-  context:           Record<string, string>,
+  context: Record<string, string>,
   componentVersions: ComponentVersionMap,
-  platform:          string,
+  platform: string
 ): string {
   // Part 1: sorted-key JSON of context (reuse the upstream helper for parity).
   const contextPart = registryContextHash(context);
 
   // Part 2: sorted-key JSON of componentVersions (apply the same canonicalization).
   const sortedVersions = Object.fromEntries(
-    Object.keys(componentVersions).sort().map(k => [k, componentVersions[k]] as const)
+    Object.keys(componentVersions)
+      .sort()
+      .map((k) => [k, componentVersions[k]] as const)
   );
   const versionPart = JSON.stringify(sortedVersions);
 
@@ -101,13 +106,13 @@ export function computeContextHash(
  */
 export function lookup(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db:                 BetterSQLite3Database<any>,
-  agentSlug:          string,
-  platform:           string,
-  context:            Record<string, string>,
-  componentVersions:  ComponentVersionMap,
+  db: BetterSQLite3Database<any>,
+  agentSlug: string,
+  platform: string,
+  context: Record<string, string>,
+  componentVersions: ComponentVersionMap
 ): ComposedPrompt | null {
-  const hash  = computeContextHash(context, componentVersions, platform);
+  const hash = computeContextHash(context, componentVersions, platform);
   const store = new ComposedPromptStore(db);
   return store.lookup(agentSlug, hash);
 }
@@ -129,14 +134,19 @@ export function lookup(
  */
 export function write(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db:                 BetterSQLite3Database<any>,
-  agentSlug:          string,
-  platform:           string,
-  context:            Record<string, string>,
-  componentVersions:  ComponentVersionMap,
-  content:            string,
+  db: BetterSQLite3Database<any>,
+  agentSlug: string,
+  platform: string,
+  context: Record<string, string>,
+  componentVersions: ComponentVersionMap,
+  content: string
 ): ComposedPrompt {
-  const hash  = computeContextHash(context, componentVersions, platform);
+  const hash = computeContextHash(context, componentVersions, platform);
   const store = new ComposedPromptStore(db);
-  return store.write({ agentSlug, contextHash: hash, content, componentVersions });
+  return store.write({
+    agentSlug,
+    contextHash: hash,
+    content,
+    componentVersions,
+  });
 }
