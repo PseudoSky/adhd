@@ -1,6 +1,6 @@
 import { Command } from 'commander';
-import { createLogger } from '@adhd/apigen-runtime';
-import type { Logger, LogFormat } from '@adhd/apigen-runtime';
+import { createLogger } from '@adhd/apigen-engine-runtime';
+import type { Logger, LogFormat } from '@adhd/apigen-engine-runtime';
 
 export interface LoggingFlags {
   logLevel?: string;

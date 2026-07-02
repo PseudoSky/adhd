@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { generateSchemas } from '@adhd/apigen-core';
-import { createApiPackage } from '@adhd/apigen-runtime';
-import type { GeneratedSchemas, MiddlewareDef } from '@adhd/apigen-runtime';
+import { createApiPackage } from '@adhd/apigen-engine-runtime';
+import type { GeneratedSchemas, MiddlewareDef } from '@adhd/apigen-engine-runtime';
 
 // Integration: the schema engine over the real fixture + the middleware/override path.
 // Teeth-guarded by audit-final-v2.schema-teeth (the spec MUST contain the discriminating

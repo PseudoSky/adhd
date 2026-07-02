@@ -33,7 +33,7 @@
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { ApiError } from '@adhd/apigen-errors';
-import type { ApiStream } from '@adhd/apigen-runtime';
+import type { ApiStream } from '@adhd/apigen-engine-runtime';
 
 // ---------------------------------------------------------------------------
 // SSE frame helpers

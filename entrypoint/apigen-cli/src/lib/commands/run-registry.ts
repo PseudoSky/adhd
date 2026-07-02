@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { discoverPackages } from '../registry';
 import { runPipeline } from '../pipeline';
 import { importSource } from '../import-source';
-import { buildFnTable } from '@adhd/apigen-runtime';
+import { buildFnTable } from '@adhd/apigen-engine-runtime';
 import { resolveTsconfig } from '../resolve-tsconfig';
 import { buildCliLogger } from '../logging';
 import type { OutputPlugin, RunInput } from '@adhd/apigen-core';

@@ -445,7 +445,7 @@ describe('dep-manifest: patchPackageJsonDeps (integration — file I/O)', () => 
       version: '0.0.0',
       type: 'module',
       dependencies: {
-        '@adhd/apigen-runtime': '^0.1.0',
+        '@adhd/apigen-engine-runtime': '^0.1.0',
         '@modelcontextprotocol/sdk': '^1.0.0',
       },
     };
@@ -495,7 +495,7 @@ describe('dep-manifest: patchPackageJsonDeps (integration — file I/O)', () => 
     );
     // Base deps preserved (logical deps are MERGED, not replaced).
     expect(
-      writtenDeps?.['@adhd/apigen-runtime'],
+      writtenDeps?.['@adhd/apigen-engine-runtime'],
       'base runtime dep must be preserved'
     ).toBe('^0.1.0');
   });
@@ -508,7 +508,7 @@ describe('dep-manifest: patchPackageJsonDeps (integration — file I/O)', () => 
       name: 'apigen-generated-output',
       version: '0.0.0',
       type: 'module',
-      dependencies: { '@adhd/apigen-runtime': '^0.1.0' },
+      dependencies: { '@adhd/apigen-engine-runtime': '^0.1.0' },
     };
     fs.writeFileSync(
       path.join(tmpDir, 'package.json'),
@@ -711,7 +711,7 @@ describe('[dod.10 teeth] decimal default-import: schema carries format:decimal a
       name: 'apigen-generated-output',
       version: '0.0.0',
       type: 'module',
-      dependencies: { '@adhd/apigen-runtime': '^0.1.0' },
+      dependencies: { '@adhd/apigen-engine-runtime': '^0.1.0' },
     };
     fs.writeFileSync(
       path.join(tmpDir, 'package.json'),

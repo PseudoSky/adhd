@@ -91,10 +91,10 @@ describe('[plugin-mcp.1] generate() — stdio transport', () => {
     expect(idx.content).toContain('groupCreateClient');
   });
 
-  it('server.ts imports dispatch from @adhd/apigen-runtime', () => {
+  it('server.ts imports dispatch from @adhd/apigen-engine-runtime', () => {
     const out = generate({ ...baseInput, options: { transport: 'stdio' } });
     const server = out.files.find((f) => f.path === 'server.ts')!;
-    expect(server.content).toContain("from '@adhd/apigen-runtime'");
+    expect(server.content).toContain("from '@adhd/apigen-engine-runtime'");
     expect(server.content).toContain('dispatch');
   });
 
