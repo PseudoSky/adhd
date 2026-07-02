@@ -41,13 +41,13 @@ import { resolveTools } from '../resolve/tools.js';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 /**
- * Path to agent-tool-registry's drizzle migrations folder.
- * tool-header.test.ts lives at packages/ai/agent-compiler/src/__tests__/
- * agent-tool-registry drizzle lives at packages/ai/agent-tool-registry/drizzle/
+ * Path to agent-store-tools's drizzle migrations folder.
+ * tool-header.test.ts lives at packages/agent/agent-engine-compiler/src/__tests__/
+ * agent-store-tools drizzle lives at packages/agent/agent-store-tools/drizzle/
  */
 const TOOL_REGISTRY_MIGRATIONS = path.resolve(
   __dirname,
-  '../../../agent-tool-registry/drizzle'
+  '../../../agent-store-tools/drizzle'
 );
 
 interface OpenResult {
