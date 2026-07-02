@@ -171,7 +171,7 @@ export interface PluginContext {
  * Example (plugin package `src/index.ts`):
  * ```ts
  * import { z } from "zod";
- * import type { PluginContext, Plugin } from "@adhd/agent-mcp-types";
+ * import type { PluginContext, Plugin } from "@adhd/agent-base-types";
  *
  * export const configSchema = z.object({ maxUSD: z.number().positive() });
  *

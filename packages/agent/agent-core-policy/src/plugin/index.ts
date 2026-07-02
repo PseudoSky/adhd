@@ -1,7 +1,7 @@
 /**
  * @adhd/agent-policy enforcement plugin.
  *
- * Mirrors @adhd/agent-mcp-budget exactly in plugin shape:
+ * Mirrors @adhd/agent-plugin-budget exactly in plugin shape:
  *   - exports configSchema (zod)
  *   - exports createPlugin (named) + default createPlugin
  *   - install() registers observational handlers (try/caught) AND one

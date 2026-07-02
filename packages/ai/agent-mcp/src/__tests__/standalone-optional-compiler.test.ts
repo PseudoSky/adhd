@@ -1,7 +1,7 @@
 /**
  * standalone-optional-compiler.test.ts
  *
- * Proves that @adhd/agent-compiler is OPTIONAL at runtime: when compileAgentFn
+ * Proves that @adhd/agent-engine-compiler is OPTIONAL at runtime: when compileAgentFn
  * is absent from BuildPromptResolverOpts, buildPromptResolver returns undefined
  * and every agent falls back to its flat systemPrompt — exactly as when the
  * registry DB is absent.

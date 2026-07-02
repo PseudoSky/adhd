@@ -28,7 +28,8 @@
     "@adhd/apigen-plugin-logger": "^0.1.1",
     "@adhd/apigen-logical": "^0.0.1",
     "@adhd/apigen-naming": "^0.1.1",
-    "decimal.js": "^10.4.3"
+    "decimal.js": "^10.4.3",
+    "@adhd/apigen-python-env": "^0.1.0"
   },
   "main": "./index.js",
   "module": "./index.mjs",

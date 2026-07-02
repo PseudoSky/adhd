@@ -41,7 +41,7 @@ export default defineConfig({
     },
     rollupOptions: {
       // Never bundle peer/native deps — the host server provides them.
-      external: ['@adhd/agent-mcp-types', 'better-sqlite3', 'zod', /^node:/],
+      external: ['@adhd/agent-base-types', 'better-sqlite3', 'zod', /^node:/],
     },
   },
 

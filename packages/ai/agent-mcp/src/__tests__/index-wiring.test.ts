@@ -42,7 +42,7 @@
  *     modules.  No other production files are modified.
  *   - Mocks: none (LLM boundary is not exercised — agentTool only starts a
  *     session, it does not run a model turn).  The real compileAgent from
- *     @adhd/agent-compiler is used throughout.
+ *     @adhd/agent-engine-compiler is used throughout.
  */
 
 import fs from "node:fs";
@@ -62,10 +62,10 @@ import { seed as seedProvider } from "@adhd/agent-core-provider";
 import { seed as seedPolicy } from "@adhd/agent-core-policy";
 
 // ── Fixture seeder + real compile function ───────────────────────────────────
-// Dynamic import required: @adhd/agent-compiler is an optional dep in this package
+// Dynamic import required: @adhd/agent-engine-compiler is an optional dep in this package
 // (lazily loaded via dynamic import in production index.ts);
 // @nx/enforce-module-boundaries forbids static imports of lazy-loaded libraries.
-const { seedFixtureAgent, compileAgent } = await import("@adhd/agent-compiler");
+const { seedFixtureAgent, compileAgent } = await import("@adhd/agent-engine-compiler");
 
 // ── The REAL factory under test (the composition root) ───────────────────────
 import { buildPromptResolver } from "../index.js";

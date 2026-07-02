@@ -10,6 +10,66 @@ Open/actionable work lives in [`/BACKLOG.md`](../../BACKLOG.md); plan-level desi
 
 ---
 
+## [Unreleased] — extraction performance + memory (2026-07-02)
+
+> 5x cold / >1000x warm extraction speedup and leak fixes across `-core`, `-cli`,
+> `-runtime`, plus the new `@adhd/apigen-python-env`. Root BACKLOG § *Extraction
+> performance + memory-leak work* has the full forensic detail.
+
+### Performance
+- **Extraction is 5x faster cold and near-free warm.** `buildDescriptor` (behind
+  `generate`/`run`/`serve`) went 37.4s → 7.4s cold and → **6–11ms** on warm re-runs
+  (6 files × 10 fns; `npx nx run apigen-cli:bench`). Mechanism: a shared per-run
+  `ExtractionSession` (one ts-morph Project per tsconfig instead of ~2 per source; one
+  schema generator per file; every `(file, typeText)` schema computed once) plus a
+  bounded persistent tier reused across runs in the same process (watch/serve/test
+  loops). The apigen-core test suite dropped 64.6s → 8.4s as a side effect.
+- New public API in `@adhd/apigen-core`: `createExtractionSession()` /
+  `clearPersistentProjectCache()`, and an optional `session` field on
+  `ExtractOptions`, `GenerateSchemasOptions`, `ExtractClassesOptions`.
+
+  ```ts
+  import { createExtractionSession, extract, generateSchemas } from '@adhd/apigen-core'
+
+  const session = createExtractionSession()
+  try {
+    const ops = await extract({ sourceFile, tsconfig, session })
+    const gen = await generateSchemas({ sourceFile, tsconfig, session }) // cache hits
+  } finally {
+    session.dispose()
+  }
+  ```
+
+### Fixed (memory)
+- **Generator cache no longer grows per file edit.** The module-global
+  ts-json-schema-generator cache was keyed on mtime and never evicted — each edit in
+  watch/serve retained another ~100–200MB program forever. Now entries are replaced on
+  version change and the persistent tier is LRU-capped (`APIGEN_PROGRAM_CACHE`,
+  default 8; `0` disables persistence).
+- **EventBus handlers are removable** (`@adhd/apigen-runtime`): `off()`/`clear()`
+  added, `on()` returns an unsubscribe fn, `createApiPackage()` results gained
+  `dispose()`.
+- **`serve` gRPC proxy sessions** idle-evict after 60s and `unref()`; the builtin
+  default-tsconfig temp file is created once per process instead of per call.
+
+### Added
+- **`@adhd/apigen-python-env`** — the Python hosts are now self-provisioning. py-grpc /
+  py-flask (and the conformance gate) resolve their interpreter through a managed venv
+  built from `apigen-python`'s own `pyproject.toml` extras
+  (`pip install apigen-python[grpc]` → `~/.adhd/apigen/pyvenv`, content-hash stamped,
+  cross-process locked, monotonic-union extras). `apigen serve` pre-provisions before
+  spawning Python hosts and pins children via `APIGEN_PYTHON`. Overrides:
+  `APIGEN_PYTHON` (explicit interpreter), `APIGEN_PYENV_HOME` (venv root).
+- `npx nx run apigen-cli:bench` — extraction benchmark against generated fixtures under
+  `tmp/apigen/bench`, printing cold/warm timings + retained heap.
+
+### Fixed
+- `packages/apigen/python/pyproject.toml` declared a non-existent build backend
+  (`setuptools.backends.legacy:build`) — every `pip install` of the package failed.
+  Now `setuptools.build_meta`.
+
+---
+
 ## [Unreleased] — apigen-logical-types (PENDING)
 
 > Cross-language serialization of non-JSON-native types and custom classes. Tracked by the

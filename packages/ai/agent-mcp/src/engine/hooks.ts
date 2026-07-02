@@ -10,7 +10,7 @@ import type {
 /**
  * Concrete implementation of IHookRegistry used by the agent-mcp server.
  *
- * NOTE: A copy of this class also lives in @adhd/agent-mcp-types so plugin
+ * NOTE: A copy of this class also lives in @adhd/agent-base-types so plugin
  * authors can instantiate it in their own tests without taking a runtime
  * dependency on the full server package. Keep the two in sync until DEBT-009
  * is resolved (extraction to @adhd/agent-mcp-hooks).

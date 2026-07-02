@@ -97,7 +97,7 @@ export interface ServerDeps {
   dagEngine: DagEngine;
   /**
    * Optional prompt-resolver dependencies.  When present, every `agent` tool
-   * call resolves the system-prompt via @adhd/agent-compiler before creating
+   * call resolves the system-prompt via @adhd/agent-engine-compiler before creating
    * the session.  When absent (no registry DB configured), the legacy
    * flat-`systemPrompt` path is used unchanged.
    */
@@ -466,8 +466,8 @@ JSON file):
 \`\`\`json
 {
   "plugins": [
-    { "module": "@adhd/agent-mcp-budget",  "config": { "maxTotalTokens": 50000 } },
-    { "module": "@adhd/agent-mcp-sanitize" }
+    { "module": "@adhd/agent-plugin-budget",  "config": { "maxTotalTokens": 50000 } },
+    { "module": "@adhd/agent-plugin-sanitize" }
   ]
 }
 \`\`\`
@@ -475,16 +475,16 @@ JSON file):
 **2. Environment variable** (legacy shorthand, no per-plugin config):
 
 \`\`\`
-ADHD_AGENT_PLUGINS="@adhd/agent-mcp-budget,@adhd/agent-mcp-sanitize"
+ADHD_AGENT_PLUGINS="@adhd/agent-plugin-budget,@adhd/agent-plugin-sanitize"
 \`\`\`
 
 Official plugins:
 
 | Package | Purpose | Config |
 |---------|---------|--------|
-| \`@adhd/agent-mcp-budget\` | Cap token spend, cost, wall-clock time per task/session/agent | \`scope\`, \`maxTotalTokens\`, \`maxModelCalls\`, \`maxCostUSD\`, \`costPerInputToken\`, … |
+| \`@adhd/agent-plugin-budget\` | Cap token spend, cost, wall-clock time per task/session/agent | \`scope\`, \`maxTotalTokens\`, \`maxModelCalls\`, \`maxCostUSD\`, \`costPerInputToken\`, … |
 | \`@adhd/agent-mcp-policy\` | Rate limits and delegation permissions | \`maxRecursionDepth\`, \`allowedAgents\` |
-| \`@adhd/agent-mcp-sanitize\` | Sub-agent output sanitization (prompt-injection defence) | \`defaultStrategy\` (prefix/wrap/none), \`agents\` (per-agent overrides), \`delegationOnly\` |
+| \`@adhd/agent-plugin-sanitize\` | Sub-agent output sanitization (prompt-injection defence) | \`defaultStrategy\` (prefix/wrap/none), \`agents\` (per-agent overrides), \`delegationOnly\` |
 
 All failures (bad config, unresolvable module, schema mismatch, factory error) are
 logged and skipped — a broken plugin never prevents the server from starting.
@@ -532,7 +532,7 @@ Plugins can observe and transform the task lifecycle via \`hooks.register()\`:
 
 The \`transform:tool_result\` event fires in Phase 3 of the orchestrator, after all tool
 calls complete and before each result is stored in the conversation history. Handlers
-mutate \`payload.result\` in place (passed by reference). The \`@adhd/agent-mcp-sanitize\`
+mutate \`payload.result\` in place (passed by reference). The \`@adhd/agent-plugin-sanitize\`
 plugin is one example of a transform handler.`;
 
 export function createServer(deps: ServerDeps): Server {

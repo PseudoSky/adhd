@@ -30,6 +30,12 @@ export interface ApiPackageOptions<M extends readonly MiddlewareDef[]> {
 export interface ApiPackageResult {
   schemas: ComposedSchemas
   createClient: (envelope: Record<string, unknown>) => Promise<object>
+  /**
+   * Release the package's event bus (removes every observer handler). Call
+   * when the package is discarded — hosts that create packages repeatedly
+   * (tests, hot reload, multi-tenant servers) leak handlers otherwise.
+   */
+  dispose: () => void
 }
 
 export class ConfigurationError extends Error {
