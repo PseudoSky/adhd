@@ -1,5 +1,5 @@
 {
-  "name": "@adhd/apigen-errors",
+  "name": "@adhd/apigen-base-errors",
   "version": "0.1.1",
   "main": "./index.js",
   "module": "./index.mjs",
