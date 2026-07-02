@@ -235,7 +235,9 @@ describe('DagClient', () => {
         notes: [],
       });
       const eligible = await client.getEligibleMilestones();
-      expect(eligible).toEqual(['alpha', 'beta']);
+      // alpha is complete — it has nothing left to dispatch and must not
+      // be re-offered (BUG-DISPATCH-008); only beta is dispatchable.
+      expect(eligible).toEqual(['beta']);
     });
 
     it('returns empty when all milestones have pending set', async () => {
@@ -312,6 +314,38 @@ describe('DagClient', () => {
 
       const eligible = await client.getEligibleMilestones();
       expect(eligible).toContain('beta');
+    });
+
+    // BUG-DISPATCH-008 — caught 2026-07-02 by the apigen-generated CLI
+    // driving the real dispatch-production dag.json: completed milestones
+    // (pending == null, all owned ops complete in dispatch_log) were still
+    // listed, so the orchestrator would re-dispatch finished work.
+    it('does NOT list an already-complete milestone as eligible', async () => {
+      await client.saveDag(makeTestDag());
+      await client.appendDispatchLog({
+        id: 'log-alpha-self-complete',
+        kind: 'execution',
+        provider: 'local',
+        model: null,
+        agent: 'test-agent',
+        effort: null,
+        started_at: '2024-01-01T00:00:00Z',
+        completed_at: '2024-01-01T00:01:00Z',
+        operations: ['op-1'],
+        turns: [],
+        results: [
+          {
+            op_id: 'op-1',
+            status: 'complete',
+            guard_result: 'pass',
+            guard_output: null,
+            guard_ran_at: '2024-01-01T00:01:00Z',
+          },
+        ],
+        notes: [],
+      });
+      const eligible = await client.getEligibleMilestones();
+      expect(eligible).not.toContain('alpha');
     });
   });
 
