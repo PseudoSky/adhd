@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { run } from '../lib/run';
-import { dispatch } from '@adhd/apigen-runtime';
+import { dispatch } from '@adhd/apigen-engine-runtime';
 import type { RunInput } from '@adhd/apigen-core';
 import * as net from 'node:net';
 
@@ -247,7 +247,7 @@ describe('[plugin-mcp.4] run() streaming-http — tools/list + callTool via real
 // ---------- [plugin-mcp.5] dispatch not inlined ----------
 
 describe('[plugin-mcp.5] run.ts does not inline dispatch logic', () => {
-  it('run.ts imports dispatch from @adhd/apigen-runtime', async () => {
+  it('run.ts imports dispatch from @adhd/apigen-engine-runtime', async () => {
     // Static import (top of file) — nx forbids mixing static + dynamic imports
     // of the same workspace lib. We assert the runtime exports `dispatch` so the
     // import path run.ts relies on is correct; absence of inline dispatch logic

@@ -27,8 +27,8 @@
  * ```
  */
 
-import { collectWithPhase } from '@adhd/apigen-runtime';
-import type { ApiStream } from '@adhd/apigen-runtime';
+import { collectWithPhase } from '@adhd/apigen-engine-runtime';
+import type { ApiStream } from '@adhd/apigen-engine-runtime';
 import { ApiError } from '@adhd/apigen-errors';
 
 // ---------------------------------------------------------------------------

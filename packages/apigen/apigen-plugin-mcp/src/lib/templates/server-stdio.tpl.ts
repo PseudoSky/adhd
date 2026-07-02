@@ -4,7 +4,7 @@ export function generateStdioServer(): string {
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { dispatch } from '@adhd/apigen-runtime'
+import { dispatch } from '@adhd/apigen-engine-runtime'
 import { toolMetas, groupFns, groupCreateClient } from './index.js'
 
 // §9.1 — extract envelope from MCP _meta["x-<pluginId>-<field>"].

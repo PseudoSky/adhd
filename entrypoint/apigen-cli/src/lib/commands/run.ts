@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runPipeline } from '../pipeline';
 import { importSource } from '../import-source';
-import { buildFnTable } from '@adhd/apigen-runtime';
+import { buildFnTable } from '@adhd/apigen-engine-runtime';
 import { resolveTsconfig, resolveNamespace } from '../resolve-tsconfig';
 import { buildCliLogger } from '../logging';
 import {

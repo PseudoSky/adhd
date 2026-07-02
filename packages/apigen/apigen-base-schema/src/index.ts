@@ -5,7 +5,7 @@
  *
  * Currently a minimal package. The canonical type IR (JSON Schema 2020-12),
  * extraction, and the validation Layer live in @adhd/apigen-core and
- * @adhd/apigen-runtime. This package exposes schema-level utilities.
+ * @adhd/apigen-engine-runtime. This package exposes schema-level utilities.
  */
 
 export const __apigen_pkg = '@adhd/apigen-schema';

@@ -20,7 +20,7 @@ import Fastify from 'fastify';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import EventEmitter from 'node:events';
 import { sendStreamSse } from '../lib/stream';
-import { createStream } from '@adhd/apigen-runtime';
+import { createStream } from '@adhd/apigen-engine-runtime';
 import { ApiError } from '@adhd/apigen-errors';
 
 // ---------------------------------------------------------------------------

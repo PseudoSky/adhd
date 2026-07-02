@@ -135,7 +135,7 @@ describe('generate()', () => {
     expect(content).toContain("router.post('/test-pkg/listUsers'");
   });
 
-  it('[plugin-api-express.2] generated routes.ts imports dispatch from @adhd/apigen-runtime', () => {
+  it('[plugin-api-express.2] generated routes.ts imports dispatch from @adhd/apigen-engine-runtime', () => {
     const out = generate(baseInput);
     expect(out.files[0].content).toMatch(
       /import \{[^}]*\bdispatch\b[^}]*\} from ['"]@adhd\/apigen-runtime['"]/

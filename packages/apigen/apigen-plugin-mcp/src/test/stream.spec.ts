@@ -12,7 +12,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { projectStreamMcp, projectStreamMcpFull } from '../lib/stream';
-import { createStream } from '@adhd/apigen-runtime';
+import { createStream } from '@adhd/apigen-engine-runtime';
 import { ApiError } from '@adhd/apigen-errors';
 
 // ---------------------------------------------------------------------------
