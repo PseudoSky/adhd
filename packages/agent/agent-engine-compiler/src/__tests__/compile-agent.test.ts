@@ -72,18 +72,22 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
  * Drizzle's migrator skips entries whose `when` <= last recorded — running
  * provider after the 1782* set would silently skip all its tables.
  */
+// @adhd/agent-core-provider/drizzle
 const PROVIDER_MIGRATIONS = path.resolve(
   __dirname,
   '../../../agent-core-provider/drizzle'
 );
+// @adhd/agent-store-prompts/drizzle
 const REGISTRY_MIGRATIONS = path.resolve(
   __dirname,
   '../../../agent-store-prompts/drizzle'
 );
+// @adhd/agent-store-tools/drizzle
 const TOOL_REGISTRY_MIGRATIONS = path.resolve(
   __dirname,
   '../../../agent-store-tools/drizzle'
 );
+// @adhd/agent-core-policy/drizzle
 const POLICY_MIGRATIONS = path.resolve(
   __dirname,
   '../../../agent-core-policy/drizzle'

@@ -75,12 +75,16 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
  */
 const AGENT_SRC = path.resolve(__dirname, '../../../');
 
+// @adhd/agent-core-provider/drizzle
 const PROVIDER_MIGRATIONS = path.join(AGENT_SRC, 'agent-core-provider/drizzle');
+// @adhd/agent-store-prompts/drizzle
 const REGISTRY_MIGRATIONS = path.join(AGENT_SRC, 'agent-store-prompts/drizzle');
+// @adhd/agent-store-tools/drizzle
 const TOOL_REGISTRY_MIGRATIONS = path.join(
   AGENT_SRC,
   'agent-store-tools/drizzle'
 );
+// @adhd/agent-core-policy/drizzle
 const POLICY_MIGRATIONS = path.join(AGENT_SRC, 'agent-core-policy/drizzle');
 
 /**
