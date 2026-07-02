@@ -6,36 +6,36 @@ import {
   offsetFromRoot,
   Tree,
   updateJson,
-} from '@nx/devkit'
-import * as path from 'node:path'
+} from '@nx/devkit';
+import * as path from 'node:path';
 
 export interface RegistryPackageGeneratorSchema {
   /** kebab-case name WITHOUT the `agent-` prefix, e.g. `budget`, `tool-registry`. */
-  name: string
+  name: string;
   /** Override target directory (default `packages/ai/agent-<name>`). */
-  directory?: string
+  directory?: string;
   /** Human-readable description for package.json. */
-  description?: string
+  description?: string;
   /** SQLite table-name prefix (default `<name>_` with hyphens → underscores). */
-  tablePrefix?: string
+  tablePrefix?: string;
 }
 
 export async function registryPackageGenerator(
   tree: Tree,
-  options: RegistryPackageGeneratorSchema,
+  options: RegistryPackageGeneratorSchema
 ) {
-  const baseName = names(options.name).fileName // "tool-registry"
-  const projectName = `agent-${baseName}` // "agent-tool-registry"
-  const packageName = `@adhd/${projectName}` // "@adhd/agent-tool-registry"
-  const projectDir = options.directory ?? `packages/ai/${projectName}`
+  const baseName = names(options.name).fileName; // "tool-registry"
+  const projectName = `agent-${baseName}`; // "agent-tool-registry"
+  const packageName = `@adhd/${projectName}`; // "@adhd/agent-tool-registry"
+  const projectDir = options.directory ?? `packages/ai/${projectName}`;
   // Table prefix: hyphens → underscores, trailing underscore. The cross-package
   // collision guard ([inv:table-prefix] in REGISTRY-PACKAGE-RULES.md).
-  const tablePrefix = options.tablePrefix ?? `${baseName.replace(/-/g, '_')}_`
+  const tablePrefix = options.tablePrefix ?? `${baseName.replace(/-/g, '_')}_`;
   const description =
     options.description ??
-    `Registry-family store for ${projectName}: drizzle-backed SQLite tables sharing the one registry database.`
+    `Registry-family store for ${projectName}: drizzle-backed SQLite tables sharing the one registry database.`;
 
-  const outputPath = `dist/${projectDir}`
+  const outputPath = `dist/${projectDir}`;
 
   // 1. project.json. Targets are named `build`/`test`/`typecheck` so they
   //    INHERIT cache + `^build` from nx.json targetDefaults (@nx/js:tsc, test).
@@ -114,10 +114,10 @@ export async function registryPackageGenerator(
         },
       },
     },
-  })
+  });
 
   // 2. Write source + config files from the __files__ templates.
-  const n = names(baseName)
+  const n = names(baseName);
   generateFiles(tree, path.join(__dirname, '__files__'), projectDir, {
     ...options,
     baseName,
@@ -131,20 +131,20 @@ export async function registryPackageGenerator(
     constantName: n.constantName, // "TOOL_REGISTRY"
     offsetFromRoot: offsetFromRoot(projectDir),
     tmpl: '',
-  })
+  });
 
   // 3. Register the package path in tsconfig.base.json (ADDITIVE — only the
   //    new line; mirrors how every shipped registry package is wired).
   updateJson(tree, 'tsconfig.base.json', (json) => {
-    const paths = json.compilerOptions?.paths ?? {}
-    paths[packageName] = [`./${projectDir}/src/index.ts`]
+    const paths = json.compilerOptions?.paths ?? {};
+    paths[packageName] = [`./${projectDir}/src/index.ts`];
     return {
       ...json,
       compilerOptions: { ...json.compilerOptions, paths },
-    }
-  })
+    };
+  });
 
-  await formatFiles(tree)
+  await formatFiles(tree);
 }
 
-export default registryPackageGenerator
+export default registryPackageGenerator;

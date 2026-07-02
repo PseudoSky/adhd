@@ -13,9 +13,9 @@
   },
   "tags": ["layer:ai", "platform:node"],
   "implicitDependencies": [
-    "agent-mcp-budget",
+    "agent-plugin-budget",
     "agent-core-policy",
-    "agent-mcp-sanitize"
+    "agent-plugin-sanitize"
   ],
   "targets": {
     "build": {

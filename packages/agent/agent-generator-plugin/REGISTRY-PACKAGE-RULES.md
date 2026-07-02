@@ -84,7 +84,7 @@ document is the standard the package must keep meeting as it grows.
 - **Deterministic without timing.** Use latches/barriers and bounded deadlines;
   prove persistence by reopening the store. Never `sleep` / wall-clock.
 - **Gate on the EXIT CODE, never stdout.** `better-sqlite3` can segfault on
-  vitest teardown *after* tests pass; `… | grep -q passed` hides that. Key on
+  vitest teardown _after_ tests pass; `… | grep -q passed` hides that. Key on
   `nx test <project>`'s exit status. The generated `vite.config.ts` already sets
   `pool: 'forks'` + `fileParallelism: false` to keep native finalizers stable.
 
