@@ -35,7 +35,7 @@ import {
   AgentStore,
   ComponentStore,
   CompositionStore,
-} from '@adhd/agent-registry';
+} from '@adhd/agent-store-prompts';
 import { resolveBody } from '../resolve/composition.js';
 
 // ── helpers ────────────────────────────────────────────────────────────────

@@ -31,8 +31,8 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import {
   ComposedPromptStore,
   contextHash as registryContextHash,
-} from '@adhd/agent-registry';
-import type { ComposedPrompt } from '@adhd/agent-registry';
+} from '@adhd/agent-store-prompts';
+import type { ComposedPrompt } from '@adhd/agent-store-prompts';
 import type { ComponentVersionMap } from '../resolve/composition.js';
 
 // ──────────────────────────────────────────────

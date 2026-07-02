@@ -1,6 +1,6 @@
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
-import { AgentPolicyStore, PolicyTemplateStore } from '@adhd/agent-policy';
+import { AgentPolicyStore, PolicyTemplateStore } from '@adhd/agent-core-policy';
 
 // ──────────────────────────────────────────────
 // resolvePolicyConstraints — fold agent_policy rows into rendered constraint text.

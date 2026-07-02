@@ -32,7 +32,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
-import { AgentToolStore, BindingStore, seed } from '@adhd/agent-tool-registry';
+import { AgentToolStore, BindingStore, seed } from '@adhd/agent-store-tools';
 
 import { resolveTools } from '../resolve/tools.js';
 
