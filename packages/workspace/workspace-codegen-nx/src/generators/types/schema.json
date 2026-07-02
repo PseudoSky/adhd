@@ -6,7 +6,7 @@
   "properties": {
     "name": {
       "type": "string",
-      "description": "Package name (becomes <group>-types-<name>)",
+      "description": "Package name (default: 'types' — becomes <group>-types[-<name>])",
       "pattern": "^[a-z][a-z0-9-]*$"
     },
     "group": {
