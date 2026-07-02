@@ -5,10 +5,18 @@
     "compilerOptions": {
       "module": "CommonJS",
       "paths": {
-        "@adhd/data": ["./packages/data/src/index.ts"],
-        "@adhd/query": ["./packages/query/src/index.ts"],
-        "@adhd/react-hooks": ["./packages/react-hooks/src/index.ts"],
-        "@adhd/transform": ["./packages/transform/src/index.ts"]
+        "@adhd/data": [
+          "./packages/data/src/index.ts"
+        ],
+        "@adhd/query": [
+          "./packages/query/src/index.ts"
+        ],
+        "@adhd/react-hooks": [
+          "./packages/react-hooks/src/index.ts"
+        ],
+        "@adhd/transform": [
+          "./packages/transform/src/index.ts"
+        ]
       }
     }
   },
@@ -22,7 +30,10 @@
     "importHelpers": true,
     "target": "es2018",
     "module": "esnext",
-    "lib": ["es2020", "dom"],
+    "lib": [
+      "es2020",
+      "dom"
+    ],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "paths": {
@@ -41,7 +52,9 @@
       "@adhd/agent-generator-plugin": [
         "./packages/agent/agent-generator-plugin/src/index.ts"
       ],
-      "@adhd/agent-mcp": ["./packages/ai/agent-mcp/src/index.ts"],
+      "@adhd/agent-mcp": [
+        "./packages/ai/agent-mcp/src/index.ts"
+      ],
       "@adhd/agent-plugin-budget": [
         "./packages/agent/agent-plugin-budget/src/index.ts"
       ],
@@ -63,7 +76,9 @@
       "@adhd/apigen-base-schema": [
         "./packages/apigen/apigen-base-schema/src/index.ts"
       ],
-      "@adhd/apigen-cli": ["./entrypoint/apigen-cli/src/index.ts"],
+      "@adhd/apigen-cli": [
+        "./entrypoint/apigen-cli/src/index.ts"
+      ],
       "@adhd/apigen-core-client": [
         "./packages/apigen/apigen-core-client/src/index.ts"
       ],
@@ -115,20 +130,36 @@
       "@adhd/apigen-plugin-py-grpc": [
         "./packages/apigen/apigen-plugin-py-grpc/src/index.ts"
       ],
-      "@adhd/apigen-python-env": ["./packages/apigen/python-env/src/index.ts"],
-      "@adhd/data": ["./packages/data/src/index.ts"],
-      "@adhd/decompile": ["./packages/decompile/src/index.ts"],
+      "@adhd/apigen-python-env": [
+        "./packages/apigen/python-env/src/index.ts"
+      ],
+      "@adhd/data": [
+        "./packages/data/src/index.ts"
+      ],
+      "@adhd/decompile": [
+        "./packages/decompile/src/index.ts"
+      ],
       "@adhd/dispatch-client": [
         "./packages/dispatch/dispatch-client/src/index.ts"
       ],
       "@adhd/dispatch-optimizer": [
         "./packages/dispatch/dispatch-optimizer/src/index.ts"
       ],
-      "@adhd/dispatch-spec": ["./packages/dispatch/dispatch-spec/src/index.ts"],
-      "@adhd/query": ["./packages/query/src/index.ts"],
-      "@adhd/react-hooks": ["./packages/react-hooks/src/index.ts"],
-      "@adhd/storybook": ["./packages/storybook/src/index.ts"],
-      "@adhd/transform": ["./packages/transform/src/index.ts"],
+      "@adhd/dispatch-spec": [
+        "./packages/dispatch/dispatch-spec/src/index.ts"
+      ],
+      "@adhd/query": [
+        "./packages/query/src/index.ts"
+      ],
+      "@adhd/react-hooks": [
+        "./packages/react-hooks/src/index.ts"
+      ],
+      "@adhd/storybook": [
+        "./packages/storybook/src/index.ts"
+      ],
+      "@adhd/transform": [
+        "./packages/transform/src/index.ts"
+      ],
       "@adhd/workspace-base-tools": [
         "./packages/workspace/workspace-base-tools/src/index.ts"
       ],
@@ -137,5 +168,8 @@
       ]
     }
   },
-  "exclude": ["node_modules", "tmp"]
+  "exclude": [
+    "node_modules",
+    "tmp"
+  ]
 }
