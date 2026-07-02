@@ -62,9 +62,7 @@
       "indexes": {
         "idx_policy_templates_type": {
           "name": "idx_policy_templates_type",
-          "columns": [
-            "type"
-          ],
+          "columns": ["type"],
           "isUnique": false
         }
       },
@@ -73,12 +71,8 @@
           "name": "policy_policy_templates_type_policy_policy_types_slug_fk",
           "tableFrom": "policy_policy_templates",
           "tableTo": "policy_policy_types",
-          "columnsFrom": [
-            "type"
-          ],
-          "columnsTo": [
-            "slug"
-          ],
+          "columnsFrom": ["type"],
+          "columnsTo": ["slug"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
