@@ -447,17 +447,17 @@ plan's new `client-fixes` milestone; recorded here per disclosure policy until f
 - **Where:** `packages/dispatch/dispatch-client/src/lib/client.ts`
 - **Symptom:** eligibility derives from `pending !== null` alone; a milestone whose dependency is dispatched-but-incomplete (or failed) is reported eligible. Only accidentally correct for wave 0.
 - **Correct semantics:** eligible iff `pending == null` AND every `depends_on` milestone is complete (PoC `compiler.ts:770`). On the e2e critical path — the orchestrator calls this every cycle.
-- **Status:** OPEN — `client-fixes.1` in dispatch-production dag.json.
+- **Status:** FIXED 2026-07-02 (`37441ef`) — completion derived per-op from `dispatch_log` (`isMilestoneComplete`); two behavioral tests; negative control captured (revert → exit 1).
 
 ### BUG-DISPATCH-002 — `plan.spec.ts` silently skips its only assertion via a stale path
 - **Where:** `packages/dispatch/dispatch-spec/src/test/plan.spec.ts`
-- **Symptom:** derives `repoRoot` by splitting `__dirname` on `'packages/shared/dispatch-spec'` — a path removed by the workspace refactor — then `if (!repoRoot) return` instead of failing. The dag.json-against-validator test has never actually run. Violates the loud-prerequisite-failure rule (CLAUDE.md §6).
-- **Status:** OPEN — `client-fixes.2`.
+- **Symptom:** derives `repoRoot` by splitting `__dirname` on `'packages/shared/dispatch-spec'` — a path removed by the workspace refactor — then `if (!repoRoot) return` instead of failing. The dag.json-against-validator test has never actually run. Violates the loud-prerequisite-failure rule (CLAUDE.md §6). (In practice it crashed with ENOENT rather than skipping — `split()` on a non-matching marker returns `[__dirname]`, so the guard was dead code either way.)
+- **Status:** FIXED 2026-07-02 (`37441ef`) — `indexOf` + loud throws for missing marker/missing dag.json; validates the real dispatch-production dag.json and passes.
 
 ### BUG-DISPATCH-003 — `dispatch-client` re-exports optimizer surface (layering leak)
 - **Where:** `packages/dispatch/dispatch-client/src/index.ts`
 - **Symptom:** re-exports `snapshot`/`optimize` from `@adhd/dispatch-optimizer`, letting consumers import optimizer surface through the client layer.
-- **Status:** OPEN — `client-fixes.3`.
+- **Status:** INVALID 2026-07-02 — not present in current source. `index.ts` exports only client/serializer symbols and has never re-exported optimizer surface on this branch (`git blame` → single commit `1e63f8d`); `package.json` doesn't depend on `dispatch-optimizer`; zero `@adhd/dispatch-client` consumers repo-wide. The finding was recorded during the plan-vs-code audit against an intended-architecture diagram, not the actual file.
 
 ### DEBT-DISPATCH-004 — `@adhd/dispatch-optimizer` published surface is stubs
 - **Where:** `packages/dispatch/dispatch-optimizer/src/lib/` — `snapshot()` returns `{} as DagSnapshot`, `optimize()` returns `[]`, all 4 algorithm files return `[]`; built bundle is 0.11 kB. The real implementation is `docs/plan/dispatch-optimizer/src/compiler.ts` (2,038 lines), never ported.
@@ -467,6 +467,13 @@ plan's new `client-fixes` milestone; recorded here per disclosure policy until f
 - **Where:** `docs/plan/dispatch-optimizer/LOG.md` (outstanding table); referenced by both dispatch plans but absent from this BACKLOG.
 - **Summary:** BL-101 fixed; BL-102 guard-only milestones lack `execution_mode` in DispatchUnit (MEDIUM); BL-103 `snapshot_version` never increments (LOW); BL-104 `compilePrompt()` doesn't inline nested interface sub-shapes (MEDIUM); BL-105 `mcp_servers: null` blocks real dispatch (HIGH — now *bypassed* by the `agent-runner` milestone's `mcpServers: {}` fallback for claudecli agents; catalog lookup still unbuilt, tracked by `backlog-fill`); BL-106 `b_per_tier` cold-start not seeded (LOW); BL-107 back-compat patches live in `run.ts` not `readDag()` (LOW).
 - **Status:** OPEN — deferred `backlog-fill` milestone covers BL-102..107 residue.
+
+### DEBT-DISPATCH-007 — `plan.spec.ts` validates a file outside its nx input set (silent cache-hit)
+
+- **Where:** `packages/dispatch/dispatch-spec/src/test/plan.spec.ts` + `nx.json` test inputs.
+- **Symptom:** the test validates `docs/plan/dispatch-production/dag.json` at runtime, but that path is not part of dispatch-spec's nx test inputs — editing dag.json then running `nx test dispatch-spec` cache-hits and restores the *old* verdict without re-validating (observed 2026-07-02 while recording the client-fixes dispatch_log). The guard passes without running, the exact failure mode CLAUDE.md §6 forbids.
+- **Fix direction:** add `{workspaceRoot}/docs/plan/**/dag.json` to the test target's inputs for dispatch-spec (or move plan validation to a dedicated non-cached target the plan tooling owns). Until then, prove plan edits with a direct `vitest run` in the package.
+- **Status:** OPEN.
 
 ## DEBT-WORKSPACE-VITE-PATHS-001 — Vite configs hardcode relative paths to dist/, coverage/, cacheDir/ instead of resolving from project config
 
