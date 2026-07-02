@@ -591,6 +591,23 @@ executes them **concurrently** (`Promise.all`), not serially — so a fan-out tu
 delegates N sub-tasks dispatches them in parallel. Recursion-depth and tool-loop policy
 are enforced *before* dispatch.
 
+### Tool advertisement (`toolAdvertisement`)
+
+By default (`"names"`), the API `tools` array carries **name-only** definitions —
+name, a one-line description, and a permissive input schema — while the full tool
+documentation (descriptions + parameter schemas) is **prepended to the system
+message**, where it forms a stable, provider-cacheable prefix instead of ~3k tokens
+of JSON schema re-tokenized every turn (measured: `docs/provider-call-audit.md`).
+Set `toolAdvertisement: "full"` on an agent to restore complete JSON-schema
+definitions on the wire (useful for models that construct arguments poorly from
+prose docs). `claudecli` providers always behave as `"full"` — they run their own
+internal tool loop and never serialize tools to a chat-completions API.
+
+Every `MODEL_REQUEST` task event records the active mode, and every
+`MODEL_RESPONSE` event stores per-turn `inputTokens`/`outputTokens`/
+`cacheReadTokens`/`cacheCreationTokens` plus `rawUsage` — the provider's usage
+object verbatim — so per-turn cost is reconstructable from `task_events` alone.
+
 ### Human-in-the-loop (HITL)
 
 Set `allowHumanInput: true` on an agent to advertise the `builtin__request_human_input`
