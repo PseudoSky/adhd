@@ -46,10 +46,10 @@ import {
   CompositionStore,
   TaxonomyStore,
   composedPromptsTable,
-} from '@adhd/agent-registry';
-import { seed as seedToolRegistry } from '@adhd/agent-tool-registry';
-import { seed as seedProvider } from '@adhd/agent-provider';
-import { seed as seedPolicy } from '@adhd/agent-policy';
+} from '@adhd/agent-store-prompts';
+import { seed as seedToolRegistry } from '@adhd/agent-store-tools';
+import { seed as seedProvider } from '@adhd/agent-core-provider';
+import { seed as seedPolicy } from '@adhd/agent-core-policy';
 
 // Under test
 import { compileAgent } from '../compile.js';
@@ -63,19 +63,19 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 // provider (1750*) → registry (1782193*) → tool-registry (1782250*) → policy (1782256*)
 const PROVIDER_MIGRATIONS = path.resolve(
   __dirname,
-  '../../../agent-provider/drizzle'
+  '../../../agent-core-provider/drizzle'
 );
 const REGISTRY_MIGRATIONS = path.resolve(
   __dirname,
-  '../../../agent-registry/drizzle'
+  '../../../agent-store-prompts/drizzle'
 );
 const TOOL_REGISTRY_MIGRATIONS = path.resolve(
   __dirname,
-  '../../../agent-tool-registry/drizzle'
+  '../../../agent-store-tools/drizzle'
 );
 const POLICY_MIGRATIONS = path.resolve(
   __dirname,
-  '../../../agent-policy/drizzle'
+  '../../../agent-core-policy/drizzle'
 );
 
 interface OpenResult {

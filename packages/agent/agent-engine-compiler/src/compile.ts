@@ -33,11 +33,11 @@
 
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
-import { AgentStore, CompositionStore } from '@adhd/agent-registry';
-import type { CompositionContext } from '@adhd/agent-registry';
-import { ToolStore, BindingStore } from '@adhd/agent-tool-registry';
-import { ToolFormatStore, emitToolsForProvider } from '@adhd/agent-provider';
-import type { ToolFormatLookup } from '@adhd/agent-provider';
+import { AgentStore, CompositionStore } from '@adhd/agent-store-prompts';
+import type { CompositionContext } from '@adhd/agent-store-prompts';
+import { ToolStore, BindingStore } from '@adhd/agent-store-tools';
+import { ToolFormatStore, emitToolsForProvider } from '@adhd/agent-core-provider';
+import type { ToolFormatLookup } from '@adhd/agent-core-provider';
 
 import { resolveTools } from './resolve/tools.js';
 import { resolveModel } from './resolve/model.js';

@@ -29,9 +29,9 @@ import {
   TaxonomyStore,
   ComponentStore,
   CompositionStore,
-} from '@adhd/agent-registry';
-import { AgentToolStore } from '@adhd/agent-tool-registry';
-import { AgentPolicyStore } from '@adhd/agent-policy';
+} from '@adhd/agent-store-prompts';
+import { AgentToolStore } from '@adhd/agent-store-tools';
+import { AgentPolicyStore } from '@adhd/agent-core-policy';
 
 // ── exported fixture constants ─────────────────────────────────────────────
 

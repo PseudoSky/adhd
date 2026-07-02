@@ -40,13 +40,13 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
 // Upstream store + seed APIs ([inv:real-rows-not-mocks])
-import { AgentStore, TaxonomyStore } from '@adhd/agent-registry';
-import { ModelStore, seed as seedProvider } from '@adhd/agent-provider';
+import { AgentStore, TaxonomyStore } from '@adhd/agent-store-prompts';
+import { ModelStore, seed as seedProvider } from '@adhd/agent-core-provider';
 import {
   AgentPolicyStore,
   PolicyTemplateStore,
   seed as seedPolicy,
-} from '@adhd/agent-policy';
+} from '@adhd/agent-core-policy';
 
 // Under test
 import { resolveModel } from '../resolve/model.js';
