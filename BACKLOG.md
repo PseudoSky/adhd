@@ -603,3 +603,32 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 - **Where:** dispatch-orchestrator orchestrator.ts:489-568
 - **Description:** injectCorrectionMilestone re-fires the same agent/model/effort/guard with a natural-language fix instruction; it cannot target a truly at-fault upstream milestone (WORKFLOW.md's richer example needs plan-authoring judgment), and downstream milestones depending on the failed slug do not automatically pick up the correction. Guard-only milestones deliberately get a note instead of a correction (D-12 rationale, behaviorally tested). Fix direction: causally-aware replan as a dedicated milestone/plugin.
 - **Status:** OPEN — found 2026-07-02 by the orchestrator-core builder.
+
+### DEBT-DISPATCH-021 — dispatch-cli package.json omits @modelcontextprotocol/sdk (runtime require on the non-dry-run path)
+- **Where:** packages/dispatch/dispatch-cli, dist bundle
+- **Description:** the built dist bundle (src/index.ts → lib/core.ts → @adhd/dispatch-orchestrator's AgentMcpRunner) externalizes and requires @modelcontextprotocol/sdk at runtime, but package.json declares only workspace @adhd/* deps per the milestone brief — a fresh npm consumer of @adhd/dispatch-cli breaks the first time they exercise the dryRun:false path.
+- **Fix direction:** add it as a direct dependency or document it as a peerDependency.
+- **Status:** OPEN — found 2026-07-02 by the cli-milestone builder.
+
+### DEBT-DISPATCH-022 — dispatch-cli has no bin field; bin/cli.ts is not compiled by the vite build
+- **Where:** packages/dispatch/dispatch-cli, package.json, bin/cli.ts, @nx/vite:build
+- **Description:** bin/cli.ts (the hand-written Commander CLI, fully tested via spawn) runs only via `npx tsx --tsconfig tsconfig.base.json bin/cli.ts`; package.json has no bin entry and @nx/vite:build does not compile bin/ to JS (decompile's @nx/js:tsc precedent does). Making the package npx-invocable needs a build step for bin/ plus a bin field. Deferred as a real scope decision, not silently dropped.
+- **Status:** OPEN — found 2026-07-02 by the cli-milestone builder.
+
+### DEBT-DISPATCH-023 — calibrateCore duplicates dispatch-orchestrator's non-exported poll internals
+- **Where:** dispatch-cli lib/core.ts, dispatch-orchestrator orchestrator.ts
+- **Description:** dispatch-cli lib/core.ts re-declares a CALIBRATION_TERMINAL status set and a pollNullTask loop duplicating @adhd/dispatch-orchestrator's non-exported POLL_TERMINAL_STATUSES/pollUntilTerminal — forced by the milestone's rule against touching other dispatch packages.
+- **Fix direction:** export both from @adhd/dispatch-orchestrator and delete the duplicates (Two-Use refactor rule).
+- **Status:** OPEN — found 2026-07-02 by the cli-milestone builder.
+
+### DEBT-DISPATCH-024 — calibrate()'s eager runner construction is structurally weaker than run()'s lazy ternary
+- **Where:** dispatch-cli src/api.ts, agent-runner.ts
+- **Description:** calibrate() passes buildProductionAgentMcpRunner() as an eager argument expression to calibrateCore, so the AgentMcpRunner object is constructed before assertModelTier() can reject a bad tier — run() by contrast guards the paid branch behind a real ternary. Verified inert today: the constructor only stores a lazy client factory (agent-runner.ts:241-243); no transport/spawn/network happens until getClient() via ensureAgent/fire/poll/cancel. Latent fragility if the constructor ever grows a side effect.
+- **Fix direction:** thread a lazy runner factory into calibrateCore, or validate the tier before constructing.
+- **Status:** OPEN — found 2026-07-02 by the cli-milestone verifier.
+
+### DEBT-DISPATCH-025 — dispatch-cli *Core functions handle a missing dag file inconsistently
+- **Where:** dispatch-cli src/api.ts (validateCore, snapshotCore, optimizeCore, statusCore, runCycleCore), dispatch-client
+- **Description:** only validateCore guards the missing-file case gracefully (returns {valid:false, errors:[{message:'dag file not found: <path>'}]}, exit 0 by design); snapshotCore/optimizeCore/statusCore/runCycleCore all let dispatch-client's generic path-less "No dag found — call saveDag first" propagate (exit 1 via the CLI's generic fail handler). Exit codes are still meaningfully nonzero, but the UX is inconsistent across sibling commands and the error omits the offending path.
+- **Fix direction:** extract validateCore's guard into a shared helper the other four call.
+- **Status:** OPEN — found 2026-07-02 by the cli-milestone verifier.
