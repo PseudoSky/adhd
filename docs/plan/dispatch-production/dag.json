@@ -328,7 +328,7 @@
    "guard": "npx nx build dispatch-cli && npx nx test dispatch-cli"
   },
   "tests-golden": {
-   "description": "tests/goldens/dispatch-production/snapshot.golden.json and dispatch-units.golden.json exist. tests/harness.ts compares current compiler output against goldens \u2014 exit 0 on match, exit 1 on divergence. GOLDEN_HISTORY.md records each regen. Covers the full pipeline: dag.json \u2192 snapshot() \u2192 optimize() \u2192 DispatchUnit[] \u2014 compared byte-identical on all non-timestamp fields across two runs (snapshot determinism).",
+   "description": "tests/goldens/dispatch-production/snapshot.golden.json and dispatch-units.golden.json exist. tests/harness.ts compares current compiler output against goldens \u2014 exit 0 on match, exit 1 on divergence. GOLDEN_HISTORY.md records each regen. Covers the full pipeline: dag.json \u2192 snapshot() \u2192 optimize() \u2192 DispatchUnit[] \u2014 compared byte-identical on all non-timestamp fields across two runs (snapshot determinism). RELOCATED 2026-07-02: repo-root tests/ is disallowed (user decision: test assets live in the entrypoint package; no-root-folders rule) - goldens live at packages/dispatch/dispatch-cli/src/test/golden/goldens/dispatch-production/{snapshot,dispatch-units}.golden.json, harness at src/test/golden/harness.ts, regen history at src/test/golden/GOLDEN_HISTORY.md; guard updated with the tsx --tsconfig quirk.",
    "rationale": "SCOPE.md \u00a7F1 defines L1 success: compiler correctness. Golden files are the pre-commit gate. Without them, a refactor of the optimizer can silently change dispatch decisions. The golden is committed alongside code changes \u2014 git log on the golden recovers full metric history.",
    "authored_by": "workflow:plan-builder",
    "pending": null,
@@ -345,7 +345,7 @@
     "docs/plan/dispatch-optimizer/SCOPE.md",
     "docs/plan/dispatch-optimizer/run-output.txt"
    ],
-   "guard": "npx tsx tests/harness.ts --project dispatch-production"
+   "guard": "npx tsx --tsconfig tsconfig.base.json packages/dispatch/dispatch-cli/src/test/golden/harness.ts --project dispatch-production"
   },
   "tests-algorithms": {
    "description": "dispatch-optimizer test suite covers: (1) Bitmask DP \u2014 5 known-optimal fixtures at N=3,5,8,12,15 with verified minimal cost; (2) Tree DP \u2014 3 forest fixtures at N=5,10,20; (3) Simulated Annealing \u2014 3 general DAG fixtures at N=8,15,30, asserting result cost \u2264 1.15 \u00d7 CP-SAT known optimal; (4) HLFET \u2014 2 large fixtures at N=60,150, asserting all precedence constraints hold and no context window violation; (5) Algorithm selection \u2014 N\u226420 selects Bitmask DP, forest selects Tree DP, general \u226450 selects SA, >50 selects HLFET; (6) Edge cases: empty plan, single milestone, cycle detection throws, guard-only milestone produces null prompt, all tool-call unit produces null prompt",
@@ -410,7 +410,7 @@
     "docs/plan/dispatch-optimizer/SCOPE.md",
     "packages/ai/agent-mcp/README.md"
    ],
-   "guard": "npx nx build dispatch-cli && npx tsx packages/dispatch/dispatch-cli/src/test/integration/real-e2e.ts"
+   "guard": "npx nx build dispatch-cli && npx tsx --tsconfig tsconfig.base.json packages/dispatch/dispatch-cli/src/test/integration/real-e2e.ts"
   },
   "hardening-complete": {
    "description": "All packages build. All package tests pass (dispatch-spec, dispatch-client, dispatch-optimizer, dispatch-serializer-json, dispatch-serializer-sqlite, dispatch-plugin-io, dispatch-plugin-gitnexus, dispatch-tools, dispatch-orchestrator). Golden files match. Algorithm test suite passes all 5 categories. All 7 BL-105 stubs closed. All 8 real-world e2e scenarios pass (scenario 4 gated behind DISPATCH_E2E_LIVE=1 per the live-test policy). CLI dispatch --help renders. The plan dag.json itself passes strict validation.",
@@ -524,7 +524,7 @@
    ],
    "type": "generative",
    "action": "create",
-   "file": "tests/goldens/dispatch-production/snapshot.golden.json",
+   "file": "packages/dispatch/dispatch-cli/src/test/golden/goldens/dispatch-production/snapshot.golden.json",
    "symbol": null,
    "provenance": "manual",
    "confidence": "documented",
