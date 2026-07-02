@@ -1,11 +1,11 @@
 import type {
-    Message,
-    ToolDefinition,
-    StreamChunk,
-    ProviderAdapter as IProviderAdapter,
-} from "@adhd/agent-mcp-types";
+  Message,
+  ToolDefinition,
+  StreamChunk,
+  ProviderAdapter as IProviderAdapter,
+} from '@adhd/agent-base-types';
 
-import { ModelStore } from "../store/model-store.js";
+import { ModelStore } from '../store/model-store.js';
 
 // ──────────────────────────────────────────────────────────────────────────────
 // ProviderAdapter — thin implementation
@@ -20,35 +20,35 @@ import { ModelStore } from "../store/model-store.js";
 // ──────────────────────────────────────────────────────────────────────────────
 
 export class ProviderAdapterImpl implements IProviderAdapter {
-    private readonly store: ModelStore;
-    private readonly platform: string;
+  private readonly store: ModelStore;
+  private readonly platform: string;
 
-    constructor(store: ModelStore, platform: string) {
-        this.store = store;
-        this.platform = platform;
-    }
+  constructor(store: ModelStore, platform: string) {
+    this.store = store;
+    this.platform = platform;
+  }
 
-    /**
-     * Resolve the canonical model id to a per-platform string via the binding
-     * table, then yield a single informational chunk.
-     *
-     * The resolved id is surfaced in the first (and only) text chunk so that
-     * tests can assert the correct resolution without live API calls.
-     */
-    async *stream(
-        _messages: Message[],
-        _tools: ToolDefinition[] | undefined,
-        model: string
-    ): AsyncIterable<StreamChunk> {
-        const resolvedModelId = this.store.resolveModelId(model, this.platform);
-        yield { type: "text", text: resolvedModelId };
-    }
+  /**
+   * Resolve the canonical model id to a per-platform string via the binding
+   * table, then yield a single informational chunk.
+   *
+   * The resolved id is surfaced in the first (and only) text chunk so that
+   * tests can assert the correct resolution without live API calls.
+   */
+  async *stream(
+    _messages: Message[],
+    _tools: ToolDefinition[] | undefined,
+    model: string
+  ): AsyncIterable<StreamChunk> {
+    const resolvedModelId = this.store.resolveModelId(model, this.platform);
+    yield { type: 'text', text: resolvedModelId };
+  }
 
-    /**
-     * Expose the resolved model id without consuming the stream.
-     * Convenience method for tests to assert resolution directly.
-     */
-    resolveModelId(canonicalId: string): string {
-        return this.store.resolveModelId(canonicalId, this.platform);
-    }
+  /**
+   * Expose the resolved model id without consuming the stream.
+   * Convenience method for tests to assert resolution directly.
+   */
+  resolveModelId(canonicalId: string): string {
+    return this.store.resolveModelId(canonicalId, this.platform);
+  }
 }

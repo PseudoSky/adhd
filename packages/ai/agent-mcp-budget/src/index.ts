@@ -11,14 +11,15 @@ import type {
   PostToolCallPayload,
   TaskStartPayload,
   PreToolCallPayload,
-} from '@adhd/agent-mcp-types';
+} from '@adhd/agent-base-types';
 
 // ── ISO8601 duration parser ──────────────────────────────────────────────────
 
 // Supported tokens: P[n]Y[n]M[n]DT[n]H[n]M[n]S
 // e.g. PT24H, PT1H30M, P1DT6H
 function parseIsoDuration(dur: string): number {
-  const re = /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/;
+  const re =
+    /^P(?:(\d+)Y)?(?:(\d+)M)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/;
   const m = dur.match(re);
   if (!m) throw new Error(`invalid ISO 8601 duration: ${dur}`);
   const [, y, M, d, h, min, s] = m;
@@ -35,9 +36,15 @@ function parseIsoDuration(dur: string): number {
 // ── Cap schema ───────────────────────────────────────────────────────────────
 
 const FIELD_NAMES = [
-  'tokens', 'inputTokens', 'outputTokens',
-  'calls', 'wallClock', 'modelMs', 'cost',
-  'toolCalls', 'responseSize',
+  'tokens',
+  'inputTokens',
+  'outputTokens',
+  'calls',
+  'wallClock',
+  'modelMs',
+  'cost',
+  'toolCalls',
+  'responseSize',
 ] as const;
 
 const capSchema = z.object({
@@ -67,18 +74,33 @@ type DimensionConfig = z.infer<typeof dimensionSchema>;
 
 export const pluginConfigSchema = z.object({
   defaults: dimensionSchema.optional(),
-  agent: z.object({
-    default: dimensionSchema.optional(),
-    overrides: z.record(z.string(), dimensionSchema.partial()).optional().default({}),
-  }).optional(),
-  provider: z.object({
-    default: dimensionSchema.optional(),
-    overrides: z.record(z.string(), dimensionSchema.partial()).optional().default({}),
-  }).optional(),
-  tool: z.object({
-    default: dimensionSchema.optional(),
-    overrides: z.record(z.string(), dimensionSchema.partial()).optional().default({}),
-  }).optional(),
+  agent: z
+    .object({
+      default: dimensionSchema.optional(),
+      overrides: z
+        .record(z.string(), dimensionSchema.partial())
+        .optional()
+        .default({}),
+    })
+    .optional(),
+  provider: z
+    .object({
+      default: dimensionSchema.optional(),
+      overrides: z
+        .record(z.string(), dimensionSchema.partial())
+        .optional()
+        .default({}),
+    })
+    .optional(),
+  tool: z
+    .object({
+      default: dimensionSchema.optional(),
+      overrides: z
+        .record(z.string(), dimensionSchema.partial())
+        .optional()
+        .default({}),
+    })
+    .optional(),
 });
 
 export type PluginConfig = z.input<typeof pluginConfigSchema>;
@@ -88,15 +110,15 @@ export const configSchema = z.object({}).passthrough();
 // ── Backward compat: flat fields → caps ──────────────────────────────────────
 
 const FIELD_MAP: Record<string, { field: Cap['field']; window?: string }> = {
-  maxInputTokens:  { field: 'inputTokens' },
+  maxInputTokens: { field: 'inputTokens' },
   maxOutputTokens: { field: 'outputTokens' },
-  maxTotalTokens:  { field: 'tokens' },
-  maxModelCalls:   { field: 'calls' },
-  maxWallClockMs:  { field: 'wallClock' },
-  maxModelMs:      { field: 'modelMs' },
-  maxCostUSD:      { field: 'cost' },
+  maxTotalTokens: { field: 'tokens' },
+  maxModelCalls: { field: 'calls' },
+  maxWallClockMs: { field: 'wallClock' },
+  maxModelMs: { field: 'modelMs' },
+  maxCostUSD: { field: 'cost' },
   maxTokensPer24h: { field: 'tokens', window: 'PT24H' },
-  maxCalls:        { field: 'toolCalls' },
+  maxCalls: { field: 'toolCalls' },
 };
 
 function flatFieldsToDimension(raw: Record<string, unknown>): DimensionConfig {
@@ -109,7 +131,13 @@ function flatFieldsToDimension(raw: Record<string, unknown>): DimensionConfig {
       const cap: Cap = { field: mapping.field, maximum: value };
       if (mapping.window) cap.window = mapping.window;
       caps.push(cap);
-    } else if (key === 'scope' || key === 'mode' || key === 'costPerInputToken' || key === 'costPerOutputToken' || key === 'message') {
+    } else if (
+      key === 'scope' ||
+      key === 'mode' ||
+      key === 'costPerInputToken' ||
+      key === 'costPerOutputToken' ||
+      key === 'message'
+    ) {
       result[key] = value;
     }
   }
@@ -145,15 +173,26 @@ function normalizeConfig(raw: unknown): PluginConfig {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function makeEnforcementError(limitName: string, limit: number, current: number, message?: string): IEnforcementError {
+function makeEnforcementError(
+  limitName: string,
+  limit: number,
+  current: number,
+  message?: string
+): IEnforcementError {
   return {
     isEnforcementError: true as const,
     code: 'BUDGET_EXCEEDED',
-    message: message ?? `${limitName} limit is ${limit}, current value is ${Math.round(current)}`,
+    message:
+      message ??
+      `${limitName} limit is ${limit}, current value is ${Math.round(current)}`,
   };
 }
 
-function makeToolWarning(toolName: string, callId: string, message: string): IToolWarning {
+function makeToolWarning(
+  toolName: string,
+  callId: string,
+  message: string
+): IToolWarning {
   return { isToolWarning: true, toolName, callId, message };
 }
 
@@ -192,34 +231,64 @@ class BudgetPlugin implements Plugin {
     private readonly db: unknown,
     private readonly cfg: PluginConfig,
     private readonly costPerInput = 0,
-    private readonly costPerOutput = 0,
+    private readonly costPerOutput = 0
   ) {}
 
   install(hooks: IHookRegistry): void {
     hooks.register('task:start', (p) => {
-      try { this.onTaskStart(p); } catch { /* observational */ }
+      try {
+        this.onTaskStart(p);
+      } catch {
+        /* observational */
+      }
     });
     hooks.register('pre:model_request', (p) => {
-      try { this.onPreModelRequest(p); } catch { /* observational */ }
+      try {
+        this.onPreModelRequest(p);
+      } catch {
+        /* observational */
+      }
     });
     hooks.register('post:model_response', (p) => {
-      try { this.onPostModelResponse(p); } catch { /* observational */ }
+      try {
+        this.onPostModelResponse(p);
+      } catch {
+        /* observational */
+      }
     });
 
     hooks.register('task:completed', (p) => {
-      try { this.onTerminal(p.executionContext.taskId); } catch { /**/ }
+      try {
+        this.onTerminal(p.executionContext.taskId);
+      } catch {
+        /**/
+      }
     });
     hooks.register('task:failed', (p) => {
-      try { this.onTerminal(p.executionContext.taskId); } catch { /**/ }
+      try {
+        this.onTerminal(p.executionContext.taskId);
+      } catch {
+        /**/
+      }
     });
     hooks.register('task:cancelled', (p) => {
-      try { this.onTerminal(p.executionContext.taskId); } catch { /**/ }
+      try {
+        this.onTerminal(p.executionContext.taskId);
+      } catch {
+        /**/
+      }
     });
 
-    hooks.registerEnforcement('pre:model_request', (p) => this.enforcePreModel(p));
+    hooks.registerEnforcement('pre:model_request', (p) =>
+      this.enforcePreModel(p)
+    );
     hooks.registerEnforcement('pre:tool_call', (p) => this.enforcePreTool(p));
     hooks.register('transform:tool_result', (p) => {
-      try { this.enforceResponseSize(p); } catch { /* observational — mutate only */ }
+      try {
+        this.enforceResponseSize(p);
+      } catch {
+        /* observational — mutate only */
+      }
     });
   }
 
@@ -227,7 +296,8 @@ class BudgetPlugin implements Plugin {
 
   private onTaskStart(p: TaskStartPayload): void {
     const { taskId, sessionId, agentName } = p.executionContext;
-    const providerType = p.executionContext.agentDefinition?.provider?.type ?? 'unknown';
+    const providerType =
+      p.executionContext.agentDefinition?.provider?.type ?? 'unknown';
     this.accumulators.set(taskId, {
       taskId,
       sessionId: sessionId ?? undefined,
@@ -289,7 +359,7 @@ class BudgetPlugin implements Plugin {
   private resolveCaps(
     agentName: string,
     providerType: string,
-    toolName?: string,
+    toolName?: string
   ): { caps: Cap[]; mode?: string; scope?: string } {
     const base = this.cfg.defaults;
     const agentDim = this.cfg.agent;
@@ -298,12 +368,12 @@ class BudgetPlugin implements Plugin {
 
     if (toolName) {
       const toolOverride = toolDim?.overrides?.[toolName];
-      const merged = this.mergeDim([
-        base,
-        toolDim?.default,
-        toolOverride,
-      ]);
-      return { caps: merged.caps ?? [], mode: merged.mode, scope: merged.scope };
+      const merged = this.mergeDim([base, toolDim?.default, toolOverride]);
+      return {
+        caps: merged.caps ?? [],
+        mode: merged.mode,
+        scope: merged.scope,
+      };
     }
 
     const agentOverride = agentDim?.overrides?.[agentName];
@@ -324,7 +394,7 @@ class BudgetPlugin implements Plugin {
     taskId: string,
     sessionId: string | undefined,
     agentName: string,
-    scope: string,
+    scope: string
   ): UsageTotals {
     const acc = this.accumulators.get(taskId);
     const inMem = acc
@@ -340,9 +410,17 @@ class BudgetPlugin implements Plugin {
 
     try {
       const db = this.db as {
-        prepare: (sql: string) => { get: (...args: unknown[]) => { input: number; output: number; cache: number; calls: number } | undefined };
+        prepare: (sql: string) => {
+          get: (
+            ...args: unknown[]
+          ) =>
+            | { input: number; output: number; cache: number; calls: number }
+            | undefined;
+        };
       };
-      let row: { input: number; output: number; cache: number; calls: number } | undefined;
+      let row:
+        | { input: number; output: number; cache: number; calls: number }
+        | undefined;
 
       if (scope === 'session' && sessionId) {
         row = db
@@ -391,7 +469,9 @@ class BudgetPlugin implements Plugin {
           modelCalls: (row.calls ?? 0) + inMem.modelCalls,
         };
       }
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
 
     return inMem;
   }
@@ -400,12 +480,14 @@ class BudgetPlugin implements Plugin {
     scope: string,
     id: string,
     windowMs: number,
-    excludeTaskId?: string,
+    excludeTaskId?: string
   ): number {
     if (!this.db) return 0;
     try {
       const db = this.db as {
-        prepare: (sql: string) => { get: (...args: unknown[]) => { total: number } | undefined };
+        prepare: (sql: string) => {
+          get: (...args: unknown[]) => { total: number } | undefined;
+        };
       };
       const since = new Date(Date.now() - windowMs).toISOString();
 
@@ -472,7 +554,7 @@ class BudgetPlugin implements Plugin {
     taskId: string,
     sessionId: string | undefined,
     agentName: string,
-    dimScope?: string,
+    dimScope?: string
   ): Record<string, number> {
     const snap: Record<string, number> = {};
 
@@ -487,14 +569,20 @@ class BudgetPlugin implements Plugin {
       acc.outputTokens * this.costPerOutput;
 
     const uniqueScopes = new Set<string>();
-    const uniqueWindows = new Map<string, { scope: string; windowMs: number }>();
+    const uniqueWindows = new Map<
+      string,
+      { scope: string; windowMs: number }
+    >();
     for (const cap of caps) {
       const scope = cap.scope ?? dimScope ?? 'task';
       if (scope !== 'task') uniqueScopes.add(scope);
       if (cap.window) {
         const key = `${scope}:${cap.window}`;
         if (!uniqueWindows.has(key)) {
-          uniqueWindows.set(key, { scope, windowMs: parseIsoDuration(cap.window) });
+          uniqueWindows.set(key, {
+            scope,
+            windowMs: parseIsoDuration(cap.window),
+          });
         }
       }
     }
@@ -516,7 +604,11 @@ class BudgetPlugin implements Plugin {
     return snap;
   }
 
-  private getSnapshotValue(snap: Record<string, number>, cap: Cap, dimScope?: string): number {
+  private getSnapshotValue(
+    snap: Record<string, number>,
+    cap: Cap,
+    dimScope?: string
+  ): number {
     const scope = cap.scope ?? dimScope ?? 'task';
     // When cap has a window, historical data comes from the window query
     // (snap[`${scope}:${cap.window}`]). Scope-level totals already include
@@ -537,9 +629,10 @@ class BudgetPlugin implements Plugin {
         base = snap[`${scopeKey}outputTokens`] ?? snap['outputTokens'];
         break;
       case 'tokens':
-        base = (snap[`${scopeKey}inputTokens`] ?? snap['inputTokens'])
-            + (snap[`${scopeKey}outputTokens`] ?? snap['outputTokens'])
-            + snap['cacheTokens'];
+        base =
+          (snap[`${scopeKey}inputTokens`] ?? snap['inputTokens']) +
+          (snap[`${scopeKey}outputTokens`] ?? snap['outputTokens']) +
+          snap['cacheTokens'];
         break;
       case 'calls':
         base = snap[`${scopeKey}calls`] ?? snap['calls'];
@@ -567,7 +660,11 @@ class BudgetPlugin implements Plugin {
     return base;
   }
 
-  private evaluateCap(cap: Cap, snap: Record<string, number>, dimScope?: string): void {
+  private evaluateCap(
+    cap: Cap,
+    snap: Record<string, number>,
+    dimScope?: string
+  ): void {
     const current = this.getSnapshotValue(snap, cap, dimScope);
     if (current >= cap.maximum) {
       throw makeEnforcementError(cap.field, cap.maximum, current, cap.message);
@@ -578,16 +675,24 @@ class BudgetPlugin implements Plugin {
 
   private enforcePreModel(p: PreModelRequestPayload): void {
     const { taskId, sessionId, agentName } = p.executionContext;
-    const providerType = p.executionContext.agentDefinition?.provider?.type ?? 'unknown';
+    const providerType =
+      p.executionContext.agentDefinition?.provider?.type ?? 'unknown';
     const acc = this.accumulators.get(taskId);
     if (!acc) return;
 
     const { caps, scope: dimScope } = this.resolveCaps(agentName, providerType);
-    const modelCaps = caps.filter(c => c.field !== 'toolCalls');
+    const modelCaps = caps.filter((c) => c.field !== 'toolCalls');
     if (modelCaps.length === 0) return;
 
     // One snapshot, one DB round-trip per unique scope/window
-    const snap = this.buildSnapshot(modelCaps, acc, taskId, sessionId, agentName, dimScope);
+    const snap = this.buildSnapshot(
+      modelCaps,
+      acc,
+      taskId,
+      sessionId,
+      agentName,
+      dimScope
+    );
     for (const cap of modelCaps) {
       this.evaluateCap(cap, snap);
     }
@@ -597,26 +702,47 @@ class BudgetPlugin implements Plugin {
 
   private enforcePreTool(p: PreToolCallPayload): void {
     const { toolName, callId, executionContext } = p;
-    const { caps, mode, scope: dimScope } = this.resolveCaps(executionContext.agentName, '', toolName);
+    const {
+      caps,
+      mode,
+      scope: dimScope,
+    } = this.resolveCaps(executionContext.agentName, '', toolName);
     const acc = this.accumulators.get(executionContext.taskId);
     if (!acc) return;
 
     if (caps.length === 0) return;
 
     const currentToolCalls = acc.toolCalls.get(toolName) ?? 0;
-    const snap = this.buildSnapshot(caps, acc, executionContext.taskId, executionContext.sessionId, executionContext.agentName, dimScope);
+    const snap = this.buildSnapshot(
+      caps,
+      acc,
+      executionContext.taskId,
+      executionContext.sessionId,
+      executionContext.agentName,
+      dimScope
+    );
 
     for (const cap of caps) {
-      const current = cap.field === 'toolCalls'
-        ? currentToolCalls
-        : this.getSnapshotValue(snap, cap, dimScope);
+      const current =
+        cap.field === 'toolCalls'
+          ? currentToolCalls
+          : this.getSnapshotValue(snap, cap, dimScope);
       if (current >= cap.maximum) {
-        const msg = cap.message ?? `tool "${toolName}": ${cap.field} limit is ${cap.maximum}, current value is ${Math.round(current)}`;
+        const msg =
+          cap.message ??
+          `tool "${toolName}": ${cap.field} limit is ${
+            cap.maximum
+          }, current value is ${Math.round(current)}`;
         const capMode = cap.mode ?? mode ?? 'warning';
         if (capMode === 'warning') {
           throw makeToolWarning(toolName, callId, msg);
         }
-        throw makeEnforcementError(`tool:${toolName}:${cap.field}`, cap.maximum, current, cap.message);
+        throw makeEnforcementError(
+          `tool:${toolName}:${cap.field}`,
+          cap.maximum,
+          current,
+          cap.message
+        );
       }
     }
 
@@ -630,7 +756,7 @@ class BudgetPlugin implements Plugin {
     if (typeof result !== 'object' || result === null) return;
 
     const { caps, mode } = this.resolveCaps('', '', toolName);
-    const sizeCaps = caps.filter(c => c.field === 'responseSize');
+    const sizeCaps = caps.filter((c) => c.field === 'responseSize');
     if (sizeCaps.length === 0) return;
 
     // Flatten text content from tool result
@@ -653,18 +779,28 @@ class BudgetPlugin implements Plugin {
 
       const capMode = cap.mode ?? mode ?? 'warning';
       if (capMode === 'block') {
-        resultObj['content'] = [{
-          type: 'text',
-          text: cap.message ?? `Response size (${totalChars} chars) exceeds limit of ${cap.maximum}. Use offset/limit or shell paging tools instead.`,
-        }];
+        resultObj['content'] = [
+          {
+            type: 'text',
+            text:
+              cap.message ??
+              `Response size (${totalChars} chars) exceeds limit of ${cap.maximum}. Use offset/limit or shell paging tools instead.`,
+          },
+        ];
         p.isError = true;
       } else {
         let remaining = cap.maximum;
         const truncated: unknown[] = [];
         for (const part of content) {
-          if (typeof part !== 'object' || part === null) { truncated.push(part); continue; }
+          if (typeof part !== 'object' || part === null) {
+            truncated.push(part);
+            continue;
+          }
           const p2 = part as Record<string, unknown>;
-          if (p2['type'] !== 'text') { truncated.push(part); continue; }
+          if (p2['type'] !== 'text') {
+            truncated.push(part);
+            continue;
+          }
           const text = (p2['text'] as string) ?? '';
           if (text.length <= remaining) {
             truncated.push(part);
@@ -676,7 +812,12 @@ class BudgetPlugin implements Plugin {
         }
         truncated.push({
           type: 'text',
-          text: `\n\n[truncated: response was ${totalChars} chars, limited to ${cap.maximum}. ${cap.message ?? 'Use offset/limit or shell paging tools for full content.'}]`,
+          text: `\n\n[truncated: response was ${totalChars} chars, limited to ${
+            cap.maximum
+          }. ${
+            cap.message ??
+            'Use offset/limit or shell paging tools for full content.'
+          }]`,
         });
         resultObj['content'] = truncated;
       }

@@ -17,7 +17,7 @@
     }
   },
   "peerDependencies": {
-    "@adhd/agent-mcp-types": "*"
+    "@adhd/agent-base-types": "*"
   },
   "dependencies": {
     "zod": "*"

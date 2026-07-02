@@ -6,7 +6,7 @@
  * Unit-testable independent of hook wiring.
  */
 
-import type { IEnforcementError } from "@adhd/agent-mcp-types";
+import type { IEnforcementError } from '@adhd/agent-base-types';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -17,8 +17,8 @@ import type { IEnforcementError } from "@adhd/agent-mcp-types";
  * All limits are optional; a missing key means "no limit enforced."
  */
 export interface RatePolicyRules {
-    /** Max number of model (LLM) calls per task. */
-    maxModelCalls?: number;
+  /** Max number of model (LLM) calls per task. */
+  maxModelCalls?: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -29,15 +29,15 @@ export interface RatePolicyRules {
  * so the orchestrator can distinguish enforcement source).
  */
 export function makeRatePolicyError(
-    limitName: string,
-    limit: number,
-    current: number
+  limitName: string,
+  limit: number,
+  current: number
 ): IEnforcementError {
-    return {
-        isEnforcementError: true as const,
-        code: "POLICY_VIOLATION",
-        message: `POLICY_VIOLATION: rate policy ${limitName} limit is ${limit}, current value is ${current}`,
-    };
+  return {
+    isEnforcementError: true as const,
+    code: 'POLICY_VIOLATION',
+    message: `POLICY_VIOLATION: rate policy ${limitName} limit is ${limit}, current value is ${current}`,
+  };
 }
 
 /**
@@ -47,14 +47,15 @@ export function makeRatePolicyError(
  * Pure function: no side effects, deterministic.
  */
 export function evaluateRatePolicy(
-    rules: RatePolicyRules,
-    modelCalls: number
+  rules: RatePolicyRules,
+  modelCalls: number
 ): IEnforcementError | null {
-    if (
-        rules.maxModelCalls !== undefined &&
-        modelCalls >= rules.maxModelCalls
-    ) {
-        return makeRatePolicyError("maxModelCalls", rules.maxModelCalls, modelCalls);
-    }
-    return null;
+  if (rules.maxModelCalls !== undefined && modelCalls >= rules.maxModelCalls) {
+    return makeRatePolicyError(
+      'maxModelCalls',
+      rules.maxModelCalls,
+      modelCalls
+    );
+  }
+  return null;
 }

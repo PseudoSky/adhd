@@ -5,21 +5,20 @@ import type {
   IHookRegistry,
   EnforcementEvent,
   EnforcementHandler,
-} from '@adhd/agent-base-types';
+} from './hooks.js';
 
 /**
- * Concrete implementation of IHookRegistry used by the agent-mcp server.
+ * Concrete implementation of IHookRegistry.
  *
- * NOTE: A copy of this class also lives in @adhd/agent-mcp-types so plugin
- * authors can instantiate it in their own tests without taking a runtime
- * dependency on the full server package. Keep the two in sync until DEBT-009
- * is resolved (extraction to @adhd/agent-mcp-hooks).
+ * Lives in @adhd/agent-mcp-types (not @adhd/agent-mcp) so plugin packages
+ * can instantiate it in their own tests without creating a circular Nx
+ * dependency on the full agent-mcp server package.
  *
  * Observational handlers registered via register() have their throws swallowed
- * and logged — a buggy plugin never kills a task.
+ * and logged to console.warn — a buggy plugin never kills a task.
  *
  * Enforcement handlers registered via registerEnforcement() propagate throws
- * so the orchestrator can fail the task with BUDGET_EXCEEDED.
+ * to the caller so the orchestrator can fail the task with BUDGET_EXCEEDED.
  */
 export class HookRegistry implements IHookRegistry {
   private readonly handlers = new Map<HookEvent, HookHandler<HookEvent>[]>();
@@ -44,6 +43,8 @@ export class HookRegistry implements IHookRegistry {
       try {
         await (handler as HookHandler<E>)(payload);
       } catch (err) {
+        // Observational hooks: errors are logged and swallowed so a
+        // buggy plugin never kills a task.
         console.warn('[HookRegistry] hook handler error (swallowed)', {
           event,
           err,
@@ -61,6 +62,11 @@ export class HookRegistry implements IHookRegistry {
     this.enforcementHandlers.set(event, list);
   }
 
+  /**
+   * Run all enforcement handlers for the event serially.
+   * Throws are NOT caught — they propagate to the orchestrator.
+   * Call after emit() so observational handlers always fire first.
+   */
   async enforce<E extends EnforcementEvent>(
     event: E,
     payload: HookEventMap[E]

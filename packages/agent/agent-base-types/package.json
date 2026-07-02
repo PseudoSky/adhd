@@ -1,5 +1,5 @@
 {
-  "name": "@adhd/agent-mcp-types",
+  "name": "@adhd/agent-base-types",
   "version": "2.0.0",
   "dependencies": {},
   "main": "./index.js",

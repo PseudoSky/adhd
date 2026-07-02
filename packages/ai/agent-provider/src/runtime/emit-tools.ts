@@ -17,15 +17,15 @@
  *  [inv:gate-not-noop], RUNTIME_GAPS Gap 1 + Gap 2 + Recommended Handoff #2)
  */
 
-import type { ToolDefinition } from "@adhd/agent-mcp-types";
-import type { EmitShape, ToolFormat } from "../store/tool-format-store.js";
+import type { ToolDefinition } from '@adhd/agent-base-types';
+import type { EmitShape, ToolFormat } from '../store/tool-format-store.js';
 
 // ──────────────────────────────────────────────
 // Error
 // ──────────────────────────────────────────────
 
 /** Error code for unsupported native tools ([def:unsupported-native]). */
-export type UnsupportedNativeToolErrorCode = "UNSUPPORTED_NATIVE_TOOL";
+export type UnsupportedNativeToolErrorCode = 'UNSUPPORTED_NATIVE_TOOL';
 
 /**
  * Thrown when the emitter encounters a provider-native tool that this package
@@ -36,21 +36,21 @@ export type UnsupportedNativeToolErrorCode = "UNSUPPORTED_NATIVE_TOOL";
  * ([inv:gate-not-noop])
  */
 export class UnsupportedNativeToolError extends Error {
-    readonly code: UnsupportedNativeToolErrorCode = "UNSUPPORTED_NATIVE_TOOL";
-    readonly toolName: string;
-    readonly providerId: string;
+  readonly code: UnsupportedNativeToolErrorCode = 'UNSUPPORTED_NATIVE_TOOL';
+  readonly toolName: string;
+  readonly providerId: string;
 
-    constructor(toolName: string, providerId: string, note: string | null) {
-        const detail = note
-            ? note
-            : `${toolName} on provider ${providerId} is not supported by @adhd/agent-provider`;
-        super(
-            `Tool '${toolName}' on provider '${providerId}' cannot be emitted: ${detail}`
-        );
-        this.name = "UnsupportedNativeToolError";
-        this.toolName = toolName;
-        this.providerId = providerId;
-    }
+  constructor(toolName: string, providerId: string, note: string | null) {
+    const detail = note
+      ? note
+      : `${toolName} on provider ${providerId} is not supported by @adhd/agent-provider`;
+    super(
+      `Tool '${toolName}' on provider '${providerId}' cannot be emitted: ${detail}`
+    );
+    this.name = 'UnsupportedNativeToolError';
+    this.toolName = toolName;
+    this.providerId = providerId;
+  }
 }
 
 // ──────────────────────────────────────────────
@@ -62,9 +62,9 @@ export class UnsupportedNativeToolError extends Error {
  * Matches the Anthropic / OpenAI `{name, description, input_schema}` shape.
  */
 export interface EmittedCustomTool {
-    name: string;
-    description: string;
-    input_schema: Record<string, unknown>;
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
 }
 
 /**
@@ -74,8 +74,8 @@ export interface EmittedCustomTool {
  * ([def:server-side-tool], [inv:server-side-shape])
  */
 export interface EmittedServerSideTool {
-    type: string;
-    name: string;
+  type: string;
+  name: string;
 }
 
 /** Discriminated union of both emitted shapes. */
@@ -92,8 +92,8 @@ export type EmittedTool = EmittedCustomTool | EmittedServerSideTool;
  * compatible lookup (e.g. an in-memory fixture in tests).
  */
 export type ToolFormatLookup = (
-    providerId: string,
-    canonicalTool: string
+  providerId: string,
+  canonicalTool: string
 ) => ToolFormat | null;
 
 // ──────────────────────────────────────────────
@@ -114,44 +114,44 @@ export type ToolFormatLookup = (
  * @throws {UnsupportedNativeToolError} when the tool's emit_shape is "unsupported".
  */
 export function emitTool(
-    tool: ToolDefinition,
-    providerId: string,
-    lookup: ToolFormatLookup
+  tool: ToolDefinition,
+  providerId: string,
+  lookup: ToolFormatLookup
 ): EmittedTool {
-    const format = lookup(providerId, tool.name);
-    const shape: EmitShape = format?.emitShape ?? "custom";
+  const format = lookup(providerId, tool.name);
+  const shape: EmitShape = format?.emitShape ?? 'custom';
 
-    switch (shape) {
-        case "server_side": {
-            // type_tag must be set for server_side rows ([inv:server-side-shape])
-            const typeTag = format?.typeTag;
-            if (!typeTag) {
-                throw new Error(
-                    `Tool format for '${tool.name}' on provider '${providerId}' is server_side but has no type_tag`
-                );
-            }
-            // Emitted with NO input_schema — server executes it
-            return { type: typeTag, name: tool.name } satisfies EmittedServerSideTool;
-        }
-
-        case "unsupported": {
-            // Always throw — never silent no-op ([inv:gate-not-noop])
-            throw new UnsupportedNativeToolError(
-                tool.name,
-                providerId,
-                format?.note ?? null
-            );
-        }
-
-        default: {
-            // "custom" or no registered row → standard tool definition shape
-            return {
-                name: tool.name,
-                description: tool.description,
-                input_schema: tool.inputSchema,
-            } satisfies EmittedCustomTool;
-        }
+  switch (shape) {
+    case 'server_side': {
+      // type_tag must be set for server_side rows ([inv:server-side-shape])
+      const typeTag = format?.typeTag;
+      if (!typeTag) {
+        throw new Error(
+          `Tool format for '${tool.name}' on provider '${providerId}' is server_side but has no type_tag`
+        );
+      }
+      // Emitted with NO input_schema — server executes it
+      return { type: typeTag, name: tool.name } satisfies EmittedServerSideTool;
     }
+
+    case 'unsupported': {
+      // Always throw — never silent no-op ([inv:gate-not-noop])
+      throw new UnsupportedNativeToolError(
+        tool.name,
+        providerId,
+        format?.note ?? null
+      );
+    }
+
+    default: {
+      // "custom" or no registered row → standard tool definition shape
+      return {
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.inputSchema,
+      } satisfies EmittedCustomTool;
+    }
+  }
 }
 
 /**
@@ -166,9 +166,9 @@ export function emitTool(
  * @throws {UnsupportedNativeToolError} on the first unsupported tool.
  */
 export function emitToolsForProvider(
-    tools: ToolDefinition[],
-    providerId: string,
-    lookup: ToolFormatLookup
+  tools: ToolDefinition[],
+  providerId: string,
+  lookup: ToolFormatLookup
 ): EmittedTool[] {
-    return tools.map(tool => emitTool(tool, providerId, lookup));
+  return tools.map((tool) => emitTool(tool, providerId, lookup));
 }
