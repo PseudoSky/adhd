@@ -44,7 +44,7 @@ export default defineConfig({
       external: [
         '@nx/devkit',
         '@nx/devkit/testing',
-        '@adhd/apigen-core-client,
+        '@adhd/apigen-core-client',
         'node:child_process',
         'node:path',
         'node:fs',
