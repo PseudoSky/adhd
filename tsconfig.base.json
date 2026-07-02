@@ -142,6 +142,9 @@
       "@adhd/decompile": [
         "./packages/decompile/src/index.ts"
       ],
+      "@adhd/dispatch-cli": [
+        "./packages/dispatch/dispatch-cli/src/index.ts"
+      ],
       "@adhd/dispatch-client": [
         "./packages/dispatch/dispatch-client/src/index.ts"
       ],
