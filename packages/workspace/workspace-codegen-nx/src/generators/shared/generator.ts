@@ -11,6 +11,7 @@ import {
   writeJson,
 } from '@nx/devkit';
 import { libraryGenerator } from '@nx/js';
+import { readWorkspaceConfig, validateGroup, validatePlatform, validateNxLayer } from './workspace-config';
 
 export interface ScaffoldGeneratorSchema {
   type: 'base' | 'core' | 'engine' | 'store' | 'plugin' | 'generator' | 'query' | 'types' | 'entrypoint';
@@ -53,6 +54,17 @@ export async function scaffoldGenerator(tree: Tree, schema: ScaffoldGeneratorSch
     projectName = pkgName;
     importPath = `@adhd/${pkgName}`;
   }
+
+  // Validate against workspace config
+  const config = readWorkspaceConfig(tree);
+  if (type !== 'entrypoint') {
+    const groupErr = validateGroup(group, config);
+    if (groupErr) throw new Error(groupErr);
+  }
+  const platformErr = validatePlatform(platform, config);
+  if (platformErr) throw new Error(platformErr);
+  const nxLayerErr = validateNxLayer(nxLayer, config);
+  if (nxLayerErr) throw new Error(nxLayerErr);
 
   logger.info(`Scaffolding ${projectName} at ${dir} (${importPath})`);
 
