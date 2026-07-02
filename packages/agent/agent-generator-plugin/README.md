@@ -1,4 +1,4 @@
-# @adhd/agent-nx
+# @adhd/agent-generator-plugin
 
 Nx generator for **golden-path `@adhd/agent-*` registry packages**. It scaffolds
 a `platform:node`, Drizzle-over-shared-SQLite registry package that is correct on
@@ -12,10 +12,10 @@ db wiring).
 
 ```bash
 # Scaffold packages/ai/agent-budget (@adhd/agent-budget).
-nx g @adhd/agent-nx:registry-package budget
+nx g @adhd/agent-generator-plugin:registry-package budget
 
 # Custom directory / description / table prefix.
-nx g @adhd/agent-nx:registry-package billing \
+nx g @adhd/agent-generator-plugin:registry-package billing \
   --directory=packages/ai/agent-billing \
   --description="Billing ledger registry" \
   --tablePrefix=billing_
@@ -26,12 +26,12 @@ Pass the name **without** the `agent-` prefix — `budget` produces the project
 
 ### Options
 
-| Option         | Required | Default                          | Notes                                                              |
-| -------------- | -------- | -------------------------------- | ------------------------------------------------------------------ |
-| `name`         | yes      | —                                | kebab-case, no `agent-` prefix (e.g. `budget`, `tool-registry`).   |
-| `directory`    | no       | `packages/ai/agent-<name>`       | Target directory.                                                  |
-| `description`  | no       | derived                          | `package.json` description.                                        |
-| `tablePrefix`  | no       | `<name>_` (hyphens → underscores)| SQLite table-name prefix; the cross-package collision guard.       |
+| Option        | Required | Default                           | Notes                                                            |
+| ------------- | -------- | --------------------------------- | ---------------------------------------------------------------- |
+| `name`        | yes      | —                                 | kebab-case, no `agent-` prefix (e.g. `budget`, `tool-registry`). |
+| `directory`   | no       | `packages/ai/agent-<name>`        | Target directory.                                                |
+| `description` | no       | derived                           | `package.json` description.                                      |
+| `tablePrefix` | no       | `<name>_` (hyphens → underscores) | SQLite table-name prefix; the cross-package collision guard.     |
 
 ## What it generates
 
@@ -40,7 +40,7 @@ Under `packages/ai/agent-<name>/`:
 - `project.json` — tags `["layer:ai","platform:node"]`; `build` (`@nx/js:tsc`,
   drizzle asset glob), `test` (`@nx/vite:test`), `typecheck`, `clean`,
   `db:generate`, `db:migrate`, and `nx-release-publish` (`dependsOn:
-  ["build","test"]`). `build`/`test`/`typecheck` inherit cache + `^build` from
+["build","test"]`). `build`/`test`/`typecheck` inherit cache + `^build` from
   `nx.json` `targetDefaults`.
 - `package.json` — `@adhd/agent-<name>`, only the deps the skeleton imports
   (`drizzle-orm`, `better-sqlite3`) to keep `@nx/dependency-checks` green.

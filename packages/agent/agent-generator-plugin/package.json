@@ -1,5 +1,5 @@
 {
-  "name": "@adhd/agent-nx",
+  "name": "@adhd/agent-generator-plugin",
   "version": "0.0.1",
   "description": "Nx generator for golden-path @adhd/agent-* registry packages (lint + cache + ^build inherited, README + rules doc)",
   "dependencies": {

@@ -9,6 +9,7 @@ All notable changes to `@adhd/agent-mcp-budget`. Format based on
 ## [0.0.2] — 2026-06-17
 
 ### Changed
+
 - **Package relocated from `packages/node-tools/` to `packages/ai/`** via
   `nx g @nx/workspace:move`. Import path `@adhd/agent-mcp-budget` and all
   runtime behaviour are unchanged. The move aligns this package with the rest of
@@ -19,6 +20,7 @@ All notable changes to `@adhd/agent-mcp-budget`. Format based on
   No change to production code — plugins depend on `@adhd/agent-mcp-types` as a peer.
 
 ### Fixed
+
 - **`vite.config.ts` now sets `emptyOutDir: true`.** Without this, Vite does not clear
   `dist/` between builds — the old `dist/package.json` (containing the previous version
   number) would survive a version bump and the wrong version would be published.
@@ -28,6 +30,7 @@ All notable changes to `@adhd/agent-mcp-budget`. Format based on
 ## [0.0.1] — 2026-06-16
 
 ### Added
+
 - Initial release. Budget enforcement plugin for `@adhd/agent-mcp`.
 - Registers a `pre:model_request` **enforcement** handler via
   `IHookRegistry.registerEnforcement()` — throws `IEnforcementError` when any
