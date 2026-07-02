@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { jsonschemaPlugin } from '../lib/plugin';
-import type { PluginInput } from '@adhd/apigen-core';
+import type { PluginInput } from '@adhd/apigen-core-client;
 
 const input: PluginInput = {
   packages: [

@@ -1,4 +1,4 @@
-import type { PluginInput, PluginOutput } from '@adhd/apigen-core';
+import type { PluginInput, PluginOutput } from '@adhd/apigen-core-client;
 import { generateStdioServer } from './templates/server-stdio.tpl';
 import { generateHttpServer } from './templates/server-http.tpl';
 

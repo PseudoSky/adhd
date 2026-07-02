@@ -26,8 +26,8 @@
 // adapter lives here; the real out-of-process Python adapter (`python-host` state) and a
 // fake/in-memory adapter (tests) implement the SAME interface and drop straight in.
 
-import { ApiError } from '@adhd/apigen-errors';
-import type { Operation, Transport } from '@adhd/apigen-core';
+import { ApiError } from '@adhd/apigen-base-errors';
+import type { Operation, Transport } from '@adhd/apigen-core-client;
 
 // ---------------------------------------------------------------------------
 // §13.1 / §9 — gateway-level error codes

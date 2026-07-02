@@ -8,7 +8,7 @@ import type {
   Result,
   Chunk,
   File,
-} from '@adhd/apigen-core';
+} from '@adhd/apigen-core-client;
 
 // Plugin-specific options — extend as needed.
 export interface LoggerOptions {

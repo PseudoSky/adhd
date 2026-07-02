@@ -17,7 +17,7 @@ import {
   collectWithPhase,
   isApiStream,
 } from './stream';
-import { ApiError } from '@adhd/apigen-errors';
+import { ApiError } from '@adhd/apigen-base-errors';
 
 // ---------------------------------------------------------------------------
 // Helper: make a simple range stream

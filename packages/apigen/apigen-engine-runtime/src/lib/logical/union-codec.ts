@@ -4,8 +4,8 @@ import type {
   SchemaNode,
   TranscodeCtx,
   Wire,
-} from '@adhd/apigen-logical';
-import { X_APIGEN_CODEC, X_APIGEN_LOGICAL } from '@adhd/apigen-logical';
+} from '@adhd/apigen-base-logical';
+import { X_APIGEN_CODEC, X_APIGEN_LOGICAL } from '@adhd/apigen-base-logical';
 
 // ---------------------------------------------------------------------------
 // Error types

@@ -4,13 +4,13 @@ import type {
   SchemaNode,
   TranscodeCtx,
   Wire,
-} from '@adhd/apigen-logical';
+} from '@adhd/apigen-base-logical';
 import {
   X_APIGEN_CODEC,
   X_APIGEN_CTOR,
   X_APIGEN_LOGICAL,
   X_APIGEN_TOJSON,
-} from '@adhd/apigen-logical';
+} from '@adhd/apigen-base-logical';
 
 /**
  * Reserved descriptor keyword carrying the extractor's **opt-in-instances**

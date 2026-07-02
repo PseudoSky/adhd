@@ -26,7 +26,7 @@ import {
   X_APIGEN_CODEC,
   X_APIGEN_CTOR,
   X_APIGEN_TOJSON,
-} from '@adhd/apigen-logical';
+} from '@adhd/apigen-base-logical';
 
 // ---------------------------------------------------------------------------
 // Public types

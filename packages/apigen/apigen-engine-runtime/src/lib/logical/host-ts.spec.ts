@@ -24,7 +24,7 @@ import {
   type SchemaNode,
   type TranscodeCtx,
   type Wire,
-} from '@adhd/apigen-logical';
+} from '@adhd/apigen-base-logical';
 import {
   tsHostBinding,
   WELL_KNOWN_TS_CODECS,
@@ -196,7 +196,7 @@ describe('tsHostBinding — negative control: coverage test has teeth', () => {
     // Build a partial binding by copying all codecs except 'uuid'.
     const partialMap = new Map<
       LogicalTypeId,
-      import('@adhd/apigen-logical').LogicalTypeCodec
+      import('@adhd/apigen-base-logical').LogicalTypeCodec
     >(tsHostBinding.codecs);
     partialMap.delete('uuid');
 
@@ -205,7 +205,7 @@ describe('tsHostBinding — negative control: coverage test has teeth', () => {
       logicalTypeVersion: tsHostBinding.logicalTypeVersion,
       codecs: Object.freeze(partialMap) as ReadonlyMap<
         LogicalTypeId,
-        import('@adhd/apigen-logical').LogicalTypeCodec
+        import('@adhd/apigen-base-logical').LogicalTypeCodec
       >,
     });
 
@@ -221,7 +221,7 @@ describe('tsHostBinding — negative control: coverage test has teeth', () => {
       logicalTypeVersion: tsHostBinding.logicalTypeVersion,
       codecs: Object.freeze(new Map()) as ReadonlyMap<
         LogicalTypeId,
-        import('@adhd/apigen-logical').LogicalTypeCodec
+        import('@adhd/apigen-base-logical').LogicalTypeCodec
       >,
     });
 

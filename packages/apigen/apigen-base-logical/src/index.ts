@@ -1,4 +1,4 @@
-// @adhd/apigen-logical — the contract spine for schema-driven, registry-based
+// @adhd/apigen-base-logical — the contract spine for schema-driven, registry-based
 // cross-host logical-type transcoding (DESIGN.md §4/§5/§13). Interfaces only at
 // this state: the codec contract, the registry, the descriptor extension
 // vocabulary, and the (not-yet-implemented) transcoder interface.

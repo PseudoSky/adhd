@@ -1,4 +1,4 @@
-import { composeSchemas } from '@adhd/apigen-core';
+import { composeSchemas } from '@adhd/apigen-core-client;
 import type {
   MiddlewareDef,
   ApiPackageOptions,

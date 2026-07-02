@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { toOpenApi } from './to-openapi'
-import type { Operation } from '@adhd/apigen-core'
+import type { Operation } from '@adhd/apigen-core-client
 
 // ---------------------------------------------------------------------------
 // Shared fixtures

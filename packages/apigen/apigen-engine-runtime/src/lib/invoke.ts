@@ -19,7 +19,7 @@
  *      weave at codegen with the same semantics.
  */
 
-import type { Operation } from '@adhd/apigen-core';
+import type { Operation } from '@adhd/apigen-core-client;
 import { dispatch } from './dispatch';
 import type { ComposedSchemas } from './types';
 

@@ -69,7 +69,7 @@ describe('plugin generator', () => {
   // Plugin interface (capabilities.{target,layer,...}) from @adhd/apigen-core
   // -------------------------------------------------------------------------
 
-  it('emits a plugin.ts that imports from @adhd/apigen-core (v2 types)', async () => {
+  it('emits a plugin.ts that imports from @adhd/apigen-core-client(v2 types)', async () => {
     const tree = createTreeWithEmptyWorkspace();
     tree.write(
       'tsconfig.base.json',
@@ -80,7 +80,7 @@ describe('plugin generator', () => {
       'packages/apigen/plugins/v2-check/src/lib/plugin.ts',
       'utf-8'
     )!;
-    expect(content).toContain('@adhd/apigen-core');
+    expect(content).toContain('@adhd/apigen-core-client);
     // must import Plugin (the v2 interface) — not the v1 OutputPlugin shape
     expect(content).toContain('Plugin');
     expect(content).not.toContain('OutputPlugin');
