@@ -16,6 +16,12 @@
     "test": {
       "executor": "@nx/vite:test",
       "outputs": ["{workspaceRoot}/coverage/packages/dispatch/dispatch-spec"],
+      "inputs": [
+        "default",
+        "^production",
+        "{workspaceRoot}/docs/plan/dispatch-production/dag.json",
+        { "externalDependencies": ["vitest"] }
+      ],
       "options": {
         "configFile": "packages/dispatch/dispatch-spec/vite.config.ts"
       }

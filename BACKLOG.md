@@ -470,10 +470,28 @@ plan's new `client-fixes` milestone; recorded here per disclosure policy until f
 
 ### DEBT-DISPATCH-007 — `plan.spec.ts` validates a file outside its nx input set (silent cache-hit)
 
-- **Where:** `packages/dispatch/dispatch-spec/src/test/plan.spec.ts` + `nx.json` test inputs.
+- **Where:** `packages/dispatch/dispatch-spec/src/test/plan.spec.ts` + its test target inputs.
 - **Symptom:** the test validates `docs/plan/dispatch-production/dag.json` at runtime, but that path is not part of dispatch-spec's nx test inputs — editing dag.json then running `nx test dispatch-spec` cache-hits and restores the *old* verdict without re-validating (observed 2026-07-02 while recording the client-fixes dispatch_log). The guard passes without running, the exact failure mode CLAUDE.md §6 forbids.
-- **Fix direction:** add `{workspaceRoot}/docs/plan/**/dag.json` to the test target's inputs for dispatch-spec (or move plan validation to a dedicated non-cached target the plan tooling owns). Until then, prove plan edits with a direct `vitest run` in the package.
-- **Status:** OPEN.
+- **Status:** FIXED 2026-07-02 — `dispatch-spec/project.json` test target declares `{workspaceRoot}/docs/plan/dispatch-production/dag.json` as an input. Differential proof: cache hit on rerun, then dag.json touch → live re-run (was a cache hit before the fix). Workspace-wide instances of the same class: DEBT-WORKSPACE-NX-INPUTS-001 below.
+
+### DEBT-WORKSPACE-NX-INPUTS-001 — tests reach outside their project root; nx cache/affected are blind to what they read
+
+**Discovered:** 2026-07-02, sweeping for the DEBT-DISPATCH-007 class after it bit twice (plan.spec.ts above; `18bf547` fixed agent-mcp drizzle paths that went stale the same way). Two coupled defect classes:
+
+**(a) Cache/affected blindness.** nx test inputs are `default` (`{projectRoot}/**/*`) + `^production` (graph dependencies only) + 3 externalDependencies; `sharedGlobals` is **empty**. Any runtime read outside those — repo-root files, `docs/`, sibling packages with no graph edge, another package's `dist/` — is invisible: stale cache hits locally, and `nx affected` skips the test in CI when the read file changes.
+
+**(b) Boundary violations (policy).** Packages must not reach into sibling packages or the repo root via `(\.\./)+` escapes at all. Every cross-package need is either a workspace import (creates the graph edge `^production` hashes), a package-owned fixture, an `implicitDependencies` declaration + declared input, or an injected path.
+
+**Audit (2026-07-02), 17 pattern hits, classified:**
+- `packages/ai/agent-mcp/src/__tests__/plugin-loader.test.ts:565` — **WORST; effectively a live bug.** Loads `dist/packages/ai/agent-mcp-budget/index.js` — the *pre-rename orphan build of a deleted package* (real package is now `packages/agent/agent-plugin-budget`). The "real budget plugin integration" test is pinned green against a ghost artifact; changes to the real plugin never reach it. Fix: repoint to `dist/packages/agent/agent-plugin-budget`, add `implicitDependencies: ["agent-plugin-budget"]` so `^build`/`^production` order and hash it.
+- `packages/ai/agent-mcp/src/__tests__/{index-wiring,live-wiring}.test.ts` — resolve 4 sibling `drizzle/` dirs (`agent-core-provider`, `agent-store-prompts`, `agent-store-tools`, `agent-core-policy`); agent-mcp imports none of them → no graph edge → migration changes don't invalidate. Already went stale once (`18bf547`).
+- `packages/agent/agent-engine-compiler/src/__tests__/compile-e2e.test.ts` (+ siblings) — same drizzle-dir pattern (3-up stays within `packages/agent/`, still cross-project); `compile-cli.test.ts` resolves `REPO_ROOT` 5-up.
+- `packages/apigen/cli/src/test/e2e/real-consumer.spec.ts` — `REPO_ROOT` 6-up; reads `packages/transform/src/lib/text.ts` + own `dist/` bin. `serve.spec.ts` — own `dist/` 5-up (own dist also needs `dependsOn: ["build"]` on the test target to be fresh).
+- **Benign (7 files):** `apigen/nx` + `agent-generator-plugin` generator specs — `tsconfig.base.json`/`../../../.eslintrc` strings are nx-devkit *virtual tree* writes, no real fs.
+- **Related rot:** `dist/packages/ai/` still contains 7 orphaned pre-rename outputs (`agent-compiler`, `agent-mcp-budget`, `agent-mcp-types`, `agent-policy`, `agent-provider`, `agent-registry`, `agent-tool-registry`) — ghost artifacts that let stale-path consumers keep passing. Delete them (each individually, no chained removals).
+
+**Remediation (sweep):** per offender: create the real graph edge (`implicitDependencies`) or move the fixture in-package; declare any legitimately-external file as an explicit `{workspaceRoot}/...` input; repoint stale dist paths; add `dependsOn: ["build"]` where a test executes its own dist; delete orphaned dist dirs; then an enforcement check (CI grep forbidding `(\.\./){3,}` path resolution under `packages/**/src`). Populate `sharedGlobals` with root configs that genuinely affect all targets (`tsconfig.base.json`, `.eslintrc.base.json`).
+- **Status:** OPEN — dispatch-spec instance fixed (reference pattern above); sweep queued after dispatch wave 2 lands to keep verification attribution clean.
 
 ## DEBT-WORKSPACE-VITE-PATHS-001 — Vite configs hardcode relative paths to dist/, coverage/, cacheDir/ instead of resolving from project config
 
