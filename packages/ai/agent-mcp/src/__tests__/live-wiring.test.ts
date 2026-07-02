@@ -88,15 +88,15 @@ import type { SessionDeps } from "../tools/session.js";
 //
 // test file is at:    packages/ai/agent-mcp/src/__tests__/    (__dirname)
 // registry packages:  packages/ai/agent-{provider,registry,tool-registry,policy}/
-// Relative path from __dirname: ../../../<package>/drizzle
+// Relative path from __dirname: ../../../<package>/drizzle (agent packages now under packages/agent/)
 //   (go up: __tests__ → src → agent-mcp → ai, then into sibling)
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
-const PROVIDER_MIGRATIONS      = path.resolve(__dirname, "../../../agent-provider/drizzle");
-const REGISTRY_MIGRATIONS      = path.resolve(__dirname, "../../../agent-registry/drizzle");
-const TOOL_REGISTRY_MIGRATIONS = path.resolve(__dirname, "../../../agent-tool-registry/drizzle");
-const POLICY_MIGRATIONS        = path.resolve(__dirname, "../../../agent-policy/drizzle");
+const PROVIDER_MIGRATIONS      = path.resolve(__dirname, "../../../../agent/agent-core-provider/drizzle");
+const REGISTRY_MIGRATIONS      = path.resolve(__dirname, "../../../../agent/agent-store-prompts/drizzle");
+const TOOL_REGISTRY_MIGRATIONS = path.resolve(__dirname, "../../../../agent/agent-store-tools/drizzle");
+const POLICY_MIGRATIONS        = path.resolve(__dirname, "../../../../agent/agent-core-policy/drizzle");
 
 // ── Flat-only agent fixture ───────────────────────────────────────────────────
 

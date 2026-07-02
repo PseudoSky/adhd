@@ -352,6 +352,10 @@ export class Orchestrator {
             stopReason: providerResponse.stopReason,
             hasContent: !!assistantMessage.content,
             toolCallCount: assistantMessage.toolCalls?.length ?? 0,
+            inputTokens: providerResponse.usage?.inputTokens,
+            outputTokens: providerResponse.usage?.outputTokens,
+            cacheReadTokens: providerResponse.usage?.cacheReadTokens,
+            cacheCreationTokens: providerResponse.usage?.cacheCreationTokens,
           },
         });
 
