@@ -1,18 +1,18 @@
-import { z } from "zod";
+import { z } from 'zod';
 
-import { taskUsageReportSchema } from "./usage.js";
+import { taskUsageReportSchema } from './usage.js';
 
 export const taskStatusSchema = z.enum([
-  "pending",
-  "running",
-  "completed",
-  "failed",
-  "cancelled",
-  "waiting",         // blocked on depends_on; DagEngine dispatches when all deps complete
-  "awaiting_input",  // suspended in HITL Promise; task_resume resolves it
+  'pending',
+  'running',
+  'completed',
+  'failed',
+  'cancelled',
+  'waiting', // blocked on depends_on; DagEngine dispatches when all deps complete
+  'awaiting_input', // suspended in HITL Promise; task_resume resolves it
 ]);
 
-export type { TaskStatus } from "@adhd/agent-mcp-types";
+export type { TaskStatus } from '@adhd/agent-base-types';
 
 export const taskSchema = z.object({
   id: z.string().uuid(),
@@ -31,25 +31,25 @@ export const taskSchema = z.object({
   cancelledAt: z.string().datetime().optional(),
   // Dependency DAG fields
   dependsOn: z.array(z.string().uuid()).optional().nullable(),
-  onUpstreamFailure: z.enum(["fail", "skip"]).optional().nullable(),
+  onUpstreamFailure: z.enum(['fail', 'skip']).optional().nullable(),
   inputs: z.record(z.string(), z.string()).optional().nullable(),
   // HITL suspension field (server-generated; not accepted from user input)
   resumeToken: z.string().uuid().optional().nullable(),
 });
 
-export type { Task } from "@adhd/agent-mcp-types";
+export type { Task } from '@adhd/agent-base-types';
 
 export const taskEventTypeSchema = z.enum([
-  "MODEL_REQUEST",
-  "MODEL_RESPONSE",
-  "TOOL_CALL",
-  "TOOL_RESULT",
-  "TASK_COMPLETED",
-  "TASK_FAILED",
-  "TASK_CANCELLED",
+  'MODEL_REQUEST',
+  'MODEL_RESPONSE',
+  'TOOL_CALL',
+  'TOOL_RESULT',
+  'TASK_COMPLETED',
+  'TASK_FAILED',
+  'TASK_CANCELLED',
 ]);
 
-export type { TaskEventType } from "@adhd/agent-mcp-types";
+export type { TaskEventType } from '@adhd/agent-base-types';
 
 export const taskEventSchema = z.object({
   id: z.string().uuid(),
@@ -59,7 +59,7 @@ export const taskEventSchema = z.object({
   createdAt: z.string().datetime(),
 });
 
-export type { TaskEvent } from "@adhd/agent-mcp-types";
+export type { TaskEvent } from '@adhd/agent-base-types';
 
 // Tool input/output schemas
 
@@ -69,7 +69,7 @@ const sessionModeSchema = z.object({
   prompt: z.string().min(1),
   background: z.boolean().default(false),
   depends_on: z.array(z.string().uuid()).optional(),
-  on_upstream_failure: z.enum(["fail", "skip"]).optional(),
+  on_upstream_failure: z.enum(['fail', 'skip']).optional(),
   stream: z.boolean().optional(),
   // resume_token is server-generated; not accepted from user input
 });
@@ -79,12 +79,15 @@ const ephemeralModeSchema = z.object({
   agent_name: z.string().min(1),
   prompt: z.string().min(1),
   depends_on: z.array(z.string().uuid()).optional(),
-  on_upstream_failure: z.enum(["fail", "skip"]).optional(),
+  on_upstream_failure: z.enum(['fail', 'skip']).optional(),
   stream: z.boolean().optional(),
   // resume_token is server-generated; not accepted from user input
 });
 
-export const taskToolInputSchema = z.union([sessionModeSchema, ephemeralModeSchema]);
+export const taskToolInputSchema = z.union([
+  sessionModeSchema,
+  ephemeralModeSchema,
+]);
 
 export const taskToolOutputSchema = z.object({
   task_id: z.string().uuid(),

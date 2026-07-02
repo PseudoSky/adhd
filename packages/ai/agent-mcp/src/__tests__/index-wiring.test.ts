@@ -42,7 +42,7 @@
  *     modules.  No other production files are modified.
  *   - Mocks: none (LLM boundary is not exercised — agentTool only starts a
  *     session, it does not run a model turn).  The real compileAgent from
- *     @adhd/agent-compiler is used throughout.
+ *     @adhd/agent-engine-compiler is used throughout.
  */
 
 import fs from "node:fs";
@@ -56,16 +56,16 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 
 // ── Registry seed APIs ────────────────────────────────────────────────────────
-import { seed as seedRegistry } from "@adhd/agent-registry";
-import { seed as seedToolRegistry } from "@adhd/agent-tool-registry";
-import { seed as seedProvider } from "@adhd/agent-provider";
-import { seed as seedPolicy } from "@adhd/agent-policy";
+import { seed as seedRegistry } from "@adhd/agent-store-prompts";
+import { seed as seedToolRegistry } from "@adhd/agent-store-tools";
+import { seed as seedProvider } from "@adhd/agent-core-provider";
+import { seed as seedPolicy } from "@adhd/agent-core-policy";
 
 // ── Fixture seeder + real compile function ───────────────────────────────────
-// Dynamic import required: @adhd/agent-compiler is an optional dep in this package
+// Dynamic import required: @adhd/agent-engine-compiler is an optional dep in this package
 // (lazily loaded via dynamic import in production index.ts);
 // @nx/enforce-module-boundaries forbids static imports of lazy-loaded libraries.
-const { seedFixtureAgent, compileAgent } = await import("@adhd/agent-compiler");
+const { seedFixtureAgent, compileAgent } = await import("@adhd/agent-engine-compiler");
 
 // ── The REAL factory under test (the composition root) ───────────────────────
 import { buildPromptResolver } from "../index.js";
@@ -83,15 +83,15 @@ import type { SessionDeps } from "../tools/session.js";
 // ── Migration folder references ───────────────────────────────────────────────
 //
 // test file is at:    packages/ai/agent-mcp/src/__tests__/
-// registry packages:  packages/ai/agent-{provider,registry,tool-registry,policy}/
+// agent packages:     packages/agent/agent-{core-provider,store-prompts,store-tools,core-policy}/
 // Relative path from __dirname: ../../../<package>/drizzle
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
-const PROVIDER_MIGRATIONS      = path.resolve(__dirname, "../../../agent-provider/drizzle");
-const REGISTRY_MIGRATIONS      = path.resolve(__dirname, "../../../agent-registry/drizzle");
-const TOOL_REGISTRY_MIGRATIONS = path.resolve(__dirname, "../../../agent-tool-registry/drizzle");
-const POLICY_MIGRATIONS        = path.resolve(__dirname, "../../../agent-policy/drizzle");
+const PROVIDER_MIGRATIONS      = path.resolve(__dirname, "../../../../agent/agent-core-provider/drizzle");
+const REGISTRY_MIGRATIONS      = path.resolve(__dirname, "../../../../agent/agent-store-prompts/drizzle");
+const TOOL_REGISTRY_MIGRATIONS = path.resolve(__dirname, "../../../../agent/agent-store-tools/drizzle");
+const POLICY_MIGRATIONS        = path.resolve(__dirname, "../../../../agent/agent-core-policy/drizzle");
 
 // ── Fixture constants ─────────────────────────────────────────────────────────
 

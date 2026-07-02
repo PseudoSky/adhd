@@ -1,6 +1,11 @@
-import { z } from "zod";
+import { z } from 'zod';
 
-export const messageRoleSchema = z.enum(["system", "user", "assistant", "tool"]);
+export const messageRoleSchema = z.enum([
+  'system',
+  'user',
+  'assistant',
+  'tool',
+]);
 
 export const toolCallSchema = z.object({
   id: z.string(),
@@ -25,4 +30,9 @@ export const messageSchema = z.object({
   createdAt: z.string().datetime(),
 });
 
-export type { MessageRole, ToolCall, ToolResult, Message } from "@adhd/agent-mcp-types";
+export type {
+  MessageRole,
+  ToolCall,
+  ToolResult,
+  Message,
+} from '@adhd/agent-base-types';

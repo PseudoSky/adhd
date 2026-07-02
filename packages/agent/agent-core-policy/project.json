@@ -1,0 +1,59 @@
+{
+  "name": "agent-core-policy",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/agent/agent-core-policy/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:ai", "platform:node"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/agent/agent-core-policy",
+        "main": "packages/agent/agent-core-policy/src/index.ts",
+        "tsConfig": "packages/agent/agent-core-policy/tsconfig.lib.json",
+        "clean": true,
+        "assets": [
+          {
+            "input": "packages/agent/agent-core-policy",
+            "glob": "drizzle/**/*",
+            "output": "."
+          }
+        ]
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/agent/agent-core-policy/tsconfig.json --noEmit"
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": ["{workspaceRoot}/coverage/packages/agent/agent-core-policy"],
+      "options": {
+        "configFile": "packages/agent/agent-core-policy/vite.config.ts"
+      }
+    },
+    "clean": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "rm -rf dist/packages/agent/agent-core-policy"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": ["build", "test"],
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  }
+}

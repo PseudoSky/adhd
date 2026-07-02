@@ -156,7 +156,7 @@ function buildUserMessage(messages: Message[]): string {
  * set is resolved from one of two sources in priority order:
  *
  *   1. compiledTools (AGENT_TOOL model) — the platform-alias array produced by
- *      `compileAgent({ platform: "claude_code" }).tools` via @adhd/agent-compiler.
+ *      `compileAgent({ platform: "claude_code" }).tools` via @adhd/agent-engine-compiler.
  *      This is the strategic source of truth: each string is a `TOOL_PLATFORM_BINDING`
  *      alias for the `claude_code` platform, derived from AGENT_TOOL grants in the
  *      registry. When compiledTools is supplied to the constructor, it is used as

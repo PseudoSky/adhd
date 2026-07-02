@@ -49,6 +49,10 @@ import * as path from 'node:path'
 import * as readline from 'node:readline'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { languageOfSource, type PluginLanguage } from '@adhd/apigen-core'
+import { ensurePythonEnv } from '@adhd/apigen-python-env'
+
+/** Interpreter provisioned by a prior startServe in this process (vs a user's APIGEN_PYTHON). */
+let _managedPython: string | undefined
 
 // ---------------------------------------------------------------------------
 // Language → default plugin
@@ -541,6 +545,13 @@ function getGrpcSession(port: number): http2.ClientHttp2Session {
       _grpcSessions.delete(key)
       session?.destroy()
     })
+    // Idle eviction: a backend that dies without a clean close/error (network
+    // hiccup, SIGKILL) would otherwise leave a stale entry until the next
+    // request touches it. setTimeout fires after 60s with no activity and
+    // closes the session, which triggers the 'close' eviction above.
+    session.setTimeout(60_000, () => session?.close())
+    // A cached idle session must never hold the event loop open by itself.
+    session.unref()
     _grpcSessions.set(key, session)
   }
   return session
@@ -1137,6 +1148,30 @@ export async function startServe(opts: {
   const log = opts.log ?? ((m: string) => process.stderr.write(`${m}\n`))
   const cliPath = opts.cliPath ?? selfCliPath()
   const hosts = resolveHosts(opts.sources, opts.mounts ?? {})
+
+  // Pre-provision the managed Python interpreter BEFORE spawning any Python
+  // host: a first-time venv bootstrap (pip install of apigen-python[grpc])
+  // takes longer than the per-host ready timeout, so doing it here keeps that
+  // budget for actual server startup. Children are pinned to the provisioned
+  // interpreter via APIGEN_PYTHON so they skip resolution entirely.
+  //
+  // APIGEN_PYTHON set by the USER is an override we respect verbatim. One set
+  // by a PREVIOUS startServe in this process (tracked via _managedPython) must
+  // NOT short-circuit provisioning — a later serve may need more extras (a
+  // flask-only serve provisions none; a grpc serve then needs 'grpc'), and
+  // ensurePythonEnv unions extras into the same interpreter path.
+  const pyPlugins = new Set(['py-flask', 'py-grpc'])
+  const pyOverride = process.env['APIGEN_PYTHON']
+  const userOverrode = pyOverride !== undefined && pyOverride !== _managedPython
+  if (hosts.some((h) => pyPlugins.has(h.plugin)) && !userOverrode) {
+    const needsGrpc = hosts.some((h) => h.plugin === 'py-grpc')
+    log(`[serve] provisioning python env${needsGrpc ? ' (grpc)' : ''}…`)
+    delete process.env['APIGEN_PYTHON'] // let ensurePythonEnv manage the venv
+    const pyenv = ensurePythonEnv({ extras: needsGrpc ? ['grpc'] : [] })
+    _managedPython = pyenv.python
+    process.env['APIGEN_PYTHON'] = pyenv.python
+    log(`[serve] python: ${pyenv.python}`)
+  }
 
   // Assign a free port to each host, then spawn.
   for (const h of hosts) {

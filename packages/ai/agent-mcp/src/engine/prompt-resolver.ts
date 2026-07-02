@@ -9,9 +9,9 @@
  *
  * compileAgent is injected as a parameter (compileAgentFn) so tests can stub it
  * without modifying production code.  Production callers pass the real
- * `compileAgent` from @adhd/agent-compiler.
+ * `compileAgent` from @adhd/agent-engine-compiler.
  *
- * [compiler-integration.1] — imports compileAgent from @adhd/agent-compiler
+ * [compiler-integration.1] — imports compileAgent from @adhd/agent-engine-compiler
  * [compiler-integration.2] — caches/looks up the composed prompt and writes composed_prompt_id
  */
 
@@ -19,7 +19,7 @@ import { createHash } from "node:crypto";
 
 import type { BetterSQLite3Database } from "drizzle-orm/better-sqlite3";
 
-import type { CompileInput, CompiledAgent } from "@adhd/agent-compiler";
+import type { CompileInput, CompiledAgent } from "@adhd/agent-engine-compiler";
 import type { ComposedPromptStore } from "../store/composed-prompt-store.js";
 import { logger } from "../logger.js";
 
@@ -43,7 +43,7 @@ export interface ResolveResult {
 
 /**
  * Injectable compile function — matches the signature of
- * `compileAgent` from @adhd/agent-compiler so tests can stub it.
+ * `compileAgent` from @adhd/agent-engine-compiler so tests can stub it.
  */
 export type CompileAgentFn = (input: CompileInput) => CompiledAgent;
 
@@ -51,7 +51,7 @@ export interface PromptResolverDeps {
     /** Agent-mcp's own composed_prompts cache store. */
     composedPromptStore: ComposedPromptStore;
     /**
-     * The compileAgent function from @adhd/agent-compiler.
+     * The compileAgent function from @adhd/agent-engine-compiler.
      * Injectable so tests can stub without touching production code.
      */
     compileAgentFn: CompileAgentFn;

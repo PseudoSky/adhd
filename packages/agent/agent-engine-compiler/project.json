@@ -1,0 +1,74 @@
+{
+  "name": "agent-engine-compiler",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/agent/agent-engine-compiler/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:ai", "platform:node"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/agent/agent-engine-compiler",
+        "main": "packages/agent/agent-engine-compiler/src/index.ts",
+        "tsConfig": "packages/agent/agent-engine-compiler/tsconfig.lib.json",
+        "clean": true,
+        "assets": [
+          {
+            "input": "packages/agent/agent-engine-compiler",
+            "glob": "drizzle/**/*",
+            "output": "."
+          }
+        ]
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": ["{options.reportsDirectory}"],
+      "options": {
+        "configFile": "packages/agent/agent-engine-compiler/vite.config.ts",
+        "reportsDirectory": "../../../coverage/packages/agent/agent-engine-compiler"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/agent/agent-engine-compiler/tsconfig.json --noEmit"
+      }
+    },
+    "db:generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "drizzle-kit generate",
+        "cwd": "packages/agent/agent-engine-compiler"
+      }
+    },
+    "db:migrate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "drizzle-kit migrate",
+        "cwd": "packages/agent/agent-engine-compiler"
+      }
+    },
+    "clean": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "rm -rf dist/packages/agent/agent-engine-compiler"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": ["build", "test"],
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  }
+}
