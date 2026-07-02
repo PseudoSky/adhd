@@ -1,4 +1,9 @@
-import type { LogicalTypeCodec, SchemaNode, TranscodeCtx, Wire } from '../contracts';
+import type {
+  LogicalTypeCodec,
+  SchemaNode,
+  TranscodeCtx,
+  Wire,
+} from '../contracts';
 
 /**
  * @stable Codec for `{type: 'string', format: 'byte'}`.
@@ -28,7 +33,9 @@ export const byteCodec: LogicalTypeCodec<Uint8Array> = {
     if (typeof wire !== 'string') {
       if (ctx.mode === 'strict') {
         throw new TypeError(
-          `[byte] expected a base64 string on the wire at "${ctx.path}", got ${typeof wire}`,
+          `[byte] expected a base64 string on the wire at "${
+            ctx.path
+          }", got ${typeof wire}`
         );
       }
       return new Uint8Array(0);
@@ -36,7 +43,7 @@ export const byteCodec: LogicalTypeCodec<Uint8Array> = {
     // Validate standard base64 alphabet (not URL-safe).
     if (ctx.mode === 'strict' && !/^[A-Za-z0-9+/]*={0,2}$/.test(wire)) {
       throw new TypeError(
-        `[byte] wire value at "${ctx.path}" is not standard base64 (format:byte): "${wire}"`,
+        `[byte] wire value at "${ctx.path}" is not standard base64 (format:byte): "${wire}"`
       );
     }
     return new Uint8Array(Buffer.from(wire, 'base64'));

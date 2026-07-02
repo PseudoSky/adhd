@@ -35,16 +35,17 @@ import {
  * MUST have an entry for each of these ids.
  */
 export const CANONICAL_LOGICAL_TYPE_IDS = [
-  dateTimeCodec.id,   // 'date-time'
-  int64Codec.id,      // 'int64'
-  decimalCodec.id,    // 'decimal'
-  byteCodec.id,       // 'byte'
-  uuidCodec.id,       // 'uuid'
+  dateTimeCodec.id, // 'date-time'
+  int64Codec.id, // 'int64'
+  decimalCodec.id, // 'decimal'
+  byteCodec.id, // 'byte'
+  uuidCodec.id, // 'uuid'
   numberSpecialCodec.id, // 'number-special'
 ] as const satisfies ReadonlyArray<string>;
 
 /** @stable Union of the canonical well-known scalar ids. */
-export type CanonicalLogicalTypeId = (typeof CANONICAL_LOGICAL_TYPE_IDS)[number];
+export type CanonicalLogicalTypeId =
+  (typeof CANONICAL_LOGICAL_TYPE_IDS)[number];
 
 // ---------------------------------------------------------------------------
 // Per-language template table type
@@ -80,13 +81,13 @@ const TYPESCRIPT_COLUMN: LanguageTable = {
     mode: 'native',
   },
 
-  'int64': {
+  int64: {
     encode: 'String($)',
     decode: 'BigInt($)',
     mode: 'native',
   },
 
-  'decimal': {
+  decimal: {
     // Default: branded string (zero-dep); opt-in to decimal.js for arithmetic.
     // DESIGN §13.2 branded row / §18 resolved: mode:'branded', dep declared so
     // generators can optionally inject it; consumers that never use Decimal
@@ -98,13 +99,13 @@ const TYPESCRIPT_COLUMN: LanguageTable = {
     mode: 'branded',
   },
 
-  'byte': {
+  byte: {
     encode: "Buffer.from($).toString('base64')",
     decode: "new Uint8Array(Buffer.from($, 'base64'))",
     mode: 'native',
   },
 
-  'uuid': {
+  uuid: {
     // UUID is a plain string in TS; encode normalises to lowercase.
     encode: '$.toLowerCase()',
     decode: '$',
@@ -131,27 +132,27 @@ const PYTHON_COLUMN: LanguageTable = {
     mode: 'native',
   },
 
-  'int64': {
+  int64: {
     encode: 'str($)',
     decode: 'int($)',
     mode: 'native',
   },
 
-  'decimal': {
+  decimal: {
     encode: 'str($)',
     decode: 'Decimal($)',
     imports: ['from decimal import Decimal'],
     mode: 'native',
   },
 
-  'byte': {
+  byte: {
     encode: 'b64encode($).decode()',
     decode: 'b64decode($)',
     imports: ['from base64 import b64encode, b64decode'],
     mode: 'native',
   },
 
-  'uuid': {
+  uuid: {
     encode: 'str($)',
     decode: 'UUID($)',
     imports: ['from uuid import UUID'],
@@ -183,7 +184,7 @@ const RUST_COLUMN: LanguageTable = {
     mode: 'lib',
   },
 
-  'int64': {
+  int64: {
     // serde_with DisplayFromStr for i64/u64.
     encode: '__SCAFFOLD_RUST_INT64_ENCODE__',
     decode: '__SCAFFOLD_RUST_INT64_DECODE__',
@@ -192,7 +193,7 @@ const RUST_COLUMN: LanguageTable = {
     mode: 'lib',
   },
 
-  'decimal': {
+  decimal: {
     encode: '__SCAFFOLD_RUST_DECIMAL_ENCODE__',
     decode: '__SCAFFOLD_RUST_DECIMAL_DECODE__',
     imports: ['use rust_decimal::Decimal;'],
@@ -200,7 +201,7 @@ const RUST_COLUMN: LanguageTable = {
     mode: 'lib',
   },
 
-  'byte': {
+  byte: {
     // serde_with Base64 attribute.
     encode: '__SCAFFOLD_RUST_BYTE_ENCODE__',
     decode: '__SCAFFOLD_RUST_BYTE_DECODE__',
@@ -209,7 +210,7 @@ const RUST_COLUMN: LanguageTable = {
     mode: 'lib',
   },
 
-  'uuid': {
+  uuid: {
     encode: '__SCAFFOLD_RUST_UUID_ENCODE__',
     decode: '__SCAFFOLD_RUST_UUID_DECODE__',
     imports: ['use uuid::Uuid;'],
@@ -238,7 +239,7 @@ const GO_COLUMN: LanguageTable = {
     mode: 'native',
   },
 
-  'int64': {
+  int64: {
     // struct tag `json:"x,string"` or math/big for arbitrary precision.
     encode: '__SCAFFOLD_GO_INT64_ENCODE__',
     decode: '__SCAFFOLD_GO_INT64_DECODE__',
@@ -246,7 +247,7 @@ const GO_COLUMN: LanguageTable = {
     mode: 'native',
   },
 
-  'decimal': {
+  decimal: {
     encode: '__SCAFFOLD_GO_DECIMAL_ENCODE__',
     decode: '__SCAFFOLD_GO_DECIMAL_DECODE__',
     imports: ['"github.com/shopspring/decimal"'],
@@ -254,7 +255,7 @@ const GO_COLUMN: LanguageTable = {
     mode: 'lib',
   },
 
-  'byte': {
+  byte: {
     // encoding/base64 — stdlib.
     encode: '__SCAFFOLD_GO_BYTE_ENCODE__',
     decode: '__SCAFFOLD_GO_BYTE_DECODE__',
@@ -262,7 +263,7 @@ const GO_COLUMN: LanguageTable = {
     mode: 'native',
   },
 
-  'uuid': {
+  uuid: {
     encode: '__SCAFFOLD_GO_UUID_ENCODE__',
     decode: '__SCAFFOLD_GO_UUID_DECODE__',
     imports: ['"github.com/google/uuid"'],
@@ -292,7 +293,7 @@ const JAVA_COLUMN: LanguageTable = {
     mode: 'lib',
   },
 
-  'int64': {
+  int64: {
     // @JsonFormat(shape=STRING) on Long / BigInteger — stdlib Jackson.
     encode: '__SCAFFOLD_JAVA_INT64_ENCODE__',
     decode: '__SCAFFOLD_JAVA_INT64_DECODE__',
@@ -300,7 +301,7 @@ const JAVA_COLUMN: LanguageTable = {
     mode: 'native',
   },
 
-  'decimal': {
+  decimal: {
     // @JsonSerialize(using=ToStringSerializer) on BigDecimal — stdlib Jackson.
     encode: '__SCAFFOLD_JAVA_DECIMAL_ENCODE__',
     decode: '__SCAFFOLD_JAVA_DECIMAL_DECODE__',
@@ -308,14 +309,14 @@ const JAVA_COLUMN: LanguageTable = {
     mode: 'native',
   },
 
-  'byte': {
+  byte: {
     // byte[] serialises as base64 by default in Jackson.
     encode: '__SCAFFOLD_JAVA_BYTE_ENCODE__',
     decode: '__SCAFFOLD_JAVA_BYTE_DECODE__',
     mode: 'native',
   },
 
-  'uuid': {
+  uuid: {
     // UUID.toString() / UUID.fromString() — stdlib Java.
     encode: '__SCAFFOLD_JAVA_UUID_ENCODE__',
     decode: '__SCAFFOLD_JAVA_UUID_DECODE__',
@@ -344,13 +345,14 @@ const JAVA_COLUMN: LanguageTable = {
  *
  * Keyed by {@link HostLanguage}, then by the canonical {@link CanonicalLogicalTypeId}.
  */
-export const TEMPLATE_CELLS: Readonly<Record<HostLanguage, LanguageTable>> = Object.freeze({
-  typescript: TYPESCRIPT_COLUMN,
-  python:     PYTHON_COLUMN,
-  rust:       RUST_COLUMN,
-  go:         GO_COLUMN,
-  java:       JAVA_COLUMN,
-});
+export const TEMPLATE_CELLS: Readonly<Record<HostLanguage, LanguageTable>> =
+  Object.freeze({
+    typescript: TYPESCRIPT_COLUMN,
+    python: PYTHON_COLUMN,
+    rust: RUST_COLUMN,
+    go: GO_COLUMN,
+    java: JAVA_COLUMN,
+  });
 
 // ---------------------------------------------------------------------------
 // Derivation helpers (DESIGN §14.1)
@@ -372,10 +374,11 @@ export function cellsFor(language: HostLanguage): LanguageTable {
  */
 export function depsForLogicalTypes(
   ids: ReadonlyArray<string>,
-  language: HostLanguage,
+  language: HostLanguage
 ): Array<{ id: string; dep: { name: string; version: string } }> {
   const column = TEMPLATE_CELLS[language];
-  const result: Array<{ id: string; dep: { name: string; version: string } }> = [];
+  const result: Array<{ id: string; dep: { name: string; version: string } }> =
+    [];
   for (const id of ids) {
     const cell = column[id as CanonicalLogicalTypeId];
     if (cell?.dep) {
@@ -399,7 +402,9 @@ export function depsForLogicalTypes(
  *
  * @returns A record keyed by canonical logical-type id (= JSON-Schema `format`).
  */
-export function tsDepMap(): Readonly<Record<string, { name: string; version: string }>> {
+export function tsDepMap(): Readonly<
+  Record<string, { name: string; version: string }>
+> {
   const column = TEMPLATE_CELLS.typescript;
   const out: Record<string, { name: string; version: string }> = {};
   for (const id of CANONICAL_LOGICAL_TYPE_IDS) {
@@ -431,7 +436,7 @@ export function tsDepMap(): Readonly<Record<string, { name: string; version: str
  */
 export function assertNoEmptyCells(
   language: HostLanguage,
-  _tableOverride?: Partial<LanguageTable>,
+  _tableOverride?: Partial<LanguageTable>
 ): void {
   const column: Partial<LanguageTable> =
     _tableOverride ?? TEMPLATE_CELLS[language];
@@ -443,7 +448,9 @@ export function assertNoEmptyCells(
   }
   if (missing.length > 0) {
     throw new Error(
-      `[hints] assertNoEmptyCells: language "${language}" is missing cells for: ${missing.join(', ')}`,
+      `[hints] assertNoEmptyCells: language "${language}" is missing cells for: ${missing.join(
+        ', '
+      )}`
     );
   }
 }

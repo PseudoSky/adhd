@@ -1,4 +1,9 @@
-import type { LogicalTypeCodec, SchemaNode, TranscodeCtx, Wire } from '../contracts';
+import type {
+  LogicalTypeCodec,
+  SchemaNode,
+  TranscodeCtx,
+  Wire,
+} from '../contracts';
 
 /**
  * @stable Branded primitive type for decimal values (mode:'branded', DESIGN §14.2).
@@ -46,14 +51,16 @@ export const decimalCodec: LogicalTypeCodec<DecimalString> = {
     if (typeof wire !== 'string') {
       if (ctx.mode === 'strict') {
         throw new TypeError(
-          `[decimal] expected a string on the wire at "${ctx.path}", got ${typeof wire}`,
+          `[decimal] expected a string on the wire at "${
+            ctx.path
+          }", got ${typeof wire}`
         );
       }
       return makeDecimal(String(wire));
     }
     if (ctx.mode === 'strict' && !/^-?\d+(\.\d+)?$/.test(wire)) {
       throw new TypeError(
-        `[decimal] wire value "${wire}" at "${ctx.path}" is not a valid decimal string`,
+        `[decimal] wire value "${wire}" at "${ctx.path}" is not a valid decimal string`
       );
     }
     return makeDecimal(wire);

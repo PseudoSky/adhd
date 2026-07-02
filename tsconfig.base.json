@@ -67,6 +67,9 @@
       "@adhd/agent-store-tools": [
         "./packages/agent/agent-store-tools/src/index.ts"
       ],
+      "@adhd/apigen-base-logical": [
+        "packages/apigen/apigen-base-logical/src/index.ts"
+      ],
       "@adhd/apigen-cli": [
         "./packages/apigen/cli/src/index.ts"
       ],

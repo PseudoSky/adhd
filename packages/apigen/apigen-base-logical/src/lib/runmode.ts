@@ -35,14 +35,14 @@ import type { LogicalTypeRegistry } from './registry';
  */
 function buildCtx(
   registry: LogicalTypeRegistry,
-  override?: Partial<TranscodeCtx>,
+  override?: Partial<TranscodeCtx>
 ): TranscodeCtx {
   return {
     registry,
     resolve: (ref) => {
       throw new Error(
         `[apigen-logical] $ref "${ref}" cannot be resolved in run-mode without a descriptor root. ` +
-          `Supply a resolve() in the ctx override to handle $ref.`,
+          `Supply a resolve() in the ctx override to handle $ref.`
       );
     },
     seen: new WeakSet<object>(),
@@ -64,7 +64,11 @@ function buildCtx(
  *   6. schema-less (type absent / additionalProperties-only) → envelope.
  *   7. Plain JSON passthrough.
  */
-function encodeNode(value: unknown, schema: SchemaNode, ctx: TranscodeCtx): Wire {
+function encodeNode(
+  value: unknown,
+  schema: SchemaNode,
+  ctx: TranscodeCtx
+): Wire {
   // ── 1. Registered codec wins ───────────────────────────────────────────────
   const codec = ctx.registry.resolve(schema);
   if (codec) {
@@ -110,7 +114,7 @@ function encodeNode(value: unknown, schema: SchemaNode, ctx: TranscodeCtx): Wire
       }) as Wire[];
     }
     return (value as unknown[]).map((el, i) =>
-      encodeNode(el, items, { ...ctx, path: `${childPath}/${i}` }),
+      encodeNode(el, items, { ...ctx, path: `${childPath}/${i}` })
     ) as Wire[];
   }
 
@@ -119,7 +123,9 @@ function encodeNode(value: unknown, schema: SchemaNode, ctx: TranscodeCtx): Wire
     if (value === null || typeof value !== 'object' || Array.isArray(value)) {
       return encodeSchemaless(value, schema, ctx);
     }
-    const props = schema['properties'] as Record<string, SchemaNode> | undefined;
+    const props = schema['properties'] as
+      | Record<string, SchemaNode>
+      | undefined;
     if (!props) {
       // No properties → passthrough (plain object)
       return encodePassthrough(value) as Wire;
@@ -129,7 +135,10 @@ function encodeNode(value: unknown, schema: SchemaNode, ctx: TranscodeCtx): Wire
     for (const [k, propSchema] of Object.entries(props)) {
       const v = (value as Record<string, unknown>)[k];
       if (v !== undefined) {
-        result[k] = encodeNode(v, propSchema, { ...ctx, path: `${childPath}/${k}` });
+        result[k] = encodeNode(v, propSchema, {
+          ...ctx,
+          path: `${childPath}/${k}`,
+        });
       }
     }
     return result;
@@ -150,7 +159,11 @@ function encodeNode(value: unknown, schema: SchemaNode, ctx: TranscodeCtx): Wire
  * Mirror of `encodeNode`: codec → $ref → oneOf → array → object → envelope →
  * passthrough.
  */
-function decodeNode(wire: Wire, schema: SchemaNode, ctx: TranscodeCtx): unknown {
+function decodeNode(
+  wire: Wire,
+  schema: SchemaNode,
+  ctx: TranscodeCtx
+): unknown {
   // ── 1. Registered codec wins ───────────────────────────────────────────────
   const codec = ctx.registry.resolve(schema);
   if (codec) {
@@ -195,7 +208,7 @@ function decodeNode(wire: Wire, schema: SchemaNode, ctx: TranscodeCtx): unknown 
       });
     }
     return wire.map((el, i) =>
-      decodeNode(el, items, { ...ctx, path: `${childPath}/${i}` }),
+      decodeNode(el, items, { ...ctx, path: `${childPath}/${i}` })
     );
   }
 
@@ -204,7 +217,9 @@ function decodeNode(wire: Wire, schema: SchemaNode, ctx: TranscodeCtx): unknown 
     if (wire === null || typeof wire !== 'object' || Array.isArray(wire)) {
       return wire;
     }
-    const props = schema['properties'] as Record<string, SchemaNode> | undefined;
+    const props = schema['properties'] as
+      | Record<string, SchemaNode>
+      | undefined;
     if (!props) {
       return wire;
     }
@@ -213,7 +228,10 @@ function decodeNode(wire: Wire, schema: SchemaNode, ctx: TranscodeCtx): unknown 
     for (const [k, propSchema] of Object.entries(props)) {
       const v = (wire as Record<string, Wire>)[k];
       if (v !== undefined) {
-        result[k] = decodeNode(v, propSchema, { ...ctx, path: `${childPath}/${k}` });
+        result[k] = decodeNode(v, propSchema, {
+          ...ctx,
+          path: `${childPath}/${k}`,
+        });
       }
     }
     return result;
@@ -240,7 +258,7 @@ function pickUnionBranch(
   value: unknown,
   oneOf: SchemaNode[],
   schema: SchemaNode,
-  _ctx: TranscodeCtx,
+  _ctx: TranscodeCtx
 ): SchemaNode {
   const discriminator = schema['discriminator'] as
     | { propertyName?: string; mapping?: Record<string, string> }
@@ -279,7 +297,7 @@ function pickUnionBranch(
 function encodeSchemaless(
   value: unknown,
   _schema: SchemaNode,
-  ctx: TranscodeCtx,
+  ctx: TranscodeCtx
 ): Wire {
   // Try to find a codec by scanning the registry for one that matches the
   // value directly (e.g. a Date instance). We use a heuristic: attempt every
@@ -435,7 +453,7 @@ export function buildTranscoder(registry: LogicalTypeRegistry): Transcoder {
 export function tryRegister(
   registry: LogicalTypeRegistry,
   _id: string,
-  loader: () => LogicalTypeCodec,
+  loader: () => LogicalTypeCodec
 ): void {
   try {
     const codec = loader();
@@ -463,10 +481,5 @@ function isModuleNotFound(err: unknown): boolean {
 }
 
 // Re-export the Transcoder interface so consumers can import from this module.
-export type {
-  Transcoder,
-  SchemaNode,
-  TranscodeCtx,
-  Wire,
-} from './contracts';
+export type { Transcoder, SchemaNode, TranscodeCtx, Wire } from './contracts';
 export type { LogicalTypeRegistry } from './registry';

@@ -1,4 +1,9 @@
-import type { LogicalTypeCodec, SchemaNode, TranscodeCtx, Wire } from '../contracts';
+import type {
+  LogicalTypeCodec,
+  SchemaNode,
+  TranscodeCtx,
+  Wire,
+} from '../contracts';
 
 /**
  * @stable Codec for `{type: 'string', format: 'int64'}`.
@@ -26,7 +31,9 @@ export const int64Codec: LogicalTypeCodec<bigint> = {
     if (typeof wire !== 'string') {
       if (ctx.mode === 'strict') {
         throw new TypeError(
-          `[int64] expected a string on the wire at "${ctx.path}", got ${typeof wire}`,
+          `[int64] expected a string on the wire at "${
+            ctx.path
+          }", got ${typeof wire}`
         );
       }
       // DEBT-LT-002 (non-string lossy path): BigInt() throws SyntaxError for

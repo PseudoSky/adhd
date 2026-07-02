@@ -1,4 +1,9 @@
-import type { LogicalTypeCodec, SchemaNode, TranscodeCtx, Wire } from '../contracts';
+import type {
+  LogicalTypeCodec,
+  SchemaNode,
+  TranscodeCtx,
+  Wire,
+} from '../contracts';
 
 /**
  * @stable Codec for `{type: 'string', format: 'date-time'}`.
@@ -25,7 +30,9 @@ export const dateTimeCodec: LogicalTypeCodec<Date> = {
     if (typeof wire !== 'string') {
       if (ctx.mode === 'strict') {
         throw new TypeError(
-          `[date-time] expected a string on the wire at "${ctx.path}", got ${typeof wire}`,
+          `[date-time] expected a string on the wire at "${
+            ctx.path
+          }", got ${typeof wire}`
         );
       }
       return new Date(String(wire));
@@ -35,7 +42,9 @@ export const dateTimeCodec: LogicalTypeCodec<Date> = {
     // silently violates the "validate-then-construct" contract (contracts.ts:37).
     if (ctx.mode === 'strict' && Number.isNaN(new Date(wire).getTime())) {
       throw new TypeError(
-        `[date-time] invalid date-time string at "${ctx.path}": ${JSON.stringify(wire)}`,
+        `[date-time] invalid date-time string at "${
+          ctx.path
+        }": ${JSON.stringify(wire)}`
       );
     }
     return new Date(wire);
