@@ -6,7 +6,7 @@ import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/ai/agent-mcp-budget',
+  cacheDir: '../../../node_modules/.vite/packages/agent/agent-plugin-budget',
 
   plugins: [
     nxViteTsPaths(),
@@ -24,7 +24,7 @@ export default defineConfig({
   // Configuration for building your library.
   // See: https://vitejs.dev/guide/build.html#library-mode
   build: {
-    outDir: '../../../dist/packages/ai/agent-mcp-budget',
+    outDir: '../../../dist/packages/agent/agent-plugin-budget',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {
@@ -55,7 +55,7 @@ export default defineConfig({
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../../coverage/packages/ai/agent-mcp-budget',
+      reportsDirectory: '../../../coverage/packages/agent/agent-plugin-budget',
       provider: 'v8',
     },
   },

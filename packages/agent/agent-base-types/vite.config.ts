@@ -6,7 +6,7 @@ import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/ai/agent-mcp-types',
+  cacheDir: '../../../node_modules/.vite/packages/agent/agent-base-types',
 
   plugins: [
     nxViteTsPaths(),
@@ -24,7 +24,7 @@ export default defineConfig({
   // Configuration for building your library.
   // See: https://vitejs.dev/guide/build.html#library-mode
   build: {
-    outDir: '../../../dist/packages/ai/agent-mcp-types',
+    outDir: '../../../dist/packages/agent/agent-base-types',
     // Clean the output dir on every build. outDir is outside `root`, so vite
     // defaults emptyOutDir to false — which left a STALE dist/package.json
     // (old version) in place, because @nx/vite:build only writes the dist
@@ -62,7 +62,7 @@ export default defineConfig({
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../../coverage/packages/ai/agent-mcp-types',
+      reportsDirectory: '../../../coverage/packages/agent/agent-base-types',
       provider: 'v8',
     },
   },
