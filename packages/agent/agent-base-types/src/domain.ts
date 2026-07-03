@@ -240,6 +240,12 @@ export interface AgentDefinition {
    * Has no effect on ephemeral tasks (no DB row to persist the resume token).
    */
   allowHumanInput?: boolean;
+  /**
+   * Controls how MCP tools are advertised to the model:
+   * - `"names"` (default): list tool names in a compact doc block
+   * - `"full"`: include full JSON Schema for each tool
+   */
+  toolAdvertisement?: 'names' | 'full';
   createdAt: string;
   updatedAt: string;
 }
