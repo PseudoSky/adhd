@@ -59,7 +59,7 @@ export class ToolStoreError extends Error {
 // ToolStore
 //
 // Thin Drizzle queries over tool_types and tools.
-// Mirrors the pattern in packages/ai/agent-mcp/src/store/agent-store.ts.
+// Mirrors the pattern in entrypoint/agent-mcp's AgentStore (agent-cache-store pattern).
 // Constructor accepts a BetterSQLite3Database so tests can inject their own
 // connection without touching the production singleton in client.ts.
 // ──────────────────────────────────────────────
