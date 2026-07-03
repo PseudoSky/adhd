@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "id": "workspace-codegen-nx-types",
+  "title": "Scaffold a types package",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Package name (default: 'types' — becomes <group>-types[-<name>])",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "group": {
+      "type": "string",
+      "description": "Domain/group (e.g. apigen, agent, dispatch)",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    }
+  },
+  "required": ["group"]
+}

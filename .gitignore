@@ -72,7 +72,10 @@ calc-server.*
 # agent-mcp secret store — ADHD_AGENT_* secrets live in ~/.adhd/.env (outside
 # the repo) but a project-local .adhd/.env is also supported for convenience.
 # Never track it.
-.adhd/
+# Track workspace.json — it's the canonical config for the generator.
+.adhd/*
+!.adhd/workspace.json
+.adhd/.env
 
 # Local env files — may hold secrets; never commit. `.env.example` templates ARE tracked.
 .env

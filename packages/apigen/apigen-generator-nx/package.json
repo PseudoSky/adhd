@@ -1,0 +1,15 @@
+{
+  "name": "@adhd/apigen-generator-nx",
+  "version": "0.0.1",
+  "dependencies": {
+    "@nx/devkit": "*"
+  },
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "typings": "./index.d.ts",
+  "generators": "./generators.json",
+  "executors": "./executors.json",
+  "publishConfig": {
+    "access": "public"
+  }
+}

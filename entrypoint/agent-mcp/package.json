@@ -1,0 +1,24 @@
+{
+  "name": "@adhd/agent-mcp",
+  "version": "2.0.0",
+  "type": "module",
+  "bin": {
+    "agent-mcp": "./src/index.js",
+    "agent-mcp-tail": "./src/scripts/agent-mcp-tail.js"
+  },
+  "dependencies": {
+    "@adhd/agent-store-runtime": "*",
+    "@adhd/agent-store-prompts": "*",
+    "@adhd/agent-engine-orchestrator": "*",
+    "@modelcontextprotocol/sdk": "*",
+    "pino": "*",
+    "drizzle-orm": "*",
+    "better-sqlite3": "*",
+    "dotenv": "*",
+    "zod": "*"
+  },
+  "devDependencies": {
+    "@adhd/agent-base-types": "*"
+  },
+  "main": "./src/index.js"
+}

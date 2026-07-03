@@ -1,0 +1,64 @@
+{
+  "name": "apigen-cli",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "entrypoint/apigen-cli/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:entrypoints", "platform:node"],
+  "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": ["{workspaceRoot}/coverage/entrypoint/apigen-cli"],
+      "dependsOn": ["build"],
+      "options": {
+        "configFile": "entrypoint/apigen-cli/vite.config.ts"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/entrypoint/apigen-cli",
+        "main": "entrypoint/apigen-cli/src/index.ts",
+        "tsConfig": "entrypoint/apigen-cli/tsconfig.lib.json",
+        "assets": ["entrypoint/apigen-cli/*.md"]
+      }
+    },
+    "generate-api": {
+      "executor": "@adhd/apigen-nx:generate",
+      "cache": true,
+      "outputs": ["{workspaceRoot}/tmp/apigen-generate-out"],
+      "inputs": ["default", "^production"],
+      "dependsOn": ["build"],
+      "options": {
+        "source": "src/test/fixtures/real-api.ts",
+        "type": "mcp",
+        "outDir": "tmp/apigen-generate-out"
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": ["build", "test"]
+    },
+    "bench": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node --expose-gc --import tsx packages/apigen/tools/bench-extract.ts",
+        "cwd": "{workspaceRoot}",
+        "env": {
+          "TSX_TSCONFIG_PATH": "tsconfig.base.json"
+        }
+      },
+      "cache": false
+    }
+  }
+}

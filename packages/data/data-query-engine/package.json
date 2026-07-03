@@ -1,0 +1,13 @@
+{
+  "name": "@adhd/data-query-engine",
+  "version": "2.2.1",
+  "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@adhd/transform": "*"
+  },
+  "main": "./index.js",
+  "typings": "./index.d.ts"
+}

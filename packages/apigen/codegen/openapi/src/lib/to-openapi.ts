@@ -6,7 +6,7 @@
 //
 // Design notes:
 //   - This is a COMMON codegen helper — descriptor-in → artifact-out.  It
-//     never imports host-specific code (no @adhd/apigen-runtime, no TS
+//     never imports host-specific code (no @adhd/apigen-engine-runtime, no TS
 //     extractor).  Platform tag: `platform:shared`.
 //   - The JSON-Schema-2020-12 `input`/`output` schemas in the descriptor are
 //     passed through verbatim — OpenAPI 3.1 natively supports JSON Schema
@@ -18,7 +18,7 @@
 //     are a convention, not a filter.
 
 import { project } from '@adhd/apigen-naming'
-import type { Operation, JSONSchema } from '@adhd/apigen-core'
+import type { Operation, JSONSchema } from '@adhd/apigen-core-client
 
 // ---------------------------------------------------------------------------
 // Public types

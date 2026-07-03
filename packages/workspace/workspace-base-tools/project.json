@@ -1,0 +1,48 @@
+{
+  "name": "workspace-base-tools",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/workspace/workspace-base-tools/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "domain:workspace",
+    "pkg-kind:base",
+    "pkg-class:foundation",
+    "layer:logic",
+    "platform:shared",
+    "access:public",
+    "publish:npm"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/packages/workspace/workspace-base-tools",
+        "main": "packages/workspace/workspace-base-tools/src/index.ts",
+        "tsConfig": "packages/workspace/workspace-base-tools/tsconfig.lib.json",
+        "assets": [
+          "packages/workspace/workspace-base-tools/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": [
+        "build",
+        "test"
+      ]
+    }
+  }
+}

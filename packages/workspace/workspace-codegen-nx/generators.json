@@ -1,0 +1,49 @@
+{
+  "generators": {
+    "base": {
+      "factory": "./src/generators/base/generator",
+      "schema": "./src/generators/base/schema.json",
+      "description": "Scaffold a base package (zero internal deps, roots of the dep graph)."
+    },
+    "core": {
+      "factory": "./src/generators/core/generator",
+      "schema": "./src/generators/core/schema.json",
+      "description": "Scaffold a core package (depends only on base packages)."
+    },
+    "engine": {
+      "factory": "./src/generators/engine/generator",
+      "schema": "./src/generators/engine/schema.json",
+      "description": "Scaffold an engine package (orchestration, wiring — depends on base + core)."
+    },
+    "store": {
+      "factory": "./src/generators/store/generator",
+      "schema": "./src/generators/store/schema.json",
+      "description": "Scaffold a store package (persistence/storage — depends on base + core)."
+    },
+    "plugin": {
+      "factory": "./src/generators/plugin/generator",
+      "schema": "./src/generators/plugin/schema.json",
+      "description": "Scaffold a plugin package (optional extension)."
+    },
+    "generator": {
+      "factory": "./src/generators/generator/generator",
+      "schema": "./src/generators/generator/schema.json",
+      "description": "Scaffold a generator package (code generator)."
+    },
+    "query": {
+      "factory": "./src/generators/query/generator",
+      "schema": "./src/generators/query/schema.json",
+      "description": "Scaffold a query package (query engine)."
+    },
+    "types": {
+      "factory": "./src/generators/types/generator",
+      "schema": "./src/generators/types/schema.json",
+      "description": "Scaffold a types package (pure type definitions, always access:public)."
+    },
+    "entrypoint": {
+      "factory": "./src/generators/entrypoint/generator",
+      "schema": "./src/generators/entrypoint/schema.json",
+      "description": "Scaffold an entrypoint (CLI/server/runner — lives under entrypoint/)."
+    }
+  }
+}

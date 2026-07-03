@@ -2,19 +2,17 @@
 
 [![npm version](https://img.shields.io/npm/v/@adhd/transform.svg)](https://www.npmjs.com/package/@adhd/transform)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Build Status](https://img.shields.io/github/actions/workflow/status/nix/adhd-transform/ci.yml?branch=main)](https://github.com/nix/adhd-transform/actions)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/PseudoSky/adhd/ci.yml?branch=main)](https://github.com/PseudoSky/adhd/actions)
 
-A comprehensive TypeScript utility library for transforming, filtering, analyzing, and manipulating data structures. Designed for use in data pipelines, analytics, and application logic.
+**155 shipped functions across 10 modules — in one `Transform` import.** The utility library that ships the deep-diff engine, path enumerator, auto-key-deriving Counter, range-to-regex, stats suite, and event-driven data structures that lodash, es-toolkit, and remeda never included.
 
 ---
 
-## Why Use `@adhd/transform`?
+## Why @adhd/transform?
 
-- **Modular**: Includes collections, filters, functions, objects, stats, and text utilities.
-- **Type-Safe**: Built with TypeScript for reliable development and autocompletion.
-- **Expressive**: Provides high-level helpers for common data operations.
-- **Efficient**: Uses optimized native methods and patterns.
-- **Extensible**: Easily compose and extend with your own utilities.
+You use lodash (or es-toolkit, or remeda) for `pick`, `omit`, and `isEqual`. But `isEqual` only tells you *if* two objects differ — not *what* changed. Same story for path enumeration, auto-key-deriving counters, numeric range to regex conversion, stats normalization, or event-driven data structures. You either write them from scratch or import 5+ separate libraries.
+
+**@adhd/transform is the only TypeScript utility library that ships a built-in deep-diff engine, path enumeration, Counter with automatic key extraction, range-to-regex conversion, a stats suite, and 155 functions across 10 modules — in one typed import.**
 
 ---
 
@@ -28,487 +26,322 @@ pnpm add @adhd/transform
 
 ---
 
-## Function Outline
+## Quickstart
 
-### Transform: Collections
-
-| Function (params)                                                                                   | Description                                          |
-| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| [difference(arrays: any[][])](#collections)                                                         | Elements in first array not in others                |
-| [intersection(arrays: any[][])](#collections)                                                       | Elements common to all arrays                        |
-| [flattenDeep(arr: any[][])](#collections)                                                           | Deeply flattens nested arrays                        |
-| [keyByArray(array: any[], key: string)](#collections)                                               | Indexes array by a key                               |
-| [keyBy(collection: any[], key: string)](#collections)                                               | Indexes array or object by a key                     |
-| [isMatch(obj: any, target: any)](#collections)                                                      | Deep partial match (does obj contain all of target?) |
-| [omitBy(orig: ArrayOrObject, check: BooleanFilter)](#collections)                                   | Omits entries where check returns true               |
-| [pickBy(orig: ArrayOrObject, check: BooleanFilter)](#collections)                                   | Picks entries where check returns true               |
-| [pluck(arr: any[], key: string)](#collections)                                                      | Extracts values for a key from array                 |
-| [minBy(collection: T[], selector: Selector<T>, compare?: ComparisonFunction<number>)](#collections) | Finds min by selector                                |
-| [maxBy(collection: T[], selector: Selector<T>, compare?: ComparisonFunction<number>)](#collections) | Finds max by selector                                |
-| [filterInclude(arr: any[], obj)](#collections)                                                      | Filters to items matching obj                        |
-| [filterExclude(arr: any[], obj)](#collections)                                                      | Filters out items matching obj                       |
-| [first(arr: any[])](#collections)                                                                   | Returns first element                                |
-| [last(arr: any[])](#collections)                                                                    | Returns last element                                 |
-| [unique(arr: any[])](#collections)                                                                  | Returns unique elements                              |
-| [uniqueBy(arr: any[], props: string[])](#collections)                                               | Unique by multiple properties                        |
-| [indexBy(arr: any[], prop: string)](#collections)                                                   | Indexes array by property                            |
-| [range(start: number, stop: number, step: number)](#collections)                                    | Generates a range of numbers                         |
-
-### Transform: Filters
-
-| Function (params)                                    | Description                           |
-| ---------------------------------------------------- | ------------------------------------- |
-| [isArray(x: unknown)](#filters)                      | Checks if value is array              |
-| [isString(x: unknown)](#filters)                     | Checks if value is string             |
-| [isDefined(x: unknown)](#filters)                    | Checks if value is not null/undefined |
-| [isInt(x: unknown)](#filters)                        | Checks if value is integer            |
-| [isFloat(x: unknown)](#filters)                      | Checks if value is float              |
-| [isRegExp(x: unknown)](#filters)                     | Checks if value is RegExp             |
-| [isTrue(a: any)](#filters)                           | Checks if value is true               |
-| [isFalse(a: any)](#filters)                          | Checks if value is false              |
-| [isLessThan(a: number, b: number)](#filters)         | Checks if a < b                       |
-| [isGreaterThan(a: number, b: number)](#filters)      | Checks if a > b                       |
-| [isIn(a: any, b: OneOfType<string,any[]>)](#filters) | Checks if a in b                      |
-| [isLike(a: string, b: string)](#filters)             | Checks if a contains b                |
-
-### Transform: Objects
-
-| Function (params)                                | Description                               |
-| ------------------------------------------------ | ----------------------------------------- |
-| [keys(obj: object)](#objects)                    | Returns object keys                       |
-| [values(obj: object)](#objects)                  | Returns object values                     |
-| [entries(obj: object)](#objects)                 | Returns object entries                    |
-| [stringify(obj: object)](#objects)               | JSON stringify                            |
-| [groupBy(arr: any[], props: string[])](#objects) | Groups array by properties                |
-| [omit(object, keys)](#objects)                   | Omits specified keys                      |
-| [pick(object, keys)](#objects)                   | Picks specified keys                      |
-| [allPaths(obj, matcher?)](#objects)              | Enumerates all paths of an object         |
-| [objectDifference(object, base)](#objects)       | Calculates difference between two objects |
-| [deepCopy(object1: any)](#objects)               | Deep copy object                          |
-| [deepEquals(object1, object2)](#objects)         | Deep equality check                       |
-
-### Transform: Stats
-
-| Function (params)                                         | Description                   |
-| --------------------------------------------------------- | ----------------------------- |
-| [minMax(list: number[])](#stats)                          | Min/max of list               |
-| [randomRange(a: number, b: number)](#stats)               | Random float between a and b  |
-| [randomRangeInt(a: number, b: number)](#stats)            | Random int between a and b    |
-| [roundToIncrement(x: number, increment: number)](#stats)  | Rounds to increment           |
-| [normalizeBetween(x, min, max, newMin?, newMax?)](#stats) | Normalizes value to new range |
-| [normalize(list: number[], bounds?)](#stats)              | Normalizes a list to bounds   |
-| [getMin(a: number, b: number)](#stats)                    | Minimum of two numbers        |
-| [getMax(a: number, b: number)](#stats)                    | Maximum of two numbers        |
-| [histogram(iterable: any[])](#stats)                      | Histogram of values           |
-| [mostCommon(iterable: any[])](#stats)                     | Most common value             |
-
-### Transform: Texts
-
-| Function (params)                                | Description                |
-| ------------------------------------------------ | -------------------------- |
-| [capitalize(str: string)](#texts)                | Capitalizes string         |
-| [trim(str: string, c?: string)](#texts)          | Trims whitespace           |
-| [upperFirst(str: string)](#texts)                | Uppercases first character |
-| [lowerFirst(str: string)](#texts)                | Lowercases first character |
-| [trimStart(str: string, c?: string)](#texts)     | Trims start                |
-| [trimEnd(str: string, c?: string)](#texts)       | Trims end                  |
-| [words(value: string)](#texts)                   | Splits into words          |
-| [hyphenCase(str: string)](#texts)                | Converts to hyphen-case    |
-| [percent(n: number, precision?: number)](#texts) | Formats percent            |
-
-### Transform: Functions
-
-| Function (params)                                                | Description                         |
-| ---------------------------------------------------------------- | ----------------------------------- |
-| [compose(...funcs: Function[])](#functions)                      | Composes functions                  |
-| [noop()](#functions)                                             | No-op function                      |
-| [extractThen(key: string, callback: Function)](#functions)       | Extracts value and applies callback |
-| [get(obj: object, path: string, defaultValue?: any)](#functions) | Gets value at path                  |
-| [set(data: object, path: string, value: any)](#functions)        | Sets value at path                  |
-| [getAll(obj, paths: string[])](#functions)                       | Gets values at multiple paths       |
-| [flow(funcs: Function[])](#functions)                            | Pipes value through functions       |
-| [partial(func, ...boundArgs)](#functions)                        | Partially applies arguments         |
-| [throttle(func: Function, timeFrame: number)](#functions)        | Throttles function                  |
-| [Differ.map(obj1, obj2)](#functions)                             | Computes deep diff between objects  |
-
-### Transform: Humanize
-
-| Function (params)                                            | Description                            |
-| ------------------------------------------------------------ | -------------------------------------- |
-| [humanizeBytes(bytes: number, decimals?: number)](#humanize) | Formats bytes to human-readable string |
-
-### Transform: Date
-
-| Function (params)                                   | Description                           |
-| --------------------------------------------------- | ------------------------------------- |
-| [formatDate(date: Date, formatStr?: string)](#date) | Formats date with format string       |
-| [humanDuration(d0: Date, d1: Date, unit?)](#date)   | Human-readable duration between dates |
-| [timeFromNow(date: Date)](#date)                    | Duration from now to date             |
-| [fromNow(count: number, unit?: string)](#date)      | Date in the future from now           |
-
-### Transform: Regex
-
-| Function (params)                                   | Description                          |
-| --------------------------------------------------- | ------------------------------------ |
-| [escapePattern(s: string)](#regex)                  | Escapes regex special characters     |
-| [mergePatterns(values: (string\|number)[])](#regex) | Merges values into alternation regex |
-| [rangeToRegex(n1?: number, n2?: number)](#regex)    | Numeric range to regex pattern       |
-
-### Transform: Structures
-
-| Class / Function            | Description                                                                    |
-| --------------------------- | ------------------------------------------------------------------------------ |
-| [Stack\<T\>](#structures)   | LIFO stack with optional typed event callbacks (onPush, onPop, onClear)        |
-| [Queue\<T\>](#structures)   | FIFO queue with optional typed event callbacks (onEnqueue, onDequeue, onClear) |
-| [Counter\<T\>](#structures) | Tracks counts by key with optional typed key extractor function                |
-
-### Collections
+The `Transform` merged export gives you every function in a single namespace:
 
 ```ts
-import { Collections } from '@adhd/transform';
+import { Transform } from '@adhd/transform';
 
-// difference: Elements in arr1 not in arr2
-Collections.difference([
-  [1, 2, 3],
-  [2, 3, 4],
-]); // [1]
+// Deep diff two objects — only changed keys returned
+Transform.Differ.map(
+  { name: 'Alice', meta: { score: 10 }, tags: ['a', 'b'] },
+  { name: 'Alice', meta: { score: 12 }, tags: ['b', 'c'] }
+);
+// => { meta: { score: 12 }, tags: { added: ['c'], deleted: ['a'] } }
 
-// intersection: Elements common to both arrays
-Collections.intersection([
-  [1, 2, 3],
-  [2, 3, 4],
-]); // [2, 3]
+// Enumerate all paths to primitive values
+Transform.allPaths({ user: { name: 'Alice', scores: [95, 87] } });
+// => [['user', 'name'], ['user', 'scores']]
 
-// flattenDeep: Deeply flattens nested arrays
-Collections.flattenDeep([[1, [2, [3]]], 4]); // [1, 2, 3, 4]
+// Compose functions into a pipeline
+Transform.flowPipe(
+  (a: number, b: number) => a + b,
+  (sum: number) => sum * 2
+)(3, 4); // => 14
 
-// keyByArray: Indexes array by a key
-Collections.keyByArray([{ id: 1 }, { id: 2 }], 'id'); // { 1: { id: 1 }, 2: { id: 2 } }
-
-// keyBy: Indexes array or object by a key
-Collections.keyBy([{ id: 1 }, { id: 2 }], 'id'); // { 1: { id: 1 }, 2: { id: 2 } }
-
-// omitBy: Omits entries where check returns true
-Collections.omitBy({ a: 1, b: 2 }, (v) => v === 2); // { a: 1 }
-
-// pickBy: Picks entries where check returns true
-Collections.pickBy({ a: 1, b: 2 }, (v) => v === 2); // { b: 2 }
-
-// pluck: Extracts values for a key from array
-Collections.pluck([{ a: 1 }, { a: 2 }], 'a'); // [1, 2]
-
-// minBy: Finds min by selector
-Collections.minBy([{ x: 1 }, { x: 2 }], (o) => o.x); // { x: 1 }
-
-// maxBy: Finds max by selector
-Collections.maxBy([{ x: 1 }, { x: 2 }], (o) => o.x); // { x: 2 }
-
-// first: Returns first element
-Collections.first([1, 2, 3]); // 1
-
-// last: Returns last element
-Collections.last([1, 2, 3]); // 3
-
-// unique: Returns unique elements
-Collections.unique([1, 2, 2, 3]); // [1, 2, 3]
-
-// uniqueBy: Unique by multiple properties
-Collections.uniqueBy(
-  [
-    { a: 1, b: 2 },
-    { a: 1, b: 3 },
-  ],
-  ['a']
-); // [{ a: 1, b: 2 }]
-
-// indexBy: Indexes array by property
-Collections.indexBy([{ id: 'a' }, { id: 'b' }], 'id'); // { a: { id: 'a' }, b: { id: 'b' } }
-
-// isMatch: Deep partial match
-Collections.isMatch({ a: 1, b: 2 }, { a: 1 }); // true
-Collections.isMatch({ a: 1 }, { a: 1, b: 2 }); // false
-
-// filterInclude/filterExclude: Filter by match
-Collections.filterInclude([{ a: 1 }, { a: 2 }], { a: 1 }); // [{ a: 1 }]
-Collections.filterExclude([{ a: 1 }, { a: 2 }], { a: 1 }); // [{ a: 2 }]
-
-// range: Generates a range of numbers
-Collections.range(1, 5, 1); // [1, 2, 3, 4, 5]
+// Track event counts with automatic key extraction
+const counter = new Transform.Counter<{ type: string }>(e => e.type);
+counter.increment({ type: 'click' }, 5);
+counter.increment({ type: 'click' }, 3);
+counter.toJson(); // => { click: 8 }
 ```
 
-### Filters
+Prefer importing individual modules? Use `import { Collections, Filters, Structures } from '@adhd/transform'`.
+
+---
+
+## The six things no other library ships
+
+### 1. `Differ.map` — deep-diff engine that tells you WHAT changed
+
+Every utility library has boolean `isEqual`. None return a structured diff. `Differ.map` walks nested objects recursively and returns **only the changed keys** — or an empty object if they're identical. Array tracking shows `added`/`deleted`. Status constants let you classify changes.
 
 ```ts
-import { Filters } from '@adhd/transform';
+import { Transform } from '@adhd/transform';
 
-// isArray: Checks if value is array
-Filters.isArray([1, 2, 3]); // true
+// Structured diff — only the keys that changed
+Transform.Differ.map(
+  { name: 'Alice', meta: { score: 10 }, tags: ['a', 'b'] },
+  { name: 'Alice', meta: { score: 12 }, tags: ['b', 'c'] }
+);
+// => { meta: { score: 12 }, tags: { added: ['c'], deleted: ['a'] } }
 
-// isString: Checks if value is string
-Filters.isString('hello'); // true
+// Identical objects return empty object
+Transform.Differ.map({ a: 1 }, { a: 1 }); // => {}
 
-// isDefined: Checks if value is not null/undefined
-Filters.isDefined(undefined); // false
+// Status constants for classifying changes
+Transform.Differ.VALUE_CREATED;    // 'created'
+Transform.Differ.VALUE_UPDATED;    // 'updated'
+Transform.Differ.VALUE_DELETED;    // 'deleted'
+Transform.Differ.VALUE_UNCHANGED;  // 'unchanged'
 
-// isInt: Checks if value is integer
-Filters.isInt(42); // true
-
-// isFloat: Checks if value is float
-Filters.isFloat(3.14); // true
-
-// isRegExp: Checks if value is RegExp
-Filters.isRegExp(/abc/); // true
-
-// isTrue: Checks if value is true
-Filters.isTrue(true); // true
-
-// isFalse: Checks if value is false
-Filters.isFalse(false); // true
-
-// isLessThan: Checks if a < b
-Filters.isLessThan(1, 2); // true
-
-// isGreaterThan: Checks if a > b
-Filters.isGreaterThan(2, 1); // true
-
-// isIn: Checks if a in b
-Filters.isIn(2, [1, 2, 3]); // true
-
-// isLike: Checks if a contains b
-Filters.isLike('hello world', 'world'); // true
+// Lower-level building blocks
+Transform.Differ.compareValues(5, 7);                         // 'updated'
+Transform.Differ.getArrayDiffData([1, 2], [2, 3]);           // { added: [3], deleted: [1] }
 ```
 
-### Objects
+### 2. `allPaths` — enumerate every value path in a nested object
+
+Need to build a form that edits a nested config? Discover every field? Generate a JSON schema? Every other library makes you write BFS from scratch. `allPaths` does it in one call — with a customizable matcher for controlling where traversal stops.
 
 ```ts
-import { Objects } from '@adhd/transform';
-
-// keys: Returns object keys
-Objects.keys({ a: 1, b: 2 }); // ['a', 'b']
-
-// values: Returns object values
-Objects.values({ a: 1, b: 2 }); // [1, 2]
-
-// entries: Returns object entries
-Objects.entries({ a: 1, b: 2 }); // [['a', 1], ['b', 2]]
-
-// deepEquals: Deep equality check
-Objects.deepEquals({ x: 1 }, { x: 1 }); // true
-
-// objectDifference: Diff between two objects
-Objects.objectDifference({ a: 1, b: 2 }, { a: 1 }); // { b: 2 }
-
-// omit/pick: Select or exclude keys
-Objects.omit({ a: 1, b: 2 }, ['a']); // { b: 2 }
-Objects.pick({ a: 1, b: 2 }, ['a']); // { a: 1 }
-
-// groupBy: Groups array by properties
-Objects.groupBy([{ a: 1 }, { a: 2 }], ['a']);
-
-// deepCopy: Deep copy object
-Objects.deepCopy({ a: 1 }); // { a: 1 }
-
-// allPaths: Enumerate all primitive-holding paths
-Objects.allPaths({ x: { y: 1, z: [2] } }); // [['x', 'y'], ['x', 'z']]
-```
-
-### Stats
-
-```ts
-import { Stats } from '@adhd/transform';
-
-// minMax: Min/max of list
-Stats.minMax([1, 2, 3, 4, 5]); // { min: 1, max: 5 }
-
-// normalize: Normalize list to bounds
-Stats.normalize([1, 2, 3, 4, 5], { min: 0, max: 4 }); // [0, 1, 2, 3, 4]
-
-// randomRange: Random float between a and b
-Stats.randomRange(10, 20); // e.g. 13.45
-
-// randomRangeInt: Random int between a and b
-Stats.randomRangeInt(1, 5); // e.g. 3
-
-// roundToIncrement: Rounds to increment
-Stats.roundToIncrement(7.3, 2); // 8
-
-// getMin/getMax: Minimum/maximum of two numbers
-Stats.getMin(3, 7); // 3
-Stats.getMax(3, 7); // 7
-
-// histogram: Histogram of values
-Stats.histogram([1, 2, 2, 3]); // Map { 1 => 1, 2 => 2, 3 => 1 }
-
-// mostCommon: Most common value
-Stats.mostCommon([1, 2, 2, 3]); // 2
-```
-
-### Texts
-
-```ts
-import { Texts } from '@adhd/transform';
-
-// capitalize: Capitalizes string
-Texts.capitalize('hello world'); // 'Hello world'
-
-// trim: Trims whitespace
-Texts.trim('  hello  '); // 'hello'
-
-// upperFirst: Uppercases first character
-Texts.upperFirst('foo'); // 'Foo'
-
-// lowerFirst: Lowercases first character
-Texts.lowerFirst('Bar'); // 'bar'
-
-// trimStart: Trims start
-Texts.trimStart('  hello'); // 'hello'
-
-// trimEnd: Trims end
-Texts.trimEnd('hello  '); // 'hello'
-
-// words: Splits into words
-Texts.words('hello world'); // ['hello', 'world']
-
-// hyphenCase: Converts to hyphen-case
-Texts.hyphenCase('Hello World'); // 'hello-world'
-
-// percent: Formats percent
-Texts.percent(0.1234); // '12.34%'
-```
-
-### Structures
-
-```ts
-import { Stack, Queue, Counter } from '@adhd/transform';
-
-// Stack: LIFO stack with event callbacks
-const stack = new Stack<number>({
-  onPush: (value) => console.log('Pushed:', value),
-  onPop: (value) => console.log('Popped:', value),
-  onClear: () => console.log('Stack cleared'),
+// Built-in path enumerator
+Transform.allPaths({
+  server: { port: 3000, host: 'localhost' },
+  debug: true
 });
+// => [['debug'], ['server', 'port'], ['server', 'host']]
 
+// Custom matcher: stop at any array (don't recurse into it)
+Transform.allPaths(
+  { nested: { arr: [1, 2, 3] }, value: 5 },
+  (key, path, obj) => Array.isArray(obj[key])
+);
+// => [['nested', 'arr']]
+```
+
+### 3. `Counter` with key extraction — auto-deriving counters
+
+Counting events by type usually means writing a reduce. Every time. `Counter<T>` accepts an optional `countBy` extractor function — it auto-derives string keys from your typed data. `toJson()` dumps the counts.
+
+```ts
+import { Transform } from '@adhd/transform';
+
+// Counter with automatic key derivation
+const counter = new Transform.Counter<{ type: string }>(e => e.type);
+counter.increment({ type: 'click' }, 5);
+counter.increment({ type: 'scroll' }, 3);
+counter.increment({ type: 'click' }, 3);
+counter.toJson(); // => { click: 8, scroll: 3 }
+
+// Query individual values
+counter.value({ type: 'click' }); // => 8
+
+// Without key extractor — single 'total' key
+const total = new Transform.Counter<string>();
+total.increment('anything', 5);
+total.increment('anything', 3);
+total.toJson(); // => { total: 8 }
+```
+
+### 4. `rangeToRegex` — numeric range to regex
+
+Your form needs to validate "enter a number between 100 and 200." You hand-write a regex by breaking the range into character classes — or you let `rangeToRegex` generate it algorithmically. Handles unbounded ranges, negative numbers, and zero-padding.
+
+```ts
+// Generate regex from numeric range
+Transform.rangeToRegex(100, 200);
+// => /^(10[0-9]|1[1-9][0-9]|200)$/
+
+Transform.rangeToRegex(-50, 50);
+// => /^(-[1-9]|-?[1-4][0-9]|-?50|[0-9])$/
+
+// Unbounded: match any positive number
+Transform.rangeToRegex(0, null);
+// => /^([0-9]+)$/
+
+// Unbounded negative to positive
+Transform.rangeToRegex(null, null);
+// => /^(-?[0-9]+)$/
+```
+
+### 5. Stats suite — normalize, histogram, mostCommon, minMax
+
+Dashboards, heatmaps, analytics — you need normalization, frequency counts, and range detection. Every other utility library makes you import `simple-statistics` or write it yourself. @adhd/transform bundles it all in one module.
+
+```ts
+// Normalize values to a target range
+Transform.normalize([10, 50, 100], { min: 0, max: 1 });
+// => [0, 0.44, 1]
+
+// Frequency histogram
+Transform.histogram(['a', 'b', 'a', 'c', 'b', 'a']);
+// => Map { 'a' => 3, 'b' => 2, 'c' => 1 }
+
+// Most frequent value
+Transform.mostCommon(['a', 'b', 'a', 'c', 'b', 'a']);
+// => 'a'
+
+// One-pass min/max
+Transform.minMax([10, 3, 47, 22]);
+// => { min: 3, max: 47 }
+
+// Reusable normalizer (pre-computes input range)
+const gradeNormalizer = Transform.makeListNormalizer([10, 50, 100], 0, 100);
+gradeNormalizer(50); // => 44.44
+```
+
+### 6. Event-driven Stack and Queue — live callbacks built in
+
+You want to log pushes, emit metrics on pops, or trigger processing on dequeue. Without @adhd/transform, you wrap every call site or pull in RxJS. Stack and Queue accept optional event callbacks that fire automatically on mutations.
+
+```ts
+import { Transform } from '@adhd/transform';
+
+// Stack with event callbacks
+const stack = new Transform.Stack<number>({
+  onPush: (v) => console.log('Pushed:', v),
+  onPop: (v) => console.log('Popped:', v),
+});
 stack.push(1); // Logs: Pushed: 1
 stack.push(2); // Logs: Pushed: 2
-stack.pop(); // Logs: Popped: 2
-stack.peek(); // Returns 1 (doesn't log)
-stack.size; // 1
-stack.isEmpty; // false
-stack.clear(); // Logs: Stack cleared
+stack.pop();   // Logs: Popped: 2, returns 2
+stack.peek();  // => 1
 
-// Queue: FIFO queue with event callbacks
-const queue = new Queue<string>([], {
-  onEnqueue: (value) => console.log('Enqueued:', value),
-  onDequeue: (value) => console.log('Dequeued:', value),
-  onClear: () => console.log('Queue cleared'),
+// Queue with initial data and callbacks
+const queue = new Transform.Queue<string>(['a', 'b'], {
+  onEnqueue: (v) => console.log('Enqueued:', v),
+  onDequeue: (v) => console.log('Dequeued:', v),
 });
-
-queue.enqueue('a'); // Logs: Enqueued: a
-queue.enqueue('b'); // Logs: Enqueued: b
-queue.dequeue(); // Logs: Dequeued: a
-queue.length; // 1
-
-// Counter: Track numeric values by key
-const counter = new Counter<string>();
-counter.increment('requests', 5); // Increment by 5
-counter.increment('requests', 3); // Now 8
-counter.decrement('requests', 2); // Now 6
-console.log(counter.value('requests')); // 6
-console.log(counter.toJson()); // { requests: 6 }
-counter.reset('requests');
-console.log(counter.value('requests')); // 0
-
-// Counter with key extractor: Track by type
-interface Item {
-  type: string;
-  count: number;
-}
-
-const typeCounter = new Counter<Item>((item) => item.type);
-
-typeCounter.increment({ type: 'site', count: 0 }, 2);
-typeCounter.increment({ type: 'local', count: 0 }, 1);
-typeCounter.increment({ type: 'site', count: 0 });
-typeCounter.decrement({ type: 'site', count: 0 });
-
-console.log(typeCounter.toJson()); // { site: 2, local: 1 }
-
-// Real-world example: Pipeline stack with live counter tracking
-const pipeline = new Stack<[string, object]>();
-const pipelineCounter = new Counter<[string, object]>((value) => value[0]);
-
-const stackWithCounters = new Stack<[string, object]>({
-  onPush: (value) => pipelineCounter.increment(value),
-  onPop: (value) => pipelineCounter.decrement(value),
-  onClear: () => pipelineCounter.clear(),
-});
-
-stackWithCounters.push(['fetched', { url: 'https://...' }]);
-stackWithCounters.push(['parsed', { content: '...' }]);
-console.log(pipelineCounter.toJson()); // { fetched: 1, parsed: 1 }
-
-const item = stackWithCounters.pop(); // Decrements 'parsed'
-console.log(pipelineCounter.toJson()); // { fetched: 1, parsed: 0 }
+queue.enqueue('c');  // fires onEnqueue('c')
+queue.dequeue();     // => 'a', fires onDequeue('a')
 ```
 
-### Functions
+---
+
+## And everything else you'd expect
+
+All in one `Transform` import — plus individual module imports when you only need a subset:
 
 ```ts
-import { Functions } from '@adhd/transform';
+import { Transform } from '@adhd/transform';
 
-// compose: Composes functions
-const add = (a: number) => a + 1;
-const double = (a: number) => a * 2;
-const composed = Functions.compose(add, double);
-composed(3); // add(double(3)) => add(6) => 7
+// Collections: pick, omit, keyBy, uniqueBy, sortBy, flattenDeep, difference, range...
+Transform.difference([[1, 2, 3], [2, 3, 4]]); // => [1]
 
-// noop: No-op function
-Functions.noop(); // null
+// Filters: 33 type checks + comparisons
+Transform.isDefined(maybeNull);          // type guard: excludes null | undefined
+Transform.isMatch(obj, { status: 'active', role: 'admin' }); // deep partial match
 
-// extractThen: Extracts value and applies callback
-Functions.extractThen('id', (id: number) => id * 2)([{ id: 5 }]); // 10
+// Functions: compose, flow, flowPipe, splitPipe, get/set by path
+Transform.flowPipe(
+  (a: number, b: number) => a + b,
+  (sum: number) => sum * 2
+)(3, 4); // => 14  — argument-spread-aware piping
 
-// get: Gets value at path
-Functions.get({ a: { b: 2 } }, 'a.b'); // 2
+Transform.get({ user: { address: { city: 'NYC' } } }, 'user.address.city', 'Unknown');
+// => 'NYC'
 
-// set: Sets value at path
-const obj = { a: { b: 2 } };
-Functions.set(obj, 'a.b', 3); // obj.a.b === 3
+// Texts: capitalize, hyphenCase, words (Unicode-aware), percent
+Transform.hyphenCase('Hello World'); // => 'Hello-World'
+Transform.percent(42.5);             // => '+42.50%'
 
-// throttle: Throttles function
-const throttled = Functions.throttle(() => console.log('hi'), 1000);
-throttled();
+// Humanize (direct import — not on Transform)
+import { Humanize } from '@adhd/transform';
+Humanize(1536); // => '1.5 KiB'
+
+// Format dates
+Transform.formatDate(new Date(2025, 0, 15), 'MMMM dd, yyyy'); // => 'January 15, 2025'
+Transform.formatDate(new Date(2025, 0, 15, 15, 45), 'hh:mm a'); // => '03:45 PM'
+
+// Duration between dates
+Transform.humanDuration(new Date('2025-01-10'), new Date('2025-01-15'));
+// => { count: 5, unit: 'days', text: '5 days from now' }
+
+// Regex escaping
+Transform.escapePattern('([a-z]+)'); // => '\(\[a\-z\]\+\)'
+
+// Objects: deepCopy, deepEquals, objectDifference, groupBy, allPaths, toFlagMap
+Transform.objectDifference(
+  { name: 'Alice', age: 30, city: 'NYC' },
+  { name: 'Alice', age: 31, city: 'NYC' }
+);
+// => { age: 30 }  — only keys where values differ (from first object)
+
+Transform.toFlagMap(['a', 'b', 'c']);
+// => { a: true, b: true, c: true }
+```
+
+**155 shipped functions. 10 modules. One import.** Collections, Filters, Functions (composition + diff), Objects (paths + deep copy), Stats (normalization + histograms), Texts, Humanize, Date, Regex, and Structures (Stack/Queue/Counter with event callbacks).
+
+```bash
+npm install @adhd/transform
 ```
 
 ---
 
-## API Reference
+## Key Features at a Glance
 
-- `Collections`: Array manipulation (difference, intersection, flatten, keyBy, isMatch, filterInclude, filterExclude, etc.)
-- `Filters`: Type checks and comparison helpers (`isArray`, `isString`, `isDefined`, `isEqual`, `isIn`, `isLike`, etc.)
-- `Objects`: Object utilities (`keys`, `values`, `entries`, `omit`, `pick`, `groupBy`, `objectDifference`, `allPaths`, etc.)
-- `Stats`: Math and statistics helpers (`minMax`, `normalize`, `normalizeBetween`, `histogram`, `mostCommon`, etc.)
-- `Texts`: String manipulation (`capitalize`, `trim`, `upperFirst`, `words`, `hyphenCase`, etc.)
-- `Functions`: Function composition and helpers (`compose`, `get`, `set`, `flow`, `partial`, `Differ`, etc.)
-- `Humanize`: Human-readable formatting (`humanizeBytes`)
-- `Date`: Date utilities (`formatDate`, `humanDuration`, `timeFromNow`, `fromNow`)
-- `Regex`: Regex utilities (`escapePattern`, `mergePatterns`, `rangeToRegex`)
-- `Structures`: Data structures (`Stack<T>`, `Queue<T>`, `Counter`) with optional event callbacks
+| If you need... | You'd normally... | With @adhd/transform |
+|---------------|-------------------|---------------------|
+| Deep diff (what changed) | Import `deep-diff` or write recursive comparator | `Transform.Differ.map(a, b)` — only changed keys |
+| Path enumeration | Write recursive BFS from scratch | `Transform.allPaths(obj)` — every primitive-holding path |
+| Counter with key extraction | Manual reduce or Map wrapper every time | `new Transform.Counter<T>(extractor)` → `counter.toJson()` |
+| Numeric range → regex | Hand-write regex for each range | `Transform.rangeToRegex(100, 200)` — algorithmically generated |
+| Stats normalization + histogram | Import `simple-statistics` | `Transform.normalize(data, 0, 100)` + `histogram` + `mostCommon` |
+| Event-driven Stack/Queue | Wrap every call site or import RxJS | `new Transform.Stack<T>({ onPush, onPop })` — callbacks built in |
+| Fan-out composition | Multiple `.map()` calls | `Transform.splitPipe(fn1, fn2)([input])` → `[result1, result2]` |
+| Spread-aware piping | Manual destructuring between steps | `Transform.flowPipe(fn1, fn2)(a, b)` — auto-spreads |
+| Object diff (structured) | Write recursive key-by-key comparison | `Transform.objectDifference(a, b)` — returns `Partial<T>` |
+| Byte formatting | Import `filesize` or `pretty-bytes` | `Humanize(1536)` → `'1.5 KiB'` |
+| Date formatting + durations | Import `date-fns` or `moment` | `Transform.formatDate(d, 'MMMM dd, yyyy')` |
+| Deep partial match | Write custom filter logic | `Transform.isMatch(obj, { status: 'active' })` |
 
 ---
 
-## File Structure
+## Module Map
 
-- `src/lib/collections.ts` – Array utilities and deep matching
-- `src/lib/filters.ts` – Type checks and comparisons
-- `src/lib/function.ts` – Function helpers, path access, diffing
-- `src/lib/object.ts` – Object utilities
-- `src/lib/stats.ts` – Math and statistics
-- `src/lib/text.ts` – String utilities
-- `src/lib/humanize.ts` – Human-readable formatting
-- `src/lib/date.ts` – Date utilities
-- `src/lib/regex.ts` – Regex utilities
-- `src/lib/structures.ts` – Stack, Queue, and Counter data structures
+| Module | Purpose | Standout functions | Reference |
+|--------|---------|--------------------|-----------|
+| **Collections** | Array ops, deep matching | `difference`, `flattenDeep`, `keyBy`, `isMatch`, `uniqueBy`, `range` | [reference](./docs/reference/collections.md) |
+| **Filters** | Type checks, comparisons | `isArray`, `isDefined`, `isEqual`, `isIn`, `isLike`, `isShallowEqual` | [reference](./docs/reference/filters.md) |
+| **Functions** | Composition, path ops, diff | `compose`, `flow`, `flowPipe`, `splitPipe`, `get`/`set`, `Differ` | [reference](./docs/reference/functions.md) |
+| **Objects** | Deep copy, diff, paths | `deepCopy`, `deepEquals`, `allPaths`, `omit`/`pick`, `groupBy` | [reference](./docs/reference/objects.md) |
+| **Stats** | Math, normalization, histograms | `normalize`, `minMax`, `histogram`, `mostCommon`, `Counter` (Map) | [reference](./docs/reference/stats.md) |
+| **Texts** | String manipulation | `capitalize`, `hyphenCase`, `words`, `percent` | [reference](./docs/reference/texts.md) |
+| **Humanize** | Human-readable formatting | `Humanize(bytes)` → `'1.5 KiB'` (direct function, not on Transform) | [reference](./docs/reference/humanize.md) |
+| **Date** | Date formatting & durations | `formatDate`, `humanDuration`, `timeFromNow`, `fromNow` | [reference](./docs/reference/date.md) |
+| **Regex** | Regex construction utils | `escapePattern`, `mergePatterns`, `rangeToRegex` | [reference](./docs/reference/regex.md) |
+| **Structures** | Data structures | `Stack<T>`, `Queue<T>`, `Counter<T>` | [reference](./docs/reference/structures.md) |
+
+Every public function is documented exhaustively in the [API reference](./docs/reference/). The README shows the highlights — the reference has every signature, parameter, return type, and runnable example.
+
+### How-To Guides
+
+Cross-module task guides for common workflows:
+
+- [Build Data Pipelines](./docs/how-to/build-data-pipelines.md) — `compose`, `flow`, `flowPipe`, `splitPipe`, `extractThen`
+- [Diff and Compare Objects](./docs/how-to/diff-and-compare.md) — `Differ.map`, `objectDifference`, `isEqual`, `isMatch`
+- [Count and Aggregate Data](./docs/how-to/count-and-aggregate.md) — `Counter`, `histogram`, `mostCommon`, `normalize`
+
+---
+
+## Data Structures
+
+```ts
+import { Transform } from '@adhd/transform';
+
+// Stack: LIFO with event callbacks
+const stack = new Transform.Stack<number>({
+  onPush: (v) => console.log('Pushed:', v),
+  onPop: (v) => console.log('Popped:', v),
+});
+stack.push(1);
+stack.push(2);
+stack.pop();   // Logs: Popped: 2, returns 2
+stack.peek();  // => 1
+
+// Queue: FIFO with event callbacks
+const queue = new Transform.Queue<string>(['a', 'b'], {
+  onEnqueue: (v) => console.log('Enqueued:', v),
+  onDequeue: (v) => console.log('Dequeued:', v),
+});
+queue.enqueue('c');
+queue.dequeue(); // => 'a'
+```
+
+> **Two Counter classes**: `Transform.Counter` (standalone) has `increment`/`decrement`/`toJson` with optional `countBy` extractor. `Stats.Counter` extends Map with `add()`/`setData()` — useful when you need Map iteration. See [structures reference](./docs/reference/structures.md) and [stats reference](./docs/reference/stats.md).
 
 ---
 
@@ -520,23 +353,16 @@ pnpm test
 
 ---
 
-## Extending
-
-- Add new utilities in the relevant module (collections, filters, etc.)
-- Compose with existing helpers for advanced data transformations
-
----
-
 ## Contributing
 
-Contributions are welcome! Please read the [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Please see the monorepo contribution guidelines for details.
 
 ---
 
 ## License
 
-[MIT](LICENSE)
+[MIT](./LICENSE)
 
 ---
 
-For more information, see the [API docs](./docs) or visit the [GitHub repository](https://github.com/nix/adhd-transform).
+For the complete API reference, see [docs/reference/](./docs/reference/). For task-oriented guides, see [docs/how-to/](./docs/how-to/). For the monorepo, visit [PseudoSky/adhd](https://github.com/PseudoSky/adhd).

@@ -153,9 +153,107 @@ nx mv agent-provider     agent-core-provider   --destination packages/agent/agen
 
 After all moves, `packages/ai/` will be empty and can be deleted with `rm -rf packages/ai`.
 
+## Agent-mcp split — extract `agent-store-runtime` + `agent-engine-orchestrator`
+
+Split `packages/ai/agent-mcp/` into three packages following the layer hierarchy. Only `entrypoint/agent-mcp/` keeps the `@adhd/agent-mcp` npm name for backward compatibility.
+
+### Target structure
+
+```
+packages/agent/
+  agent-base-types/                      ← exists, hosts shared domain types
+  agent-core-policy/                     ← exists
+  agent-core-provider/                   ← exists
+  agent-store-prompts/                   ← exists, has ComposedPromptStore for cache
+  agent-store-runtime/                   ← NEW — session + task stores
+  agent-engine-orchestrator/             ← NEW — engine, providers, tool handlers, clients
+  agent-plugin-budget/                   ← exists
+  agent-plugin-sanitize/                 ← exists
+
+entrypoint/
+  agent-mcp/                             ← NEW — thin MCP server shell
+```
+
+### Package: `agent-store-runtime` (store layer)
+
+**NPM:** `@adhd/agent-store-runtime` at `packages/agent/agent-store-runtime/`
+**Tags:** `domain:agent, pkg-kind:store, pkg-class:foundation, layer:data, platform:shared`
+**Deps:** `agent-base-types`, `drizzle-orm`, `better-sqlite3`
+
+**Contents (extracted from agent-mcp):**
+- `store/session-store.ts` — session lifecycle, message history, context window
+- `store/task-store.ts` — task lifecycle, cancellation token registry
+- `db/schema.ts` — tables: `sessions`, `messages`, `tasks`, `task_events`, `task_usage`, `experiment_assignments`
+- `runtime/usage-client.ts` — `UsageClient` class for token accumulation
+- `utils/ids.ts` — `generateId`
+- `utils/timestamps.ts` — `nowIso`
+
+**Not included (stays in entrypoint/agent-mcp):**
+- `agents` table — thin cache, kept with the entrypoint
+- `store/agent-store.ts` — CRUD for agents, kept with the entrypoint
+
+### Package: `agent-engine-orchestrator` (engine layer)
+
+**NPM:** `@adhd/agent-engine-orchestrator` at `packages/agent/agent-engine-orchestrator/`
+**Tags:** `domain:agent, pkg-kind:engine, pkg-class:foundation, layer:logic, platform:node`
+**Deps:** `agent-base-types`, `agent-core-policy`, `agent-core-provider`, `agent-store-prompts`, `agent-store-runtime`, `drizzle-orm`, `pino`
+
+**Contents (extracted from agent-mcp):**
+- `engine/orchestrator.ts` — tool-use loop, HITL, event emission
+- `engine/policy.ts` — `PolicyEngine` (recursion depth, tool loops, allowed agents)
+- `engine/hooks.ts` — `HookRegistry`
+- `engine/prompt-resolver.ts` — `resolveComposedPrompt`, `computeContextHash`
+- `engine/queue.ts` — `BackgroundQueue`
+- `engine/dag-engine.ts` — `DagEngine` (task dependency DAG)
+- `providers/` — `types.ts`, `factory.ts`, `anthropic.ts`, `openai.ts`, `claudecli.ts`
+- `clients/` — MCP client registry + transports (in-process, stdio, http, sse)
+- `tools/agent-crud.ts` — agent create/read/update/delete/list
+- `tools/session.ts` — agent/session tool
+- `tools/task.ts` — task/create/result/list/cancel
+- `tools/usage.ts` — usage_query tool
+- `plugins/loader.ts` — external plugin loading
+- `plugins/usage-plugin.ts` — `UsagePlugin` (writes to task_usage via store-runtime)
+- `validation/` — Zod schemas for agent, session, task, message, mcp, execution, usage, errors
+- `runtime/usage-client.ts` — `UsageClient` (shared with store-runtime)
+
+**Uses `@adhd/agent-store-prompts`** for `ComposedPromptStore` (composed prompt cache).  
+**Uses `@adhd/agent-store-runtime`** for `SessionStore` + `TaskStore` (session/task lifecycle).
+
+### Entrypoint: `entrypoint/agent-mcp`
+
+**NPM:** `@adhd/agent-mcp` at `entrypoint/agent-mcp/`
+**Tags:** `entrypoint:mcp, pkg-class:entrypoint, platform:node`
+**Deps:** `agent-engine-orchestrator`, `agent-store-runtime`, `agent-store-prompts`, `@modelcontextprotocol/sdk`
+
+**Contents:**
+- `index.ts` — composition root, process lifecycle, `main()`
+- `server.ts` — MCP server creation via `@modelcontextprotocol/sdk`
+- `config.ts` — env loading, config singleton
+- `logger.ts` — pino to stderr
+- `store/agent-store.ts` — agents table (thin cache)
+- `db/client.ts` — DB singleton connection
+- `db/schema.ts` — agents table + migrations
+- `db/migrate.ts` / `migrate-runner.ts` — migration boot
+- `streaming/sse-server.ts` — SSE task event server
+- `streaming/chat-gateway.ts` — OpenAI-compatible gateway
+- `streaming/event-bus.ts` — in-process event bus
+- `utils/load-env.ts` — env file loading
+- `scripts/agent-mcp-tail.ts` — CLI dev tool
+
+### Migration steps
+
+1. **Create `agent-store-runtime`** — extract session-store, task-store, usage-client, schema, ids, timestamps
+2. **Create `agent-engine-orchestrator`** — extract engine, providers, clients, tools, plugins, validation
+3. **Remove duplicate `ComposedPromptStore`** from agent-mcp; import from `@adhd/agent-store-prompts` instead
+4. **Wire entrypoint** — `entrypoint/agent-mcp/` imports from the two new packages, registers tools, starts server
+5. **Update tsconfig.base.json** — add paths for the new packages
+6. **Update package.json deps** — all consumers of agent-mcp now depend on the specific package they need
+7. **Tests** — all existing tests must pass; verify with `nx run-many -t test`
+8. **Remove old `packages/ai/agent-mcp/`** once verified
+
 ## Phase 2 (separate plan)
 
 - Enforce strict import rules per layer definition
 - Refactor apigen: split `apigen-core-client` into `apigen-extractor-ts` + move types to `apigen-base-types`
-- Refactor agent: remove engine→store and engine→engine violations
+- Remove engine→store and engine→engine violations
 - Lock `pkg-class` ESLint rules, remove wildcard

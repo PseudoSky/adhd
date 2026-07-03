@@ -77,7 +77,7 @@ export interface ComponentListFilter {
 // version row. The PromptComponent shape gains `versionId` (the stable surrogate a
 // junction version_pin stores).
 //
-// Mirrors the store-class pattern in packages/ai/agent-mcp/src/store/agent-store.ts
+// Mirrors the store-class pattern in entrypoint/agent-mcp's AgentStore (agent-cache-store pattern)
 // [ref:store-class] (contexts/_shared.md)
 // ──────────────────────────────────────────────
 

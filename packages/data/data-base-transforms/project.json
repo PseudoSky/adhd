@@ -1,0 +1,75 @@
+{
+  "name": "data-base-transforms",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/data/data-base-transforms/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "platform:shared",
+    "layer:shared"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/packages/data/data-base-transforms",
+        "main": "packages/data/data-base-transforms/src/index.ts",
+        "tsConfig": "packages/data/data-base-transforms/tsconfig.lib.json",
+        "assets": [
+          "packages/data/data-base-transforms/*.md"
+        ]
+      }
+    },
+    "version": {
+      "executor": "nx:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": [
+          "scripts/version-packages.sh transform packages/data/data-base-transforms"
+        ]
+      }
+    },
+    "version-prerelease": {
+      "executor": "nx:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": [
+          "scripts/version-packages.sh transform packages/data/data-base-transforms @adhd -prerelease"
+        ]
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": [
+          "echo 'Running npm publish dry run'",
+          "npm publish --dry-run dist/packages/data/data-base-transforms"
+        ]
+      },
+      "configurations": {
+        "production": {
+          "parallel": false,
+          "commands": [
+            "npm publish dist/packages/data/data-base-transforms"
+          ]
+        }
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  }
+}

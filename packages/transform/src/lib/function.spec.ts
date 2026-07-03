@@ -1,4 +1,4 @@
-import functional from './function';
+import functional, { Differ } from './function';
 
 describe('functional', () => {
   it('setters', () => {
@@ -49,6 +49,55 @@ describe('functional', () => {
     expect(functional.splitPipe(() => false, () => true)()).toEqual([false, true]);
     expect(functional.flow([() => false, (a: any) => !a])()).toEqual(true);
     expect(functional.partial((a: number, b: number) => a + b, 1)(2)).toEqual(3);
-    // expect(functional.Differ(() => false)).toEqual(false);
+  });
+});
+
+// Regression coverage for BUG-TRANSFORM-001. Assertions captured from real execution.
+// Reverting either fix in Differ.map turns these red: the scalar branch would THROW
+// ("arr.sort is not a function"), and the second-pass guard prevents unchanged keys
+// from reappearing as changes.
+describe('Differ', () => {
+  it('diffs objects with scalar fields without throwing (BUG-TRANSFORM-001)', () => {
+    // The exact case that used to crash: an object whose fields are primitives.
+    expect(() => Differ.map({ a: 1 }, { a: 2 })).not.toThrow();
+    expect(Differ.map({ a: 1 }, { a: 2 })).toEqual({ a: 2 });
+  });
+
+  it('returns only the changed keys, excluding unchanged ones', () => {
+    // Unchanged `name` must NOT appear; only genuinely changed keys are returned.
+    expect(
+      Differ.map(
+        { name: 'Alice', meta: { score: 10 }, tags: ['a', 'b'] },
+        { name: 'Alice', meta: { score: 12 }, tags: ['b', 'c'] },
+      ),
+    ).toEqual({ meta: { score: 12 }, tags: { added: ['c'], deleted: ['a'] } });
+  });
+
+  it('returns an empty object when nothing changed', () => {
+    expect(Differ.map({ a: 1, b: 2 }, { a: 1, b: 2 })).toEqual({});
+  });
+
+  it('surfaces added and removed keys', () => {
+    expect(Differ.map({ a: 1 }, { a: 1, b: 2 })).toEqual({ b: 2 });
+    expect(Differ.map({ a: 1, b: 2 }, { a: 1 })).toEqual({ b: 2 });
+  });
+
+  it('recurses nested objects and reports only the changed leaf', () => {
+    expect(Differ.map({ u: { name: 'A', age: 30 } }, { u: { name: 'A', age: 31 } }))
+      .toEqual({ u: { age: 31 } });
+  });
+
+  it('diffs arrays via added/deleted tracking', () => {
+    expect(Differ.map([1, 2], [2, 3])).toEqual({ added: [3], deleted: [1] });
+    expect(Differ.getArrayDiffData([1, 2], [2, 3])).toEqual({ added: [3], deleted: [1] });
+    expect(Differ.map({ tags: ['a', 'b'] }, { tags: ['b', 'c'] }))
+      .toEqual({ tags: { added: ['c'], deleted: ['a'] } });
+  });
+
+  it('classifies value comparisons and exposes status constants', () => {
+    expect(Differ.compareValues(5, 5)).toEqual(Differ.VALUE_UNCHANGED);
+    expect(Differ.compareValues(5, 7)).toEqual(Differ.VALUE_UPDATED);
+    expect(Differ.VALUE_CREATED).toEqual('created');
+    expect(Differ.VALUE_DELETED).toEqual('deleted');
   });
 });

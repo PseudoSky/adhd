@@ -52,8 +52,14 @@
       "@adhd/agent-generator-plugin": [
         "./packages/agent/agent-generator-plugin/src/index.ts"
       ],
+      "@adhd/agent-engine-orchestrator": [
+        "./packages/agent/agent-engine-orchestrator/src/index.ts"
+      ],
       "@adhd/agent-mcp": [
-        "./packages/ai/agent-mcp/src/index.ts"
+        "./entrypoint/agent-mcp/src/index.ts"
+      ],
+      "@adhd/agent-store-runtime": [
+        "./packages/agent/agent-store-runtime/src/index.ts"
       ],
       "@adhd/agent-plugin-budget": [
         "./packages/agent/agent-plugin-budget/src/index.ts"
@@ -67,86 +73,104 @@
       "@adhd/agent-store-tools": [
         "./packages/agent/agent-store-tools/src/index.ts"
       ],
+      "@adhd/apigen-base-errors": [
+        "./packages/apigen/apigen-base-errors/src/index.ts"
+      ],
+      "@adhd/apigen-base-logical": [
+        "./packages/apigen/apigen-base-logical/src/index.ts"
+      ],
+      "@adhd/apigen-base-schema": [
+        "./packages/apigen/apigen-base-schema/src/index.ts"
+      ],
+      "@adhd/apigen-base-types": [
+        "./packages/apigen/apigen-base-types/src/index.ts"
+      ],
       "@adhd/apigen-cli": [
-        "./packages/apigen/cli/src/index.ts"
+        "./entrypoint/apigen-cli/src/index.ts"
       ],
-      "@adhd/apigen-codegen-openapi": [
-        "./packages/apigen/codegen/openapi/src/index.ts"
+      "@adhd/apigen-core-client": [
+        "./packages/apigen/apigen-core-client/src/index.ts"
       ],
-      "@adhd/apigen-conformance": [
-        "./packages/apigen/conformance/src/index.ts"
+      "@adhd/apigen-engine-conformance": [
+        "./packages/apigen/apigen-engine-conformance/src/index.ts"
       ],
-      "@adhd/apigen-core": [
-        "./packages/apigen/core/src/index.ts"
+      "@adhd/apigen-engine-gateway": [
+        "./packages/apigen/apigen-engine-gateway/src/index.ts"
       ],
-      "@adhd/apigen-errors": [
-        "./packages/apigen/errors/src/index.ts"
+      "@adhd/apigen-engine-naming": [
+        "./packages/apigen/apigen-engine-naming/src/index.ts"
       ],
-      "@adhd/apigen-gateway": [
-        "./packages/apigen/gateway/src/index.ts"
+      "@adhd/apigen-engine-runtime": [
+        "./packages/apigen/apigen-engine-runtime/src/index.ts"
       ],
-      "@adhd/apigen-logical": [
-        "./packages/apigen/logical/src/index.ts"
-      ],
-      "@adhd/apigen-naming": [
-        "./packages/apigen/naming/src/index.ts"
-      ],
-      "@adhd/apigen-nx": [
-        "./packages/apigen/nx/src/index.ts"
+      "@adhd/apigen-generator-nx": [
+        "./packages/apigen/apigen-generator-nx/src/index.ts"
       ],
       "@adhd/apigen-plugin-api-express": [
-        "./packages/apigen/plugins/api-express/src/index.ts"
+        "./packages/apigen/apigen-plugin-api-express/src/index.ts"
       ],
       "@adhd/apigen-plugin-api-fastify": [
-        "./packages/apigen/plugins/api-fastify/src/index.ts"
+        "./packages/apigen/apigen-plugin-api-fastify/src/index.ts"
       ],
       "@adhd/apigen-plugin-cli-output": [
-        "./packages/apigen/plugins/cli/src/index.ts"
+        "./packages/apigen/apigen-plugin-cli-output/src/index.ts"
       ],
       "@adhd/apigen-plugin-demo-plugin": [
         "./packages/apigen/plugins/demo-plugin/src/index.ts"
       ],
       "@adhd/apigen-plugin-health": [
-        "./packages/apigen/plugins/health/src/index.ts"
+        "./packages/apigen/apigen-plugin-health/src/index.ts"
       ],
       "@adhd/apigen-plugin-jsonschema": [
-        "./packages/apigen/plugins/jsonschema/src/index.ts"
+        "./packages/apigen/apigen-plugin-jsonschema/src/index.ts"
       ],
       "@adhd/apigen-plugin-logger": [
-        "./packages/apigen/plugins/logger/src/index.ts"
+        "./packages/apigen/apigen-plugin-logger/src/index.ts"
       ],
       "@adhd/apigen-plugin-mcp": [
-        "./packages/apigen/plugins/mcp/src/index.ts"
+        "./packages/apigen/apigen-plugin-mcp/src/index.ts"
       ],
       "@adhd/apigen-plugin-openapi": [
-        "./packages/apigen/plugins/openapi/src/index.ts"
+        "./packages/apigen/apigen-plugin-openapi/src/index.ts"
       ],
       "@adhd/apigen-plugin-py-flask": [
-        "./packages/apigen/plugins/py-flask/src/index.ts"
+        "./packages/apigen/apigen-plugin-py-flask/src/index.ts"
       ],
       "@adhd/apigen-plugin-py-grpc": [
-        "./packages/apigen/plugins/py-grpc/src/index.ts"
+        "./packages/apigen/apigen-plugin-py-grpc/src/index.ts"
       ],
       "@adhd/apigen-python-env": [
         "./packages/apigen/python-env/src/index.ts"
       ],
-      "@adhd/apigen-runtime": [
-        "./packages/apigen/runtime/src/index.ts"
+      "@adhd/data-core-structures": [
+        "./packages/data/data-core-structures/src/index.ts"
       ],
-      "@adhd/apigen-schema": [
-        "./packages/apigen/schema/src/index.ts"
+      "@adhd/data-core-structures-base-transforms": [
+        "./packages/data/data-core-structures/data-base-transforms/src/index.ts"
       ],
-      "@adhd/data": [
-        "./packages/data/src/index.ts"
+      "@adhd/data-core-structures-query-engine": [
+        "./packages/data/data-core-structures/data-query-engine/src/index.ts"
       ],
-      "@adhd/decompile": [
-        "./packages/decompile/src/index.ts"
+      "@adhd/decompile-cli": [
+        "./entrypoint/decompile-cli/src/index.ts"
+      ],
+      "@adhd/dispatch-base-spec": [
+        "./packages/dispatch/dispatch-base-spec/src/index.ts"
+      ],
+      "@adhd/dispatch-base-types": [
+        "./packages/dispatch/dispatch-base-types/src/index.ts"
       ],
       "@adhd/dispatch-cli": [
         "./packages/dispatch/dispatch-cli/src/index.ts"
       ],
       "@adhd/dispatch-client": [
         "./packages/dispatch/dispatch-client/src/index.ts"
+      ],
+      "@adhd/dispatch-core-client": [
+        "./packages/dispatch/dispatch-core-client/src/index.ts"
+      ],
+      "@adhd/dispatch-core-optimizer": [
+        "./packages/dispatch/dispatch-core-optimizer/src/index.ts"
       ],
       "@adhd/dispatch-optimizer": [
         "./packages/dispatch/dispatch-optimizer/src/index.ts"
@@ -160,17 +184,17 @@
       "@adhd/dispatch-spec": [
         "./packages/dispatch/dispatch-spec/src/index.ts"
       ],
-      "@adhd/query": [
-        "./packages/query/src/index.ts"
+      "@adhd/ui-react-base-hooks": [
+        "./packages/ui-react/ui-react-base-hooks/src/index.ts"
       ],
-      "@adhd/react-hooks": [
-        "./packages/react-hooks/src/index.ts"
+      "@adhd/ui-react-base-storybook": [
+        "./packages/ui-react/ui-react-base-storybook/src/index.ts"
       ],
-      "@adhd/storybook": [
-        "./packages/storybook/src/index.ts"
+      "@adhd/workspace-base-tools": [
+        "./packages/workspace/workspace-base-tools/src/index.ts"
       ],
-      "@adhd/transform": [
-        "./packages/transform/src/index.ts"
+      "@adhd/workspace-codegen-nx": [
+        "./packages/workspace/workspace-codegen-nx/src/index.ts"
       ]
     }
   },
