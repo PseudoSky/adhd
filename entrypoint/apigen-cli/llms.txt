@@ -1,0 +1,37 @@
+# @adhd/apigen-cli — LLM summary
+
+## Identity
+- npm: @adhd/apigen-cli (0.1.0) — bin: `apigen`
+- Source: entrypoint/apigen-cli/ in adhd monorepo
+- License: MIT
+- Build: npx nx build apigen-cli
+
+## Commands
+- `apigen run --source <path> --type <plugin-id> [--opt key=value] [--use <plugin>] [--v2]` — Serve source as live server
+- `apigen generate --source <path> --type <plugin-id> --out-dir <path> [options]` — Generate artifacts to disk
+- `apigen serve --source <path> [--source ...] --port <port> [--mount ns=plugin]` — Multi-source front server
+- `apigen run-registry --packages-dir <path> --type <plugin-id> [options]` — Multi-package live server
+- `apigen generate-registry --packages-dir <path> --type <plugin-id> --out-dir <path> [options]` — Multi-package generate
+
+## Plugin types (--type)
+mcp, jsonschema, api-fastify, api-express, cli/cli-output, py-flask, py-grpc
+
+## Built-in --use plugins
+health, logger (plus custom by package specifier or local path)
+
+## Key flags (all commands)
+- --log-level (APIGEN_LOG_LEVEL): trace|debug|info|warn|error|fatal|silent
+- --log-format (APIGEN_LOG_FORMAT): json|pretty
+- --log-file (APIGEN_LOG_FILE): path
+- --v2: use unified orchestrator path
+- --config: projection-override config file (Tenet 1)
+
+## Sources
+- CLI entry: src/index.ts (Commander.js)
+- Command implementations: src/lib/commands/{run,generate,serve,run-registry,generate-registry}.ts
+- Pipeline: src/lib/pipeline.ts (v1), src/lib/orchestrator.ts (v2)
+- Scaffolding: src/lib/scaffold.ts
+- Registry discovery: src/lib/registry.ts
+- Tsconfig resolution: src/lib/resolve-tsconfig.ts
+- Dynamic import: src/lib/import-source.ts
+- Logging: src/lib/logging.ts

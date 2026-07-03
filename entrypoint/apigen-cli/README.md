@@ -1,150 +1,434 @@
 # @adhd/apigen-cli
 
-The user-facing CLI for **apigen** — take any `.ts` file and expose its exports as an
-**MCP server, HTTP API (Fastify/Express), CLI, or JSON Schema**, with **zero changes to
-the source**. Functions are the single source of truth; everything is derived.
+**apigen: code-first, polyglot API generation.**
 
-> This documents the **v1** (TypeScript-only) implementation that ships today. The
-> transport-neutral, polyglot **v2** standard is specified in
-> [`docs/apigen/SPEC.md`](../../../docs/apigen/SPEC.md) and is in active build-out.
+Write ordinary functions in your language of choice. Get **type-safe, production-ready servers** in any protocol — MCP, HTTP (Fastify/Express), CLI, JSON Schema, Python Flask, or Python gRPC — with **zero framework boilerplate, zero annotations, and zero changes to your source**.
+
+```bash
+npx @adhd/apigen-cli --help
+```
+
+## What you can build
+
+apigen turns your functions into running servers. Here's what that means in practice:
+
+**A polyglot microservice from one command.** Mount TypeScript and Python files behind a single port — Fastify, Express, Flask, and gRPC all sharing one HTTP/1.1 + HTTP/2 endpoint, with per-namespace health and partial-availability isolation.
+
+**An AI tool server from a single file.** Extract your business logic as an MCP server over stdio, SSE, or streaming HTTP — ready for any MCP host (Claude Desktop, Cursor, custom agents).
+
+**Generated, deployable projects.** Emit a complete, runnable server project to disk, complete with `package.json`, `tsconfig.json`, and workspace-linked dependencies. The generated code is type-checked and imports only the dependencies your functions actually use.
+
+**Cross-language type fidelity.** Types that normally break in JSON — `Date`, `bigint`, `Decimal`, `Uint8Array`, discriminated unions, nominal classes — survive the wire with exact precision, and they mean the *same bytes* whether the function runs in TypeScript or Python.
+
+**Pluggable middleware via composition.** Add health endpoints, per-operation logging, auth, or rate-limiting with `--use` plugins — never by editing your business logic.
+
+```ts
+// This file. That's it. No decorators, no framework, no schema.
+// apigen reads it and serves it as any protocol you ask for.
+export async function greet(name: string): Promise<string> {
+  return `hello, ${name}`;
+}
+```
+
+```bash
+# → MCP server (AI agents consume your function as a tool)
+npx @adhd/apigen-cli run --source greet.ts --type mcp
+
+# → HTTP server on port 3000
+npx @adhd/apigen-cli run --source greet.ts --type api-fastify --opt port=3000
+
+# → CLI tool (interactive command from your function)
+npx @adhd/apigen-cli run --source greet.ts --type cli
+```
+
+The protocol is a deployment choice, never a rewrite.
 
 ---
 
-## Install / launch
+## Install
 
-The CLI is not bundled to `dist` by default. Use whichever fits:
+### Via npm (published package)
 
 ```bash
-cd <repo-root>
+npx @adhd/apigen-cli <command>       # run without installing
+npm install -g @adhd/apigen-cli      # global install
+apigen --help
+```
 
-# A) Dev — run the TypeScript entry directly (no build):
-alias apigen='npx tsx packages/apigen/cli/src/index.ts'
+### From source (this monorepo)
 
-# B) Bundled bin — build once, then run dist (bin name: apigen-cli):
+```bash
 npx nx build apigen-cli
-#   → node packages/apigen/cli/dist/index.js
+alias apigen='node dist/entrypoint/apigen-cli/index.js'
 ```
-
-**Commands:** `run`, `generate`, `run-registry`, `generate-registry`
-**`--type` (target plugin):** `mcp` · `api-fastify` · `api-express` · `cli` · `jsonschema`
-**Server knobs:** passed through repeatable `--opt key=value`.
-
-A ready fixture lives at `packages/apigen/cli/src/test/fixtures/api.ts` (`getUser`, `sendEmail`),
-used in the examples below.
 
 ---
 
-## Run a live server — `run`
+## Quickstart
+
+### One function → one server → one curl
 
 ```bash
-# MCP over stdio (default transport)
-apigen run --source packages/apigen/cli/src/test/fixtures/api.ts --type mcp
+# Create your source
+echo 'export async function greet(name: string): Promise<string> {
+  return `hello, ${name}`;
+}' > hello.ts
 
-# MCP over HTTP transports
-apigen run --source .../api.ts --type mcp --opt transport=sse             --opt port=3000
-apigen run --source .../api.ts --type mcp --opt transport=streaming-http  --opt port=3000
+# Serve it live
+npx @adhd/apigen-cli run --source hello.ts --type api-fastify --opt port=8080
 
-# HTTP API (Fastify or Express) — --namespace sets the route prefix segment
-apigen run --source packages/apigen/cli/src/test/fixtures/api.ts \
-  --type api-fastify --namespace api --opt port=3000
-```
-
-Call an HTTP server — **method must be uppercase `POST`**, arguments wrapped in
-`{"data":{…}}` (the request envelope), route is `/<namespace>/<fn>`:
-
-```bash
-curl -X POST http://127.0.0.1:3000/api/getUser \
+# Call it — arguments in {"data":{…}} envelope
+curl -X POST http://localhost:8080/hello/greet \
   -H 'content-type: application/json' \
-  -d '{"data":{"userId":"abc"}}'
-# → {"id":"abc"}
+  -d '{"data":{"name":"ada"}}'
+# → {"result":"hello, ada"}
 ```
 
-### `--opt` keys read by the server plugins
-
-| key           | targets                                               | default     | meaning                                |
-| ------------- | ----------------------------------------------------- | ----------- | -------------------------------------- |
-| `transport`   | `mcp`                                                 | `stdio`     | `stdio` \| `sse` \| `streaming-http`   |
-| `port`        | `mcp` (http transports), `api-fastify`, `api-express` | `3000`      | listen port                            |
-| `host`        | `mcp` (http), `api-fastify`, `api-express`            | `127.0.0.1` | bind host                              |
-| `routePrefix` | `api-fastify`, `api-express`                          | `""`        | path prefix before `/<namespace>/<fn>` |
-
-`mcp` over `stdio` keeps **stdout** clean for the JSON-RPC channel — all logs go to stderr.
-
----
-
-## Generate to disk — `generate`
+### One source, every protocol
 
 ```bash
-# MCP server source
-apigen generate --source packages/apigen/cli/src/test/fixtures/api.ts \
-  --type mcp --out-dir /tmp/apigen-out
-node /tmp/apigen-out/server.ts          # or: npx tsx /tmp/apigen-out/server.ts
+# MCP server (stdio — for AI agents)
+npx @adhd/apigen-cli run --source hello.ts --type mcp
 
-apigen generate --source .../api.ts --type api-fastify --out-dir /tmp/out-http    # routes.ts
-apigen generate --source .../api.ts --type cli         --out-dir /tmp/out-cli     # cli.ts
-apigen generate --source .../api.ts --type jsonschema  --out-dir /tmp/out-schema  # *.json
+# MCP over SSE
+npx @adhd/apigen-cli run --source hello.ts --type mcp --opt transport=sse --opt port=3000
+
+# HTTP (Express)
+npx @adhd/apigen-cli run --source hello.ts --type api-express --opt port=3001
+
+# CLI tool (interactive)
+npx @adhd/apigen-cli run --source hello.ts --type cli
+
+# JSON Schema (generate to disk)
+npx @adhd/apigen-cli generate --source hello.ts --type jsonschema --out-dir ./schema
 ```
 
-Generated servers import `dispatch`/`buildFnTable` from `@adhd/apigen-runtime` — no inlined
-dispatch logic — so disk output behaves identically to `run`.
-
----
-
-## Multi-package — `run-registry` / `generate-registry`
-
-Discover packages in a directory by **nx tag** and wire them into one surface:
+### Multi-language, one port
 
 ```bash
-apigen run-registry --packages-dir packages/apigen/cli/src/test/fixtures/registry \
-  --tag api --type mcp
-apigen generate-registry --packages-dir <dir> --tag api --type mcp --out-dir /tmp/reg-out
+# TypeScript + Python behind a single HTTP/gRPC front
+npx @adhd/apigen-cli serve \
+  --source money.ts \
+  --source orders.py \
+  --port 8080
+
+# Verify everything is healthy
+curl http://localhost:8080/_meta/health
+# → {"status":"ok","hosts":{"money":"ready","orders":"ready"}}
+# A failed host degrades only its own namespace (503/UNAVAILABLE).
+# The rest keep serving.
 ```
 
-`--tag` / `--exclude-tag` are repeatable; untagged exports stay out of the surface.
+### With middleware
+
+```bash
+npx @adhd/apigen-cli run --source hello.ts --type api-fastify --use health --use logger
+# health → GET /_meta/health  (live health check)
+# logger → per-operation structured logging to stderr
+```
 
 ---
 
-## Flags
+## What you get: the generated server
 
-### Export shapes — `--export`
+When you `generate`, apigen emits a **real, runnable project**:
 
-- _(omit)_ — named exports (`export function f`, `export const f = …`).
-- `--export default` — a default-exported function/object.
-- `--export <objName>` — a named object whose properties are the operations.
+```
+./out/api/
+├── package.json          # only the deps your code actually uses
+├── tsconfig.json         # ready to compile
+├── node_modules/         # linked (with --link-workspace) or via npm install
+├── server.ts             # the generated server entry point
+└── routes.ts             # generated route handlers
+```
 
-> **Known v1 limitations (tracked, fixed by v2):** `export { x as y }` aliases,
-> anonymous default exports, and CJS-source files mis-name routes because v1 names by the
-> _declaration_ identifier rather than the _exported symbol_. v2 (`docs/apigen/SPEC.md`)
-> names by exported symbol and closes these.
+```bash
+# Build output that runs standalone
+npx @adhd/apigen-cli generate --source hello.ts --type api-fastify --out-dir ./out/api
+cd ./out/api && npm install && npx tsx server.ts
+```
 
-### Resolution
+The generated server imports `dispatch`/`buildFnTable` from `@adhd/apigen-engine-runtime` — no inlined dispatch logic — so it behaves identically to `run`.
 
-- `--tsconfig <path>` — explicit tsconfig; otherwise the nearest one, else a builtin default.
-- `--namespace <name>` — the package id / route prefix segment. Defaults to the tsconfig
-  folder name, falling back to the source file's folder.
+---
 
-### Plugin options
+## Commands
 
-- `--opt key=value` — repeatable; forwarded to the target plugin (see table above).
+### `apigen run` — Serve a source file as a live server
 
-### Logging (stderr — stdout stays protocol-clean)
+Start a live server from TypeScript or Python source. Functions are imported at runtime via `tsx` and handed to the selected plugin.
 
-- `--log-level trace|debug|info|warn|error|fatal|silent` (env `APIGEN_LOG_LEVEL`)
-- `--log-format json|pretty` (env `APIGEN_LOG_FORMAT`)
-- `--log-file <path>` — write logs to a file instead of stderr (env `APIGEN_LOG_FILE`)
+```bash
+apigen run --source <path> --type <plugin-id> [options]
+```
 
-Lifecycle logged: compile → server start → host/port → route/tool list → per-request → shutdown.
+| Flag | Description |
+|------|-------------|
+| `--source <path>` | Source file (`.ts`, `.py`) |
+| `--type <plugin-id>` | Output plugin — see [Plugins](#plugins) |
+| `--export <mode>` | Export selection: `"default"` \| `"<name>"` \| omit for named |
+| `--tsconfig <path>` | Explicit tsconfig.json |
+| `--namespace <name>` | Route prefix (default: tsconfig folder name) |
+| `--opt <key>=<value>` | Plugin option (repeatable) |
+| `--use <plugin>` | Middleware plugin (repeatable) |
+| `--config <path>` | Projection-override config file |
+| `--v2` | Use v2 unified orchestrator |
+
+The server handles `SIGINT`/`SIGTERM` gracefully.
+
+### `apigen generate` — Generate server artifacts to disk
+
+Extract TypeScript source and write generated files to an output directory. The output includes resolution scaffolding (`package.json`, `tsconfig.json`) so it runs standalone.
+
+```bash
+apigen generate --source <path> --type <plugin-id> --out-dir <path> [options]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--source <path>` | TypeScript source file |
+| `--type <plugin-id>` | Output plugin |
+| `--out-dir <path>` | Output directory |
+| `--export <mode>` | Export selection |
+| `--tsconfig <path>` | Explicit tsconfig.json |
+| `--namespace <name>` | Package namespace |
+| `--opt <key>=<value>` | Plugin option (repeatable) |
+| `--use <plugin>` | Middleware plugin (repeatable) |
+| `--config <path>` | Projection-override config file |
+| `--link-workspace` | Emit workspace-linked `node_modules` (for monorepo dev before publish) |
+| `--v2` | Use v2 unified orchestrator |
+
+```bash
+# Generate a Fastify HTTP server
+apigen generate --source hello.ts --type api-fastify --out-dir ./out/http
+cd ./out/http && npm install && npx tsx server.ts
+
+# Generate an MCP server project with workspace linking
+apigen generate --source hello.ts --type mcp --out-dir ./out/mcp --link-workspace
+node ./out/mcp/server.ts
+```
+
+Per-surface dependencies are automatically patched into `package.json`: if your function uses `Decimal`, only then does `decimal.js` appear as a dependency.
+
+### `apigen serve` — Multi-source, multi-language front server
+
+Mount many source files across languages behind a single HTTP/1.1 + gRPC (HTTP/2) port. This is a small distributed system in one command: each source runs as a child process supervised with health probes and partial-availability isolation.
+
+```bash
+apigen serve --source <path> [--source ...] --port <port> [--mount <ns>=<plugin> ...]
+```
+
+| Flag | Description |
+|------|-------------|
+| `--source <path>` | Source to mount (repeatable; `.ts` → api-fastify, `.py` → py-flask) |
+| `--port <port>` | Front TCP port (HTTP + gRPC multiplexed) |
+| `--mount <ns>=<plugin>` | Pin namespace to specific plugin (repeatable; e.g. `ledger=py-grpc`) |
+
+**Namespace by default** is the source filename stem. So `--source money.ts` creates namespace `money` served via `api-fastify`. Override with `--mount orders=api-express`.
+
+```bash
+# Mix TypeScript and Python, four frameworks, one port
+apigen serve \
+  --source money.ts \
+  --source orders.ts \
+  --source billing.py \
+  --source ledger.py \
+  --port 8080 \
+  --mount orders=api-express \
+  --mount ledger=py-grpc
+```
+
+**Architecture:**
+- **Protocol demux** — A raw `net.Server` peeks the first 3 bytes. HTTP/2 prior-knowledge (h2c/gRPC) starts with `PRI`; everything else is HTTP/1.1. Both share one TCP port.
+- **Spawn + supervise** — Each source starts as a child `apigen run` subprocess on a free loopback port. Children are tracked by PID.
+- **Readiness probes** — HTTP hosts via `GET /_meta/health`, gRPC hosts via TCP connect. Both poll with 15s timeout.
+- **Partial availability** — A dead child fails only its `/<ns>/*` routes (503 HTTP, UNAVAILABLE gRPC).
+- **Orphan-free teardown** — `SIGINT`/`SIGTERM` sends `SIGTERM` then `SIGKILL` after 3s grace.
+- **Python pre-provisioning** — The managed Python venv is set up before any child spawns, so first-time `pip install` doesn't eat the ready timeout.
+
+### `apigen run-registry` — Multi-package live server
+
+Discover packages by nx tag and wire them into one live server.
+
+```bash
+apigen run-registry --packages-dir <path> --type <plugin-id> [options]
+```
+
+All discovered packages are passed to `plugin.run()` in one invocation — one server, all namespaces.
+
+### `apigen generate-registry` — Multi-package artifact generation
+
+Discover packages by nx tag and generate artifacts for all in one pass.
+
+```bash
+apigen generate-registry --packages-dir <path> --type <plugin-id> --out-dir <path> [options]
+```
+
+---
+
+## Plugins
+
+| ID | Language | `run` | `generate` | What it builds |
+|----|----------|-------|------------|----------------|
+| `mcp` | TS | ✓ | ✓ | **MCP server** — model-context-protocol AI tool server. Transports: stdio, SSE, streaming-http |
+| `jsonschema` | TS | | ✓ | **JSON Schema** — per-operation input/output schema files |
+| `api-fastify` | TS | ✓ | ✓ | **Fastify HTTP server** — high-performance, plugin-based HTTP |
+| `api-express` | TS | ✓ | ✓ | **Express HTTP server** — familiar Node.js HTTP framework |
+| `cli` / `cli-output` | TS | ✓ | ✓ | **Interactive CLI tool** — your functions become command-line commands |
+| `py-flask` | Py | ✓ | ✓ | **Python Flask server** — Python HTTP via the Flask framework |
+| `py-grpc` | Py | ✓ | ✓ | **Python gRPC server** — HTTP/2 gRPC with protobuf wire format |
+
+Non-TS plugins (`py-flask`, `py-grpc`) bypass TypeScript compilation — they spawn a Python subprocess. All plugins use the same canonical wire format, so a `Decimal` is the same JSON string from Fastify, Flask, or gRPC.
+
+---
+
+## Common flags
+
+### `--opt <key>=<value>` — Plugin options
+
+Passed through to the target plugin. Recognized keys:
+
+| Key | Applies to | Default | Meaning |
+|-----|------------|---------|---------|
+| `transport` | `mcp` | `stdio` | `stdio` \| `sse` \| `streaming-http` |
+| `port` | `mcp` (HTTP), `api-fastify`, `api-express`, `py-flask` | `3000` | Listen port |
+| `host` | All HTTP transports | `127.0.0.1` | Bind address |
+| `routePrefix` | `api-fastify`, `api-express` | `""` | Path prefix before `/<namespace>/<fn>` |
+| `http.verb.<id>=GET/POST` | All HTTP plugins | (derived) | Override HTTP verb per operation |
+
+MCP over `stdio` keeps **stdout** clean for JSON-RPC — all logs go to stderr.
+
+### `--use <plugin>` — Middleware plugins
+
+Compose cross-cutting behavior without editing your source code. Accepts:
+
+- **Built-in slugs:** `health` — mounts `GET /_meta/health`; `logger` — per-operation structured logging
+- **Package specifiers:** any npm package exporting a Plugin interface
+- **Local paths:** filesystem path to a plugin module
+
+```bash
+apigen run --source hello.ts --type api-fastify --use health --use logger
+```
+
+Multiple `--use` plugins compose in declaration order.
+
+### `--export <mode>` — Export selection
+
+Controls which exports become API operations:
+
+| Value | Behavior |
+|-------|----------|
+| _(omit)_ | Named exports (`export function f`, `export const f = …`) |
+| `default` | Default-exported function or object |
+| `<name>` | A named object whose properties become operations |
+
+> **v1 limitation:** `export { x as y }` aliases and anonymous defaults mis-name routes in v1 (named by declaration identifier). v2 names by exported symbol. Fixed by the `--v2` flag.
+
+### `--v2` — Unified orchestrator
+
+Activates the v2 detect→extract→merge→collision-check→generate/run pipeline. Uses a shared `ExtractionSession` (one ts-morph `Project` per tsconfig). Collision checks are a hard error (no silent last-writer-wins). v1 remains the default for backward compatibility.
+
+### `--config <path>` — Projection-override file
+
+JSON file for out-of-source HTTP verb and naming overrides (Tenet 1 — source is never modified). CLI `--opt` flags override file values.
+
+### `--link-workspace` — Pre-publish bridge
+
+When generating output that depends on `@adhd/apigen-*` packages not yet published, emits a workspace-linked `node_modules` so the output runs in place. For published consumers: omit this flag and run `npm install` instead.
+
+---
+
+## Middleware system (plugins via `--use`)
+
+apigen's architecture supports **layer and mount plugins** that compose at runtime:
+
+- **Layer plugins** intercept the request/response cycle — validate, log, rate-limit, add auth context.
+- **Mount plugins** add routes — health endpoints, metrics, status pages.
+
+Built-in plugins:
+
+| Plugin | Type | What it does |
+|--------|------|-------------|
+| `health` | Mount | Adds `GET /_meta/health` with aggregate status |
+| `logger` | Layer | Per-operation pino logging to stderr |
+
+Write your own by exporting a Plugin object (with `capabilities` field) from any npm package or local file.
+
+---
+
+## Type safety and rich types
+
+apigen infers JSON Schema from your TypeScript types. Types that plain JSON would mangle are carried through a canonical wire format:
+
+| Type | Wire encoding | Survives? |
+|------|--------------|-----------|
+| `Date` | RFC3339 UTC string | ✓ |
+| `bigint` / `int64` | Decimal string | ✓ (no precision loss past 2⁵³) |
+| `Decimal` | Decimal string | ✓ (exact, never a binary float) |
+| `Uint8Array` / bytes | Base64 | ✓ |
+| Discriminated unions (`Dog \| Cat`) | Tagged variant | ✓ |
+| Nominal classes | Reconstructed instance | ✓ |
+| `readonly T[]` | Preserved element type | ✓ |
+
+Cross-language fidelity: a `Decimal("123.456")` produces the same JSON string from TypeScript, Python Flask, and Python gRPC — verified by the conformance suite.
+
+---
+
+## Logging
+
+All logs go to **stderr** only — stdout is protocol-clean for MCP stdio transport.
+
+| Flag | Env var | Values | Default |
+|------|---------|--------|---------|
+| `--log-level <level>` | `APIGEN_LOG_LEVEL` | `trace` \| `debug` \| `info` \| `warn` \| `error` \| `fatal` \| `silent` | `info` |
+| `--log-format <format>` | `APIGEN_LOG_FORMAT` | `json` \| `pretty` | plain |
+| `--log-file <path>` | `APIGEN_LOG_FILE` | file path | stderr |
+
+---
+
+## Fail-fast guards
+
+The CLI catches common mistakes early with actionable messages:
+
+- **0 functions found:** `--source` points to generated output or a type-only file → `"0 functions found — looks like generated output or the wrong source file."`
+- **Missing `decimal.js`:** Your function uses `Decimal` but the package isn't installed → `"function quote takes a Decimal; install \`decimal.js\`."`
+- **Non-TS plugin bypass:** `--type py-flask` with `.py` source skips the TS pipeline (which would crash on a non-TS file)
 
 ---
 
 ## Nx integration
 
-- Cache-aware generate target: `@adhd/apigen-nx:generate` (see [`../nx`](../nx)).
-- Scaffold a new output plugin: `nx g @adhd/apigen-nx:plugin <name>`.
+- **Cache-aware generate target:** `@adhd/apigen-generator-nx:generate` — run `apigen generate` as a cached Nx target. See [`packages/apigen/apigen-generator-nx`](../../packages/apigen/apigen-generator-nx).
+- **Scaffold a new output plugin:** `nx g @adhd/apigen-generator-nx:plugin <name>` — generates a buildable plugin package implementing the `OutputPlugin` interface. Use this to add a new codegen target (e.g., `nestjs`, `hono`, `spring`) without forking apigen.
+- **Scaffold a new host language:** `nx g @adhd/apigen-generator-nx:host <name>` — generates a host-language harness with a "red-by-construction" conformance manifest. Use this to add a new runtime (e.g., Rust, Go, Java) to the polyglot serve topology.
 
-## Develop
+---
+
+## Architecture
+
+apigen works in three stages:
+
+1. **Extract** — Parse your source (TypeScript via ts-morph), infer JSON Schema for every parameter and return type, detect rich types (Date, Decimal, bigint, etc.).
+2. **Compose** — Merge schemas across packages, run collision checks (no silent name shadowing).
+3. **Project** — Hand the composed descriptor to the selected output plugin for live serving or code generation.
+
+The v2 architecture (`docs/apigen/SPEC.md`) extends this to a polyglot detect → extract → merge → project pipeline with a canonical JSON descriptor as the neutral contract. Python plugins already ship; Rust/Go/Java host languages are designed in the SPEC.
+
+---
+
+## Developing
 
 ```bash
-npx nx build apigen-cli      # bundle
-npx nx test  apigen-cli      # Vitest (unit + integration)
+npx nx build apigen-cli                    # Bundle (Vite)
+npx nx test apigen-cli                     # Test (Vitest — unit + integration)
+npx nx run apigen-cli:bench               # Benchmarks (--expose-gc)
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+---
+
+## Spec
+
+- **v2 Canonical Spec:** [`docs/apigen/SPEC.md`](../../docs/apigen/SPEC.md) — architecture, canonical descriptor, polyglot topology
+- **Guided Tour:** [`docs/apigen/DEMO.md`](../../docs/apigen/DEMO.md) — runnable walk-through from zero
