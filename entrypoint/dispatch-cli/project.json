@@ -19,9 +19,6 @@
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
-      "dependsOn": [
-        "generate-cli"
-      ],
       "outputs": [
         "{workspaceRoot}/coverage/entrypoint/dispatch-cli"
       ],
