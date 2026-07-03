@@ -2,7 +2,7 @@ import type {
   OutputPlugin,
   PluginInput,
   PluginOutput,
-} from '@adhd/apigen-core-client;
+} from '@adhd/apigen-core-client';
 import { generate } from './generate';
 
 export const cliPlugin: OutputPlugin = {

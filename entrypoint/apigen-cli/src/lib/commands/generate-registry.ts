@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { discoverPackages } from '../registry';
 import { runPipeline } from '../pipeline';
 import { buildCliLogger } from '../logging';
-import type { OutputPlugin, PluginInput } from '@adhd/apigen-core-client;
+import type { OutputPlugin, PluginInput } from '@adhd/apigen-core-client';
 
 /** Parse --opt key=value pairs into an options record. */
 function parseOptPairs(pairs: string[]): Record<string, unknown> {

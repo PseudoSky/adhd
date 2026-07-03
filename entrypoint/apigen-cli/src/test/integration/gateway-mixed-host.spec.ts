@@ -35,7 +35,7 @@ import {
   type HostRequest,
   type InProcessRuntime,
 } from '@adhd/apigen-gateway';
-import type { Operation, Transport } from '@adhd/apigen-core-client;
+import type { Operation, Transport } from '@adhd/apigen-core-client';
 
 // ---------------------------------------------------------------------------
 // Minimal Operation builders, host-tagged for routing.

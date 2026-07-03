@@ -332,10 +332,7 @@ function runScalarAwareGenerator(
   session?: InternalExtractionSession
 ): Record<string, unknown> {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { DEFAULT_CONFIG } =
-    require('ts-json-schema-generator/dist/src/Config.js') as {
-      DEFAULT_CONFIG: CompletedConfig;
-    };
+  const { DEFAULT_CONFIG } = require('ts-json-schema-generator/dist/src/Config.js') as { DEFAULT_CONFIG: CompletedConfig };
   const completedConfig: CompletedConfig = { ...DEFAULT_CONFIG, ...config };
   const pathStr = completedConfig.path as string;
 
@@ -362,10 +359,9 @@ function runScalarAwareGenerator(
   }
   if (!gen) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { createProgram } =
-      require('ts-json-schema-generator/dist/factory/program.js') as {
-        createProgram: (cfg: CompletedConfig) => unknown;
-      };
+    const { createProgram } = require('ts-json-schema-generator/dist/factory/program.js') as {
+      createProgram: (cfg: CompletedConfig) => unknown;
+    };
     const ts = getTsjsTs();
     const augmentor = buildParserAugmentor(
       ts.SyntaxKind.BigIntKeyword,

@@ -14,8 +14,8 @@ import { tsDepMap } from '@adhd/apigen-base-logical';
 import { registerGenerateRegistryCommand } from '../lib/commands/generate-registry';
 import { discoverPackages } from '../lib/registry';
 import jsonschemaPlugin from '@adhd/apigen-plugin-jsonschema';
-import { generateSchemas, composeSchemas } from '@adhd/apigen-core-client;
-import type { OutputPlugin } from '@adhd/apigen-core-client;
+import { generateSchemas, composeSchemas } from '@adhd/apigen-core-client';
+import type { OutputPlugin } from '@adhd/apigen-core-client';
 
 const fixturesDir = path.join(__dirname, 'fixtures');
 const registryDir = path.join(fixturesDir, 'registry');

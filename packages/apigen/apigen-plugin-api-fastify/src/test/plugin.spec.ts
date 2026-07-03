@@ -5,7 +5,7 @@ import { apiFastifyPlugin } from '../lib/plugin';
 import { generate } from '../lib/generate';
 import { run } from '../lib/run';
 import healthPlugin from '@adhd/apigen-plugin-health';
-import type { PluginInput, RunInput } from '@adhd/apigen-core-client;
+import type { PluginInput, RunInput } from '@adhd/apigen-core-client';
 import * as net from 'node:net';
 
 /** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */

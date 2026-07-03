@@ -9,7 +9,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { dispatch, createLogger, describeParams } from '@adhd/apigen-engine-runtime';
 import type { Logger } from '@adhd/apigen-engine-runtime';
-import type { RunInput } from '@adhd/apigen-core-client;
+import type { RunInput } from '@adhd/apigen-core-client';
 import { envelopeMetaKey } from '@adhd/apigen-naming';
 import { MCP_ERROR_KIND } from '@adhd/apigen-base-errors';
 

@@ -31,7 +31,7 @@ import type {
   OutputPlugin,
   PluginInput,
   ComposedSchemas,
-} from '@adhd/apigen-core-client;
+} from '@adhd/apigen-core-client';
 
 // ---------------------------------------------------------------------------
 // Fixture paths

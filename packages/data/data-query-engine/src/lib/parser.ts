@@ -1,4 +1,4 @@
-import { Transform as _ } from '@adhd/data-core-structures-base-transforms';
+import { Transform as _ } from '@adhd/data-base-transforms';
 import { BooleanExpression, OrderByExpression } from './expressions';
 import { operators } from './filters';
 import { OrderByOperation } from './operators';

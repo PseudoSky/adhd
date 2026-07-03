@@ -18,7 +18,7 @@
 //     are a convention, not a filter.
 
 import { project } from '@adhd/apigen-naming'
-import type { Operation, JSONSchema } from '@adhd/apigen-core-client
+import type { Operation, JSONSchema } from '@adhd/apigen-core-client'
 
 // ---------------------------------------------------------------------------
 // Public types

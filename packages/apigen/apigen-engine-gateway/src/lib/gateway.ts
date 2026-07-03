@@ -27,7 +27,7 @@
 // fake/in-memory adapter (tests) implement the SAME interface and drop straight in.
 
 import { ApiError } from '@adhd/apigen-base-errors';
-import type { Operation, Transport } from '@adhd/apigen-core-client;
+import type { Operation, Transport } from '@adhd/apigen-core-client';
 
 // ---------------------------------------------------------------------------
 // §13.1 / §9 — gateway-level error codes

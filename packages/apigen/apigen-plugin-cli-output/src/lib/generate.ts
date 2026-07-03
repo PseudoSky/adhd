@@ -1,4 +1,4 @@
-import type { PluginInput, PluginOutput } from '@adhd/apigen-core-client;
+import type { PluginInput, PluginOutput } from '@adhd/apigen-core-client';
 import { needsEnvelopeField, dataParamNames } from '@adhd/apigen-engine-runtime';
 import { envelopeCliFlag, envelopeEnvVar } from '@adhd/apigen-naming';
 import { CLI_EXIT_CODE } from '@adhd/apigen-base-errors';

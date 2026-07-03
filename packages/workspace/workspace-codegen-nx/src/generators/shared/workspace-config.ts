@@ -22,6 +22,7 @@ export function readWorkspaceConfig(tree?: Tree): WorkspaceConfig | null {
         return readJson<WorkspaceConfig>(tree, CONFIG_PATH);
       }
     } else {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const fs = require('fs');
       if (fs.existsSync(CONFIG_PATH)) {
         return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));

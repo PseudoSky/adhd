@@ -2,7 +2,7 @@ import type {
   OutputPlugin,
   PluginInput,
   PluginOutput,
-} from '@adhd/apigen-core-client;
+} from '@adhd/apigen-core-client';
 import * as path from 'node:path';
 
 export const jsonschemaPlugin: OutputPlugin = {
