@@ -1,0 +1,67 @@
+{
+  "name": "ui-react-base-hooks",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/ui-react/ui-react-base-hooks/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["platform:browser", "layer:ui-primitives"],
+  "targets": {
+    "build": {
+      "cache": false,
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/ui-react/ui-react-base-hooks",
+        "main": "packages/ui-react/ui-react-base-hooks/src/index.ts",
+        "tsConfig": "packages/ui-react/ui-react-base-hooks/tsconfig.lib.json",
+        "assets": ["packages/ui-react/ui-react-base-hooks/*.md"]
+      }
+    },
+    "version": {
+      "executor": "nx:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": [
+          "scripts/version-packages.sh react-hooks packages/ui-react/ui-react-base-hooks"
+        ]
+      }
+    },
+    "version-prerelease": {
+      "executor": "nx:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": [
+          "scripts/version-packages.sh react-hooks packages/ui-react/ui-react-base-hooks @adhd -prerelease"
+        ]
+      }
+    },
+    "publish": {
+      "executor": "nx:run-commands",
+      "options": {
+        "parallel": false,
+        "commands": [
+          "echo 'Running npm publish dry run'",
+          "npm publish --dry-run dist/packages/ui-react/ui-react-base-hooks"
+        ]
+      },
+      "configurations": {
+        "production": {
+          "parallel": false,
+          "commands": ["npm publish dist/packages/ui-react/ui-react-base-hooks"]
+        }
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  }
+}

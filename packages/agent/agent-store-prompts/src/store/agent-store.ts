@@ -95,7 +95,7 @@ export interface AgentListFilter {
 // TaxonomyStore
 //
 // Thin Drizzle wrapper for registry_taxonomy_categories.
-// Mirrors the store-class pattern in packages/ai/agent-mcp/src/store/agent-store.ts
+// Mirrors the store-class pattern in entrypoint/agent-mcp's AgentStore (agent-cache-store pattern)
 // [ref:store-class] (contexts/_shared.md)
 // ──────────────────────────────────────────────
 

@@ -1,0 +1,57 @@
+{
+  "name": "dispatch-base-spec",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/dispatch/dispatch-base-spec/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:shared", "platform:shared"],
+  "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/dispatch/dispatch-base-spec"
+      ],
+      "options": {
+        "configFile": "packages/dispatch/dispatch-base-spec/vite.config.ts"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["default", "^production", { "externalDependencies": ["typescript"] }],
+      "options": {
+        "command": "tsc -p packages/dispatch/dispatch-spec/tsconfig.lib.json --noEmit"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/dispatch/dispatch-base-spec",
+        "main": "packages/dispatch/dispatch-base-spec/src/index.ts",
+        "tsConfig": "packages/dispatch/dispatch-base-spec/tsconfig.lib.json",
+        "assets": [
+          "packages/dispatch/dispatch-base-spec/*.md",
+          {
+            "input": "packages/dispatch/dispatch-base-spec/src",
+            "glob": "*.json",
+            "output": "/"
+          }
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": ["build", "test"]
+    }
+  }
+}

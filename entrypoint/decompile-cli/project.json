@@ -1,0 +1,37 @@
+{
+  "name": "decompile-cli",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "entrypoint/decompile-cli/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["platform:node", "layer:entrypoints"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "generatePackageJson": true,
+      "updateBuildableProjectDepsInPackageJson": true,
+      "buildableProjectDepsInPackageJsonType": "dependencies",
+      "options": {
+        "outputPath": "dist/entrypoint/decompile-cli",
+        "tsConfig": "entrypoint/decompile-cli/tsconfig.lib.json",
+        "packageJson": "entrypoint/decompile-cli/package.json",
+        "main": "entrypoint/decompile-cli/src/index.ts",
+        "assets": ["entrypoint/decompile-cli/*.md"],
+        "createLockFile": false
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  }
+}

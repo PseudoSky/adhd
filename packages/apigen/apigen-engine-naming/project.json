@@ -1,0 +1,42 @@
+{
+  "name": "apigen-engine-naming",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/apigen/apigen-engine-naming/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:logic", "platform:shared"],
+  "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-engine-naming"
+      ],
+      "options": {
+        "configFile": "packages/apigen/apigen-engine-naming/vite.config.ts"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/apigen/apigen-engine-naming",
+        "main": "packages/apigen/apigen-engine-naming/src/index.ts",
+        "tsConfig": "packages/apigen/apigen-engine-naming/tsconfig.lib.json",
+        "assets": ["packages/apigen/apigen-engine-naming/*.md"]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": ["build", "test"]
+    }
+  }
+}
