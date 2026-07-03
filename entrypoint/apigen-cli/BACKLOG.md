@@ -1,6 +1,6 @@
 # BACKLOG — @adhd/apigen-cli
 
-Package-scoped log. Repo-wide context lives in the root [BACKLOG.md](../../../BACKLOG.md)
+Package-scoped log. Repo-wide context lives in the root [BACKLOG.md](../../BACKLOG.md)
 (§ _Extraction performance + memory-leak work (2026-07-02)_).
 
 ## Fixed
