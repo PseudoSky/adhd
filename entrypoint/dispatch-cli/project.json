@@ -1,7 +1,7 @@
 {
   "name": "dispatch-cli",
-  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/dispatch/dispatch-cli/src",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "entrypoint/dispatch-cli/src",
   "projectType": "library",
   "release": {
     "version": {
@@ -12,7 +12,8 @@
     }
   },
   "tags": [
-    "layer:entrypoints",
+    "entrypoint:cli",
+    "pkg-class:entrypoint",
     "platform:node"
   ],
   "targets": {
@@ -22,10 +23,10 @@
         "generate-cli"
       ],
       "outputs": [
-        "{workspaceRoot}/coverage/packages/dispatch/dispatch-cli"
+        "{workspaceRoot}/coverage/entrypoint/dispatch-cli"
       ],
       "options": {
-        "configFile": "packages/dispatch/dispatch-cli/vite.config.ts"
+        "configFile": "entrypoint/dispatch-cli/vite.config.ts"
       }
     },
     "typecheck": {
@@ -33,7 +34,7 @@
       "cache": true,
       "inputs": ["default", "^production", { "externalDependencies": ["typescript"] }],
       "options": {
-        "command": "tsc -p packages/dispatch/dispatch-cli/tsconfig.lib.json --noEmit"
+        "command": "tsc -p entrypoint/dispatch-cli/tsconfig.lib.json --noEmit"
       }
     },
     "build": {
@@ -42,20 +43,20 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/packages/dispatch/dispatch-cli",
-        "main": "packages/dispatch/dispatch-cli/src/index.ts",
-        "tsConfig": "packages/dispatch/dispatch-cli/tsconfig.lib.json",
+        "outputPath": "dist/entrypoint/dispatch-cli",
+        "main": "entrypoint/dispatch-cli/src/index.ts",
+        "tsConfig": "entrypoint/dispatch-cli/tsconfig.lib.json",
         "assets": [
-          "packages/dispatch/dispatch-cli/*.md"
+          "entrypoint/dispatch-cli/*.md"
         ]
       }
     },
     "generate-cli": {
-      "executor": "@adhd/apigen-nx:generate",
+      "executor": "@adhd/apigen-generator-nx:generate",
       "options": {
         "source": "src/api.ts",
         "type": "cli",
-        "outDir": "dist/packages/dispatch/dispatch-cli/cli"
+        "outDir": "dist/entrypoint/dispatch-cli/cli"
       }
     },
     "nx-release-publish": {
