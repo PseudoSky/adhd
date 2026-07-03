@@ -17,9 +17,9 @@
 
 import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
-import { extract } from '@adhd/apigen-core-client;
+import { extract } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-naming';
-import type { Operation } from '@adhd/apigen-core-client;
+import type { Operation } from '@adhd/apigen-core-client';
 
 const shapesDir = path.join(__dirname, '..', 'fixtures', 'shapes');
 

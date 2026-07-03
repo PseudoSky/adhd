@@ -26,7 +26,7 @@ import {
   composeSchemas,
   generateSchemas,
   createExtractionSession,
-} from '@adhd/apigen-core-client;
+} from '@adhd/apigen-core-client';
 import type {
   ExtractionSession,
   Operation,
@@ -37,7 +37,7 @@ import type {
   PluginInput,
   RunInput,
   OutputPlugin,
-} from '@adhd/apigen-core-client;
+} from '@adhd/apigen-core-client';
 import { checkCollisions, CollisionDetectedError } from '@adhd/apigen-naming';
 import type { ProjectionConfig } from '@adhd/apigen-naming';
 import { resolveTsconfig, resolveNamespace } from './resolve-tsconfig';

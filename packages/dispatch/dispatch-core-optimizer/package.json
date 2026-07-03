@@ -2,7 +2,7 @@
   "name": "@adhd/dispatch-core-optimizer",
   "version": "0.0.1",
   "dependencies": {
-    "@adhd/dispatch-spec": "0.0.1"
+    "@adhd/dispatch-base-spec": "0.0.1"
   },
   "main": "./index.js",
   "module": "./index.mjs",

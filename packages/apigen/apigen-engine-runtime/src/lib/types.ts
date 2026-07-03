@@ -1,4 +1,4 @@
-import type { GeneratedSchemas, ComposedSchemas } from '@adhd/apigen-core-client;
+import type { GeneratedSchemas, ComposedSchemas } from '@adhd/apigen-core-client';
 
 export type { GeneratedSchemas, ComposedSchemas };
 

@@ -88,6 +88,9 @@
       "@adhd/apigen-cli": [
         "./entrypoint/apigen-cli/src/index.ts"
       ],
+      "@adhd/apigen-core": [
+        "./packages/apigen/apigen-core-client/src/index.ts"
+      ],
       "@adhd/apigen-core-client": [
         "./packages/apigen/apigen-core-client/src/index.ts"
       ],
@@ -97,6 +100,9 @@
       "@adhd/apigen-engine-gateway": [
         "./packages/apigen/apigen-engine-gateway/src/index.ts"
       ],
+      "@adhd/apigen-naming": [
+        "./packages/apigen/apigen-engine-naming/src/index.ts"
+      ],
       "@adhd/apigen-engine-naming": [
         "./packages/apigen/apigen-engine-naming/src/index.ts"
       ],
@@ -105,6 +111,9 @@
       ],
       "@adhd/apigen-generator-nx": [
         "./packages/apigen/apigen-generator-nx/src/index.ts"
+      ],
+      "@adhd/apigen-codegen-openapi": [
+        "./packages/apigen/codegen/openapi/src/index.ts"
       ],
       "@adhd/apigen-plugin-api-express": [
         "./packages/apigen/apigen-plugin-api-express/src/index.ts"
@@ -145,8 +154,8 @@
       "@adhd/data-core-structures": [
         "./packages/data/data-core-structures/src/index.ts"
       ],
-      "@adhd/data-core-structures-base-transforms": [
-        "./packages/data/data-core-structures/data-base-transforms/src/index.ts"
+      "@adhd/data-base-transforms": [
+        "./packages/data/data-base-transforms/src/index.ts"
       ],
       "@adhd/data-core-structures-query-engine": [
         "./packages/data/data-core-structures/data-query-engine/src/index.ts"
@@ -164,7 +173,7 @@
         "./packages/dispatch/dispatch-cli/src/index.ts"
       ],
       "@adhd/dispatch-client": [
-        "./packages/dispatch/dispatch-client/src/index.ts"
+        "./packages/dispatch/dispatch-core-client/src/index.ts"
       ],
       "@adhd/dispatch-core-client": [
         "./packages/dispatch/dispatch-core-client/src/index.ts"
@@ -173,7 +182,7 @@
         "./packages/dispatch/dispatch-core-optimizer/src/index.ts"
       ],
       "@adhd/dispatch-optimizer": [
-        "./packages/dispatch/dispatch-optimizer/src/index.ts"
+        "./packages/dispatch/dispatch-core-optimizer/src/index.ts"
       ],
       "@adhd/dispatch-orchestrator": [
         "./packages/dispatch/dispatch-orchestrator/src/index.ts"
@@ -182,7 +191,7 @@
         "./packages/dispatch/dispatch-serializer-json/src/index.ts"
       ],
       "@adhd/dispatch-spec": [
-        "./packages/dispatch/dispatch-spec/src/index.ts"
+        "./packages/dispatch/dispatch-base-spec/src/index.ts"
       ],
       "@adhd/ui-react-base-hooks": [
         "./packages/ui-react/ui-react-base-hooks/src/index.ts"

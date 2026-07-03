@@ -14,7 +14,7 @@ import type {
   OutputPlugin,
   PluginInput,
   ComposedSchemas,
-} from '@adhd/apigen-core-client;
+} from '@adhd/apigen-core-client';
 import { emitResolutionScaffolding } from '../scaffold';
 // DEBT-LT-005: replaced the inline TS_LOGICAL_TYPE_DEP_MAP duplicate with the
 // authoritative source from @adhd/apigen-base-logical. tsDepMap() derives the map

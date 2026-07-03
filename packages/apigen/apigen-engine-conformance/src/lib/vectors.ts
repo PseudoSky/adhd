@@ -13,7 +13,7 @@
 //   E. Validation necessary-not-sufficient — schema-valid-but-domain-wrong passes the validator (SPEC §6)
 //   F. Logical type wire spec  — canonical wire encodings for well-known scalar types (DESIGN §3/§4.7)
 
-import type { Operation, Segment } from '@adhd/apigen-core-client;
+import type { Operation, Segment } from '@adhd/apigen-core-client';
 import {
   project,
   checkCollisions,
@@ -22,7 +22,7 @@ import {
   envelopeCliFlag,
   envelopeEnvVar,
   envelopeMetaKey,
-} from '@adhd/apigen-naming';
+} from '@adhd/apigen-engine-naming';
 import {
   ApiError,
   HTTP_STATUS,
@@ -141,7 +141,7 @@ export function assertOperationEqual(
   const fields = Object.keys(a) as (keyof Operation)[];
   for (const f of fields) {
     if (JSON.stringify(a[f]) !== JSON.stringify(b[f])) {
-      return `field "${f}" differs: ${JSON.stringify(
+      return `field "${String(f)}" differs: ${JSON.stringify(
         a[f]
       )} !== ${JSON.stringify(b[f])}`;
     }

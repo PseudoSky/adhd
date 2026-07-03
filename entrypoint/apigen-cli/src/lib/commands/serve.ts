@@ -48,7 +48,7 @@ import * as net from 'node:net';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { languageOfSource, type PluginLanguage } from '@adhd/apigen-core-client;
+import { languageOfSource, type PluginLanguage } from '@adhd/apigen-core-client';
 import { ensurePythonEnv } from '@adhd/apigen-python-env';
 
 /** Interpreter provisioned by a prior startServe in this process (vs a user's APIGEN_PYTHON). */

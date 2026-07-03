@@ -23,7 +23,7 @@ import type {
   Descriptor,
   MountedOperation,
   Call,
-} from '@adhd/apigen-core-client;
+} from '@adhd/apigen-core-client';
 
 // ---------------------------------------------------------------------------
 // Plugin-specific options

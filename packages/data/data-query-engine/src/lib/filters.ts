@@ -1,4 +1,4 @@
-import { Transform as _ } from '@adhd/data-core-structures-base-transforms';
+import { Transform as _ } from '@adhd/data-base-transforms';
 // export const partialApply = (fn: ((...args: unknown[]) => any), ...cache: undefined[]) => (...args: unknown[][]) => {
 //   const all = cache.concat(args);
 //   return all.length >= fn.length ? fn(...all) : partialApply(fn, ...all);

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { openapiPlugin } from '../lib/plugin';
-import type { Descriptor, Operation, Extensions } from '@adhd/apigen-core-client;
+import type { Descriptor, Operation, Extensions } from '@adhd/apigen-core-client';
 
 // ---------------------------------------------------------------------------
 // Fixtures

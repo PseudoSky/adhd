@@ -5,9 +5,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "peerDependencies": {
-    "@adhd/transform": "*"
-  },
+  "peerDependencies": {},
   "main": "./index.js",
   "typings": "./index.d.ts"
 }
