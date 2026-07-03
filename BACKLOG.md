@@ -2,6 +2,15 @@
 
 ## Bugs
 
+### BUG-APIGEN-016 — `apigen serve` / conformance test harness leaks orphaned flask/grpc server processes
+**Discovered:** 2026-07-03, while dispatching the doc-agent pipeline at `entrypoint/apigen-cli` (the agent's CLI "prove-it" ran `apigen serve`, which hung; investigating found the leak).
+**Symptom:** 41 orphaned `python3 -m apigen_python.flask_server` / `apigen_python.grpc_server` processes were running, each bound to a temp module (`/var/folders/…/apigen-serve-*/b.py`, namespace `b`) on its own localhost port (51371, 52159, 52433, 57546, 58078, 58626, 59043, …). They spanned multiple Python installs (3.13 Cellar, 3.9 CommandLineTools, plain `python3`), i.e. accumulated across many sessions/runs, not one. Nothing reaps them.
+**Root cause (unverified):** the `apigen serve` path (and/or the cross-host conformance/demo harnesses that spawn real flask/grpc servers) starts child server processes but does not reliably kill them when the parent CLI/test exits or is interrupted — so every crashed/interrupted `serve` or conformance run leaks a server that holds a port forever.
+**Fix direction:** make the server-spawning code register the child PID and kill it on parent exit (SIGINT/SIGTERM/atexit/`finally`), or spawn in a process group and kill the group on teardown; conformance/demo harnesses must clean up in a bounded `finally`. Add a `nx run apigen…:clean` or a reaper that kills stray `apigen-serve-*` temp servers.
+**Interim cleanup done:** killed all 41 via `pkill -f 'apigen_python.(flask|grpc)_server.*var/folders/.*apigen-'` (temp-module pattern only; MCP/memory servers untouched).
+**Related (doc-agent side, fixed):** the doc-cartographer/doc-steward now refuse to execute blocking subcommands (`serve`/`run`/`watch`/`dev`) during doc verification — they document such commands from `--help`+source and wrap anything that might block in `timeout`, killing spawned children. So the doc pipeline no longer *adds* to this leak.
+**Status:** OPEN (apigen-side reaping); doc-agent contribution mitigated.
+
 ### BUG-APIGEN-001 — ctx-param functions return wrong results via generated servers (being fixed)
 **Discovered:** 2026-06-23, by the apigen v2 capstone DoD probe (dod.1).
 **Symptom:** a function whose first param is `ctx` but which has NO session middleware (e.g. `getUser(ctx, userId)` in `packages/apigen/cli/src/test/fixtures/real-api.ts`) returns wrong results through the generated MCP server: `callTool(getUser,{data:{userId:'abc'}})` → `{}` while direct `getUser(ctx,'abc')` → `{id:'abc'}`. Non-ctx functions are fine.

@@ -170,7 +170,7 @@
         "./packages/dispatch/dispatch-base-types/src/index.ts"
       ],
       "@adhd/dispatch-cli": [
-        "./packages/dispatch/dispatch-cli/src/index.ts"
+        "./entrypoint/dispatch-cli/src/index.ts"
       ],
       "@adhd/dispatch-client": [
         "./packages/dispatch/dispatch-core-client/src/index.ts"
