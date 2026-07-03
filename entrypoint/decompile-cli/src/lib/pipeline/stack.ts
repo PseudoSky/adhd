@@ -1,4 +1,4 @@
-import { Transform } from '@adhd/data-core-structures-base-transforms';
+import { Transform } from '@adhd/data-base-transforms';
 import { RawSourceMap } from 'source-map';
 /**
  * Pipeline stack for tracking decompiled objects by type.

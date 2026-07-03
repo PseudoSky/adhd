@@ -16,7 +16,7 @@
  *  file: Optional. The generated filename this source map is associated with.
  */
 
-import { Transform } from '@adhd/data-core-structures-base-transforms';
+import { Transform } from '@adhd/data-base-transforms';
 import isBase64 from './isBase64.js';
 
 type MapType = {

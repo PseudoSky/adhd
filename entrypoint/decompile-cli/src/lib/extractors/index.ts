@@ -1,4 +1,4 @@
-import { Transform } from '@adhd/data-core-structures-base-transforms';
+import { Transform } from '@adhd/data-base-transforms';
 import Stack from '../pipeline/stack.js';
 import Store from '../store/index.js';
 import extractLocal from './local-file.js';
