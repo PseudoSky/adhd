@@ -8,7 +8,7 @@ import pathMod from 'node:path';
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/dispatch/dispatch-cli',
+  cacheDir: '../../../node_modules/.vite/entrypoint/dispatch-cli',
 
   plugins: [
     {
@@ -18,7 +18,7 @@ export default defineConfig({
       closeBundle() {
         const srcPath = pathMod.resolve(__dirname, 'README.md');
         if (!fs.existsSync(srcPath)) return;
-        const outDir = pathMod.resolve(__dirname, '../../../dist/packages/dispatch/dispatch-cli');
+        const outDir = pathMod.resolve(__dirname, '../../../dist/entrypoint/dispatch-cli');
         fs.mkdirSync(outDir, { recursive: true });
         fs.copyFileSync(srcPath, pathMod.join(outDir, 'README.md'));
       },
@@ -46,7 +46,7 @@ export default defineConfig({
   // Configuration for building your library.
   // See: https://vitejs.dev/guide/build.html#library-mode
   build: {
-    outDir: '../../../dist/packages/dispatch/dispatch-cli',
+    outDir: '../../../dist/entrypoint/dispatch-cli',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {
@@ -87,7 +87,7 @@ export default defineConfig({
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../../coverage/packages/dispatch/dispatch-cli',
+      reportsDirectory: '../../../coverage/entrypoint/dispatch-cli',
       provider: 'v8',
     },
   },

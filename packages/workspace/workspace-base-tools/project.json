@@ -22,7 +22,7 @@
   ],
   "targets": {
     "build": {
-      "executor": "@nx/vite:build",
+      "executor": "@nx/js:tsc",
       "outputs": [
         "{options.outputPath}"
       ],
@@ -31,7 +31,11 @@
         "main": "packages/workspace/workspace-base-tools/src/index.ts",
         "tsConfig": "packages/workspace/workspace-base-tools/tsconfig.lib.json",
         "assets": [
-          "packages/workspace/workspace-base-tools/*.md"
+          {
+            "input": "packages/workspace/workspace-base-tools",
+            "glob": "*.md",
+            "output": "."
+          }
         ]
       }
     },
