@@ -7,7 +7,7 @@
 // fails if the §13.1 guarantee regresses (negative controls included).
 
 import { describe, it, expect } from 'vitest';
-import type { Operation, Transport } from '@adhd/apigen-core-client;
+import type { Operation, Transport } from '@adhd/apigen-core-client';
 import {
   createGateway,
   createInProcessHostAdapter,

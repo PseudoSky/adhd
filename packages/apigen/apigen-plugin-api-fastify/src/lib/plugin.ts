@@ -3,7 +3,7 @@ import type {
   PluginInput,
   PluginOutput,
   RunInput,
-} from '@adhd/apigen-core-client;
+} from '@adhd/apigen-core-client';
 import { generate } from './generate';
 import { run } from './run';
 

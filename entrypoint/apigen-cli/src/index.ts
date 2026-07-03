@@ -12,7 +12,7 @@ import cliOutputPlugin from '@adhd/apigen-plugin-cli-output';
 import pyFlaskPlugin from '@adhd/apigen-plugin-py-flask';
 import pyGrpcPlugin from '@adhd/apigen-plugin-py-grpc';
 import { addLoggingOptions } from './lib/logging';
-import type { OutputPlugin } from '@adhd/apigen-core-client;
+import type { OutputPlugin } from '@adhd/apigen-core-client';
 
 const plugins: Record<string, OutputPlugin> = {
   mcp: mcpPlugin,

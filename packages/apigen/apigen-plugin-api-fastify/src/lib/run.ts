@@ -12,7 +12,7 @@ import type {
   Layer,
   ParamInfo,
 } from '@adhd/apigen-engine-runtime';
-import type { RunInput, ComposedSchemas } from '@adhd/apigen-core-client;
+import type { RunInput, ComposedSchemas } from '@adhd/apigen-core-client';
 import { envelopeKey } from '@adhd/apigen-naming';
 import { HTTP_STATUS, ApiError } from '@adhd/apigen-base-errors';
 import type { ProjectionConfig } from '@adhd/apigen-naming';

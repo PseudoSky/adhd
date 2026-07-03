@@ -1,7 +1,7 @@
 import {
   Collections,
   Filters,
-} from '@adhd/data-core-structures-base-transforms';
+} from '@adhd/data-base-transforms';
 
 type PropMapping = {
   longitude: string;

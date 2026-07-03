@@ -2,12 +2,12 @@
   "name": "@adhd/dispatch-cli",
   "version": "0.0.1",
   "dependencies": {
-    "@adhd/dispatch-spec": "0.0.1",
-    "@adhd/dispatch-client": "0.0.1",
     "@adhd/dispatch-serializer-json": "0.0.1",
-    "@adhd/dispatch-optimizer": "0.0.1",
     "@adhd/dispatch-orchestrator": "0.0.1",
-    "commander": "14.0.3"
+    "commander": "14.0.3",
+    "@adhd/dispatch-base-spec": "0.0.1",
+    "@adhd/dispatch-core-client": "0.0.1",
+    "@adhd/dispatch-core-optimizer": "0.0.1"
   },
   "main": "./index.js",
   "module": "./index.mjs",

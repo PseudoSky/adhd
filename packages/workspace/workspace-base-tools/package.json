@@ -1,7 +1,9 @@
 {
   "name": "@adhd/workspace-base-tools",
   "version": "0.0.1",
-  "dependencies": {},
+  "dependencies": {
+    "@nx/devkit": "18.3.4"
+  },
   "main": "./index.js",
   "module": "./index.mjs",
   "typings": "./index.d.ts"

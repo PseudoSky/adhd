@@ -2,9 +2,9 @@
   "name": "@adhd/dispatch-orchestrator",
   "version": "0.0.1",
   "dependencies": {
-    "@adhd/dispatch-spec": "0.0.1",
-    "@adhd/dispatch-client": "0.0.1",
-    "@modelcontextprotocol/sdk": "1.29.0"
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@adhd/dispatch-base-spec": "0.0.1",
+    "@adhd/dispatch-core-client": "0.0.1"
   },
   "devDependencies": {
     "@adhd/dispatch-optimizer": "0.0.1",
