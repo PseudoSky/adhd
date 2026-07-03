@@ -1,0 +1,33 @@
+{
+  "name": "apigen-generator-nx",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/apigen/apigen-generator-nx/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:logic", "platform:node"],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/apigen/apigen-generator-nx",
+        "main": "packages/apigen/apigen-generator-nx/src/index.ts",
+        "tsConfig": "packages/apigen/apigen-generator-nx/tsconfig.lib.json",
+        "assets": ["packages/apigen/apigen-generator-nx/*.md"]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": ["build", "test"]
+    }
+  }
+}

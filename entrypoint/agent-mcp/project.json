@@ -1,0 +1,24 @@
+{
+  "name": "agent-mcp",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "entrypoint/agent-mcp/src",
+  "projectType": "library",
+  "tags": ["entrypoint:mcp", "pkg-class:entrypoint", "platform:node"],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "options": {
+        "main": "entrypoint/agent-mcp/src/index.ts",
+        "outputPath": "dist/entrypoint/agent-mcp",
+        "tsConfig": "entrypoint/agent-mcp/tsconfig.lib.json",
+        "assets": ["entrypoint/agent-mcp/*.json", "entrypoint/agent-mcp/drizzle"]
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "options": {
+        "config": "entrypoint/agent-mcp/vite.config.ts"
+      }
+    }
+  }
+}

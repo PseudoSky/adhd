@@ -1,0 +1,33 @@
+{
+  "name": "dispatch-core-optimizer",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/dispatch/dispatch-core-optimizer/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": ["layer:logic", "platform:shared"],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist/packages/dispatch/dispatch-core-optimizer",
+        "main": "packages/dispatch/dispatch-core-optimizer/src/index.ts",
+        "tsConfig": "packages/dispatch/dispatch-core-optimizer/tsconfig.lib.json",
+        "assets": ["packages/dispatch/dispatch-core-optimizer/*.md"]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": ["build", "test"]
+    }
+  }
+}

@@ -3,7 +3,7 @@
     "agent-mcp": {
       "type": "stdio",
       "command": "node",
-      "args": ["dist/packages/ai/agent-mcp/src/index.js"],
+      "args": ["dist/entrypoint/agent-mcp/src/index.js"],
       "env": {
         "ADHD_AGENT_DATABASE_PATH": "data/agent-mcp/agents-dev.db"
       }

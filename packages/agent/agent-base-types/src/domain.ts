@@ -241,14 +241,9 @@ export interface AgentDefinition {
    */
   allowHumanInput?: boolean;
   /**
-   * How tools are advertised to the provider API.
-   * - "names" (default when absent): slim definitions (name + one-line
-   *   description + permissive schema) go in the API tools array; the full
-   *   documentation including parameter schemas is prepended to the system
-   *   message as a stable, provider-cacheable prefix.
-   * - "full": complete JSON-schema definitions in the API tools array.
-   * claudecli providers always behave as "full" — they run their own internal
-   * tool loop and never serialize tools to a chat-completions API.
+   * Controls how MCP tools are advertised to the model:
+   * - `"names"` (default): list tool names in a compact doc block
+   * - `"full"`: include full JSON Schema for each tool
    */
   toolAdvertisement?: 'names' | 'full';
   createdAt: string;

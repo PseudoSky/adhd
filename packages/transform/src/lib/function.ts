@@ -254,17 +254,15 @@ export class Differ {
       throw "Invalid argument. Function given, object expected.";
     }
 
-    // TODO: looks like this will short circuit the rest of the func (array is value)
+    // Scalar (non-array, non-object) values: compare by value. Using compareArrays
+    // here previously crashed (sortBy → .sort on a primitive), breaking every diff
+    // of an object with a scalar field. See BUG-TRANSFORM-001.
     if (isValue(obj1) || isValue(obj2)) {
-      const change = Differ.compareArrays(obj1 as any[], obj2 as any[])
+      const change = Differ.compareValues(obj1, obj2)
       if (change === Differ.VALUE_UNCHANGED) {
         return null
       }
       return obj2 === undefined ? obj1 : obj2
-      // {
-      //   type: Differ.compareValues(obj1, obj2),
-      //   data: obj2 === undefined ? obj1 : obj2
-      // };
     }
 
     if (isArray(obj1) || isArray(obj2)) {
@@ -292,8 +290,11 @@ export class Differ {
         diff[key] = d
       }
     }
+    // Second pass: keys present in obj2 but NOT in obj1 (genuinely added). Keys that
+    // exist in obj1 were already handled above — re-adding them here reported
+    // unchanged fields as changes (BUG-TRANSFORM-001). Guard obj1 in case it is undefined.
     for (const key in obj2) {
-      if (isFunction(obj2[key]) || diff[key] !== undefined) {
+      if (isFunction(obj2[key]) || diff[key] !== undefined || (obj1 && key in (obj1 as object))) {
         continue;
       }
       const d = Differ.map(undefined, obj2[key])
