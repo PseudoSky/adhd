@@ -18,6 +18,7 @@ Verify that every clause of the Definition of Done is satisfied. Each criterion 
 
 - [audit-final.1] All 6 packages build successfully — proves [dod.1]
 - [audit-final.2] adhd-env init generates valid YAML — proves [dod.2]
+- [audit-final.3] adhd-env set + build round-trips correctly — proves [dod.3]
 ---
 
 ## Reservations
