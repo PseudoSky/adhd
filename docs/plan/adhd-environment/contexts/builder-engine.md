@@ -1,4 +1,4 @@
-# builder-engine — STATE_NAME
+# builder-engine
 
 **Phase:** builder · **Kind:** work · **Depends on:** contract-base-spec · **Guard:** `true`
 
@@ -6,17 +6,21 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The `environment-builder` package has all core pipeline modules implemented: YAML parser, field definition merger, config resolver (with env var loading and `${VAR}` interpolation), JSON Schema generator, provenance tracker, validation via ajv, and atomic snapshot writer. The pipeline `buildSnapshot()` assembles them into a 17-step build process.
 
 ---
 
 ## Acceptance criteria
 
-<!-- Author criteria with `plan-scaffold.js add-criterion`. Each writes a
-     matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
-     bare [slug.N] tokens here without a matching audit check. -->
-
-_No criteria yet._
+- [builder-engine.1] `parseYamlSpec(filePath)` returns `ParsedYamlSpec` with project, namespaces, dirs, config fields
+- [builder-engine.2] `mergeFieldDefinitions(system, global, project)` — project overrides global, global overrides system; validation keywords (minimum, maximum, enum) are inherited from higher scopes
+- [builder-engine.3] `resolveConfig(fields, env)` — checks process.env first, then defaults; `${VAR}` interpolation replaces single-level references
+- [builder-engine.4] `generateFieldSchema(fields)` returns JSON Schema object matching field definitions
+- [builder-engine.5] `validateConfig(config, schema)` — passes valid config, throws field-level errors on invalid
+- [builder-engine.6] `trackProvenance(resolved)` returns provenance map per field
+- [builder-engine.7] `inferEnvVar("ADHD_AGENT_MCP", "db.path")` → `"ADHD_AGENT_MCP_DB_PATH"`
+- [builder-engine.8] `buildSnapshot(spec)` assembles all modules and returns an `EnvironmentSnapshot`-like result
+- [builder-engine.9] `npx nx build environment-builder` exits 0
 
 ---
 
@@ -31,4 +35,9 @@ mutates:    ["packages/environment/environment-builder/src/yaml-parser.ts", "pac
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+1. Each module is a pure function — no side effects, no shared state between pipeline steps.
+2. `yaml-parser.ts` validates project.name (non-empty kebab-case) and envPrefix (uppercase).
+3. `config-resolver.ts` loads `.env` hierarchy but this is deprecated in v0.0.5 — the primary store is `adhd-env set`.
+4. `${VAR}` interpolation is single-level only; unresolved vars remain as literal strings.
+5. The builder does NOT create directories or write snapshots — that's the `EnvironmentSnapshot` class (next state).
+6. See `interfaces-architect.md` §7 for the 17-step pipeline pseudocode.
