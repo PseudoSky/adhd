@@ -331,6 +331,14 @@
       "paths": [
         "entrypoint/environment-cli/src"
       ]
+    },
+    {
+      "id": "runtime-py.2",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd packages/environment/environment-core-py && python -m pytest tests/ -v",
+      "expect": "exit0"
     }
   ]
 }

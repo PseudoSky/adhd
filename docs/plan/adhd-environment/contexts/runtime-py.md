@@ -12,10 +12,6 @@ The `adhd-environment` Python package provides a thin runtime client (~40 lines)
 
 ## Acceptance criteria
 
-- [runtime-py.1] `Environment(project="agent-mcp", namespace="production")` constructs from existing snapshot
-- [runtime-py.3] `env.get("path.state.data")` returns directory path string
-- [runtime-py.5] `env.hash` returns `"sha256-"` + 64 hex chars
-- [runtime-py.7] `pytest tests/ -v` passes
 
 
 
@@ -24,7 +20,7 @@ read_only:  []
 mutates:    ["packages/environment/environment-core-py/src/adhd_environment/__init__.py", "packages/environment/environment-core-py/src/adhd_environment/environment.py"]
 ```
 
-- [runtime-py.8] command passes
+- [runtime-py.2] Python tests pass
 ---
 
 ## Notes for executor
