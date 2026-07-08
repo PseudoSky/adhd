@@ -7,8 +7,7 @@
       "tier": null,
       "kind": "command",
       "cmd": "npx nx run-many -t build --projects=environment-*",
-      "expect": "exit0",
-      "proves_dod": "dod.1"
+      "expect": "exit0"
     },
     {
       "id": "audit-final.2",
