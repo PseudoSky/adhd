@@ -22,6 +22,7 @@
 - [audit-final.3] Set+build round-trips
 - [audit-final.4] Build writes snapshot
 - [audit-final.5] Typed env constructs
+- [audit-final.6] contentHash matches test vector
 ---
 
 ## Reservations
