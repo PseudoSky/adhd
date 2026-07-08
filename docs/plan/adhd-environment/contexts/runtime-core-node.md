@@ -20,6 +20,7 @@ mutates:    ["packages/environment/environment-core-node/src/index.ts", "package
 ```
 
 - [runtime-core-node.10] Runtime package builds
+- [runtime-core-node.2] Environment class is exported from environment.ts
 ---
 
 ## Notes for executor

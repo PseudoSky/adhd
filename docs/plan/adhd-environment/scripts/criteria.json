@@ -313,6 +313,14 @@
       "paths": [
         "nx.json"
       ]
+    },
+    {
+      "id": "runtime-core-node.2",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "node -e 'const{Environment}=require(\"./packages/environment/environment-core-node/src/environment\");console.log(typeof Environment)'",
+      "expect": "exit0"
     }
   ]
 }
