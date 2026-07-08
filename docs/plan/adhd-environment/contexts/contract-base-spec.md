@@ -12,10 +12,9 @@ The `environment-base-spec` package is fully scaffolded with the canonical JSON 
 
 ## Acceptance criteria
 
-- [contract-base-spec.1] `adhd-environment.schema.json` validates against JSON Schema meta-schema (draft-07)
-- [contract-base-spec.2] `cross-language-test-vectors.json` contains contentHash test vector `{b:"2",a:"1"}` → `"sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"`
-- [contract-base-spec.3] `src/index.ts` re-exports shared TypeScript types (EnvironmentSnapshot, ProjectIdentity, ConfigFieldDefinition, ProvenanceEntry, DirectoryEntry, DirectoryType, ConfigScope, FieldType, ProvenanceSource)
-- [contract-base-spec.4] Schema defines all sections: project, namespace, version, directories, config, fieldSchema, provenance, envPrefix, envVars
+- [contract-base-spec.1] Schema file validates against JSON Schema meta-schema
+- [contract-base-spec.2] Cross-language test vectors exist with contentHash gate
+- [contract-base-spec.3] index.ts re-exports shared types
 - [contract-base-spec.5] `npx nx build environment-base-spec` exits 0
 
 ---
