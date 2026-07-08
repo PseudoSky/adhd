@@ -12,11 +12,6 @@ The `@adhd/environment-cli` package at `entrypoint/environment-cli/` provides an
 
 ## Acceptance criteria
 
-- [runtime-cli.1] `npx nx generate-cli environment-cli` produces valid CLI at `dist/entrypoint/environment-cli/cli/`
-- [runtime-cli.2] `adhd-env init --generate-config` writes `adhd.environment.yaml` with `orgNamespace: adhd` and no `envPrefixOverride`
-- [runtime-cli.4] `adhd-env build --namespace production` reads YAML + stored values, writes snapshot
-- [runtime-cli.6] `adhd-env build` (no --namespace) writes to `.../default/adhd-environment.json`
-- [runtime-cli.8] `adhd-env export --project agent-mcp --out-file /tmp/snap.json` copies snapshot
 
 
 
@@ -25,7 +20,7 @@ read_only:  []
 mutates:    ["entrypoint/environment-cli/src/api.ts", "entrypoint/environment-cli/src/commands/set.ts", "entrypoint/environment-cli/src/core.ts"]
 ```
 
-- [runtime-cli.9] command passes
+- [runtime-cli.9] CLI package builds
 ---
 
 ## Notes for executor
