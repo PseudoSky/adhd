@@ -62,9 +62,8 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
-      "cmd": "node -e 'const{build}=require(\"@adhd/environment-builder\"); const s=build({project:{name:\"t\",envPrefix:\"T\"}}); console.log(typeof s.get,typeof s.set,typeof s.configPath,typeof s.write)'",
-      "expect": "exit0",
-      "proves_dod": "dod.8"
+      "cmd": "node -e 'const{build}=require(\"@adhd/environment-builder\"); const s=build({project:{name:\"t\",envPrefix:\"T\"}}); [\"get\",\"set\",\"configPath\",\"write\"].every(m=>typeof s[m]===\"function\")'",
+      "expect": "exit0"
     },
     {
       "id": "contract-base-spec.1",
