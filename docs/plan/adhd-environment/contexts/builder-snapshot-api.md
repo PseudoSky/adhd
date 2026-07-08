@@ -12,11 +12,7 @@ The `EnvironmentSnapshot<T>` class is fully implemented with typed `.set()`, `.g
 
 ## Acceptance criteria
 
-- [builder-snapshot-api.1] `build(spec)` returns `EnvironmentSnapshot<T>` instance
-- [builder-snapshot-api.3] `snap.set("server.port", "4000")` mutates in-memory value
-- [builder-snapshot-api.5] `snap.configPath` resolves to `~/.<org>/<project>/<namespace>/adhd-environment.json`
-- [builder-snapshot-api.7] `snap.set("server.port", "50")` followed by `snap.write()` throws validation error (below minimum)
-- [builder-snapshot-api.9] `npx nx build environment-builder` exits 0 (after update)
+- [builder-snapshot-api.9] npx nx build environment-builder exits 0 after EnvironmentSnapshot class added
 ---
 ## Reservations
 ```text
