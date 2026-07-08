@@ -102,6 +102,14 @@
       "paths": [
         "packages/environment/environment-base-spec"
       ]
+    },
+    {
+      "id": "contract-base-spec.5",
+      "phase": "contract",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx build environment-base-spec",
+      "expect": "exit0"
     }
   ]
 }
