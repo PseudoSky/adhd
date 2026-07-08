@@ -24,6 +24,14 @@
       "kind": "command",
       "cmd": "adhd-env set test.key test-val --namespace default && adhd-env build",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-final.4",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "adhd-env build --namespace production",
+      "expect": "exit0"
     }
   ]
 }

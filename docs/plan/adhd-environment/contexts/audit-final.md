@@ -20,6 +20,7 @@
 
 - [audit-final.2] Init generates YAML
 - [audit-final.3] Set+build round-trips
+- [audit-final.4] Build writes snapshot
 ---
 
 ## Reservations
