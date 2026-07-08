@@ -22,6 +22,7 @@ Verify that every clause of the Definition of Done is satisfied. Each criterion 
 - [audit-final.4] adhd-env build writes snapshot to correct path — proves [dod.4]
 - [audit-final.5] Typed Environment constructs with params object — proves [dod.5]
 - [audit-final.6] contentHash test vector matches canonical value — proves [dod.6]
+- [audit-final.7] Old config.ts is removed — proves [dod.7]
 ---
 
 ## Reservations
