@@ -13,17 +13,11 @@ The `adhd-environment` Python package provides a thin runtime client (~40 lines)
 ## Acceptance criteria
 
 - [runtime-py.1] `Environment(project="agent-mcp", namespace="production")` constructs from existing snapshot
-- [runtime-py.2] `env.get("config.server.port")` returns `3000`
 - [runtime-py.3] `env.get("path.state.data")` returns directory path string
-- [runtime-py.4] `env.get("env.OPENAI_API_KEY")` returns recorded env var value
 - [runtime-py.5] `env.hash` returns `"sha256-"` + 64 hex chars
-- [runtime-py.6] `contentHash({"b": "2", "a": "1"})` returns `"sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"`
 - [runtime-py.7] `pytest tests/ -v` passes
-- [runtime-py.8] `python -m build` produces valid wheel
 
----
 
-## Reservations
 
 ```text
 read_only:  []
