@@ -339,6 +339,14 @@
       "kind": "command",
       "cmd": "cd packages/environment/environment-core-py && python -m pytest tests/ -v",
       "expect": "exit0"
+    },
+    {
+      "id": "runtime-py.3",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "node -e 'require(\"child_process\").execSync(\"python3 -c \\\"from adhd_environment.environment import Environment; print(1)\\\"\",{cwd:\"packages/environment/environment-core-py\"})'",
+      "expect": "exit0"
     }
   ]
 }
