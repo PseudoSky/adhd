@@ -88,10 +88,10 @@
       "end_ref": null
     },
     "scaffold-workspace": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-08T22:19:43.078Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ee3c76964e1b8357bd060a88747bd52c668aada4",
       "end_ref": null
     }
   },
@@ -102,7 +102,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "contract-base-spec",
+  "current_state": "scaffold-workspace",
   "dod_provenance": {
     "confirmed_at": "2026-07-08T07:12:02.530Z",
     "by": "pseudosky",
