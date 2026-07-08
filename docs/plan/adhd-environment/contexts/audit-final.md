@@ -23,6 +23,7 @@
 - [audit-final.4] Build writes snapshot
 - [audit-final.5] Typed env constructs
 - [audit-final.6] contentHash matches test vector
+- [audit-final.7] Old config.ts removed
 ---
 
 ## Reservations
