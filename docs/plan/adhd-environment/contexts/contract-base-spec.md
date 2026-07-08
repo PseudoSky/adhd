@@ -1,6 +1,6 @@
 # contract-base-spec — STATE_NAME
 
-**Phase:** contract · **Kind:** work · **Depends on:** none · **Guard:** `true`
+**Phase:** contract · **Kind:** work · **Depends on:** scaffold-workspace · **Guard:** `true`
 
 ---
 
