@@ -21,6 +21,7 @@ mutates:    ["packages/environment/environment-core-py/src/adhd_environment/__in
 ```
 
 - [runtime-py.2] Python tests pass
+- [runtime-py.3] Python Environment class imports without error
 ---
 
 ## Notes for executor
