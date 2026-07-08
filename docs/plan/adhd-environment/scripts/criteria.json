@@ -321,6 +321,16 @@
       "kind": "command",
       "cmd": "node -e 'const{Environment}=require(\"./packages/environment/environment-core-node/src/environment\");console.log(typeof Environment)'",
       "expect": "exit0"
+    },
+    {
+      "id": "runtime-cli.3",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "present",
+      "pattern": "commands/set.ts",
+      "paths": [
+        "entrypoint/environment-cli/src"
+      ]
     }
   ]
 }
