@@ -23,3 +23,5 @@
 - `[dod.5]` **Typed Environment::project, namespace, namespace, adhdRoot> provides typed env.get() (structural)** — Typed Environment::project, namespace, namespace, adhdRoot> provides typed env.get().
 
 - `[dod.6]` **contentHash test vector matches across all 3 languages (structural)** — contentHash test vector matches across all 3 languages.
+
+- `[dod.7]` **Agent-mcp config.ts (299 lines) replaced with adhd.environment.yaml + typed Environment (structural)** — Agent-mcp config.ts (299 lines) replaced with adhd.environment.yaml + typed Environment.
