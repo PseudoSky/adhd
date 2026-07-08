@@ -17,6 +17,7 @@ Verify that every clause of the Definition of Done is satisfied. Each criterion 
      bare [slug.N] tokens here without a matching audit check. -->
 
 - [audit-final.1] All 6 packages build successfully — proves [dod.1]
+- [audit-final.2] adhd-env init generates valid YAML — proves [dod.2]
 ---
 
 ## Reservations
