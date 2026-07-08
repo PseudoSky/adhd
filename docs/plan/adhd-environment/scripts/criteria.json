@@ -365,6 +365,16 @@
       "kind": "command",
       "cmd": "cd packages/environment/environment-core-rs && cargo clippy -- -D warnings",
       "expect": "exit0"
+    },
+    {
+      "id": "refactor-agent-mcp.3",
+      "phase": "refactor",
+      "tier": null,
+      "kind": "absent",
+      "pattern": "load-env.ts",
+      "paths": [
+        "entrypoint/agent-mcp/src"
+      ]
     }
   ]
 }
