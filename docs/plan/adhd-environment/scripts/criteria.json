@@ -234,6 +234,14 @@
       "kind": "command",
       "cmd": "cargo build",
       "expect": "exit0"
+    },
+    {
+      "id": "refactor-agent-mcp.1",
+      "phase": "refactor",
+      "tier": null,
+      "kind": "absent",
+      "pattern": "entrypoint/agent-mcp/src/config.ts",
+      "paths": []
     }
   ]
 }
