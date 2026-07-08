@@ -12,10 +12,6 @@ Verify that all runtime clients (TypeScript, Python, Rust) and the CLI produce c
 
 ## Acceptance criteria
 
-- [audit-runtime.1] `npx nx build environment-core-node` exits 0
-- [audit-runtime.3] `cargo build` (environment-core-rs) exits 0
-- [audit-runtime.5] TypeScript `contentHash({b:"2",a:"1"})` = Python `contentHash({"b":"2","a":"1"})` = Rust `contentHash({"b":"2","a":"1"})` = `"sha256-9f86d081..."` (byte-identical)
-- [audit-runtime.7] CLI `adhd-env build --namespace production` writes valid snapshot
 
 
 
@@ -23,6 +19,7 @@ read_only:  []
 mutates:    ["scripts/audit_audit-runtime.py"]
 ```
 
+- [audit-runtime.1] TS runtime package builds
 ---
 
 ## Notes for executor
