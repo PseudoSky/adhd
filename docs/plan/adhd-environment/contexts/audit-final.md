@@ -19,6 +19,7 @@
 - [audit-final.1] All packages build
 
 - [audit-final.2] Init generates YAML
+- [audit-final.3] Set+build round-trips
 ---
 
 ## Reservations
