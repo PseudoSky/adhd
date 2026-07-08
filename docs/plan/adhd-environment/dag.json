@@ -86,6 +86,22 @@
       ],
       "context": "contexts/runtime-core-node.md",
       "notes": ""
+    },
+    "runtime-cli": {
+      "kind": "work",
+      "phase": "runtime",
+      "depends_on": [
+        "builder-snapshot-api",
+        "runtime-core-node"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/environment/environment-cli/src/api.ts",
+        "packages/environment/environment-cli/src/commands/set.ts",
+        "packages/environment/environment-cli/src/core.ts"
+      ],
+      "context": "contexts/runtime-cli.md",
+      "notes": ""
     }
   },
   "authored_with": {
