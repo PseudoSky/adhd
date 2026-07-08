@@ -6,7 +6,8 @@
     "contract",
     "builder",
     "runtime",
-    "refactor"
+    "refactor",
+    "audit"
   ],
   "terminal": "done",
   "nodes": {},
