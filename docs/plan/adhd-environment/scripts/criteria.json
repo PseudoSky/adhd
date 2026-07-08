@@ -92,6 +92,16 @@
       "paths": [
         "packages/environment/environment-base-spec/spec"
       ]
+    },
+    {
+      "id": "contract-base-spec.3",
+      "phase": "contract",
+      "tier": null,
+      "kind": "present",
+      "pattern": "src/index.ts",
+      "paths": [
+        "packages/environment/environment-base-spec"
+      ]
     }
   ]
 }
