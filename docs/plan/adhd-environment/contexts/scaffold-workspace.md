@@ -81,15 +81,6 @@ After scaffold, add the apigen `generate-cli` target to `entrypoint/environment-
     "outDir": "dist/entrypoint/environment-cli/cli"
   }
 }
-```json
-"generate-cli": {
-  "executor": "@adhd/apigen-generator-nx:generate",
-  "options": {
-    "source": "entrypoint/environment-cli/src/api.ts",
-    "type": "cli",
-    "outDir": "dist/entrypoint/environment-cli/cli"
-  }
-}
 ```
 
 ### Step 1: Install Nx plugins
