@@ -16,7 +16,9 @@
     "contract-base-spec": {
       "kind": "work",
       "phase": "contract",
-      "depends_on": [],
+      "depends_on": [
+        "scaffold-workspace"
+      ],
       "guard": "true",
       "artifacts": [
         "packages/environment/environment-base-spec/package.json",
