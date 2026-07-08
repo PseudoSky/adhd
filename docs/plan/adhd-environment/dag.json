@@ -176,6 +176,20 @@
       ],
       "context": "contexts/audit-final.md",
       "notes": ""
+    },
+    "docs-steward": {
+      "kind": "work",
+      "phase": "docs",
+      "depends_on": [
+        "audit-final"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "docs/plan/adhd-environment/demo/DEMO.md",
+        "docs/plan/adhd-environment/USE_CASES.md"
+      ],
+      "context": "contexts/docs-steward.md",
+      "notes": ""
     }
   },
   "authored_with": {
