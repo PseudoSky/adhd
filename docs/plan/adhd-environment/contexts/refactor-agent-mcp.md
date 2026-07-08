@@ -12,11 +12,7 @@
 
 ## Acceptance criteria
 
-- [refactor-agent-mcp.1] `entrypoint/agent-mcp/src/config.ts` is removed (old file gone)
-- [refactor-agent-mcp.2] `entrypoint/agent-mcp/adhd.environment.yaml` exists with project name `agent-mcp`, `orgNamespace: adhd`, and all 10 config fields
-- [refactor-agent-mcp.4] `getProviderConfig("openai")` reads from `env.get("config.providers.openai.*")` + `env.get("env.OPENAI_API_KEY")`
-- [refactor-agent-mcp.6] All 27 env vars from old `rawFromEnv()` are accessible via `env.get("env.*")`
-- [refactor-agent-mcp.8] `load-env.ts`, `deepFreeze()`, `resolveEnvRef()`, `verifyEnvRefs()`, `subprocessEnv()` are removed
+- [refactor-agent-mcp.1] Old 299-line config.ts is removed
 ---
 ## Reservations
 ```text
