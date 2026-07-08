@@ -129,6 +129,22 @@
       ],
       "context": "contexts/runtime-rs.md",
       "notes": ""
+    },
+    "audit-runtime": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "runtime-core-node",
+        "runtime-cli",
+        "runtime-py",
+        "runtime-rs"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "scripts/audit_audit-runtime.py"
+      ],
+      "context": "contexts/audit-runtime.md",
+      "notes": ""
     }
   },
   "authored_with": {
