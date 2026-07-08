@@ -17,3 +17,5 @@
 - `[dod.2]` **adhd-env init --generate-config writes starter adhd.environment.yaml (structural)** — adhd-env init --generate-config writes starter adhd.environment.yaml.
 
 - `[dod.3]` **adhd-env set stores config values without .env file (structural)** — adhd-env set stores config values without .env file.
+
+- `[dod.4]` **adhd-env build reads YAML, writes snapshot at ~/.<org>/<project>/<namespace>/adhd-environment.json (structural)** — adhd-env build reads YAML, writes snapshot at ~/.<org>/<project>/<namespace>/adhd-environment.json.
