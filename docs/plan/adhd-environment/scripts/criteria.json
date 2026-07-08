@@ -242,6 +242,14 @@
       "kind": "absent",
       "pattern": "entrypoint/agent-mcp/src/config.ts",
       "paths": []
+    },
+    {
+      "id": "refactor-agent-mcp.2",
+      "phase": "refactor",
+      "tier": null,
+      "kind": "present",
+      "pattern": "entrypoint/agent-mcp/adhd.environment.yaml",
+      "paths": []
     }
   ]
 }
