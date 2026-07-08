@@ -82,6 +82,16 @@
       "paths": [
         "packages/environment/environment-base-spec/spec"
       ]
+    },
+    {
+      "id": "contract-base-spec.2",
+      "phase": "contract",
+      "tier": null,
+      "kind": "present",
+      "pattern": "cross-language-test-vectors.json",
+      "paths": [
+        "packages/environment/environment-base-spec/spec"
+      ]
     }
   ]
 }
