@@ -162,6 +162,14 @@
       "paths": [
         "packages/environment/environment-core-node/src"
       ]
+    },
+    {
+      "id": "runtime-core-node.10",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx build environment-core-node",
+      "expect": "exit0"
     }
   ]
 }
