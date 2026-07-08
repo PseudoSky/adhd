@@ -383,6 +383,14 @@
       "kind": "command",
       "cmd": "cd packages/environment/environment-core-py && python -m build",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-runtime.3",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd packages/environment/environment-core-rs && cargo build",
+      "expect": "exit0"
     }
   ]
 }
