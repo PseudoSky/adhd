@@ -303,6 +303,16 @@
       "paths": [
         "entrypoint/environment-cli"
       ]
+    },
+    {
+      "id": "scaffold-workspace.3",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/workspace-codegen-nx",
+      "paths": [
+        "nx.json"
+      ]
     }
   ]
 }

@@ -19,6 +19,7 @@ All 6 package directories exist under `packages/environment/` with their Nx work
 - [scaffold-workspace.1] All 5 library package directories exist under packages/environment/
 
 - [scaffold-workspace.2] CLI entrypoint directory exists at entrypoint/environment-cli/
+- [scaffold-workspace.3] nx.json has @monodon/rust and @nxlv/python plugins registered
 ---
 
 ## Reservations
