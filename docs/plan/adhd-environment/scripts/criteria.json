@@ -303,7 +303,7 @@
       "phase": "scaffold",
       "tier": null,
       "kind": "present",
-      "pattern": "@adhd/workspace-codegen-nx",
+      "pattern": "@monodon/rust",
       "paths": [
         "nx.json"
       ]
