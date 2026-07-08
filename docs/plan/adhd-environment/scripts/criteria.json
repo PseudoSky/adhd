@@ -248,8 +248,10 @@
       "phase": "refactor",
       "tier": null,
       "kind": "present",
-      "pattern": "entrypoint/agent-mcp/adhd.environment.yaml",
-      "paths": []
+      "pattern": "adhd.environment.yaml",
+      "paths": [
+        "entrypoint/agent-mcp"
+      ]
     },
     {
       "id": "audit-builder.1",
