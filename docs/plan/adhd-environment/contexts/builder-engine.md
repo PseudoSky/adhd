@@ -13,18 +13,12 @@ The `environment-builder` package has all core pipeline modules implemented: YAM
 ## Acceptance criteria
 
 - [builder-engine.1] `parseYamlSpec(filePath)` returns `ParsedYamlSpec` with project, namespaces, dirs, config fields
-- [builder-engine.2] `mergeFieldDefinitions(system, global, project)` — project overrides global, global overrides system; validation keywords (minimum, maximum, enum) are inherited from higher scopes
 - [builder-engine.3] `resolveConfig(fields, env)` — checks process.env first, then defaults; `${VAR}` interpolation replaces single-level references
-- [builder-engine.4] `generateFieldSchema(fields)` returns JSON Schema object matching field definitions
 - [builder-engine.5] `validateConfig(config, schema)` — passes valid config, throws field-level errors on invalid
-- [builder-engine.6] `trackProvenance(resolved)` returns provenance map per field
 - [builder-engine.7] `inferEnvVar("ADHD_AGENT_MCP", "db.path")` → `"ADHD_AGENT_MCP_DB_PATH"`
-- [builder-engine.8] `buildSnapshot(spec)` assembles all modules and returns an `EnvironmentSnapshot`-like result
 - [builder-engine.9] `npx nx build environment-builder` exits 0
-
 ---
 
-## Reservations
 
 ```text
 read_only:  []
