@@ -161,6 +161,20 @@
       ],
       "context": "contexts/refactor-agent-mcp.md",
       "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "refactor-agent-mcp",
+        "audit-runtime"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "scripts/audit_audit-final.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
     }
   },
   "authored_with": {
