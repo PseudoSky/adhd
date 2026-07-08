@@ -72,6 +72,20 @@
       ],
       "context": "contexts/audit-builder.md",
       "notes": ""
+    },
+    "runtime-core-node": {
+      "kind": "work",
+      "phase": "runtime",
+      "depends_on": [
+        "builder-snapshot-api"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/environment/environment-core-node/src/index.ts",
+        "packages/environment/environment-core-node/src/environment.ts"
+      ],
+      "context": "contexts/runtime-core-node.md",
+      "notes": ""
     }
   },
   "authored_with": {
