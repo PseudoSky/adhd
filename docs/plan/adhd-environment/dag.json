@@ -10,7 +10,22 @@
     "audit"
   ],
   "terminal": "done",
-  "nodes": {},
+  "nodes": {
+    "contract-base-spec": {
+      "kind": "work",
+      "phase": "contract",
+      "depends_on": [],
+      "guard": "true",
+      "artifacts": [
+        "packages/environment/environment-base-spec/package.json",
+        "packages/environment/environment-base-spec/spec/adhd-environment.schema.json",
+        "packages/environment/environment-base-spec/spec/cross-language-test-vectors.json",
+        "packages/environment/environment-base-spec/src/index.ts"
+      ],
+      "context": "contexts/contract-base-spec.md",
+      "notes": ""
+    }
+  },
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.25",
