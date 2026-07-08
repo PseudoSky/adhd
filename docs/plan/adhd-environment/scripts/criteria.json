@@ -180,6 +180,16 @@
       "paths": [
         "entrypoint/environment-cli/src"
       ]
+    },
+    {
+      "id": "runtime-cli.2",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "present",
+      "pattern": "commands/set.ts",
+      "paths": [
+        "entrypoint/environment-cli/src"
+      ]
     }
   ]
 }
