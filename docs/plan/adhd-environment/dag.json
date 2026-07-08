@@ -116,6 +116,19 @@
       ],
       "context": "contexts/runtime-py.md",
       "notes": ""
+    },
+    "runtime-rs": {
+      "kind": "work",
+      "phase": "runtime",
+      "depends_on": [
+        "contract-base-spec"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/environment/environment-core-rs/src/lib.rs"
+      ],
+      "context": "contexts/runtime-rs.md",
+      "notes": ""
     }
   },
   "authored_with": {
