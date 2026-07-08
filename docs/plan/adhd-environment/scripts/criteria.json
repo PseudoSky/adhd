@@ -250,6 +250,14 @@
       "kind": "present",
       "pattern": "entrypoint/agent-mcp/adhd.environment.yaml",
       "paths": []
+    },
+    {
+      "id": "audit-builder.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx build environment-base-spec && npx nx build environment-builder",
+      "expect": "exit0"
     }
   ]
 }
