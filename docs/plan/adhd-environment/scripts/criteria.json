@@ -7,7 +7,8 @@
       "tier": null,
       "kind": "command",
       "cmd": "npx nx run-many -t build --projects=environment-*",
-      "expect": "exit0"
+      "expect": "exit0",
+      "proves_dod": "dod.1"
     },
     {
       "id": "audit-final.2",
@@ -15,7 +16,8 @@
       "tier": null,
       "kind": "command",
       "cmd": "adhd-env init --generate-config",
-      "expect": "exit0"
+      "expect": "exit0",
+      "proves_dod": "dod.2"
     },
     {
       "id": "audit-final.3",
@@ -23,7 +25,8 @@
       "tier": null,
       "kind": "command",
       "cmd": "adhd-env set test.key test-val --namespace default && adhd-env build",
-      "expect": "exit0"
+      "expect": "exit0",
+      "proves_dod": "dod.3"
     },
     {
       "id": "audit-final.4",
@@ -31,7 +34,8 @@
       "tier": null,
       "kind": "command",
       "cmd": "adhd-env build --namespace production",
-      "expect": "exit0"
+      "expect": "exit0",
+      "proves_dod": "dod.4"
     },
     {
       "id": "audit-final.5",
@@ -39,7 +43,8 @@
       "tier": null,
       "kind": "command",
       "cmd": "node -e 'new (require(\"@adhd/environment\").Environment)({project:\"test\",namespace:\"default\"})'",
-      "expect": "exit0"
+      "expect": "exit0",
+      "proves_dod": "dod.5"
     },
     {
       "id": "audit-final.6",
@@ -47,7 +52,8 @@
       "tier": null,
       "kind": "command",
       "cmd": "node -e 'const{contentHash}=require(\"@adhd/environment\"); process.exit(contentHash({b:\"2\",a:\"1\"})===\"sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\"?0:1)'",
-      "expect": "exit0"
+      "expect": "exit0",
+      "proves_dod": "dod.6"
     },
     {
       "id": "audit-final.7",
@@ -55,7 +61,8 @@
       "tier": null,
       "kind": "absent",
       "pattern": "entrypoint/agent-mcp/src/config.ts",
-      "paths": []
+      "paths": [],
+      "proves_dod": "dod.7"
     },
     {
       "id": "audit-final.8",
@@ -63,7 +70,18 @@
       "tier": null,
       "kind": "command",
       "cmd": "node -e 'const{build}=require(\"@adhd/environment-builder\"); const s=build({project:{name:\"t\",envPrefix:\"T\"}}); console.log(typeof s.get,typeof s.set,typeof s.configPath,typeof s.write)'",
-      "expect": "exit0"
+      "expect": "exit0",
+      "proves_dod": "dod.8"
+    },
+    {
+      "id": "contract-base-spec.1",
+      "phase": "contract",
+      "tier": null,
+      "kind": "present",
+      "pattern": "adhd-environment.schema.json",
+      "paths": [
+        "packages/environment/environment-base-spec/spec"
+      ]
     }
   ]
 }
