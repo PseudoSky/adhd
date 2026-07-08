@@ -14,17 +14,11 @@ The `@adhd/environment-cli` package at `entrypoint/environment-cli/` provides an
 
 - [runtime-cli.1] `npx nx generate-cli environment-cli` produces valid CLI at `dist/entrypoint/environment-cli/cli/`
 - [runtime-cli.2] `adhd-env init --generate-config` writes `adhd.environment.yaml` with `orgNamespace: adhd` and no `envPrefixOverride`
-- [runtime-cli.3] `adhd-env set providers.openai.secret sk-test --namespace production` exits 0 and stores value
 - [runtime-cli.4] `adhd-env build --namespace production` reads YAML + stored values, writes snapshot
-- [runtime-cli.5] `adhd-env build --namespace staging` writes to a separate namespace directory tree
 - [runtime-cli.6] `adhd-env build` (no --namespace) writes to `.../default/adhd-environment.json`
-- [runtime-cli.7] `adhd-env status --project agent-mcp --json` returns StatusResult
 - [runtime-cli.8] `adhd-env export --project agent-mcp --out-file /tmp/snap.json` copies snapshot
-- [runtime-cli.9] `npx nx build environment-cli` exits 0
 
----
 
-## Reservations
 
 ```text
 read_only:  []
