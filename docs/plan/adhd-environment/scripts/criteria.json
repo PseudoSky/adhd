@@ -16,6 +16,14 @@
       "kind": "command",
       "cmd": "adhd-env init --generate-config",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-final.3",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "adhd-env set test.key test-val --namespace default && adhd-env build",
+      "expect": "exit0"
     }
   ]
 }
