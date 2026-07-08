@@ -24,6 +24,7 @@
 - [audit-final.5] Typed env constructs
 - [audit-final.6] contentHash matches test vector
 - [audit-final.7] Old config.ts removed
+- [audit-final.8] EnvironmentSnapshot API works
 ---
 
 ## Reservations
