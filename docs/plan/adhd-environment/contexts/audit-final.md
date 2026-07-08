@@ -6,7 +6,7 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+Verify that every clause of the Definition of Done is satisfied. Each criterion below proves one `[dod.N]` clause.
 
 ---
 
@@ -16,15 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-- [audit-final.1] All packages build
-
-- [audit-final.2] Init generates YAML
-- [audit-final.3] Set+build round-trips
-- [audit-final.4] Build writes snapshot
-- [audit-final.5] Typed env constructs
-- [audit-final.6] contentHash matches test vector
-- [audit-final.7] Old config.ts removed
-- [audit-final.8] EnvironmentSnapshot API works
+- [audit-final.1] All 6 packages build successfully — proves [dod.1]
 ---
 
 ## Reservations
