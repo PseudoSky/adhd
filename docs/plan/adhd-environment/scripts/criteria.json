@@ -39,8 +39,7 @@
       "tier": null,
       "kind": "command",
       "cmd": "node -e 'new (require(\"@adhd/environment\").Environment)({project:\"test\",namespace:\"default\"})'",
-      "expect": "exit0",
-      "proves_dod": "dod.5"
+      "expect": "exit0"
     },
     {
       "id": "audit-final.6",
