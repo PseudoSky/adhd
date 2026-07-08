@@ -21,6 +21,7 @@
 - [audit-final.2] Init generates YAML
 - [audit-final.3] Set+build round-trips
 - [audit-final.4] Build writes snapshot
+- [audit-final.5] Typed env constructs
 ---
 
 ## Reservations
