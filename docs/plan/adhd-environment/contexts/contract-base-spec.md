@@ -12,11 +12,8 @@ The `environment-base-spec` package is fully scaffolded with the canonical JSON 
 
 ## Acceptance criteria
 
-- [contract-base-spec.1] Schema file validates against JSON Schema meta-schema
-- [contract-base-spec.2] Cross-language test vectors exist with contentHash gate
-- [contract-base-spec.3] index.ts re-exports shared types
-- [contract-base-spec.5] `npx nx build environment-base-spec` exits 0
 
+- [contract-base-spec.1] Snapshot schema validates against JSON Schema meta-schema (draft-07)
 ---
 
 ## Reservations
