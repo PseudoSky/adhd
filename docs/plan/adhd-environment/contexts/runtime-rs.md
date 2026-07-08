@@ -16,6 +16,7 @@ The `adhd-environment` Rust crate provides a thin runtime client (~50 lines) at 
 - [runtime-rs.3] `env.get_str("config.db.path")` returns `Some("/path/to/db")`
 - [runtime-rs.5] `env.hash()` returns `"sha256-"` + hex string
 - [runtime-rs.7] `cargo clippy -- -D warnings` passes
+- [runtime-rs.6] command passes
 ---
 
 
