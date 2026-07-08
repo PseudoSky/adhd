@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "audit-final.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx run-many -t build --projects=environment-*",
+      "expect": "exit0"
+    }
+  ]
+}
