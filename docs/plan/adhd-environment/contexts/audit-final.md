@@ -20,6 +20,7 @@ Verify that every clause of the Definition of Done is satisfied. Each criterion 
 - [audit-final.2] adhd-env init generates valid YAML — proves [dod.2]
 - [audit-final.3] adhd-env set + build round-trips correctly — proves [dod.3]
 - [audit-final.4] adhd-env build writes snapshot to correct path — proves [dod.4]
+- [audit-final.5] Typed Environment constructs with params object — proves [dod.5]
 ---
 
 ## Reservations
