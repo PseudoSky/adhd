@@ -25,6 +25,7 @@ read_only:  []
 mutates:    ["entrypoint/environment-cli/src/api.ts", "entrypoint/environment-cli/src/commands/set.ts", "entrypoint/environment-cli/src/core.ts"]
 ```
 
+- [runtime-cli.9] command passes
 ---
 
 ## Notes for executor
