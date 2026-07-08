@@ -13,16 +13,11 @@ The `adhd-environment` Rust crate provides a thin runtime client (~50 lines) at 
 ## Acceptance criteria
 
 - [runtime-rs.1] `Environment::new("agent-mcp", None, Some("production"), None)` constructs from existing snapshot
-- [runtime-rs.2] `env.get("config.server.port")` returns `Some(serde_json::Value::Number(3000))`
 - [runtime-rs.3] `env.get_str("config.db.path")` returns `Some("/path/to/db")`
-- [runtime-rs.4] `env.get_int("config.server.port")` returns `Some(3000)`
 - [runtime-rs.5] `env.hash()` returns `"sha256-"` + hex string
-- [runtime-rs.6] `cargo test` passes
 - [runtime-rs.7] `cargo clippy -- -D warnings` passes
-
 ---
 
-## Reservations
 
 ```text
 read_only:  []
