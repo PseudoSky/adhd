@@ -170,6 +170,16 @@
       "kind": "command",
       "cmd": "npx nx build environment-core-node",
       "expect": "exit0"
+    },
+    {
+      "id": "runtime-cli.1",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "present",
+      "pattern": "api.ts",
+      "paths": [
+        "entrypoint/environment-cli/src"
+      ]
     }
   ]
 }
