@@ -266,6 +266,19 @@
       "kind": "command",
       "cmd": "npx nx build environment-core-node",
       "expect": "exit0"
+    },
+    {
+      "id": "docs-steward.1",
+      "phase": "docs",
+      "tier": null,
+      "kind": "present",
+      "pattern": "README.md",
+      "paths": [
+        "packages/environment/environment-core-node",
+        "packages/environment/environment-core-py",
+        "packages/environment/environment-core-rs",
+        "entrypoint/environment-cli"
+      ]
     }
   ]
 }
