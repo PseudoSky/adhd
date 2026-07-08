@@ -144,6 +144,14 @@
       "paths": [
         "packages/environment/environment-builder/src"
       ]
+    },
+    {
+      "id": "builder-snapshot-api.9",
+      "phase": "builder",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx build environment-builder",
+      "expect": "exit0"
     }
   ]
 }
