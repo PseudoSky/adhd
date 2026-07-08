@@ -134,6 +134,16 @@
       "kind": "command",
       "cmd": "npx nx build environment-builder",
       "expect": "exit0"
+    },
+    {
+      "id": "builder-snapshot-api.1",
+      "phase": "builder",
+      "tier": null,
+      "kind": "present",
+      "pattern": "environment-snapshot.ts",
+      "paths": [
+        "packages/environment/environment-builder/src"
+      ]
     }
   ]
 }
