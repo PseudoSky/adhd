@@ -375,6 +375,14 @@
       "paths": [
         "entrypoint/agent-mcp/src"
       ]
+    },
+    {
+      "id": "audit-runtime.2",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd packages/environment/environment-core-py && python -m build",
+      "expect": "exit0"
     }
   ]
 }

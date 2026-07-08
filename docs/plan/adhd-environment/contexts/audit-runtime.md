@@ -20,6 +20,7 @@ mutates:    ["scripts/audit_audit-runtime.py"]
 ```
 
 - [audit-runtime.1] TS runtime package builds
+- [audit-runtime.2] Python package builds to wheel
 ---
 
 ## Notes for executor
