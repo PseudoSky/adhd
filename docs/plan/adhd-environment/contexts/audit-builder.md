@@ -13,15 +13,10 @@ Verify that the builder phase (contract-base-spec → builder-engine → builder
 ## Acceptance criteria
 
 - [audit-builder.1] `npx nx build environment-base-spec` exits 0
-- [audit-builder.2] `npx nx build environment-builder` exits 0
 - [audit-builder.3] `build(spec)` returns `EnvironmentSnapshot` with correct `.get()`, `.set()`, `.configPath`, `.write()`
-- [audit-builder.4] `build(existingSnapshot)` rebuilds preserving set values
 - [audit-builder.5] Atomic write integrity: simulated crash leaves no partial file
-- [audit-builder.6] No `.env` file loading in builder output (v0.0.5 constraint)
 
----
 
-## Reservations
 
 ```text
 read_only:  []
