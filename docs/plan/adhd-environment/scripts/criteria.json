@@ -347,6 +347,14 @@
       "kind": "command",
       "cmd": "node -e 'require(\"child_process\").execSync(\"python3 -c \\\"from adhd_environment.environment import Environment; print(1)\\\"\",{cwd:\"packages/environment/environment-core-py\"})'",
       "expect": "exit0"
+    },
+    {
+      "id": "runtime-rs.2",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd packages/environment/environment-core-rs && cargo test",
+      "expect": "exit0"
     }
   ]
 }
