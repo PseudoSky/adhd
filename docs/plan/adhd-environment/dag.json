@@ -191,6 +191,31 @@
       ],
       "context": "contexts/docs-steward.md",
       "notes": ""
+    },
+    "scaffold-workspace": {
+      "kind": "work",
+      "phase": "scaffold",
+      "depends_on": [],
+      "guard": "true",
+      "artifacts": [
+        "packages/environment/environment-base-spec/package.json",
+        "packages/environment/environment-base-spec/project.json",
+        "packages/environment/environment-base-spec/tsconfig.json",
+        "packages/environment/environment-builder/package.json",
+        "packages/environment/environment-builder/project.json",
+        "packages/environment/environment-builder/tsconfig.json",
+        "packages/environment/environment-core-node/package.json",
+        "packages/environment/environment-core-node/project.json",
+        "packages/environment/environment-core-node/tsconfig.json",
+        "packages/environment/environment-cli/package.json",
+        "packages/environment/environment-cli/project.json",
+        "packages/environment/environment-cli/tsconfig.json",
+        "packages/environment/environment-core-py/pyproject.toml",
+        "packages/environment/environment-core-rs/Cargo.toml",
+        "packages/environment/environment-core-rs/Cargo.lock"
+      ],
+      "context": "contexts/scaffold-workspace.md",
+      "notes": ""
     }
   },
   "authored_with": {
