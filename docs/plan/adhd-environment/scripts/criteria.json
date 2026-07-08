@@ -31,8 +31,7 @@
       "tier": null,
       "kind": "command",
       "cmd": "adhd-env build --namespace production",
-      "expect": "exit0",
-      "proves_dod": "dod.4"
+      "expect": "exit0"
     },
     {
       "id": "audit-final.5",
