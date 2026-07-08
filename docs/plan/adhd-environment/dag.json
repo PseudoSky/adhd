@@ -24,6 +24,26 @@
       ],
       "context": "contexts/contract-base-spec.md",
       "notes": ""
+    },
+    "builder-engine": {
+      "kind": "work",
+      "phase": "builder",
+      "depends_on": [
+        "contract-base-spec"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/environment/environment-builder/src/yaml-parser.ts",
+        "packages/environment/environment-builder/src/field-merge.ts",
+        "packages/environment/environment-builder/src/config-resolver.ts",
+        "packages/environment/environment-builder/src/json-schema-gen.ts",
+        "packages/environment/environment-builder/src/provenance.ts",
+        "packages/environment/environment-builder/src/validation.ts",
+        "packages/environment/environment-builder/src/snapshot-writer.ts",
+        "packages/environment/environment-builder/src/index.ts"
+      ],
+      "context": "contexts/builder-engine.md",
+      "notes": ""
     }
   },
   "authored_with": {
