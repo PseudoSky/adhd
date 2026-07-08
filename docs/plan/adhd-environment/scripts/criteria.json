@@ -190,6 +190,14 @@
       "paths": [
         "entrypoint/environment-cli/src"
       ]
+    },
+    {
+      "id": "runtime-cli.9",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx build environment-cli",
+      "expect": "exit0"
     }
   ]
 }
