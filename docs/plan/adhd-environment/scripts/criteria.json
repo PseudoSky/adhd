@@ -126,6 +126,14 @@
       "kind": "command",
       "cmd": "node -e 'const{inferEnvVar}=require(\"./packages/environment/environment-builder/src/config-resolver\"); console.log(inferEnvVar(\"ADHD_AGENT_MCP\",\"db.path\"))'",
       "expect": "exit0"
+    },
+    {
+      "id": "builder-engine.9",
+      "phase": "builder",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx build environment-builder",
+      "expect": "exit0"
     }
   ]
 }
