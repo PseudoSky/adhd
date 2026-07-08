@@ -32,6 +32,14 @@
       "kind": "command",
       "cmd": "adhd-env build --namespace production",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-final.5",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "node -e 'new (require(\"@adhd/environment\").Environment)({project:\"test\",namespace:\"default\"})'",
+      "expect": "exit0"
     }
   ]
 }
