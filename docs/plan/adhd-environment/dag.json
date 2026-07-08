@@ -44,6 +44,21 @@
       ],
       "context": "contexts/builder-engine.md",
       "notes": ""
+    },
+    "builder-snapshot-api": {
+      "kind": "work",
+      "phase": "builder",
+      "depends_on": [
+        "builder-engine"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/environment/environment-builder/src/environment-snapshot.ts",
+        "packages/environment/environment-builder/src/index.ts",
+        "packages/environment/environment-builder/src/__tests__/environment-snapshot.test.ts"
+      ],
+      "context": "contexts/builder-snapshot-api.md",
+      "notes": ""
     }
   },
   "authored_with": {
