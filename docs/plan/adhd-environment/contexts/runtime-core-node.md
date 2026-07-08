@@ -12,11 +12,6 @@ The `@adhd/environment` package provides a thin (~60 line) typed runtime client.
 
 ## Acceptance criteria
 
-- [runtime-core-node.1] `new Environment({ project: "agent-mcp", namespace: "production" })` constructs without error when snapshot exists
-- [runtime-core-node.3] `env.get("path.state.data")` returns directory path string
-- [runtime-core-node.5] `env.get("provenance.db.path")` returns `{ source: string, scope: string }`
-- [runtime-core-node.7] `env["config.server.port"]` delegates to `env.get()`
-- [runtime-core-node.9] `env.prefix` returns `"ADHD_AGENT_MCP_PRODUCTION_"` (namespace-aware)
 
 
 
@@ -24,7 +19,7 @@ read_only:  []
 mutates:    ["packages/environment/environment-core-node/src/index.ts", "packages/environment/environment-core-node/src/environment.ts"]
 ```
 
-- [runtime-core-node.10] command passes
+- [runtime-core-node.10] Runtime package builds
 ---
 
 ## Notes for executor
