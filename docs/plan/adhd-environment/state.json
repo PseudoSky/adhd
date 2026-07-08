@@ -88,5 +88,20 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "contract-base-spec"
+  "current_state": "contract-base-spec",
+  "dod_provenance": {
+    "confirmed_at": "2026-07-08T07:12:02.530Z",
+    "by": "pseudosky",
+    "note": "Confirmed interactively with user on 2026-07-08 via GATE 2 approval",
+    "dod_ids": [
+      "dod.1",
+      "dod.2",
+      "dod.3",
+      "dod.4",
+      "dod.5",
+      "dod.6",
+      "dod.7",
+      "dod.8"
+    ]
+  }
 }
