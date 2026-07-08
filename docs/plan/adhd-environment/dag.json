@@ -145,6 +145,22 @@
       ],
       "context": "contexts/audit-runtime.md",
       "notes": ""
+    },
+    "refactor-agent-mcp": {
+      "kind": "work",
+      "phase": "refactor",
+      "depends_on": [
+        "runtime-core-node",
+        "runtime-cli",
+        "audit-builder"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "entrypoint/agent-mcp/adhd.environment.yaml",
+        "entrypoint/agent-mcp/src/config.ts"
+      ],
+      "context": "contexts/refactor-agent-mcp.md",
+      "notes": ""
     }
   },
   "authored_with": {
