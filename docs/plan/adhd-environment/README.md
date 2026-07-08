@@ -12,4 +12,4 @@
 
 ## Definition of Done
 
-_No DoD clauses yet — author them with `plan-scaffold.js add-dod`._
+- `[dod.1]` **All 6 packages build successfully (nx build, pytest, cargo test) (structural)** — All 6 packages build successfully (nx build, pytest, cargo test).
