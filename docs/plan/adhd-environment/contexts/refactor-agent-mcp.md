@@ -13,6 +13,7 @@
 ## Acceptance criteria
 
 - [refactor-agent-mcp.1] Old 299-line config.ts is removed
+- [refactor-agent-mcp.2] adhd.environment.yaml exists with project name agent-mcp and orgNamespace adhd
 ---
 ## Reservations
 ```text
