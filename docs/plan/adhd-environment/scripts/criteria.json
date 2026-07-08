@@ -279,6 +279,20 @@
         "packages/environment/environment-core-rs",
         "entrypoint/environment-cli"
       ]
+    },
+    {
+      "id": "scaffold-workspace.1",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "present",
+      "pattern": "packages/environment",
+      "paths": [
+        "packages/environment/environment-base-spec",
+        "packages/environment/environment-builder",
+        "packages/environment/environment-core-node",
+        "packages/environment/environment-core-py",
+        "packages/environment/environment-core-rs"
+      ]
     }
   ]
 }
