@@ -226,6 +226,14 @@
       "paths": [
         "packages/environment/environment-core-rs/src"
       ]
+    },
+    {
+      "id": "runtime-rs.6",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cargo build",
+      "expect": "exit0"
     }
   ]
 }
