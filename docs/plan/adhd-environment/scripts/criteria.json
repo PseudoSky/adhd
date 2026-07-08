@@ -152,6 +152,16 @@
       "kind": "command",
       "cmd": "npx nx build environment-builder",
       "expect": "exit0"
+    },
+    {
+      "id": "runtime-core-node.1",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "present",
+      "pattern": "environment.ts",
+      "paths": [
+        "packages/environment/environment-core-node/src"
+      ]
     }
   ]
 }
