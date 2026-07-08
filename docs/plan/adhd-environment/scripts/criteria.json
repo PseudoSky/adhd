@@ -355,6 +355,14 @@
       "kind": "command",
       "cmd": "cd packages/environment/environment-core-rs && cargo test",
       "expect": "exit0"
+    },
+    {
+      "id": "runtime-rs.3",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "cd packages/environment/environment-core-rs && cargo clippy -- -D warnings",
+      "expect": "exit0"
     }
   ]
 }
