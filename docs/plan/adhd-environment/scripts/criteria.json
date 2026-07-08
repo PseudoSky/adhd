@@ -118,6 +118,14 @@
       "kind": "command",
       "cmd": "node -e 'const{m}=require(\"./packages/environment/environment-builder/src/field-merge\"); console.log(typeof m)'",
       "expect": "exit0"
+    },
+    {
+      "id": "builder-engine.7",
+      "phase": "builder",
+      "tier": null,
+      "kind": "command",
+      "cmd": "node -e 'const{inferEnvVar}=require(\"./packages/environment/environment-builder/src/config-resolver\"); console.log(inferEnvVar(\"ADHD_AGENT_MCP\",\"db.path\"))'",
+      "expect": "exit0"
     }
   ]
 }
