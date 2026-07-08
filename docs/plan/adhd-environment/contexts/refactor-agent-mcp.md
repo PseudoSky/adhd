@@ -14,17 +14,11 @@
 
 - [refactor-agent-mcp.1] `entrypoint/agent-mcp/src/config.ts` is removed (old file gone)
 - [refactor-agent-mcp.2] `entrypoint/agent-mcp/adhd.environment.yaml` exists with project name `agent-mcp`, `orgNamespace: adhd`, and all 10 config fields
-- [refactor-agent-mcp.3] Agent-mcp starts with `new Environment<AgentMcpConfig>({ project: "agent-mcp", namespace: "production" })` — no Zod, no dotenv import
 - [refactor-agent-mcp.4] `getProviderConfig("openai")` reads from `env.get("config.providers.openai.*")` + `env.get("env.OPENAI_API_KEY")`
-- [refactor-agent-mcp.5] `isEnvNameAllowed(name)` uses `env.prefix` (namespace-aware, not hardcoded)
 - [refactor-agent-mcp.6] All 27 env vars from old `rawFromEnv()` are accessible via `env.get("env.*")`
-- [refactor-agent-mcp.7] Agent-mcp test suite passes after refactor
 - [refactor-agent-mcp.8] `load-env.ts`, `deepFreeze()`, `resolveEnvRef()`, `verifyEnvRefs()`, `subprocessEnv()` are removed
-
 ---
-
 ## Reservations
-
 ```text
 read_only:  []
 mutates:    ["entrypoint/agent-mcp/adhd.environment.yaml", "entrypoint/agent-mcp/src/config.ts"]
