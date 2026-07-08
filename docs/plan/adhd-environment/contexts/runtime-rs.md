@@ -13,6 +13,7 @@ The `adhd-environment` Rust crate provides a thin runtime client (~50 lines) at 
 ## Acceptance criteria
 
 - [runtime-rs.2] Rust tests pass
+- [runtime-rs.3] Rust clippy passes with no warnings
 ---
 
 
