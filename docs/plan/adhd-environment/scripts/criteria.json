@@ -216,6 +216,16 @@
       "kind": "command",
       "cmd": "python -m build",
       "expect": "exit0"
+    },
+    {
+      "id": "runtime-rs.1",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "present",
+      "pattern": "lib.rs",
+      "paths": [
+        "packages/environment/environment-core-rs/src"
+      ]
     }
   ]
 }

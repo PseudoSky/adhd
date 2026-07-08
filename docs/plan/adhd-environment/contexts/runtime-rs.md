@@ -1,4 +1,4 @@
-# runtime-rs — STATE_NAME
+# runtime-rs
 
 **Phase:** runtime · **Kind:** work · **Depends on:** contract-base-spec · **Guard:** `true`
 
@@ -6,17 +6,19 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+The `adhd-environment` Rust crate provides a thin runtime client (~50 lines) at `packages/environment/environment-core-rs/`. It reads a snapshot JSON and exposes `Environment.get()` for config, paths, env vars, and provenance — identical API surface to the TypeScript runtime. No builder logic.
 
 ---
 
 ## Acceptance criteria
 
-<!-- Author criteria with `plan-scaffold.js add-criterion`. Each writes a
-     matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
-     bare [slug.N] tokens here without a matching audit check. -->
-
-_No criteria yet._
+- [runtime-rs.1] `Environment::new("agent-mcp", None, Some("production"), None)` constructs from existing snapshot
+- [runtime-rs.2] `env.get("config.server.port")` returns `Some(serde_json::Value::Number(3000))`
+- [runtime-rs.3] `env.get_str("config.db.path")` returns `Some("/path/to/db")`
+- [runtime-rs.4] `env.get_int("config.server.port")` returns `Some(3000)`
+- [runtime-rs.5] `env.hash()` returns `"sha256-"` + hex string
+- [runtime-rs.6] `cargo test` passes
+- [runtime-rs.7] `cargo clippy -- -D warnings` passes
 
 ---
 
@@ -31,4 +33,9 @@ mutates:    ["packages/environment/environment-core-rs/src/lib.rs"]
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+1. Dependencies: `serde`, `serde_json`, `sha2` for JSON parsing and hashing.
+2. The runtime is a JSON file reader — no builder logic, no validation.
+3. `contentHash()` must match TS/Python test vector byte-for-byte.
+4. Use `serde_json::Value` for the untyped `get()` return; provide typed helpers (`get_str`, `get_int`, `get_bool`).
+5. Cargo.toml and project.json were created by `scaffold-workspace` — only implement `src/lib.rs` here.
+6. See `interfaces-architect.md` §2 for the exact API spec.
