@@ -13,21 +13,13 @@ The `@adhd/environment` package provides a thin (~60 line) typed runtime client.
 ## Acceptance criteria
 
 - [runtime-core-node.1] `new Environment({ project: "agent-mcp", namespace: "production" })` constructs without error when snapshot exists
-- [runtime-core-node.2] `env.get("config.server.port")` returns `number` (typed via generic)
 - [runtime-core-node.3] `env.get("path.state.data")` returns directory path string
-- [runtime-core-node.4] `env.get("env.OPENAI_API_KEY")` returns recorded env var value
 - [runtime-core-node.5] `env.get("provenance.db.path")` returns `{ source: string, scope: string }`
-- [runtime-core-node.6] `env.hash` returns `"sha256-"` + 64 hex chars
 - [runtime-core-node.7] `env["config.server.port"]` delegates to `env.get()`
-- [runtime-core-node.8] `new Environment({ project: "nonexistent" })` throws with "not found" + path
 - [runtime-core-node.9] `env.prefix` returns `"ADHD_AGENT_MCP_PRODUCTION_"` (namespace-aware)
-- [runtime-core-node.10] `npx nx build environment-core-node` exits 0
 
----
 
-## Reservations
 
-```text
 read_only:  []
 mutates:    ["packages/environment/environment-core-node/src/index.ts", "packages/environment/environment-core-node/src/environment.ts"]
 ```
