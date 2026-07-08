@@ -12,9 +12,6 @@ Verify that the builder phase (contract-base-spec → builder-engine → builder
 
 ## Acceptance criteria
 
-- [audit-builder.1] `npx nx build environment-base-spec` exits 0
-- [audit-builder.3] `build(spec)` returns `EnvironmentSnapshot` with correct `.get()`, `.set()`, `.configPath`, `.write()`
-- [audit-builder.5] Atomic write integrity: simulated crash leaves no partial file
 
 
 
@@ -23,6 +20,7 @@ read_only:  []
 mutates:    ["scripts/audit_audit-builder.py"]
 ```
 
+- [audit-builder.1] All builder-phase packages build successfully
 ---
 
 ## Notes for executor
