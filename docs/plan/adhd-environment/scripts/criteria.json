@@ -110,6 +110,14 @@
       "kind": "command",
       "cmd": "npx nx build environment-base-spec",
       "expect": "exit0"
+    },
+    {
+      "id": "builder-engine.1",
+      "phase": "builder",
+      "tier": null,
+      "kind": "command",
+      "cmd": "node -e 'const{m}=require(\"./packages/environment/environment-builder/src/field-merge\"); console.log(typeof m)'",
+      "expect": "exit0"
     }
   ]
 }
