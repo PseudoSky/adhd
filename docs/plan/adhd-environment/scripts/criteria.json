@@ -55,8 +55,7 @@
       "tier": null,
       "kind": "absent",
       "pattern": "entrypoint/agent-mcp/src/config.ts",
-      "paths": [],
-      "proves_dod": "dod.7"
+      "paths": []
     },
     {
       "id": "audit-final.8",
