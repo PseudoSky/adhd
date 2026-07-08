@@ -15,8 +15,7 @@
       "tier": null,
       "kind": "command",
       "cmd": "adhd-env init --generate-config",
-      "expect": "exit0",
-      "proves_dod": "dod.2"
+      "expect": "exit0"
     },
     {
       "id": "audit-final.3",
