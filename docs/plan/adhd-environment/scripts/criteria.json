@@ -208,6 +208,14 @@
       "paths": [
         "packages/environment/environment-core-py/src/adhd_environment"
       ]
+    },
+    {
+      "id": "runtime-py.8",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python -m build",
+      "expect": "exit0"
     }
   ]
 }
