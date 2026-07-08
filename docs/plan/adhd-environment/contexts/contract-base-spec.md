@@ -15,6 +15,7 @@ The `environment-base-spec` package is fully scaffolded with the canonical JSON 
 
 - [contract-base-spec.1] Snapshot schema validates against JSON Schema meta-schema (draft-07)
 - [contract-base-spec.2] cross-language-test-vectors.json exists with contentHash gate test vector
+- [contract-base-spec.3] index.ts exports EnvironmentSnapshot, ProjectIdentity, ConfigFieldDefinition, ProvenanceEntry, DirectoryEntry, DirectoryType, ConfigScope, FieldType, ProvenanceSource
 ---
 
 ## Reservations
