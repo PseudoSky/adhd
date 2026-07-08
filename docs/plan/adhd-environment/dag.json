@@ -8,7 +8,8 @@
     "runtime",
     "refactor",
     "audit",
-    "docs"
+    "docs",
+    "scaffold"
   ],
   "terminal": "done",
   "nodes": {
