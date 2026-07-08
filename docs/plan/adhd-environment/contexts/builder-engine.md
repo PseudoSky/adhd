@@ -12,11 +12,7 @@ The `environment-builder` package has all core pipeline modules implemented: YAM
 
 ## Acceptance criteria
 
-- [builder-engine.1] `parseYamlSpec(filePath)` returns `ParsedYamlSpec` with project, namespaces, dirs, config fields
-- [builder-engine.3] `resolveConfig(fields, env)` — checks process.env first, then defaults; `${VAR}` interpolation replaces single-level references
-- [builder-engine.5] `validateConfig(config, schema)` — passes valid config, throws field-level errors on invalid
-- [builder-engine.7] `inferEnvVar("ADHD_AGENT_MCP", "db.path")` → `"ADHD_AGENT_MCP_DB_PATH"`
-- [builder-engine.9] `npx nx build environment-builder` exits 0
+- [builder-engine.9] npx nx build environment-builder exits 0
 ---
 
 
