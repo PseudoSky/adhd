@@ -3,7 +3,8 @@
   "title": "adhd-environment v0.0.5",
   "plan_kind": "greenfield",
   "phases": [
-    "contract"
+    "contract",
+    "builder"
   ],
   "terminal": "done",
   "nodes": {},
