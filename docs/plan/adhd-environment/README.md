@@ -21,3 +21,5 @@
 - `[dod.4]` **adhd-env build reads YAML, writes snapshot at ~/.<org>/<project>/<namespace>/adhd-environment.json (structural)** — adhd-env build reads YAML, writes snapshot at ~/.<org>/<project>/<namespace>/adhd-environment.json.
 
 - `[dod.5]` **Typed Environment::project, namespace, namespace, adhdRoot> provides typed env.get() (structural)** — Typed Environment::project, namespace, namespace, adhdRoot> provides typed env.get().
+
+- `[dod.6]` **contentHash test vector matches across all 3 languages (structural)** — contentHash test vector matches across all 3 languages.
