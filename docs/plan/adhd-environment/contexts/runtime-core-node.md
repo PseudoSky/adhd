@@ -24,6 +24,7 @@ read_only:  []
 mutates:    ["packages/environment/environment-core-node/src/index.ts", "packages/environment/environment-core-node/src/environment.ts"]
 ```
 
+- [runtime-core-node.10] command passes
 ---
 
 ## Notes for executor
