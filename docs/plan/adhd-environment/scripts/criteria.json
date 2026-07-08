@@ -258,6 +258,14 @@
       "kind": "command",
       "cmd": "npx nx build environment-base-spec && npx nx build environment-builder",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-runtime.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx build environment-core-node",
+      "expect": "exit0"
     }
   ]
 }
