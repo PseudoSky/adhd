@@ -19,3 +19,5 @@
 - `[dod.3]` **adhd-env set stores config values without .env file (structural)** — adhd-env set stores config values without .env file.
 
 - `[dod.4]` **adhd-env build reads YAML, writes snapshot at ~/.<org>/<project>/<namespace>/adhd-environment.json (structural)** — adhd-env build reads YAML, writes snapshot at ~/.<org>/<project>/<namespace>/adhd-environment.json.
+
+- `[dod.5]` **Typed Environment::project, namespace, namespace, adhdRoot> provides typed env.get() (structural)** — Typed Environment::project, namespace, namespace, adhdRoot> provides typed env.get().
