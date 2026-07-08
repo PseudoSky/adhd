@@ -21,6 +21,7 @@ mutates:    ["entrypoint/environment-cli/src/api.ts", "entrypoint/environment-cl
 ```
 
 - [runtime-cli.9] CLI package builds
+- [runtime-cli.3] adhd-env set command implemented in commands/set.ts
 ---
 
 ## Notes for executor
