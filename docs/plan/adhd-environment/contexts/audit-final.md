@@ -18,6 +18,7 @@
 
 - [audit-final.1] All packages build
 
+- [audit-final.2] Init generates YAML
 ---
 
 ## Reservations
