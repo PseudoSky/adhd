@@ -12,9 +12,6 @@ Full consumer-facing documentation is written — README, API docs, usage guides
 
 ## Acceptance criteria
 
-- [docs-steward.1] Package READMEs exist for environment-core-node, environment-cli, environment-core-py, environment-core-rs
-- [docs-steward.3] README includes `adhd-env set` and `adhd-env build` workflow example
-- [docs-steward.5] Python and Rust READMEs show equivalent usage to TypeScript
 
 
 
@@ -23,6 +20,7 @@ read_only:  []
 mutates:    ["docs/plan/adhd-environment/demo/DEMO.md", "docs/plan/adhd-environment/USE_CASES.md"]
 ```
 
+- [docs-steward.2] README.md exists for each runtime package
 ---
 
 ## Notes for executor
