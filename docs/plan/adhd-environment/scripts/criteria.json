@@ -391,6 +391,14 @@
       "kind": "command",
       "cmd": "cd packages/environment/environment-core-rs && cargo build",
       "expect": "exit0"
+    },
+    {
+      "id": "docs-steward.2",
+      "phase": "docs",
+      "tier": null,
+      "kind": "command",
+      "cmd": "test -f packages/environment/environment-core-node/README.md && test -f entrypoint/environment-cli/README.md && test -f packages/environment/environment-core-py/README.md && test -f packages/environment/environment-core-rs/README.md",
+      "expect": "exit0"
     }
   ]
 }
