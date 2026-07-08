@@ -24,6 +24,7 @@ read_only:  []
 mutates:    ["packages/environment/environment-core-py/src/adhd_environment/__init__.py", "packages/environment/environment-core-py/src/adhd_environment/environment.py"]
 ```
 
+- [runtime-py.8] command passes
 ---
 
 ## Notes for executor
