@@ -338,7 +338,7 @@ These live in `environment-base-spec` because they must produce identical output
 // src/content-hash.ts
 export function contentHash(config: Record<string, string>): string;
 // Returns "sha256-" + hex(SHA-256(sorted key=value\n))
-// Test vector: {b:"2", a:"1"} → "sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"
+// Test vector: {b:"2", a:"1"} → "sha256-66e4efebc74d002dabcf821c0ee1402726e5c9d25a8469e7fc3f7d7691464788"
 
 // src/env-prefix.ts
 export function projectEnvPrefix(projectName: string): string;

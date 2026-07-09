@@ -12,14 +12,14 @@
   },
   "cargo-registry-token": {
     "type": "credential",
-    "description": "crates.io API token consumed by the environment-core-rs nx-release-publish target (cargo publish --token $CARGO_REGISTRY_TOKEN, defined in scaffold-workspace project.json). PUBLISH-ONLY: needed exclusively at release/publish time, NOT for cargo build/test. runtime-rs's guard is `rustup run 1.95.0 cargo build`, which never touches crates.io. blocks_at is set to `release` (was `per-state`) so this credential does NOT halt wave 2; required_by names runtime-rs only as the crate's owning state for traceability. Rebound per ENV-PLAN-006 (user-approved 2026-07-08).",
+    "description": "crates.io API token for the FUTURE publish pipeline of the environment-core-rs crate. IMPORTANT — as of this plan the publish pipeline is UNIMPLEMENTED: a repo-wide search for `cargo publish`, `CARGO_REGISTRY_TOKEN`, `uv publish`, and `twine` across every project.json/package.json returns nothing, and environment-core-rs has no project.json at all (it is not yet an nx-registered project, so no nx-release-publish target exists). The round-1 claim that this token is 'consumed by the environment-core-rs nx-release-publish target defined in scaffold-workspace project.json' was FALSE and is retracted (F14). This credential is therefore PUBLISH-ONLY and entirely UNENFORCED by any current build/test/audit: runtime-rs's guard is `rustup run 1.95.0 cargo build`, which never touches crates.io. `required_by: [runtime-rs]` names the crate's owning state for provenance/traceability only — it is NOT an execution dependency (gap-check requires required_by to be non-empty and name a real node, so the owning state is used as that anchor). `blocks_at: release` defers all enforcement until a release/publish target is implemented and run; until then this blocker halts no wave.",
     "required_by": ["runtime-rs"],
     "owner": "human:ops",
-    "how_to_provide": "crates.io -> Account Settings -> API Tokens -> New Token (publish scope for the adhd-environment crate); export CARGO_REGISTRY_TOKEN in the release environment.",
+    "how_to_provide": "FIRST implement the release path (register environment-core-rs as an nx project and add an nx-release-publish / `cargo publish --token $CARGO_REGISTRY_TOKEN` target) — this does not exist yet. THEN: crates.io -> Account Settings -> API Tokens -> New Token (publish scope for the adhd-environment crate); export CARGO_REGISTRY_TOKEN in the release environment before invoking publish.",
     "destination": "env:CARGO_REGISTRY_TOKEN",
-    "verification": "test -n \"$CARGO_REGISTRY_TOKEN\"",
+    "verification": "test -n \"$CARGO_REGISTRY_TOKEN\"  # presence-only; there is no publish target to exercise yet, so this cannot verify a live release. Meaningful only once the (currently unimplemented) publish pipeline exists.",
     "blocks_at": "release",
-    "note": "Publish-only credential; lands on the Step-8 hand-off punch list. Enforced only at `nx release publish`, never at any build/test/audit wave.",
+    "note": "Publish-only credential for an UNIMPLEMENTED pipeline. No `cargo publish`/`nx-release-publish` target exists in the repo today; wiring one is future work. Enforced only at a future `nx release publish`, never at any build/test/audit wave.",
     "status": "needed"
   }
 }
