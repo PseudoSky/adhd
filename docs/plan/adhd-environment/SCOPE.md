@@ -218,7 +218,7 @@ Five segments:
 
 - `entrypoint/agent-mcp/src/config.ts` is gone — replaced by `adhd.environment.yaml` + typed `Environment`
 - Agent-mcp starts up with `new Environment<AgentMcpConfig>({ project: "agent-mcp", namespace: "production" })` — no Zod, no dotenv, no manual env resolution, no `.env` file
-- All 27 env vars from the old `rawFromEnv()` map to inferred env vars in the YAML
+- All 26 env vars from the old `rawFromEnv()` map to inferred env vars in the YAML
 - `getProviderConfig({ provider: "openai" })` still works — reads from `env.get("config.providers.openai.*")` + `env.get("env.OPENAI_API_KEY")`
 - Agent-mcp test suite still passes after refactor
 

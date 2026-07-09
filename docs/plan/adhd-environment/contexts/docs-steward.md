@@ -12,6 +12,7 @@ Full consumer-facing documentation is written — README, API docs, usage guides
 
 ## Acceptance criteria
 
+- [docs-steward.1] README.md is present in each runtime package directory (`environment-core-node`, `environment-core-py`, `environment-core-rs`, `environment-cli`)
 - [docs-steward.2] README.md exists for each runtime package
 
 ---
