@@ -111,3 +111,7 @@ packages/environment/environment-core-rs/target/
 # so a `git add -f` cannot slip one through.
 adhd-environment.json
 adhd-environment.json.tmp
+
+# Agent scratch/artifacts — same class as .claude/ (already ignored). 61MB of
+# reports, reviews, and transcripts; never belongs in history.
+.opencode/
