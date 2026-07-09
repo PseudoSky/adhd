@@ -1,9 +1,10 @@
 // download.worker.ts
+import type { FileDownloadOptions, FileType } from './index';
 
 export type WorkerMessage = {
   data: unknown[];
-  fileType: 'json' | 'csv' | 'excel';
-  options: unknown;
+  fileType: FileType;
+  options: FileDownloadOptions;
   cacheKey: string;
 };
 
@@ -35,7 +36,7 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 
 async function processLargeData(
   data: unknown[],
-  fileType: 'json' | 'csv' | 'excel',
+  fileType: FileType,
   options: FileDownloadOptions
 ) {
   const chunks: unknown[][] = [];
@@ -46,7 +47,7 @@ async function processLargeData(
     chunks.push(data.slice(i, i + CHUNK_SIZE));
   }
 
-  const processedChunks: unknown[] = [];
+  const processedChunks: string[] = [];
 
   // Process each chunk
   for (let i = 0; i < chunks.length; i++) {
@@ -65,12 +66,15 @@ async function processLargeData(
 
 async function processChunk(
   chunk: unknown[],
-  fileType: 'json' | 'csv' | 'excel',
+  fileType: FileType,
   options: FileDownloadOptions
-) {
+): Promise<string> {
   switch (fileType) {
     case 'csv':
-      return convertToCSV(chunk, options.csv);
+      // CSV conversion is only ever invoked with array-of-record chunks;
+      // the hook-level `data: unknown` contract only holds for the raw
+      // payload, not for what a CSV export can meaningfully process.
+      return convertToCSV(chunk as Record<string, unknown>[], options.csv);
     case 'excel':
       // Note: XLSX operations should be handled in main thread
       // as Web Workers don't have direct access to external modules
@@ -81,7 +85,7 @@ async function processChunk(
 }
 
 function convertToCSV(
-  data: unknown[],
+  data: Record<string, unknown>[],
   csvOptions?: FileDownloadOptions['csv']
 ): string {
   if (!Array.isArray(data) || !data.length) return '';
@@ -90,7 +94,7 @@ function convertToCSV(
   const useQuotes = csvOptions?.quotes !== false;
   const includeHeader = csvOptions?.header !== false;
 
-  const headers = Object.keys(data[0] as object);
+  const headers = Object.keys(data[0]);
   const csvRows = [];
 
   if (includeHeader) {
@@ -101,7 +105,7 @@ function convertToCSV(
     ...data.map((row) =>
       headers
         .map((header) => {
-          const cell = (row as Record<string, unknown>)[header];
+          const cell = row[header];
           const value = typeof cell === 'object' ? JSON.stringify(cell) : cell;
           return useQuotes
             ? `"${String(value).replace(/"/g, '""')}"`
@@ -114,29 +118,30 @@ function convertToCSV(
   return csvRows.join('\n');
 }
 
-function combineChunks(chunks: unknown[], fileType: 'json' | 'csv' | 'excel') {
+function combineChunks(
+  chunks: string[],
+  fileType: FileType
+): { data: string; type: string } {
   let type: string;
-  let data: unknown;
+  let data: string;
 
   switch (fileType) {
     case 'csv':
       type = 'text/csv;charset=utf-8;';
       // For CSV, we need to keep only one header
       data =
-        (chunks[0] as string).split('\n')[0] +
+        chunks[0].split('\n')[0] +
         '\n' +
-        (chunks as string[])
-          .map((chunk) => chunk.split('\n').slice(1).join('\n'))
-          .join('\n');
+        chunks.map((chunk) => chunk.split('\n').slice(1).join('\n')).join('\n');
       break;
     case 'excel':
       type =
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      data = JSON.parse('[' + (chunks as string[]).join(',') + ']');
+      data = JSON.parse('[' + chunks.join(',') + ']');
       break;
     default:
       type = 'application/json;charset=utf-8;';
-      data = '[' + (chunks as string[]).join(',') + ']';
+      data = '[' + chunks.join(',') + ']';
   }
 
   return { data, type };

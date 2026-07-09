@@ -54,29 +54,25 @@ const loadExtract = (src: StackItem, types: SelectorTypes[] = []) => {
     const chosenType = selectors[t];
     const resSel = $(chosenType.selector);
     if (resSel) {
-      return (
-        Array.prototype.map
-          .call(resSel, (el) => {
-            const $el = $(el);
-            const r = new URL(
-              $el.attr(chosenType.attribute) as string,
-              src.path
-            ).toString();
-            console.log('lnk', r);
-            return r.replace(/[?].*/, '') as string;
-            // if (raw) {
-            //     return {
-            //         $el,
-            //         value: $el.attr(chosenType.attribute)
-            //     };
-            // }
-          })
-          // TODO: no idea how this works
-          .reduce(
-            (r: string[], l: string) =>
-              r.includes(l) || l.endsWith('undefined') ? r : [...r, l],
-            []
-          ) as string[]
+      // `Array.prototype.map.call(...)` is untypable by TS: the generic `this` is lost,
+      // so it returns `unknown[]`. Chaining `.reduce((r: string[], l: string) => …)`
+      // off that array therefore failed to match any overload (TS2769) once `any` was
+      // swept to `unknown`. Assert the element type ONCE, here at the boundary where
+      // the callback demonstrably returns `string`, then let `reduce` be properly typed.
+      const links = Array.prototype.map.call(resSel, (el: unknown): string => {
+        const $el = $(el as never);
+        const r = new URL(
+          $el.attr(chosenType.attribute) as string,
+          src.path
+        ).toString();
+        console.log('lnk', r);
+        return r.replace(/[?].*/, '');
+      }) as string[];
+
+      // Dedupe, dropping entries whose URL resolution produced a trailing "undefined".
+      return links.reduce<string[]>(
+        (r, l) => (r.includes(l) || l.endsWith('undefined') ? r : [...r, l]),
+        []
       );
     } else {
       return [] as string[];

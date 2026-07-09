@@ -32,12 +32,17 @@ export const keyByArray = <T extends Record<string, unknown>>(
 export const keyBy = (
   collection: Record<string, unknown> | unknown[],
   key: string
-): Record<string, unknown> => {
+  // keyBy is genuinely polymorphic at runtime: an array collection is
+  // keyed into a Record, while a non-array (object) collection falls
+  // through to Object.values and yields an array — the two branches
+  // below preserve that dual pre-existing shape rather than forcing a
+  // single (and therefore inaccurate) return type.
+): Record<string, unknown> | unknown[] => {
   // keyBy for array and object
   const c = collection || {};
   return Array.isArray(c)
     ? keyByArray(c as Record<string, unknown>[], key)
-    : Object.values(keyByArray(c as Record<string, unknown>, key));
+    : Object.values(keyByArray(c as unknown as Record<string, unknown>[], key));
 };
 
 export function isMatchType(obj: unknown, target: unknown) {

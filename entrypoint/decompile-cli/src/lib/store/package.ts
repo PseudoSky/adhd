@@ -52,7 +52,12 @@ const hasDepType = (t: DependencyEnum[] = []) => {
 };
 interface CruiseOptions {
   sourceDir: string;
-  doNotFollow?: { dependencyTypes: string[] };
+  // `dependencyTypes` was `string[]`, which is NOT assignable to
+  // dependency-cruiser's `IDoNotFollowType.dependencyTypes: DependencyType[]`
+  // (TS2345 — `string` is not assignable to `DependencyType`). The precise union
+  // is already declared in this file as `DependencyEnum`; use it, so a typo in a
+  // dependency-type name is caught here rather than silently ignored by the cruiser.
+  doNotFollow?: { dependencyTypes: DependencyEnum[] };
   extends?: string;
   [key: string]: unknown;
 }

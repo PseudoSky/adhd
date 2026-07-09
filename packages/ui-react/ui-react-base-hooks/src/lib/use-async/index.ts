@@ -56,7 +56,16 @@ export function useAsync<
         }
       }
     },
-    [asyncFunction, options]
+    // `options` itself is not memoized by callers (a fresh object literal
+    // per render is the common/expected usage pattern — see this hook's
+    // own tests), so depending on the whole object makes `execute`
+    // re-identify every render. Depend on the specific callbacks it
+    // actually closes over instead, so `execute` (and therefore the
+    // effect below that depends on it) stays referentially stable across
+    // renders that don't change these handlers — this is what actually
+    // fixes the infinite render/execute loop; simply dropping `execute`
+    // from the effect's deps would silence the lint rule without fixing it.
+    [asyncFunction, options.onSuccess, options.onError]
   );
 
   useEffect(() => {
