@@ -85,6 +85,15 @@ describe('[cli-run-cmd.1+2] run command — imports fns and calls plugin.run()',
       let capturedInput: RunInput | undefined;
       let resolveRun: (() => void) | undefined;
 
+      // Latch, not a poll. The previous `setImmediate` busy-wait competed for the very
+      // CPU that ts-morph needed to finish the extraction it was waiting on, so under
+      // `nx run-many --parallel=5` the deadline expired and this failed with
+      // `expected undefined not to be undefined`.
+      let signalRunCalled!: () => void;
+      const runCalled = new Promise<void>((r) => {
+        signalRunCalled = r;
+      });
+
       const capturingPlugin: OutputPlugin = {
         id: 'capturing',
         description: 'captures RunInput and waits for abort',
@@ -93,6 +102,7 @@ describe('[cli-run-cmd.1+2] run command — imports fns and calls plugin.run()',
         },
         async run(input: RunInput): Promise<void> {
           capturedInput = input;
+          signalRunCalled();
           // Simulate a long-running server: resolve when signal fires or resolveRun called
           return new Promise<void>((resolve) => {
             resolveRun = resolve;
@@ -117,12 +127,17 @@ describe('[cli-run-cmd.1+2] run command — imports fns and calls plugin.run()',
         'capturing',
       ]);
 
-      // Wait until plugin.run() has been called (bounded poll — no sleep).
-      // 12 s to tolerate concurrent ts-morph compilation across 11 test files.
-      const deadline = Date.now() + 12000;
-      while (!capturedInput && Date.now() < deadline) {
-        await new Promise<void>((r) => setImmediate(r));
-      }
+      // Await the latch with a bounded deadline; fail loudly with a diagnosis.
+      await Promise.race([
+        runCalled,
+        new Promise<never>((_, reject) => {
+          const t = setTimeout(
+            () => reject(new Error('plugin.run() was never called within 15s')),
+            15000,
+          );
+          t.unref?.();
+        }),
+      ]);
       expect(capturedInput).toBeDefined();
 
       // [cli-run-cmd.1] fns contains live functions from the fixture
@@ -165,7 +180,10 @@ describe('[cli-run-cmd.1+2] run command — imports fns and calls plugin.run()',
 // ───────────────────────────────────────────────────────────────────────────
 
 describe('[cli-run-cmd.4] run-registry command — passes multiple packages at once', () => {
-  it('discovers pkg-a and pkg-b and passes them as a single packages array', async () => {
+  // Explicit timeout: drives a REAL ts-morph extraction over two fixture packages.
+  // It inherited vitest's 5 s default and timed out under `--parallel=5`. The work is
+  // genuinely slow, not hung; its sibling already declares `{ timeout: 20000 }`.
+  it('discovers pkg-a and pkg-b and passes them as a single packages array', { timeout: 30000 }, async () => {
     let capturedInput: RunInput | undefined;
 
     const capturingPlugin: OutputPlugin = {

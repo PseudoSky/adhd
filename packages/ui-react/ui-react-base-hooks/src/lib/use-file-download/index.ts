@@ -44,6 +44,23 @@ export interface DownloadProgress {
   error?: Error | null;
 }
 
+/**
+ * Shape of the messages posted back from the download Web Worker. The worker is
+ * typed via a separate module (`worker.ts`) so the message is received here as
+ * `unknown` and asserted to this shape at the `onmessage` boundary.
+ */
+interface WorkerMessage {
+  status: 'progress' | 'error' | 'complete';
+  progress: number;
+  error: string;
+  result: {
+    data: BlobPart;
+    type: string;
+    cacheKey: string;
+    fileType: FileType;
+  };
+}
+
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const CHUNK_SIZE = 1000; // Process 1000 records at a time
 
@@ -70,12 +87,12 @@ const validateData = (
           if (data.some((item) => typeof item[key] !== type)) {
             errors.push(`Invalid type for field "${key}"`);
           }
-        } else if (typeof data[key] !== type) {
+        } else if (typeof (data as Record<string, unknown>)[key] !== type) {
           errors.push(`Invalid type for field "${key}"`);
         }
       });
     } catch (error) {
-      errors.push(`Schema validation failed: ${error.message}`);
+      errors.push(`Schema validation failed: ${(error as Error).message}`);
     }
   }
 
@@ -116,7 +133,7 @@ export const useFileDownload = ({
       // Set up message handler
       // WorkerMessage from worker is typed different
       workerInstance.onmessage = (event: MessageEvent<unknown>) => {
-        const { status, progress, result, error } = event.data;
+        const { status, progress, result, error } = event.data as WorkerMessage;
 
         if (status === 'progress') {
           setDownloadState((prev) => ({
@@ -199,7 +216,7 @@ export const useFileDownload = ({
       const useQuotes = csvOptions?.quotes !== false;
       const includeHeader = csvOptions?.header !== false;
 
-      const headers = Object.keys(data[0]);
+      const headers = Object.keys(data[0] as object);
       const csvRows = [];
 
       if (includeHeader) {
@@ -210,7 +227,7 @@ export const useFileDownload = ({
         ...data.map((row) =>
           headers
             .map((header) => {
-              const cell = row[header];
+              const cell = (row as Record<string, unknown>)[header];
               const value =
                 typeof cell === 'object' ? JSON.stringify(cell) : cell;
               return useQuotes

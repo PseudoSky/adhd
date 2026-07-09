@@ -90,6 +90,6 @@ export const CustomSerializer = Template.bind({});
 CustomSerializer.args = {
   storageKey: 'demo-custom',
   initialValue: new Date(),
-  serializer: (date: Date) => date.toISOString(),
+  serializer: (value: unknown) => (value as Date).toISOString(),
   deserializer: (str: string) => new Date(str),
 };

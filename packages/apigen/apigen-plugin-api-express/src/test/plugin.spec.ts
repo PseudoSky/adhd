@@ -138,7 +138,10 @@ describe('generate()', () => {
   it('[plugin-api-express.2] generated routes.ts imports dispatch from @adhd/apigen-engine-runtime', () => {
     const out = generate(baseInput);
     expect(out.files[0].content).toMatch(
-      /import \{[^}]*\bdispatch\b[^}]*\} from ['"]@adhd\/apigen-runtime['"]/
+      // Package was renamed @adhd/apigen-runtime -> @adhd/apigen-engine-runtime.
+      // The generator (src/lib/generate.ts) emits the new name; only this assertion
+      // still carried the old one, so the test failed while the code was correct.
+      /import \{[^}]*\bdispatch\b[^}]*\} from ['"]@adhd\/apigen-engine-runtime['"]/
     );
   });
 

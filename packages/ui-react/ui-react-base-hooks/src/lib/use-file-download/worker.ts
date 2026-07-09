@@ -36,7 +36,7 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 async function processLargeData(
   data: unknown[],
   fileType: 'json' | 'csv' | 'excel',
-  options: unknown
+  options: FileDownloadOptions
 ) {
   const chunks: unknown[][] = [];
   const totalChunks = Math.ceil(data.length / CHUNK_SIZE);
@@ -66,7 +66,7 @@ async function processLargeData(
 async function processChunk(
   chunk: unknown[],
   fileType: 'json' | 'csv' | 'excel',
-  options: unknown
+  options: FileDownloadOptions
 ) {
   switch (fileType) {
     case 'csv':
@@ -80,14 +80,17 @@ async function processChunk(
   }
 }
 
-function convertToCSV(data: unknown[], csvOptions?: unknown): string {
+function convertToCSV(
+  data: unknown[],
+  csvOptions?: FileDownloadOptions['csv']
+): string {
   if (!Array.isArray(data) || !data.length) return '';
 
   const delimiter = csvOptions?.delimiter || ',';
   const useQuotes = csvOptions?.quotes !== false;
   const includeHeader = csvOptions?.header !== false;
 
-  const headers = Object.keys(data[0]);
+  const headers = Object.keys(data[0] as object);
   const csvRows = [];
 
   if (includeHeader) {
@@ -98,7 +101,7 @@ function convertToCSV(data: unknown[], csvOptions?: unknown): string {
     ...data.map((row) =>
       headers
         .map((header) => {
-          const cell = row[header];
+          const cell = (row as Record<string, unknown>)[header];
           const value = typeof cell === 'object' ? JSON.stringify(cell) : cell;
           return useQuotes
             ? `"${String(value).replace(/"/g, '""')}"`
