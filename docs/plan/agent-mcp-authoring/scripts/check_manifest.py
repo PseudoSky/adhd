@@ -29,7 +29,7 @@ import sys
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 DECISIONS = os.path.join(REPO_ROOT, "docs/plan/agent-mcp-authoring/decisions.md")
-GUARDED_PREFIXES = ("packages/ai/agent-mcp/src", "packages/agent/agent-base-types/src")
+GUARDED_PREFIXES = ("entrypoint/agent-mcp/src", "packages/agent/agent-base-types/src")
 
 
 def run(cmd):

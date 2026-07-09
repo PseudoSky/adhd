@@ -1,6 +1,6 @@
 # live-model-e2e — AGENT_MCP_LIVE-gated real-model composition journey across a PROVIDER MATRIX
 
-**Phase:** e2e · **Kind:** work · **Depends on:** composition-journey-e2e · **Guard:** `npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts`
+**Phase:** e2e · **Kind:** work · **Depends on:** composition-journey-e2e · **Guard:** `npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts`
 
 ---
 
@@ -76,7 +76,7 @@ LMSTUDIO_BASE_URL=http://localhost:1234/v1 AGENT_MCP_LIVE=1 \
 
 ```text
 read_only:  []
-mutates:    ["packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts"]
+mutates:    ["entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts"]
 ```
 
 ---
