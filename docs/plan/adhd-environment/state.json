@@ -46,11 +46,11 @@
       "end_ref": null
     },
     "runtime-py": {
-      "status": "pending",
+      "status": "complete",
       "started_at": null,
-      "done_at": null,
+      "done_at": "2026-07-09T04:38:59.458Z",
       "start_ref": null,
-      "end_ref": null
+      "end_ref": "b71b6920b21ae899d1fa2862c4b61989229d25c4"
     },
     "runtime-rs": {
       "status": "pending",
@@ -131,6 +131,18 @@
       "audit_criteria_total": 21,
       "by": "plan-orchestrator",
       "note": "environment-builder config composition engine; 119 tests; nx build green; fixed detectDrift keying bug"
+    },
+    {
+      "ts": "2026-07-09T04:38:59.458Z",
+      "from": "builder-snapshot-api",
+      "to": "runtime-py",
+      "start_ref": null,
+      "end_ref": "b71b6920b21ae899d1fa2862c4b61989229d25c4",
+      "audit_exit": 31,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 41,
+      "by": "plan-orchestrator",
+      "note": "environment-core-py port; 42 tests; all cross-language vectors pass (correct hash); uv build green"
     }
   ],
   "amendment_log": [
