@@ -1,6 +1,6 @@
 # agent-define — transactional declarative composition upsert
 
-**Phase:** authoring · **Kind:** work · **Depends on:** component-define · **Guard:** `npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/agent-define.test.ts`
+**Phase:** authoring · **Kind:** work · **Depends on:** component-define · **Guard:** `npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/agent-define.test.ts`
 
 ---
 
@@ -39,7 +39,7 @@ never leaves the registry inconsistent.
 
 ```text
 read_only:  []
-mutates:    ["packages/ai/agent-mcp/src/tools/authoring.ts", "packages/ai/agent-mcp/src/registry/composition-writer.ts", "packages/ai/agent-mcp/src/server.ts", "packages/ai/agent-mcp/src/__tests__/agent-define.test.ts"]
+mutates:    ["entrypoint/agent-mcp/src/tools/authoring.ts", "entrypoint/agent-mcp/src/registry/composition-writer.ts", "entrypoint/agent-mcp/src/server.ts", "entrypoint/agent-mcp/src/__tests__/agent-define.test.ts"]
 ```
 
 ---

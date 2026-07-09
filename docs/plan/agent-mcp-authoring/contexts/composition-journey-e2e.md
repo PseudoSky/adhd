@@ -1,6 +1,6 @@
 # composition-journey-e2e — the Cumulative Usability Gate, public surface only
 
-**Phase:** e2e · **Kind:** work · **Depends on:** versioning · **Guard:** `npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts`
+**Phase:** e2e · **Kind:** work · **Depends on:** versioning · **Guard:** `npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/composition-journey-e2e.test.ts`
 
 See `contexts/_shared.md` for invariants and the three lanes.
 
@@ -31,7 +31,7 @@ removed from the run path entirely; `live-model-e2e` then extends this to the fu
 `{anthropic, claudecli, lmstudio}` matrix.
 
 **The tooth:** the test carries a static import-scan assertion — it imports NO
-`packages/ai/**/src/**` path (only the MCP wire client + the compiler CLI bin at
+`packages/agent/**/src/** or entrypoint/**/src/**` path (only the MCP wire client + the compiler CLI bin at
 `dist/packages/agent/agent-engine-compiler/src/cli/compile.js`). Reintroducing a deep src
 import (the exact author-perspective gap the team-lead flagged) flips it red.
 
@@ -79,7 +79,7 @@ import (the exact author-perspective gap the team-lead flagged) flips it red.
 
 ```text
 read_only:  []
-mutates:    ["packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts", "docs/plan/agent-registry/demo/compose-via-mcp.mjs"]
+mutates:    ["entrypoint/agent-mcp/src/__tests__/composition-journey-e2e.test.ts", "docs/plan/agent-registry/demo/compose-via-mcp.mjs"]
 ```
 
 ---

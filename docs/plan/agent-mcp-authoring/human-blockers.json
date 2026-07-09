@@ -39,15 +39,27 @@
   },
   "sox-package-publish": {
     "type": "external-resource",
-    "description": "The @adhd/sox-embedding-provider, @adhd/sox-vector-store, @adhd/sox-ingest, and @adhd/sox-analysis packages must be available as npm deps (published, linked, or local path) before the embedding-substrate state can add them to package.json. Only @adhd/sox-memory-core is published; all others 404 on npm as of 2026-06-29. Decisions.md §D5 documents three options: publish, npm link, or local path reference.",
+    "description": "The MINIMAL 3-package set — @adhd/sox-embedding-provider, @adhd/sox-vector-store, @adhd/sox-ingest — must be resolvable as npm deps before embedding-substrate/enrichment-pipeline add them to packages/agent/agent-store-prompts/package.json. All three 404 on npm as of 2026-07-08 (only @adhd/sox-memory-core@0.2.1 is published). These are ESM packages (\"type\":\"module\", exports.import) so the probe uses dynamic import(), NOT require(). enrichment-pipeline consumes the @adhd/sox-ingest/core SUBPATH specifically (dep-free: node:crypto only — avoids web-tree-sitter/tree-sitter-wasms pulled by the root barrel's AstChunker), so the probe imports both '@adhd/sox-ingest' AND '@adhd/sox-ingest/core'. CAVEAT: the ./core export + src/core.ts are currently UNCOMMITTED in sox-ecosystem's working tree (untracked) — this blocker must confirm @adhd/sox-ingest/core actually resolves before enrichment-pipeline starts. @adhd/sox-analysis and @adhd/sox-memory-core are NOT required by this plan (D-summary calls ingest() directly) and are intentionally omitted. Supply via changesets publish from sox-ecosystem (pnpm rewrites workspace:* at pack time — decisions.md §D5). NOTE: the sox-ingest-publishable blocker is now VERIFIED (commit f4897aa: private:false + invariant removed).",
     "required_by": [
       "embedding-substrate",
       "enrichment-pipeline"
     ],
-    "verification": "node -e \"require('@adhd/sox-embedding-provider'); require('@adhd/sox-vector-store'); require('@adhd/sox-ingest'); console.log('ALL RESOLVE OK')\" 2>&1",
+    "verification": "node -e \"Promise.all([import('@adhd/sox-embedding-provider'),import('@adhd/sox-vector-store'),import('@adhd/sox-ingest'),import('@adhd/sox-ingest/core')]).then(()=>console.log('ALL 4 (incl /core subpath) RESOLVE OK')).catch(e=>{console.error(String(e));process.exit(1)})\"",
     "status": "needed",
     "owner": "executor environment",
-    "how_to_provide": "Run one of the three options in decisions.md §D5 (publish to npm, npm link, or add file: paths to adhd's package.json). Then verify all four packages resolve.",
+    "how_to_provide": "In sox-ecosystem: make @adhd/sox-ingest publishable (see sox-ingest-publishable), then `pnpm changeset` + `pnpm changeset version` + `pnpm publish -r` for the 3 packages. Then add them as ^0.1.0 deps to agent-store-prompts and confirm the dynamic-import probe prints ALL 3 RESOLVE OK.",
+    "blocks_at": "state-start"
+  },
+  "sox-ingest-publishable": {
+    "type": "manual-approval",
+    "description": "RESOLVED 2026-07-08 by sox-ecosystem commit f4897aa (P1(ingest-public): expose @adhd/sox-ingest public surface). @adhd/sox-ingest previously carried package.json private:true + a source header invariant 'PRIVATE — never published to npm; only the memory domain composer may call this package'. That commit sets private:false and DELETES the header invariant, so @adhd/agent-store-prompts (NOT the memory domain composer) importing ingest() directly is now sanctioned. Kept as a VERIFIED record, not deleted. CAVEAT: this landed via concurrent work DURING this planning session; the package read private:true when first inspected — re-verify before executing enrichment-pipeline. (memory-core@0.3.0 hard-pins sox-ingest@0.1.0, so this also unblocks any future memory-core publish — BACKLOG SOX-PKG-001.)",
+    "required_by": [
+      "enrichment-pipeline"
+    ],
+    "verification": "node -e \"process.exit(require('/Users/nix/dev/ai/sox-ecosystem/libs/data/ingest/ingest/package.json').private === false ? 0 : 1)\" && ! grep -rq 'PRIVATE — never published' /Users/nix/dev/ai/sox-ecosystem/libs/data/ingest/ingest/src && echo 'OWNER SIGN-OFF OK (private:false + invariant removed, commit f4897aa)'",
+    "status": "verified",
+    "owner": "sox-ecosystem owner",
+    "how_to_provide": "Already done in sox-ecosystem commit f4897aa: @adhd/sox-ingest package.json is private:false and the 'PRIVATE — never published … only the memory domain composer may call this' header invariant is removed. Re-verify with the verification command before enrichment-pipeline executes (the change was concurrent to this session).",
     "blocks_at": "state-start"
   }
 }
