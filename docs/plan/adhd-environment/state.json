@@ -53,11 +53,11 @@
       "end_ref": "b71b6920b21ae899d1fa2862c4b61989229d25c4"
     },
     "runtime-rs": {
-      "status": "pending",
+      "status": "complete",
       "started_at": null,
-      "done_at": null,
+      "done_at": "2026-07-09T04:39:07.047Z",
       "start_ref": null,
-      "end_ref": null
+      "end_ref": "51159bf1909c92f76de62fb46e2042e3085b589a"
     },
     "audit-runtime": {
       "status": "pending",
@@ -143,6 +143,18 @@
       "audit_criteria_total": 41,
       "by": "plan-orchestrator",
       "note": "environment-core-py port; 42 tests; all cross-language vectors pass (correct hash); uv build green"
+    },
+    {
+      "ts": "2026-07-09T04:39:07.047Z",
+      "from": "builder-snapshot-api",
+      "to": "runtime-rs",
+      "start_ref": null,
+      "end_ref": "51159bf1909c92f76de62fb46e2042e3085b589a",
+      "audit_exit": 31,
+      "audit_criteria_passed": 10,
+      "audit_criteria_total": 41,
+      "by": "plan-orchestrator",
+      "note": "environment-core-rs port; 18 unit+4 doctest; all cross-language vectors pass; cargo build+clippy green"
     }
   ],
   "amendment_log": [
