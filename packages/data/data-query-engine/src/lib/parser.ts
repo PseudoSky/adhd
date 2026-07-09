@@ -142,7 +142,15 @@ export function parseWhere(
   return compileWhere(query)(obj);
 }
 // TODO: decide wether or not to support <field_direction_nulls> (probaby want to use regex in this case)
-const parseOrderByOperation = (path: string[], value: string) => {
+// `value` comes from `_.get(...)`, which returns `unknown`. It is immediately
+// `.split()`, so a non-string was always a latent runtime crash — surface it
+// loudly here instead of casting the type away.
+const parseOrderByOperation = (path: string[], value: unknown) => {
+  if (typeof value !== 'string') {
+    throw new TypeError(
+      `order_by at "${path.join('.')}" must be a string such as "asc_nulls_last", got ${typeof value}`
+    );
+  }
   const [dir, , nulls = 'last'] = value.split('_') as [
     'asc' | 'desc',
     string,
@@ -159,7 +167,10 @@ export function parseOrderBy(
   if (_.isString(query)) {
     return [{ key: query as string, dir: 'desc', nulls: 'last' }];
   } else if (_.isArray(query)) {
-    const apaths = _.allPaths(query);
+    // `allPaths` declares `Record<string, unknown>`; an array IS such a record at
+    // runtime (it enumerates index keys via `for…in`), but TS has no index signature
+    // for it. Assert at this one boundary rather than widening allPaths' signature.
+    const apaths = _.allPaths(query as unknown as Record<string, unknown>);
     const sorts = apaths.map((e) =>
       parseOrderByOperation(e.slice(1), _.get(query, e))
     );
