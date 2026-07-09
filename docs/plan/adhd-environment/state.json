@@ -126,6 +126,27 @@
         "contexts/docs-steward.md"
       ],
       "by": "plan-orchestrator"
+    },
+    {
+      "ts": "2026-07-09T01:44:43.076Z",
+      "state": "refactor-agent-mcp",
+      "class": "executor",
+      "type": "gap-audit-repair-2",
+      "reason": "Second GO-WITH-FIXES re-audit repair (F1-F4 + DoD hygiene). F1: expand refactor-agent-mcp reservation/artifacts to the full agent-mcp source graph — add the 5 real ./config.js consumers (index/server/logger/streaming/sse-server/db/client) + a new environment.ts module (home for the config accessor + getProviderConfig/isEnvNameAllowed wrappers once config.ts is deleted); context Delta Spec instructs rewiring each consumer. F2: rescope criteria .5 (getProviderConfig asserted in new environment.ts, not tree-wide src grep) and .6 (26 legacy names asserted in adhd.environment.yaml, not tree-wide grep) so both FAIL if the refactor drops the wrapper/mapping. F3: correct env-var count 27->26 (real: rawFromEnv 17 + PROVIDER_DEFAULTS 9) across SCOPE.md, CURRENT_CONFIG_PATTERNS.md, USE_CASES.md, DEMO.md, refactor-agent-mcp.md; add missing ADHD_AGENT_SSE_BASE_URL row to CURRENT_CONFIG_PATTERNS.md field table (25->26 rows). F4: backfill [docs-steward.1] into docs-steward context. Plus: nx-reset op-note in _shared.md; DoD delivered-by claims for 9/10 work states in README (docs-steward left unmapped-no DoD outcome for docs; strict sentinel withheld to avoid regressing the gate). No topology change.",
+      "files_synced": [
+        "dag.json",
+        "contexts/refactor-agent-mcp.md",
+        "scripts/criteria.json",
+        "scripts/audit_checks.js",
+        "CURRENT_CONFIG_PATTERNS.md",
+        "SCOPE.md",
+        "USE_CASES.md",
+        "demo/DEMO.md",
+        "contexts/docs-steward.md",
+        "contexts/_shared.md",
+        "README.md"
+      ],
+      "by": "plan-orchestrator"
     }
   ],
   "authored_with": {
