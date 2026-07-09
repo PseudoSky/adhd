@@ -903,3 +903,62 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
   4. `ui-react-base-hooks` — 33 (`use-async`, `use-file-download`(+worker), `use-local-storage`, `use-throttle`) → concrete types (`Blob`, `File`, URL params); `unknown` where values flow through `JSON.parse`.
   5. `data-base-transforms` — ~132 (`collections/filters/function/object/regex/stats` + specs). Highest effort; mostly generic utilities → `unknown` or proper generic defaults.
 - **Status:** OPEN. `FAILURE.md` should be deleted once this entry is confirmed — a root-level status file is not a tracking system.
+
+## Full-repo `lint / build / test` sweep (2026-07-09)
+
+Ran `nx run-many -t <target> --all --parallel=5` over all 59 projects.
+Baseline: **lint exit 0**, **build exit 1** (5 projects), **test exit 1** (11 projects).
+
+### BUILD-ANY-001 — `any` → `unknown` sweep broke 5 builds (root cause proven)
+- **Where:** commit `b1580fd6 chore(repo): commit pre-existing working-tree state (not authored this session)` replaced `any` with `unknown` across `packages/data/data-base-transforms/src/lib/*` and `packages/ui-react/ui-react-base-hooks/src/lib/use-file-download/*` without adapting the code. Under `strict: true` every use site fails.
+- **Cascade:** `data-core-structures`, `data-query-engine`, `decompile-cli` each reported the *same* 34 errors — they only depend on `data-base-transforms`. So 5 build failures reduce to **2 root projects**.
+- **Fix:** proper generics + type-predicate guards (`filters.ts`), not a re-introduction of `any`. Four genuine non-`unknown` bugs also surfaced and were fixed: `regex.ts` duplicate `prefix` identifier (TS2300), `regex.ts` 5-vs-6 argument call mismatch (TS2554), `function.ts` non-array rest parameter (TS2370), `object.ts` missing return path (TS7030).
+- **Status:** `data-base-transforms` FIXED (build exit 0). `ui-react-base-hooks` IN PROGRESS.
+
+### BUILD-OPT-001 — `dispatch-core-optimizer` did not compile (FIXED)
+- **Where:** `src/lib/snapshot.ts:951`, `src/lib/compiler.ts:916` — `TS2741: Property 'tokens_naive' is missing in type … but required in type 'SnapshotOptimization'`.
+- **Description:** `tokens_naive: number | null` was added as a **required** field to `SnapshotOptimization` (`packages/dispatch/dispatch-base-spec/src/lib/types.ts:579`) without updating the two construction sites. `optimize.ts`'s own design note had explicitly deferred this: *"Adding a `tokens_naive` field to SnapshotOptimization belongs to a future @adhd/dispatch-spec change, not this file."* The spec change landed; the call sites never followed.
+- **Fix:** `tokens_naive: null` at both sites. It **cannot** be computed there — `computeTokensNaive(snapshot, deps)` takes a *finished* `DagSnapshot`, and these sites are still assembling it. `null` is the declared "not computed" value; callers wanting the F4 baseline call the exported `computeTokensNaive()`. No test asserts a numeric value.
+- **Status:** FIXED — build exit 0, test exit 0 (28/28).
+
+### TEST-CLI-001 — `dispatch-cli` test target never generated the CLI it drives (FIXED)
+- **Where:** `entrypoint/dispatch-cli/project.json` → `targets.test`
+- **Description:** `cli-smoke.spec.ts` fails loudly when `dist/entrypoint/dispatch-cli/cli/cli.ts` is absent, and its error message asserts *"This target's project.json declares dependsOn: ["generate-cli"], so a normal `npx nx test dispatch-cli` always produces this file first."* **It did not.** `test.dependsOn` was `null`; only `nx.json`'s `targetDefaults.test.dependsOn = ["^build"]` applied, which never runs `generate-cli`. The error message documented a guarantee that did not exist.
+- **Fix:** `"dependsOn": ["^build", "generate-cli"]` on the test target. (A project-level `dependsOn` **replaces** the targetDefaults value, so `^build` must be repeated — omitting it would silently stop building dependencies.)
+- **Verification (teeth):** deleted `dist/.../cli/cli.ts`, ran `nx test dispatch-cli` → `generate-cli` ran, artifact was recreated, 30/30 passed, exit 0.
+- **Status:** FIXED
+
+### TEST-FLAKE-001 — `apigen-cli` had two timing-dependent tests (FIXED)
+- **Where:** `entrypoint/apigen-cli/src/test/run.spec.ts`
+- **`[cli-run-cmd.1+2]`** spun on `setImmediate` until `capturedInput` appeared, bounded by a 12 s deadline. That busy-wait **competes for the very CPU that ts-morph needs** to finish the extraction it is waiting on, so under `--parallel=5` the deadline expired: `expected undefined not to be undefined`. Replaced with a latch (`signalRunCalled()` from inside `run()`) plus a bounded 15 s rejection — deterministic, and idle while waiting.
+- **`[cli-run-cmd.4]`** drives a real ts-morph extraction over two fixture packages but inherited vitest's **5 s default timeout** (its sibling already declares `{ timeout: 20000 }`). `Test timed out in 5000ms`. Given an explicit `{ timeout: 30000 }`; assertions unchanged.
+- **Verification:** 4 concurrent vitest processes on the same spec — all exit 0. (Passing in isolation proved nothing; the failure only reproduces under contention.)
+- **Status:** FIXED — violated the repo rule "be deterministic without timing; a flaky proof is not a proof."
+
+### TEST-REF-001 — `agent-plugin-budget`: `ReferenceError` aborted two tests before they asserted anything (FIXED)
+- **Where:** `src/__tests__/budget-plugin.test.ts` → `describe('maxTokensPer24h — mock DB')` `beforeEach`
+- **Description:** `lastQuery = undefined;` referenced an **undeclared** variable, left behind by a refactor that removed the query-recording mock. Every `beforeEach` threw `ReferenceError: lastQuery is not defined`, so **both** tests in that block aborted before executing a single assertion. They were red, but their assertions had never once run.
+- **Fix:** removed the dead statement. Both tests then passed on their own merits (32/32).
+- **Status:** FIXED
+
+### TEST-RENAME-001 — `apigen-plugin-api-{express,fastify}` asserted a package name that no longer exists (FIXED)
+- The package is `@adhd/apigen-engine-runtime`; the generator emits it; the test *titles* say it. Only the regex still matched `@adhd/apigen-runtime`. The tests failed while the code was correct.
+- **Status:** FIXED — express 25/25, fastify 37/37.
+
+### TEST-PATH-001 — `dispatch-base-spec` hard-coded a package path that moved twice (FIXED)
+- `plan.spec.ts` located the repo root by string-matching `'packages/dispatch/dispatch-spec'` in `__dirname`. The package moved `packages/shared/dispatch-spec` → `packages/dispatch/dispatch-spec` → `packages/dispatch/dispatch-base-spec`; the last rename broke it.
+- **Fix:** walk up from `__dirname` to the directory containing `nx.json`. Rename-proof, still fails loudly (never skips).
+- **Status:** FIXED — 25/25.
+
+### TEST-NONE-001 — `workspace-codegen-nx` had a `test` target and zero tests (FIXED)
+- `nx test workspace-codegen-nx` → `No test files found, exiting with code 1`. `passWithNoTests: true` would have been a silent skip, which the repo's testing protocol forbids.
+- **Fix:** wrote `src/generators/types/generator.spec.ts` driving the **real** generator through `@nx/devkit`'s in-memory `Tree` (no mocks, no filesystem, deterministic): scaffold paths, the `pkg-kind:types`/`pkg-class:types` re-tag override, explicit-name handling, and `platform:shared`.
+- **Teeth proven:** flipping the tag assertion to `pkg-kind:base` turns it red (`expected [...] to include 'pkg-kind:base'`); restoring it goes green.
+- **Status:** FIXED — 4/4.
+
+### ENV-HAZARD-001 🔴 — a concurrent agent ran `git reset --hard`, destroying uncommitted work
+- **Evidence:** `git reflog` → `9df52faa HEAD@{0}: reset: moving to HEAD`.
+- **Impact:** wiped five uncommitted test fixes mid-session (re-applied from memory), and reverted an uncommitted fix in `dispatch-core-optimizer` (surfacing BUILD-OPT-001 as a *new* failure that had not appeared in the sweep 20 minutes earlier). Other agents in this repo are also auto-committing (`b1580fd6`, `8afbeb0e`, `9df52faa`) with messages admitting the content is unreviewed / of unknown provenance.
+- **Mitigation used:** working patch backed up outside the tree (`/tmp/adhd-testfixes.patch`) via `git diff HEAD`.
+- **Recommendation:** serialize agents that mutate git state, or give each a worktree under `.worktrees/`. `git reset --hard` and blanket `git add -A` commits should be forbidden for non-interactive agents.
+- **Status:** OPEN — process defect, not a code defect.

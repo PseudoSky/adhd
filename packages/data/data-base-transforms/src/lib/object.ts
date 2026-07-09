@@ -224,7 +224,11 @@ export function groupBy(arr: Record<string, unknown>[], props: string[]) {
       const k = vals.join(':');
       res[k] =
         res[k] ||
-        ({ ...rollObject(props, vals), children: [] } as GroupByBucket);
+        ({
+          ...rollObject(props, vals),
+          children: [],
+          size: 0,
+        } as GroupByBucket);
       res[k].children.push(e);
       res[k].size = res[k].children.length;
       return res;
