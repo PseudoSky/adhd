@@ -265,3 +265,74 @@ def test_to_json_returns_equal_but_independent_copy(env: Environment) -> None:
 
     snapshot_copy["config"]["transport"]["port"] = 9999
     assert env.get("config.transport.port") == 8080  # original untouched by mutation
+
+
+# ---------------------------------------------------------------------------
+# ENV-CORE-006 -- path traversal guard
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_project", ["..", "../../../etc", "a/b", "a\\b", "/abs"])
+def test_environment_rejects_traversal_in_project(tmp_path: Path, bad_project: str) -> None:
+    with pytest.raises(ValueError):
+        Environment(bad_project, adhd_root=tmp_path)
+
+
+@pytest.mark.parametrize("bad_namespace", ["..", "../../../etc", "a/b", "a\\b", "/abs"])
+def test_environment_rejects_traversal_in_namespace(tmp_path: Path, bad_namespace: str) -> None:
+    with pytest.raises(ValueError):
+        Environment("agent-mcp", namespace=bad_namespace, adhd_root=tmp_path)
+
+
+def test_traversal_guard_blocks_escape_before_read(tmp_path: Path) -> None:
+    """A crafted project must not resolve a snapshot path that escapes
+    adhd_root -- the guard raises before any filesystem access."""
+    # Plant a snapshot OUTSIDE the adhd_root that a naive join would reach.
+    outside = tmp_path / "outside"
+    _write_snapshot(outside, "default", "default", SAMPLE_SNAPSHOT)
+    with pytest.raises(ValueError):
+        Environment("../outside", namespace="default", adhd_root=tmp_path / "root")
+
+
+# ---------------------------------------------------------------------------
+# ENV-CORE-009 -- secret references resolve from the environment at read time
+# ---------------------------------------------------------------------------
+
+
+def _secret_snapshot() -> dict:
+    data = json.loads(json.dumps(SAMPLE_SNAPSHOT))
+    # A secret field persists a REFERENCE, never the plaintext value.
+    data["config"]["providers"] = {"openai": {"secret": "adhd-secret-ref:OPENAI_API_KEY"}}
+    data["raw"]["providers.openai.secret"] = "adhd-secret-ref:OPENAI_API_KEY"
+    data["provenance"]["providers.openai.secret"] = {
+        "source": "project.override",
+        "scope": "project",
+        "env": "OPENAI_API_KEY",
+    }
+    return data
+
+
+def test_secret_reference_resolves_from_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_snapshot(tmp_path, "agent-mcp", "production", _secret_snapshot())
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-live-secret")
+    env = Environment("agent-mcp", namespace="production", adhd_root=tmp_path)
+    assert env.get("config.providers.openai.secret") == "sk-live-secret"
+
+
+def test_secret_reference_returns_none_when_env_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_snapshot(tmp_path, "agent-mcp", "production", _secret_snapshot())
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    env = Environment("agent-mcp", namespace="production", adhd_root=tmp_path)
+    assert env.get("config.providers.openai.secret") is None
+
+
+def test_secret_plaintext_never_on_disk(tmp_path: Path) -> None:
+    """The snapshot bytes must contain only the reference, never the value."""
+    path = _write_snapshot(tmp_path, "agent-mcp", "production", _secret_snapshot())
+    on_disk = path.read_bytes()
+    assert b"adhd-secret-ref:OPENAI_API_KEY" in on_disk
+    assert b"sk-live-secret" not in on_disk

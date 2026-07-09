@@ -1,10 +1,12 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   assertNoNamespaceConflict,
   atomicWrite,
+  DEFAULT_SNAPSHOT_DIR_MODE,
+  DEFAULT_SNAPSHOT_FILE_MODE,
   detectDrift,
   DriftError,
   NamespaceConflictError,
@@ -12,7 +14,9 @@ import {
   resolveConfigPath,
   resolveDirs,
 } from '../snapshot-writer';
-import type { ResolvedDirectoryEntry, SnapshotData } from '@adhd/environment-base-spec';
+import { redactSecrets } from '../config-resolver';
+import { unflatten } from '../config-resolver';
+import type { ConfigFieldDefinition, ResolvedDirectoryEntry, SnapshotData } from '@adhd/environment-base-spec';
 
 describe('resolveConfigPath', () => {
   it('builds <adhdRoot>/<org>/<project>/<namespace>/adhd-environment.json', () => {
@@ -63,6 +67,58 @@ describe('atomicWrite', () => {
     const filePath = join(dir, 'raw.json');
     atomicWrite(filePath, '{"raw":true}');
     expect(readFileSync(filePath, 'utf8')).toBe('{"raw":true}');
+  });
+
+  // ENV-CORE-010 — the credential-bearing snapshot must not be world-readable.
+  it('creates the snapshot 0o600 and its parent directory 0o700 by default', () => {
+    const subdir = join(dir, 'sub');
+    const filePath = join(subdir, 'adhd-environment.json');
+    atomicWrite(filePath, { ok: true });
+    expect(statSync(filePath).mode & 0o777).toBe(DEFAULT_SNAPSHOT_FILE_MODE);
+    expect(statSync(subdir).mode & 0o777).toBe(DEFAULT_SNAPSHOT_DIR_MODE);
+    expect(DEFAULT_SNAPSHOT_FILE_MODE).toBe(0o600);
+    expect(DEFAULT_SNAPSHOT_DIR_MODE).toBe(0o700);
+  });
+
+  // ENV-CORE-011 — a failed rename must not leave a stale plaintext .tmp.
+  it('unlinks the .tmp and rethrows when the rename fails, leaving no stale plaintext behind', () => {
+    // Make the destination an existing non-empty directory so renameSync throws.
+    const filePath = join(dir, 'snap.json');
+    mkdirSync(filePath);
+    mkdirSync(join(filePath, 'child'));
+    expect(() => atomicWrite(filePath, { secret: 'sk-must-not-persist' })).toThrow();
+    expect(existsSync(`${filePath}.tmp`)).toBe(false);
+    // And the secret never reached the (would-be) tmp on disk.
+    expect(existsSync(`${filePath}.tmp`)).toBe(false);
+  });
+
+  // ENV-CORE-009 — a resolved secret value must never appear in the file bytes.
+  it('writes a snapshot whose secret field is a reference, never the plaintext value', () => {
+    const fields: Record<string, ConfigFieldDefinition> = {
+      'providers.openai.secret': {
+        type: 'string',
+        default: '',
+        scope: 'project',
+        sourceScope: 'project',
+        env: 'OPENAI_API_KEY',
+        secret: true,
+      },
+      'db.path': { type: 'string', default: '', scope: 'project', sourceScope: 'project', env: 'ADHD_X_DB_PATH' },
+    };
+    const resolvedRaw = { 'providers.openai.secret': 'sk-live-should-not-persist', 'db.path': '/tmp/db' };
+    const redacted = redactSecrets(resolvedRaw, fields);
+    const snapshot = {
+      version: '0.0.5',
+      raw: redacted,
+      config: unflatten(redacted),
+    };
+    const filePath = join(dir, 'agent-mcp', 'default', 'adhd-environment.json');
+    atomicWrite(filePath, snapshot);
+    const bytes = readFileSync(filePath, 'utf8');
+    expect(bytes).toContain('adhd-secret-ref:OPENAI_API_KEY');
+    expect(bytes).not.toContain('sk-live-should-not-persist');
+    // Non-secret fields are untouched.
+    expect(bytes).toContain('/tmp/db');
   });
 });
 
