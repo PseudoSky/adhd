@@ -54,7 +54,12 @@ const isPrimitiveArray: PathMatcher = (key, path, o) => {
   }
   return isValue(o[key]);
 };
-type QueueItem = { obj: Record<string, unknown>; path: string[] };
+// `obj` genuinely holds any value while traversal descends (objects,
+// arrays, and eventually primitives at leaves) — `Record<string, unknown>`
+// was too narrow for that and caused the `obj[key]` (unknown) → QueueItem
+// mismatch; `unknown` matches how it's actually consumed below (always
+// behind a `typeof`/null narrow before use).
+type QueueItem = { obj: unknown; path: string[] };
 export function allPaths(
   o: Record<string, unknown>,
   matcher = isPrimitiveArray,
@@ -70,21 +75,26 @@ export function allPaths(
     const { obj, path } = stack.dequeue()!;
 
     if (typeof obj === 'object' && obj !== null) {
-      for (const key in obj) {
+      const record = obj as Record<string, unknown>;
+      for (const key in record) {
         // Ignore primitive arrays
-        if (matcher(key, path, obj)) {
+        if (matcher(key, path, record)) {
           // console.log(`ADDED ${path.join('.')}.${key}`)
           paths[path.join('.') + key] = [...path, key];
         }
-        if (traversePrimitiveArrays || !isPrimitiveArray(key, path, obj)) {
-          const nextObj = obj[key];
+        if (traversePrimitiveArrays || !isPrimitiveArray(key, path, record)) {
+          const nextObj = record[key];
           stack.enqueue({ obj: nextObj, path: [...path, key] });
         }
       }
     } else if (
       path.length &&
       obj &&
-      matcher(path[path.length - 1], path.slice(0, path.length - 1), obj)
+      matcher(
+        path[path.length - 1],
+        path.slice(0, path.length - 1),
+        obj as Record<string, unknown>
+      )
     ) {
       paths[path.join('.')] = path;
       console.log(`ADDED ${path.join('.')}`);
@@ -112,14 +122,16 @@ export function zipObject(
  * @param values - A string or array of values.
  * @returns An object created from the given keys and values.
  */
-export function rollObject(keys: string[], values: string | unknown[]) {
-  if (keys.length === values.length) {
-    return keys.reduce(
-      (res: Record<string, unknown>, k: string, i: number) =>
-        Object.assign(res, { [k]: values[i] }),
-      {}
-    );
-  }
+export function rollObject(
+  keys: string[],
+  values: string | unknown[]
+): Record<string, unknown> | undefined {
+  if (keys.length !== values.length) return undefined;
+  return keys.reduce(
+    (res: Record<string, unknown>, k: string, i: number) =>
+      Object.assign(res, { [k]: values[i] }),
+    {}
+  );
 }
 
 /**
@@ -200,12 +212,19 @@ export function hasAll(obj: Record<string, unknown>, keys: string[] = []) {
  * @param props - The properties to group by.
  * @returns An array of grouped objects.
  */
+type GroupByBucket = Record<string, unknown> & {
+  children: Record<string, unknown>[];
+  size: number;
+};
+
 export function groupBy(arr: Record<string, unknown>[], props: string[]) {
   return Object.values(
-    arr.reduce((res, e) => {
+    arr.reduce((res: Record<string, GroupByBucket>, e) => {
       const vals = props.map(makeGetter(undefined, e));
       const k = vals.join(':');
-      res[k] = res[k] || { ...rollObject(props, vals), children: [] };
+      res[k] =
+        res[k] ||
+        ({ ...rollObject(props, vals), children: [] } as GroupByBucket);
       res[k].children.push(e);
       res[k].size = res[k].children.length;
       return res;

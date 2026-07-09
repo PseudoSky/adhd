@@ -6,22 +6,38 @@ export type ArrayOrObject = Record<string | number, unknown>;
 export type Selector<T> = (data: T, index: number, orig: T[]) => unknown;
 export type ComparisonFunction<T> = (a: T, b: T) => 0 | 1 | -1;
 
-export const difference = (arrays: unknown[][]) =>
-  arrays.reduce((a, b) => a.filter((c: unknown) => !b.includes(c)));
-export const intersection = (arrays: unknown[][]) =>
-  arrays.reduce((a, b) => a.filter((c: unknown) => b.includes(c)));
-export const flattenDeep = (arr: unknown[][]): unknown[] =>
-  arr.flatMap((subArray, _index) =>
+export const difference = <T,>(arrays: T[][]): T[] =>
+  arrays.reduce((a, b) => a.filter((c: T) => !b.includes(c)));
+export const intersection = <T,>(arrays: T[][]): T[] =>
+  arrays.reduce((a, b) => a.filter((c: T) => b.includes(c)));
+
+type NestedArray<T> = T | NestedArray<T>[];
+export const flattenDeep = <T,>(arr: NestedArray<T>[]): T[] =>
+  arr.flatMap((subArray) =>
     Array.isArray(subArray) ? flattenDeep(subArray) : subArray
   );
-export const keyByArray = (array: Record<string, unknown>[], key: string) =>
-  (array || []).reduce((r, x) => ({ ...r, [key ? x[key] : x]: x }), {});
-export const keyBy = (collection: Record<string, unknown> | [], key: string) => {
+
+export const keyByArray = <T extends Record<string, unknown>>(
+  array: T[],
+  key: keyof T & string
+): Record<string, T> =>
+  (array || []).reduce((r, x) => {
+    // Computed property names require a string/number/symbol key. The
+    // legacy (pre-`unknown`) behaviour let JS's implicit object-to-string
+    // coercion decide the key when `key` was falsy; `String(...)`
+    // reproduces that exactly instead of changing runtime behaviour.
+    const k = key ? String(x[key]) : String(x);
+    return { ...r, [k]: x };
+  }, {} as Record<string, T>);
+export const keyBy = (
+  collection: Record<string, unknown> | unknown[],
+  key: string
+): Record<string, unknown> => {
   // keyBy for array and object
   const c = collection || {};
   return Array.isArray(c)
-    ? keyByArray(c, key)
-    : Object.values(keyByArray(c as [], key));
+    ? keyByArray(c as Record<string, unknown>[], key)
+    : Object.values(keyByArray(c as Record<string, unknown>, key));
 };
 
 export function isMatchType(obj: unknown, target: unknown) {
@@ -103,12 +119,8 @@ export function pluck(arr: Record<string, unknown>[], key: string) {
 export function minBy<T>(
   collection: T[],
   selector: Selector<T>,
-  compare: ComparisonFunction<number> = reverseSort
+  compare: ComparisonFunction<unknown> = reverseSort
 ) {
-  // TODO: make a default minby compare so the types work
-
-  // slower because need to create a lambda function for each call...
-
   // Maps all collection items to objects with their selector values and index
   //    {value, index, data}
   // then reduces them using the "compare" function
@@ -118,7 +130,7 @@ export function minBy<T>(
     data,
   }));
   return indexed.reduce(
-    (r, e) => (compare(r.value, e.value) == -1 ? e : r),
+    (r, e) => (compare(r.value as number, e.value as number) == -1 ? e : r),
     indexed[0]
   ).data;
 }
@@ -126,20 +138,24 @@ export function minBy<T>(
 export function maxBy<T>(
   collection: T[],
   selector: Selector<T>,
-  compare: ComparisonFunction<number> = defaultSort
+  compare: ComparisonFunction<unknown> = defaultSort
 ) {
   // slower because need to create a lambda function for each call...
   return minBy(collection, selector, compare);
 }
 
-export function defaultSort(a: unknown, b: unknown) {
+export function defaultSort<T>(a: T, b: T): 0 | 1 | -1 {
   if (a == b) return 0;
-  return a > b ? 1 : -1;
+  // Generic passthrough comparator: relies on JS's abstract relational
+  // comparison, which is defined for all values (numbers, strings, Dates,
+  // etc.) and yields `false` (not a throw) for incomparable types — the
+  // same permissive behaviour the legacy `any`-typed version relied on.
+  return (a as unknown as number) > (b as unknown as number) ? 1 : -1;
 }
 
-export function reverseSort(a: number, b: number) {
+export function reverseSort<T>(a: T, b: T): 0 | 1 | -1 {
   if (a == b) return 0;
-  return b > a ? 1 : -1;
+  return (b as unknown as number) > (a as unknown as number) ? 1 : -1;
 }
 
 export function first(arr: unknown[]) {
@@ -193,13 +209,13 @@ export function filterInclude(arr: unknown[], obj = {}) {
 //   return arr.reduce((res, element) => Object.assign(res, {[element[key]]: element}) = (res[element[key]]||[]).concat([]))
 // }
 
-export function unique(arr: unknown[]) {
-  return arr.reduce((a, d) => {
+export function unique<T>(arr: T[]): T[] {
+  return arr.reduce((a: T[], d) => {
     if (!a.includes(d)) {
       a.push(d);
     }
     return a;
-  }, []);
+  }, [] as T[]);
 }
 
 export function uniqueByProp<
@@ -226,8 +242,13 @@ export function uniqueBy(arr: Record<string, unknown>[], props: string[]) {
 
 export function indexBy(arr: Record<string, unknown>[], prop: string) {
   if (!prop || !arr || !arr.length) return {};
-  return arr.reduce((res, e) => {
-    if (prop in e) res[e[prop]] = (res[e[prop]] || []).concat(e);
+  return arr.reduce((res: Record<string, unknown[]>, e) => {
+    if (prop in e) {
+      // Object/array keys are always coerced to strings by JS at runtime;
+      // `String(...)` makes that explicit instead of changing behaviour.
+      const key = String(e[prop]);
+      res[key] = (res[key] || []).concat(e);
+    }
     return res;
   }, {});
 }
