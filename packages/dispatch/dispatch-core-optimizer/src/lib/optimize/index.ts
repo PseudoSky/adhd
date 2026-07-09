@@ -1,1 +1,1 @@
-export { optimize } from './bitmask-dp';
+export { optimize, computeTokensNaive } from '../optimize.js';
