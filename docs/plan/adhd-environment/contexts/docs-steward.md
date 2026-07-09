@@ -1,6 +1,6 @@
 # docs-steward
 
-**Phase:** docs · **Kind:** work · **Depends on:** audit-final · **Guard:** `true`
+**Phase:** docs · **Kind:** work · **Depends on:** audit-final · **Guard:** `test -f packages/environment/environment-core-node/README.md`
 
 ---
 
@@ -12,15 +12,17 @@ Full consumer-facing documentation is written — README, API docs, usage guides
 
 ## Acceptance criteria
 
+- [docs-steward.2] README.md exists for each runtime package
 
+---
 
+## Reservations
 
 ```text
 read_only:  []
 mutates:    ["docs/plan/adhd-environment/demo/DEMO.md", "docs/plan/adhd-environment/USE_CASES.md"]
 ```
 
-- [docs-steward.2] README.md exists for each runtime package
 ---
 
 ## Notes for executor

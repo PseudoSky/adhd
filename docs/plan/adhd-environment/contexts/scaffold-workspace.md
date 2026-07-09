@@ -1,6 +1,6 @@
-# scaffold-workspace — STATE_NAME
+# scaffold-workspace
 
-**Phase:** scaffold · **Kind:** work · **Depends on:** none · **Guard:** `true`
+**Phase:** scaffold · **Kind:** work · **Depends on:** none · **Guard:** `test -f packages/environment/environment-base-spec/package.json && test -f entrypoint/environment-cli/package.json`
 
 ---
 
@@ -10,16 +10,32 @@ All 6 package directories exist under `packages/environment/` with their Nx work
 
 ---
 
+## Semantic Distillation
+
+- **Primitive:** CREATE 6 packages under `packages/environment/` + 1 entrypoint under `entrypoint/environment-cli/`
+
+- **Reference Pattern:** See `packages/dispatch/dispatch-core-client/` and `entrypoint/apigen-cli/` for naming conventions. Use `@adhd/workspace-codegen-nx` generators (NOT `@nx/js:library`).
+
+- **Delta Spec:** 
+  1. `npm install -D @monodon/rust @nxlv/python`
+  2. Add `{ "plugin": "@monodon/rust" }` and `{ "plugin": "@nxlv/python" }` to nx.json plugins array (preserve existing entries)
+  3. Run 4 workspace-codegen-nx generators (see below for exact commands)
+  4. Hand-write Python `pyproject.toml` + `project.json` with `@nxlv/python:build`/`publish` targets
+  5. Hand-write Rust `Cargo.toml` + `project.json` with `@monodon/rust:build`/`test`/`lint` targets
+  6. Add 4 path mappings to `tsconfig.base.json` `compilerOptions.paths`
+  7. Verify `npx nx build environment-base-spec` exits 0
+
+- **Invariants:** Do NOT modify existing packages outside `packages/environment/` or `entrypoint/environment-cli/`. Do NOT remove existing nx.json plugin entries.
+
+---
+
 ## Acceptance criteria
 
-<!-- Author criteria with `plan-scaffold.js add-criterion`. Each writes a
-     matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
-     bare [slug.N] tokens here without a matching audit check. -->
-
 - [scaffold-workspace.1] All 5 library package directories exist under packages/environment/
-
 - [scaffold-workspace.2] CLI entrypoint directory exists at entrypoint/environment-cli/
 - [scaffold-workspace.3] nx.json has @monodon/rust and @nxlv/python plugins registered
+- [scaffold-workspace.4] `environment-core-node` package.json `name` is `@adhd/environment` (B3: NOT the generator default `@adhd/environment-core-node`) and `tsconfig.base.json` aliases `@adhd/environment` → its src/index.ts
+
 ---
 
 ## Reservations
@@ -54,6 +70,15 @@ npx nx generate @adhd/workspace-codegen-nx:core \
   --group environment --name core-node \
   --nxLayer shared --platform node --access public --publish true
 ```
+
+> **⚠️ Package identity override (B3, required).** The `core` generator names this package
+> `@adhd/environment-core-node` by the `<group>-<name>` convention. This is the published runtime
+> client whose npm name is **`@adhd/environment`** (SCOPE.md §3 constraint "npm name `@adhd/environment`",
+> interfaces-architect.md §4). After generating, **edit `packages/environment/environment-core-node/package.json`
+> and set `"name": "@adhd/environment"`**. If it is left as `@adhd/environment-core-node`, the final-audit
+> probes `require("@adhd/environment")` (dod.5/dod.6) throw MODULE_NOT_FOUND. The matching
+> `tsconfig.base.json` alias `@adhd/environment` → `packages/environment/environment-core-node/src/index.ts`
+> is declared below — the runtime `require()` resolution depends on the package.json `name`, so both must agree.
 
 Generator layer reference:
 - `types` → for pure type/contract packages (like `*-types`)
@@ -290,7 +315,7 @@ environment-core-node ── environment-cli (dependsOn: ^build)
 
 ### tsconfig.base.json path mappings
 
-Add these 6 entries under `compilerOptions.paths`:
+Add these 4 entries under `compilerOptions.paths` (note: `@adhd/environment` maps to the `environment-core-node` package dir but is published under the name `@adhd/environment` — see the B3 override above):
 ```json
 "@adhd/environment-base-spec": ["packages/environment/environment-base-spec/src/index.ts"],
 "@adhd/environment-builder": ["packages/environment/environment-builder/src/index.ts"],

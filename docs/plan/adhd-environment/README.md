@@ -1,14 +1,16 @@
 # adhd-environment v0.0.5
 
-<one-paragraph statement of what this plan delivers>
+Multi-language centralized configuration management for the ADHD monorepo. Replaces hand-written Zod schemas + dotenv + manual env var mapping with a YAML config file, a CLI builder, and thin typed runtime clients in TypeScript, Python, and Rust.
 
 ## Consumer
 
-<who walks through the change, and in what role>
+ADHD package authors (Samira) and deployers (Luca) who currently maintain 299-line config.ts files with Zod schemas, explicit `rawFromEnv()` calls, and PROVIDER_DEFAULTS tables. The plan delivers a unified environment SDK that any ADHD entrypoint can adopt.
 
 ## Value delta
 
-<the observable before → after change the consumer experiences>
+Before: 299 lines of config.ts per package (Zod + dotenv + deepFreeze + env var mapping) × 5 packages = ~1,500 lines of repetitive config boilerplate. No provenance tracking, no cross-language config sharing, no namespace isolation.
+
+After: One checked-in YAML file + one `adhd-env build` command + one typed `new Environment<Config>({ project, namespace })` call per package. ~30 lines per package. Provenance tracking, auto-generated JSON Schema, fully-nested namespace directory trees, and cross-language parity (TS/Python/Rust).
 
 ## Definition of Done
 

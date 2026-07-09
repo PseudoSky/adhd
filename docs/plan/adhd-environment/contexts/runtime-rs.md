@@ -1,6 +1,6 @@
 # runtime-rs
 
-**Phase:** runtime · **Kind:** work · **Depends on:** contract-base-spec · **Guard:** `true`
+**Phase:** runtime · **Kind:** work · **Depends on:** contract-base-spec · **Guard:** `cargo build`
 
 ---
 
@@ -14,8 +14,10 @@ The `adhd-environment` Rust crate provides a thin runtime client (~50 lines) at 
 
 - [runtime-rs.2] Rust tests pass
 - [runtime-rs.3] Rust clippy passes with no warnings
+
 ---
 
+## Reservations
 
 ```text
 read_only:  []
