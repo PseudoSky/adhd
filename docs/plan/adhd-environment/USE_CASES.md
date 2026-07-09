@@ -547,7 +547,7 @@ function isEnvNameAllowed(name: string): boolean {
 
 ---
 
-### UC-27: All 27 env vars mappable to env.get()
+### UC-27: All 26 env vars mappable to env.get()
 
 **Scenario:** Every env var from the old `rawFromEnv()` is accessible via `env.get("env.*")`.
 
@@ -555,7 +555,7 @@ function isEnvNameAllowed(name: string): boolean {
 ```ts
 const openaiKey = env.get("env.OPENAI_API_KEY");
 const anthropicKey = env.get("env.ANTHROPIC_API_KEY");
-// ... all 27 old env vars
+// ... all 26 old env vars
 ```
 
 **Expected output:**

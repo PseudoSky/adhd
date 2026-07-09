@@ -9,7 +9,7 @@ How each ADHD entrypoint handles configuration today, and what moves to `@adhd/e
 ### What it does now
 
 1. `loadEnvHierarchy()` — loads 3-tier dotenv: `~/.adhd/.env` → `./.adhd/.env` → `./.env`
-2. `rawFromEnv(env)` — reads every env var by explicit name (27 env vars mapped one-by-one)
+2. `rawFromEnv(env)` — reads every env var by explicit name (26 env vars mapped one-by-one)
 3. `configSchema.parse(rawFromEnv(env))` — Zod validates + applies defaults
 4. Returns a frozen `Config` object with typed accessors (`config.db.path`, `config.getProviderConfig(opts)`)
 
@@ -30,6 +30,7 @@ How each ADHD entrypoint handles configuration today, and what moves to `@adhd/e
 | `transport.port` | `ADHD_AGENT_PORT` | `3000` | `z.coerce.number().int().positive()` |
 | `sse.port` | `ADHD_AGENT_SSE_PORT` | `3001` | `z.coerce.number().int().positive()` |
 | `sse.host` | `ADHD_AGENT_SSE_HOST` | `127.0.0.1` | `z.string()` |
+| `sse.baseUrl` | `ADHD_AGENT_SSE_BASE_URL` | `http://localhost:${sse.port}` | `z.string().optional()` |
 | `plugins.configPath` | `ADHD_AGENT_CONFIG` | — | `z.string().optional()` |
 | `plugins.entries` | `ADHD_AGENT_PLUGINS` | — | comma-split → string[] |
 | `security.envAllowlist` | `ADHD_AGENT_ENV_ALLOWLIST` | — | comma-split → string[] |
