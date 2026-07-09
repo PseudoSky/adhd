@@ -1,6 +1,6 @@
 # audit-builder
 
-**Phase:** audit · **Kind:** audit · **Depends on:** builder-snapshot-api · **Guard:** `true`
+**Phase:** audit · **Kind:** audit · **Depends on:** builder-snapshot-api · **Guard:** `npx --yes nx build environment-base-spec && npx --yes nx build environment-builder`
 
 ---
 
@@ -12,15 +12,17 @@ Verify that the builder phase (contract-base-spec → builder-engine → builder
 
 ## Acceptance criteria
 
+- [audit-builder.1] All builder-phase packages build successfully
 
+---
 
+## Reservations
 
 ```text
 read_only:  []
 mutates:    ["scripts/audit_audit-builder.py"]
 ```
 
-- [audit-builder.1] All builder-phase packages build successfully
 ---
 
 ## Notes for executor

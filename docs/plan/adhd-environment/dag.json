@@ -3,13 +3,13 @@
   "title": "adhd-environment v0.0.5",
   "plan_kind": "greenfield",
   "phases": [
+    "scaffold",
     "contract",
     "builder",
     "runtime",
     "refactor",
     "audit",
-    "docs",
-    "scaffold"
+    "docs"
   ],
   "terminal": "done",
   "nodes": {
@@ -19,11 +19,11 @@
       "depends_on": [
         "scaffold-workspace"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx build environment-base-spec",
       "artifacts": [
-        "packages/environment/environment-base-spec/package.json",
         "packages/environment/environment-base-spec/spec/adhd-environment.schema.json",
         "packages/environment/environment-base-spec/spec/cross-language-test-vectors.json",
+        "packages/environment/environment-base-spec/spec/SPEC.md",
         "packages/environment/environment-base-spec/src/index.ts"
       ],
       "context": "contexts/contract-base-spec.md",
@@ -35,7 +35,7 @@
       "depends_on": [
         "contract-base-spec"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx build environment-builder",
       "artifacts": [
         "packages/environment/environment-builder/src/yaml-parser.ts",
         "packages/environment/environment-builder/src/field-merge.ts",
@@ -43,8 +43,7 @@
         "packages/environment/environment-builder/src/json-schema-gen.ts",
         "packages/environment/environment-builder/src/provenance.ts",
         "packages/environment/environment-builder/src/validation.ts",
-        "packages/environment/environment-builder/src/snapshot-writer.ts",
-        "packages/environment/environment-builder/src/index.ts"
+        "packages/environment/environment-builder/src/snapshot-writer.ts"
       ],
       "context": "contexts/builder-engine.md",
       "notes": ""
@@ -55,7 +54,7 @@
       "depends_on": [
         "builder-engine"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx build environment-builder",
       "artifacts": [
         "packages/environment/environment-builder/src/environment-snapshot.ts",
         "packages/environment/environment-builder/src/index.ts",
@@ -70,7 +69,7 @@
       "depends_on": [
         "builder-snapshot-api"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx build environment-base-spec && npx --yes nx build environment-builder",
       "artifacts": [
         "scripts/audit_audit-builder.py"
       ],
@@ -83,7 +82,7 @@
       "depends_on": [
         "builder-snapshot-api"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx build environment-core-node",
       "artifacts": [
         "packages/environment/environment-core-node/src/index.ts",
         "packages/environment/environment-core-node/src/environment.ts"
@@ -98,11 +97,11 @@
         "builder-snapshot-api",
         "runtime-core-node"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx build environment-cli",
       "artifacts": [
-        "packages/environment/environment-cli/src/api.ts",
-        "packages/environment/environment-cli/src/commands/set.ts",
-        "packages/environment/environment-cli/src/core.ts"
+        "entrypoint/environment-cli/src/api.ts",
+        "entrypoint/environment-cli/src/commands/set.ts",
+        "entrypoint/environment-cli/src/core.ts"
       ],
       "context": "contexts/runtime-cli.md",
       "notes": ""
@@ -113,7 +112,7 @@
       "depends_on": [
         "contract-base-spec"
       ],
-      "guard": "true",
+      "guard": "python -m build",
       "artifacts": [
         "packages/environment/environment-core-py/src/adhd_environment/__init__.py",
         "packages/environment/environment-core-py/src/adhd_environment/environment.py"
@@ -127,7 +126,7 @@
       "depends_on": [
         "contract-base-spec"
       ],
-      "guard": "true",
+      "guard": "cargo build",
       "artifacts": [
         "packages/environment/environment-core-rs/src/lib.rs"
       ],
@@ -143,7 +142,7 @@
         "runtime-py",
         "runtime-rs"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx build environment-core-node && python -m build && cargo build",
       "artifacts": [
         "scripts/audit_audit-runtime.py"
       ],
@@ -158,7 +157,7 @@
         "runtime-cli",
         "audit-builder"
       ],
-      "guard": "true",
+      "guard": "test ! -f entrypoint/agent-mcp/src/config.ts && npx --yes nx test agent-mcp",
       "artifacts": [
         "entrypoint/agent-mcp/adhd.environment.yaml",
         "entrypoint/agent-mcp/src/config.ts"
@@ -173,7 +172,7 @@
         "refactor-agent-mcp",
         "audit-runtime"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx run-many -t build --projects=environment-*",
       "artifacts": [
         "scripts/audit_audit-final.py"
       ],
@@ -186,7 +185,7 @@
       "depends_on": [
         "audit-final"
       ],
-      "guard": "true",
+      "guard": "test -f packages/environment/environment-core-node/README.md",
       "artifacts": [
         "docs/plan/adhd-environment/demo/DEMO.md",
         "docs/plan/adhd-environment/USE_CASES.md"
@@ -198,7 +197,7 @@
       "kind": "work",
       "phase": "scaffold",
       "depends_on": [],
-      "guard": "true",
+      "guard": "test -f packages/environment/environment-base-spec/package.json && test -f entrypoint/environment-cli/package.json",
       "artifacts": [
         "packages/environment/environment-base-spec/package.json",
         "packages/environment/environment-base-spec/project.json",
@@ -209,12 +208,13 @@
         "packages/environment/environment-core-node/package.json",
         "packages/environment/environment-core-node/project.json",
         "packages/environment/environment-core-node/tsconfig.json",
-        "packages/environment/environment-cli/package.json",
-        "packages/environment/environment-cli/project.json",
-        "packages/environment/environment-cli/tsconfig.json",
+        "entrypoint/environment-cli/package.json",
+        "entrypoint/environment-cli/project.json",
+        "entrypoint/environment-cli/tsconfig.json",
         "packages/environment/environment-core-py/pyproject.toml",
         "packages/environment/environment-core-rs/Cargo.toml",
-        "packages/environment/environment-core-rs/Cargo.lock"
+        "packages/environment/environment-core-rs/Cargo.lock",
+        "tsconfig.base.json"
       ],
       "context": "contexts/scaffold-workspace.md",
       "notes": ""

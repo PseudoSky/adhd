@@ -53,9 +53,9 @@
       "id": "audit-final.7",
       "phase": "audit",
       "tier": null,
-      "kind": "absent",
-      "pattern": "entrypoint/agent-mcp/src/config.ts",
-      "paths": []
+      "kind": "command",
+      "cmd": "test ! -f entrypoint/agent-mcp/src/config.ts",
+      "expect": "exit0"
     },
     {
       "id": "audit-final.8",
@@ -231,19 +231,41 @@
       "id": "refactor-agent-mcp.1",
       "phase": "refactor",
       "tier": null,
-      "kind": "absent",
-      "pattern": "entrypoint/agent-mcp/src/config.ts",
-      "paths": []
+      "kind": "command",
+      "cmd": "test ! -f entrypoint/agent-mcp/src/config.ts",
+      "expect": "exit0"
     },
     {
       "id": "refactor-agent-mcp.2",
       "phase": "refactor",
       "tier": null,
-      "kind": "present",
-      "pattern": "adhd.environment.yaml",
-      "paths": [
-        "entrypoint/agent-mcp"
-      ]
+      "kind": "command",
+      "cmd": "test -f entrypoint/agent-mcp/adhd.environment.yaml && grep -Eq \"envPrefixOverride:[[:space:]]*ADHD_AGENT\" entrypoint/agent-mcp/adhd.environment.yaml",
+      "expect": "exit0"
+    },
+    {
+      "id": "refactor-agent-mcp.4",
+      "phase": "refactor",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx test agent-mcp",
+      "expect": "exit0"
+    },
+    {
+      "id": "refactor-agent-mcp.5",
+      "phase": "refactor",
+      "tier": null,
+      "kind": "command",
+      "cmd": "grep -rqs getProviderConfig entrypoint/agent-mcp/src",
+      "expect": "exit0"
+    },
+    {
+      "id": "refactor-agent-mcp.6",
+      "phase": "refactor",
+      "tier": null,
+      "kind": "command",
+      "cmd": "grep -rqs ADHD_AGENT_DATABASE_PATH entrypoint/agent-mcp && grep -rqs ADHD_AGENT_OPENAI_SECRET entrypoint/agent-mcp && grep -rqs ADHD_AGENT_LOG_LEVEL entrypoint/agent-mcp",
+      "expect": "exit0"
     },
     {
       "id": "audit-builder.1",
@@ -309,11 +331,43 @@
       ]
     },
     {
+      "id": "scaffold-workspace.4",
+      "phase": "scaffold",
+      "tier": null,
+      "kind": "command",
+      "cmd": "node -e 'process.exit(require(\"./packages/environment/environment-core-node/package.json\").name===\"@adhd/environment\"?0:1)' && grep -q '\"@adhd/environment\":' tsconfig.base.json",
+      "expect": "exit0"
+    },
+    {
       "id": "runtime-core-node.2",
       "phase": "runtime",
       "tier": null,
       "kind": "command",
       "cmd": "node -e 'const{Environment}=require(\"./packages/environment/environment-core-node/src/environment\");console.log(typeof Environment)'",
+      "expect": "exit0"
+    },
+    {
+      "id": "runtime-core-node.3",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "F=packages/environment/environment-core-node/src/environment.ts; grep -q provenance $F && grep -q version $F && grep -q hash $F && grep -qi scope $F && grep -q Proxy $F",
+      "expect": "exit0"
+    },
+    {
+      "id": "runtime-core-node.4",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx test environment-core-node",
+      "expect": "exit0"
+    },
+    {
+      "id": "runtime-core-node.5",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "node -e 'process.exit(require(\"./packages/environment/environment-core-node/package.json\").name===\"@adhd/environment\"?0:1)'",
       "expect": "exit0"
     },
     {
@@ -325,6 +379,22 @@
       "paths": [
         "entrypoint/environment-cli/src"
       ]
+    },
+    {
+      "id": "runtime-cli.4",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "F=entrypoint/environment-cli/src/api.ts; grep -q 'function init' $F && grep -q 'function build' $F && grep -q 'function set' $F && grep -q 'function status' $F && grep -q 'function verify' $F && grep -q 'function doctor' $F && grep -q 'function configGet' $F && grep -q 'function exportSnapshot' $F && grep -q 'function diff' $F",
+      "expect": "exit0"
+    },
+    {
+      "id": "runtime-cli.5",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx test environment-cli",
+      "expect": "exit0"
     },
     {
       "id": "runtime-py.2",
@@ -362,11 +432,9 @@
       "id": "refactor-agent-mcp.3",
       "phase": "refactor",
       "tier": null,
-      "kind": "absent",
-      "pattern": "load-env.ts",
-      "paths": [
-        "entrypoint/agent-mcp/src"
-      ]
+      "kind": "command",
+      "cmd": "test ! -f entrypoint/agent-mcp/src/utils/load-env.ts",
+      "expect": "exit0"
     },
     {
       "id": "audit-runtime.2",

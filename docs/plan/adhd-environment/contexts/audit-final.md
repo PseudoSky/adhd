@@ -1,6 +1,6 @@
-# audit-final — STATE_NAME
+# audit-final
 
-**Phase:** audit · **Kind:** audit · **Depends on:** refactor-agent-mcp, audit-runtime · **Guard:** `true`
+**Phase:** audit · **Kind:** audit · **Depends on:** refactor-agent-mcp, audit-runtime · **Guard:** `npx --yes nx run-many -t build --projects=environment-*`
 
 ---
 
