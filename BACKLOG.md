@@ -780,7 +780,7 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 - **Discovered by:** running `nx build agent-mcp` while verifying the `agent-mcp-authoring` plan's `versioning` guard. The break was *masking* AMA-016 — the guard looked red for the wrong reason. With the build repaired, `nx build agent-mcp` exits 0, confirming AMA-016 (guard green before the state does any work).
 - **Fix:** renamed the second binding to `connected`, preserving the original re-fetch-from-map semantics (a concurrent connect that replaced the entry still wins) and keeping the added null check.
 - **Verification:** `nx build agent-engine-orchestrator` exit 0; `nx build agent-mcp` exit 0; `nx test agent-engine-orchestrator` exit 0, 49/49 tests passed.
-- **Status:** FIXED (working tree; not committed).
+- **Status:** FIXED (working tree; not committed). Re-verified: `nx build agent-engine-orchestrator` exit 0, `nx build agent-mcp` exit 0, 0 `TS2451` errors. Fixing this exposed BUG-ORCH-002 (below).
 
 ### SOX-BUG-001/002, SOX-DOC-001..004 — FIXED in sox-ecosystem (2026-07-08)
 - **SOX-BUG-001 (code):** `warmupTimeoutMs()` was defined twice with disagreeing defaults (index.ts 180 000 / fastembed.ts 60 000), both keyed on `SOX_EMBED_WARMUP_TIMEOUT_MS`, so the inner 60 s silently governed cold ONNX downloads. Now defined **once**, exported from `index.ts`, default `180_000`; `fastembed.ts` imports it. Verified: `grep -rn "function warmupTimeoutMs" src/` → exactly 1 hit; built `dist` reports `warmupTimeoutMs() = 180000`; loading `dist/fastembed.js` *before* `dist/index.js` exposes no import cycle.
@@ -878,3 +878,28 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 - **Action taken:** the seven *normative* pins were updated to the v2 digest so the gate can go green. The files that **narrate** the old value (`orchestration-ledger.md`, both `BACKLOG.md`s, `SPEC_0.0.0`–`0.0.4`) were deliberately left alone — rewriting them would falsify the audit record of the fabricated-hash incident (ADHDENV-BL-3).
 - **Outstanding:** the DoD clause's *value* changed, not its *intent*. **A human must re-confirm the DoD** (`state-transition.js --confirm-dod`) before this plan may reach `done`. The orchestrator must not self-certify this.
 - **Status:** OPEN — owner: human. Blocks terminal transition together with ENV-PLAN-016.
+
+### BUG-ORCH-002 — agent-engine-orchestrator: a failed MCP connect poisoned the client cache forever (FIXED)
+- **Where:** `packages/agent/agent-engine-orchestrator/src/clients/registry.ts` → `McpClientRegistry.getOrCreateClient`
+- **Description:** `connectPromises.set(name, client.connect().then(...))` cached the promise unconditionally, and `connectPromises` was only ever cleared **wholesale** in `close()` (line 181). So a single failed connect — server not up yet, transient spawn failure, wrong command — left a **rejected promise cached under that server name for the life of the process**. Every subsequent `getClient(name)` hit the `if (connectPromise) { await connectPromise; … }` fast path, re-awaited the same rejected promise, and rethrew the *original* error. The server could never reconnect; there was no retry and no recovery path short of `close()`.
+- **Found while:** fixing BUG-ORCH-001 (the `TS2451` redeclare) in the same block. Reading the surrounding code to make the rename safe surfaced it.
+- **Fix:** attach a `.catch` that evicts the entry before rethrowing, guarded by `if (this.connectPromises.get(name) === connectPromise)` so a newer in-flight attempt is never deleted. The success path and the concurrent-dedupe behaviour are unchanged.
+- **Verification (real components, no mocks of the unit under test):** new `src/__tests__/registry-connect-retry.test.ts` drives the real `McpClientRegistry` over a real `StdioClientTransport`, which really spawns `sh -c 'echo attempt >> <marker>; exit 1'`. It counts actual spawns via the marker file:
+  - first `getClient` rejects, spawn count = 1
+  - second `getClient` rejects **and spawn count = 2** (a genuine retry)
+  - two concurrent callers dedupe to **one** spawn
+  - unknown server name fails fast, spawn count = 0
+  Deterministic (the child exits immediately; no sleeps, no wall-clock).
+- **Negative control (proof of teeth):** reverting the `.catch` eviction makes exactly the retry test go red — `AssertionError: expected 1 to be 2` — while the other three still pass. The test cannot pass vacuously.
+- **Status:** FIXED. `nx test agent-engine-orchestrator` exit 0, 53/53 (was 49). `nx lint` exit 0. `nx build agent-mcp` exit 0.
+
+### LINT-ANY-001 — `@typescript-eslint/no-explicit-any` remains in 5 packages (~204 warnings)
+- **Where:** captured from a stray root `FAILURE.md` left by an earlier agent pass that "ran out of steps". Folded here so the deferral is not lost with the file.
+- **Completed already (0 warnings):** `agent-core-policy`, `agent-plugin-budget`, `data-core-structures`, `decompile-cli`, `agent-engine-compiler`.
+- **Remaining:**
+  1. `dispatch-serializer-json` — 10 (all `index.spec.ts`, `as Array<any>`) → `as Array<unknown>`; `.id` access still works via bracket notation.
+  2. `apigen-plugin-mcp` — 11 (`run.ts`, `generate.spec.ts`, `run.spec.ts`) → `as unknown as <T>`; `eslint-disable-next-line` only for genuinely untypable MCP runtime types.
+  3. `data-query-engine` — 18 (`filters.ts`, `query.ts`) → default generic `T = any` → `T = unknown`.
+  4. `ui-react-base-hooks` — 33 (`use-async`, `use-file-download`(+worker), `use-local-storage`, `use-throttle`) → concrete types (`Blob`, `File`, URL params); `unknown` where values flow through `JSON.parse`.
+  5. `data-base-transforms` — ~132 (`collections/filters/function/object/regex/stats` + specs). Highest effort; mostly generic utilities → `unknown` or proper generic defaults.
+- **Status:** OPEN. `FAILURE.md` should be deleted once this entry is confirmed — a root-level status file is not a tracking system.
