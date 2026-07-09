@@ -1,0 +1,48 @@
+{
+  "name": "environment-base-spec",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/environment/environment-base-spec/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "domain:environment",
+    "pkg-kind:types",
+    "pkg-class:types",
+    "layer:shared",
+    "platform:shared",
+    "access:public",
+    "publish:npm"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "dist/packages/environment/environment-base-spec",
+        "main": "packages/environment/environment-base-spec/src/index.ts",
+        "tsConfig": "packages/environment/environment-base-spec/tsconfig.lib.json",
+        "assets": [
+          "packages/environment/environment-base-spec/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      },
+      "dependsOn": [
+        "build",
+        "test"
+      ]
+    }
+  }
+}
