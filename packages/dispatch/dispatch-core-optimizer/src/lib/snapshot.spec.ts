@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { snapshot, topoSortMilestones } from './snapshot.js';
+import type { DagSnapshot } from '@adhd/dispatch-spec';
 import {
   deepFreeze,
   defaultDeps,
@@ -277,8 +278,51 @@ describe('snapshot() deps.dispatchLog override', () => {
 });
 
 // ---------------------------------------------------------------------------
-// snapshot() — non-mutation contract
+// snapshot() — JSON round-trip (DEBT-DISPATCH-014)
 // ---------------------------------------------------------------------------
+
+describe('snapshot() JSON round-trip', () => {
+  it('survives JSON.stringify → JSON.parse without data loss', () => {
+    const dag = miniDag({
+      milestones: {
+        a: miniMilestone({ model: 'Sonnet' }),
+        b: miniMilestone({ model: 'Sonnet', depends_on: ['a'] }),
+      },
+      operations: [
+        miniOp({ id: 'a.1', milestone: 'a', file: 'a.ts', action: 'create', ki_estimate: 100 }),
+        miniOp({ id: 'b.1', milestone: 'b', file: 'b.ts', action: 'create', ki_estimate: 200 }),
+      ],
+    });
+    const snap = snapshot(dag, defaultDeps({ fileSizes: (p) => new Map(p.map((x) => [x, 50])) }));
+    const serialized = JSON.stringify(snap);
+    const parsed = JSON.parse(serialized) as DagSnapshot;
+
+    // Strip snapshot_at from both before comparing (it changes per call)
+    const stripTime = (s: DagSnapshot) => ({ ...s, snapshot_at: '' });
+    const snapCleaned = stripTime(snap);
+    const parsedCleaned = stripTime(parsed);
+
+    expect(parsedCleaned).toEqual(snapCleaned);
+  });
+
+  it('preserves numeric values (no Infinity/NaN contamination)', () => {
+    const dag = miniDag({
+      milestones: { a: miniMilestone({ model: 'Sonnet' }) },
+      operations: [
+        miniOp({ id: 'a.1', milestone: 'a', shape: { kind: 'function', ops: [{ op: 'add-export', target: 'foo', to: 'bar', position: null, required: true }] }, ki_estimate: 100 }),
+      ],
+    });
+    const snap = snapshot(dag, defaultDeps());
+    const json = JSON.stringify(snap);
+    expect(json).not.toContain('Infinity');
+    expect(json).not.toContain('NaN');
+
+    const parsed = JSON.parse(json) as DagSnapshot;
+    const w = parsed.optimization.context_window_per_tier;
+    expect(w.Sonnet).toBeTypeOf('number');
+    expect(Number.isFinite(w.Sonnet)).toBe(true);
+  });
+});
 
 describe('snapshot() non-mutation contract', () => {
   it('does not mutate a deep-frozen dag or deps', () => {

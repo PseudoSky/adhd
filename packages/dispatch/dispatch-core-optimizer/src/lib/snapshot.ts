@@ -163,7 +163,13 @@ function resolveContextWindowPerTier(
   const tiers = new Set([...Object.keys(dagW), ...Object.keys(depsW)]);
   const result: Record<string, number> = {};
   for (const tier of tiers) {
-    result[tier] = dagW[tier] ?? depsW[tier] ?? Number.POSITIVE_INFINITY;
+    const value = dagW[tier] ?? depsW[tier];
+    if (value === undefined) {
+      throw new TypeError(
+        `Model tier "${tier}" not found in dag or deps context_window_per_tier`
+      );
+    }
+    result[tier] = value;
   }
   return result;
 }
@@ -948,7 +954,18 @@ export function snapshot(dag: DagJson, deps: IOptimizerDeps): DagSnapshot {
 
   // Build optimization block for snapshot — RESOLVED values (cold-start defaults
   // applied), so the snapshot is self-describing without needing deps again.
+  const tokens_naive: number = (() => {
+    let total = 0;
+    for (const m of Object.values(milestones)) {
+      if (m.eligible && m.status === 'pending' && m.model !== null) {
+        const b = bPerTier[m.model] ?? deps.bPerTier[m.model] ?? 0;
+        total += b + (m.ki_estimate ?? 0);
+      }
+    }
+    return total;
+  })();
   const optimization: SnapshotOptimization = {
+    tokens_naive,
     sentinel_fanout: sentinelFanout,
     context_window_override: dag.optimization.context_window_override,
     b_override: dag.optimization.b_override,

@@ -1,1 +1,1 @@
-export { snapshot } from './clone';
+export { snapshot, topoSortMilestones } from '../snapshot.js';

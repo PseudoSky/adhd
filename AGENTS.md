@@ -58,10 +58,38 @@ This project is indexed by GitNexus as **adhd** (23271 symbols, 35246 relationsh
 
 ## Never Do
 
+- **NEVER run `git reset --hard`.** It silently and irrecoverably destroys uncommitted work, including work belonging to other agents running concurrently in this repo. This has already happened here: a hard reset wiped five in-flight test fixes and reverted an uncommitted compiler fix, which then resurfaced as a "new" build failure. There is no undo — the discarded changes were never in the object database.
+- NEVER run `git checkout -- .`, `git restore` over a whole directory/tree, or `git clean -f` — same failure mode, same lack of recovery.
+- NEVER run `git stash` / `git stash pop` — it corrupts the nx project graph in this repo.
 - NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
 - NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
 - NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
 - NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+
+### Never discard changes you did not author — surface them
+
+**Default: you may not discard uncommitted changes.** A dirty file you did not create this
+session belongs to someone else — another agent working concurrently, or the user. Deleting,
+reverting, resetting, or stashing it destroys their work. When uncommitted changes are in your
+way (e.g. they block a merge or a checkout), the answer is **never** to discard them — it is to
+**stop and surface them to the user for resolution**, or to preserve them (commit to a branch,
+or `git diff HEAD > /tmp/<name>.patch`) so nothing is lost. This has already cost real work here:
+a hard reset wiped five in-flight test fixes, and a bare `git stash` swept every concurrent
+agent's changes into one orphaned snapshot.
+
+You may only discard changes that are **unambiguously your own scratch, created this session** —
+and even then, preserve first if there is any doubt.
+
+| Situation | Do | Never |
+|---|---|---|
+| A dirty file you didn't author is in your way | **stop and surface it to the user**; or preserve it (branch/patch) | discard it to "get a clean tree" |
+| Drop **your own** one-file scratch edit | `git restore <path>` (single, explicit path) | `git restore .` / `git checkout -- .` over a tree |
+| Move HEAD, keep the working tree | `git reset --soft <ref>` | `git reset --hard <ref>` |
+| Need a pristine tree to build/inspect | a worktree under `.worktrees/` | resetting/cleaning the shared tree |
+| Set work aside before a risky op | commit it, or `git diff HEAD > /tmp/<name>.patch` | `git stash` |
+
+If you believe a hard reset — or discarding anyone's uncommitted work — is genuinely required,
+**stop and ask a human.** Assume another agent has unsaved work in this tree, because it usually does.
 
 ## Resources
 
