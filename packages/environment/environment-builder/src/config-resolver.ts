@@ -31,6 +31,52 @@ export function inferEnvVar(prefix: string, fieldPath: string): string {
   return `${prefix}_${fieldPath.toUpperCase().replace(/[.-]/g, '_')}`;
 }
 
+/** Reserved prefix marking a redacted secret reference. Duplicated from
+ *  `@adhd/environment-base-spec`'s `SECRET_REF_PREFIX` (this module imports
+ *  only *types* from the base-spec at runtime — see the file header — so the
+ *  value is pinned identically here, exactly as `inferEnvVar` is). */
+export const SECRET_REF_PREFIX = 'adhd-secret-ref:';
+
+// ============================================================================
+// Secret redaction (`[inv:no-plaintext-secrets]`, ENV-CORE-009)
+// ============================================================================
+
+/**
+ * Replaces every `secret: true` field's resolved value in a flat dot-path
+ * map with a *reference* — `"adhd-secret-ref:<ENV_VAR>"` — so the plaintext
+ * credential is NEVER persisted to `adhd-environment.json`. The runtime
+ * client (`Environment.get`) resolves the live value from the environment at
+ * read time. Non-secret fields pass through unchanged.
+ *
+ * The env-var name used is the field's finalized effective `env` (the
+ * explicit override or the inferred name), as produced by `resolveConfig`.
+ * This is the canonical pre-persistence transform: build the snapshot's
+ * `raw` (and, via `unflatten`, its nested `config`) from the OUTPUT of this
+ * function, and compute `configHash` over the redacted `raw` so the hash is
+ * stable and never depends on a secret's plaintext.
+ *
+ * Note: a `noEnv` secret (one that can only come from the `adhd-env set`
+ * store / default) has no env source to resolve from at read time; its value
+ * is still redacted here (never leaked) but will read back as unset. See
+ * BACKLOG ENV-CORE-012.
+ */
+export function redactSecrets(
+  raw: Record<string, unknown>,
+  fields: Record<string, ConfigFieldDefinition>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(raw)) {
+    const field = fields[key];
+    if (field?.secret === true) {
+      const envName = field.env && field.env !== '' ? field.env : inferEnvVar('ADHD', key);
+      out[key] = `${SECRET_REF_PREFIX}${envName}`;
+    } else {
+      out[key] = raw[key];
+    }
+  }
+  return out;
+}
+
 // ============================================================================
 // Step 5 — load stored values (`adhd-env set` store)
 // ============================================================================

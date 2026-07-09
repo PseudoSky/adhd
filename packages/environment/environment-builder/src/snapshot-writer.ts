@@ -11,7 +11,15 @@
  * provides the pure/side-effecting primitives.
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
 import type { DirectoryEntry, ResolvedDirectoryEntry, SnapshotData } from '@adhd/environment-base-spec';
@@ -44,26 +52,59 @@ export function resolveConfigPath(
 // ============================================================================
 
 export interface AtomicWriteOptions {
-  /** POSIX file mode for the written file. Defaults to the platform default. */
+  /** POSIX file mode for the written file. Defaults to `0o600` (owner
+   *  read/write only) — the snapshot may carry secret references and,
+   *  historically, plaintext credentials, so it must never be created
+   *  world-readable (ENV-CORE-010). */
   mode?: number;
+  /** POSIX mode for the created parent directory. Defaults to `0o700`. */
+  dirMode?: number;
 }
+
+/** Default owner-only file mode for the credential-bearing snapshot. */
+export const DEFAULT_SNAPSHOT_FILE_MODE = 0o600;
+/** Default owner-only directory mode for the snapshot's parent directory. */
+export const DEFAULT_SNAPSHOT_DIR_MODE = 0o700;
 
 /**
  * Atomically writes `data` (JSON-stringified unless already a string) to
- * `filePath`: creates the parent directory tree if needed, writes to
- * `<filePath>.tmp`, then `renameSync`s over `filePath`. `renameSync` on the
- * same filesystem is atomic — a reader can never observe a partially-written
- * file at `filePath` itself; at worst a stale `.tmp` is left behind if the
- * process is killed mid-write, never a truncated `filePath`.
+ * `filePath`: creates the parent directory tree (mode `0o700` by default) if
+ * needed, writes to `<filePath>.tmp` **created at `0o600`**, then
+ * `renameSync`s over `filePath`. `renameSync` on the same filesystem is
+ * atomic — a reader can never observe a partially-written file at `filePath`.
+ *
+ * The tmp file is created owner-only up front (never more permissive than the
+ * destination, ENV-CORE-010/011) and is `unlinkSync`ed if the write or rename
+ * throws, so a mid-write failure never leaves a stale, world-readable
+ * `.tmp` holding the same secrets behind (ENV-CORE-011).
  */
 export function atomicWrite(filePath: string, data: unknown, opts: AtomicWriteOptions = {}): void {
-  mkdirSync(dirname(filePath), { recursive: true });
+  const fileMode = opts.mode ?? DEFAULT_SNAPSHOT_FILE_MODE;
+  const dirMode = opts.dirMode ?? DEFAULT_SNAPSHOT_DIR_MODE;
+  const dir = dirname(filePath);
+  mkdirSync(dir, { recursive: true, mode: dirMode });
+  // mkdir's mode is masked by umask and skipped for pre-existing dirs; force
+  // the immediate parent to the intended mode.
+  chmodSync(dir, dirMode);
+
   const tmpPath = `${filePath}.tmp`;
   const serialized = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-  const writeOptions: { encoding: BufferEncoding; mode?: number } = { encoding: 'utf8' };
-  if (opts.mode !== undefined) writeOptions.mode = opts.mode;
-  writeFileSync(tmpPath, serialized, writeOptions);
-  renameSync(tmpPath, filePath);
+  try {
+    // Create the tmp owner-only so secret bytes never touch a world-readable
+    // inode, even transiently.
+    writeFileSync(tmpPath, serialized, { encoding: 'utf8', mode: fileMode });
+    chmodSync(tmpPath, fileMode); // defeat umask on the created file
+    renameSync(tmpPath, filePath);
+    chmodSync(filePath, fileMode);
+  } catch (err) {
+    // Never leave a stale plaintext .tmp behind on failure (ENV-CORE-011).
+    try {
+      if (existsSync(tmpPath)) unlinkSync(tmpPath);
+    } catch {
+      /* best-effort cleanup — surface the original error below */
+    }
+    throw err;
+  }
 }
 
 // ============================================================================

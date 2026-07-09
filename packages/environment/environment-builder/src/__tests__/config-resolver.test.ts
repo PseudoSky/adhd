@@ -1,9 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mergeFieldDefinitions } from '../field-merge';
-import { coerceConfig, coerceValue, inferEnvVar, readStore, resolveConfig, unflatten } from '../config-resolver';
+import { coerceConfig, coerceValue, inferEnvVar, readStore, redactSecrets, resolveConfig, unflatten } from '../config-resolver';
+import { generateCrossLanguageVectors } from '@adhd/environment-base-spec';
+import type { ConfigFieldDefinition } from '@adhd/environment-base-spec';
 
 describe('inferEnvVar', () => {
   it('matches the contract test vector', () => {
@@ -155,6 +157,58 @@ describe('resolveConfig', () => {
     expect(resolvedFields['db.path'].env).toBe('ADHD_TEST_DB_PATH');
     // Input map must not be mutated (pure function).
     expect(fields['db.path'].env).toBe('');
+  });
+});
+
+describe('redactSecrets (ENV-CORE-009)', () => {
+  const fields: Record<string, ConfigFieldDefinition> = {
+    'providers.openai.secret': {
+      type: 'string',
+      default: '',
+      scope: 'project',
+      sourceScope: 'project',
+      env: 'OPENAI_API_KEY',
+      secret: true,
+    },
+    'db.path': { type: 'string', default: '', scope: 'project', sourceScope: 'project', env: 'ADHD_X_DB_PATH' },
+  };
+
+  it('replaces a secret value with an env-var reference, leaving non-secret fields intact', () => {
+    const redacted = redactSecrets({ 'providers.openai.secret': 'sk-test', 'db.path': '/tmp/db' }, fields);
+    expect(redacted['providers.openai.secret']).toBe('adhd-secret-ref:OPENAI_API_KEY');
+    expect(redacted['db.path']).toBe('/tmp/db');
+  });
+
+  it('never leaks the plaintext secret into the redacted map', () => {
+    const redacted = redactSecrets({ 'providers.openai.secret': 'sk-super-secret', 'db.path': '/tmp/db' }, fields);
+    expect(JSON.stringify(redacted)).not.toContain('sk-super-secret');
+  });
+
+  it('does not mutate the input raw map', () => {
+    const raw = { 'providers.openai.secret': 'sk-test', 'db.path': '/tmp/db' };
+    redactSecrets(raw, fields);
+    expect(raw['providers.openai.secret']).toBe('sk-test');
+  });
+});
+
+describe('cross-language vectors drift guard (ENV-CORE-007)', () => {
+  it('the committed cross-language-test-vectors.json equals a fresh TS generation', () => {
+    // The Python and Rust suites replay this exact file; if it ever drifts
+    // from the generator (the TS reference impl), the ports would be graded
+    // against a stale expectation. This is the guard that keeps the emitted
+    // file honest — it FAILS the moment the file and the generator disagree.
+    const committedPath = join(
+      __dirname,
+      '..',
+      '..',
+      '..',
+      'environment-base-spec',
+      'spec',
+      'cross-language-test-vectors.json',
+    );
+    const committed = JSON.parse(readFileSync(committedPath, 'utf8'));
+    const fresh = generateCrossLanguageVectors();
+    expect(committed).toEqual(fresh);
   });
 });
 

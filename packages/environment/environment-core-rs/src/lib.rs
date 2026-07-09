@@ -43,6 +43,34 @@ pub const DEFAULT_NAMESPACE: &str = "default";
 /// runtime client.
 pub const SNAPSHOT_FILENAME: &str = "adhd-environment.json";
 
+/// contentHash serialization format version (mirrors
+/// `CONTENT_HASH_FORMAT_VERSION` in `environment-base-spec`). v2 == the
+/// length-prefixed, injective encoding (see [`content_hash`]).
+pub const CONTENT_HASH_FORMAT_VERSION: u32 = 2;
+
+/// Reserved prefix marking a redacted secret reference (mirrors
+/// `SECRET_REF_PREFIX` in `environment-base-spec`). A resolved config value
+/// of `"adhd-secret-ref:ADHD_FOO_SECRET"` means "read the secret from env var
+/// `ADHD_FOO_SECRET` at runtime"; the plaintext is never persisted
+/// (ENV-CORE-009).
+pub const SECRET_REF_PREFIX: &str = "adhd-secret-ref:";
+
+/// The genuine JSON-Schema keywords a field definition may contribute to a
+/// generated schema. adhd-specific metadata (`env`/`scope`/`secret`/`noEnv`)
+/// is intentionally excluded (see [`generate_field_schema`], ENV-CORE-001).
+const JSON_SCHEMA_LEAF_KEYS: [&str; 10] = [
+    "type",
+    "default",
+    "description",
+    "minimum",
+    "maximum",
+    "enum",
+    "pattern",
+    "minLength",
+    "maxLength",
+    "items",
+];
+
 // ============================================================================
 // Cross-cutting scope + directory-type enums
 // ============================================================================
@@ -290,6 +318,11 @@ pub enum EnvironmentError {
     /// The snapshot file existed but could not be parsed as valid
     /// `SnapshotData` JSON.
     Parse(serde_json::Error),
+    /// A caller-supplied `project`/`namespace` segment was rejected because
+    /// it could escape `adhd_root` when interpolated into the snapshot path
+    /// (empty, `.`/`..`, a path separator, embedded NUL, or absolute) —
+    /// ENV-CORE-006.
+    InvalidPathSegment(String),
 }
 
 impl fmt::Display for EnvironmentError {
@@ -308,6 +341,9 @@ impl fmt::Display for EnvironmentError {
             EnvironmentError::Parse(err) => {
                 write!(f, "failed to parse adhd-environment snapshot: {err}")
             }
+            EnvironmentError::InvalidPathSegment(msg) => {
+                write!(f, "invalid path segment: {msg}")
+            }
         }
     }
 }
@@ -318,8 +354,27 @@ impl std::error::Error for EnvironmentError {
             EnvironmentError::SnapshotNotFound(_) => None,
             EnvironmentError::Io(err) => Some(err),
             EnvironmentError::Parse(err) => Some(err),
+            EnvironmentError::InvalidPathSegment(_) => None,
         }
     }
+}
+
+/// Rejects a `project`/`namespace` segment that could escape `adhd_root`
+/// when interpolated into a filesystem path (ENV-CORE-006).
+fn validate_path_segment(segment: &str, label: &str) -> Result<(), EnvironmentError> {
+    if segment.is_empty()
+        || segment == "."
+        || segment == ".."
+        || segment.contains('/')
+        || segment.contains('\\')
+        || segment.contains('\0')
+        || Path::new(segment).is_absolute()
+    {
+        return Err(EnvironmentError::InvalidPathSegment(format!(
+            "{label}: {segment:?}"
+        )));
+    }
+    Ok(())
 }
 
 impl From<std::io::Error> for EnvironmentError {
@@ -393,6 +448,11 @@ impl Environment {
             .namespace
             .clone()
             .unwrap_or_else(|| DEFAULT_NAMESPACE.to_string());
+
+        // ENV-CORE-006: guard against traversal before deriving the path.
+        validate_path_segment(&params.project, "project")?;
+        validate_path_segment(&namespace, "namespace")?;
+
         let adhd_root = params.adhd_root.clone().unwrap_or_else(default_adhd_root);
 
         let snapshot_path = resolve_snapshot_path(&adhd_root, &params.project, &namespace);
@@ -487,7 +547,16 @@ impl Environment {
                 }
             }
         }
-        get_nested(&self.data.config, path)
+        let value = get_nested(&self.data.config, path)?;
+        // ENV-CORE-009: secret fields persist a reference, not the plaintext.
+        // Resolve the live value from the environment at read time (or `None`
+        // when the env var is unset).
+        if let Value::String(s) = &value {
+            if let Some(env_var) = s.strip_prefix(SECRET_REF_PREFIX) {
+                return env::var(env_var).ok().map(Value::String);
+            }
+        }
+        Some(value)
     }
 
     fn get_path(&self, rest: &str) -> Option<Value> {
@@ -618,7 +687,20 @@ fn parse_path_key(rest: &str) -> Option<(DirectoryType, Option<String>)> {
 // (sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930),
 // not the stale placeholder.
 
-/// `sha256-` + hex(SHA-256(sorted `key=value\n` lines)).
+/// `sha256-` + hex(SHA-256(length-prefixed, sorted lines)).
+///
+/// Serialization (format v2, injective — see `environment-base-spec` SPEC.md
+/// §4.1): keys are sorted ascending by Unicode code point (Rust's `str::cmp`
+/// is byte-wise over UTF-8, which equals code-point order — matching Python's
+/// `sorted()` and the corrected TS port, ENV-CORE-002). Each entry emits the
+/// line `<utf8_len(k)>:<k>=<utf8_len(v)>:<v>\n`. The byte-length prefixes make
+/// the encoding injective: a `=` or `\n` inside a key or value can never be
+/// mistaken for a delimiter (ENV-CORE-004), unlike the old `key=value\n` form.
+///
+/// A lone surrogate (the one input the base-spec rejects with
+/// `LoneSurrogateError`) cannot occur here: a Rust `String`/`&str` is always
+/// well-formed UTF-8, so the condition is unreachable by construction
+/// (ENV-CORE-005).
 ///
 /// Input order does not matter: entries are sorted by key before
 /// serialization, so `content_hash([("b","2"),("a","1")])` and
@@ -628,7 +710,7 @@ fn parse_path_key(rest: &str) -> Option<(DirectoryType, Option<String>)> {
 /// use adhd_environment::content_hash;
 /// assert_eq!(
 ///     content_hash([("b", "2"), ("a", "1")]),
-///     "sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930",
+///     "sha256-66e4efebc74d002dabcf821c0ee1402726e5c9d25a8469e7fc3f7d7691464788",
 /// );
 /// ```
 pub fn content_hash<I, K, V>(entries: I) -> String
@@ -645,8 +727,12 @@ where
 
     let mut buf = String::new();
     for (key, value) in &pairs {
+        buf.push_str(&key.as_bytes().len().to_string());
+        buf.push(':');
         buf.push_str(key);
         buf.push('=');
+        buf.push_str(&value.as_bytes().len().to_string());
+        buf.push(':');
         buf.push_str(value);
         buf.push('\n');
     }
@@ -694,9 +780,11 @@ pub fn infer_env_var(prefix: &str, field_path: &str) -> String {
 /// Fields sharing a parent path (e.g. `"db.path"` and `"db.pool.size"`)
 /// reuse the same intermediate object node.
 ///
-/// Leaf field definitions are passed through unmodified (any JSON Schema
-/// validation keywords they carry — `minimum`, `enum`, `pattern`, etc. —
-/// are preserved as-is).
+/// Each leaf keeps ONLY genuine JSON-Schema keywords (`type`, `default`,
+/// `description`, `minimum`, `maximum`, `enum`, `pattern`, `minLength`,
+/// `maxLength`, `items`). adhd-specific metadata (`env`, `scope`, `secret`,
+/// `noEnv`) is dropped — copying the leaf verbatim leaked which fields are
+/// secrets and their env-var names (ENV-CORE-001).
 pub fn generate_field_schema(fields: &Map<String, Value>) -> Value {
     let mut properties = Map::new();
     for (path, definition) in fields {
@@ -707,6 +795,25 @@ pub fn generate_field_schema(fields: &Map<String, Value>) -> Value {
     root.insert("type".to_string(), Value::String("object".to_string()));
     root.insert("properties".to_string(), Value::Object(properties));
     Value::Object(root)
+}
+
+/// Projects a field definition onto its genuine JSON-Schema keywords only,
+/// dropping adhd-specific metadata (ENV-CORE-001). Mirrors
+/// `fieldDefinitionToJsonSchema` in `environment-base-spec`. Non-object
+/// definitions (which should not occur) are returned unchanged.
+fn field_definition_to_json_schema(definition: &Value) -> Value {
+    match definition {
+        Value::Object(map) => {
+            let mut out = Map::new();
+            for key in JSON_SCHEMA_LEAF_KEYS {
+                if let Some(value) = map.get(key) {
+                    out.insert(key.to_string(), value.clone());
+                }
+            }
+            Value::Object(out)
+        }
+        other => other.clone(),
+    }
 }
 
 /// Inserts `definition` at the (possibly multi-segment) dot-path `path`
@@ -721,7 +828,7 @@ fn insert_nested_property(properties: &mut Map<String, Value>, path: &str, defin
     let rest: Vec<&str> = segments.collect();
 
     if rest.is_empty() {
-        properties.insert(head.to_string(), definition);
+        properties.insert(head.to_string(), field_definition_to_json_schema(&definition));
         return;
     }
 
@@ -788,8 +895,20 @@ mod tests {
             "expected at least one contentHash vector"
         );
 
+        let mut asserted = 0usize;
         for case in cases {
             let name = case["name"].as_str().unwrap_or("<unnamed>");
+            // Skip specified failure cases: a lone-surrogate input is encoded
+            // via `inputKeyCodeUnits` (no `input`) and cannot be constructed
+            // as a Rust `String` at all — it is unreachable here by
+            // construction (ENV-CORE-005), so Rust legitimately skips it.
+            if case.get("error").is_some() || case.get("inputKeyCodeUnits").is_some() {
+                assert!(
+                    case["input"].as_object().is_none(),
+                    "error vector '{name}' must not also carry a normal input"
+                );
+                continue;
+            }
             let input = case["input"]
                 .as_object()
                 .expect("contentHash vector input must be an object");
@@ -813,17 +932,50 @@ mod tests {
 
             let actual = content_hash(pairs);
             assert_eq!(actual, expected, "contentHash vector '{name}' mismatch");
+            asserted += 1;
         }
+        assert!(asserted > 0, "no contentHash success vectors were asserted");
     }
 
     #[test]
     fn content_hash_pinned_gate_value() {
-        // The single most load-bearing vector, spelled out explicitly per
-        // the executor brief (contentHash({b:"2",a:"1"}) ==
-        // sha256-4a73850f...).
+        // The single most load-bearing vector, spelled out explicitly. This
+        // is the v2 (length-prefixed, injective) digest of the sorted
+        // serialization "1:a=1:1\n1:b=1:2\n" (ENV-CORE-004).
         assert_eq!(
             content_hash([("b", "2"), ("a", "1")]),
-            "sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"
+            "sha256-66e4efebc74d002dabcf821c0ee1402726e5c9d25a8469e7fc3f7d7691464788"
+        );
+    }
+
+    #[test]
+    fn content_hash_astral_key_ordering_matches_reference() {
+        // ENV-CORE-002: BMP key (U+FFFF) + astral key (U+1F600). Rust's
+        // str::cmp orders by code point (U+FFFF before U+1F600); a UTF-16
+        // code-unit sort would invert them. Assert against the pinned
+        // reference digest from the generated vectors file.
+        let vectors = vectors();
+        let case = vectors["contentHash"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["name"] == "astral-plane-key-ordering")
+            .expect("astral-plane-key-ordering vector present");
+        let input = case["input"].as_object().unwrap();
+        let pairs: Vec<(String, String)> = input
+            .iter()
+            .map(|(k, v)| (k.clone(), v.as_str().unwrap().to_string()))
+            .collect();
+        assert_eq!(content_hash(pairs), case["expected"].as_str().unwrap());
+    }
+
+    #[test]
+    fn content_hash_serialization_is_injective() {
+        // ENV-CORE-004: the old key=value\n form collided
+        // ({a:"1\nb=2"} == {a:"1",b:"2"}); v2 must not.
+        assert_ne!(
+            content_hash([("a", "1\nb=2")]),
+            content_hash([("a", "1"), ("b", "2")]),
         );
     }
 
@@ -929,6 +1081,35 @@ mod tests {
                 "generateFieldSchema vector '{name}' mismatch"
             );
         }
+    }
+
+    #[test]
+    fn generate_field_schema_strips_adhd_metadata_from_leaf() {
+        // ENV-CORE-001 (security): env/scope/secret/noEnv must NOT appear in
+        // the generated schema. Serialize the whole output and assert the
+        // leaked keys/values are absent.
+        let mut leaf = Map::new();
+        leaf.insert("type".to_string(), Value::String("string".to_string()));
+        leaf.insert("secret".to_string(), Value::Bool(true));
+        leaf.insert("env".to_string(), Value::String("CUSTOM_ENV".to_string()));
+        leaf.insert("scope".to_string(), Value::String("global".to_string()));
+        leaf.insert("noEnv".to_string(), Value::Bool(true));
+        leaf.insert("default".to_string(), Value::String("x".to_string()));
+        // Field path deliberately does NOT end in a metadata word, so a match
+        // below can only be leaked metadata, never a legitimate property name.
+        let mut fields = Map::new();
+        fields.insert("providers.openai.apiKey".to_string(), Value::Object(leaf));
+
+        let schema = generate_field_schema(&fields);
+        let serialized = serde_json::to_string(&schema).unwrap();
+        assert!(!serialized.contains("\"secret\""), "leaked `secret`: {serialized}");
+        assert!(!serialized.contains("CUSTOM_ENV"), "leaked env name: {serialized}");
+        assert!(!serialized.contains("\"env\""), "leaked `env`: {serialized}");
+        assert!(!serialized.contains("noEnv"), "leaked `noEnv`: {serialized}");
+        assert!(!serialized.contains("\"scope\""), "leaked `scope`: {serialized}");
+        // Genuine JSON-Schema keywords survive.
+        assert!(serialized.contains("\"type\""));
+        assert!(serialized.contains("\"default\""));
     }
 
     // ---- Environment: reading a snapshot -------------------------------
@@ -1221,5 +1402,101 @@ mod tests {
             assert_eq!(parsed, scope);
         }
         assert!(Scope::from_str("nonsense").is_err());
+    }
+
+    // ---- ENV-CORE-006: path traversal guard ---------------------------
+
+    #[test]
+    fn environment_rejects_traversal_in_project_or_namespace() {
+        let tmp = tempdir().expect("tempdir");
+        let root = tmp.path().to_str().unwrap().to_string();
+
+        for bad in ["..", "../../../etc", "a/b", "a\\b", "/abs", ""] {
+            let err = Environment::new(
+                EnvironmentParams::new(bad).with_adhd_root(root.clone()),
+            )
+            .expect_err("traversal project must be rejected");
+            assert!(matches!(err, EnvironmentError::InvalidPathSegment(_)), "project {bad:?}");
+
+            let err = Environment::new(
+                EnvironmentParams::new("agent-mcp")
+                    .with_adhd_root(root.clone())
+                    .with_namespace(bad),
+            )
+            .expect_err("traversal namespace must be rejected");
+            assert!(matches!(err, EnvironmentError::InvalidPathSegment(_)), "namespace {bad:?}");
+        }
+    }
+
+    #[test]
+    fn traversal_guard_blocks_escape_before_read() {
+        // A snapshot planted OUTSIDE the root must remain unreachable: the
+        // guard rejects the crafted project before any filesystem access.
+        let tmp = tempdir().expect("tempdir");
+        write_fixture(tmp.path(), "outside", "default");
+        let root = tmp.path().join("root");
+        fs::create_dir_all(&root).unwrap();
+
+        let err = Environment::new(
+            EnvironmentParams::new("../outside")
+                .with_adhd_root(root.to_str().unwrap().to_string()),
+        )
+        .expect_err("must not escape adhd_root");
+        assert!(matches!(err, EnvironmentError::InvalidPathSegment(_)));
+    }
+
+    // ---- ENV-CORE-009: secret references resolve at read time ----------
+
+    fn secret_fixture(root: &Path) {
+        let mut snapshot = fixture_snapshot();
+        // A secret field persists a REFERENCE, never the plaintext.
+        if let Value::Object(config) = &mut snapshot.config {
+            let mut openai = Map::new();
+            openai.insert(
+                "secret".to_string(),
+                Value::String(format!("{SECRET_REF_PREFIX}OPENAI_API_KEY")),
+            );
+            let mut providers = Map::new();
+            providers.insert("openai".to_string(), Value::Object(openai));
+            config.insert("providers".to_string(), Value::Object(providers));
+        }
+        snapshot.raw.insert(
+            "providers.openai.secret".to_string(),
+            format!("{SECRET_REF_PREFIX}OPENAI_API_KEY"),
+        );
+        let dir = root.join("agent-mcp").join("default");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join(SNAPSHOT_FILENAME),
+            serde_json::to_string_pretty(&snapshot).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn secret_reference_resolves_from_environment() {
+        let tmp = tempdir().expect("tempdir");
+        secret_fixture(tmp.path());
+        // SAFETY: no other test in this crate reads/writes OPENAI_API_KEY.
+        env::set_var("OPENAI_API_KEY", "sk-live-secret");
+        let env_client = Environment::new(
+            EnvironmentParams::new("agent-mcp")
+                .with_adhd_root(tmp.path().to_str().unwrap().to_string()),
+        )
+        .unwrap();
+        let resolved = env_client.get_str("config.providers.openai.secret");
+        env::remove_var("OPENAI_API_KEY");
+        assert_eq!(resolved, Some("sk-live-secret".to_string()));
+    }
+
+    #[test]
+    fn secret_plaintext_never_on_disk() {
+        let tmp = tempdir().expect("tempdir");
+        secret_fixture(tmp.path());
+        let bytes =
+            fs::read(tmp.path().join("agent-mcp/default").join(SNAPSHOT_FILENAME)).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        assert!(text.contains("adhd-secret-ref:OPENAI_API_KEY"));
+        assert!(!text.contains("sk-live-secret"));
     }
 }

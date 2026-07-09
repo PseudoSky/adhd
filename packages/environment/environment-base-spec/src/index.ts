@@ -393,32 +393,116 @@ export type DeepPath<T, K extends string> = K extends `${infer Head}.${infer Tai
 // Python, and Rust. `spec/cross-language-test-vectors.json` pins the gate.
 // ============================================================================
 
+/** Content-hash serialization format version. Bumped from the original
+ *  (unversioned) `key=value\n` form to `v2` when the length-prefixed,
+ *  injective encoding was adopted (see `contentHash` and SPEC.md §4.1).
+ *  Every pinned digest in `cross-language-test-vectors.json` is a `v2`
+ *  digest. */
+export const CONTENT_HASH_FORMAT_VERSION = 2;
+
 /**
- * `sha256-` hash of a flat config record, computed as SHA-256 over its
- * entries sorted lexicographically by key and serialized one per line as
- * `key=value\n` (each line — including the last — terminated with `\n`).
+ * Raised by `contentHash` when a key or value contains a lone surrogate
+ * code unit (an unpaired UTF-16 surrogate, U+D800–U+DFFF). Such strings are
+ * not well-formed Unicode and have no canonical UTF-8 encoding; rather than
+ * silently substituting U+FFFD (old TS behaviour) or raising a language-
+ * specific encoder error (old Python behaviour), all three ports reject them
+ * with this one, specified error. Rust `String`s cannot represent a lone
+ * surrogate at all, so the condition is unreachable there by construction.
+ */
+export class LoneSurrogateError extends Error {
+  constructor(
+    /** Whether the offending string was a map key or a map value. */
+    readonly location: 'key' | 'value',
+    /** The offending string (as received). */
+    readonly offending: string,
+  ) {
+    super(`contentHash: lone surrogate in ${location} (not well-formed Unicode)`);
+    this.name = 'LoneSurrogateError';
+  }
+}
+
+/** True if `s` contains an unpaired UTF-16 surrogate code unit. */
+function hasLoneSurrogate(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      // High surrogate — must be followed by a low surrogate.
+      const next = i + 1 < s.length ? s.charCodeAt(i + 1) : 0;
+      if (next < 0xdc00 || next > 0xdfff) return true;
+      i++; // valid pair — skip the low surrogate
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      // Low surrogate with no preceding high surrogate.
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Ordinal comparison by Unicode code point (NOT UTF-16 code unit).
  *
- * This is the cross-language content-addressing primitive: TS, Python, and
- * Rust MUST all produce the identical hex digest for the identical input.
+ * `String.prototype.sort()`'s default and `localeCompare` both order by
+ * UTF-16 code unit, which places astral-plane characters (≥ U+10000, encoded
+ * as a surrogate pair whose lead unit is 0xD800–0xDBFF) *before* BMP
+ * characters in U+E000–U+FFFF. Python's `sorted()` and Rust's `str::cmp`
+ * order by scalar value (code point / UTF-8 byte order). This comparator
+ * reproduces the Python/Rust order in TS so all three agree — code-point
+ * order is the canonical, portable order (see SPEC.md §4.1). */
+function codePointCompare(a: string, b: string): number {
+  const ca = Array.from(a);
+  const cb = Array.from(b);
+  const n = Math.min(ca.length, cb.length);
+  for (let i = 0; i < n; i++) {
+    const da = ca[i].codePointAt(0) ?? 0;
+    const db = cb[i].codePointAt(0) ?? 0;
+    if (da !== db) return da < db ? -1 : 1;
+  }
+  if (ca.length === cb.length) return 0;
+  return ca.length < cb.length ? -1 : 1;
+}
+
+/** UTF-8 byte length of a (well-formed) string. Callers must reject lone
+ *  surrogates first (see `hasLoneSurrogate`) so `TextEncoder` never has to
+ *  substitute U+FFFD here. */
+function utf8ByteLength(s: string): number {
+  return new TextEncoder().encode(s).length;
+}
+
+/**
+ * `sha256-` hash of a flat config record, using a length-prefixed,
+ * **injective** serialization (format `v2`). TS, Python, and Rust MUST all
+ * produce the identical hex digest for the identical input.
  *
- * Algorithm (canonical, per `contexts/_shared.md` `[def:contentHash]`):
- *   1. Take `Object.keys(config)`, sort ascending (code-point order).
- *   2. For each key `k` in that order, emit the line `` `${k}=${config[k]}\n` ``.
- *   3. Concatenate all lines (no additional separator — each line already
- *      carries its own trailing `\n`).
- *   4. SHA-256 the resulting UTF-8 string; hex-encode the digest.
- *   5. Prefix with `"sha256-"`.
+ * Algorithm (canonical, per SPEC.md §4.1 `[def:contentHash]`):
+ *   1. Reject any key or value containing a lone surrogate
+ *      (`LoneSurrogateError`).
+ *   2. Take `Object.keys(config)`, sort ascending by **Unicode code point**
+ *      (NOT UTF-16 code unit — see `codePointCompare`).
+ *   3. For each key `k` in that order, let `lk`/`lv` be the UTF-8 byte
+ *      lengths of `k` and `config[k]`, and emit the line
+ *      `` `${lk}:${k}=${lv}:${config[k]}\n` ``.
+ *   4. Concatenate all lines (no extra separator — each carries its own `\n`).
+ *   5. SHA-256 the resulting UTF-8 string; hex-encode; prefix `"sha256-"`.
+ *
+ * The byte-length prefixes make the encoding injective: a decoder reads
+ * exactly `lk`/`lv` bytes for the key/value, so `=` or `\n` occurring
+ * *inside* a key or value can never be mistaken for a structural delimiter.
+ * The old `key=value\n` form (format v1) collided — e.g.
+ * `{a:"1\nb=2"}` and `{a:"1", b:"2"}` hashed identically; under v2 they do
+ * not (proven in the cross-language vectors: `value-with-newline-collision-a`
+ * vs `two-entries-no-collision`).
  *
  * @example
  * contentHash({ b: "2", a: "1" })
- * // → "sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"
- * // (sorted serialization is "a=1\nb=2\n")
+ * // sorts to ["a","b"], serializes to "1:a=1:1\n1:b=1:2\n", then SHA-256.
  */
 export function contentHash(config: Record<string, string>): string {
-  const sortedKeys = Object.keys(config).sort();
+  const sortedKeys = Object.keys(config).sort(codePointCompare);
   let serialized = '';
   for (const key of sortedKeys) {
-    serialized += `${key}=${config[key]}\n`;
+    const value = config[key];
+    if (hasLoneSurrogate(key)) throw new LoneSurrogateError('key', key);
+    if (hasLoneSurrogate(value)) throw new LoneSurrogateError('value', value);
+    serialized += `${utf8ByteLength(key)}:${key}=${utf8ByteLength(value)}:${value}\n`;
   }
   const hex = sha256Hex(serialized);
   return `sha256-${hex}`;
@@ -427,14 +511,18 @@ export function contentHash(config: Record<string, string>): string {
 /**
  * Infers a project's env var prefix from its (kebab-case) name.
  *
- * Algorithm: uppercase the project name, replace every `-` with `_`,
- * prepend `"ADHD_"`.
+ * Algorithm: uppercase the project name, replace every `-` **and** `.` with
+ * `_`, prepend `"ADHD_"`. Both separators are folded so the result is always
+ * a legal POSIX env-var name even for dotted project names (`"foo.bar"` →
+ * `"ADHD_FOO_BAR"`, not the illegal `"ADHD_FOO.BAR"`); this matches
+ * `inferEnvVar`, which already folds both. See SPEC.md §4.2.
  *
  * @example projectEnvPrefix("agent-mcp") // → "ADHD_AGENT_MCP"
  * @example projectEnvPrefix("decompile-cli") // → "ADHD_DECOMPILE_CLI"
+ * @example projectEnvPrefix("foo.bar") // → "ADHD_FOO_BAR"
  */
 export function projectEnvPrefix(projectName: string): string {
-  return `ADHD_${projectName.toUpperCase().replace(/-/g, '_')}`;
+  return `ADHD_${projectName.toUpperCase().replace(/[.-]/g, '_')}`;
 }
 
 /**
@@ -536,6 +624,58 @@ function fieldDefinitionToJsonSchema(
   if (def.maxLength !== undefined) schema.maxLength = def.maxLength;
   if (def.items !== undefined) schema.items = def.items;
   return schema;
+}
+
+// ============================================================================
+// 13b. Secret references (credential redaction — see SPEC.md §7)
+//
+// A resolved snapshot must NEVER persist the plaintext value of a
+// `secret: true` field. Instead it stores a *reference* — a reserved-prefix
+// string carrying the env-var name the secret is read from — and the runtime
+// client resolves the actual value from the process environment at read time
+// (`Environment.get`). The reference form is a plain string (not an object)
+// so it is representable both in the nested `config` (a JSON value) and in
+// the flat `raw` map (whose values are strings in every port, including
+// Rust's `BTreeMap<String, String>`).
+// ============================================================================
+
+/** Reserved prefix marking a redacted secret reference. A field value of
+ *  `"adhd-secret-ref:ADHD_FOO_SECRET"` means "read the secret from the env
+ *  var `ADHD_FOO_SECRET` at runtime". This prefix is reserved: a genuine
+ *  config value must not begin with it. */
+export const SECRET_REF_PREFIX = 'adhd-secret-ref:';
+
+/** Builds the persisted reference for a secret field, given the env-var name
+ *  its value is resolved from. */
+export function makeSecretRef(envVarName: string): string {
+  return `${SECRET_REF_PREFIX}${envVarName}`;
+}
+
+/** True if `value` is a secret reference string (see `SECRET_REF_PREFIX`). */
+export function isSecretRef(value: unknown): value is string {
+  return typeof value === 'string' && value.startsWith(SECRET_REF_PREFIX);
+}
+
+/** Extracts the env-var name from a secret reference, or `undefined` if
+ *  `value` is not a secret reference. */
+export function secretRefEnvVar(value: unknown): string | undefined {
+  return isSecretRef(value) ? (value as string).slice(SECRET_REF_PREFIX.length) : undefined;
+}
+
+/**
+ * Resolves a secret reference against a supplied environment map, returning
+ * the live secret value (or `undefined` if the env var is unset). Non-secret
+ * values are returned unchanged. This is the read-time counterpart to
+ * `makeSecretRef`; every runtime client (TS/Python/Rust) applies the
+ * equivalent resolution in its `Environment.get`.
+ */
+export function resolveSecretRef(
+  value: unknown,
+  env: Record<string, string | undefined> = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {},
+): unknown {
+  const envVar = secretRefEnvVar(value);
+  if (envVar === undefined) return value;
+  return env[envVar];
 }
 
 // ============================================================================
@@ -666,4 +806,247 @@ function bytesToHex(bytes: Uint8Array): string {
 function sha256Hex(input: string): string {
   const bytes = new TextEncoder().encode(input);
   return bytesToHex(sha256Digest(bytes));
+}
+
+// ============================================================================
+// 15. Cross-language conformance-vector generator (see SPEC.md §4, §8)
+//
+// This is the SINGLE SOURCE OF TRUTH for `spec/cross-language-test-vectors.json`.
+// The committed JSON file is *emitted* by `generateCrossLanguageVectors()`
+// running the real primitives above — it is never hand-authored — so a
+// pinned `expected` can never silently drift from the implementation that
+// produced it (that drift is exactly what let ENV-CORE-001/002/003 ship
+// green against a pure vector-replay suite). The Python and Rust suites load
+// the emitted file and assert their ports reproduce every vector, including
+// the adversarial cases below. Regenerate with
+// `packages/environment/environment-base-spec` build + the emit script noted
+// in SPEC.md §8; a drift guard in `environment-builder`'s test suite asserts
+// the committed file deep-equals a fresh generation.
+// ============================================================================
+
+/** A single primitive vector. `expected` is present for success cases;
+ *  `error` (the thrown error's `name`) is present for specified failure
+ *  cases (e.g. lone-surrogate rejection). */
+export interface CrossLanguageVector {
+  name: string;
+  description?: string;
+  /** Normal case: the input as a JSON value. Omitted for inputs that cannot
+   *  be portably serialized as JSON (see `inputKeyCodeUnits`). */
+  input?: unknown;
+  /** Error case only: a `contentHash` key expressed as raw UTF-16 code units
+   *  (integers). Used for inputs containing a lone surrogate, which cannot be
+   *  represented as a literal JSON string that every language's parser
+   *  accepts (`serde_json` rejects a `\uD800` escape outright). Consumers
+   *  reconstruct the key in-language; Rust cannot build a lone-surrogate
+   *  `String` and skips these, as documented. Paired with `inputValue`. */
+  inputKeyCodeUnits?: number[];
+  /** Error case only: the value paired with `inputKeyCodeUnits`. */
+  inputValue?: string;
+  expected?: unknown;
+  error?: string;
+}
+
+export interface CrossLanguageVectors {
+  $schema: string;
+  specVersion: string;
+  contentHashFormatVersion: number;
+  description: string;
+  contentHash: CrossLanguageVector[];
+  projectEnvPrefix: CrossLanguageVector[];
+  inferEnvVar: CrossLanguageVector[];
+  generateFieldSchema: CrossLanguageVector[];
+}
+
+/** Runs `contentHash`, capturing either the digest or the thrown error name,
+ *  so error-case vectors are generated from the real behaviour rather than
+ *  asserted by hand. */
+function contentHashVector(
+  name: string,
+  input: Record<string, string>,
+  description?: string,
+): CrossLanguageVector {
+  try {
+    return { name, ...(description ? { description } : {}), input, expected: contentHash(input) };
+  } catch (err) {
+    return {
+      name,
+      ...(description ? { description } : {}),
+      input,
+      error: err instanceof Error ? err.name : String(err),
+    };
+  }
+}
+
+/**
+ * Emits the full, authoritative set of cross-language conformance vectors by
+ * running the real primitive implementations in this module. The returned
+ * object is what gets written to `spec/cross-language-test-vectors.json`.
+ */
+export function generateCrossLanguageVectors(): CrossLanguageVectors {
+  const contentHashVectors: CrossLanguageVector[] = [
+    contentHashVector(
+      'spec-example-unsorted-input',
+      { b: '2', a: '1' },
+      'Canonical example given out of sorted order — proves the function sorts before hashing.',
+    ),
+    contentHashVector(
+      'spec-example-pre-sorted-input',
+      { a: '1', b: '2' },
+      'Same pairs pre-sorted — must equal spec-example-unsorted-input.',
+    ),
+    contentHashVector('empty-object', {}, 'Zero entries serialize to the empty string.'),
+    contentHashVector('single-entry', { only: 'value' }),
+    contentHashVector('three-entries-unsorted', { zeta: '26', alpha: '1', mid: '13' }),
+    contentHashVector(
+      'astral-plane-key-ordering',
+      { '\u{1F600}': 'astral', '￿': 'bmp' },
+      'ENV-CORE-002: a BMP key (U+FFFF) and an astral key (U+1F600) — canonical code-point order sorts U+FFFF BEFORE U+1F600. UTF-16 code-unit order (old TS `.sort()`) would place the astral key first (lead surrogate 0xD83D < 0xFFFF) and produce a different digest.',
+    ),
+    contentHashVector(
+      'value-with-newline-collision-a',
+      { a: '1\nb=2' },
+      'ENV-CORE-004: under the old `key=value\\n` form this collided with two-entries-no-collision; the v2 length-prefixed form makes them distinct.',
+    ),
+    contentHashVector(
+      'two-entries-no-collision',
+      { a: '1', b: '2' },
+      'ENV-CORE-004: must NOT equal value-with-newline-collision-a under the injective v2 encoding.',
+    ),
+    contentHashVector(
+      'value-with-equals-and-newline',
+      { key: 'a=b\nc=d', 'x=y': 'z' },
+      'ENV-CORE-004: `=` and `\\n` inside both a value and a key — injectivity relies on the byte-length prefixes, not on these being separator-free.',
+    ),
+    contentHashVector(
+      'dotted-keys',
+      { 'providers.openai.secret': 'x', 'db.path': '/tmp/db' },
+      'Flat dot-path keys (the real shape of `raw`).',
+    ),
+    contentHashVector(
+      'unicode-values',
+      { sharp: 'straße', micro: 'µ', turkish: 'İ' },
+      'Multi-byte UTF-8 values — byte-length prefixes count UTF-8 bytes, not code points.',
+    ),
+    (() => {
+      // ENV-CORE-005: a lone high surrogate as a key must be REJECTED with
+      // LoneSurrogateError. Represented via code units (not a literal JSON
+      // string) so the emitted file stays parseable by serde_json — see
+      // `inputKeyCodeUnits`.
+      const key = String.fromCharCode(0xd800);
+      let error = '';
+      try {
+        contentHash({ [key]: 'x' });
+      } catch (err) {
+        error = err instanceof Error ? err.name : String(err);
+      }
+      return {
+        name: 'lone-surrogate-key-rejected',
+        description:
+          'ENV-CORE-005: a lone high surrogate (U+D800) as a key must be REJECTED with LoneSurrogateError in TS and Python. Unreachable in Rust — a String cannot hold a lone surrogate — so the Rust suite skips it. Input given as UTF-16 code units because a literal lone surrogate is not portably JSON-serializable.',
+        inputKeyCodeUnits: [0xd800],
+        inputValue: 'x',
+        error,
+      } as CrossLanguageVector;
+    })(),
+  ];
+
+  const projectEnvPrefixVectors: CrossLanguageVector[] = [
+    { name: 'agent-mcp', input: 'agent-mcp', expected: projectEnvPrefix('agent-mcp') },
+    { name: 'decompile-cli', input: 'decompile-cli', expected: projectEnvPrefix('decompile-cli') },
+    {
+      name: 'dotted-project-name',
+      description:
+        'ENV-CORE-003: a dotted project name folds `.`→`_` (like `-`), yielding a legal POSIX env-var prefix. Old TS/Python folded only `-` and emitted the illegal `ADHD_FOO.BAR`.',
+      input: 'foo.bar',
+      expected: projectEnvPrefix('foo.bar'),
+    },
+    {
+      name: 'unicode-case-folding',
+      description:
+        'Unicode default case mapping under uppercasing (ß→SS, µ→Μ) must agree across TS toUpperCase / Python str.upper / Rust to_uppercase.',
+      input: 'faß-µ',
+      expected: projectEnvPrefix('faß-µ'),
+    },
+  ];
+
+  const inferEnvVarVectors: CrossLanguageVector[] = [
+    {
+      name: 'dotted-path',
+      input: { prefix: 'ADHD_AGENT_MCP', fieldPath: 'db.path' },
+      expected: inferEnvVar('ADHD_AGENT_MCP', 'db.path'),
+    },
+    {
+      name: 'dashed-and-dotted-path',
+      input: { prefix: 'ADHD_AGENT_MCP', fieldPath: 'provider-key.secret' },
+      expected: inferEnvVar('ADHD_AGENT_MCP', 'provider-key.secret'),
+    },
+    {
+      name: 'deep-nested-path',
+      input: { prefix: 'ADHD_AGENT_MCP', fieldPath: 'transport.port' },
+      expected: inferEnvVar('ADHD_AGENT_MCP', 'transport.port'),
+    },
+  ];
+
+  const generateFieldSchemaVectors: CrossLanguageVector[] = [
+    {
+      name: 'single-nested-field',
+      input: { 'server.port': { type: 'integer', minimum: 1024 } },
+      expected: generateFieldSchema({ 'server.port': { type: 'integer', minimum: 1024 } }),
+    },
+    {
+      name: 'multiple-fields-shared-and-deep-parents',
+      input: {
+        'db.path': { type: 'string', default: './data.sqlite' },
+        'db.pool.size': { type: 'integer', minimum: 1, maximum: 100, default: 10 },
+        'logging.level': { type: 'string', enum: ['debug', 'info', 'warn', 'error'], default: 'info' },
+      },
+      expected: generateFieldSchema({
+        'db.path': { type: 'string', default: './data.sqlite' },
+        'db.pool.size': { type: 'integer', minimum: 1, maximum: 100, default: 10 },
+        'logging.level': { type: 'string', enum: ['debug', 'info', 'warn', 'error'], default: 'info' },
+      }),
+    },
+    { name: 'empty-fields', input: {}, expected: generateFieldSchema({}) },
+    {
+      name: 'adhd-metadata-stripped-from-leaf',
+      description:
+        'ENV-CORE-001 (security): adhd-specific keys (env, scope, secret, noEnv) MUST be dropped from the generated schema — Python/Rust previously copied the leaf verbatim, leaking which fields are secrets and their env-var names.',
+      input: {
+        'providers.openai.secret': {
+          type: 'string',
+          default: 'x',
+          description: 'API key',
+          minLength: 1,
+          env: 'CUSTOM_OPENAI_KEY',
+          scope: 'global',
+          secret: true,
+          noEnv: true,
+        },
+      },
+      expected: generateFieldSchema({
+        'providers.openai.secret': {
+          type: 'string',
+          default: 'x',
+          description: 'API key',
+          minLength: 1,
+          env: 'CUSTOM_OPENAI_KEY',
+          scope: 'global',
+          secret: true,
+          noEnv: true,
+        } as YamlFieldDefinition,
+      }),
+    },
+  ];
+
+  return {
+    $schema: 'https://adhd.dev/schemas/environment/cross-language-test-vectors.schema.json',
+    specVersion: SPEC_VERSION,
+    contentHashFormatVersion: CONTENT_HASH_FORMAT_VERSION,
+    description:
+      'Pinned cross-language conformance vectors for the pure primitives exported by @adhd/environment-base-spec (contentHash, projectEnvPrefix, inferEnvVar, generateFieldSchema). GENERATED by generateCrossLanguageVectors() in src/index.ts — do not hand-edit; regenerate (see SPEC.md §8). The TypeScript, Python, and Rust runtime clients MUST reproduce every "expected" value from the corresponding "input". A vector with "error" instead of "expected" is a specified FAILURE case: the port must raise the named error (Rust may legitimately be unable to construct the input — e.g. a lone surrogate — and skips only those). Comparison semantics: contentHash/projectEnvPrefix/inferEnvVar expected values are exact strings; generateFieldSchema expected values compare by structural (deep) equality — key insertion order is not significant.',
+    contentHash: contentHashVectors,
+    projectEnvPrefix: projectEnvPrefixVectors,
+    inferEnvVar: inferEnvVarVectors,
+    generateFieldSchema: generateFieldSchemaVectors,
+  };
 }

@@ -1,0 +1,53 @@
+{
+  "name": "environment-core-rs",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/environment/environment-core-rs/src",
+  "projectType": "library",
+  "tags": [
+    "domain:environment",
+    "pkg-kind:core",
+    "pkg-class:foundation",
+    "layer:data",
+    "platform:rust",
+    "access:domain",
+    "publish:crates"
+  ],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/Cargo.toml",
+        "{projectRoot}/Cargo.lock",
+        "{projectRoot}/rust-toolchain.toml",
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/nx-run.sh"
+      ],
+      "outputs": ["{projectRoot}/target"],
+      "options": {
+        "command": "sh packages/environment/environment-core-rs/nx-run.sh build"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/Cargo.toml",
+        "{projectRoot}/Cargo.lock",
+        "{projectRoot}/rust-toolchain.toml",
+        "{projectRoot}/src/**/*",
+        "{projectRoot}/nx-run.sh"
+      ],
+      "options": {
+        "command": "sh packages/environment/environment-core-rs/nx-run.sh test"
+      }
+    },
+    "nx-release-publish": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build", "test"],
+      "options": {
+        "command": "sh packages/environment/environment-core-rs/nx-run.sh publish"
+      }
+    }
+  }
+}
