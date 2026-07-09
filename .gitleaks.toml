@@ -71,3 +71,20 @@ stopwords = [
   "test-token",
   "notarealkey",
 ]
+
+# ── ENV-SEC-003: confirmed false positives, each verified by inspection ──────
+# Scoped by VALUE regex, never by rule id. `generic-api-key` fires 4 times: twice on
+# the REAL leaked nxCloudAccessToken (ENV-SEC-002) and twice on a public OAuth client
+# id. Allowlisting the RULE would silence the real leak.
+# NOTE: gitleaks' `allowlist.regexes` is an array of STRINGS. Writing it as
+# [[allowlist.regexes]] table-arrays makes gitleaks FTL, emit an empty report, and
+# look exactly like "no leaks found". Never let a config error read as clean.
+# gitleaks matches allowlist regexes against the SECRET by default; ours are
+# line shapes, so target the whole line.
+regexTarget = "line"
+regexes = [
+  # OAuth *client id* is a public identifier, not a secret.
+  '''OAUTH_CLIENT_ID\s*=\s*["'][0-9a-f-]{36}["']''',
+  # curl example against http://localhost:<port> — no credential present.
+  '''curl\s+http://localhost:\d+/''',
+]
