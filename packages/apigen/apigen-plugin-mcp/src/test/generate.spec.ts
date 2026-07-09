@@ -77,13 +77,17 @@ describe('[plugin-mcp.1] generate() — stdio transport', () => {
 
   it('server.ts contains StdioServerTransport', () => {
     const out = generate({ ...baseInput, options: { transport: 'stdio' } });
-    const server = out.files.find((f) => f.path === 'server.ts')!;
+    const server = out.files.find((f) => f.path === 'server.ts');
+    expect(server).toBeDefined();
+    if (!server) throw new Error('Expected server.ts');
     expect(server.content).toContain('StdioServerTransport');
   });
 
   it('index.ts contains toolMetas with fixture fn names', () => {
     const out = generate({ ...baseInput, options: { transport: 'stdio' } });
-    const idx = out.files.find((f) => f.path === 'index.ts')!;
+    const idx = out.files.find((f) => f.path === 'index.ts');
+    expect(idx).toBeDefined();
+    if (!idx) throw new Error('Expected index.ts');
     expect(idx.content).toContain('getUser');
     expect(idx.content).toContain('listUsers');
     expect(idx.content).toContain('toolMetas');
@@ -93,14 +97,18 @@ describe('[plugin-mcp.1] generate() — stdio transport', () => {
 
   it('server.ts imports dispatch from @adhd/apigen-engine-runtime', () => {
     const out = generate({ ...baseInput, options: { transport: 'stdio' } });
-    const server = out.files.find((f) => f.path === 'server.ts')!;
+    const server = out.files.find((f) => f.path === 'server.ts');
+    expect(server).toBeDefined();
+    if (!server) throw new Error('Expected server.ts');
     expect(server.content).toContain("from '@adhd/apigen-engine-runtime'");
     expect(server.content).toContain('dispatch');
   });
 
   it('defaults to stdio when no transport option given', () => {
     const out = generate(baseInput);
-    const server = out.files.find((f) => f.path === 'server.ts')!;
+    const server = out.files.find((f) => f.path === 'server.ts');
+    expect(server).toBeDefined();
+    if (!server) throw new Error('Expected server.ts');
     expect(server.content).toContain('StdioServerTransport');
   });
 });
@@ -110,13 +118,17 @@ describe('[plugin-mcp.1] generate() — stdio transport', () => {
 describe('[plugin-mcp.2] generate() — sse transport', () => {
   it('server.ts contains SSEServerTransport', () => {
     const out = generate({ ...baseInput, options: { transport: 'sse' } });
-    const server = out.files.find((f) => f.path === 'server.ts')!;
+    const server = out.files.find((f) => f.path === 'server.ts');
+    expect(server).toBeDefined();
+    if (!server) throw new Error('Expected server.ts');
     expect(server.content).toContain('SSEServerTransport');
   });
 
   it('does NOT contain StdioServerTransport', () => {
     const out = generate({ ...baseInput, options: { transport: 'sse' } });
-    const server = out.files.find((f) => f.path === 'server.ts')!;
+    const server = out.files.find((f) => f.path === 'server.ts');
+    expect(server).toBeDefined();
+    if (!server) throw new Error('Expected server.ts');
     expect(server.content).not.toContain('StdioServerTransport');
   });
 });
@@ -129,7 +141,9 @@ describe('[plugin-mcp.3] generate() — streaming-http transport', () => {
       ...baseInput,
       options: { transport: 'streaming-http' },
     });
-    const server = out.files.find((f) => f.path === 'server.ts')!;
+    const server = out.files.find((f) => f.path === 'server.ts');
+    expect(server).toBeDefined();
+    if (!server) throw new Error('Expected server.ts');
     expect(server.content).toContain('StreamableHTTPServerTransport');
   });
 
@@ -138,7 +152,9 @@ describe('[plugin-mcp.3] generate() — streaming-http transport', () => {
       ...baseInput,
       options: { transport: 'streaming-http' },
     });
-    const server = out.files.find((f) => f.path === 'server.ts')!;
+    const server = out.files.find((f) => f.path === 'server.ts');
+    expect(server).toBeDefined();
+    if (!server) throw new Error('Expected server.ts');
     expect(server.content).not.toContain('StdioServerTransport');
     expect(server.content).not.toContain('SSEServerTransport');
   });
@@ -154,6 +170,7 @@ describe('[plugin-mcp.6] mcpPlugin — optionsSchema transport enum', () => {
   });
 
   it('optionsSchema.properties.transport.enum contains all 3 transports', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const schema = mcpPlugin.optionsSchema as any;
     const enumValues: string[] = schema.properties.transport.enum;
     expect(enumValues).toContain('stdio');
@@ -172,7 +189,9 @@ describe('[plugin-mcp.6] mcpPlugin — optionsSchema transport enum', () => {
 describe('[plugin-mcp.5] no inline dispatch logic in generate output', () => {
   it('index.ts does not contain dispatch implementation', () => {
     const out = generate(baseInput);
-    const idx = out.files.find((f) => f.path === 'index.ts')!;
+    const idx = out.files.find((f) => f.path === 'index.ts');
+    expect(idx).toBeDefined();
+    if (!idx) throw new Error('Expected index.ts');
     // index.ts is a data file — it must not contain any dispatch call
     expect(idx.content).not.toContain('dispatch(');
   });
@@ -190,7 +209,9 @@ describe('[v2-proj-transport] §9.1 MCP envelope binding in generated server.ts'
       options: { transport: 'stdio' },
     };
     const out = generate(input);
-    const server = out.files.find((f) => f.path === 'server.ts')!;
+    const server = out.files.find((f) => f.path === 'server.ts');
+    expect(server).toBeDefined();
+    if (!server) throw new Error('Expected server.ts');
     // §9.1: MCP envelope uses _meta key convention
     expect(server.content).toContain('_meta');
     // The generated extractEnvelope function must build 'x-auth-session' key
@@ -206,7 +227,9 @@ describe('[v2-proj-transport] §9.1 MCP envelope binding in generated server.ts'
       options: { transport: 'stdio' },
     };
     const out = generate(input);
-    const server = out.files.find((f) => f.path === 'server.ts')!;
+    const server = out.files.find((f) => f.path === 'server.ts');
+    expect(server).toBeDefined();
+    if (!server) throw new Error('Expected server.ts');
     // Old v1 pattern: dispatch(... args as Record ..., ((args as any)['data'] ...))
     // where args (the full args including envelope fields) is passed as the envelope arg.
     // In v2, envelope is extracted from _meta separately and passed as its own arg.
@@ -226,7 +249,9 @@ describe('[v2-proj-transport] §9.1 MCP envelope binding in generated server.ts'
         options: { transport },
       };
       const out = generate(input);
-      const server = out.files.find((f) => f.path === 'server.ts')!;
+      const server = out.files.find((f) => f.path === 'server.ts');
+      expect(server).toBeDefined();
+      if (!server) throw new Error('Expected server.ts');
       expect(server.content).toContain('extractEnvelope');
     }
   });

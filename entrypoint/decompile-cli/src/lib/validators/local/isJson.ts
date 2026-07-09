@@ -30,7 +30,7 @@ const Bench = {
   total: 0,
 };
 // TODO: create a utility or package where this belings.
-const benchWrapper = (func: (s: string) => any) => {
+const benchWrapper = (func: (s: string) => unknown) => {
   return (s: string) => {
     const start = new Date();
     const res = func(s);

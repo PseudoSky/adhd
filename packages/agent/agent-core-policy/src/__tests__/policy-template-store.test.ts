@@ -55,7 +55,8 @@ const openHandles: Database.Database[] = [];
 afterEach(() => {
   while (openHandles.length) {
     try {
-      openHandles.pop()!.close();
+      const handle = openHandles.pop();
+      if (handle) handle.close();
     } catch {
       /* already closed */
     }
@@ -250,11 +251,13 @@ describe('PolicyTemplateStore', () => {
 
     const rateOnly = store.list('rate');
     expect(rateOnly).toHaveLength(1);
-    expect(rateOnly[0]!.slug).toBe('template-rate');
+    expect(rateOnly[0]).not.toBeNull();
+    expect(rateOnly[0].slug).toBe('template-rate');
 
     const permOnly = store.list('permission');
     expect(permOnly).toHaveLength(1);
-    expect(permOnly[0]!.slug).toBe('template-permission');
+    expect(permOnly[0]).not.toBeNull();
+    expect(permOnly[0].slug).toBe('template-permission');
 
     fs.unlinkSync(dbPath);
   });

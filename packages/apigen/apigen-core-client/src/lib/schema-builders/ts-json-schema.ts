@@ -326,6 +326,190 @@ function generatorEntryKey(
  * many-export file). Only the stable real source file (Path 1) is cached, where
  * the amortisation turns O(N) program builds into O(1).
  */
+/**
+ * Zod module specifiers that indicate a source file imports zod transitively.
+ * When detected, Path 1 (ts-json-schema-generator) is skipped because its
+ * `skipTypeCheck` AST-based resolution confuses zod types with user types,
+ * producing corrupted schemas that crash at runtime with unresolvable $ref.
+ */
+const ZOD_MODULE_SPECIFIERS = new Set(['zod', /^zod\/./]);
+
+/**
+ * Check whether a source file imports from `zod` (either directly or from
+ * a sub-path like `zod/v4`).  Memoizable per SourceFile.
+ */
+function sourceFileHasZodImport(sf: SourceFile): boolean {
+  for (const imp of sf.getImportDeclarations()) {
+    const mod = imp.getModuleSpecifierValue();
+    for (const spec of ZOD_MODULE_SPECIFIERS) {
+      if (typeof spec === 'string') {
+        if (mod === spec) return true;
+      } else {
+        if (spec.test(mod)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Remove any `$defs`/`definitions` entries that originate from zod internals
+ * (e.g., ZodString, ZodNumber, ZodType). ts-json-schema-generator's whole-file
+ * extraction registers zod-derived declarations into the shared definitions
+ * registry when a source file transitively imports anything using zod,
+ * corrupting unrelated primitive entries.
+ *
+ * The filter deletes:
+ *   1. Keys whose name contains "zod" or "Zod" (case-insensitive).
+ *   2. Keys whose value contains a `$ref` that points to any key removed in
+ *      step 1 (transitive cleanup).
+ *
+ * This runs on EVERY generated schema — both the top-level schema returned
+ * from `createSchema()` and its embedded `$defs`/`definitions` objects.
+ */
+function filterZodDefinitions(schema: Record<string, unknown>): void {
+  for (const defKey of ['$defs', 'definitions']) {
+    const defs = schema[defKey] as Record<string, unknown> | undefined;
+    if (!defs || typeof defs !== 'object') continue;
+
+    const keys = Object.keys(defs);
+    if (keys.length === 0) continue;
+
+    // Pass 1: find all zod-related keys.
+    const zodKeys = new Set(keys.filter((k) => /zod/i.test(k)));
+
+    // Pass 2: any entry whose $ref points to a zod key is also zod-polluted.
+    for (const [key, value] of Object.entries(defs)) {
+      if (zodKeys.has(key)) continue;
+      if (typeof value !== 'object' || value === null) continue;
+      const valRec = value as Record<string, unknown>;
+      const ref = typeof valRec['$ref'] === 'string' ? valRec['$ref'] : '';
+      if (!ref) continue;
+      for (const zk of zodKeys) {
+        if (ref.includes(zk)) {
+          zodKeys.add(key);
+          break;
+        }
+      }
+    }
+
+    for (const key of zodKeys) {
+      delete defs[key];
+    }
+  }
+
+  // Pass 3: recursively walk the entire schema and strip any remaining
+  // zod references that survived the top-level $defs purge.
+  stripZodRefsRecursive(schema);
+}
+
+/**
+ * Recursively walk a schema object (including nested properties, items,
+ * oneOf branches, allOf/anyOf arrays) and:
+ *   - Remove `$ref` entries that point to zod-named definitions
+ *   - Delete the `$ref` key (schema falls back to structural validation
+ *     which may be looser but never crashes).
+ */
+function stripZodRefsRecursive(
+  node: Record<string, unknown>,
+  visited?: WeakSet<object>
+): void {
+  if (!node || typeof node !== 'object') return;
+  const set = visited ?? new WeakSet<object>();
+  if (set.has(node)) return;
+  set.add(node);
+
+  for (const key of Object.keys(node)) {
+    if (key === '$ref' && typeof node[key] === 'string') {
+      const ref = node[key] as string;
+      // Match patterns like #/definitions/$ZodNumberParams,
+      // #/definitions/ZodString, etc.
+      if (/zod/i.test(ref)) {
+        delete node[key];
+      }
+    }
+  }
+
+  // Recurse into child schemas (objects and arrays)
+  for (const [, value] of Object.entries(node)) {
+    if (typeof value === 'object' && value !== null) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (typeof item === 'object' && item !== null) {
+            stripZodRefsRecursive(item as Record<string, unknown>, set);
+          }
+        }
+      } else {
+        stripZodRefsRecursive(value as Record<string, unknown>, set);
+      }
+    }
+  }
+}
+
+/**
+ * Validate that all `$ref` entries in a schema point to definitions that
+ * exist within the schema's own `$defs` or `definitions`.
+ *
+ * Throws at GENERATE time if any dangling `$ref` is found — this prevents
+ * the runtime crash described in BUG-APIGEN-CORE-001.
+ */
+function validateSchemaRefs(schema: Record<string, unknown>): void {
+  // Collect available definition keys
+  const available = new Set<string>();
+  for (const defKey of ['$defs', 'definitions']) {
+    const obj = schema[defKey] as Record<string, unknown> | undefined;
+    if (obj && typeof obj === 'object') {
+      for (const k of Object.keys(obj)) available.add(k);
+    }
+  }
+
+  const dangling = findDanglingRefs(schema, available);
+  if (dangling.length > 0) {
+    throw new Error(
+      `[apigen-core-client] Generated schema contains ${dangling.length} unresolvable $ref(s): ${dangling.join(', ')}. ` +
+        `This usually means zod-internal definitions were stripped but $ref references to them remain. ` +
+        `Check the source file's imports or the ts-json-schema-generator output.`
+    );
+  }
+}
+
+/**
+ * Walk a schema tree and return a list of all `$ref` values that point to
+ * definitions NOT present in `available`.
+ */
+function findDanglingRefs(
+  schema: Record<string, unknown>,
+  available: Set<string>
+): string[] {
+  if (!schema || typeof schema !== 'object') return [];
+  const dangling: string[] = [];
+
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === '$ref' && typeof value === 'string') {
+      const match = value.match(/#\/(?:\$defs|definitions)\/(.+)$/);
+      if (match && !available.has(match[1])) {
+        dangling.push(value);
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (typeof item === 'object' && item !== null) {
+            dangling.push(
+              ...findDanglingRefs(item as Record<string, unknown>, available)
+            );
+          }
+        }
+      } else {
+        dangling.push(
+          ...findDanglingRefs(value as Record<string, unknown>, available)
+        );
+      }
+    }
+  }
+
+  return dangling;
+}
+
 function runScalarAwareGenerator(
   config: Config,
   cacheable: boolean,
@@ -392,10 +576,21 @@ function runScalarAwareGenerator(
     }
   }
 
-  return gen.createSchema(completedConfig.type as string) as Record<
+  const rawSchema = gen.createSchema(completedConfig.type as string) as Record<
     string,
     unknown
   >;
+
+  // BUG-APIGEN-CORE-001: prune zod-internal definitions that ts-json-schema-generator
+  // may have registered via whole-file extraction when a source file transitively
+  // imports a zod-using module.
+  filterZodDefinitions(rawSchema);
+
+  // BUG-APIGEN-CORE-001: fail at generate time (loud) on any remaining
+  // dangling $ref that survived the zod filter.
+  validateSchemaRefs(rawSchema);
+
+  return rawSchema;
 }
 
 /**
@@ -647,21 +842,29 @@ async function buildSchemaUncached(
 
   // --- Path 1: named type (ts-json-schema-generator can look it up by name) ---
   //
-  // Run the scalar-aware generator (with custom parser augmentor) so that even
-  // named types that CONTAIN nested scalars like bigint / Uint8Array / Decimal
-  // get the right format at every depth.
-  try {
-    const config: Config = {
-      path: sf.getFilePath(),
-      type: normalizedTypeText,
-      skipTypeCheck: true,
-      tsconfig,
-    };
-    // Path 1 keys off the stable real source file → cache the built program.
-    const schema = runScalarAwareGenerator(config, true, session);
-    return schema as Record<string, unknown>;
-  } catch {
-    // Fall through to alias-injection path for anonymous / inline types.
+  // BUG-APIGEN-CORE-001: ts-json-schema-generator's skipTypeCheck AST-based
+  // resolution confuses zod types with user types when the source file imports
+  // zod, producing corrupted schemas that crash at runtime. Skip Path 1 for
+  // zod-importing files — fall directly to morph-walk (Path 2) which uses
+  // ts-morph's type-checked resolution and correctly resolves primitives.
+  const hasZodImport =
+    session?.zodImportCache.get(sf) ?? sourceFileHasZodImport(sf);
+  if (session) session.zodImportCache.set(sf, hasZodImport);
+
+  if (!hasZodImport) {
+    try {
+      const config: Config = {
+        path: sf.getFilePath(),
+        type: normalizedTypeText,
+        skipTypeCheck: true,
+        tsconfig,
+      };
+      // Path 1 keys off the stable real source file → cache the built program.
+      const schema = runScalarAwareGenerator(config, true, session);
+      return schema as Record<string, unknown>;
+    } catch {
+      // Fall through to alias-injection path for anonymous / inline types.
+    }
   }
 
   // --- Path 2: anonymous / inline type (e.g. `{ at: Date; label: string; }`, `Date[]`,

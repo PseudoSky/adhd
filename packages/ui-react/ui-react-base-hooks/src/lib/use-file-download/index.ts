@@ -7,7 +7,7 @@ export type FileType = 'json' | 'csv' | 'excel';
 export interface ValidationOptions {
   maxSize?: number;
   allowedTypes?: FileType[];
-  schema?: Record<string, any>;
+  schema?: Record<string, unknown>;
 }
 
 export interface FileDownloadOptions {
@@ -23,7 +23,7 @@ export interface FileDownloadOptions {
   };
   excel?: {
     sheetName?: string;
-    headerStyle?: any; // XLSX.CellStyle when xlsx is loaded
+    headerStyle?: unknown; // XLSX.CellStyle when xlsx is loaded
     password?: string;
   };
   validation?: ValidationOptions;
@@ -33,7 +33,7 @@ export interface FileDownloadOptions {
 }
 
 export interface UseFileDownloadProps {
-  data: any;
+  data: unknown;
   fileName?: string;
   options?: FileDownloadOptions;
 }
@@ -48,7 +48,7 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const CHUNK_SIZE = 1000; // Process 1000 records at a time
 
 const validateData = (
-  data: any,
+  data: unknown,
   options?: ValidationOptions
 ): { isValid: boolean; errors: string[] } => {
   const errors: string[] = [];
@@ -74,7 +74,7 @@ const validateData = (
           errors.push(`Invalid type for field "${key}"`);
         }
       });
-    } catch (error: any) {
+    } catch (error) {
       errors.push(`Schema validation failed: ${error.message}`);
     }
   }
@@ -115,7 +115,7 @@ export const useFileDownload = ({
 
       // Set up message handler
       // WorkerMessage from worker is typed different
-      workerInstance.onmessage = (event: MessageEvent<any>) => {
+      workerInstance.onmessage = (event: MessageEvent<unknown>) => {
         const { status, progress, result, error } = event.data;
 
         if (status === 'progress') {
@@ -135,6 +135,7 @@ export const useFileDownload = ({
         } else if (status === 'complete') {
           const blob = new Blob([result.data], { type: result.type });
           cache.set(result.cacheKey, blob);
+          // eslint-disable-next-line react-hooks/exhaustive-deps
           processDownload(blob, result.fileType);
         }
       };
@@ -142,7 +143,8 @@ export const useFileDownload = ({
       return workerInstance;
     }
     return null;
-  }, [data, options.onProgress, options.onError]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, options, cache]);
 
   // Cleanup function
   useEffect(() => {
@@ -153,9 +155,10 @@ export const useFileDownload = ({
   }, [worker, cache]);
 
   const processChunk = useCallback(
-    async (chunk: any[], fileType: FileType): Promise<Blob> => {
+    async (chunk: unknown[], fileType: FileType): Promise<Blob> => {
       switch (fileType) {
         case 'csv': {
+          // eslint-disable-next-line react-hooks/exhaustive-deps
           const csvContent = await convertToCSV(chunk, options.csv);
           return new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         }
@@ -184,11 +187,12 @@ export const useFileDownload = ({
           });
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [options]
   );
 
   const convertToCSV = useCallback(
-    (data: any[], csvOptions?: FileDownloadOptions['csv']): string => {
+    (data: unknown[], csvOptions?: FileDownloadOptions['csv']): string => {
       if (!Array.isArray(data) || !data.length) return '';
 
       const delimiter = csvOptions?.delimiter || ',';
@@ -224,8 +228,8 @@ export const useFileDownload = ({
 
   // Async await for queueing
   const processLargeData = useCallback(
-    async (data: any[], fileType: FileType): Promise<Blob> => {
-      const chunks: any[][] = [];
+    async (data: unknown[], fileType: FileType): Promise<Blob> => {
+      const chunks: unknown[][] = [];
       const totalChunks = Math.ceil(data.length / CHUNK_SIZE);
 
       // Split data into chunks
@@ -254,7 +258,6 @@ export const useFileDownload = ({
   // src/lib/use-file-download/index.ts
   const downloadFile = useCallback(
     async (fileType: FileType = 'json') => {
-      const startTime = performance.now();
       setDownloadState({ status: 'loading', progress: 0, error: null });
 
       try {
@@ -272,7 +275,11 @@ export const useFileDownload = ({
         if (cache.has(cacheKey)) {
           setDownloadState((prev) => ({ ...prev, progress: 90 }));
           options.onProgress?.(90);
-          blob = cache.get(cacheKey)!;
+          const cachedBlob = cache.get(cacheKey);
+          if (!cachedBlob) {
+            throw new Error('Cache entry disappeared between has() and get()');
+          }
+          blob = cachedBlob;
         } else {
           setDownloadState((prev) => ({ ...prev, status: 'processing' }));
 
@@ -280,7 +287,7 @@ export const useFileDownload = ({
             Array.isArray(data) &&
             data.length > CHUNK_SIZE &&
             worker &&
-            fileType != 'excel'
+            fileType !== 'excel'
           ) {
             // Use Web Worker for large datasets
             worker.postMessage({

@@ -220,11 +220,13 @@ async function main() {
         emitTaskEvent: emitTaskEvent as NonNullable<Parameters<typeof enqueueExistingTask>[1]>["emitTaskEvent"],
     } as Parameters<typeof enqueueExistingTask>[1];
 
+    const taskDeps = taskDepsRef.value;
+
     gatewayDepsRef.value = {
         agentStore,
         sessionStore,
         taskStore,
-        taskDeps: taskDepsRef.value!,
+        taskDeps,
     };
 
     const orphanedPending = dbAny
@@ -237,7 +239,7 @@ async function main() {
         logger.info({ count: orphanedPending.length }, "Re-enqueueing orphaned pending tasks");
         for (const row of orphanedPending) {
             try {
-                await enqueueExistingTask(row.id, taskDepsRef.value!);
+                await enqueueExistingTask(row.id, taskDeps);
             } catch (err) {
                 logger.warn({ taskId: row.id, err }, "Failed to re-enqueue orphaned task");
             }

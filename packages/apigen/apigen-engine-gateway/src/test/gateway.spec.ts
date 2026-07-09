@@ -269,7 +269,8 @@ describe('§13.1 deadlines', () => {
 
     // Let the gateway register its deadline timer.
     await until(() => fire != null);
-    fire!(); // deadline elapses
+    expect(fire).not.toBeNull();
+    (fire as () => void)(); // deadline elapses
 
     const err = await routed.then(
       () => null,

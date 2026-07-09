@@ -60,7 +60,9 @@ describe('export-shape matrix — every shape names ops by EXPORTED symbol (F28/
     expect(names).not.toContain('internalList');
 
     // The MCP name + HTTP route + CLI path all track the exported symbol.
-    const fetchUser = ops.find((o) => leafName(o) === 'fetchUser')!;
+    const fetchUser = ops.find((o) => leafName(o) === 'fetchUser');
+    expect(fetchUser).toBeDefined();
+    if (!fetchUser) throw new Error('fetchUser not found');
     const proj = project(fetchUser);
     expect(proj.mcp.name).toBe('shapes_renamed_fetch_user');
     expect(proj.http.route).toBe('/shapes/renamed/fetch-user');
@@ -86,7 +88,9 @@ describe('export-shape matrix — every shape names ops by EXPORTED symbol (F28/
     const ops = await extractShape('default-object.ts');
     const names = ops.map(leafName).sort();
     expect(names).toEqual(['product', 'sum']);
-    const sum = ops.find((o) => leafName(o) === 'sum')!;
+    const sum = ops.find((o) => leafName(o) === 'sum');
+    expect(sum).toBeDefined();
+    if (!sum) throw new Error('sum not found');
     // Path includes the synthetic 'default' segment.
     expect(sum.path.map((s) => s.raw)).toEqual([
       'default-object',
@@ -116,7 +120,9 @@ describe('export-shape matrix — every shape names ops by EXPORTED symbol (F28/
     const ops = await extractShape('cjs-source.cts');
     const names = ops.map(leafName).sort();
     expect(names).toEqual(['repeat', 'toUpper']);
-    const toUpper = ops.find((o) => leafName(o) === 'toUpper')!;
+    const toUpper = ops.find((o) => leafName(o) === 'toUpper');
+    expect(toUpper).toBeDefined();
+    if (!toUpper) throw new Error('toUpper not found');
     expect(toUpper.id).toBe('shapes/cjs-source/to-upper');
     expect(project(toUpper).mcp.name).toBe('shapes_cjs_source_to_upper');
   });

@@ -6,6 +6,53 @@ on:
     types: [labeled, closed, opened, reopened, synchronize]
 
 jobs:
+  # Credential gate. The pre-commit hook is local-only and trivially bypassed
+  # (`git commit --no-verify`, or a clone that never ran `yarn`), so the hook is
+  # fast feedback — THIS job is the enforcement boundary. It runs the exact same
+  # scanner (.githooks/check-no-credentials.js) the hook does, so a commit cannot
+  # pass locally and fail differently here.
+  secret-scan:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install gitleaks (pinned + checksum-verified)
+        env:
+          GITLEAKS_VERSION: '8.30.1'
+          # sha256 of gitleaks_8.30.1_linux_x64.tar.gz (verified against the release
+          # asset, 8230402 bytes). Bump this together with GITLEAKS_VERSION.
+          GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL "$url" -o /tmp/gitleaks.tgz
+          # Fail loudly on a checksum mismatch: a tampered scanner is worse than none.
+          echo "${GITLEAKS_SHA256}  /tmp/gitleaks.tgz" | sha256sum -c - || {
+            echo "::error::gitleaks tarball checksum mismatch — refusing to run a scanner we cannot verify."
+            echo "actual: $(sha256sum /tmp/gitleaks.tgz)"
+            exit 1
+          }
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan the PR diff for credentials
+        env:
+          # A missing/broken scanner is a HARD failure in CI, never a silent pass.
+          SECRET_SCAN_REQUIRE_GITLEAKS: '1'
+        run: |
+          node .githooks/check-no-credentials.js \
+            --range "${{ github.event.pull_request.base.sha }}" \
+                    "${{ github.event.pull_request.head.sha }}"
+
   test:
     runs-on: ubuntu-latest
     env:

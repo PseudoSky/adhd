@@ -61,8 +61,8 @@ export interface ResolvedTool {
  * @param platform   - Target platform id (e.g. 'claude_code', 'claude_api').
  * @returns Ordered, de-duplicated `ResolvedTool[]` ready for header emission.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function resolveTools(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: BetterSQLite3Database<any>,
   agentSlug: string,
   platform: string

@@ -4,9 +4,12 @@ import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 
+const repoRoot = path.resolve(__dirname, '../../..');
+const distDir = path.join(repoRoot, 'dist/packages/dispatch/dispatch-spec');
+
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/dispatch/dispatch-spec',
+  cacheDir: path.join(repoRoot, 'node_modules/.vite/packages/dispatch/dispatch-spec'),
 
   plugins: [
     {
@@ -17,12 +20,8 @@ export default defineConfig({
           p = require('node:path');
         const src = p.resolve(__dirname, 'README.md');
         if (!fs.existsSync(src)) return;
-        const out = p.resolve(
-          __dirname,
-          '../../../dist/packages/dispatch/dispatch-spec'
-        );
-        fs.mkdirSync(out, { recursive: true });
-        fs.copyFileSync(src, p.join(out, 'README.md'));
+        fs.mkdirSync(distDir, { recursive: true });
+        fs.copyFileSync(src, p.join(distDir, 'README.md'));
       },
     },
     {
@@ -31,14 +30,10 @@ export default defineConfig({
       closeBundle() {
         const fs = require('node:fs'),
           p = require('node:path');
-        const out = p.resolve(
-          __dirname,
-          '../../../dist/packages/dispatch/dispatch-spec'
-        );
-        fs.mkdirSync(out, { recursive: true });
+        fs.mkdirSync(distDir, { recursive: true });
         for (const f of ['dag-v4.schema.json', 'valid-ops-by-kind.json']) {
           const src = p.resolve(__dirname, 'src', f);
-          if (fs.existsSync(src)) fs.copyFileSync(src, p.join(out, f));
+          if (fs.existsSync(src)) fs.copyFileSync(src, p.join(distDir, f));
         }
       },
     },
@@ -50,7 +45,7 @@ export default defineConfig({
   ],
 
   build: {
-    outDir: '../../../dist/packages/dispatch/dispatch-spec',
+    outDir: distDir,
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: { transformMixedEsModules: true },
@@ -65,12 +60,15 @@ export default defineConfig({
 
   test: {
     globals: true,
-    cache: { dir: '../../../node_modules/.vitest' },
+    cache: { dir: path.join(repoRoot, 'node_modules/.vitest') },
     environment: 'node',
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec',
+      reportsDirectory: path.join(
+        repoRoot,
+        'coverage/packages/dispatch/dispatch-spec'
+      ),
       provider: 'v8',
     },
   },

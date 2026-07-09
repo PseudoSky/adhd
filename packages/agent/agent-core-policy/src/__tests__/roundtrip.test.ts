@@ -71,7 +71,8 @@ const tmpPaths: string[] = [];
 afterEach(() => {
   while (openHandles.length) {
     try {
-      openHandles.pop()!.close();
+      const handle = openHandles.pop();
+      if (handle) handle.close();
     } catch {
       /* already closed */
     }
@@ -178,9 +179,9 @@ describe('policy seed + roundtrip', () => {
 
       // The inherited row must appear with inherited_from = category slug.
       const inherited = resolved.find((r) => r.policySlug === 'no-credentials');
-      expect(inherited).toBeDefined();
-      expect(inherited!.isMandatory).toBe(true);
-      expect(inherited!.inheritedFrom).toBe('quality-security');
+      expect(inherited).not.toBeNull();
+      expect(inherited.isMandatory).toBe(true);
+      expect(inherited.inheritedFrom).toBe('quality-security');
     }
   });
 

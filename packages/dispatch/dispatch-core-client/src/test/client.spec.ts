@@ -140,9 +140,9 @@ describe('DagClient', () => {
     it('returns the operation by id', async () => {
       await client.saveDag(makeTestDag());
       const op = await client.getOperation('op-1');
-      expect(op).toBeDefined();
-      expect(op!.id).toBe('op-1');
-      expect(op!.milestone).toBe('alpha');
+      expect(op).not.toBeNull();
+      expect(op.id).toBe('op-1');
+      expect(op.milestone).toBe('alpha');
     });
 
     it('returns undefined for unknown id', async () => {
@@ -157,7 +157,8 @@ describe('DagClient', () => {
       await client.saveDag(makeTestDag());
       await client.updateOperationStatus('op-1', 'complete');
       const op = await client.getOperation('op-1');
-      expect(op!.status).toBe('complete');
+      expect(op).not.toBeNull();
+      expect(op.status).toBe('complete');
     });
 
     it('throws for unknown operation', async () => {
@@ -172,8 +173,8 @@ describe('DagClient', () => {
     it('returns the milestone by slug', async () => {
       await client.saveDag(makeTestDag());
       const ms = await client.getMilestone('alpha');
-      expect(ms).toBeDefined();
-      expect(ms!.description).toBe('Alpha milestone');
+      expect(ms).not.toBeNull();
+      expect(ms.description).toBe('Alpha milestone');
     });
 
     it('returns undefined for unknown slug', async () => {
@@ -188,7 +189,8 @@ describe('DagClient', () => {
       await client.saveDag(makeTestDag());
       await client.clearPending('beta');
       const ms = await client.getMilestone('beta');
-      expect(ms!.pending).toBeNull();
+      expect(ms).not.toBeNull();
+      expect(ms.pending).toBeNull();
     });
 
     it('throws for unknown milestone', async () => {

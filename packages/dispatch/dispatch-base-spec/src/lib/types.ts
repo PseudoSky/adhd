@@ -82,7 +82,7 @@ export type Confidence = 'verified' | 'vendored' | 'documented' | 'assumed';
 export type KiSource = 'estimate' | 'calibrated' | 'actual';
 export type DispatchKind = 'planning' | 'execution';
 export type ProviderType = 'anthropic' | 'openai' | 'claudecli';
-export type SentinelRole = 'prewarm' | 'payload';
+export type SentinelRole = 'prewarm' | 'payload' | 'solo';
 export type ModelTier = 'Haiku' | 'Sonnet' | 'Opus';
 export type EffortTier = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type PlanKind = 'brownfield' | 'greenfield';
@@ -430,7 +430,7 @@ export interface DispatchNote {
 export interface DispatchLogEntry {
   id: string;
   kind: DispatchKind;
-  provider: 'anthropic' | 'openai' | 'deepseek' | 'google' | 'local';
+  provider: 'anthropic' | 'openai' | 'deepseek' | 'google' | 'local' | 'claudecli' | 'teammate';
   model: string | null;
   agent: string;
   effort: EffortTier | null;
@@ -576,6 +576,7 @@ export interface DagJson {
 }
 
 export interface SnapshotOptimization {
+  tokens_naive: number | null;
   sentinel_fanout: SentinelFanoutConfig;
   context_window_override: Record<string, number> | null;
   b_override: Record<string, number> | null;

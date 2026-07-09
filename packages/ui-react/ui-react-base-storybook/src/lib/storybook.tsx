@@ -3,7 +3,7 @@ import styles from './storybook.module.css';
 /* eslint-disable-next-line */
 export interface StorybookProps {}
 
-export function Storybook(props: StorybookProps) {
+export function Storybook(_props: StorybookProps) {
   return (
     <div className={styles['container']}>
       <h1>Welcome to Storybook!</h1>

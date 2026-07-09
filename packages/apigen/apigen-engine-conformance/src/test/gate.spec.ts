@@ -10,7 +10,7 @@
  *   5. A manifest-only host with empty supportedIds is non-conformant.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
@@ -27,7 +27,7 @@ import {
   discoverHosts,
   runConformanceMatrix,
 } from '../lib/gate';
-import type { HostManifest, VectorRunResult } from '../lib/gate';
+import type { HostManifest } from '../lib/gate';
 
 import { logicalTypeVectors } from '../lib/vectors';
 import type { LogicalTypeVector } from '../lib/vectors';
@@ -212,7 +212,7 @@ describe('runTsMatrix — host with missing supportedId', () => {
       dtFail,
       'expected a failure for missing date-time codec'
     ).toBeDefined();
-    expect(dtFail!.error).toMatch(/no codec registered/);
+    expect(dtFail?.error).toMatch(/no codec registered/);
   });
 
   it('[TEETH-3] removing all codecs causes every vector to fail', () => {
@@ -239,7 +239,7 @@ describe('runTsMatrix — negative-control non-vacuity', () => {
     );
     expect(ncResult).toBeDefined();
     // Must be pass=true meaning "the check DID turn red" (the gate verified the mutation is non-conformant)
-    expect(ncResult!.pass).toBe(true);
+    expect(ncResult?.pass).toBe(true);
   });
 
   it('[nc-teeth] the negative control for int64 turns red (numeric wire instead of string)', () => {
@@ -250,7 +250,7 @@ describe('runTsMatrix — negative-control non-vacuity', () => {
         r.phase === 'negative-control'
     );
     expect(ncResult).toBeDefined();
-    expect(ncResult!.pass).toBe(true);
+    expect(ncResult?.pass).toBe(true);
   });
 
   it('[nc-teeth] the negative control for byte turns red (URL-safe base64 wire)', () => {
@@ -261,7 +261,7 @@ describe('runTsMatrix — negative-control non-vacuity', () => {
         r.phase === 'negative-control'
     );
     expect(ncResult).toBeDefined();
-    expect(ncResult!.pass).toBe(true);
+    expect(ncResult?.pass).toBe(true);
   });
 
   it('[nc-teeth] the negative control for uuid turns red (uppercase wire)', () => {
@@ -272,7 +272,7 @@ describe('runTsMatrix — negative-control non-vacuity', () => {
         r.phase === 'negative-control'
     );
     expect(ncResult).toBeDefined();
-    expect(ncResult!.pass).toBe(true);
+    expect(ncResult?.pass).toBe(true);
   });
 
   it('[nc-teeth] the negative control for NaN turns red (null wire)', () => {
@@ -283,16 +283,19 @@ describe('runTsMatrix — negative-control non-vacuity', () => {
         r.phase === 'negative-control'
     );
     expect(ncResult).toBeDefined();
-    expect(ncResult!.pass).toBe(true);
+    expect(ncResult?.pass).toBe(true);
   });
 
   it('[nc-NEGATIVE-vacuous] a vacuous negative control (same wire) is detected', () => {
     // Craft a vector where negativeControl.to === wire — must be flagged as vacuous.
     // We simulate this by running a vector with a mutated negativeControl that maps back to canonical wire.
     // The gate should produce pass=false for that negative-control check.
-    const dtVector = logicalTypeVectors.find(
+    const maybeDtVector = logicalTypeVectors.find(
       (v) => v.logicalType === 'date-time'
-    )!;
+    );
+    expect(maybeDtVector).toBeDefined();
+    if (!maybeDtVector) throw new Error('test precondition failed');
+    const dtVector = maybeDtVector;
     // A mutation that does NOT change the wire (same value = vacuous)
     const vacuousVector: LogicalTypeVector = {
       ...dtVector,
@@ -310,8 +313,8 @@ describe('runTsMatrix — negative-control non-vacuity', () => {
     );
     expect(ncResult).toBeDefined();
     // The negative control is vacuous — the gate should flag it (pass=false)
-    expect(ncResult!.pass).toBe(false);
-    expect(ncResult!.error).toMatch(/vacuous/);
+    expect(ncResult?.pass).toBe(false);
+    expect(ncResult?.error).toMatch(/vacuous/);
   });
 });
 
@@ -427,8 +430,9 @@ describe('getPythonHostManifest', () => {
   it('returns a manifest when packages/apigen/python/apigen_logical.py exists', () => {
     const m = getPythonHostManifest(WORKSPACE_ROOT);
     expect(m).not.toBeNull();
-    expect(m!.host).toBe('python');
-    expect(checkSupportedIds(m!)).toHaveLength(0);
+    if (!m) throw new Error('expected Python host manifest');
+    expect(m.host).toBe('python');
+    expect(checkSupportedIds(m)).toHaveLength(0);
   });
 
   it('returns null for a workspace root without the Python host', () => {
@@ -475,8 +479,11 @@ describe('discoverManifestHosts', () => {
 
     const discovered = discoverManifestHosts(tmpDir);
     expect(discovered).toHaveLength(1);
-    expect(discovered[0]!.host).toBe('my-lang');
-    expect(checkSupportedIds(discovered[0]!)).toHaveLength(0);
+    const first = discovered[0];
+    expect(first).toBeDefined();
+    if (!first) throw new Error('expected first manifest');
+    expect(first.host).toBe('my-lang');
+    expect(checkSupportedIds(first)).toHaveLength(0);
 
     // Cleanup
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -501,7 +508,10 @@ describe('discoverManifestHosts', () => {
 
     const discovered = discoverManifestHosts(tmpDir);
     expect(discovered).toHaveLength(1);
-    const errors = checkSupportedIds(discovered[0]!);
+    const first = discovered[0];
+    expect(first).toBeDefined();
+    if (!first) throw new Error('expected scaffolded manifest');
+    const errors = checkSupportedIds(first);
     // Empty supportedIds → fails for ALL canonical ids
     expect(errors.length).toBe(CANONICAL_IDS.length);
 
@@ -523,13 +533,17 @@ describe('discoverHosts', () => {
   it('TS host runner is "ts"', () => {
     const hosts = discoverHosts(WORKSPACE_ROOT);
     const ts = hosts.find((h) => h.manifest.host === 'ts');
-    expect(ts!.runner).toBe('ts');
+    expect(ts).toBeDefined();
+    if (!ts) throw new Error('expected ts host');
+    expect(ts.runner).toBe('ts');
   });
 
   it('Python host runner is "python"', () => {
     const hosts = discoverHosts(WORKSPACE_ROOT);
     const py = hosts.find((h) => h.manifest.host === 'python');
-    expect(py!.runner).toBe('python');
+    expect(py).toBeDefined();
+    if (!py) throw new Error('expected python host');
+    expect(py.runner).toBe('python');
   });
 });
 
@@ -542,28 +556,30 @@ describe('runConformanceMatrix — integration', () => {
     const results = runConformanceMatrix(WORKSPACE_ROOT);
     const ts = results.find((r) => r.host === 'ts');
     expect(ts).toBeDefined();
-    const failures = ts!.results.filter((r) => !r.pass);
+    if (!ts) throw new Error('expected ts result');
+    const failures = ts.results.filter((r) => !r.pass);
     expect(
       failures,
       `TS host failures:\n${failures
         .map((f) => `  ${f.vectorId} (${f.phase}): ${f.error}`)
         .join('\n')}`
     ).toHaveLength(0);
-    expect(ts!.passed).toBe(true);
+    expect(ts.passed).toBe(true);
   });
 
   it('[Python-pass] Python host result has passed=true', () => {
     const results = runConformanceMatrix(WORKSPACE_ROOT);
     const py = results.find((r) => r.host === 'python');
     expect(py).toBeDefined();
-    const failures = py!.results.filter((r) => !r.pass);
+    if (!py) throw new Error('expected python result');
+    const failures = py.results.filter((r) => !r.pass);
     expect(
       failures,
       `Python host failures:\n${failures
         .map((f) => `  ${f.vectorId} (${f.phase}): ${f.error}`)
         .join('\n')}`
     ).toHaveLength(0);
-    expect(py!.passed).toBe(true);
+    expect(py.passed).toBe(true);
   });
 
   it('[red-host TEETH] a red host (missing supportedIds) makes the matrix non-passing', () => {

@@ -40,3 +40,22 @@ accepted by the user at confirm-dod. They are scope-vs-goal gaps, not regression
   `agent-policy`/`agent-tool-registry` required a fresh human `--confirm-dod`. Logged as a
   plan-state-machine reflection (memory uid `01KVVHENAC…`). Re-confirm provider's DoD with
   fresh scrutiny if you want parity.
+
+---
+
+## External reference — sox policy-enforcer architecture & landscape
+
+- **EP-1 — Shell command policy enforcement library exists externally.** The sox ecosystem has a full policy-enforcer implementation in `~/dev/ai/claude-agents/tools/policy-enforcer/` (YAML rules, shell-aware matcher, decision engine, exemptions, audit log, CLI tools, schema validator). A thorough comparison of 7 external tools (allowlister, bashguard, Gemini CLI Policy Engine, Pi Permission System, LeaSH, claude-smart-approval, CSC) was documented to memory. See memory episode `01KWZC4Q95HDQS865F2YQBJ7NA` (topic: policy-enforcer). This is a reference architecture for any future shell-command-level policy enforcement the agent policy package might integrate with.
+
+---
+
+## Revalidation (2026-07-04) — verified against current source
+
+| Item | Status | Notes |
+|------|--------|-------|
+| NB-1 — 1 of 8 enforcement mechanisms | **CHANGED (partially improved)** | `EnforcementEvent` type now has 2 values (`pre:model_request` \| `pre:tool_call`). Orchestrator fires both; budget plugin uses both. BUT: policy plugin still only registers for `pre:model_request` (`packages/agent/agent-core-policy/src/plugin/index.ts:104`). The 8 GOAL-level mechanisms remain unbuilt. |
+| NB-2 — Single limit (maxModelCalls) | **STILL OPEN** | `RatePolicyRules` has only `maxModelCalls?: number`. No `maxTokens`, `maxToolCalls`, etc. |
+| NB-3 — Single-level inheritance | **STILL OPEN** | `resolveForAgent` does one hop (agent → categories → policies). No `parentCategorySlug` in schema. |
+| NB-4 — No live e2e enforcement test | **STILL OPEN** | Zero `AGENT_MCP_LIVE` matches. Tests use real `HookRegistry` but no real model. **Highest-priority gap.** |
+| NB-5 — Lint debt | **STILL OPEN** | Still exactly 24 `no-non-null-assertion` warnings + `tslib` unused dep (explicitly ignored in eslint config). Unchanged. |
+| NB-6 — `dod_confirmed` inconsistency | **STILL OPEN** | Zero matches in `.ts` source. Only in documentation files. No code changes made. |

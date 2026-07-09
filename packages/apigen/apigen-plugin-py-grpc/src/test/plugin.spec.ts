@@ -36,8 +36,6 @@ const NS = 'pkg';
 const SVC = 'PkgService';
 const ADDR = `localhost:${PORT}`;
 
-const IS_LIVE = true; // always run — gRPC server is local, no env gate needed
-
 // ---------------------------------------------------------------------------
 // Server lifecycle helpers
 // ---------------------------------------------------------------------------

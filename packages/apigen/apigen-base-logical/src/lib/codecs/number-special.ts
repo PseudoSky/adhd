@@ -50,7 +50,7 @@ export const numberSpecialCodec: LogicalTypeCodec<number> = {
     return node['type'] === 'number' && node['format'] === undefined;
   },
 
-  encode(value: number, _node: SchemaNode, ctx: TranscodeCtx): Wire {
+  encode(value: number, _node: SchemaNode, _ctx: TranscodeCtx): Wire {
     if (Number.isNaN(value)) return NAN_WIRE;
     if (value === Infinity) return INF_WIRE;
     if (value === -Infinity) return NEG_INF_WIRE;

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createApiPackage, assertNoSelfSubscription } from '../lib/api-package';
 import { ConfigurationError } from '../lib/types';
 import type { GeneratedSchemas, MiddlewareDef } from '../lib/types';

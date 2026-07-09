@@ -49,10 +49,10 @@ import { compileAgent } from '../compile.js';
 // Resolved relative to this compiled file's __dirname at runtime so the bin
 // works from the dist layout without referencing source paths.
 //
-// dist/packages/ai/agent-compiler/src/cli/compile.js
-//   → ../../               = dist/packages/ai/agent-compiler/
-//   → ../../../            = dist/packages/ai/
-//   → ../../../<pkg>/drizzle = dist/packages/ai/<pkg>/drizzle
+// dist/packages/agent/agent-engine-compiler/src/cli/compile.js
+//   → ../../               = dist/packages/agent/agent-engine-compiler/
+//   → ../../../            = dist/packages/agent/
+//   → ../../../<pkg>/drizzle = dist/packages/agent/<pkg>/drizzle
 //
 // Timestamp order (ascending) matters so Drizzle's journal bookkeeping
 // doesn't skip a migration set:
@@ -64,14 +64,14 @@ import { compileAgent } from '../compile.js';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const AI_DIST = path.resolve(__dirname, '../../../');
 
-const PROVIDER_MIGRATIONS = path.join(AI_DIST, 'agent-provider/drizzle');
-const REGISTRY_MIGRATIONS = path.join(AI_DIST, 'agent-registry/drizzle');
+const PROVIDER_MIGRATIONS = path.join(AI_DIST, 'agent-core-provider/drizzle');
+const REGISTRY_MIGRATIONS = path.join(AI_DIST, 'agent-store-prompts/drizzle');
 const TOOL_REGISTRY_MIGRATIONS = path.join(
   AI_DIST,
-  'agent-tool-registry/drizzle'
+  'agent-store-tools/drizzle'
 );
-const POLICY_MIGRATIONS = path.join(AI_DIST, 'agent-policy/drizzle');
-const COMPILER_MIGRATIONS = path.join(AI_DIST, 'agent-compiler/drizzle');
+const POLICY_MIGRATIONS = path.join(AI_DIST, 'agent-core-policy/drizzle');
+const COMPILER_MIGRATIONS = path.join(AI_DIST, 'agent-engine-compiler/drizzle');
 
 // ──────────────────────────────────────────────
 // Resolved args
@@ -193,15 +193,16 @@ function requireNext(flags: string[], i: number, flag: string): string {
  * Runs all five migration sets in ascending timestamp order so Drizzle's
  * journal does not skip any set.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function openDb(dbPath: string): {
   conn: Database.Database;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: BetterSQLite3Database<any>;
 } {
   if (!fs.existsSync(dbPath)) {
-    die(
-      `Registry DB not found at: ${dbPath}\nUse --db <path> or set AGENT_REGISTRY_DB.`
-    );
+    const parent = path.dirname(dbPath);
+    if (!fs.existsSync(parent)) {
+      fs.mkdirSync(parent, { recursive: true });
+    }
   }
   const conn = new Database(dbPath);
   conn.pragma('journal_mode = WAL');
@@ -219,6 +220,10 @@ function openDb(dbPath: string): {
   ]) {
     if (fs.existsSync(folder)) {
       migrate(db, { migrationsFolder: folder });
+    } else {
+      process.stderr.write(
+        `agent-compiler: warning: migration folder not found: ${folder}\n`
+      );
     }
   }
 
@@ -230,10 +235,10 @@ function openDb(dbPath: string): {
 // Compile a single agent → string artifact
 // ──────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function compileSingle(
   slug: string,
   args: CliArgs,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: BetterSQLite3Database<any>
 ): string {
   let result;

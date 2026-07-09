@@ -3,12 +3,12 @@ interface CacheEntry {
   a: number;
   max: number;
   b: number;
-  isPadded?: any;
+  isPadded?: unknown;
   maxLen?: number;
-  negatives?: any;
-  positives?: any;
+  negatives?: unknown;
+  positives?: unknown;
   result?: string;
-  string?: any;
+  string?: unknown;
 }
 const RegexRange = {
   cache: {} as Record<string, CacheEntry>,
@@ -30,7 +30,7 @@ interface Pattern {
  * Zip strings (`for in` can be used on string characters)
  */
 
-const zip = (a: any[] | string, b: any[] | string) => {
+const zip = (a: unknown[] | string, b: unknown[] | string) => {
   const arr = [];
   for (let i = 0; i < a.length; i++) {
     arr.push([a[i], b[i]]);
@@ -43,14 +43,14 @@ const compare = (a: number, b: number) => {
   return b > a ? -1 : 0;
 };
 
-const push = (arr: any[], ele: any) => {
+const push = (arr: unknown[], ele: unknown) => {
   if (arr.indexOf(ele) === -1) {
     arr.push(ele);
   }
   return arr;
 };
 
-const contains = (arr: any[], key: string, val: number | string) => {
+const contains = (arr: unknown[], key: string, val: number | string) => {
   for (let i = 0; i < arr.length; i++) {
     if (arr[i][key] === val) {
       return true;
@@ -103,6 +103,7 @@ const padZeros = (val: number | string, token: CacheEntry) => {
 const filterPatterns = (
   arr: Pattern[],
   comparison: Pattern[],
+  prefix: string,
   prefix: string,
   intersection: boolean,
   options: Options

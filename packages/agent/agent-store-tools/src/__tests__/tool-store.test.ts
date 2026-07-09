@@ -350,9 +350,9 @@ describe('ToolStore — persistence (close + reopen proves disk write)', () => {
     expect(all).toHaveLength(2);
     const byName = Object.fromEntries(all.map((t) => [t.name, t]));
 
-    expect(byName['shell_exec']!.requiresApproval).toBe(true);
-    expect(byName['shell_exec']!.capabilities).toEqual(['exec', 'shell']);
-    expect(byName['file_read']!.requiresApproval).toBe(false);
+    expect(byName['shell_exec'].requiresApproval).toBe(true);
+    expect(byName['shell_exec'].capabilities).toEqual(['exec', 'shell']);
+    expect(byName['file_read'].requiresApproval).toBe(false);
 
     closeDb(sqlite2);
   });

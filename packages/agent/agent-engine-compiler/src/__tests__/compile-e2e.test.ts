@@ -66,7 +66,7 @@ import {
   AgentToolStore,
 } from '@adhd/agent-store-tools';
 import { seed as seedProvider } from '@adhd/agent-core-provider';
-import { seed as seedPolicy, AgentPolicyStore } from '@adhd/agent-core-policy';
+import { seed as seedPolicy } from '@adhd/agent-core-policy';
 
 // Fixture seeder
 import {

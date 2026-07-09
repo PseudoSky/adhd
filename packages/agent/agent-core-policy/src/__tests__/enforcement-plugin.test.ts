@@ -287,7 +287,7 @@ describe('[enforcement-plugin.4] negative control — teeth proof', () => {
     const hooks = new HookRegistry();
 
     // Simulate a broken plugin whose enforce() returns without throwing
-    hooks.registerEnforcement('pre:model_request', (_p) => {
+    hooks.registerEnforcement('pre:model_request', () => {
       // deliberately NO throw — the broken variant
       return;
     });

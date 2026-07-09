@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../db/schema.js';
 import { runMigrationsOn } from '../db/migrate-runner.js';
-import { config, loadConfig } from '../config.js';
+import { loadConfig } from '../config.js';
 import { logger } from '../logger.js';
 import { AgentStore } from '../store/agent-store.js';
 import { SessionStore, TaskStore } from '@adhd/agent-store-runtime';
@@ -41,6 +41,7 @@ describe('agent-mcp entrypoint wiring', () => {
 
     it('AgentStore can create, read, and delete an agent', () => {
         const hooks = new HookRegistry();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const agentStore = new AgentStore(db as any, hooks);
 
         const agent = agentStore.create({
@@ -84,7 +85,9 @@ describe('agent-mcp entrypoint wiring', () => {
 
     it('SessionStore can create, read, and close a session', () => {
         const hooks = new HookRegistry();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const agentStore = new AgentStore(db as any, hooks);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sessionStore = new SessionStore(db as any, hooks);
 
         const agentDef = agentStore.read('test-agent');
@@ -107,6 +110,7 @@ describe('agent-mcp entrypoint wiring', () => {
     });
 
     it('TaskStore can create and read a task', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const taskStore = new TaskStore(db as any);
 
         const task = taskStore.create({

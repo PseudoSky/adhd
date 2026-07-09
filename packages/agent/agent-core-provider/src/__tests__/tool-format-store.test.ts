@@ -195,8 +195,9 @@ describe('ToolFormatStore — getShape', () => {
 
     const shape = store.getShape('anthropic', 'web_search');
     expect(shape).not.toBeNull();
-    expect(shape!.emitShape).toBe('server_side');
-    expect(shape!.typeTag).toBe('web_search_20250305');
+    if (!shape) throw new Error('Expected shape to be defined');
+    expect(shape.emitShape).toBe('server_side');
+    expect(shape.typeTag).toBe('web_search_20250305');
 
     sqlite.close();
   });

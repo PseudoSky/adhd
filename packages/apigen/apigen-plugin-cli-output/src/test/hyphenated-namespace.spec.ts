@@ -27,7 +27,7 @@ import * as path from 'node:path'
 import { generate } from '../lib/generate'
 import type { PluginInput } from '@adhd/apigen-core'
 
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..', '..')
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..')
 const TSCONFIG_BASE = path.join(REPO_ROOT, 'tsconfig.base.json')
 const TMP_ROOT = path.join(REPO_ROOT, 'tmp', 'apigen-plugin-cli-output', 'hyphenated-regression')
 

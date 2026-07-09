@@ -6,6 +6,7 @@
     "agent":      { "description": "AI agent runtime — orchestrator, providers, stores, MCP server" },
     "data":       { "description": "Data utilities — structures, transforms, query engine" },
     "dispatch":   { "description": "Task dispatch — DAG-based execution planning and optimization" },
+    "environment": { "description": "Environment management — specs, builders, core runtimes for Node, Python, and Rust" },
     "ui-react":   { "description": "React UI components — hooks, storybook config" },
     "workspace":  { "description": "Workspace tooling — generators, shared utilities" }
   },

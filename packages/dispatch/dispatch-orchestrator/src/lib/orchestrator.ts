@@ -192,6 +192,12 @@ export interface OrchestratorDeps {
    * would otherwise never naturally become true. Default: `DEFAULT_MAX_CYCLES`.
    */
   maxCycles?: number;
+  /**
+   * When `true` (default), a per-unit transport/disk failure records a
+   * `'failed'` dispatch-log entry and continues to the next unit without
+   * aborting the cycle. When `false`, the error propagates up immediately.
+   */
+  continueOnError?: boolean;
 }
 
 interface ResolvedDeps {
@@ -207,6 +213,7 @@ interface ResolvedDeps {
   poll: PollConfig;
   guardExec: GuardExecFn;
   guardTimeoutMs: number;
+  continueOnError: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +263,7 @@ const GUARD_EXEC_AGENT_LABEL = 'dispatch-orchestrator:guard-exec';
 function capOutput(s: string): string {
   const buf = Buffer.from(s, 'utf8');
   if (buf.byteLength <= GUARD_OUTPUT_CAP_BYTES) return s;
-  return `${buf.subarray(0, GUARD_OUTPUT_CAP_BYTES).toString('utf8')}\n...[truncated at ${GUARD_OUTPUT_CAP_BYTES} bytes]`;
+  return `${buf.toString('utf8', 0, GUARD_OUTPUT_CAP_BYTES)}\n...[truncated at ${GUARD_OUTPUT_CAP_BYTES} bytes]`;
 }
 
 function defaultClock(): string {
@@ -329,6 +336,7 @@ function resolveDeps(deps: OrchestratorDeps): ResolvedDeps {
     poll: { ...DEFAULT_POLL, ...deps.poll },
     guardExec: deps.guardExec ?? defaultGuardExec,
     guardTimeoutMs: deps.guardTimeoutMs ?? DEFAULT_GUARD_TIMEOUT_MS,
+    continueOnError: deps.continueOnError ?? true,
   };
 }
 
@@ -428,14 +436,14 @@ function resolveUnitProviderAndTokens(unit: DispatchUnit, dag: DagJson): void {
  * `task_resume` wiring, so it is handled the same as a failure (see
  * `dispatchUnit`) rather than polled forever.
  */
-const POLL_TERMINAL_STATUSES: ReadonlySet<DispatchTaskStatus> = new Set([
+export const POLL_TERMINAL_STATUSES: ReadonlySet<DispatchTaskStatus> = new Set([
   'completed',
   'failed',
   'cancelled',
   'awaiting_input',
 ]);
 
-interface PollOutcome {
+export interface PollOutcome {
   status: DispatchTaskStatus;
   usage: DispatchUsageReport | undefined;
   timedOut: boolean;
@@ -446,7 +454,7 @@ interface PollOutcome {
  * (`poll.timeoutMs`, counted in `poll.intervalMs` increments via the injected
  * `sleep` — never a wall-clock read) is reached.
  */
-async function pollUntilTerminal(
+export async function pollUntilTerminal(
   runner: IDispatchAgentRunner,
   taskId: string,
   poll: PollConfig,
@@ -649,18 +657,18 @@ async function dispatchUnit(
       });
     }
   } else if (unit.operations.length > 0) {
-    // Non-empty operations, but ALL type: 'tool-call' (e.g. dag-mutation
-    // ops per D-13). Real execution requires @adhd/dispatch-tools, which is
-    // not wired into this minimal loop (see dag.json milestones
-    // ["dispatch-tools"] / ["hardening-complete"]). Honest handling: mark
-    // 'skipped' — never claim it ran — but still verify via the milestone
-    // guard(s) below; a guard that depends on the un-executed mutation will
-    // correctly fail and drive a correction, one that doesn't care may
-    // legitimately still pass.
+    // Non-empty operations with no prompt — either tool-call ops (e.g.
+    // dag-mutation per D-13) or automated guard ops. Real tool-call
+    // execution requires @adhd/dispatch-tools, which is not wired into
+    // this minimal loop (see dag.json milestones ["dispatch-tools"] /
+    // ["hardening-complete"]). Automated guard ops are executed inline
+    // below via op-level guard routing. Mark the default status 'skipped'
+    // for any ops not handled by a specific path; milestone guard(s) still
+    // verify the outcome.
     opResultStatus = 'skipped';
     notes.push({
       level: 'warn',
-      text: `unit '${unit.id}': ${unit.operations.length} tool-call operation(s) with no generative content — tool-call execution (@adhd/dispatch-tools) is not wired into dispatch-orchestrator's minimal loop; marking skipped, proceeding to milestone guard(s)`,
+      text: `unit '${unit.id}': ${unit.operations.length} operation(s) with no generative content — tool-call execution (@adhd/dispatch-tools) is not wired into dispatch-orchestrator's minimal loop; marking skipped, proceeding to milestone guard(s)`,
     });
   } else {
     // True guard-only milestone(s) (D-12): zero operations at all.
@@ -678,6 +686,49 @@ async function dispatchUnit(
     guard_output: null,
     guard_ran_at: null,
   }));
+
+  // Build operation lookup for per-operation guard routing.
+  const opLookup = new Map<string, OperationDag>();
+  for (const op of dag.operations as OperationDag[]) {
+    opLookup.set(op.id, op);
+  }
+
+  const shouldRunDispatchedGuards = opResultStatus !== 'failed';
+
+  // Execute per-operation automated guards (type:'automated'/action:'guard').
+  // These are routed through the same GuardExecFn seam as milestone-level
+  // guards, but operate at the operation level.
+  for (const opId of unit.operations) {
+    const opDag = opLookup.get(opId);
+    if (
+      !opDag ||
+      opDag.type !== 'automated' ||
+      opDag.action !== 'guard' ||
+      opDag.guard == null
+    ) {
+      continue;
+    }
+
+    const resultEntry = results.find((r) => r.op_id === opId);
+    if (!resultEntry) continue;
+
+    if (!shouldRunDispatchedGuards) {
+      const guardRanAt = deps.clock();
+      resultEntry.status = 'failed';
+      resultEntry.guard_result = 'fail';
+      resultEntry.guard_output = `guard not run: dispatch ${dispatchId} did not complete (task status: ${taskStatus ?? 'n/a'})`;
+      resultEntry.guard_ran_at = guardRanAt;
+      continue;
+    }
+
+    const execResult = await deps.guardExec(opDag.guard, deps.guardTimeoutMs);
+    const guardRanAt = deps.clock();
+    const passed = execResult.exitCode === 0;
+    resultEntry.status = passed ? 'complete' : 'failed';
+    resultEntry.guard_result = passed ? 'pass' : 'fail';
+    resultEntry.guard_output = execResult.output;
+    resultEntry.guard_ran_at = guardRanAt;
+  }
 
   const guardOpIds: string[] = [];
   const guardOutcomes: MilestoneGuardOutcome[] = [];
@@ -862,14 +913,73 @@ export async function orchestrateCycle(deps: OrchestratorDeps): Promise<CycleRes
 
   for (const unit of units) {
     resolveUnitProviderAndTokens(unit, dag);
-    const { summary, injectedSlugs } = await dispatchUnit(unit, dag, snap, resolved);
-    dispatched.push(summary);
-    injectedMilestones.push(...injectedSlugs);
+    try {
+      const { summary, injectedSlugs } = await dispatchUnit(unit, dag, snap, resolved);
+      dispatched.push(summary);
+      injectedMilestones.push(...injectedSlugs);
 
-    // Persist after EVERY unit (not just at cycle end) so a crash mid-cycle
-    // never loses an already-completed unit's work on restart.
-    await resolved.client.saveDag(dag);
-    persisted = true;
+      // Persist after EVERY unit (not just at cycle end) so a crash mid-cycle
+      // never loses an already-completed unit's work on restart.
+      await resolved.client.saveDag(dag);
+      persisted = true;
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const failId = resolved.idFactory();
+      const failStartedAt = resolved.clock();
+      const failCompletedAt = resolved.clock();
+      const failEntry: DispatchLogEntry = {
+        id: failId,
+        kind: 'execution',
+        provider: 'local',
+        model: null,
+        agent: unit.agent_name,
+        effort: unit.effort ?? null,
+        started_at: failStartedAt,
+        completed_at: failCompletedAt,
+        operations: [...unit.operations, ...unit.milestones.map((s) => `${s}.guard`)],
+        turns: [],
+        results: [
+          ...unit.operations.map((opId) => ({
+            op_id: opId,
+            status: 'failed' as const,
+            guard_result: null as GuardResult | null,
+            guard_output: null as string | null,
+            guard_ran_at: null as string | null,
+          })),
+          ...unit.milestones.map((slug) => ({
+            op_id: `${slug}.guard`,
+            status: 'failed' as const,
+            guard_result: 'fail' as GuardResult,
+            guard_output: `uncaught error: ${errMsg}`,
+            guard_ran_at: failCompletedAt,
+          })),
+        ],
+        notes: [
+          {
+            level: 'error',
+            text: `unit '${unit.id}' failed with uncaught error: ${errMsg}`,
+          },
+        ],
+      };
+      dag.dispatch_log.push(failEntry);
+
+      dispatched.push({
+        unitId: unit.id,
+        milestones: unit.milestones,
+        agentName: unit.agent_name,
+        taskId: null,
+        taskStatus: null,
+        dispatchLogEntryId: failId,
+        guardOutcomes: unit.milestones.map((slug) => ({
+          milestone: slug,
+          guardResult: 'fail' as GuardResult,
+          guardOutput: `uncaught error: ${errMsg}`,
+          injectedCorrection: null,
+        })),
+      });
+
+      if (!resolved.continueOnError) throw err;
+    }
   }
 
   return {

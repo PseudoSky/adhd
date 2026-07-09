@@ -2,6 +2,8 @@ import { describe, it, expect, afterEach } from 'vitest';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as fs from 'node:fs';
+import * as net from 'node:net';
+import { spawn, type ChildProcess } from 'node:child_process';
 import {
   parseMounts,
   namespaceOfSource,
@@ -171,19 +173,19 @@ describe('[serve.live] real cross-language serve front', () => {
 
   /**
    * The bundled standalone CLI — children are spawned as `node <bundle> run …`.
-   * Walk up from this test file until a `dist/packages/apigen/cli/index.js`
+   * Walk up from this test file until a `dist/entrypoint/apigen-cli/index.js`
    * exists, so the path is robust to how vitest sets `__dirname`/`--root`.
    */
   const cliPath = (() => {
     let dir = __dirname;
     for (let i = 0; i < 12; i++) {
-      const candidate = path.join(dir, 'dist/packages/apigen/cli/index.js');
+      const candidate = path.join(dir, 'dist/entrypoint/apigen-cli/index.js');
       if (fs.existsSync(candidate)) return candidate;
       dir = path.dirname(dir);
     }
     return path.resolve(
       __dirname,
-      '../../../../../dist/packages/apigen/cli/index.js'
+      '../../../../../dist/entrypoint/apigen-cli/index.js'
     );
   })();
 
@@ -432,6 +434,7 @@ describe('[serve.live] real cross-language serve front', () => {
          * `spawnSync` would block the event loop, preventing the proxy from
          * forwarding packets while grpcurl waits — causing a 10 s timeout.
          */
+        const grpcurl = grpcurlPath;
         const runGrpcurl = (
           args: string[],
           timeoutMs = 10000
@@ -443,7 +446,7 @@ describe('[serve.live] real cross-language serve front', () => {
           new Promise((resolve) => {
             let stdout = '';
             let stderr = '';
-            const child = spawn(grpcurlPath!, args, {
+            const child = spawn(grpcurl, args, {
               encoding: 'utf8',
             } as never);
             child.stdout.on('data', (d: Buffer) => {
@@ -557,6 +560,89 @@ describe('[serve.live] real cross-language serve front', () => {
 
       await shutdown();
       shutdownFn = undefined;
+    }
+  );
+
+  it(
+    'cleans up children on SIGTERM and leaves zero orphan processes',
+    { timeout: 30000 },
+    async () => {
+      expect(fs.existsSync(cliPath), `built CLI not found at ${cliPath}`).toBe(
+        true
+      );
+
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-sigterm-'));
+      const aTs = path.join(tmpDir, 'a.ts');
+      fs.writeFileSync(
+        aTs,
+        `export async function addNumbers(a: number, b: number): Promise<number> { return a + b }\n`
+      );
+
+      const port = await findFreePort();
+
+      const serveProc: ChildProcess = spawn(
+        process.execPath,
+        [cliPath, 'serve', '--source', aTs, '--port', String(port)],
+        { stdio: ['ignore', 'pipe', 'pipe'], env: process.env }
+      );
+
+      // Guarantee cleanup: if anything goes wrong, kill the spawned process.
+      const cleanupProc = () => {
+        try {
+          serveProc.kill('SIGKILL');
+        } catch {
+          /* already dead */
+        }
+      };
+
+      try {
+        // Wait for the front to be healthy.
+        const deadline = Date.now() + 15000;
+        let ready = false;
+        while (Date.now() < deadline) {
+          try {
+            const res = await fetch(`http://127.0.0.1:${port}/_meta/health`);
+            if (res.status === 200) {
+              ready = true;
+              break;
+            }
+          } catch {
+            /* connection refused — keep polling */
+          }
+          await new Promise<void>((r) => setTimeout(r, 200));
+        }
+        expect(
+          ready,
+          `serve did not become ready on port ${port} within 15 s`
+        ).toBe(true);
+
+        // Send SIGTERM to the serve process.
+        serveProc.kill('SIGTERM');
+
+        // Wait for the process to exit.
+        const exitCode = await new Promise<number | null>((resolve) => {
+          serveProc.once('exit', (code) => resolve(code));
+        });
+        // SIGTERM → clean exit (code 0 from process.exit(0) in onSignal).
+        expect(exitCode).toBe(0);
+
+        // Give the OS a moment to release the port.
+        await new Promise<void>((r) => setTimeout(r, 500));
+
+        // Verify the front port is free — no orphan server is still listening.
+        const portFree = await new Promise<boolean>((resolve) => {
+          const srv = net.createServer();
+          srv.once('error', () => resolve(false));
+          srv.listen(port, '127.0.0.1', () => {
+            srv.close(() => resolve(true));
+          });
+        });
+        expect(portFree, `port ${port} should be free after serve shutdown`).toBe(
+          true
+        );
+      } finally {
+        cleanupProc();
+      }
     }
   );
 });

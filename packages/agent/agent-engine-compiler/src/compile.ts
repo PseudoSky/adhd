@@ -101,8 +101,8 @@ export interface CompiledAgent {
  * Look up the `header_format` for a platform from `tool_platform_bindings.platforms`.
  * Returns the platform's `headerFormat` column, or 'none' if no row is found.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getPlatformHeaderFormat(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: BetterSQLite3Database<any>,
   platform: string
 ): string {
@@ -125,14 +125,16 @@ function getPlatformHeaderFormat(
  *
  * This is the emit-layer fix for the advisory noted in decisions.md.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractBodyParts(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: BetterSQLite3Database<any>,
   agentSlug: string,
   context: CompositionContext
 ): { bodySections: string[]; componentVersions: ComponentVersionMap } {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const store = new CompositionStore(db as any);
+  const store = new CompositionStore(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    db as any
+  );
   const resolved = store.resolveComposition(agentSlug, context);
 
   const componentVersions: ComponentVersionMap = {};

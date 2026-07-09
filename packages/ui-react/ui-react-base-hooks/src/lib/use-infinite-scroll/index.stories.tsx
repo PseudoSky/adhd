@@ -100,11 +100,11 @@ export const Basic: StoryObj = {
 
 // ErrorExample story for useInfiniteScroll
 function InfiniteListWithError() {
-  const [items, setItems] = useState<string[]>(
+  const [items, _setItems] = useState<string[]>(
     Array.from({ length: 20 }, (_, i) => `Item ${i + 1}`)
   );
   const [isLoading, setIsLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, _setHasMore] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const loadMore = useCallback(async () => {

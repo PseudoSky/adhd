@@ -459,7 +459,7 @@ describe('BudgetPlugin — task scope', () => {
     const mockDb = {
       prepare(sql: string) {
         return {
-          get(...params: unknown[]) {
+          get(..._params: unknown[]) {
             if (sql.includes('input_tokens, 0) AS input')) {
               return { input: 40_000, output: 40_000, cache: 0, calls: 5 };
             }
@@ -991,8 +991,8 @@ describe('per-tool overrides', () => {
     await hooks.emit('transform:tool_result', payload);
 
     expect(payload.isError).toBe(false);
-    const text = (payload.result as any).content
-      .map((c: any) => c.text)
+    const text = (payload.result as unknown as { content: { text: string }[] }).content
+      .map((c) => c.text)
       .join('');
     expect(text).toContain('[truncated');
     expect(text).toContain('limited to 30');
@@ -1025,18 +1025,16 @@ describe('per-tool overrides', () => {
     await hooks.emit('transform:tool_result', payload);
 
     expect(payload.isError).toBe(false);
-    expect((payload.result as any).content[0].text).toBe('small file');
+    expect((payload.result as unknown as { content: { text: string }[] }).content[0].text).toBe('small file');
   });
 });
 
 describe('maxTokensPer24h — mock DB', () => {
   let hooks: HookRegistry;
-  let lastQuery: { sql: string; params: unknown[] } | undefined;
   const mockDb = {
     prepare(sql: string) {
       return {
-        get(...params: unknown[]) {
-          lastQuery = { sql, params };
+        get(..._params: unknown[]) {
           if (sql.includes('created_at')) {
             return { total: 150_000 };
           }
@@ -1111,7 +1109,7 @@ describe('maxTokensPer24h — mock DB', () => {
     const lowMockDb = {
       prepare(sql: string) {
         return {
-          get(...params: unknown[]) {
+          get(..._params: unknown[]) {
             if (sql.includes('created_at')) return { total: 10_000 };
             return undefined;
           },

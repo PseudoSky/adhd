@@ -160,7 +160,7 @@ describe('generate()', () => {
     const { content } = generate(input).files[0];
     // Must import dispatch from the runtime package
     expect(content).toMatch(
-      /import \{[^}]*\bdispatch\b[^}]*\} from ['"]@adhd\/apigen-runtime['"]/
+      /import \{[^}]*\bdispatch\b[^}]*\} from ['"]@adhd\/apigen-engine-runtime['"]/
     );
     // Must not contain a function body that could be an inlined dispatch
     expect(content).not.toMatch(/function dispatch\s*\(/);

@@ -159,14 +159,14 @@ describe('ComposedPromptStore', () => {
       // Cache HIT: same (agent_slug, context_hash) → row returned
       const found = store.lookup(agentSlug, hash);
       expect(found).not.toBeNull();
-      expect(found!.id).toBe(written.id);
-      expect(found!.agentSlug).toBe(agentSlug);
-      expect(found!.contextHash).toBe(hash);
-      expect(found!.content).toBe(
+      expect(found.id).toBe(written.id);
+      expect(found.agentSlug).toBe(agentSlug);
+      expect(found.contextHash).toBe(hash);
+      expect(found.content).toBe(
         'You are a code review agent.\n\nReview the code carefully.'
       );
       // TOOTH: audit map must survive JSON round-trip through reopen
-      expect(found!.componentVersions).toEqual({
+      expect(found.componentVersions).toEqual({
         'system-intro': 2,
         'review-criteria': 1,
         'output-format': 3,

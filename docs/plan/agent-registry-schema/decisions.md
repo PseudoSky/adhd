@@ -246,6 +246,10 @@ predicate evaluator so the semantics never diverge.
    component; it cannot make a junction-attached component optional or required. This
    keeps `is_required` a property of the explicit attachment only.
 
+   Note: the actual context_rules ∪ junction merge is deferred to @adhd/agent-compiler's
+   composition resolution. resolveComposition itself only reads junction rows
+   (agentComponentsTable).
+
 **Why keep both rather than fully unify:**
 
 - They encode genuinely different relationships: a junction row is "this component IS

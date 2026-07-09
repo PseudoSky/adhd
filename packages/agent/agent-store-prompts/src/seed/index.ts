@@ -4,12 +4,14 @@
  * Idempotent seed function for @adhd/agent-registry.
  *
  * Inserts all system prompt types and shared components into the given DB.
- * Running `seed(db)` twice is a NO-OP: both inserts use ON CONFLICT DO NOTHING
- * (via ComponentStore.upsertType and direct INSERT OR IGNORE for components),
- * so row counts and versions are never bumped on re-seed.
+ * Running `seed(db)` twice is a NO-OP using two different idempotency strategies:
+ *   - Prompt types: ComponentStore.upsertType uses ON CONFLICT DO NOTHING.
+ *   - Components: read-before-write (SELECT to check existence, conditional INSERT),
+ *     not INSERT OR IGNORE — so row counts and versions are never bumped on re-seed.
  *
  * [inv:version-retained] — seed never calls ComponentStore.version(); it only
- * calls create() for new slugs. ON CONFLICT DO NOTHING prevents duplicate writes.
+ * inserts rows that are absent (read-before-write for components, ON CONFLICT DO
+ * NOTHING for prompt types).
  *
  * Usage:
  *   import { seed } from '@adhd/agent-registry/seed';

@@ -46,12 +46,13 @@ describe('TEMPLATE_CELLS completeness — TypeScript column', () => {
         TEMPLATE_CELLS.typescript[id as keyof LanguageTable];
       expect(cell).toBeDefined();
       // A cell must have non-empty encode/decode strings.
-      expect(typeof cell!.encode).toBe('string');
-      expect(cell!.encode.length).toBeGreaterThan(0);
-      expect(typeof cell!.decode).toBe('string');
-      expect(cell!.decode.length).toBeGreaterThan(0);
+      const tsCell = cell as TemplateCell;
+      expect(typeof tsCell.encode).toBe('string');
+      expect(tsCell.encode.length).toBeGreaterThan(0);
+      expect(typeof tsCell.decode).toBe('string');
+      expect(tsCell.decode.length).toBeGreaterThan(0);
       // mode must be one of the three valid values.
-      expect(['native', 'lib', 'branded']).toContain(cell!.mode);
+      expect(['native', 'lib', 'branded']).toContain(tsCell.mode);
     });
   }
 });
@@ -62,11 +63,12 @@ describe('TEMPLATE_CELLS completeness — Python column', () => {
       const cell: TemplateCell | undefined =
         TEMPLATE_CELLS.python[id as keyof LanguageTable];
       expect(cell).toBeDefined();
-      expect(typeof cell!.encode).toBe('string');
-      expect(cell!.encode.length).toBeGreaterThan(0);
-      expect(typeof cell!.decode).toBe('string');
-      expect(cell!.decode.length).toBeGreaterThan(0);
-      expect(['native', 'lib', 'branded']).toContain(cell!.mode);
+      const pyCell = cell as TemplateCell;
+      expect(typeof pyCell.encode).toBe('string');
+      expect(pyCell.encode.length).toBeGreaterThan(0);
+      expect(typeof pyCell.decode).toBe('string');
+      expect(pyCell.decode.length).toBeGreaterThan(0);
+      expect(['native', 'lib', 'branded']).toContain(pyCell.mode);
     });
   }
 });
@@ -94,8 +96,9 @@ describe('tsDepMap()', () => {
   it('maps "decimal" → decimal.js', () => {
     const map = tsDepMap();
     expect(map['decimal']).toBeDefined();
-    expect(map['decimal']!.name).toBe('decimal.js');
-    expect(map['decimal']!.version).toMatch(/^\^10/);
+    const decimalEntry = map['decimal'] as { name: string; version: string };
+    expect(decimalEntry.name).toBe('decimal.js');
+    expect(decimalEntry.version).toMatch(/^\^10/);
   });
 
   it('does NOT include a dep for "date-time" (stdlib)', () => {
@@ -320,8 +323,9 @@ describe('depsForLogicalTypes()', () => {
   it('returns the decimal.js dep for ["decimal"] in TypeScript', () => {
     const deps = depsForLogicalTypes(['decimal'], 'typescript');
     expect(deps).toHaveLength(1);
-    expect(deps[0]!.id).toBe('decimal');
-    expect(deps[0]!.dep.name).toBe('decimal.js');
+    const d0 = deps[0] as { id: string; dep: { name: string; version: string } };
+    expect(d0.id).toBe('decimal');
+    expect(d0.dep.name).toBe('decimal.js');
   });
 
   it('returns nothing for stdlib-only ids in TypeScript', () => {
@@ -376,10 +380,10 @@ describe('TypeScript column — verbatim expressions from DESIGN §13.2', () => 
   });
 
   it('decimal dep is decimal.js ^10', () => {
-    const dep = TEMPLATE_CELLS.typescript['decimal'].dep;
+    const dep = TEMPLATE_CELLS.typescript['decimal'].dep as { name: string; version: string };
     expect(dep).toBeDefined();
-    expect(dep!.name).toBe('decimal.js');
-    expect(dep!.version).toBe('^10');
+    expect(dep.name).toBe('decimal.js');
+    expect(dep.version).toBe('^10');
   });
 });
 

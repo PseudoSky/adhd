@@ -95,6 +95,9 @@ function detectCycle(
  * field existed remains valid — this only rejects entries that are
  * malformed independent of `model_calls` (wrong types, missing required
  * fields), never a turn that simply omits `model_calls`.
+ *
+ * Provider values are not validated here. See DEBT-DISPATCH-019 for the gap
+ * ('claudecli' and 'teammate' were added after initial validation).
  */
 function validateDispatchLogTurns(
   entries: unknown[],

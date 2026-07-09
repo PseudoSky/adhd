@@ -37,3 +37,12 @@ program's referenced-files set in the version stamp.
 
 Per-source fan-out across workers for multi-source cold runs. Deferred: bundled-CLI
 worker-entry complexity vs. modest gains now that warm runs are ~free.
+
+---
+
+## Revalidation (2026-07-04) — verified against current source
+
+| Item | Status | Notes |
+|------|--------|-------|
+| DEBT-APIGEN-CACHE-001 | **STILL OPEN** | `persistentSchemasFor()` uses single `entry.version` stamp only (packages/apigen/apigen-core-client/src/lib/extraction-session.ts:133-145). Inline comment at packages/apigen/apigen-core-client/src/lib/extraction-session.ts:121-124 acknowledges the debt. No referenced-files set in any version stamp. Test does not cover cross-file import change. |
+| DEFER-APIGEN-PERF-001 | **STILL OPEN** | Zero matches for `worker_threads`/`Worker` in `src/`. No implementation exists. |

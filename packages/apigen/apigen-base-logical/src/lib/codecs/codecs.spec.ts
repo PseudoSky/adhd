@@ -482,7 +482,8 @@ describe('DEBT-LT-002 — int64 codec: lossy non-numeric string handling', () =>
 describe('dateTimeCodec', () => {
   const reg = createRegistry();
   registerWellKnown(reg);
-  const codec: LogicalTypeCodec = reg.get('date-time')!;
+  const codec = reg.get('date-time') as LogicalTypeCodec;
+  expect(codec).not.toBeNull();
   const schema = { type: 'string', format: 'date-time' } as SchemaNode;
   const ctx = makeCtx();
 
@@ -505,7 +506,8 @@ describe('dateTimeCodec', () => {
 describe('int64Codec', () => {
   const reg = createRegistry();
   registerWellKnown(reg);
-  const codec = reg.get('int64')!;
+  const codec = reg.get('int64') as LogicalTypeCodec;
+  expect(codec).not.toBeNull();
   const schema = { type: 'string', format: 'int64' } as SchemaNode;
   const ctx = makeCtx();
 
@@ -527,7 +529,8 @@ describe('int64Codec', () => {
 describe('byteCodec', () => {
   const reg = createRegistry();
   registerWellKnown(reg);
-  const codec = reg.get('byte')!;
+  const codec = reg.get('byte') as LogicalTypeCodec;
+  expect(codec).not.toBeNull();
   const schema = { type: 'string', format: 'byte' } as SchemaNode;
   const ctx = makeCtx();
 
@@ -543,7 +546,8 @@ describe('byteCodec', () => {
 describe('uuidCodec', () => {
   const reg = createRegistry();
   registerWellKnown(reg);
-  const codec = reg.get('uuid')!;
+  const codec = reg.get('uuid') as LogicalTypeCodec;
+  expect(codec).not.toBeNull();
   const schema = { type: 'string', format: 'uuid' } as SchemaNode;
   const ctx = makeCtx();
 
@@ -564,7 +568,8 @@ describe('uuidCodec', () => {
 describe('numberSpecialCodec', () => {
   const reg = createRegistry();
   registerWellKnown(reg);
-  const codec = reg.get('number-special')!;
+  const codec = reg.get('number-special') as LogicalTypeCodec;
+  expect(codec).not.toBeNull();
   const schema = { type: 'number' } as SchemaNode;
   const ctx = makeCtx();
 

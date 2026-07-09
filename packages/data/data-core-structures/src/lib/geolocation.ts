@@ -72,7 +72,7 @@ export function LatLon(latitude: number, longitude: number) {
   return { latitude, longitude };
 }
 
-export function Cardinal(collection: any[], props = DefaultProps) {
+export function Cardinal(collection: unknown[], props = DefaultProps) {
   const [latMin, lonMin, latMax, lonMax] = Bbox(collection, props);
   return {
     southWest: [latMin, lonMin],
@@ -80,7 +80,7 @@ export function Cardinal(collection: any[], props = DefaultProps) {
   };
 }
 
-export function Bbox<T = any>(
+export function Bbox<T = unknown>(
   collection: T[],
   props: PropMapping = DefaultProps
 ) {
@@ -91,10 +91,10 @@ export function Bbox<T = any>(
   return [lat.min, lon.min, lat.max, lon.max];
 }
 
-export function Region<Data = any>(
+export function Region<Data = unknown>(
   collection: Data[],
   props = DefaultProps,
-  padding = DefaultPadding
+  _padding = DefaultPadding
 ) {
   if (Filters.isEmpty(collection)) return null;
   const box = Bbox(collection, props);

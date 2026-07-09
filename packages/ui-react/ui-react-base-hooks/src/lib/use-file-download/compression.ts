@@ -1,13 +1,3 @@
-// Utility function to convert Blob to ArrayBuffer
-async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as ArrayBuffer);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsArrayBuffer(blob);
-  });
-}
-
 // Optional: Add utility function to check if a blob is compressed
 export function isCompressedBlob(blob: Blob): boolean {
   return blob.type === 'application/gzip';

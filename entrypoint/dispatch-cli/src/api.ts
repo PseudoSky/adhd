@@ -175,5 +175,5 @@ export async function run(dagPath: string, dryRun = true): Promise<CycleResult> 
  *   runtime — any other value throws).
  */
 export async function calibrate(modelTier: string): Promise<CalibrationResult> {
-  return calibrateCore(modelTier, buildProductionAgentMcpRunner(), DEFAULT_CALIBRATION_PATH);
+  return calibrateCore(modelTier, () => buildProductionAgentMcpRunner(), DEFAULT_CALIBRATION_PATH);
 }

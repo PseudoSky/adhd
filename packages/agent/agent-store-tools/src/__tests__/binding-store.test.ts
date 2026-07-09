@@ -142,9 +142,9 @@ describe('BindingStore — platforms table [platform-and-binding-schema.1]', () 
     expect(platforms).toHaveLength(3);
 
     const byId = Object.fromEntries(platforms.map((p) => [p.id, p]));
-    expect(byId['claude_code']!.headerFormat).toBe('yaml_frontmatter');
-    expect(byId['claude_api']!.headerFormat).toBe('json_object');
-    expect(byId['openai']!.headerFormat).toBe('none');
+    expect(byId['claude_code'].headerFormat).toBe('yaml_frontmatter');
+    expect(byId['claude_api'].headerFormat).toBe('json_object');
+    expect(byId['openai'].headerFormat).toBe('none');
   });
 
   it('seedPlatform is idempotent (onConflictDoNothing)', () => {
@@ -214,11 +214,11 @@ describe('BindingStore — tool_platform_bindings table [platform-and-binding-sc
 
     const bindings = store.listForPlatform('claude_code');
     expect(bindings).toHaveLength(1);
-    expect(bindings[0]!.toolName).toBe('shell_exec');
-    expect(bindings[0]!.platformToolName).toBe('Bash');
-    expect(bindings[0]!.availability).toBe('available');
-    expect(bindings[0]!.requiresMcp).toBe(false);
-    expect(bindings[0]!.invocationNote).toBeNull();
+    expect(bindings[0].toolName).toBe('shell_exec');
+    expect(bindings[0].platformToolName).toBe('Bash');
+    expect(bindings[0].availability).toBe('available');
+    expect(bindings[0].requiresMcp).toBe(false);
+    expect(bindings[0].invocationNote).toBeNull();
   });
 
   it('creates a binding with all optional fields', () => {
@@ -232,9 +232,9 @@ describe('BindingStore — tool_platform_bindings table [platform-and-binding-sc
     });
 
     const bindings = store.listForPlatform('claude_code');
-    expect(bindings[0]!.requiresMcp).toBe(true);
-    expect(bindings[0]!.invocationNote).toBe('requires --chrome');
-    expect(bindings[0]!.availability).toBe('requires_permission');
+    expect(bindings[0].requiresMcp).toBe(true);
+    expect(bindings[0].invocationNote).toBe('requires --chrome');
+    expect(bindings[0].availability).toBe('requires_permission');
   });
 
   it('throws BINDING_ALREADY_EXISTS on duplicate (tool_name, platform_id)', () => {
@@ -272,11 +272,11 @@ describe('BindingStore — tool_platform_bindings table [platform-and-binding-sc
 
     const claudeCodeBindings = store.listForPlatform('claude_code');
     expect(claudeCodeBindings).toHaveLength(1);
-    expect(claudeCodeBindings[0]!.platformToolName).toBe('Bash');
+    expect(claudeCodeBindings[0].platformToolName).toBe('Bash');
 
     const claudeApiBindings = store.listForPlatform('claude_api');
     expect(claudeApiBindings).toHaveLength(1);
-    expect(claudeApiBindings[0]!.platformToolName).toBe('bash');
+    expect(claudeApiBindings[0].platformToolName).toBe('bash');
   });
 
   it('listForPlatform returns empty array for platform with no bindings', () => {
@@ -458,11 +458,11 @@ describe('BindingStore.resolve — [def:resolve] / [dod.1] [platform-and-binding
     expect(platforms).toHaveLength(3);
 
     const byId = Object.fromEntries(platforms.map((p) => [p.id, p]));
-    expect(byId['claude_code']!.headerFormat).toBe('yaml_frontmatter');
-    expect(byId['claude_code']!.supportsToolSelection).toBe(true);
-    expect(byId['claude_api']!.headerFormat).toBe('json_object');
-    expect(byId['openai']!.headerFormat).toBe('none');
-    expect(byId['openai']!.supportsToolSelection).toBe(false);
+    expect(byId['claude_code'].headerFormat).toBe('yaml_frontmatter');
+    expect(byId['claude_code'].supportsToolSelection).toBe(true);
+    expect(byId['claude_api'].headerFormat).toBe('json_object');
+    expect(byId['openai'].headerFormat).toBe('none');
+    expect(byId['openai'].supportsToolSelection).toBe(false);
 
     closeDb(sqlite2);
   });
