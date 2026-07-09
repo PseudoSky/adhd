@@ -30,8 +30,11 @@ interface Pattern {
  * Zip strings (`for in` can be used on string characters)
  */
 
-const zip = (a: unknown[] | string, b: unknown[] | string) => {
-  const arr = [];
+// Only ever called with two equal-length digit strings (see rangeToPattern
+// below); typed to match that actual usage instead of the looser
+// `unknown[] | string` the sweep left behind.
+const zip = (a: string, b: string): [string, string][] => {
+  const arr: [string, string][] = [];
   for (let i = 0; i < a.length; i++) {
     arr.push([a[i], b[i]]);
   }
@@ -43,14 +46,18 @@ const compare = (a: number, b: number) => {
   return b > a ? -1 : 0;
 };
 
-const push = (arr: unknown[], ele: unknown) => {
+const push = <T,>(arr: T[], ele: T): T[] => {
   if (arr.indexOf(ele) === -1) {
     arr.push(ele);
   }
   return arr;
 };
 
-const contains = (arr: unknown[], key: string, val: number | string) => {
+const contains = <T extends Record<string, unknown>>(
+  arr: T[],
+  key: keyof T,
+  val: number | string
+) => {
   for (let i = 0; i < arr.length; i++) {
     if (arr[i][key] === val) {
       return true;
@@ -103,7 +110,6 @@ const padZeros = (val: number | string, token: CacheEntry) => {
 const filterPatterns = (
   arr: Pattern[],
   comparison: Pattern[],
-  prefix: string,
   prefix: string,
   intersection: boolean,
   options: Options
@@ -196,7 +202,10 @@ const rangeToPattern = (
     if (startDigit === stopDigit) {
       pattern += startDigit;
     } else if (startDigit !== '0' || stopDigit !== '9') {
-      pattern += toCharacterClass(startDigit, stopDigit);
+      // zip() yields single decimal-digit characters; toCharacterClass
+      // does numeric arithmetic on them, so convert explicitly instead of
+      // relying on implicit string→number coercion in `-`.
+      pattern += toCharacterClass(Number(startDigit), Number(stopDigit));
     } else {
       digits += 1;
     }

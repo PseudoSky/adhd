@@ -42,34 +42,34 @@ export function isType<T extends TSTypes>(
 ): x is TsTypeMap[T] {
   return Object.prototype.toString.call(x) === TypeMap[type];
 }
-export function isBoolean(x: unknown) {
+export function isBoolean(x: unknown): x is boolean {
   return isType(x, 'Boolean');
 }
-export function isString(x: unknown) {
+export function isString(x: unknown): x is string {
   return isType(x, 'String');
 }
-export function isNumber(x: unknown) {
+export function isNumber(x: unknown): x is number {
   return isType(x, 'Number');
 }
-export function isDate(x: unknown) {
+export function isDate(x: unknown): x is Date {
   return isType(x, 'Date');
 }
-export function isNull(x: unknown) {
+export function isNull(x: unknown): x is null {
   return isType(x, 'Null') && x === null;
 }
-export function isUndefined(x: unknown) {
+export function isUndefined(x: unknown): x is undefined {
   return isType(x, 'Undefined') && x === undefined;
 }
-export function isArray(x: unknown) {
+export function isArray(x: unknown): x is readonly unknown[] {
   return isType(x, 'Array');
 }
-export function isObject(x: unknown) {
+export function isObject(x: unknown): x is Record<string, unknown> {
   return isType(x, 'Object');
 }
-export function isFunction(x: unknown) {
+export function isFunction(x: unknown): x is (...args: unknown[]) => unknown {
   return isType(x, 'Function');
 }
-export function isRegExp(x: unknown) {
+export function isRegExp(x: unknown): x is RegExp {
   return isType(x, 'RegExp');
 }
 export function isDefined(

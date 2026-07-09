@@ -1046,7 +1046,10 @@ describe('maxTokensPer24h — mock DB', () => {
 
   beforeEach(() => {
     hooks = new HookRegistry();
-    lastQuery = undefined;
+    // A `lastQuery = undefined;` reset lived here, left by a refactor that removed the
+    // query-recording mock. `lastQuery` was never declared, so this threw
+    // `ReferenceError: lastQuery is not defined` in every beforeEach — BOTH tests in
+    // this describe aborted before asserting anything.
   });
 
   it('blocks when 24h total + current exceeds maxTokensPer24h', async () => {

@@ -63,7 +63,8 @@ export function extractThen(
   key: string,
   callback: CallbackFunctionVariadic
 ): (...args: Parameters<typeof callback>) => ReturnType<typeof callback> {
-  return (...args) => callback(...args.map(({ [key]: value }) => value));
+  return (...args) =>
+    callback(...args.map((arg) => (arg as Record<string, unknown>)[key]));
 }
 
 /*
@@ -120,28 +121,25 @@ export function makeGetter(
   }
   if (!_path) {
     /* THIS IS A PARTIAL: NOT RECURSIVE */
-    return (path: string) => makeGetter(path, obj)();
+    return (path?: unknown) => makeGetter(path as string, obj)();
   }
   const path = toPath(_path);
   if (!path.length) return (value: unknown) => obj || value;
   return (value: unknown) =>
-    path.reduce(
-      (previous: Record<string, unknown>, key: string, index: number) => {
-        const res = previous;
-        const field = key.replace(/(^")|("$)/g, '') as keyof typeof res;
-        const isEnd = index === path.length - 1;
-        if (!isEnd) {
-          const nextType = !Number.isNaN(parseInt(path[index + 1])) ? [] : {};
-          if (!(field in res)) {
-            res[field] = nextType;
-          }
-          return res[field];
+    path.reduce<unknown>((previous, key: string, index: number) => {
+      const res = previous as Record<string, unknown>;
+      const field = key.replace(/(^")|("$)/g, '');
+      const isEnd = index === path.length - 1;
+      if (!isEnd) {
+        const nextType = !Number.isNaN(parseInt(path[index + 1])) ? [] : {};
+        if (!(field in res)) {
+          res[field] = nextType;
         }
-        // TODO: this had a bug for number values of 0 needs more testing
-        return isUndefined(res[field]) ? value : res[field];
-      },
-      obj as Record<string, unknown>
-    );
+        return res[field];
+      }
+      // TODO: this had a bug for number values of 0 needs more testing
+      return isUndefined(res[field]) ? value : res[field];
+    }, obj);
 }
 
 /**
@@ -155,25 +153,22 @@ export function makeSetter(_path: string, obj?: unknown) {
   if (!path.length)
     return (defaultValue: unknown) => obj || defaultValue;
   return (value: unknown) =>
-    path.reduce(
-      (previous: Record<string, unknown>, key: string, index: number) => {
-        const res = previous;
-        const field = key.replace(/(^")|("$)/g, '') as keyof typeof res;
-        const isEnd = index === path.length - 1;
-        if (!isEnd) {
-          const nextType = !Number.isNaN(parseInt(path[index + 1])) ? [] : {};
-          if (!(field in res)) {
-            res[field] = nextType;
-          }
+    path.reduce<unknown>((previous, key: string, index: number) => {
+      const res = previous as Record<string, unknown>;
+      const field = key.replace(/(^")|("$)/g, '');
+      const isEnd = index === path.length - 1;
+      if (!isEnd) {
+        const nextType = !Number.isNaN(parseInt(path[index + 1])) ? [] : {};
+        if (!(field in res)) {
+          res[field] = nextType;
         }
-        if (isEnd) {
-          res[field] = value;
-          return obj;
-        }
-        return res[field];
-      },
-      obj as Record<string, unknown>
-    );
+      }
+      if (isEnd) {
+        res[field] = value;
+        return obj;
+      }
+      return res[field];
+    }, obj);
 }
 
 /**
@@ -245,8 +240,8 @@ export function throttle<T extends CallbackFunctionVariadic>(
 }
 
 export function flowPipe(...funcs: CallbackFunctionVariadic[]) {
-  return (...props: unknown) => {
-    return funcs.reduce((res, f) => {
+  return (...props: unknown[]) => {
+    return funcs.reduce<unknown>((res, f) => {
       return Array.isArray(res) ? f.apply(this, res) : f(res);
     }, props);
   };

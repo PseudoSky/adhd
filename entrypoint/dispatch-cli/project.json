@@ -19,6 +19,11 @@
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
+      "//dependsOn": "cli-smoke.spec.ts drives the GENERATED CLI at dist/entrypoint/dispatch-cli/cli/cli.ts and fails loudly when it is absent. Its error message claimed this target already declared dependsOn:[generate-cli] — it did not; only nx.json's targetDefaults dependsOn:[^build] applied, which never runs generate-cli. Declaring it here restores that promise. NOTE: a project-level dependsOn REPLACES the targetDefaults value, so ^build must be repeated.",
+      "dependsOn": [
+        "^build",
+        "generate-cli"
+      ],
       "outputs": [
         "{workspaceRoot}/coverage/entrypoint/dispatch-cli"
       ],

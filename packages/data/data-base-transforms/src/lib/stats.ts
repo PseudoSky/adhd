@@ -170,10 +170,11 @@ export class NormalizedHistogram {
 
   getBin = (_value: unknown) => {
     const { step } = this.config;
-    if (_value in this.lookup) return this.lookup[_value];
+    const key = _value as string | number;
+    if (key in this.lookup) return this.lookup[key];
     const value = this.normalize(_value);
     const bin = roundToIncrement(value, step);
-    this.lookup[_value] = bin;
+    this.lookup[key] = bin;
     console.warn(`BIN: val=${_value} normal=${value} bin=${bin}`);
     return bin;
   };
@@ -228,7 +229,7 @@ export class NormalizedHistogram {
     // }
     this.lookup = {};
     const { bins, start, step } = this.config;
-    this.normalize = makeListNormalizer(data, start, bins * step);
+    this.normalize = makeListNormalizer(data as number[], start, bins * step);
     this.counter = new Counter(data, (v) => this.normalize(v));
     this.bins();
   };
