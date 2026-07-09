@@ -31,7 +31,7 @@
 
 ## 1 · Cold Open — The Hook
 
-🎬 **Scene.** Samira opens `entrypoint/agent-mcp/src/config.ts` — 299 lines. A Zod schema with 17 nested objects. A `rawFromEnv()` function reading 27 env vars by name, one by one. A `PROVIDER_DEFAULTS` table. `loadEnvHierarchy()`. `deepFreeze()`. Every new field means editing three places. This pattern is repeated across five packages.
+🎬 **Scene.** Samira opens `entrypoint/agent-mcp/src/config.ts` — 299 lines. A Zod schema with 17 nested objects. A `rawFromEnv()` function reading 26 env vars by name, one by one. A `PROVIDER_DEFAULTS` table. `loadEnvHierarchy()`. `deepFreeze()`. Every new field means editing three places. This pattern is repeated across five packages.
 
 `@adhd/environment` v0.0.5 promises: one YAML file, one `adhd-env build` command, one typed `new Environment<AgentMcpConfig>({ project: "agent-mcp", namespace: "production" })` call. Secrets set via `adhd-env set` — no `.env` file. Builder returns an `EnvironmentSnapshot` instance with `.set()`, `.get()`, `.configPath`, `.write()`. Full scope cascade, auto-generated JSON Schema, provenance tracking, cross-language parity.
 
@@ -870,7 +870,7 @@ rm -rf "$ADHD_HOME" /tmp/adhd-env-demo /tmp/snapshot.json /tmp/adhd-runtime.ts
 | REQ-024 | Agent-mcp: config.ts → typed Environment | §5.1, §5.2 | ☐ |
 | REQ-025 | Agent-mcp: getProviderConfig preserved | §5.3 | ☐ |
 | REQ-026 | Agent-mcp: env.prefix replaces hardcoded | §5.2 | ☐ |
-| REQ-027 | All 27 old env vars mappable | §1.3, §5.2 | ☐ |
+| REQ-027 | All 26 old env vars mappable | §1.3, §5.2 | ☐ |
 | REQ-028 | build() returns EnvironmentSnapshot instance | §3.1 | ☐ |
 | REQ-029 | EnvironmentSnapshot.get() instance method | §3.1 | ☐ |
 | REQ-030 | EnvironmentSnapshot.set() + .write() persistence | §3.2 | ☐ |

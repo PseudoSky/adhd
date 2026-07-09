@@ -56,8 +56,8 @@ check("refactor-agent-mcp.1", "Old config.ts removed", "test ! -f entrypoint/age
 check("refactor-agent-mcp.2", "adhd.environment.yaml exists with envPrefixOverride ADHD_AGENT", "test -f entrypoint/agent-mcp/adhd.environment.yaml && grep -Eq 'envPrefixOverride:[[:space:]]*ADHD_AGENT' entrypoint/agent-mcp/adhd.environment.yaml")
 check("refactor-agent-mcp.3", "load-env.ts removed (real path src/utils/load-env.ts)", "test ! -f entrypoint/agent-mcp/src/utils/load-env.ts")
 check("refactor-agent-mcp.4", "agent-mcp test suite passes after refactor", "npx nx test agent-mcp")
-check("refactor-agent-mcp.5", "getProviderConfig preserved and referenced", "grep -rqs getProviderConfig entrypoint/agent-mcp/src")
-check("refactor-agent-mcp.6", "27 legacy ADHD_AGENT_* env vars preserved (no naive-inference drift)", "grep -rqs ADHD_AGENT_DATABASE_PATH entrypoint/agent-mcp && grep -rqs ADHD_AGENT_OPENAI_SECRET entrypoint/agent-mcp && grep -rqs ADHD_AGENT_LOG_LEVEL entrypoint/agent-mcp")
+check("refactor-agent-mcp.5", "getProviderConfig preserved in new environment.ts module (not tree-wide grep)", "test -f entrypoint/agent-mcp/src/environment.ts && grep -qs getProviderConfig entrypoint/agent-mcp/src/environment.ts")
+check("refactor-agent-mcp.6", "26 legacy ADHD_AGENT_* env vars mapped in adhd.environment.yaml (not tree-wide grep)", "test -f entrypoint/agent-mcp/adhd.environment.yaml && grep -qs ADHD_AGENT_DATABASE_PATH entrypoint/agent-mcp/adhd.environment.yaml && grep -qs ADHD_AGENT_OPENAI_SECRET entrypoint/agent-mcp/adhd.environment.yaml && grep -qs ADHD_AGENT_LOG_LEVEL entrypoint/agent-mcp/adhd.environment.yaml")
 
 // ── audit-builder ──
 check("audit-builder.1", "Builder packages build", "npx nx build environment-base-spec && npx nx build environment-builder")

@@ -45,5 +45,13 @@
 - **[inv:package-identity]** — the TS runtime client publishes as **`@adhd/environment`** (not
   `@adhd/environment-core-node`); the `tsconfig.base.json` alias and `package.json` `name` must agree.
 - **[inv:legacy-env-names]** — the agent-mcp refactor MUST preserve every deployed `ADHD_AGENT_*` env
-  var name (CURRENT_CONFIG_PATTERNS.md §agent-mcp is authoritative), via `envPrefixOverride: ADHD_AGENT`
-  plus per-field `env:` overrides.
+  var name (CURRENT_CONFIG_PATTERNS.md §agent-mcp is authoritative — **26** unique vars), via
+  `envPrefixOverride: ADHD_AGENT` plus per-field `env:` overrides.
+
+## Operational notes
+
+- **[op:nx-graph-reset]** — if any nx command (`nx show` / `nx build` / `nx test` / `nx run-many`) fails
+  workspace-wide with **"Failed to process project graph"** (e.g. a stale daemon holding a phantom
+  project such as `packages/environment/environment-core-builder`), run `npx nx reset` to clear the
+  daemon + cached graph, then retry the command before diagnosing anything else. This applies to every
+  nx-guarded state (scaffold-workspace, contract, builder, runtime-core-node/cli, refactor, audit).

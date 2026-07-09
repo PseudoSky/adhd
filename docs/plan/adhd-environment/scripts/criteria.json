@@ -256,7 +256,7 @@
       "phase": "refactor",
       "tier": null,
       "kind": "command",
-      "cmd": "grep -rqs getProviderConfig entrypoint/agent-mcp/src",
+      "cmd": "test -f entrypoint/agent-mcp/src/environment.ts && grep -qs getProviderConfig entrypoint/agent-mcp/src/environment.ts",
       "expect": "exit0"
     },
     {
@@ -264,7 +264,7 @@
       "phase": "refactor",
       "tier": null,
       "kind": "command",
-      "cmd": "grep -rqs ADHD_AGENT_DATABASE_PATH entrypoint/agent-mcp && grep -rqs ADHD_AGENT_OPENAI_SECRET entrypoint/agent-mcp && grep -rqs ADHD_AGENT_LOG_LEVEL entrypoint/agent-mcp",
+      "cmd": "test -f entrypoint/agent-mcp/adhd.environment.yaml && grep -qs ADHD_AGENT_DATABASE_PATH entrypoint/agent-mcp/adhd.environment.yaml && grep -qs ADHD_AGENT_OPENAI_SECRET entrypoint/agent-mcp/adhd.environment.yaml && grep -qs ADHD_AGENT_LOG_LEVEL entrypoint/agent-mcp/adhd.environment.yaml",
       "expect": "exit0"
     },
     {
