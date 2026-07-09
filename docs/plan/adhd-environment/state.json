@@ -4,11 +4,11 @@
   "dag": "dag.json",
   "states": {
     "contract-base-spec": {
-      "status": "pending",
+      "status": "complete",
       "started_at": null,
-      "done_at": null,
+      "done_at": "2026-07-09T04:04:04.100Z",
       "start_ref": null,
-      "end_ref": null
+      "end_ref": "c06e3953c536ac466dfcfca3b646b0e2d4258a1d"
     },
     "builder-engine": {
       "status": "pending",
@@ -107,6 +107,18 @@
       "audit_criteria_total": 53,
       "by": "plan-orchestrator",
       "note": "6-pkg @adhd/environment family + CLI scaffolded; core-py/core-rs created; nx resolves; @adhd/environment name+alias (B3)"
+    },
+    {
+      "ts": "2026-07-09T04:04:04.100Z",
+      "from": "contract-base-spec",
+      "to": "contract-base-spec",
+      "start_ref": null,
+      "end_ref": "c06e3953c536ac466dfcfca3b646b0e2d4258a1d",
+      "audit_exit": 11,
+      "audit_criteria_passed": 5,
+      "audit_criteria_total": 16,
+      "by": "plan-orchestrator",
+      "note": "environment-base-spec shared contract + cross-language test vectors (pure SHA-256, correct contentHash); guard green; hook passed"
     }
   ],
   "amendment_log": [
@@ -167,7 +179,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "contract-base-spec",
+  "current_state": "builder-engine",
   "dod_provenance": {
     "confirmed_at": "2026-07-08T07:12:02.530Z",
     "by": "pseudosky",
