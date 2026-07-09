@@ -1,6 +1,6 @@
 # audit-runtime
 
-**Phase:** audit · **Kind:** audit · **Depends on:** runtime-core-node, runtime-cli, runtime-py, runtime-rs · **Guard:** `true`
+**Phase:** audit · **Kind:** audit · **Depends on:** runtime-core-node, runtime-cli, runtime-py, runtime-rs · **Guard:** `npx --yes nx build environment-core-node && python -m build && cargo build`
 
 ---
 
@@ -12,16 +12,19 @@ Verify that all runtime clients (TypeScript, Python, Rust) and the CLI produce c
 
 ## Acceptance criteria
 
+- [audit-runtime.1] TS runtime package builds
+- [audit-runtime.2] Python package builds to wheel
+- [audit-runtime.3] Rust crate builds
 
+---
 
+## Reservations
 
+```text
 read_only:  []
 mutates:    ["scripts/audit_audit-runtime.py"]
 ```
 
-- [audit-runtime.1] TS runtime package builds
-- [audit-runtime.2] Python package builds to wheel
-- [audit-runtime.3] Rust crate builds
 ---
 
 ## Notes for executor

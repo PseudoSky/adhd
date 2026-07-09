@@ -1,6 +1,6 @@
 # builder-snapshot-api
 
-**Phase:** builder · **Kind:** work · **Depends on:** builder-engine · **Guard:** `true`
+**Phase:** builder · **Kind:** work · **Depends on:** builder-engine · **Guard:** `npx nx build environment-builder`
 
 ---
 

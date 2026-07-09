@@ -1,6 +1,6 @@
 # runtime-py
 
-**Phase:** runtime · **Kind:** work · **Depends on:** contract-base-spec · **Guard:** `true`
+**Phase:** runtime · **Kind:** work · **Depends on:** contract-base-spec · **Guard:** `python -m build`
 
 ---
 
@@ -12,16 +12,18 @@ The `adhd-environment` Python package provides a thin runtime client (~40 lines)
 
 ## Acceptance criteria
 
+- [runtime-py.2] Python tests pass
+- [runtime-py.3] Python Environment class imports without error
 
+---
 
+## Reservations
 
 ```text
 read_only:  []
 mutates:    ["packages/environment/environment-core-py/src/adhd_environment/__init__.py", "packages/environment/environment-core-py/src/adhd_environment/environment.py"]
 ```
 
-- [runtime-py.2] Python tests pass
-- [runtime-py.3] Python Environment class imports without error
 ---
 
 ## Notes for executor
