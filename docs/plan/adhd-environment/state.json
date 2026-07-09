@@ -88,14 +88,27 @@
       "end_ref": null
     },
     "scaffold-workspace": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-07-08T22:19:43.078Z",
-      "done_at": null,
+      "done_at": "2026-07-09T03:41:18.054Z",
       "start_ref": "ee3c76964e1b8357bd060a88747bd52c668aada4",
-      "end_ref": null
+      "end_ref": "ceeac507afb255b2af4efe438cf317380b6329ee"
     }
   },
-  "transition_log": [],
+  "transition_log": [
+    {
+      "ts": "2026-07-09T03:41:18.054Z",
+      "from": "scaffold-workspace",
+      "to": "scaffold-workspace",
+      "start_ref": "ee3c76964e1b8357bd060a88747bd52c668aada4",
+      "end_ref": "ceeac507afb255b2af4efe438cf317380b6329ee",
+      "audit_exit": 41,
+      "audit_criteria_passed": 12,
+      "audit_criteria_total": 53,
+      "by": "plan-orchestrator",
+      "note": "6-pkg @adhd/environment family + CLI scaffolded; core-py/core-rs created; nx resolves; @adhd/environment name+alias (B3)"
+    }
+  ],
   "amendment_log": [
     {
       "ts": "2026-07-09T01:06:23.114Z",
@@ -154,7 +167,7 @@
     "version": "0.8.25",
     "hash": "961c3053dfab"
   },
-  "current_state": "scaffold-workspace",
+  "current_state": "contract-base-spec",
   "dod_provenance": {
     "confirmed_at": "2026-07-08T07:12:02.530Z",
     "by": "pseudosky",
