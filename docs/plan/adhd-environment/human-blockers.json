@@ -12,13 +12,14 @@
   },
   "cargo-registry-token": {
     "type": "credential",
-    "description": "crates.io API token consumed by the environment-core-rs nx-release-publish target (cargo publish --token $CARGO_REGISTRY_TOKEN, defined in scaffold-workspace project.json). Needed only at release/publish time, not for cargo build/test — surfaced here so it lands on the Step 8 hand-off punch list.",
-    "required_by": ["runtime-rs"],
+    "description": "crates.io API token consumed by the environment-core-rs nx-release-publish target (cargo publish --token $CARGO_REGISTRY_TOKEN, defined in scaffold-workspace project.json). PUBLISH-ONLY: needed exclusively at release/publish time, NOT for cargo build/test. runtime-rs's guard is `rustup run 1.95.0 cargo build`, which never touches crates.io — so this token must NOT block wave 2. Rebound to the release target (ENV-PLAN-006, user-approved 2026-07-08).",
+    "required_by": [],
     "owner": "human:ops",
     "how_to_provide": "crates.io -> Account Settings -> API Tokens -> New Token (publish scope for the adhd-environment crate); export CARGO_REGISTRY_TOKEN in the release environment.",
     "destination": "env:CARGO_REGISTRY_TOKEN",
     "verification": "test -n \"$CARGO_REGISTRY_TOKEN\"",
-    "blocks_at": "per-state",
+    "blocks_at": "release",
+    "note": "Publish-only credential; surfaced on the Step-8 hand-off punch list. Does not gate any build/test state.",
     "status": "needed"
   }
 }
