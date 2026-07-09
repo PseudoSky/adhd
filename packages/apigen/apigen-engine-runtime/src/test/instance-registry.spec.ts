@@ -194,7 +194,7 @@ describe('InstanceRegistry — TTL expiry', () => {
       defaultTtlMs: 1_000,
       sweepIntervalMs: 500,
     });
-    const { instanceId } = registry.create(Counter as AnyConstructor, [0]);
+    const { instanceId: _instanceId } = registry.create(Counter as AnyConstructor, [0]);
     // Advance so both TTL and sweep fire.
     vi.advanceTimersByTime(2_000);
     // Entry should be gone from the store (swept).

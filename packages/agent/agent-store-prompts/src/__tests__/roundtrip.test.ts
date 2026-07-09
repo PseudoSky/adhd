@@ -69,7 +69,7 @@ const TMP_DIR = EXTERNAL_DB_PATH
 
 const DB_PATH = EXTERNAL_DB_PATH
   ? EXTERNAL_DB_PATH
-  : path.join(TMP_DIR!, 'roundtrip.db');
+  : path.join(TMP_DIR as string, 'roundtrip.db');
 
 // Expose (or confirm) the path for external scripts (nc_mutate / nc_restore).
 process.env['ROUNDTRIP_DB_PATH'] = DB_PATH;
@@ -174,8 +174,9 @@ describe('seed round-trip', () => {
 
       expect(read.slug).toBe('default-skeptic');
       expect(read.type).toBe('rule');
-      expect(read.version).toBe(seedEntry!.version);
-      expect(read.content).toBe(seedEntry!.content);
+      expect(seedEntry).not.toBeNull();
+      expect(read.version).toBe(seedEntry.version);
+      expect(read.content).toBe(seedEntry.content);
       expect(read.isShared).toBe(true);
     } finally {
       conn.close();
@@ -192,20 +193,25 @@ describe('seed round-trip', () => {
 
     try {
       // Capture counts before second seed.
-      const typesBefore = db
+      const typesBeforeRow = db
         .select({ n: count() })
         .from(promptTypesTable)
-        .get()!.n;
+        .get();
+      expect(typesBeforeRow).not.toBeNull();
+      const typesBefore = typesBeforeRow.n;
 
       // Head identity rows (one per slug) and version history rows (one per
       // seeded entry) — both must be invariant across a re-seed.
-      const headsBefore = db.select({ n: count() }).from(componentsTable).get()!
-        .n;
+      const headsBeforeRow = db.select({ n: count() }).from(componentsTable).get();
+      expect(headsBeforeRow).not.toBeNull();
+      const headsBefore = headsBeforeRow.n;
 
-      const componentsBefore = db
+      const componentsBeforeRow = db
         .select({ n: count() })
         .from(componentVersionsTable)
-        .get()!.n;
+        .get();
+      expect(componentsBeforeRow).not.toBeNull();
+      const componentsBefore = componentsBeforeRow.n;
 
       // Read a reference row to compare version afterward.
       const skepticBefore = componentStore.read('default-skeptic');
@@ -214,16 +220,20 @@ describe('seed round-trip', () => {
       seed(db);
 
       // Counts must not change.
-      const typesAfter = db.select({ n: count() }).from(promptTypesTable).get()!
-        .n;
+      const typesAfterRow = db.select({ n: count() }).from(promptTypesTable).get();
+      expect(typesAfterRow).not.toBeNull();
+      const typesAfter = typesAfterRow.n;
 
-      const headsAfter = db.select({ n: count() }).from(componentsTable).get()!
-        .n;
+      const headsAfterRow = db.select({ n: count() }).from(componentsTable).get();
+      expect(headsAfterRow).not.toBeNull();
+      const headsAfter = headsAfterRow.n;
 
-      const componentsAfter = db
+      const componentsAfterRow = db
         .select({ n: count() })
         .from(componentVersionsTable)
-        .get()!.n;
+        .get();
+      expect(componentsAfterRow).not.toBeNull();
+      const componentsAfter = componentsAfterRow.n;
 
       expect(typesAfter).toBe(typesBefore);
       expect(headsAfter).toBe(headsBefore);

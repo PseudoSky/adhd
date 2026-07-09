@@ -4,7 +4,7 @@ import { compileWhere, parseOrderBy } from './parser';
 
 export const orderBy =
   (props: OrderByExpression[] = []) =>
-  (a: any, b: any) => {
+  (a: unknown, b: unknown) => {
     const orderOps = parseOrderBy(props);
     // console.log({orderOps})
     for (const p in orderOps) {
@@ -28,8 +28,8 @@ export const orderBy =
 
 type QueryType = {
   raw?: QueryExpression;
-  where?: (() => boolean) | ((obj: any) => any);
-  order_by?: (a: any, b: any) => number; // | string[];
+  where?: (() => boolean) | ((obj: unknown) => unknown);
+  order_by?: (a: unknown, b: unknown) => number; // | string[];
   distinct_on?: string[];
   offset?: number;
   limit?: number;
@@ -55,11 +55,11 @@ type QueryType = {
 //   Currently the functional interface and the raw type are mixed
 export class Query implements QueryType {
   raw: QueryExpression;
-  where?: (() => boolean) | ((obj: any) => any);
-  order_by?: (a: any, b: any) => any; // | string[]);
-  distinct_on: any;
+  where?: (() => boolean) | ((obj: unknown) => unknown);
+  order_by?: (a: unknown, b: unknown) => unknown; // | string[]);
+  distinct_on: unknown;
   offset = 0;
-  limit: any;
+  limit: unknown;
   constructor(_query: QueryExpression = {}) {
     // const query = RawQuery(_query);
     this.raw = {};
@@ -119,11 +119,11 @@ export class Query implements QueryType {
   }
 }
 
-export class DataView<T = any> {
+export class DataView<T = unknown> {
   data: T[] = [];
   dataview: T[] = [];
   query: Query;
-  dirty: any;
+  dirty: boolean;
   logging: boolean;
   has_more = false;
   metrics = {

@@ -69,7 +69,7 @@ describe('plugin generator', () => {
   // Plugin interface (capabilities.{target,layer,...}) from @adhd/apigen-core
   // -------------------------------------------------------------------------
 
-  it('emits a plugin.ts that imports from @adhd/apigen-core-client(v2 types)', async () => {
+  it('emits a plugin.ts that imports from @adhd/apigen-core (v2 types)', async () => {
     const tree = createTreeWithEmptyWorkspace();
     tree.write(
       'tsconfig.base.json',
@@ -79,8 +79,9 @@ describe('plugin generator', () => {
     const content = tree.read(
       'packages/apigen/plugins/v2-check/src/lib/plugin.ts',
       'utf-8'
-    )!;
-    expect(content).toContain('@adhd/apigen-core-client');
+    );
+    expect(content).not.toBeNull();
+    expect(content).toContain('@adhd/apigen-core');
     // must import Plugin (the v2 interface) — not the v1 OutputPlugin shape
     expect(content).toContain('Plugin');
     expect(content).not.toContain('OutputPlugin');
@@ -96,7 +97,8 @@ describe('plugin generator', () => {
     const content = tree.read(
       'packages/apigen/plugins/v2-caps/src/lib/plugin.ts',
       'utf-8'
-    )!;
+    );
+    expect(content).not.toBeNull();
     expect(content).toContain('capabilities');
     expect(content).toContain('target');
     expect(content).toContain('generate');
@@ -113,7 +115,8 @@ describe('plugin generator', () => {
     const content = tree.read(
       'packages/apigen/plugins/no-run/src/lib/plugin.ts',
       'utf-8'
-    )!;
+    );
+    expect(content).not.toBeNull();
     expect(content).not.toContain('serve(');
     // identifier uses camelCase propertyName, not hyphenated fileName
     expect(content).toContain('noRunPlugin');
@@ -129,7 +132,8 @@ describe('plugin generator', () => {
     const content = tree.read(
       'packages/apigen/plugins/with-run/src/lib/plugin.ts',
       'utf-8'
-    )!;
+    );
+    expect(content).not.toBeNull();
     expect(content).toContain('serve(');
     // Harness type is injected into serve() signature
     expect(content).toContain('Harness');
@@ -147,7 +151,8 @@ describe('plugin generator', () => {
     const spec = tree.read(
       'packages/apigen/plugins/spec-check/src/test/plugin.spec.ts',
       'utf-8'
-    )!;
+    );
+    expect(spec).not.toBeNull();
     expect(spec).toContain('capabilities');
     expect(spec).toContain('target');
     // the test must have teeth — if capabilities are missing it should fail

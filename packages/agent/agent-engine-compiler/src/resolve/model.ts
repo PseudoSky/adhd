@@ -41,8 +41,8 @@ import { ModelStore, ModelStoreError } from '@adhd/agent-core-provider';
  * @param platform   - Target platform id (e.g. 'claude_code', 'claude_api').
  * @returns Platform-specific model string, or '' if the agent has no model_hint.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function resolveModel(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: BetterSQLite3Database<any>,
   agentSlug: string,
   platform: string

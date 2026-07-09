@@ -63,10 +63,13 @@ const openHandles: Database.Database[] = [];
 
 afterEach(() => {
   while (openHandles.length) {
-    try {
-      openHandles.pop()!.close();
-    } catch {
-      /* already closed */
+    const handle = openHandles.pop();
+    if (handle) {
+      try {
+        handle.close();
+      } catch {
+        /* already closed */
+      }
     }
   }
 });
@@ -181,8 +184,9 @@ describe('AgentPolicyStore — LAZY policy inheritance [Decision 1]', () => {
         (r) => r.policySlug === REVIEWER_POSTURE_TEMPLATE.slug
       );
       expect(preRow).toBeDefined();
-      expect(preRow!.inheritedFrom).toBe(CATEGORY_SLUG);
-      expect(preRow!.isMandatory).toBe(true);
+      if (!preRow) throw new Error('Expected preRow to exist');
+      expect(preRow.inheritedFrom).toBe(CATEGORY_SLUG);
+      expect(preRow.isMandatory).toBe(true);
 
       // Step 3: CLOSE the handle — proves we're not reading memory state
       sqlite.close();
@@ -205,7 +209,8 @@ describe('AgentPolicyStore — LAZY policy inheritance [Decision 1]', () => {
       // There should be exactly one resolved policy (the inherited one)
       expect(resolved).toHaveLength(1);
 
-      const inheritedRow = resolved[0]!;
+      const inheritedRow = resolved[0];
+      if (!inheritedRow) throw new Error('Expected resolved[0] to exist');
 
       // [policy-inheritance.1]: inherited_from must be the category slug
       expect(inheritedRow.inheritedFrom).toBe(CATEGORY_SLUG);
@@ -268,7 +273,8 @@ describe('AgentPolicyStore — LAZY policy inheritance [Decision 1]', () => {
     );
     expect(reviewerRows).toHaveLength(1);
 
-    const winningRow = reviewerRows[0]!;
+    const winningRow = reviewerRows[0];
+    if (!winningRow) throw new Error('Expected reviewerRows[0] to exist');
     // Direct-attach has inheritedFrom = null
     expect(winningRow.inheritedFrom).toBeNull();
     // Direct-attach overrides isMandatory to false
@@ -334,13 +340,15 @@ describe('AgentPolicyStore — LAZY policy inheritance [Decision 1]', () => {
       (r) => r.policySlug === REVIEWER_POSTURE_TEMPLATE.slug
     );
     expect(reviewerRow).toBeDefined();
-    expect(reviewerRow!.inheritedFrom).toBe('quality-security');
-    expect(reviewerRow!.isMandatory).toBe(true);
+    if (!reviewerRow) throw new Error('Expected reviewerRow to exist');
+    expect(reviewerRow.inheritedFrom).toBe('quality-security');
+    expect(reviewerRow.isMandatory).toBe(true);
 
     const readOnlyRow = resolved.find((r) => r.policySlug === 'read-only');
     expect(readOnlyRow).toBeDefined();
-    expect(readOnlyRow!.inheritedFrom).toBe('read-only-tier');
-    expect(readOnlyRow!.isMandatory).toBe(false);
+    if (!readOnlyRow) throw new Error('Expected readOnlyRow to exist');
+    expect(readOnlyRow.inheritedFrom).toBe('read-only-tier');
+    expect(readOnlyRow.isMandatory).toBe(false);
 
     fs.unlinkSync(dbPath);
   });
@@ -377,8 +385,10 @@ describe('AgentPolicyStore — LAZY policy inheritance [Decision 1]', () => {
     // Should only see the direct-attach row — no category membership means
     // no inherited rows, even though a category-level policy exists
     expect(resolved).toHaveLength(1);
-    expect(resolved[0]!.policySlug).toBe(DIRECT_POLICY_TEMPLATE.slug);
-    expect(resolved[0]!.inheritedFrom).toBeNull();
+    const resolvedRow = resolved[0];
+    if (!resolvedRow) throw new Error('Expected resolved[0] to exist');
+    expect(resolvedRow.policySlug).toBe(DIRECT_POLICY_TEMPLATE.slug);
+    expect(resolvedRow.inheritedFrom).toBeNull();
 
     fs.unlinkSync(dbPath);
   });
@@ -421,7 +431,9 @@ describe('AgentPolicyStore — LAZY policy inheritance [Decision 1]', () => {
     // The correct path: resolveForAgent returns 1 inherited row
     const resolvedRows = store.resolveForAgent(NEW_AGENT_SLUG);
     expect(resolvedRows).toHaveLength(1);
-    expect(resolvedRows[0]!.inheritedFrom).toBe(CATEGORY_SLUG);
+    const resolvedRow = resolvedRows[0];
+    if (!resolvedRow) throw new Error('Expected resolvedRows[0] to exist');
+    expect(resolvedRow.inheritedFrom).toBe(CATEGORY_SLUG);
 
     // The BROKEN path: listForAgent returns 0 rows (no direct-attach exists)
     // — this is what would happen if the join were omitted (the nc_break script)

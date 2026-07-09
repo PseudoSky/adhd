@@ -23,8 +23,7 @@ export const intMax = Number.MAX_SAFE_INTEGER;
 /**
  * Represents a variadic callback function that takes any number of arguments.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type CallbackFunctionVariadic = (...args: any[]) => any;
+export type CallbackFunctionVariadic = (...args: unknown[]) => unknown;
 /**
  * Represents a typed callback function that takes a specific set of parameters.
  * @typeParam Params - The type of the parameters for the callback function.
@@ -90,7 +89,7 @@ export function toPath(path: string | string[]): string[] {
  * @param obj - The value to check.
  * @returns True if the value is falsey, false otherwise.
  */
-export function isFalsey(obj: any) {
+export function isFalsey(obj: unknown) {
   return obj !== null && obj !== undefined;
 }
 
@@ -99,7 +98,7 @@ export function isFalsey(obj: any) {
  * @param obj - The object to check.
  * @returns True if the object exists, false otherwise.
  */
-export function doesObjectExists(obj: any) {
+export function doesObjectExists(obj: unknown) {
   return !!obj && obj !== null && obj !== undefined;
 }
 
@@ -111,35 +110,38 @@ export function doesObjectExists(obj: any) {
  */
 export function makeGetter(
   _path?: string | string[],
-  obj?: any
-): (value?: any) => any {
+  obj?: unknown
+): (value?: unknown) => unknown {
   // TODO: see https://github.com/g-makarov/dot-path-value/blob/main/src/index.ts
   //       for future typing
   if (!obj) {
     /* THIS IS A PARTIAL: NOT RECURSIVE */
-    return (_obj: any) => makeGetter(_path, _obj)();
+    return (_obj: unknown) => makeGetter(_path, _obj)();
   }
   if (!_path) {
     /* THIS IS A PARTIAL: NOT RECURSIVE */
     return (path: string) => makeGetter(path, obj)();
   }
   const path = toPath(_path);
-  if (!path.length) return (value: any) => obj || value;
-  return (value: any) =>
-    path.reduce((previous, key: string, index: number) => {
-      const res = previous;
-      const field = key.replace(/(^")|("$)/g, '') as keyof typeof res;
-      const isEnd = index === path.length - 1;
-      if (!isEnd) {
-        const nextType = !Number.isNaN(parseInt(path[index + 1])) ? [] : {};
-        if (!(field in res)) {
-          res[field] = nextType;
+  if (!path.length) return (value: unknown) => obj || value;
+  return (value: unknown) =>
+    path.reduce(
+      (previous: Record<string, unknown>, key: string, index: number) => {
+        const res = previous;
+        const field = key.replace(/(^")|("$)/g, '') as keyof typeof res;
+        const isEnd = index === path.length - 1;
+        if (!isEnd) {
+          const nextType = !Number.isNaN(parseInt(path[index + 1])) ? [] : {};
+          if (!(field in res)) {
+            res[field] = nextType;
+          }
+          return res[field];
         }
-        return res[field];
-      }
-      // TODO: this had a bug for number values of 0 needs more testing
-      return isUndefined(res[field]) ? value : res[field];
-    }, obj);
+        // TODO: this had a bug for number values of 0 needs more testing
+        return isUndefined(res[field]) ? value : res[field];
+      },
+      obj as Record<string, unknown>
+    );
 }
 
 /**
@@ -148,26 +150,30 @@ export function makeGetter(
  * @param obj - The object to set the value in.
  * @returns A function that, when called with a value, will set the value at the specified path.
  */
-export function makeSetter(_path: string, obj?: any) {
+export function makeSetter(_path: string, obj?: unknown) {
   const path = toPath(_path);
-  if (!path.length) return (defaultValue: any) => obj || defaultValue;
-  return (value: any) =>
-    path.reduce((previous, key: string, index: number) => {
-      const res = previous;
-      const field = key.replace(/(^")|("$)/g, '') as keyof typeof res;
-      const isEnd = index === path.length - 1;
-      if (!isEnd) {
-        const nextType = !Number.isNaN(parseInt(path[index + 1])) ? [] : {};
-        if (!(field in res)) {
-          res[field] = nextType;
+  if (!path.length)
+    return (defaultValue: unknown) => obj || defaultValue;
+  return (value: unknown) =>
+    path.reduce(
+      (previous: Record<string, unknown>, key: string, index: number) => {
+        const res = previous;
+        const field = key.replace(/(^")|("$)/g, '') as keyof typeof res;
+        const isEnd = index === path.length - 1;
+        if (!isEnd) {
+          const nextType = !Number.isNaN(parseInt(path[index + 1])) ? [] : {};
+          if (!(field in res)) {
+            res[field] = nextType;
+          }
         }
-      }
-      if (isEnd) {
-        res[field] = value;
-        return obj;
-      }
-      return res[field];
-    }, obj);
+        if (isEnd) {
+          res[field] = value;
+          return obj;
+        }
+        return res[field];
+      },
+      obj as Record<string, unknown>
+    );
 }
 
 /**
@@ -178,9 +184,9 @@ export function makeSetter(_path: string, obj?: any) {
  * @returns The value at the specified path, or the default value if the path does not exist.
  */
 export function get(
-  obj: any,
+  obj: unknown,
   path: string | string[],
-  defaultValue: any = undefined
+  defaultValue: unknown = undefined
 ) {
   return makeGetter(path, obj)(defaultValue);
 }
@@ -192,7 +198,7 @@ export function get(
  * @param value - The value to set.
  * @returns The updated object.
  */
-export function set(data: any, path: string, value: any) {
+export function set(data: unknown, path: string, value: unknown) {
   return makeSetter(path, data)(value);
 }
 
@@ -203,7 +209,7 @@ export function set(data: any, path: string, value: any) {
  * @param into - An optional array to store the retrieved values in.
  * @returns An array of the retrieved values.
  */
-export function getAll(obj: any, paths: string[], into: any[] = []) {
+export function getAll(obj: unknown, paths: string[], into: unknown[] = []) {
   return paths.reduce((res, path) => {
     const value = get(obj, path, undefined);
     return res.concat([value]);
@@ -217,7 +223,7 @@ export function getAll(obj: any, paths: string[], into: any[] = []) {
  */
 
 export function runAfter(f: CallbackFunctionVariadic, t: number) {
-  return function (...args: any[]) {
+  return function (...args: unknown[]) {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     return setTimeout(() => f.apply(self, args), t);
@@ -239,7 +245,7 @@ export function throttle<T extends CallbackFunctionVariadic>(
 }
 
 export function flowPipe(...funcs: CallbackFunctionVariadic[]) {
-  return (...props: any) => {
+  return (...props: unknown) => {
     return funcs.reduce((res, f) => {
       return Array.isArray(res) ? f.apply(this, res) : f(res);
     }, props);
@@ -274,8 +280,8 @@ export class Differ {
   static VALUE_UNCHANGED = 'unchanged';
 
   static map = <
-    O1 = Record<string, any> | any[],
-    O2 = Record<string, any> | any[]
+    O1 = Record<string, unknown> | unknown[],
+    O2 = Record<string, unknown> | unknown[]
   >(
     obj1?: O1,
     obj2?: O2
@@ -286,7 +292,7 @@ export class Differ {
 
     // TODO: looks like this will short circuit the rest of the func (array is value)
     if (isValue(obj1) || isValue(obj2)) {
-      const change = Differ.compareArrays(obj1 as any[], obj2 as any[]);
+      const change = Differ.compareArrays(obj1 as unknown[], obj2 as unknown[]);
       if (change === Differ.VALUE_UNCHANGED) {
         return null;
       }
@@ -298,14 +304,14 @@ export class Differ {
     }
 
     if (isArray(obj1) || isArray(obj2)) {
-      const change = Differ.compareArrays(obj1 as any[], obj2 as any[]);
+      const change = Differ.compareArrays(obj1 as unknown[], obj2 as unknown[]);
       if (change === Differ.VALUE_UNCHANGED) {
         return null;
       }
-      return Differ.getArrayDiffData(obj1 as any[], obj2 as any[]);
+      return Differ.getArrayDiffData(obj1 as unknown[], obj2 as unknown[]);
     }
 
-    const diff: Record<string, any> = {};
+    const diff: Record<string, unknown> = {};
     for (const key in obj1) {
       if (isFunction(obj1[key as keyof typeof obj1])) {
         continue;
@@ -334,7 +340,7 @@ export class Differ {
     return diff;
   };
 
-  static getArrayDiffData = (arr1: any[], arr2: any[]) => {
+  static getArrayDiffData = (arr1: unknown[], arr2: unknown[]) => {
     if (arr1 === undefined || arr2 === undefined) {
       return arr1 === undefined ? arr1 : arr2;
     }
@@ -351,7 +357,7 @@ export class Differ {
     };
   };
 
-  static compareArrays = (arr1: any[], arr2: any[]) => {
+  static compareArrays = (arr1: unknown[], arr2: unknown[]) => {
     // const set1 = new Set(arr1);
     // const set2 = new Set(arr2);
     if (isEqual(sortBy(arr1), sortBy(arr2))) {
@@ -366,7 +372,7 @@ export class Differ {
     return Differ.VALUE_UPDATED;
   };
 
-  static compareValues = (value1: any, value2: any) => {
+  static compareValues = (value1: unknown, value2: unknown) => {
     if (value1 === value2) {
       return Differ.VALUE_UNCHANGED;
     }

@@ -15,9 +15,9 @@ export default {
   },
 } as Meta;
 
-interface DemoProps extends UseLocalStorageOptions<any> {
+interface DemoProps extends UseLocalStorageOptions<unknown> {
   storageKey: string;
-  initialValue: any;
+  initialValue: unknown;
 }
 
 const LocalStorageComponent: React.FC<DemoProps> = ({
@@ -42,7 +42,7 @@ const LocalStorageComponent: React.FC<DemoProps> = ({
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
         <button
           onClick={() =>
-            setValue((prev: any) => (typeof prev === 'number' ? prev + 1 : 1))
+            setValue((prev: unknown) => (typeof prev === 'number' ? prev + 1 : 1))
           }
         >
           Increment

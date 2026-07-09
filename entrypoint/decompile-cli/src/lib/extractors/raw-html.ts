@@ -73,7 +73,7 @@ const loadExtract = (src: StackItem, types: SelectorTypes[] = []) => {
           })
           // TODO: no idea how this works
           .reduce(
-            (r: any, l: any) =>
+            (r: string[], l: string) =>
               r.includes(l) || l.endsWith('undefined') ? r : [...r, l],
             []
           ) as string[]

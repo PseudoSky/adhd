@@ -1,8 +1,7 @@
 import { eq } from 'drizzle-orm';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyBetterSQLite3Database =
-  import('drizzle-orm/better-sqlite3').BetterSQLite3Database<any>;
+type AnyBetterSQLite3Database = import('drizzle-orm/better-sqlite3').BetterSQLite3Database<any>;
 
 import { policyTemplatesTable } from '../db/schema.js';
 
@@ -118,13 +117,19 @@ export class PolicyTemplateStore {
 
     this.db.insert(policyTemplatesTable).values(row).run();
 
-    return this._toTemplate(
-      this.db
-        .select()
-        .from(policyTemplatesTable)
-        .where(eq(policyTemplatesTable.slug, input.slug))
-        .get()!
-    );
+    const inserted = this.db
+      .select()
+      .from(policyTemplatesTable)
+      .where(eq(policyTemplatesTable.slug, input.slug))
+      .get();
+
+    if (!inserted) {
+      throw new Error(
+        `Failed to read back inserted policy template '${input.slug}'`
+      );
+    }
+
+    return this._toTemplate(inserted);
   }
 
   /**

@@ -196,7 +196,8 @@ describe('host generator', () => {
     const harness = tree.read(
       'packages/apigen/hosts/typescript/src/conformance/harness.spec.ts',
       'utf-8'
-    )!;
+    );
+    expect(harness).not.toBeNull();
     expect(harness).toContain('typescript');
   });
 
@@ -206,7 +207,8 @@ describe('host generator', () => {
     const harness = tree.read(
       'packages/apigen/hosts/typescript/src/conformance/harness.spec.ts',
       'utf-8'
-    )!;
+    );
+    expect(harness).not.toBeNull();
     // The harness must assert supportedIds.length === 0
     expect(harness).toContain('supportedIds');
     expect(harness).toContain('length').valueOf;
@@ -219,7 +221,8 @@ describe('host generator', () => {
     const harness = tree.read(
       'packages/apigen/hosts/typescript/src/conformance/harness.spec.ts',
       'utf-8'
-    )!;
+    );
+    expect(harness).not.toBeNull();
     // All three harness obligations must be present
     expect(harness).toContain('encode');
     expect(harness).toContain('decode');
@@ -235,7 +238,8 @@ describe('host generator', () => {
     const harness = tree.read(
       'packages/apigen/hosts/python/src/conformance/harness.spec.ts',
       'utf-8'
-    )!;
+    );
+    expect(harness).not.toBeNull();
     expect(harness).toContain('host-manifest.json');
   });
 

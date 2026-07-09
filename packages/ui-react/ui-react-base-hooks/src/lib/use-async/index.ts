@@ -21,7 +21,7 @@ type AsyncFunc<Props extends unknown[], Data> =
   | AsyncNoProps<Data>;
 
 export function useAsync<
-  T extends AsyncFunc<any[], any>,
+  T extends AsyncFunc<unknown[], unknown>,
   Props extends Parameters<T>,
   Data extends ReturnType<T>
 >(
@@ -63,7 +63,7 @@ export function useAsync<
     if (options.immediate) {
       execute(...(options.variables || ([] as Props)));
     }
-  }, [options.variables]);
+  }, [options.variables, execute, options.immediate]);
 
   return {
     execute,

@@ -18,7 +18,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { execSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { ensurePythonEnv } from '@adhd/apigen-python-env';
 
 import {
@@ -107,7 +107,7 @@ function makeCtx(overrides: Partial<TranscodeCtx> = {}): TranscodeCtx {
   registerWellKnown(registry);
   return {
     registry,
-    resolve: (_ref: string) => ({} as SchemaNode),
+    resolve: () => ({} as SchemaNode),
     seen: new WeakSet(),
     path: '/',
     mode: 'strict',

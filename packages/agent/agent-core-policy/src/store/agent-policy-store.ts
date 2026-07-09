@@ -1,8 +1,7 @@
 import { eq } from 'drizzle-orm';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyBetterSQLite3Database =
-  import('drizzle-orm/better-sqlite3').BetterSQLite3Database<any>;
+type AnyBetterSQLite3Database = import('drizzle-orm/better-sqlite3').BetterSQLite3Database<any>;
 
 import {
   agentCategoriesTable,
@@ -180,14 +179,21 @@ export class AgentPolicyStore {
 
     this.db.insert(agentPoliciesTable).values(row).run();
 
-    return this._toRow(
-      this.db
-        .select()
-        .from(agentPoliciesTable)
-        .where(eq(agentPoliciesTable.agentSlug, input.agentSlug))
-        .all()
-        .find((r: { policySlug: string }) => r.policySlug === input.policySlug)!
-    );
+    const insertedRow = this.db
+      .select()
+      .from(agentPoliciesTable)
+      .where(eq(agentPoliciesTable.agentSlug, input.agentSlug))
+      .all()
+      .find((r: { policySlug: string }) => r.policySlug === input.policySlug);
+
+    if (!insertedRow) {
+      throw new AgentPolicyError(
+        'AGENT_POLICY_ALREADY_ATTACHED',
+        `Failed to read back inserted policy '${input.policySlug}' for agent '${input.agentSlug}'`
+      );
+    }
+
+    return this._toRow(insertedRow);
   }
 
   /**

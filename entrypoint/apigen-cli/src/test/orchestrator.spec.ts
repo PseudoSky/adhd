@@ -10,7 +10,7 @@
 //
 // Live-server tests (APIGEN_LIVE=1) are gated and skipped in normal CI.
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
@@ -30,7 +30,6 @@ import type {
   Segment,
   OutputPlugin,
   PluginInput,
-  ComposedSchemas,
 } from '@adhd/apigen-core-client';
 
 // ---------------------------------------------------------------------------
@@ -422,7 +421,10 @@ describe('[dod.10 v2 teeth] buildDescriptor: default-import Decimal source carri
       descriptor.packageSchemas.has('decimal-test'),
       'packageSchemas must contain the namespace'
     ).toBe(true);
-    const { schemas } = descriptor.packageSchemas.get('decimal-test')!;
+    const decimalPkg = descriptor.packageSchemas.get('decimal-test');
+    expect(decimalPkg).toBeDefined();
+    if (!decimalPkg) throw new Error('decimal-test package not found');
+    const { schemas } = decimalPkg;
 
     // The composed schema for addAmounts must carry format:decimal in input
     // or output. If normalizeTypeText is not called in buildSchema, the
@@ -452,15 +454,10 @@ describe('[dod.10 v2 teeth] buildDescriptor: default-import Decimal source carri
   // [v2.b] orchestrateGenerate drives the full v2 path and collectDepsFromPackageSchemas
   // returns decimal.js — proving the dep-manifest step works through the v2 path.
   it('orchestrateGenerate: collectDepsFromPackageSchemas returns decimal.js for a default-import Decimal source', async () => {
-    const capturedPackageSchemas = new Map<
-      string,
-      { id: string; schemas: ComposedSchemas; importPath: string }
-    >();
-
     const capturingPlugin: OutputPlugin = {
       id: 'capturing',
       description: 'captures packageSchemas for inspection',
-      generate(input: PluginInput) {
+      generate(_input: PluginInput) {
         return { files: [] };
       },
     };
@@ -471,7 +468,10 @@ describe('[dod.10 v2 teeth] buildDescriptor: default-import Decimal source carri
       os.tmpdir()
     );
 
-    const { schemas } = result.descriptor.packageSchemas.get('decimal-test')!;
+    const decimalResult = result.descriptor.packageSchemas.get('decimal-test');
+    expect(decimalResult).toBeDefined();
+    if (!decimalResult) throw new Error('decimal-test package not found');
+    const { schemas } = decimalResult;
 
     // Walk all schemas and collect all format values.
     const allFormats = new Set<string>();

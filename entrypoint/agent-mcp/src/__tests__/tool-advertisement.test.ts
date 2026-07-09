@@ -1,21 +1,24 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { Orchestrator } from "../engine/orchestrator.js";
-import {
-    renderToolPromptDoc,
-    toNameOnlyTools,
-} from "../engine/tool-advertisement.js";
-import { nowIso } from "../utils/timestamps.js";
-import { generateId } from "../utils/ids.js";
 import type {
+    ExecutionContext,
     LLMProvider,
+    McpClientRegistry,
+    Message,
+    OrchestratorSessionStore,
+    OrchestratorTaskStore,
     ProviderChatRequest,
     ToolDefinition,
-} from "../providers/types.js";
-import type { ExecutionContext, Message } from "../validation/index.js";
-import type { McpClientRegistry } from "../clients/registry.js";
-import { PolicyEngine } from "../engine/policy.js";
-import type { TaskStore } from "../store/task-store.js";
-import type { SessionStore } from "../store/session-store.js";
+} from "@adhd/agent-engine-orchestrator";
+import {
+    Orchestrator,
+    PolicyEngine,
+    renderToolPromptDoc,
+    toNameOnlyTools,
+} from "@adhd/agent-engine-orchestrator";
+
+const generateId = () => randomUUID();
+const nowIso = () => new Date().toISOString();
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -54,22 +57,23 @@ const policy = {
     check: () => { /* no-op: test stub — policy always permits */ },
 } as unknown as PolicyEngine;
 
-/** TaskStore stub that records every appended event for assertions. */
+/** OrchestratorTaskStore stub that records every appended event for assertions. */
 function makeTaskStore() {
     const events: Array<{ type: string; payload: Record<string, unknown> }> = [];
     const store = {
         updateStatus: () => { /* no-op */ },
-        appendEvent: (e: { type: string; payload: Record<string, unknown> }) => {
-            events.push(e);
+        appendEvent: (e: { taskId: string; type: string; payload?: unknown }) => {
+            events.push({ type: e.type, payload: (e.payload ?? {}) as Record<string, unknown> });
         },
         unregisterCancellation: () => { /* no-op */ },
-    } as unknown as TaskStore;
+    } as unknown as OrchestratorTaskStore;
     return { store, events };
 }
 
 const sessionStore = {
     appendMessage: () => { /* no-op */ },
-} as unknown as SessionStore;
+    close: () => { /* no-op */ },
+} as unknown as OrchestratorSessionStore;
 
 function makeCtx(
     defOverrides: Partial<ExecutionContext["agentDefinition"]> = {}
@@ -233,8 +237,10 @@ describe("toNameOnlyTools", () => {
         const [slim] = toNameOnlyTools([
             { name: "t", description: "x".repeat(300), inputSchema: {} },
         ]);
-        expect(slim.description!.length).toBeLessThanOrEqual(140);
-        expect(slim.description!.endsWith("…")).toBe(true);
+        expect(slim.description).toBeDefined();
+        if (!slim.description) throw new Error("expected description");
+        expect(slim.description.length).toBeLessThanOrEqual(140);
+        expect(slim.description.endsWith("…")).toBe(true);
     });
 });
 
@@ -253,7 +259,8 @@ describe("Orchestrator tool advertisement", () => {
 
         // Wire tools are name-only — the rich schema must NOT be serialized.
         expect(request.tools).toHaveLength(1);
-        expect(request.tools![0].inputSchema).toEqual({
+        if (!request.tools) throw new Error("expected tools");
+        expect(request.tools[0].inputSchema).toEqual({
             type: "object",
             properties: {},
             additionalProperties: true,

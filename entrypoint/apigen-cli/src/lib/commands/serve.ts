@@ -35,8 +35,12 @@
  *      HTTP hosts return 503 `unavailable`, gRPC hosts return gRPC status 14
  *      (UNAVAILABLE) — every other host keeps serving.
  *
- *   5. **Orphan-free teardown.** On `SIGINT`/`SIGTERM` (or front shutdown)
- *      all children are killed and the process exits clean.
+ *   5. **Orphan-free teardown.** On `SIGINT`/`SIGTERM`, uncaught exceptions,
+ *      unhandled rejections, or front shutdown, all children are killed
+ *      (SIGTERM → SIGKILL escalation) and the process exits clean.  Children
+ *      run in the same process group (`detached: false`) so terminal signals
+ *      propagate to the entire group; crash handlers guarantee cleanup even
+ *      when no signal is delivered.
  *
  * @module commands/serve
  */
@@ -424,6 +428,7 @@ export function spawnHost(
   const child = spawn(process.execPath, args, {
     stdio: ['ignore', 'inherit', 'inherit'],
     env: process.env,
+    detached: false,
   });
   host.child = child;
   host.alive = true;
@@ -476,13 +481,16 @@ function spawnGrpcHost(
   const child = spawn(process.execPath, args, {
     stdio: ['ignore', 'pipe', 'inherit'],
     env: process.env,
+    detached: false,
   });
   host.child = child;
   host.alive = true;
 
   // Listen for {"ready":true} on stdout to flip host.ready.
   // The py-grpc plugin emits this line once the gRPC server is accepting connections.
-  const rl = readline.createInterface({ input: child.stdout! });
+  const stdout = child.stdout;
+  if (!stdout) throw new Error('child process stdout is null');
+  const rl = readline.createInterface({ input: stdout });
   rl.on('line', (line: string) => {
     try {
       const msg = JSON.parse(line.trim()) as Record<string, unknown>;
@@ -1333,14 +1341,31 @@ export function registerServeCommand(program: Command): void {
         });
 
         let shuttingDown = false;
-        const onSignal = (sig: NodeJS.Signals) => {
+        const onSignal = (sig: string) => {
           if (shuttingDown) return;
           shuttingDown = true;
           process.stderr.write(`\n[serve] received ${sig}\n`);
-          void shutdown().then(() => process.exit(0));
+          shutdown()
+            .then(() => process.exit(0))
+            .catch((err) => {
+              process.stderr.write(`[serve] shutdown error: ${err}\n`);
+              process.exit(1);
+            });
         };
         process.on('SIGINT', () => onSignal('SIGINT'));
         process.on('SIGTERM', () => onSignal('SIGTERM'));
+        process.on('uncaughtException', (err) => {
+          onSignal('SIGTERM');
+          setImmediate(() => {
+            throw err;
+          });
+        });
+        process.on('unhandledRejection', (reason) => {
+          onSignal('SIGTERM');
+          setImmediate(() => {
+            throw reason;
+          });
+        });
         // Keep the process alive; the front server's open handle does this.
       }
     );

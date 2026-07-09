@@ -33,7 +33,69 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.660Z"
+      "updated_at": "2026-07-09T03:43:18.512Z"
+    },
+    {
+      "plan": "adhd-environment",
+      "dir": "adhd-environment",
+      "status": "in-progress",
+      "mutate_set": [
+        "docs/plan/adhd-environment/USE_CASES.md",
+        "docs/plan/adhd-environment/demo/DEMO.md",
+        "entrypoint/agent-mcp/adhd.environment.yaml",
+        "entrypoint/agent-mcp/src/config.ts",
+        "entrypoint/agent-mcp/src/db/client.ts",
+        "entrypoint/agent-mcp/src/environment.ts",
+        "entrypoint/agent-mcp/src/index.ts",
+        "entrypoint/agent-mcp/src/logger.ts",
+        "entrypoint/agent-mcp/src/server.ts",
+        "entrypoint/agent-mcp/src/streaming/sse-server.ts",
+        "entrypoint/environment-cli/package.json",
+        "entrypoint/environment-cli/project.json",
+        "entrypoint/environment-cli/src/api.ts",
+        "entrypoint/environment-cli/src/commands/set.ts",
+        "entrypoint/environment-cli/src/core.ts",
+        "entrypoint/environment-cli/tsconfig.json",
+        "packages/environment/environment-base-spec/package.json",
+        "packages/environment/environment-base-spec/project.json",
+        "packages/environment/environment-base-spec/spec/SPEC.md",
+        "packages/environment/environment-base-spec/spec/adhd-environment.schema.json",
+        "packages/environment/environment-base-spec/spec/cross-language-test-vectors.json",
+        "packages/environment/environment-base-spec/src/index.ts",
+        "packages/environment/environment-base-spec/tsconfig.json",
+        "packages/environment/environment-builder/package.json",
+        "packages/environment/environment-builder/project.json",
+        "packages/environment/environment-builder/src/__tests__/environment-snapshot.test.ts",
+        "packages/environment/environment-builder/src/config-resolver.ts",
+        "packages/environment/environment-builder/src/environment-snapshot.ts",
+        "packages/environment/environment-builder/src/field-merge.ts",
+        "packages/environment/environment-builder/src/index.ts",
+        "packages/environment/environment-builder/src/json-schema-gen.ts",
+        "packages/environment/environment-builder/src/provenance.ts",
+        "packages/environment/environment-builder/src/snapshot-writer.ts",
+        "packages/environment/environment-builder/src/validation.ts",
+        "packages/environment/environment-builder/src/yaml-parser.ts",
+        "packages/environment/environment-builder/tsconfig.json",
+        "packages/environment/environment-core-node/package.json",
+        "packages/environment/environment-core-node/project.json",
+        "packages/environment/environment-core-node/src/environment.ts",
+        "packages/environment/environment-core-node/src/index.ts",
+        "packages/environment/environment-core-node/tsconfig.json",
+        "packages/environment/environment-core-py/pyproject.toml",
+        "packages/environment/environment-core-py/src/adhd_environment/__init__.py",
+        "packages/environment/environment-core-py/src/adhd_environment/environment.py",
+        "packages/environment/environment-core-rs/Cargo.lock",
+        "packages/environment/environment-core-rs/Cargo.toml",
+        "packages/environment/environment-core-rs/src/lib.rs",
+        "scripts/audit_audit-builder.py",
+        "scripts/audit_audit-final.py",
+        "scripts/audit_audit-runtime.py",
+        "tsconfig.base.json"
+      ],
+      "references": [],
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-09T03:43:18.513Z"
     },
     {
       "plan": "agent-compiler",
@@ -73,7 +135,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.662Z"
+      "updated_at": "2026-07-09T03:43:18.514Z"
     },
     {
       "plan": "agent-mcp-authoring",
@@ -105,8 +167,10 @@
         "packages/ai/agent-mcp/src/tools/discovery.ts",
         "packages/ai/agent-mcp/src/tools/guide.ts",
         "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-registry/package.json",
         "packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts",
         "packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts",
+        "packages/ai/agent-registry/src/enrich/cosine.ts",
         "packages/ai/agent-registry/src/enrich/embedding.ts",
         "packages/ai/agent-registry/src/enrich/enrich-component.ts",
         "packages/ai/agent-registry/src/enrich/summarize.ts",
@@ -117,7 +181,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.662Z"
+      "updated_at": "2026-07-09T03:43:18.514Z"
     },
     {
       "plan": "agent-mcp-refactor",
@@ -160,7 +224,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.663Z"
+      "updated_at": "2026-07-09T03:43:18.515Z"
     },
     {
       "plan": "agent-policy",
@@ -195,7 +259,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.663Z"
+      "updated_at": "2026-07-09T03:43:18.515Z"
     },
     {
       "plan": "agent-provider",
@@ -233,12 +297,12 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.664Z"
+      "updated_at": "2026-07-09T03:43:18.516Z"
     },
     {
       "plan": "agent-provider-credentialing",
       "dir": "agent-provider-credentialing",
-      "status": "superseded",
+      "status": "published",
       "mutate_set": [
         ".gitignore",
         "docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py",
@@ -278,7 +342,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.664Z"
+      "updated_at": "2026-07-09T03:43:18.516Z"
     },
     {
       "plan": "agent-registry-migration",
@@ -290,6 +354,17 @@
         "docs/plan/agent-registry-migration/review.md",
         "docs/plan/agent-registry-migration/scripts/audit_migration.py",
         "docs/plan/agent-registry-migration/scripts/review_gate.py",
+        "docs/plan/agent-registry/CLOSEOUT.md",
+        "docs/plan/agent-registry/COVERAGE.md",
+        "docs/plan/agent-registry/DEMO.md",
+        "docs/plan/agent-registry/demo/",
+        "packages/ai/agent-provider/src/seed/bindings.ts",
+        "packages/ai/agent-provider/src/seed/index.ts",
+        "packages/ai/agent-provider/src/seed/models.ts",
+        "packages/ai/agent-provider/src/seed/providers.ts",
+        "packages/ai/agent-provider/src/store/model-store.ts",
+        "packages/ai/agent-provider/src/store/provider-store.ts",
+        "packages/ai/agent-provider/src/store/tool-format-store.ts",
         "packages/ai/agent-registry-migration/package.json",
         "packages/ai/agent-registry-migration/project.json",
         "packages/ai/agent-registry-migration/src/__fixtures__/code-reviewer.md",
@@ -319,12 +394,12 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.665Z"
+      "updated_at": "2026-07-09T03:43:18.516Z"
     },
     {
       "plan": "agent-registry-release",
       "dir": "agent-registry-release",
-      "status": "superseded",
+      "status": "published",
       "mutate_set": [
         ".gitignore",
         "docs/plan/agent-registry-release/MERGE_RUNBOOK.md",
@@ -342,7 +417,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.665Z"
+      "updated_at": "2026-07-09T03:43:18.517Z"
     },
     {
       "plan": "agent-registry-schema",
@@ -377,7 +452,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.665Z"
+      "updated_at": "2026-07-09T03:43:18.517Z"
     },
     {
       "plan": "agent-tool-registry",
@@ -413,7 +488,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.666Z"
+      "updated_at": "2026-07-09T03:43:18.517Z"
     },
     {
       "plan": "apigen-client-generation",
@@ -573,7 +648,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.666Z"
+      "updated_at": "2026-07-09T03:43:18.519Z"
     },
     {
       "plan": "apigen-logical-types",
@@ -609,7 +684,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.667Z"
+      "updated_at": "2026-07-09T03:43:18.519Z"
     },
     {
       "plan": "hitl-interrupts",
@@ -629,7 +704,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.667Z"
+      "updated_at": "2026-07-09T03:43:18.520Z"
     },
     {
       "plan": "parallel-tool-execution",
@@ -647,7 +722,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.667Z"
+      "updated_at": "2026-07-09T03:43:18.520Z"
     },
     {
       "plan": "task-dependency-dag",
@@ -667,7 +742,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.667Z"
+      "updated_at": "2026-07-09T03:43:18.520Z"
     },
     {
       "plan": "task-schema-foundation",
@@ -688,7 +763,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.668Z"
+      "updated_at": "2026-07-09T03:43:18.521Z"
     },
     {
       "plan": "task-streaming-sse",
@@ -711,17 +786,7 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.668Z"
-    },
-    {
-      "plan": "workspace-cleanup",
-      "dir": "workspace-cleanup",
-      "status": "planned",
-      "mutate_set": [],
-      "references": [],
-      "assumed_baseline": [],
-      "depends_on": [],
-      "updated_at": "2026-07-01T00:00:00.000Z"
+      "updated_at": "2026-07-09T03:43:18.521Z"
     },
     {
       "plan": "usage-tracking",
@@ -757,8 +822,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-06-27T00:46:45.668Z"
+      "updated_at": "2026-07-09T03:43:18.522Z"
     }
   ],
-  "updated_at": "2026-06-27T00:46:45.675Z"
+  "updated_at": "2026-07-09T03:43:18.529Z"
 }

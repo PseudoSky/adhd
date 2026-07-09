@@ -6,21 +6,22 @@ import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import fs from 'node:fs';
 import pathMod from 'node:path';
 
+const repoRoot = path.resolve(__dirname, '../../..');
+const distDir = path.join(repoRoot, 'dist/packages/dispatch/dispatch-orchestrator');
+
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/dispatch/dispatch-orchestrator',
+  cacheDir: path.join(repoRoot, 'node_modules/.vite/packages/dispatch/dispatch-orchestrator'),
 
   plugins: [
     {
-      // ship README.md into dist (npm page) — @nx/vite:build ignores project.json assets
       name: 'apigen-copy-readme',
       apply: 'build',
       closeBundle() {
         const srcPath = pathMod.resolve(__dirname, 'README.md');
         if (!fs.existsSync(srcPath)) return;
-        const outDir = pathMod.resolve(__dirname, '../../../dist/packages/dispatch/dispatch-orchestrator');
-        fs.mkdirSync(outDir, { recursive: true });
-        fs.copyFileSync(srcPath, pathMod.join(outDir, 'README.md'));
+        fs.mkdirSync(distDir, { recursive: true });
+        fs.copyFileSync(srcPath, pathMod.join(distDir, 'README.md'));
       },
     },
     nxViteTsPaths(),
@@ -30,38 +31,22 @@ export default defineConfig({
     }),
   ],
 
-  // Uncomment this if you are using workers.
-  // worker: {
-  //  plugins: [ nxViteTsPaths() ],
-  // },
-
-  // Configuration for building your library.
-  // See: https://vitejs.dev/guide/build.html#library-mode
   build: {
-    outDir: '../../../dist/packages/dispatch/dispatch-orchestrator',
+    outDir: distDir,
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {
       transformMixedEsModules: true,
     },
     lib: {
-      // Could also be a dictionary or array of multiple entry points.
       entry: 'src/index.ts',
       name: "dispatch-orchestrator",
       fileName: 'index',
-      // Change this to the formats you want to support.
-      // Don't forget to update your package.json as well.
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
       external: [
-        // platform:node — resolve node builtins (fs/path, used by
-        // MockAgentRunner) from the runtime instead of bundling/stubbing
-        // them for a browser target (matches apigen/python-env's pattern).
         /^node:/,
-        // Real npm dep, not a workspace package — resolved from the
-        // consumer's install tree rather than bundled (matches apigen/cli's
-        // pattern for this same SDK).
         /^@modelcontextprotocol\/sdk(\/|$)/,
       ],
     },
@@ -70,14 +55,17 @@ export default defineConfig({
   test: {
     globals: true,
     cache: {
-      dir: '../../../node_modules/.vitest',
+      dir: path.join(repoRoot, 'node_modules/.vitest'),
     },
     environment: 'node',
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../../coverage/packages/dispatch/dispatch-orchestrator',
+      reportsDirectory: path.join(
+        repoRoot,
+        'coverage/packages/dispatch/dispatch-orchestrator'
+      ),
       provider: 'v8',
     },
   },

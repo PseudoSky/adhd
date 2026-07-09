@@ -37,7 +37,6 @@ import type { ErrorObject } from 'ajv';
 import { ApiError } from '@adhd/apigen-base-errors';
 import type { Layer, Call, Next } from './invoke';
 import type { LayerResult } from './invoke';
-import type { InvokeOptions } from './invoke';
 
 // ---------------------------------------------------------------------------
 // Ajv singleton — one instance for all validation in the runtime process.

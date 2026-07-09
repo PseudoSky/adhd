@@ -27,7 +27,6 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import {
   AgentStore,
   TaxonomyStore,
-  ComponentStore,
   CompositionStore,
 } from '@adhd/agent-store-prompts';
 import { AgentToolStore } from '@adhd/agent-store-tools';

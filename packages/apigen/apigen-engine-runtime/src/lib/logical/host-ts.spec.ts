@@ -145,7 +145,8 @@ describe('tsHostBinding — date-time round-trip through the binding', () => {
   });
 
   it('encodes a Date to an RFC 3339 UTC string', () => {
-    const codec = dateTimeCodecFromBinding!;
+    if (!dateTimeCodecFromBinding) throw new Error('date-time codec not bound');
+    const codec = dateTimeCodecFromBinding;
     const seed = new Date('2024-03-15T10:30:00.000Z');
     const ctx = makeCtx();
 
@@ -158,7 +159,8 @@ describe('tsHostBinding — date-time round-trip through the binding', () => {
   });
 
   it('decodes the wire back to a Date with the same getTime()', () => {
-    const codec = dateTimeCodecFromBinding!;
+    if (!dateTimeCodecFromBinding) throw new Error('date-time codec not bound');
+    const codec = dateTimeCodecFromBinding;
     const originalMs = 1710496200000; // 2024-03-15T10:30:00.000Z
     const seed = new Date(originalMs);
     const ctx = makeCtx();
@@ -172,7 +174,8 @@ describe('tsHostBinding — date-time round-trip through the binding', () => {
   });
 
   it('full round-trip is identity over getTime()', () => {
-    const codec = dateTimeCodecFromBinding!;
+    if (!dateTimeCodecFromBinding) throw new Error('date-time codec not bound');
+    const codec = dateTimeCodecFromBinding;
     const ctx = makeCtx();
     const dates = [
       new Date('2000-01-01T00:00:00.000Z'),

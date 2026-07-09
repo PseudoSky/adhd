@@ -1,4 +1,6 @@
 import { type SourceFile } from 'ts-morph';
+import type { SchemaNode } from '@adhd/apigen-base-logical';
+import { validateSchemaRefs } from '@adhd/apigen-base-logical';
 import type { GenerateSchemasOptions, GeneratedSchemas } from './types';
 import { extractNamed } from './extractors/named';
 import { extractDefault } from './extractors/default-export';
@@ -92,6 +94,33 @@ export async function generateSchemas(
       };
     }
 
+    // BUG-APIGEN-CORE-001: validate all $ref values against the accumulated
+    // $defs dictionary so unresolvable refs are caught at generation time,
+    // not at first runtime invocation.
+    const allDefs: Record<string, SchemaNode> = {};
+    const collectDefs = (node: Record<string, unknown>): void => {
+      const defs = node['$defs'] as Record<string, SchemaNode> | undefined;
+      if (defs) Object.assign(allDefs, defs);
+    };
+    for (const fnSchema of Object.values(schemas)) {
+      collectDefs(fnSchema.input);
+      collectDefs(fnSchema.output);
+    }
+    // Only run validation when there are $defs to resolve against; a schema
+    // with $ref but no $defs at all is a structural problem that the
+    // orchestrator will catch when composing the final descriptor.
+    if (Object.keys(allDefs).length > 0) {
+      for (const [fnName, fnSchema] of Object.entries(schemas)) {
+        try {
+          validateSchemaRefs(fnSchema.input, allDefs);
+          validateSchemaRefs(fnSchema.output, allDefs);
+        } catch (err) {
+          throw new Error(
+            `[apigen-core-client] Schema validation failed for function "${fnName}": ${(err as Error).message}`
+          );
+        }
+      }
+    }
     return { metadata: { namespace, phase }, schemas };
   } finally {
     if (ownsSession) session.dispose();

@@ -554,6 +554,7 @@ export const VALIDATION_VECTORS: ValidationCase[] = [
       required: ['amount'],
     },
     // This exceeds Number.MAX_SAFE_INTEGER — JSON.parse will silently corrupt it.
+    // eslint-disable-next-line @typescript-eslint/no-loss-of-precision
     schemaValidValue: { amount: 9007199254740993 },
     domainNote:
       'Exceeds Number.MAX_SAFE_INTEGER; JSON.parse silently rounds it. SPEC §4 mandates int64 as string-encoded for 64-bit integers; this proves the validator alone cannot catch the precision loss.',
@@ -720,6 +721,7 @@ export const logicalTypeVectors: LogicalTypeVector[] = [
       { pointer: '/bigintStr', equals: '9007199254740993' },
     ],
     // Mutating wire to a plain JSON number (f64) must break int64 precision guarantee.
+    // eslint-disable-next-line @typescript-eslint/no-loss-of-precision
     negativeControl: { mutate: 'wire', to: 9007199254740993 },
   },
 

@@ -1,0 +1,148 @@
+{
+  "description": "Shared output types for the harness tool catalog. Each HARN-XXX tool outputs to its $REF.json envelope where data conforms to the schema indicated by output_schema.$ref in the registry entry.",
+  "schemas": {
+    "HARN-027": {
+      "type": "object",
+      "title": "WhatWebOutput",
+      "required": ["technologies", "plugin_count"],
+      "properties": {
+        "technologies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Technology" }
+        },
+        "plugin_count": {
+          "type": "integer",
+          "description": "Number of active plugins that fired"
+        },
+        "raw": {
+          "type": "string",
+          "description": "Raw WhatWeb JSON output (escaped string)"
+        }
+      }
+    },
+    "HARN-028": {
+      "type": "object",
+      "title": "NucleiOutput",
+      "required": ["findings", "templates_run"],
+      "properties": {
+        "findings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Finding" }
+        },
+        "templates_run": {
+          "type": "integer",
+          "description": "Number of nuclei templates executed"
+        }
+      }
+    },
+    "HARN-029": {
+      "type": "object",
+      "title": "FfufOutput",
+      "required": ["endpoints", "results_total", "wordlist"],
+      "properties": {
+        "endpoints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Endpoint" }
+        },
+        "results_total": {
+          "type": "integer",
+          "description": "Total fuzzing results"
+        },
+        "wordlist": {
+          "type": "string",
+          "description": "Wordlist path used for fuzzing"
+        }
+      }
+    },
+    "HARN-030": {
+      "type": "object",
+      "title": "JsluiceOutput",
+      "required": ["endpoints", "secrets", "files_analyzed"],
+      "properties": {
+        "endpoints": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Endpoint" }
+        },
+        "secrets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Secret" }
+        },
+        "urls_raw": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Raw URLs extracted (no dedup)"
+        },
+        "files_analyzed": {
+          "type": "integer",
+          "description": "Number of bundle files analyzed"
+        }
+      }
+    },
+    "HARN-031": {
+      "type": "object",
+      "title": "SecretFinderOutput",
+      "required": ["secrets", "files_analyzed"],
+      "properties": {
+        "secrets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Secret" }
+        },
+        "files_analyzed": {
+          "type": "integer",
+          "description": "Number of bundle files analyzed"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Technology": {
+      "type": "object",
+      "title": "Technology",
+      "required": ["name", "source"],
+      "properties": {
+        "name":        { "type": "string", "description": "Technology name (e.g. jQuery, Apache, React)" },
+        "version":     { "type": "string", "description": "Detected version string, may be empty" },
+        "category":    { "type": "string", "description": "Category such as cms, js-framework, server, os, etc." },
+        "confidence":  { "type": "integer", "description": "Detection confidence (0-100)" },
+        "source":      { "type": "string", "enum": ["whatweb"], "description": "Source tool identifier" }
+      }
+    },
+    "Endpoint": {
+      "type": "object",
+      "title": "Endpoint",
+      "required": ["path", "method", "source"],
+      "properties": {
+        "path":           { "type": "string", "description": "Discovered URL path" },
+        "method":         { "type": "string", "default": "GET", "description": "HTTP method" },
+        "source":         { "type": "string", "description": "Source tool identifier (ffuf, jsluice, etc.)" },
+        "status_code":    { "type": "integer", "description": "HTTP response status code" },
+        "content_length": { "type": "integer", "description": "Response body length in bytes" }
+      }
+    },
+    "Secret": {
+      "type": "object",
+      "title": "Secret",
+      "required": ["type", "value_redacted", "file", "confidence"],
+      "properties": {
+        "type":           { "type": "string", "description": "Secret type (api_key, jwt_token, password, aws_key, etc.)" },
+        "value_redacted": { "type": "string", "description": "Redacted value (first 4 + last 4 chars visible)" },
+        "file":           { "type": "string", "description": "Source file path" },
+        "confidence":     { "type": "string", "enum": ["firm", "possible", "weak"], "description": "Detection confidence level" }
+      }
+    },
+    "Finding": {
+      "type": "object",
+      "title": "Finding",
+      "required": ["id", "title", "severity", "vector", "confidence"],
+      "properties": {
+        "id":              { "type": "string", "description": "Unique finding identifier" },
+        "title":           { "type": "string", "description": "Human-readable finding title" },
+        "severity":        { "type": "string", "enum": ["critical", "high", "medium", "low", "info"], "description": "Vulnerability severity" },
+        "endpoint":        { "type": "string", "description": "Affected URL/endpoint" },
+        "vector":          { "type": "string", "description": "Template or vector identifier" },
+        "mitre_techniques": { "type": "array", "items": { "type": "string" }, "description": "MITRE ATT&CK technique IDs" },
+        "confidence":      { "type": "string", "enum": ["firm", "possible", "weak"], "description": "Detection confidence" }
+      }
+    }
+  }
+}

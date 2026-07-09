@@ -301,8 +301,11 @@ export class ClaudeCliProvider implements LLMProvider {
             env: subEnv,
         });
 
+        if (!proc.stdout) throw new Error('stdout not available');
+        if (!proc.stdin) throw new Error('stdin not available');
+
         const rl = readline.createInterface({
-            input: proc.stdout!,
+            input: proc.stdout,
             crlfDelay: Infinity,
         });
 
@@ -310,7 +313,7 @@ export class ClaudeCliProvider implements LLMProvider {
         request.signal?.addEventListener("abort", onAbort, { once: true });
 
         try {
-            proc.stdin!.write(
+            proc.stdin.write(
                 JSON.stringify({
                     type: "user",
                     message: { role: "user", content: userMessage },
@@ -382,7 +385,7 @@ export class ClaudeCliProvider implements LLMProvider {
                             isError = true;
                         }
 
-                        proc.stdin!.write(
+                        proc.stdin.write(
                             JSON.stringify({
                                 type: "user",
                                 message: {
@@ -400,7 +403,7 @@ export class ClaudeCliProvider implements LLMProvider {
                 }
             }
 
-            proc.stdin!.end();
+            proc.stdin.end();
 
             if (!finalResult) {
                 throw new ToolError(

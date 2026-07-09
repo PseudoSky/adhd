@@ -43,9 +43,8 @@ import {
   DEFAULT_POLL,
   MockAgentRunner,
   orchestrateCycle,
+  pollUntilTerminal,
   type CycleResult,
-  type DispatchTaskStatus,
-  type DispatchUsageReport,
   type IDispatchAgentRunner,
   type OrchestratorDeps,
   type PollConfig,
@@ -58,6 +57,15 @@ import {
 /** Builds a real `IDagClient` reading/writing `dagPath` via the JSON-file serializer. */
 export function buildClient(dagPath: string): IDagClient {
   return createDagClient(createJsonFileSerializer(dagPath));
+}
+
+/** Throws if `dagPath` does not point to a readable dag file, with the path in the message. */
+async function guardDagExists(dagPath: string): Promise<void> {
+  const serializer = createJsonFileSerializer(dagPath);
+  const dag = await serializer.readDag();
+  if (dag === null) {
+    throw new Error(`dag file not found: ${dagPath}`);
+  }
 }
 
 /**
@@ -133,12 +141,14 @@ export async function validateCore(dagPath: string): Promise<ValidationResult> {
 
 /** Real `DagClient` load + `@adhd/dispatch-optimizer`'s `snapshot()`. Read-only. */
 export async function snapshotCore(dagPath: string): Promise<DagSnapshot> {
+  await guardDagExists(dagPath);
   const dag = await buildClient(dagPath).load();
   return computeSnapshot(dag, buildOptimizerDeps());
 }
 
 /** `snapshotCore()` + the greedy `optimize()`. Read-only — dispatches nothing. */
 export async function optimizeCore(dagPath: string): Promise<DispatchUnit[]> {
+  await guardDagExists(dagPath);
   const dag = await buildClient(dagPath).load();
   const deps = buildOptimizerDeps();
   return computeOptimize(computeSnapshot(dag, deps), deps);
@@ -146,6 +156,7 @@ export async function optimizeCore(dagPath: string): Promise<DispatchUnit[]> {
 
 /** `DagClient.getEligibleMilestones()` — dispatch_log-derived completion. Read-only. */
 export async function eligibleCore(dagPath: string): Promise<string[]> {
+  await guardDagExists(dagPath);
   return buildClient(dagPath).getEligibleMilestones();
 }
 
@@ -173,6 +184,7 @@ export interface MilestoneStatusEntry {
 export async function statusCore(
   dagPath: string
 ): Promise<Record<string, MilestoneStatusEntry>> {
+  await guardDagExists(dagPath);
   const dag = await buildClient(dagPath).load();
   const snap = computeSnapshot(dag, buildOptimizerDeps());
   const ownOps = operationIdsByMilestone(dag);
@@ -221,6 +233,7 @@ export async function runCycleCore(
   dryRun: boolean,
   runnerOverride?: IDispatchAgentRunner
 ): Promise<CycleResult> {
+  await guardDagExists(dagPath);
   const runner =
     runnerOverride ??
     (dryRun
@@ -271,20 +284,6 @@ export interface CalibrationResult {
 
 const NULL_TASK_PROMPT = 'Respond with only the word "ok". Take no other action.';
 
-/**
- * Statuses that stop polling — mirrors dispatch-orchestrator's own
- * `POLL_TERMINAL_STATUSES` (not exported, so re-declared here; see the cli
- * milestone completion report for the DRY follow-up: exporting
- * `pollUntilTerminal`/this set from `@adhd/dispatch-orchestrator` would let
- * calibrate-like external callers reuse it directly).
- */
-const CALIBRATION_TERMINAL: ReadonlySet<DispatchTaskStatus> = new Set([
-  'completed',
-  'failed',
-  'cancelled',
-  'awaiting_input',
-]);
-
 function buildNullTaskUnit(modelTier: ModelTier): DispatchUnit {
   const now = new Date().toISOString();
   return {
@@ -313,23 +312,6 @@ function buildNullTaskUnit(modelTier: ModelTier): DispatchUnit {
     completed_at: null,
     tokens_actual: null,
   };
-}
-
-/** Bounded poll (never a raw wall-clock wait — `sleep`/`poll` are both injectable). */
-async function pollNullTask(
-  runner: IDispatchAgentRunner,
-  taskId: string,
-  poll: PollConfig,
-  sleep: (ms: number) => Promise<void>
-): Promise<{ status: DispatchTaskStatus; usage: DispatchUsageReport | undefined }> {
-  let elapsedMs = 0;
-  for (;;) {
-    const { status, usage } = await runner.poll(taskId);
-    if (CALIBRATION_TERMINAL.has(status)) return { status, usage };
-    if (elapsedMs >= poll.timeoutMs) return { status, usage };
-    await sleep(poll.intervalMs);
-    elapsedMs += poll.intervalMs;
-  }
 }
 
 function readExistingCalibration(outputPath: string): Record<string, number> {
@@ -361,19 +343,20 @@ function readExistingCalibration(outputPath: string): Record<string, number> {
  */
 export async function calibrateCore(
   modelTier: string,
-  runner: IDispatchAgentRunner,
+  runner: IDispatchAgentRunner | (() => IDispatchAgentRunner),
   outputPath: string,
   pollOverrides?: { poll?: PollConfig; sleep?: (ms: number) => Promise<void> }
 ): Promise<CalibrationResult> {
   const tier = assertModelTier(modelTier);
+  const resolvedRunner = typeof runner === 'function' ? runner() : runner;
   const poll = pollOverrides?.poll ?? DEFAULT_POLL;
   const sleep =
     pollOverrides?.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
 
   const unit = buildNullTaskUnit(tier);
-  await runner.ensureAgent(unit);
-  const fired = await runner.fire(unit);
-  const { usage } = await pollNullTask(runner, fired.taskId, poll, sleep);
+  await resolvedRunner.ensureAgent(unit);
+  const fired = await resolvedRunner.fire(unit);
+  const { usage } = await pollUntilTerminal(resolvedRunner, fired.taskId, poll, sleep);
 
   const inputTokens = usage?.direct.inputTokens ?? 0;
   const outputTokens = usage?.direct.outputTokens ?? 0;

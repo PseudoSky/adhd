@@ -54,7 +54,7 @@ describe('functional', () => {
         () => true
       )()
     ).toEqual([false, true]);
-    expect(functional.flow([() => false, (a: any) => !a])()).toEqual(true);
+    expect(functional.flow([() => false, (a: unknown) => !a])()).toEqual(true);
     expect(functional.partial((a: number, b: number) => a + b, 1)(2)).toEqual(
       3
     );

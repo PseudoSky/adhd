@@ -181,7 +181,8 @@ describe('createUnionCodec', () => {
 
   it('round-trips a Dog value: TS → wire → Dog instance (correct variant)', () => {
     const registry = buildRegistry();
-    const codec = registry.get('cli.Pet')!;
+    const codec = registry.get('cli.Pet');
+    if (!codec) throw new Error('cli.Pet codec not found');
     expect(codec).toBeDefined();
 
     const dog = new Dog('Rex', 'Labrador');
@@ -205,7 +206,8 @@ describe('createUnionCodec', () => {
 
   it('round-trips a Cat value: TS → wire → Cat instance (correct variant)', () => {
     const registry = buildRegistry();
-    const codec = registry.get('cli.Pet')!;
+    const codec = registry.get('cli.Pet');
+    if (!codec) throw new Error('cli.Pet codec not found');
     const cat = new Cat('Whiskers', true);
     const ctx = ctxFor(registry);
 
@@ -224,7 +226,8 @@ describe('createUnionCodec', () => {
 
   it('ensures Dog→wire→decode yields Dog (not Cat) and Cat→wire→decode yields Cat (not Dog)', () => {
     const registry = buildRegistry();
-    const codec = registry.get('cli.Pet')!;
+    const codec = registry.get('cli.Pet');
+    if (!codec) throw new Error('cli.Pet codec not found');
     const dog = new Dog('Buddy', 'Beagle');
     const cat = new Cat('Luna', false);
     const ctx = ctxFor(registry);
@@ -245,7 +248,8 @@ describe('createUnionCodec', () => {
 
   it('[neg-a] throws E_UNION_UNKNOWN_TAG when the wire has an unknown discriminator tag', () => {
     const registry = buildRegistry();
-    const codec = registry.get('cli.Pet')!;
+    const codec = registry.get('cli.Pet');
+    if (!codec) throw new Error('cli.Pet codec not found');
     const unknownWire = { kind: 'fish', name: 'Nemo' } as unknown as Wire;
 
     try {
@@ -259,7 +263,8 @@ describe('createUnionCodec', () => {
 
   it('[neg-a] throws E_UNION_UNKNOWN_TAG when encoding a value with an unknown discriminator tag', () => {
     const registry = buildRegistry();
-    const codec = registry.get('cli.Pet')!;
+    const codec = registry.get('cli.Pet');
+    if (!codec) throw new Error('cli.Pet codec not found');
     const unknownValue = { kind: 'fish', name: 'Nemo' } as unknown as object;
 
     try {
@@ -275,7 +280,8 @@ describe('createUnionCodec', () => {
 
   it('[neg-b] throws E_UNION_NO_DISCRIMINATOR when the value is missing the discriminator property', () => {
     const registry = buildRegistry();
-    const codec = registry.get('cli.Pet')!;
+    const codec = registry.get('cli.Pet');
+    if (!codec) throw new Error('cli.Pet codec not found');
     const noTag = { name: 'Rex', breed: 'Labrador' } as unknown as object;
 
     try {
@@ -289,7 +295,8 @@ describe('createUnionCodec', () => {
 
   it('[neg-b] throws E_UNION_NO_DISCRIMINATOR when the wire object is missing the discriminator property', () => {
     const registry = buildRegistry();
-    const codec = registry.get('cli.Pet')!;
+    const codec = registry.get('cli.Pet');
+    if (!codec) throw new Error('cli.Pet codec not found');
     const noTagWire = { name: 'Rex', breed: 'Labrador' } as unknown as Wire;
 
     try {
@@ -305,7 +312,8 @@ describe('createUnionCodec', () => {
 
   it('[neg-c] hints-advisory: decoding with x-apigen-logical stripped yields identical result', () => {
     const registry = buildRegistry();
-    const codec = registry.get('cli.Pet')!;
+    const codec = registry.get('cli.Pet');
+    if (!codec) throw new Error('cli.Pet codec not found');
 
     const dog = new Dog('Scout', 'Golden Retriever');
     const ctx = ctxFor(registry);
@@ -351,7 +359,8 @@ describe('createUnionCodec', () => {
 
   it('throws E_UNION_INVALID_WIRE when the wire is not an object', () => {
     const registry = buildRegistry();
-    const codec = registry.get('cli.Pet')!;
+    const codec = registry.get('cli.Pet');
+    if (!codec) throw new Error('cli.Pet codec not found');
 
     expect(() =>
       codec.decode('not-an-object' as Wire, PET_UNION_NODE, ctxFor(registry))
@@ -390,7 +399,8 @@ describe('createUnionCodec', () => {
       'x-apigen-logical': 'union',
     };
     const registry = buildRegistry();
-    const codec = registry.get('cli.Pet')!;
+    const codec = registry.get('cli.Pet');
+    if (!codec) throw new Error('cli.Pet codec not found');
     const dog = new Dog('Max', 'Poodle');
 
     try {

@@ -31,8 +31,6 @@ const PORT = 49271; // deterministic high port, avoids clashes
 const NS = 'testapi';
 const BASE = `http://127.0.0.1:${PORT}`;
 
-const IS_LIVE = true; // always run — Python server is local, no env gate needed
-
 // ---------------------------------------------------------------------------
 // Server lifecycle helpers
 // ---------------------------------------------------------------------------

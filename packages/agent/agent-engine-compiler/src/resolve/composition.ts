@@ -50,8 +50,8 @@ export interface ResolvedBody {
  * @throws {CompositionError} AGENT_NOT_FOUND | COMPONENT_VERSION_NOT_FOUND |
  *   REQUIRED_COMPONENT_EXCLUDED — propagated unchanged from CompositionStore.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function resolveBody(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: BetterSQLite3Database<any>,
   agentSlug: string,
   context: CompositionContext = {}

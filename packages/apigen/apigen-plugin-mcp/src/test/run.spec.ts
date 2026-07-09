@@ -167,6 +167,7 @@ describe('[plugin-mcp.4] run() streaming-http — tools/list + callTool via real
   }
 
   it('[plugin-mcp.4] tools/list returns getUser and listUsers', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resp = (await rpc('tools/list', {})) as any;
     // Result may be at resp.result (raw JSON-RPC) or resp itself (SDK unwrapped)
     const tools: Array<{ name: string }> =
@@ -177,6 +178,7 @@ describe('[plugin-mcp.4] run() streaming-http — tools/list + callTool via real
   });
 
   it('tools/list does NOT include __samples__ or non-function exports', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resp = (await rpc('tools/list', {})) as any;
     const tools: Array<{ name: string }> =
       resp?.result?.tools ?? resp?.tools ?? [];
@@ -188,6 +190,7 @@ describe('[plugin-mcp.4] run() streaming-http — tools/list + callTool via real
     const resp = (await rpc('tools/call', {
       name: 'getUser',
       arguments: { data: { userId: 'u99' } },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const content: Array<{ type: string; text: string }> =
       resp?.result?.content ?? resp?.content ?? [];
@@ -201,6 +204,7 @@ describe('[plugin-mcp.4] run() streaming-http — tools/list + callTool via real
     const resp = (await rpc('tools/call', {
       name: 'listUsers',
       arguments: { data: {} },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const content: Array<{ type: string; text: string }> =
       resp?.result?.content ?? resp?.content ?? [];
@@ -344,6 +348,7 @@ describe('[v2-proj-transport] run() — MCP envelope from _meta (§9.1)', () => 
         _meta: { 'x-auth-session': 'tok-mcp' }, // §9.1 MCP carrier
         data: { userId: 'u-meta' },
       },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const content: Array<{ type: string; text: string }> =
       resp?.result?.content ?? resp?.content ?? [];
@@ -362,6 +367,7 @@ describe('[v2-proj-transport] run() — MCP envelope from _meta (§9.1)', () => 
         session: 'wrong-carrier', // wrong carrier — should be in _meta
         data: { userId: 'u-body' },
       },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
     const content: Array<{ type: string; text: string }> =
       resp?.result?.content ?? resp?.content ?? [];

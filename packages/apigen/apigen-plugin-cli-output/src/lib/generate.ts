@@ -2,6 +2,7 @@ import type { PluginInput, PluginOutput } from '@adhd/apigen-core-client';
 import { needsEnvelopeField, dataParamNames } from '@adhd/apigen-engine-runtime';
 import { envelopeCliFlag, envelopeEnvVar } from '@adhd/apigen-naming';
 import { CLI_EXIT_CODE } from '@adhd/apigen-base-errors';
+import * as path from 'node:path';
 
 // ---------------------------------------------------------------------------
 // §9.1 — envelope field binding for CLI (flag + env var per field)
@@ -68,6 +69,19 @@ function sanitizeIdentifier(id: string): string {
   return s
 }
 
+/**
+ * Converts an absolute (or package-name) import path to one relative to
+ * {@link outDir}, ensuring the result is suitable for a JS import statement
+ * (starts with `'./'` or `'../'`).  Package names (non-absolute) are
+ * returned verbatim.
+ */
+function relativeImportPath(outDir: string, importPath: string): string {
+  if (!path.isAbsolute(importPath)) return importPath
+  const rel = path.relative(outDir, importPath)
+  if (!rel.startsWith('.') && !rel.startsWith('/')) return `./${rel}`
+  return rel
+}
+
 export function generate(input: PluginInput): PluginOutput {
   const cliName = (input.options['name'] as string) ?? 'cli';
   const version = (input.options['version'] as string) ?? '0.1.0';
@@ -79,9 +93,11 @@ export function generate(input: PluginInput): PluginOutput {
     `import { dispatch, buildFnTable } from '@adhd/apigen-engine-runtime'`,
   ];
   for (const pkg of input.packages) {
-    lines.push(`import * as ${pkg.id}_ns from '${pkg.importPath}'`);
+    const varName = sanitizeIdentifier(pkg.id)
+    const importRel = relativeImportPath(input.outputDir, pkg.importPath)
+    lines.push(`import * as ${varName}_ns from '${importRel}'`);
     lines.push(
-      `const ${pkg.id}_fns = buildFnTable(${pkg.id}_ns as Record<string, unknown>)`
+      `const ${varName}_fns = buildFnTable(${varName}_ns as Record<string, unknown>)`
     );
   }
   lines.push(``);
@@ -117,8 +133,20 @@ export function generate(input: PluginInput): PluginOutput {
         >
       )?.['data'] as Record<string, unknown> | undefined;
       const schemaProps =
-        (dataSchema?.['properties'] as Record<string, { type?: string }>) ?? {};
+        (dataSchema?.['properties'] as Record<string, { type?: string; anyOf?: Array<{ type?: string }>; default?: unknown }>) ?? {};
       const requiredParams = (dataSchema?.['required'] as string[]) ?? [];
+
+      // Helper: anyOf with all non-null members being 'boolean' counts as boolean
+      const isBooleanParam = (param: string): boolean => {
+        const prop = schemaProps[param]
+        if (!prop) return false
+        if (prop.type === 'boolean') return true
+        if (prop.anyOf) {
+          const nonNull = prop.anyOf.filter((m) => m.type !== 'null')
+          return nonNull.length > 0 && nonNull.every((m) => m.type === 'boolean')
+        }
+        return false
+      }
 
       lines.push(`program`);
       lines.push(`  .command('${fnName}')`);
@@ -152,10 +180,15 @@ export function generate(input: PluginInput): PluginOutput {
         p.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase());
       for (const param of paramNames) {
         const flag = kebab(param);
-        const isBoolean = schemaProps[param]?.type === 'boolean';
+        const isBoolean = isBooleanParam(param);
         const isRequired = requiredParams.includes(param);
         if (isBoolean) {
           lines.push(`  .option('--${flag}')`);
+          // DEBT-APIGEN-CLI-004: when a boolean param defaults to true emit
+          // --no-<flag> so Commander generates the negation flag.
+          if (schemaProps[param]?.default === true) {
+            lines.push(`  .option('--no-${flag}')`);
+          }
         } else if (isRequired) {
           lines.push(`  .requiredOption('--${flag} <${flag}>')`);
         } else {
@@ -195,7 +228,7 @@ export function generate(input: PluginInput): PluginOutput {
       }
 
       lines.push(
-        `    const result = await dispatch(${pkg.id}_fns as any, undefined, schemas['${pkg.id}:${fnName}'] as any, '${fnName}', envelope, domainArgs)`
+        `    const result = await dispatch(${varName}_fns as any, undefined, schemas['${pkg.id}:${fnName}'] as any, '${fnName}', envelope, domainArgs)`
       );
       // Print the result as single-line JSON so consumers (and tooling) can
       // parse the last stdout line unambiguously; pretty-printing would split

@@ -72,6 +72,12 @@
         "testStorybookTargetName": "test-storybook",
         "staticStorybookTargetName": "static-storybook"
       }
+    },
+    {
+      "plugin": "@monodon/rust"
+    },
+    {
+      "plugin": "@nxlv/python"
     }
   ],
   "generators": {

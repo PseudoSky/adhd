@@ -70,7 +70,9 @@ describe('health plugin — v2 shape', () => {
   });
 
   it('mount.operations is a function', () => {
-    expect(typeof healthPlugin.capabilities.mount!.operations).toBe('function');
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    expect(typeof mount.operations).toBe('function');
   });
 });
 
@@ -80,36 +82,48 @@ describe('health plugin — v2 shape', () => {
 
 describe('health plugin — mount.operations()', () => {
   it('returns exactly one mounted operation', () => {
-    const ops = healthPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    const ops = mount.operations(sampleDescriptor);
     expect(Array.isArray(ops)).toBe(true);
     expect(ops.length).toBe(1);
   });
 
   it('the mounted operation has id "_meta/health"', () => {
-    const [op] = healthPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    const [op] = mount.operations(sampleDescriptor);
     expect(op.id).toBe('_meta/health');
   });
 
   it('the mounted operation is safe (kind: query, safe: true) → GET /meta/health', () => {
-    const [op] = healthPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    const [op] = mount.operations(sampleDescriptor);
     expect(op.safe).toBe(true);
     expect(op.kind).toBe('query');
   });
 
   it('restricts the mounted operation to http and grpc transports (SPEC §13.1)', () => {
-    const [op] = healthPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    const [op] = mount.operations(sampleDescriptor);
     // Both http (health checks) and grpc (load-balancer probes) are required.
     expect(op.transports).toContain('http');
     expect(op.transports).toContain('grpc');
   });
 
   it('exposes a handler function on the mounted operation', () => {
-    const [op] = healthPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    const [op] = mount.operations(sampleDescriptor);
     expect(typeof op.handler).toBe('function');
   });
 
   it('sets host from the descriptor', () => {
-    const [op] = healthPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    const [op] = mount.operations(sampleDescriptor);
     expect(op.host).toBe(sampleDescriptor.host);
   });
 });
@@ -120,32 +134,42 @@ describe('health plugin — mount.operations()', () => {
 
 describe('health plugin — handler returns readiness signal', () => {
   it('handler returns { status: "ok" }', () => {
-    const [op] = healthPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    const [op] = mount.operations(sampleDescriptor);
     const result = op.handler(makeCall(sampleDescriptor)) as HealthResponse;
     expect(result.status).toBe('ok');
   });
 
   it('handler result carries the host tag from the descriptor', () => {
-    const [op] = healthPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    const [op] = mount.operations(sampleDescriptor);
     const result = op.handler(makeCall(sampleDescriptor)) as HealthResponse;
     expect(result.host).toBe('ts');
   });
 
   it('handler result reflects the descriptor host for a non-ts host', () => {
     const rustDescriptor: Descriptor = { ...sampleDescriptor, host: 'rust' };
-    const [op] = healthPlugin.capabilities.mount!.operations(rustDescriptor);
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    const [op] = mount.operations(rustDescriptor);
     const result = op.handler(makeCall(rustDescriptor)) as HealthResponse;
     expect(result.host).toBe('rust');
   });
 
   it('omits meta key when no meta option is supplied', () => {
-    const [op] = healthPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    const [op] = mount.operations(sampleDescriptor);
     const result = op.handler(makeCall(sampleDescriptor)) as HealthResponse;
     expect(result.meta).toBeUndefined();
   });
 
   it('includes meta in response when meta option is supplied', () => {
-    const [op] = healthPlugin.capabilities.mount!.operations(sampleDescriptor, {
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    const [op] = mount.operations(sampleDescriptor, {
       meta: { region: 'us-east-1', revision: 42 },
     });
     const result = op.handler(makeCall(sampleDescriptor)) as HealthResponse;
@@ -155,7 +179,9 @@ describe('health plugin — handler returns readiness signal', () => {
   // Teeth: the handler must return status:'ok' always (not a mocked value).
   // If the handler is replaced with a no-op returning {}, this test goes red.
   it('negative — handler must always return status: "ok" (not missing, not "error")', () => {
-    const [op] = healthPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    const [op] = mount.operations(sampleDescriptor);
     const result = op.handler(makeCall(sampleDescriptor)) as Record<
       string,
       unknown
@@ -169,7 +195,9 @@ describe('health plugin — handler returns readiness signal', () => {
   // Teeth: host must come from the descriptor, not be hardcoded.
   it('negative — host in response must match descriptor.host (not be hardcoded)', () => {
     const pyDescriptor: Descriptor = { ...sampleDescriptor, host: 'py' };
-    const [op] = healthPlugin.capabilities.mount!.operations(pyDescriptor);
+    const mount = healthPlugin.capabilities.mount;
+    expect(mount).not.toBeNull();
+    const [op] = mount.operations(pyDescriptor);
     const result = op.handler(makeCall(pyDescriptor)) as HealthResponse;
     // If host were hardcoded to 'ts', this fails.
     expect(result.host).toBe('py');

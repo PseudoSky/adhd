@@ -48,15 +48,15 @@ type PathMatcher = <T extends object>(
 const isPrimitiveArray: PathMatcher = (key, path, o) => {
   if (isArray(o[key])) {
     return (
-      (o[key] as any[]).length == 0 ||
-      (o[key] as any[]).every((e) => isValue(e))
+      (o[key] as unknown[]).length == 0 ||
+      (o[key] as unknown[]).every((e) => isValue(e))
     );
   }
   return isValue(o[key]);
 };
-type QueueItem = { obj: any; path: string[] };
+type QueueItem = { obj: Record<string, unknown>; path: string[] };
 export function allPaths(
-  o: any,
+  o: Record<string, unknown>,
   matcher = isPrimitiveArray,
   traversePrimitiveArrays = false
 ) {
@@ -100,8 +100,8 @@ export function allPaths(
  * @returns An object created from the given key-value pairs.
  */
 export function zipObject(
-  array: Iterable<readonly [PropertyKey, any]>,
-  loose = false
+  array: Iterable<readonly [PropertyKey, unknown]>,
+  _loose = false
 ) {
   return Object.fromEntries(array);
 }
@@ -112,10 +112,11 @@ export function zipObject(
  * @param values - A string or array of values.
  * @returns An object created from the given keys and values.
  */
-export function rollObject(keys: any[], values: string | any[]) {
+export function rollObject(keys: string[], values: string | unknown[]) {
   if (keys.length === values.length) {
     return keys.reduce(
-      (res: any, k: any, i: number) => Object.assign(res, { [k]: values[i] }),
+      (res: Record<string, unknown>, k: string, i: number) =>
+        Object.assign(res, { [k]: values[i] }),
       {}
     );
   }
@@ -133,7 +134,7 @@ export function omit(
 ) {
   const keySet = new Set(keys);
   return Object.fromEntries(
-    Object.entries(object).filter(([k, v]) => !keySet.has(k))
+    Object.entries(object).filter(([k, _v]) => !keySet.has(k))
   );
 }
 
@@ -144,10 +145,10 @@ export function omit(
  * @returns A new object with the specified keys.
  */
 export function pick(
-  object: { [x: string]: any; hasOwnProperty: (arg0: any) => any },
-  keys: any[]
+  object: Record<string, unknown>,
+  keys: string[]
 ) {
-  return keys.reduce((obj: { [x: string]: any }, key: string | number) => {
+  return keys.reduce((obj: Record<string, unknown>, key: string | number) => {
     if (object && key in object) {
       obj[key] = object[key];
     }
@@ -166,8 +167,8 @@ export const maskObject = pick;
  * @param default_value - The default value for the object properties (default is true).
  * @returns An object with boolean values for the given keys.
  */
-export function toFlagMap(arr: any[], default_value = true) {
-  return arr.reduce((obj: { [x: string]: boolean }, key: string | number) => {
+export function toFlagMap(arr: string[], default_value = true) {
+  return arr.reduce((obj: Record<string, boolean>, key: string | number) => {
     obj[key] = default_value;
     return obj;
   }, {});
@@ -179,7 +180,7 @@ export function toFlagMap(arr: any[], default_value = true) {
  * @param key - The key to check for.
  * @returns True if the object has the specified key, false otherwise.
  */
-export function has(obj: Record<string, any>, key?: string) {
+export function has(obj: Record<string, unknown>, key?: string) {
   return key && key in obj;
 }
 
@@ -189,7 +190,7 @@ export function has(obj: Record<string, any>, key?: string) {
  * @param keys - An array of keys to check for.
  * @returns True if the object has all the specified keys, false otherwise.
  */
-export function hasAll(obj: Record<string, any>, keys: string[] = []) {
+export function hasAll(obj: Record<string, unknown>, keys: string[] = []) {
   return keys.reduce((r, k) => r && k in obj, true);
 }
 
@@ -199,7 +200,7 @@ export function hasAll(obj: Record<string, any>, keys: string[] = []) {
  * @param props - The properties to group by.
  * @returns An array of grouped objects.
  */
-export function groupBy(arr: any[], props: string[]) {
+export function groupBy(arr: Record<string, unknown>[], props: string[]) {
   return Object.values(
     arr.reduce((res, e) => {
       const vals = props.map(makeGetter(undefined, e));
@@ -218,8 +219,8 @@ export function groupBy(arr: any[], props: string[]) {
  * @param loose - If true, omits entries where the value is falsy.
  * @returns An array of key-value pairs.
  */
-export function unZipObject(object: Record<string, any>, loose = false) {
-  return Object.keys(object).reduce((res: [string, any][], key) => {
+export function unZipObject(object: Record<string, unknown>, loose = false) {
+  return Object.keys(object).reduce((res: [string, unknown][], key) => {
     if (loose || (key in object && object[key])) {
       res.push([key, object[key]]);
     }
@@ -233,7 +234,7 @@ export function unZipObject(object: Record<string, any>, loose = false) {
  * @param object2 - The second object to compare.
  * @returns True if the objects are deeply equal, false otherwise.
  */
-export function deepEquals(object1: any, object2: any) {
+export function deepEquals(object1: unknown, object2: unknown) {
   return JSON.stringify(object1) === JSON.stringify(object2);
 }
 
@@ -242,7 +243,7 @@ export function deepEquals(object1: any, object2: any) {
  * @param object1 - The object to copy.
  * @returns A deep copy of the object.
  */
-export function deepCopy(object1: any) {
+export function deepCopy(object1: unknown) {
   return JSON.parse(JSON.stringify(object1));
 }
 
@@ -252,15 +253,15 @@ export function deepCopy(object1: any) {
  * @param _base - The base object to compare against.
  * @returns A new object representing the difference between the two objects.
  */
-export function objectDifference<T extends Record<string, any>>(
+export function objectDifference<T extends Record<string, unknown>>(
   _object: T,
-  _base: Record<string, any>
+  _base: Record<string, unknown>
 ): Partial<T> {
-  // Use Record<string, any> for internal recursion to allow indexing
+  // Use Record<string, unknown> for internal recursion to allow indexing
   function buildChanges(
-    object: Record<string, any>,
-    base: Record<string, any>
-  ): Record<string, any> {
+    object: Record<string, unknown>,
+    base: Record<string, unknown>
+  ): Record<string, unknown> {
     // Use your typed 'entries' utility
     return entries(object).reduce((result, [key, value]) => {
       const baseValue = base[key];
@@ -270,14 +271,14 @@ export function objectDifference<T extends Record<string, any>>(
         result[key] =
           isObject(value) && isObject(baseValue)
             ? buildChanges(
-                value as Record<string, any>,
-                baseValue as Record<string, any>
+                value as Record<string, unknown>,
+                baseValue as Record<string, unknown>
               )
             : value;
       }
 
       return result;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, unknown>);
   }
 
   return buildChanges(_object, _base) as Partial<T>;

@@ -5,9 +5,11 @@ import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { copyReadme } from '../../../tools/vite-copy-readme.mjs';
 
+const repoRoot = path.resolve(__dirname, '../../..');
+
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/apigen/core',
+  cacheDir: path.join(repoRoot, 'node_modules/.vite/packages/apigen/core'),
 
   plugins: [
     copyReadme(__dirname),
@@ -18,31 +20,20 @@ export default defineConfig({
     }),
   ],
 
-  // Uncomment this if you are using workers.
-  // worker: {
-  //  plugins: [ nxViteTsPaths() ],
-  // },
-
-  // Configuration for building your library.
-  // See: https://vitejs.dev/guide/build.html#library-mode
   build: {
-    outDir: '../../../dist/packages/apigen/core',
+    outDir: path.join(repoRoot, 'dist/packages/apigen/core'),
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {
       transformMixedEsModules: true,
     },
     lib: {
-      // Could also be a dictionary or array of multiple entry points.
       entry: 'src/index.ts',
       name: 'apigen-core',
       fileName: 'index',
-      // Change this to the formats you want to support.
-      // Don't forget to update your package.json as well.
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      // External packages that should not be bundled into your library.
       external: [],
     },
   },
@@ -50,14 +41,17 @@ export default defineConfig({
   test: {
     globals: true,
     cache: {
-      dir: '../../../node_modules/.vitest',
+      dir: path.join(repoRoot, 'node_modules/.vitest'),
     },
     environment: 'node',
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../../coverage/packages/apigen/core',
+      reportsDirectory: path.join(
+        repoRoot,
+        'coverage/packages/apigen/core'
+      ),
       provider: 'v8',
     },
   },

@@ -68,7 +68,9 @@ export class McpClientRegistry {
         let connectPromise = this.connectPromises.get(name);
         if (connectPromise) {
             await connectPromise;
-            return this.clients.get(name)!;
+            const client = this.clients.get(name);
+            if (!client) throw new Error(`MCP client not found after connect: ${name}`);
+            return client;
         }
 
         let client: StdioMcpClient | HttpMcpClient | SseMcpClient;
@@ -84,14 +86,34 @@ export class McpClientRegistry {
             throw new Error(`Unknown MCP transport: ${(exhaustive as { transport: string }).transport}`);
         }
 
-        connectPromise = client.connect().then(() => {
+        // A REJECTED connect promise must not stay cached. `connectPromises` was only
+        // ever cleared wholesale in close(), so a single failed connect (server not up
+        // yet, transient spawn failure) poisoned the entry forever: every later
+        // getOrCreateClient(name) re-awaited the same rejected promise and rethrew the
+        // original error, and that server could never reconnect for the process's life.
+        // Evict on failure so the next call makes a fresh attempt.
+        const attempt = client.connect().then(() => {
             this.clients.set(name, client);
             this.logger.debug({ server: name }, "MCP client connected");
         });
 
+        connectPromise = attempt.catch((err: unknown) => {
+            // Only evict OUR entry — a newer attempt may already have replaced it.
+            if (this.connectPromises.get(name) === connectPromise) {
+                this.connectPromises.delete(name);
+            }
+            throw err;
+        });
+
         this.connectPromises.set(name, connectPromise);
         await connectPromise;
-        return this.clients.get(name)!;
+        // NB: distinct binding — `client` is already declared in this block scope
+        // (the `let client: Stdio|Http|Sse` above). Re-fetch from the map rather
+        // than returning `client` directly so a concurrent connect that replaced
+        // the entry wins, matching the pre-existing `this.clients.get(name)!`.
+        const connected = this.clients.get(name);
+        if (!connected) throw new Error(`MCP client not found after connect: ${name}`);
+        return connected;
     }
 
     async getClient(name: string): Promise<IMcpClient> {

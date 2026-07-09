@@ -49,20 +49,20 @@ async function freePort(): Promise<number> {
 // Paths — the BUILT bin + the UNMODIFIED real package source.
 // ---------------------------------------------------------------------------
 
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..', '..');
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..');
 const BUILT_BIN = path.join(
   REPO_ROOT,
   'dist',
-  'packages',
-  'apigen',
-  'cli',
+  'entrypoint',
+  'apigen-cli',
   'index.js'
 );
-// An UNMODIFIED file from the real @adhd/transform package (flat function exports).
+// An UNMODIFIED file from the real @adhd/data-base-transforms package (flat function exports).
 const TRANSFORM_SRC = path.join(
   REPO_ROOT,
   'packages',
-  'transform',
+  'data',
+  'data-base-transforms',
   'src',
   'lib',
   'text.ts'
@@ -138,7 +138,7 @@ afterAll(async () => {
 // (1) MCP variant — real MCP client over stdio against the BUILT bin.
 // ---------------------------------------------------------------------------
 
-describe('real-consumer: MCP over the built bin against UNMODIFIED @adhd/transform', () => {
+describe('real-consumer: MCP over the built bin against UNMODIFIED @adhd/data-base-transforms', () => {
   it('tools/list == transform exports; callTool deep-equals in-process ground truth', async () => {
     // The MCP SDK stdio client SPAWNS the built bin as the server process and
     // manages its lifecycle (closed in afterEach).
@@ -273,7 +273,7 @@ describe('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transf
     // The namespace is derived from the source's tsconfig/folder. Probe the most
     // likely candidate ('lib' — the parent folder of text.ts) plus a fallback by
     // attempting a real call and accepting the first that yields a 200.
-    const candidates = ['lib', 'transform', 'text'];
+    const candidates = ['data-base-transforms', 'lib', 'text'];
     const deadline = Date.now() + 15_000;
     while (Date.now() < deadline) {
       for (const ns of candidates) {

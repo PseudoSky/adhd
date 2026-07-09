@@ -29,7 +29,7 @@ export {
   codecIdOf,
 } from './lib/descriptor-ext';
 
-export { buildTranscoder, tryRegister } from './lib/runmode';
+export { buildTranscoder, tryRegister, validateSchemaRefs } from './lib/runmode';
 
 export {
   dateTimeCodec,

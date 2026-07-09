@@ -72,6 +72,7 @@ function buildMcpServer(
     tools: Object.entries(toolMetas).map(([name, meta]) => ({
       name,
       description: descriptions[name] ?? name,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       inputSchema: (meta.schema as any).input,
     })),
   }));
@@ -80,18 +81,23 @@ function buildMcpServer(
     const { name, arguments: args = {} } = req.params;
     // §9.1: envelope fields come from _meta["x-<pluginId>-<field>"], not from args body.
     const mcpMeta =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ((args as any)['_meta'] as Record<string, unknown> | undefined) ?? {};
     const meta = toolMetas[name];
     if (!meta) throw new Error(`Unknown tool: ${name}`);
-    const pkg = input.packages.find((p) => p.id === meta.group)!;
+    const pkg = input.packages.find((p) => p.id === meta.group);
+    if (!pkg) throw new Error(`Package not found: ${meta.group}`);
     const fnSchema = meta.schema as Record<string, unknown>;
     const envelope = extractEnvelopeFromMeta(fnSchema, mcpMeta);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const domainData = ((args as any)['data'] ?? {}) as Record<string, unknown>;
     const start = Date.now();
     try {
+      if (!pkg.fns) throw new Error(`Package ${pkg.id} has no functions`);
       const result = await dispatch(
-        pkg.fns!,
+        pkg.fns,
         pkg.createClient,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         meta.schema as any,
         name,
         envelope,

@@ -114,7 +114,8 @@ describe('registry-package generator', () => {
     const schema = tree.read(
       'packages/ai/agent-tool-registry/src/db/schema.ts',
       'utf-8'
-    )!;
+    );
+    expect(schema).not.toBeNull();
     expect(schema).toContain('table prefix: tool_registry_');
   });
 
@@ -127,7 +128,8 @@ describe('registry-package generator', () => {
     const schema = tree.read(
       'packages/ai/agent-billing/src/db/schema.ts',
       'utf-8'
-    )!;
+    );
+    expect(schema).not.toBeNull();
     expect(schema).toContain('table prefix: billing_');
   });
 
@@ -137,7 +139,8 @@ describe('registry-package generator', () => {
     const spec = tree.read(
       'packages/ai/agent-budget/src/__tests__/skeleton.test.ts',
       'utf-8'
-    )!;
+    );
+    expect(spec).not.toBeNull();
     expect(spec).toContain('better-sqlite3');
     expect(spec).toContain('reopen');
     expect(spec).not.toContain(':memory:');
@@ -155,7 +158,8 @@ describe('registry-package generator', () => {
   it('CLAUDE.md links the rules doc', async () => {
     const tree = seed(createTreeWithEmptyWorkspace());
     await registryPackageGenerator(tree, { name: 'budget' });
-    const claude = tree.read('packages/ai/agent-budget/CLAUDE.md', 'utf-8')!;
+    const claude = tree.read('packages/ai/agent-budget/CLAUDE.md', 'utf-8');
+    expect(claude).not.toBeNull();
     expect(claude).toContain('REGISTRY-PACKAGE-RULES.md');
   });
 

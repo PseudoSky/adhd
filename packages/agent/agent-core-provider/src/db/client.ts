@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import Database from 'better-sqlite3';
@@ -6,7 +7,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 
 import * as schema from './schema.js';
 
-const databasePath = process.env['DATABASE_PATH'] || './data/agents.db';
+const databasePath = process.env['DATABASE_PATH'] || path.join(os.homedir(), '.adhd', 'agent-core-provider', 'agents.db');
 
 const resolvedPath = path.resolve(databasePath);
 

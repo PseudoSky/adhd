@@ -26,8 +26,7 @@
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyBetterSQLite3Database =
-  import('drizzle-orm/better-sqlite3').BetterSQLite3Database<any>;
+type AnyBetterSQLite3Database = import('drizzle-orm/better-sqlite3').BetterSQLite3Database<any>;
 
 import { policyTypesTable, policyTemplatesTable } from '../db/schema.js';
 import { POLICY_TYPES } from './policy-types.js';

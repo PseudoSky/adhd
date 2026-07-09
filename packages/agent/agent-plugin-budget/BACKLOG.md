@@ -24,4 +24,13 @@
 
 **Status:** Planned — not started.
 
-**Related:** The `countToolCalls()` method in `src/index.ts` is currently a stub returning 0; it needs a proper per-tool call counter before rate limiting can work, or the rate-limiter can own its own counter.
+**Related:** Per-tool call counting is done inline in `enforcePreTool()` via `BudgetAccumulator.toolCalls` (a `Map<string, number>`). The rate-limiter can leverage this existing counter and the `task_usage` DB table.
+
+---
+
+## Revalidation (2026-07-04) — verified against current source
+
+| Item | Status | Notes |
+|------|--------|-------|
+| FEAT-001 — Rate-limit tool calls | **STILL OPEN** | No token-bucket or sliding-window implementation exists. `BudgetAccumulator.toolCalls` (packages/agent/agent-plugin-budget/src/index.ts:213) is a simple lifetime counter. Tests: 32/32 pass. Lint: 0 errors, 6 warnings (test-only). |
+| Stale claim in Related | **STALE — inaccurate** | `countToolCalls()` method does NOT exist anywhere in the codebase. Per-tool call counting is inline in `enforcePreTool()` via `acc.toolCalls.get(toolName)`. The Related paragraph should be corrected. |

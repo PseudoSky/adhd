@@ -15,8 +15,10 @@ export default async function generateExecutor(
   schema: GenerateExecutorSchema,
   context: ExecutorContext
 ): Promise<{ success: boolean }> {
+  const projectName = context.projectName;
+  if (!projectName) throw new Error('projectName is required');
   const projectRoot =
-    context.workspace?.projects[context.projectName!]?.root ?? '';
+    context.workspace?.projects[projectName]?.root ?? '';
   const sourceFile = path.resolve(context.root, projectRoot, schema.source);
   const outDir = path.resolve(context.root, schema.outDir);
 
@@ -37,7 +39,7 @@ export default async function generateExecutor(
 
   // Prefer the locally-built bin inside the monorepo (no publish/link required); fall back to
   // 'npx @adhd/apigen-cli' for standalone consumers using the published binary.
-  const localBin = path.join(context.root, 'dist/packages/apigen/cli/index.js');
+  const localBin = path.join(context.root, 'dist/entrypoint/apigen-cli/index.js');
   const [cmd, args] = existsSync(localBin)
     ? ['node', [localBin, ...cliArgs]]
     : ['npx', ['@adhd/apigen-cli', ...cliArgs]];

@@ -162,7 +162,12 @@ export class ComponentStore {
         .returning({ versionId: componentVersionsTable.versionId })
         .get();
 
-      return inserted!.versionId;
+      if (!inserted) {
+        throw new Error(
+          `insert failed: component '${input.slug}' version 1`
+        );
+      }
+      return inserted.versionId;
     });
 
     return {
@@ -329,11 +334,18 @@ export class ComponentStore {
       .returning({ versionId: componentVersionsTable.versionId })
       .get();
 
+    if (!inserted) {
+      throw new Error(
+        `insert failed: component '${slug}' version ${nextVersion}`
+      );
+    }
+    const versionId = inserted.versionId;
+
     return {
       slug,
       type: head.type,
       version: nextVersion,
-      versionId: inserted!.versionId,
+      versionId,
       content: newContent,
       isShared: Boolean(head.isShared),
       createdAt: head.createdAt,

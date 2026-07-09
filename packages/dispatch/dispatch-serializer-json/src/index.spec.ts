@@ -89,7 +89,7 @@ describe('createJsonFileSerializer', () => {
       const result = normalizeDag(dag);
       expect(Array.isArray(result.operations)).toBe(true);
       expect((result.operations as Array<unknown>).length).toBe(1);
-      expect((result.operations as Array<any>)[0].id).toBe('op1');
+      expect((result.operations as Array<unknown>)[0].id).toBe('op1');
     });
   });
 
@@ -150,7 +150,7 @@ describe('createJsonFileSerializer', () => {
       const serializer = createJsonFileSerializer(path.join(TMP_DIR, 'valid'));
       const dag = await serializer.readDag();
       expect(dag).not.toBeNull();
-      expect((dag!.operations as Array<any>)[0].id).toBe('op1');
+      expect((dag.operations as Array<unknown>)[0].id).toBe('op1');
     });
 
     it('should normalize object-format operations to array', async () => {
@@ -185,8 +185,9 @@ describe('createJsonFileSerializer', () => {
 
       const serializer = createJsonFileSerializer(path.join(TMP_DIR, 'legacy'));
       const dag = await serializer.readDag();
-      expect(Array.isArray(dag!.operations)).toBe(true);
-      expect((dag!.operations as Array<any>).length).toBe(1);
+      expect(dag).not.toBeNull();
+      expect(Array.isArray(dag.operations)).toBe(true);
+      expect((dag.operations as Array<unknown>).length).toBe(1);
     });
   });
 
@@ -226,7 +227,7 @@ describe('createJsonFileSerializer', () => {
 
       const content = fs.readFileSync(filePath, 'utf-8');
       const parsed = JSON.parse(content);
-      expect((parsed.operations as Array<any>).length).toBe(1);
+      expect((parsed.operations as Array<unknown>).length).toBe(1);
     });
 
     it('should overwrite existing file atomically', async () => {
@@ -289,12 +290,12 @@ describe('createJsonFileSerializer', () => {
       await serializer.writeDag(dag1);
       let content = fs.readFileSync(filePath, 'utf-8');
       let parsed = JSON.parse(content);
-      expect((parsed.operations as Array<any>)[0].id).toBe('op1');
+      expect((parsed.operations as Array<unknown>)[0].id).toBe('op1');
 
       await serializer.writeDag(dag2);
       content = fs.readFileSync(filePath, 'utf-8');
       parsed = JSON.parse(content);
-      expect((parsed.operations as Array<any>)[0].id).toBe('op2');
+      expect((parsed.operations as Array<unknown>)[0].id).toBe('op2');
     });
   });
 
@@ -427,9 +428,9 @@ describe('createJsonFileSerializer', () => {
       const readDag = await serializer.readDag();
 
       expect(readDag).not.toBeNull();
-      expect((readDag!.operations as Array<any>).length).toBe(2);
-      expect((readDag!.operations as Array<any>)[0].id).toBe('op1');
-      expect((readDag!.operations as Array<any>)[1].id).toBe('op2');
+      expect((readDag.operations as Array<unknown>).length).toBe(2);
+      expect((readDag.operations as Array<unknown>)[0].id).toBe('op1');
+      expect((readDag.operations as Array<unknown>)[1].id).toBe('op2');
     });
 
     it('should round-trip snapshot with write and read', async () => {
@@ -539,7 +540,7 @@ describe('createJsonFileSerializer', () => {
       const content = fs.readFileSync(filePath, 'utf-8');
       const parsed = JSON.parse(content) as DagJson;
 
-      expect((parsed.operations as Array<any>).length).toBe(1);
+      expect((parsed.operations as Array<unknown>).length).toBe(1);
       expect(fs.existsSync(filePath)).toBe(true);
     });
   });

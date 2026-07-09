@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { taskTool, taskResume, createProvider } from "@adhd/agent-engine-orchestrator";
 
 const isLive = process.env["AGENT_MCP_LIVE"] === "1";
 
@@ -41,9 +42,7 @@ describe.skipIf(!isLive)(`live-oauth.e2e – real ${LIVE_PROVIDER.type} provider
     it("two echo tools called in one turn via real model", async () => {
         if (!isLive) return;
 
-        const { buildHarness, drainQueue } = await import("./harness.js");
-        const { taskTool } = await import("@adhd/agent-engine-orchestrator");
-        const { createProvider } = await import("@adhd/agent-engine-orchestrator");
+        const { buildHarness } = await import("./harness.js");
 
         const harness = await buildHarness({ withSse: true });
 
@@ -65,8 +64,6 @@ describe.skipIf(!isLive)(`live-oauth.e2e – real ${LIVE_PROVIDER.type} provider
 
             // Two echo tools as in-process stubs
             const echoCallLog: string[] = [];
-
-            const { McpClientRegistry } = await import("@adhd/agent-engine-orchestrator");
 
             const patchedDeps = {
                 ...harness.taskDeps,
@@ -124,8 +121,6 @@ describe.skipIf(!isLive)(`live-oauth.e2e – real ${LIVE_PROVIDER.type} provider
         if (!isLive) return;
 
         const { buildHarness, drainQueue } = await import("./harness.js");
-        const { taskTool, taskResume } = await import("@adhd/agent-engine-orchestrator");
-        const { createProvider } = await import("@adhd/agent-engine-orchestrator");
 
         const harness = await buildHarness();
 
@@ -194,10 +189,12 @@ describe.skipIf(!isLive)(`live-oauth.e2e – real ${LIVE_PROVIDER.type} provider
             expect(suspended.resumeToken).toBeTruthy();
 
             // Resume with human answer
+            const resumeToken = suspended.resumeToken;
+            if (!resumeToken) throw new Error("expected resumeToken to be defined");
             await taskResume(
                 {
                     taskId,
-                    resumeToken: suspended.resumeToken!,
+                    resumeToken,
                     userInput: "yes, confirmed",
                 },
                 { taskStore: harness.taskStore }

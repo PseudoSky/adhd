@@ -304,24 +304,24 @@ describe('McpServerStore — persistence (close + reopen proves disk write)', ()
     const byId = Object.fromEntries(all.map((s) => [s.id, s]));
 
     // Filesystem server assertions
-    expect(byId['@modelcontextprotocol/server-filesystem']!.transport).toBe(
+    expect(byId['@modelcontextprotocol/server-filesystem'].transport).toBe(
       'stdio'
     );
     expect(
-      byId['@modelcontextprotocol/server-filesystem']!.providedToolIds
+      byId['@modelcontextprotocol/server-filesystem'].providedToolIds
     ).toEqual(['file_read', 'file_write', 'file_list']);
     expect(
-      byId['@modelcontextprotocol/server-filesystem']!.configSchema
+      byId['@modelcontextprotocol/server-filesystem'].configSchema
     ).toEqual(FILESYSTEM_CONFIG_SCHEMA);
 
     // Web server assertions
-    expect(byId['@modelcontextprotocol/server-fetch']!.transport).toBe('SSE');
-    expect(byId['@modelcontextprotocol/server-fetch']!.providedToolIds).toEqual(
+    expect(byId['@modelcontextprotocol/server-fetch'].transport).toBe('SSE');
+    expect(byId['@modelcontextprotocol/server-fetch'].providedToolIds).toEqual(
       ['web_fetch', 'web_search']
     );
     expect(
       (
-        byId['@modelcontextprotocol/server-fetch']!.configSchema as Record<
+        byId['@modelcontextprotocol/server-fetch'].configSchema as Record<
           string,
           unknown
         >

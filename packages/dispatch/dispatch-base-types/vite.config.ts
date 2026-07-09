@@ -4,9 +4,11 @@ import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 
+const repoRoot = path.resolve(__dirname, '../../..');
+
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/dispatch/dispatch-base-types',
+  cacheDir: path.join(repoRoot, 'node_modules/.vite/packages/dispatch/dispatch-base-types'),
 
   plugins: [
     nxViteTsPaths(),
@@ -16,31 +18,20 @@ export default defineConfig({
     }),
   ],
 
-  // Uncomment this if you are using workers.
-  // worker: {
-  //  plugins: [ nxViteTsPaths() ],
-  // },
-
-  // Configuration for building your library.
-  // See: https://vitejs.dev/guide/build.html#library-mode
   build: {
-    outDir: '../../../dist/packages/dispatch/dispatch-base-types',
+    outDir: path.join(repoRoot, 'dist/packages/dispatch/dispatch-base-types'),
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {
       transformMixedEsModules: true,
     },
     lib: {
-      // Could also be a dictionary or array of multiple entry points.
       entry: 'src/index.ts',
       name: 'dispatch-dispatch-base-types',
       fileName: 'index',
-      // Change this to the formats you want to support.
-      // Don't forget to update your package.json as well.
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      // External packages that should not be bundled into your library.
       external: [],
     },
   },
@@ -48,15 +39,17 @@ export default defineConfig({
   test: {
     globals: true,
     cache: {
-      dir: '../../../node_modules/.vitest',
+      dir: path.join(repoRoot, 'node_modules/.vitest'),
     },
     environment: 'jsdom',
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory:
-        '../../../coverage/packages/dispatch/dispatch-base-types',
+      reportsDirectory: path.join(
+        repoRoot,
+        'coverage/packages/dispatch/dispatch-base-types'
+      ),
       provider: 'v8',
     },
   },

@@ -51,7 +51,6 @@ import {
   agentReadInputSchema,
   agentUpdateInputSchema,
   agentDeleteInputSchema,
-  agentListInputSchema,
   agentToolInputSchema,
   sessionListInputSchema,
   sessionCloseInputSchema,
@@ -134,6 +133,7 @@ export function toMcpInputSchema(
   const jsonSchema = z.toJSONSchema(schema) as Record<string, unknown>;
 
   if (jsonSchema['type'] === 'object') {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { $schema: _drop, ...rest } = jsonSchema;
     return rest;
   }

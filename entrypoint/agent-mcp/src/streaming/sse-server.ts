@@ -52,7 +52,12 @@ export function startSseServer(
             res.end("Not found");
             return;
         }
-        const taskId = match[1]!;
+        const taskId = match[1];
+        if (!taskId) {
+            res.writeHead(404);
+            res.end("Not found");
+            return;
+        }
 
         res.writeHead(200, {
             "Content-Type": "text/event-stream",

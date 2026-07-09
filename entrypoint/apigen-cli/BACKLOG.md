@@ -31,4 +31,94 @@ set by a previous `startServe` in the same process is not treated as a user over
 
 ## Open
 
-_(none package-specific — see root BACKLOG for DEBT-APIGEN-CACHE-001 / DEFER-APIGEN-PERF-001)_
+### BUG-APIGEN-017 — MCP tool schemas don't reject unknown properties
+
+**Reported:** 2026-07-06  
+**Source:** `scratch-agent-search` consumer (agent-browser project)
+
+**Observed:** Calling a zero-argument MCP function like `tripwireStatus` with an extraneous
+`{ data: { provider: "duckduckgo" } }` envelope was silently accepted. The extra property
+was ignored without error, so the caller never realized the mistake.
+
+**Root cause:** apigen-cli generates MCP input schemas without `additionalProperties: false`.
+The MCP SDK (and Zod, if used) silently discards unknown properties by default.
+
+**Impact:** Consumer mistakes are invisible — agents can pass invalid parameters and get
+a successful response back, with no indication the parameter was unused.
+
+**Suggested fix:** Generate input schemas with `additionalProperties: false` in the JSON
+Schema output, or configure the MCP server to reject unknown properties. This applies
+to the `dispatch` path in the generated server template and/or the runtime MCP adapter.
+
+**Affected tools:** All zero-argument functions (`listProviders`, `chromeStatus`,
+`tripwireStatus`, `launchChrome`) plus any function where extra params could silently
+be ignored.
+
+**Workaround (consumer side):** Add guard clauses to exported functions that log warnings
+for unexpected parameters. This was applied to `search-mcp-source.ts` in agent-browser.
+
+---
+
+### BUG-APIGEN-018 — Tool descriptions don't include default parameter values
+
+**Reported:** 2026-07-06
+**Source:** scratch-agent-search MCP surface (`search-mcp-source.ts`)
+
+**Observed:** Functions have parameter defaults in their TypeScript signature
+(e.g. `search(provider = '', query = '', strategy = 'auto', ...)`), but the
+generated MCP tool input schema `description` fields don't communicate these
+defaults. A consumer calling `search()` doesn't know that `strategy` defaults
+to `"auto"`, `includeContent` to `false`, or `maxContentSize` to `0`.
+
+**Impact:** Consumers either guess defaults, hardcode them unnecessarily, or
+pass `undefined` for every optional parameter.
+
+**Suggested fix:** Include the JSDoc `@default` tag (or inline default value)
+in the generated parameter description. If the function parameter has a
+TypeScript initializer, apigen-cli should extract that value and emit it as
+`description: "... (default: auto)"` in the schema.
+
+---
+
+### BUG-APIGEN-019 — Union return types produce weak MCP schemas
+
+**Reported:** 2026-07-06
+**Source:** scratch-agent-search MCP surface (`search-mcp-source.ts`)
+
+**Observed:** The `search()` function has a return type of
+`SearchResponse | Record<string, unknown>`. The first arm is the real result
+shape; the second arm is the help/no-query response. apigen-cli generates a
+schema that represents this as a very permissive `object` type, which gives
+consumers no structured information about what fields to expect in either case.
+
+**Impact:** Agents can't statically determine the response shape. They have
+to infer from runtime examples rather than from the tool schema itself.
+
+**Suggested fix:** Support discriminated union return types in the generated
+schema (e.g. `oneOf` with `discriminator`), or allow the consumer to define
+multiple return types per tool and let the schema reflect which fields
+appear under which `outcome` values.
+
+---
+
+### BUG-APIGEN-020 — Generated tool schemas don't document the `data` envelope
+
+**Reported:** 2026-07-06
+**Source:** scratch-agent-search consumer (agent-browser project)
+
+**Observed:** apigen-cli wraps all function parameters in a `data` envelope
+for the MCP transport. The actual call structure is:
+```typescript
+callTool({ name: "search", arguments: { data: { provider: "npm", query: "test" } } })
+```
+But the generated tool name (`search_search`) and the `data` envelope convention
+are not documented in the tool descriptions or the server metadata. Consumers
+have to discover this from trial and error.
+
+**Impact:** Every new consumer spends a round-trip figuring out the calling
+convention. The `data` envelope and underscored tool names are apigen-specific
+conventions that differ from standard MCP tool usage.
+
+**Suggested fix:** Add the tool naming convention and data-envelope structure
+to either (a) the generated server metadata, (b) each tool's description
+string, or (c) a standard response from a meta-tool.

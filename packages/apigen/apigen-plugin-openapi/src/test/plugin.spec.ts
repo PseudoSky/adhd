@@ -88,9 +88,10 @@ describe('openapi plugin — v2 shape', () => {
   });
 
   it('mount.operations is a function', () => {
-    expect(typeof openapiPlugin.capabilities.mount!.operations).toBe(
-      'function'
-    );
+    const mount = openapiPlugin.capabilities.mount;
+    expect(mount).toBeDefined();
+    if (!mount) throw new Error('Expected mount capability');
+    expect(typeof mount.operations).toBe('function');
   });
 });
 
@@ -100,29 +101,44 @@ describe('openapi plugin — v2 shape', () => {
 
 describe('openapi plugin — mount.operations()', () => {
   it('returns exactly one mounted operation', () => {
-    const ops = openapiPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = openapiPlugin.capabilities.mount;
+    expect(mount).toBeDefined();
+    if (!mount) throw new Error('Expected mount capability');
+    const ops = mount.operations(sampleDescriptor);
     expect(Array.isArray(ops)).toBe(true);
     expect(ops.length).toBe(1);
   });
 
   it('the mounted operation has id "_meta/openapi"', () => {
-    const [op] = openapiPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = openapiPlugin.capabilities.mount;
+    expect(mount).toBeDefined();
+    if (!mount) throw new Error('Expected mount capability');
+    const [op] = mount.operations(sampleDescriptor);
     expect(op.id).toBe('_meta/openapi');
   });
 
   it('the mounted operation is safe (kind: query, safe: true) → GET /meta/openapi', () => {
-    const [op] = openapiPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = openapiPlugin.capabilities.mount;
+    expect(mount).toBeDefined();
+    if (!mount) throw new Error('Expected mount capability');
+    const [op] = mount.operations(sampleDescriptor);
     expect(op.safe).toBe(true);
     expect(op.kind).toBe('query');
   });
 
   it('restricts the mounted operation to the http transport only', () => {
-    const [op] = openapiPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = openapiPlugin.capabilities.mount;
+    expect(mount).toBeDefined();
+    if (!mount) throw new Error('Expected mount capability');
+    const [op] = mount.operations(sampleDescriptor);
     expect(op.transports).toEqual(['http']);
   });
 
   it('exposes a handler function on the mounted operation', () => {
-    const [op] = openapiPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = openapiPlugin.capabilities.mount;
+    expect(mount).toBeDefined();
+    if (!mount) throw new Error('Expected mount capability');
+    const [op] = mount.operations(sampleDescriptor);
     expect(typeof op.handler).toBe('function');
   });
 });
@@ -133,7 +149,10 @@ describe('openapi plugin — mount.operations()', () => {
 
 describe('openapi plugin — handler returns OpenAPI doc', () => {
   it('handler returns an object with openapi: "3.1.0"', () => {
-    const [op] = openapiPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = openapiPlugin.capabilities.mount;
+    expect(mount).toBeDefined();
+    if (!mount) throw new Error('Expected mount capability');
+    const [op] = mount.operations(sampleDescriptor);
     const result = op.handler(makeCall(sampleDescriptor)) as Record<
       string,
       unknown
@@ -142,7 +161,10 @@ describe('openapi plugin — handler returns OpenAPI doc', () => {
   });
 
   it('handler result includes a paths object', () => {
-    const [op] = openapiPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = openapiPlugin.capabilities.mount;
+    expect(mount).toBeDefined();
+    if (!mount) throw new Error('Expected mount capability');
+    const [op] = mount.operations(sampleDescriptor);
     const result = op.handler(makeCall(sampleDescriptor)) as Record<
       string,
       unknown
@@ -151,7 +173,10 @@ describe('openapi plugin — handler returns OpenAPI doc', () => {
   });
 
   it('handler result contains the descriptor operation projected to its HTTP route', () => {
-    const [op] = openapiPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = openapiPlugin.capabilities.mount;
+    expect(mount).toBeDefined();
+    if (!mount) throw new Error('Expected mount capability');
+    const [op] = mount.operations(sampleDescriptor);
     const result = op.handler(makeCall(sampleDescriptor)) as {
       paths: Record<string, unknown>;
     };
@@ -163,7 +188,10 @@ describe('openapi plugin — handler returns OpenAPI doc', () => {
   });
 
   it('forwards title and version options to the OpenAPI doc info', () => {
-    const ops = openapiPlugin.capabilities.mount!.operations(sampleDescriptor, {
+    const mount = openapiPlugin.capabilities.mount;
+    expect(mount).toBeDefined();
+    if (!mount) throw new Error('Expected mount capability');
+    const ops = mount.operations(sampleDescriptor, {
       title: 'Widget API',
       version: '3.0.0',
     });
@@ -176,7 +204,10 @@ describe('openapi plugin — handler returns OpenAPI doc', () => {
 
   // Teeth: if toOpenApi is broken and returns empty paths, this test goes red.
   it('negative — handler result must have at least one path entry for a non-empty descriptor', () => {
-    const [op] = openapiPlugin.capabilities.mount!.operations(sampleDescriptor);
+    const mount = openapiPlugin.capabilities.mount;
+    expect(mount).toBeDefined();
+    if (!mount) throw new Error('Expected mount capability');
+    const [op] = mount.operations(sampleDescriptor);
     const result = op.handler(makeCall(sampleDescriptor)) as {
       paths: Record<string, unknown>;
     };

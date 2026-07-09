@@ -7,13 +7,7 @@ import { buildPackage } from './package.js';
 import { BABELRC, BLANK_PACKAGE } from './templates.js';
 import { read_map } from './utils.js';
 
-const DEPSTORE = {};
-// const addDepsFor = (filePath, dependencies) => {
-//   DEPSTORE[filePath] = _.keys(dependencies);
-//   return dependencies;
-// };
-
-export const buildConsumer = async (_outname: any, mapPath: string) => {
+export const buildConsumer = async (_outname: string, mapPath: string) => {
   // const outputDir = path.resolve(`./${outname}`);
   const rawMap = read_map(mapPath);
 
@@ -30,7 +24,7 @@ export const build = (
   project: string,
   map_dir = `./maps`,
   prefix = 'build/',
-  type = 'dir'
+  _type = 'dir'
 ) => {
   const PROJECT = project; // process.env.PROJECT || 'patreon'
   const PREFIX = prefix;

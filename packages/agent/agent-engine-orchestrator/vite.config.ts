@@ -1,15 +1,18 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
+import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+
+const repoRoot = path.resolve(__dirname, '../../..');
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/agent/agent-engine-orchestrator',
+  cacheDir: path.join(repoRoot, 'node_modules/.vite/packages/agent/agent-engine-orchestrator'),
 
   plugins: [nxViteTsPaths()],
 
   build: {
-    outDir: '../../../dist/packages/agent/agent-engine-orchestrator',
+    outDir: path.join(repoRoot, 'dist/packages/agent/agent-engine-orchestrator'),
     reportCompressedSize: true,
     commonjsOptions: {
       transformMixedEsModules: true,
@@ -28,7 +31,7 @@ export default defineConfig({
   test: {
     globals: true,
     cache: {
-      dir: '../../../node_modules/.vitest',
+      dir: path.join(repoRoot, 'node_modules/.vitest'),
     },
     environment: 'node',
     pool: 'forks',
@@ -37,7 +40,10 @@ export default defineConfig({
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../../coverage/packages/agent/agent-engine-orchestrator',
+      reportsDirectory: path.join(
+        repoRoot,
+        'coverage/packages/agent/agent-engine-orchestrator'
+      ),
       provider: 'v8',
     },
   },

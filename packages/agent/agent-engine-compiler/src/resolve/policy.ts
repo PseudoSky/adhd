@@ -54,8 +54,8 @@ export interface Constraint {
  * @param agentSlug  - Slug of the agent whose policy constraints to resolve.
  * @returns Ordered list of constraints (direct first, then inherited by category).
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function resolvePolicyConstraints(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: BetterSQLite3Database<any>,
   agentSlug: string
 ): Constraint[] {

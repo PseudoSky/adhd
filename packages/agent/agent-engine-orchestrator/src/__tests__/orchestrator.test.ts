@@ -91,7 +91,8 @@ function hangingProvider(): LLMProvider {
                     reject(signal.reason);
                     return;
                 }
-                signal?.addEventListener("abort", () => reject(signal!.reason));
+                const sig = signal;
+                if (sig) sig.addEventListener("abort", () => reject(sig.reason));
             }),
     };
 }

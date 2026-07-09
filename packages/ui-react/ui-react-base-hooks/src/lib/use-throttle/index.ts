@@ -7,7 +7,7 @@ export interface UseThrottleOptions {
   trailing?: boolean;
 }
 
-export function useThrottle<T extends (...args: any[]) => any>(
+export function useThrottle<T extends (...args: unknown[]) => unknown>(
   callback: T,
   options: UseThrottleOptions = {}
 ): T {

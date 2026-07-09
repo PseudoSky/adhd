@@ -16,7 +16,7 @@ describe('query', () => {
     const dv = new DataView(largeSample as [], undefined, true).orderBy([
       { value: 'asc' },
     ]);
-    const query: BooleanExpression = {
+    const _query: BooleanExpression = {
       _and: [{ _and: [{ _and: [{ name: { _eq: 'D' } }] }] }],
     };
 

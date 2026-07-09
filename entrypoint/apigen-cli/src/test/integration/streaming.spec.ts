@@ -109,7 +109,8 @@ describe('streaming: SSE projection end-to-end', () => {
     // A terminal in-band error frame is present (NOT a dropped stream).
     const errorFrame = boomFrames.find((f) => f.event === 'error');
     expect(errorFrame).toBeDefined();
-    const errPayload = JSON.parse(errorFrame!.data) as {
+    if (!errorFrame) throw new Error('errorFrame not found');
+    const errPayload = JSON.parse(errorFrame.data) as {
       code: string;
       message: string;
     };

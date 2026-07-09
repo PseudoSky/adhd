@@ -183,8 +183,8 @@ describe('AgentToolStore — grant / listForAgent / revoke', () => {
     expect(grant.contextCondition).toEqual(condition);
 
     const listed = store.listForAgent('security-bot');
-    expect(listed[0]!.contextCondition).toEqual(condition);
-    expect(typeof listed[0]!.contextCondition).toBe('object');
+    expect(listed[0].contextCondition).toEqual(condition);
+    expect(typeof listed[0].contextCondition).toBe('object');
   });
 
   it('listForAgent returns empty array for an unknown agent slug', () => {
@@ -277,7 +277,7 @@ describe('AgentToolStore — persistence (close + reopen proves disk write)', ()
     // Exactly one grant must be returned.
     expect(grants).toHaveLength(1);
 
-    const grant = grants[0]!;
+    const grant = grants[0];
     expect(grant.agentSlug).toBe('code-reviewer');
     expect(grant.toolName).toBe('file_read');
 
@@ -317,8 +317,8 @@ describe('AgentToolStore — persistence (close + reopen proves disk write)', ()
 
     expect(grants).toHaveLength(1);
     // JSON must survive as a JS object, not a raw string
-    expect(typeof grants[0]!.contextCondition).toBe('object');
-    expect(grants[0]!.contextCondition).toEqual(condition);
+    expect(typeof grants[0].contextCondition).toBe('object');
+    expect(grants[0].contextCondition).toEqual(condition);
 
     closeDb(sqlite2);
   });
@@ -377,7 +377,7 @@ describe('AgentToolStore — [inv:no-cross-pkg-fk] agent_slug is a logical refer
       'ghost-agent-that-does-not-exist-anywhere'
     );
     expect(grants).toHaveLength(1);
-    expect(grants[0]!.agentSlug).toBe(
+    expect(grants[0].agentSlug).toBe(
       'ghost-agent-that-does-not-exist-anywhere'
     );
 

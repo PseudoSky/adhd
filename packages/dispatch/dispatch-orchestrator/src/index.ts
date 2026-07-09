@@ -32,6 +32,7 @@ export type {
   MilestoneGuardOutcome,
   DispatchedUnitSummary,
   CycleResult,
+  PollOutcome,
 } from './lib/orchestrator.js';
 export {
   orchestrateCycle,
@@ -41,4 +42,6 @@ export {
   DEFAULT_POLL,
   DEFAULT_GUARD_TIMEOUT_MS,
   DEFAULT_MAX_CYCLES,
+  POLL_TERMINAL_STATUSES,
+  pollUntilTerminal,
 } from './lib/orchestrator.js';

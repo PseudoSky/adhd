@@ -164,9 +164,10 @@ async function resolveSession(
         fingerprintMap.delete(fp);
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sessionDeps: SessionDeps = {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         agentStore: deps.agentStore as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         sessionStore: deps.sessionStore as any,
         policy: deps.taskDeps.policy,
     };

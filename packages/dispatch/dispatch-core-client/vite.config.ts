@@ -6,24 +6,22 @@ import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import fs from 'node:fs';
 import pathMod from 'node:path';
 
+const repoRoot = path.resolve(__dirname, '../../..');
+const distDir = path.join(repoRoot, 'dist/packages/dispatch/dispatch-client');
+
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/dispatch/dispatch-client',
+  cacheDir: path.join(repoRoot, 'node_modules/.vite/packages/dispatch/dispatch-client'),
 
   plugins: [
     {
-      // ship README.md into dist (npm page) — @nx/vite:build ignores project.json assets
       name: 'apigen-copy-readme',
       apply: 'build',
       closeBundle() {
         const srcPath = pathMod.resolve(__dirname, 'README.md');
         if (!fs.existsSync(srcPath)) return;
-        const outDir = pathMod.resolve(
-          __dirname,
-          '../../../dist/packages/dispatch/dispatch-client'
-        );
-        fs.mkdirSync(outDir, { recursive: true });
-        fs.copyFileSync(srcPath, pathMod.join(outDir, 'README.md'));
+        fs.mkdirSync(distDir, { recursive: true });
+        fs.copyFileSync(srcPath, pathMod.join(distDir, 'README.md'));
       },
     },
     nxViteTsPaths(),
@@ -33,31 +31,20 @@ export default defineConfig({
     }),
   ],
 
-  // Uncomment this if you are using workers.
-  // worker: {
-  //  plugins: [ nxViteTsPaths() ],
-  // },
-
-  // Configuration for building your library.
-  // See: https://vitejs.dev/guide/build.html#library-mode
   build: {
-    outDir: '../../../dist/packages/dispatch/dispatch-client',
+    outDir: distDir,
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {
       transformMixedEsModules: true,
     },
     lib: {
-      // Could also be a dictionary or array of multiple entry points.
       entry: 'src/index.ts',
       name: 'dispatch-client',
       fileName: 'index',
-      // Change this to the formats you want to support.
-      // Don't forget to update your package.json as well.
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      // External packages that should not be bundled into your library.
       external: [],
     },
   },
@@ -65,14 +52,17 @@ export default defineConfig({
   test: {
     globals: true,
     cache: {
-      dir: '../../../node_modules/.vitest',
+      dir: path.join(repoRoot, 'node_modules/.vitest'),
     },
     environment: 'node',
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../../coverage/packages/dispatch/dispatch-client',
+      reportsDirectory: path.join(
+        repoRoot,
+        'coverage/packages/dispatch/dispatch-client'
+      ),
       provider: 'v8',
     },
   },

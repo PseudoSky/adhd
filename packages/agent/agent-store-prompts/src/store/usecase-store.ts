@@ -202,8 +202,11 @@ export class UseCaseStore {
       .returning({ id: contextRulesTable.id })
       .get();
 
+    if (!result) {
+      throw new Error('insert failed: context rule');
+    }
     return {
-      id: result!.id,
+      id: result.id,
       agentSlug: input.agentSlug,
       condition: input.condition,
       componentSlug: input.componentSlug,

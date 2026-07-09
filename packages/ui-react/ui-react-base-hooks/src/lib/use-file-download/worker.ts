@@ -1,9 +1,9 @@
 // download.worker.ts
 
 export type WorkerMessage = {
-  data: any[];
+  data: unknown[];
   fileType: 'json' | 'csv' | 'excel';
-  options: any;
+  options: unknown;
   cacheKey: string;
 };
 
@@ -34,11 +34,11 @@ self.onmessage = async (event: MessageEvent<WorkerMessage>) => {
 };
 
 async function processLargeData(
-  data: any[],
+  data: unknown[],
   fileType: 'json' | 'csv' | 'excel',
-  options: any
+  options: unknown
 ) {
-  const chunks: any[][] = [];
+  const chunks: unknown[][] = [];
   const totalChunks = Math.ceil(data.length / CHUNK_SIZE);
 
   // Split data into chunks
@@ -46,7 +46,7 @@ async function processLargeData(
     chunks.push(data.slice(i, i + CHUNK_SIZE));
   }
 
-  const processedChunks: any[] = [];
+  const processedChunks: unknown[] = [];
 
   // Process each chunk
   for (let i = 0; i < chunks.length; i++) {
@@ -64,9 +64,9 @@ async function processLargeData(
 }
 
 async function processChunk(
-  chunk: any[],
+  chunk: unknown[],
   fileType: 'json' | 'csv' | 'excel',
-  options: any
+  options: unknown
 ) {
   switch (fileType) {
     case 'csv':
@@ -80,7 +80,7 @@ async function processChunk(
   }
 }
 
-function convertToCSV(data: any[], csvOptions?: any): string {
+function convertToCSV(data: unknown[], csvOptions?: unknown): string {
   if (!Array.isArray(data) || !data.length) return '';
 
   const delimiter = csvOptions?.delimiter || ',';
@@ -111,27 +111,29 @@ function convertToCSV(data: any[], csvOptions?: any): string {
   return csvRows.join('\n');
 }
 
-function combineChunks(chunks: any[], fileType: 'json' | 'csv' | 'excel') {
+function combineChunks(chunks: unknown[], fileType: 'json' | 'csv' | 'excel') {
   let type: string;
-  let data: any;
+  let data: unknown;
 
   switch (fileType) {
     case 'csv':
       type = 'text/csv;charset=utf-8;';
       // For CSV, we need to keep only one header
       data =
-        chunks[0].split('\n')[0] +
+        (chunks[0] as string).split('\n')[0] +
         '\n' +
-        chunks.map((chunk) => chunk.split('\n').slice(1).join('\n')).join('\n');
+        (chunks as string[])
+          .map((chunk) => chunk.split('\n').slice(1).join('\n'))
+          .join('\n');
       break;
     case 'excel':
       type =
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-      data = JSON.parse('[' + chunks.join(',') + ']');
+      data = JSON.parse('[' + (chunks as string[]).join(',') + ']');
       break;
     default:
       type = 'application/json;charset=utf-8;';
-      data = '[' + chunks.join(',') + ']';
+      data = '[' + (chunks as string[]).join(',') + ']';
   }
 
   return { data, type };

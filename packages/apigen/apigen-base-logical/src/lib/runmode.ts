@@ -372,6 +372,97 @@ function encodePassthrough(value: unknown): unknown {
 // ---------------------------------------------------------------------------
 
 /**
+ * @stable Validate all `$ref` values in a schema tree against a `$defs` dictionary.
+ *
+ * Walks `schema` recursively (into `properties`, `items`, `oneOf`, `$ref`,
+ * `additionalProperties`, `propertyNames`) and throws if any `$ref` value
+ * does not resolve to a key in `defs`.  Call this during schema generation
+ * (e.g., from `generate-schemas.ts`) to surface unresolvable `$ref` values at
+ * build time instead of at first runtime invocation (BUG-APIGEN-CORE-001).
+ *
+ * @param schema - The root schema node to validate.
+ * @param defs   - Dictionary of named definitions keyed by full `$ref` URI
+ *                 (e.g., `"#/$defs/MyType"`). If omitted, no cross-schema
+ *                 validation is performed and only the structural walk runs.
+ *
+ * @throws {Error} When any `$ref` in `schema` cannot be resolved against `defs`.
+ *
+ * @example
+ * ```ts
+ * const defs = { '#/$defs/User': { type: 'object', properties: { ... } } };
+ * validateSchemaRefs({ $ref: '#/$defs/User' }, defs); // ok
+ * validateSchemaRefs({ $ref: '#/$defs/Missing' }, defs);  // throws
+ * ```
+ */
+export function validateSchemaRefs(
+  schema: SchemaNode,
+  defs?: Readonly<Record<string, SchemaNode>>
+): void {
+  const visited = new Set<SchemaNode>();
+  const stack: SchemaNode[] = [schema];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node) continue;
+    if (visited.has(node)) continue;
+    visited.add(node);
+
+    // $ref — validate and recurse into the resolved definition
+    const ref = node['$ref'];
+    if (typeof ref === 'string') {
+      if (defs) {
+        const resolved = defs[ref];
+        if (!resolved) {
+          const available = Object.keys(defs).join(', ') || '(none)';
+          throw new Error(
+            `[apigen-logical] $ref "${ref}" cannot be resolved. ` +
+              `Available $defs: ${available}`
+          );
+        }
+        stack.push(resolved);
+      }
+      continue;
+    }
+
+    // oneOf
+    const oneOf = node['oneOf'];
+    if (Array.isArray(oneOf)) {
+      for (const branch of oneOf) {
+        if (typeof branch === 'object' && branch !== null)
+          stack.push(branch as SchemaNode);
+      }
+    }
+
+    // object properties
+    const props = node['properties'] as
+      | Record<string, SchemaNode>
+      | undefined;
+    if (props) {
+      for (const v of Object.values(props)) stack.push(v);
+    }
+
+    // array items (singular + positional tuple form)
+    const items = node['items'];
+    if (Array.isArray(items)) {
+      for (const it of items) {
+        if (typeof it === 'object' && it !== null)
+          stack.push(it as SchemaNode);
+      }
+    } else if (typeof items === 'object' && items !== null) {
+      stack.push(items as SchemaNode);
+    }
+
+    // additionalProperties schema (maps)
+    const addl = node['additionalProperties'];
+    if (typeof addl === 'object' && addl !== null)
+      stack.push(addl as SchemaNode);
+
+    // propertyNames schema (record key validation)
+    const pn = node['propertyNames'];
+    if (typeof pn === 'object' && pn !== null) stack.push(pn as SchemaNode);
+  }
+}
+
+/**
  * @stable Build a compile-once, schema-walking `Transcoder` over a frozen
  * registry snapshot.
  *

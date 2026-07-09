@@ -184,26 +184,26 @@ describe('UseCaseStore', () => {
 
       // Assert use-case survives reopen
       const queriedUseCase = useCaseStore.getUseCase('security-audit');
-      expect(queriedUseCase).toBeDefined();
-      expect(queriedUseCase!.name).toBe('Security Audit');
-      expect(queriedUseCase!.description).toBe(
+      expect(queriedUseCase).not.toBeNull();
+      expect(queriedUseCase.name).toBe('Security Audit');
+      expect(queriedUseCase.description).toBe(
         'Deep security analysis scenario'
       );
 
       // Assert component link with weight survives reopen (TOOTH: weight must persist)
       const components = useCaseStore.componentsFor('security-audit');
       expect(components).toHaveLength(1);
-      expect(components[0]!.componentSlug).toBe('security-rules');
-      expect(components[0]!.useCaseSlug).toBe('security-audit');
-      expect(components[0]!.weight).toBe(90); // TOOTH: fails if weight not stored
+      expect(components[0].componentSlug).toBe('security-rules');
+      expect(components[0].useCaseSlug).toBe('security-audit');
+      expect(components[0].weight).toBe(90); // TOOTH: fails if weight not stored
 
       // Assert context rule survives reopen (TOOTH: rule must persist)
       const rules = useCaseStore.contextRulesFor('review-agent');
       expect(rules).toHaveLength(1);
-      expect(rules[0]!.agentSlug).toBe('review-agent');
-      expect(rules[0]!.condition).toBe('{"ticket_type":"security"}');
-      expect(rules[0]!.componentSlug).toBe('security-rules');
-      expect(rules[0]!.position).toBe(5);
+      expect(rules[0].agentSlug).toBe('review-agent');
+      expect(rules[0].condition).toBe('{"ticket_type":"security"}');
+      expect(rules[0].componentSlug).toBe('security-rules');
+      expect(rules[0].position).toBe(5);
     });
   });
 
@@ -269,8 +269,8 @@ describe('UseCaseStore', () => {
 
       const otherRules = useCaseStore.contextRulesFor('other-agent');
       expect(otherRules).toHaveLength(1);
-      expect(otherRules[0]!.agentSlug).toBe('other-agent');
-      expect(otherRules[0]!.componentSlug).toBe('compliance-rule');
+      expect(otherRules[0].agentSlug).toBe('other-agent');
+      expect(otherRules[0].componentSlug).toBe('compliance-rule');
     });
   });
 
@@ -289,7 +289,7 @@ describe('UseCaseStore', () => {
 
       const components = useCaseStore.componentsFor('no-weight-case');
       expect(components).toHaveLength(1);
-      expect(components[0]!.weight).toBeNull();
+      expect(components[0].weight).toBeNull();
     });
   });
 });

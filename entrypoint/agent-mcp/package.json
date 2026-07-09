@@ -15,7 +15,10 @@
     "drizzle-orm": "*",
     "better-sqlite3": "*",
     "dotenv": "*",
-    "zod": "*"
+    "zod": "*",
+    "@adhd/agent-base-types": "2.0.0",
+    "@adhd/agent-engine-compiler": "0.0.1",
+    "tslib": "^2.3.0"
   },
   "devDependencies": {
     "@adhd/agent-base-types": "*"

@@ -20,7 +20,7 @@ export function extractNamed(sf: SourceFile): FnMeta[] {
       name: fn.getName() ?? '',
       params: fn.getParameters().map((p) => ({
         name: p.getName(),
-        type: p.getType().getText(),
+        type: p.getTypeNode()?.getText() ?? p.getType().getText(),
         optional: p.isOptional() || p.hasInitializer(),
       })),
       returnType: fn.getReturnType().getText(),
@@ -56,7 +56,7 @@ export function extractNamed(sf: SourceFile): FnMeta[] {
           (paramDecl?.hasQuestionToken?.() ?? false);
         return {
           name: p.getName(),
-          type: p.getTypeAtLocation(decl).getText(),
+          type: paramDecl?.getTypeNode()?.getText() ?? p.getTypeAtLocation(decl).getText(),
           optional,
         };
       }),
