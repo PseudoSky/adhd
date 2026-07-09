@@ -58,7 +58,7 @@
       "depends_on": [
         "builder-engine"
       ],
-      "guard": "npx --yes nx build environment-builder",
+      "guard": "test -f packages/environment/environment-builder/src/environment-snapshot.ts && npx --yes nx build environment-builder && node -e 'const{build}=require(\"./packages/environment/environment-builder\"); const s=build({project:{name:\"t\",envPrefix:\"T\"}}); process.exit([\"get\",\"set\",\"configPath\",\"write\"].every(m=>typeof s[m]===\"function\")?0:1)'",
       "artifacts": [
         "packages/environment/environment-builder/src/environment-snapshot.ts",
         "packages/environment/environment-builder/src/index.ts",
@@ -75,7 +75,7 @@
       "depends_on": [
         "builder-snapshot-api"
       ],
-      "guard": "npx --yes nx build environment-base-spec && npx --yes nx build environment-builder",
+      "guard": "python3 docs/plan/adhd-environment/scripts/guard_audit_builder.py",
       "artifacts": [
         "scripts/audit_audit-builder.py"
       ],
@@ -90,7 +90,7 @@
       "depends_on": [
         "builder-snapshot-api"
       ],
-      "guard": "npx --yes nx build environment-core-node",
+      "guard": "test -f packages/environment/environment-core-node/src/environment.ts && npx --yes nx build environment-core-node && node -e 'new (require(\"@adhd/environment\").Environment)({project:\"test\",namespace:\"default\"})'",
       "artifacts": [
         "packages/environment/environment-core-node/src/index.ts",
         "packages/environment/environment-core-node/src/environment.ts"
@@ -107,7 +107,7 @@
         "builder-snapshot-api",
         "runtime-core-node"
       ],
-      "guard": "npx --yes nx build environment-cli",
+      "guard": "test -f entrypoint/environment-cli/src/api.ts && F=entrypoint/environment-cli/src/api.ts && grep -q 'function init' $F && grep -q 'function build' $F && grep -q 'function set' $F && grep -q 'function status' $F && grep -q 'function verify' $F && grep -q 'function doctor' $F && grep -q 'function configGet' $F && grep -q 'function exportSnapshot' $F && grep -q 'function diff' $F && npx --yes nx build environment-cli",
       "artifacts": [
         "entrypoint/environment-cli/src/api.ts",
         "entrypoint/environment-cli/src/commands/set.ts",
@@ -158,7 +158,7 @@
         "runtime-py",
         "runtime-rs"
       ],
-      "guard": "npx --yes nx build environment-core-node && python -m build && cargo build",
+      "guard": "python3 docs/plan/adhd-environment/scripts/guard_audit_runtime.py",
       "artifacts": [
         "scripts/audit_audit-runtime.py"
       ],
@@ -198,7 +198,7 @@
         "refactor-agent-mcp",
         "audit-runtime"
       ],
-      "guard": "npx --yes nx run-many -t build --projects=environment-*",
+      "guard": "python3 docs/plan/adhd-environment/scripts/guard_audit_final.py",
       "artifacts": [
         "scripts/audit_audit-final.py"
       ],

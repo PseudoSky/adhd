@@ -871,3 +871,10 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 - `packages/ai/agent-mcp/src/providers/anthropic.ts:25` — `OAUTH_CLIENT_ID = "9d1c250a-…"`. An OAuth **client id** is a public identifier, not a secret.
 - `packages/ai/agent-mcp/INSTALL.md:65` — a `curl` example against `http://localhost:1234/v1/models`. No credential.
 - Consider adding both to `.gitleaks.toml`'s allowlist with a comment, so the signal stays clean.
+
+### ENV-PLAN-019 — a human-confirmed DoD acceptance value changed as a consequence of the ENV-CORE-004 fix
+- **Where:** `docs/plan/adhd-environment/SCOPE.md:20` and `:227` (Definition of Done); mirrored in `contexts/_shared.md`, `contexts/contract-base-spec.md`, `TOOLS.md`, `interfaces-architect.md`, `demo/DEMO.md`, `scripts/criteria.json` (`audit-final.6`), `scripts/audit_checks.js`
+- **Description:** The DoD asserted `contentHash({b:"2",a:"1"}) === "sha256-4a73850f…"` in all three languages. `state.json.dod_provenance` records these clauses as confirmed interactively by `pseudosky` on 2026-07-08. ENV-CORE-004 replaced the non-injective `key=value\n` serialization with a length-prefixed **format v2**, so the correct digest for that input is now `sha256-66e4efeb…464788`. Leaving the old value pinned would make `audit-final.6` permanently red; changing it silently would rewrite a human-confirmed acceptance criterion.
+- **Action taken:** the seven *normative* pins were updated to the v2 digest so the gate can go green. The files that **narrate** the old value (`orchestration-ledger.md`, both `BACKLOG.md`s, `SPEC_0.0.0`–`0.0.4`) were deliberately left alone — rewriting them would falsify the audit record of the fabricated-hash incident (ADHDENV-BL-3).
+- **Outstanding:** the DoD clause's *value* changed, not its *intent*. **A human must re-confirm the DoD** (`state-transition.js --confirm-dod`) before this plan may reach `done`. The orchestrator must not self-certify this.
+- **Status:** OPEN — owner: human. Blocks terminal transition together with ENV-PLAN-016.
