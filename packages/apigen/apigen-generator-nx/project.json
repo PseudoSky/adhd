@@ -14,13 +14,32 @@
   "tags": ["layer:logic", "platform:node"],
   "targets": {
     "build": {
-      "executor": "@nx/vite:build",
+      "executor": "@nx/js:tsc",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/packages/apigen/apigen-generator-nx",
         "main": "packages/apigen/apigen-generator-nx/src/index.ts",
         "tsConfig": "packages/apigen/apigen-generator-nx/tsconfig.lib.json",
-        "assets": ["packages/apigen/apigen-generator-nx/*.md"]
+        "assets": [
+          "packages/apigen/apigen-generator-nx/*.md",
+          "packages/apigen/apigen-generator-nx/generators.json",
+          "packages/apigen/apigen-generator-nx/executors.json",
+          {
+            "input": "packages/apigen/apigen-generator-nx/src/generators",
+            "glob": "**/__files__/**",
+            "output": "./src/generators"
+          },
+          {
+            "input": "packages/apigen/apigen-generator-nx/src/generators",
+            "glob": "**/schema.json",
+            "output": "./src/generators"
+          },
+          {
+            "input": "packages/apigen/apigen-generator-nx/src/executors",
+            "glob": "**/schema.json",
+            "output": "./src/executors"
+          }
+        ]
       }
     },
     "nx-release-publish": {

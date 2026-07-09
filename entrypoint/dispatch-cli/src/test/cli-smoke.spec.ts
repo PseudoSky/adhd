@@ -46,21 +46,19 @@ import * as path from 'node:path';
 
 import { makeCompletionLogEntry, makeFixtureDag } from './helpers/fixtures.js';
 
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..');
+const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const TSCONFIG_BASE = path.join(REPO_ROOT, 'tsconfig.base.json');
 const GENERATED_CLI_PATH = path.join(
   REPO_ROOT,
   'dist',
-  'packages',
-  'dispatch',
+  'entrypoint',
   'dispatch-cli',
   'cli',
   'cli.ts'
 );
 const FALLBACK_CLI_PATH = path.join(
   REPO_ROOT,
-  'packages',
-  'dispatch',
+  'entrypoint',
   'dispatch-cli',
   'bin',
   'cli.ts'

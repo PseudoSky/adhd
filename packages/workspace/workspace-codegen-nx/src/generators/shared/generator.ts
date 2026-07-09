@@ -1,12 +1,8 @@
 import {
   type Tree,
-  type GeneratorCallback,
   formatFiles,
   joinPathFragments,
   logger,
-  names,
-  offsetFromRoot,
-  readProjectConfiguration,
   readJson,
   writeJson,
 } from '@nx/devkit';

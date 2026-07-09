@@ -11,7 +11,7 @@ describe('useInfiniteScroll', () => {
     observeFn = vi.fn();
     disconnectFn = vi.fn();
 
-    const MockObserver = vi.fn((callback, options) => {
+    const MockObserver = vi.fn((callback, _options) => {
       intersectionCallback = callback;
       return {
         observe: observeFn,
@@ -19,7 +19,7 @@ describe('useInfiniteScroll', () => {
         disconnect: disconnectFn,
       };
     });
-    window.IntersectionObserver = MockObserver as any;
+    window.IntersectionObserver = MockObserver as unknown as IntersectionObserver;
   });
 
   afterEach(() => {
@@ -49,7 +49,7 @@ describe('useInfiniteScroll', () => {
 
     // Manually set the ref to a DOM element before the hook mounts
     const element = document.createElement('div');
-    const { result } = renderHook(() => {
+    const { result: _result } = renderHook(() => {
       const scroll = useInfiniteScroll({
         onLoadMore,
         hasMore: false,

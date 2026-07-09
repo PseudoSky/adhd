@@ -1,5 +1,5 @@
 /* SECTION: typechecks */
-type Expand<T> = T extends any ? T : T;
+type Expand<T> = T extends unknown ? T : T;
 type ValueType = string | number | boolean | null | undefined | Date;
 type PrimitiveTypes =
   | ValueType

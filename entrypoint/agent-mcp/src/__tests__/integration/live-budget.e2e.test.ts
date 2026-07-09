@@ -21,6 +21,8 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { agentTool, taskTool } from "@adhd/agent-engine-orchestrator";
+import { generateId, tasksTable, taskEventsTable } from "@adhd/agent-store-runtime";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -54,10 +56,6 @@ describe.skipIf(!isLive)(
     () => {
         it("task fails with BUDGET_EXCEEDED when maxModelCalls:1 and tool forces second model call", async () => {
             const { buildHarness, drainQueue } = await import("./harness.js");
-            const { agentTool } = await import("@adhd/agent-engine-orchestrator");
-            const { taskTool } = await import("@adhd/agent-engine-orchestrator");
-            const { generateId } = await import("@adhd/agent-store-runtime");
-            const { tasksTable, taskEventsTable } = await import("@adhd/agent-store-runtime");
             const { eq } = await import("drizzle-orm");
 
             const harness = await buildHarness({ skipOrphanScan: true });
@@ -123,7 +121,8 @@ describe.skipIf(!isLive)(
 
                 expect(tasks.length).toBeGreaterThan(0);
 
-                const task = tasks[0]!;
+                const task = tasks[0];
+                if (!task) throw new Error("expected at least one task");
 
                 // Primary assertion: task failed due to budget enforcement
                 expect(task.status).toBe("failed");

@@ -47,11 +47,17 @@ type DependencyEnum =
   | 'unknown';
 // TODO: down or upgrade depcheck;
 const hasDepType = (t: DependencyEnum[] = []) => {
-  const types = new Set(t);
   return ({ dependencyTypes }: { dependencyTypes: DependencyEnum[] }) =>
     dependencyTypes.length && new Set(dependencyTypes).has(t[0]);
 };
-const defaultOptions = {
+interface CruiseOptions {
+  sourceDir: string;
+  doNotFollow?: { dependencyTypes: string[] };
+  extends?: string;
+  [key: string]: unknown;
+}
+
+const defaultOptions: CruiseOptions = {
   sourceDir: '',
   // "ignoreMatches"
   // includeDir: false,
@@ -66,19 +72,19 @@ const defaultOptions = {
     ],
   },
   extends: 'dependency-cruiser/configs/recommended',
-} as any;
+};
 export const getDeps = async (
   p_paths: string[],
   _options = {},
   src_path = ''
 ) => {
-  const options: any = {
+  const options: CruiseOptions = {
     ...defaultOptions,
     ..._options,
   };
 
   const project_path = p_paths[0];
-  const { ext, dir, base } = path.parse(project_path);
+  const { ext, dir, base: _base } = path.parse(project_path);
   const full_pkg_path = path.resolve(ext ? dir : project_path);
   const full_path = path.join(full_pkg_path, src_path);
   let pathz = ext ? [project_path] : [full_path];

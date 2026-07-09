@@ -109,8 +109,8 @@ function openDb(dbPath: string): OpenResult {
 }
 
 /** Count rows in registry_composed_prompts for a given agentSlug. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowCount(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: ReturnType<typeof drizzle<any>>,
   agentSlug: string
 ): number {
@@ -565,7 +565,8 @@ describe('compileAgent — composed_prompts cache (reopen-proven)', () => {
         .orderBy(composedPromptsTable.id)
         .all();
 
-      const latestRow = allRows[allRows.length - 1]!;
+      const latestRow = allRows[allRows.length - 1];
+      if (!latestRow) throw new Error('Expected at least one composed prompt row');
       expect(latestRow.h).not.toEqual(baselineHash);
 
       // TOOTH 3: the new content includes the bumped component's updated text.

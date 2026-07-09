@@ -87,14 +87,15 @@ describe('createNominalCodec', () => {
     const joined = new Date('2024-01-02T03:04:05.678Z');
     const user = new User('u-1', joined);
 
-    const wire = codec!.encode(user, USER_NODE, ctxFor(registry)) as Record<
+    if (!codec) throw new Error('cli.User codec not found');
+    const wire = codec.encode(user, USER_NODE, ctxFor(registry)) as Record<
       string,
       Wire
     >;
     // Nested Date recursed through the date-time codec → RFC3339 string on the wire.
     expect(wire).toEqual({ id: 'u-1', joinedAt: '2024-01-02T03:04:05.678Z' });
 
-    const back = codec!.decode(wire, USER_NODE, ctxFor(registry));
+    const back = codec.decode(wire, USER_NODE, ctxFor(registry));
     expect(back).toBeInstanceOf(User);
     const decoded = back as User;
     expect(decoded.id).toBe('u-1');
@@ -123,7 +124,8 @@ describe('createNominalCodec', () => {
     registry.register(
       createNominalCodec({ id: 'cli.Node', schema: NODE_NODE })
     );
-    const codec = registry.get('cli.Node')!;
+    const codec = registry.get('cli.Node');
+    if (!codec) throw new Error('cli.Node codec not found');
 
     const a: Record<string, unknown> = { name: 'a' };
     a['next'] = a; // back-edge
@@ -151,7 +153,8 @@ describe('createNominalCodec', () => {
       'x-apigen-codec': 'cli.User',
     };
     const registry = buildRegistry(stripped, User);
-    const codec = registry.get('cli.User')!;
+    const codec = registry.get('cli.User');
+    if (!codec) throw new Error('cli.User codec not found');
 
     const joined = new Date('2024-06-23T00:00:00.000Z');
     const user = new User('u-2', joined);
@@ -170,7 +173,8 @@ describe('createNominalCodec', () => {
     plainRegistry.register(
       createNominalCodec({ id: 'cli.User', schema: stripped })
     );
-    const plainCodec = plainRegistry.get('cli.User')!;
+    const plainCodec = plainRegistry.get('cli.User');
+    if (!plainCodec) throw new Error('cli.User codec not found');
     const bag = plainCodec.decode(
       wire,
       stripped,
@@ -182,15 +186,16 @@ describe('createNominalCodec', () => {
 
     // And the wire is byte-identical to the fully-hinted node (hints are advisory).
     const hintedRegistry = buildRegistry(USER_NODE, User);
-    const hintedWire = hintedRegistry
-      .get('cli.User')!
-      .encode(user, USER_NODE, ctxFor(hintedRegistry));
+    const hintedCodec = hintedRegistry.get('cli.User');
+    if (!hintedCodec) throw new Error('cli.User codec not found in hinted registry');
+    const hintedWire = hintedCodec.encode(user, USER_NODE, ctxFor(hintedRegistry));
     expect(wire).toEqual(hintedWire);
   });
 
   it('uses toJSON when present and field-projects when absent (same wire)', () => {
     const registry = buildRegistry(USER_NODE, User);
-    const codec = registry.get('cli.User')!;
+    const codec = registry.get('cli.User');
+    if (!codec) throw new Error('cli.User codec not found');
     const joined = new Date('2024-01-02T03:04:05.678Z');
     const user = new User('u-3', joined);
 
@@ -216,7 +221,8 @@ describe('createNominalCodec', () => {
     };
     const registry = createRegistry();
     registry.register(createNominalCodec({ id: 'cli.Socket', schema: node }));
-    const codec = registry.get('cli.Socket')!;
+    const codec = registry.get('cli.Socket');
+    if (!codec) throw new Error('cli.Socket codec not found');
 
     // Encode still works (encode-only).
     const wire = codec.encode({ id: 's-1' }, node, ctxFor(registry));
@@ -236,7 +242,8 @@ describe('createNominalCodec', () => {
 
   it('validate-then-construct: rejects a non-object wire and missing required fields', () => {
     const registry = buildRegistry(USER_NODE, User);
-    const codec = registry.get('cli.User')!;
+    const codec = registry.get('cli.User');
+    if (!codec) throw new Error('cli.User codec not found');
 
     expect(() =>
       codec.decode('not-an-object' as Wire, USER_NODE, ctxFor(registry))

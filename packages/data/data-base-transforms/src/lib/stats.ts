@@ -113,7 +113,7 @@ export function normalize(list: number[], bounds = { min: 0, max: 1 }) {
   );
 }
 
-export function histogram(iterable: any[]) {
+export function histogram(iterable: unknown[]) {
   const result = new Map();
 
   for (const x of iterable) {
@@ -124,8 +124,8 @@ export function histogram(iterable: any[]) {
 }
 
 export class Counter extends Map {
-  normalizer: (val: any) => any;
-  constructor(iterable: any[] = [], normalizer = (val: any) => val) {
+  normalizer: (val: unknown) => unknown;
+  constructor(iterable: unknown[] = [], normalizer = (val: unknown) => val) {
     super();
     this.normalizer = normalizer;
     for (const x of iterable) {
@@ -139,27 +139,22 @@ export class Counter extends Map {
     }
   };
 
-  add = (value: any) => {
+  add = (value: unknown) => {
     const x = this.normalizer(value);
     this.set(x, (this.get(x) || 0) + 1);
   };
 }
 type Range = { min?: number; max?: number };
-type Bin = {
-  bin: number;
-  x: number;
-  y: number;
-};
 // TODO: I dont think this actually normalizes
 export class NormalizedHistogram {
   config: { bins: number; start: number; step: number; standard: boolean };
   lookup: { [k: string | number]: number };
-  normalize(_value: any): number {
+  normalize(_value: unknown): number {
     throw new Error('Method not implemented.');
   }
   counter: Counter;
   range: Range;
-  constructor(data: any[], bins = 10, start = 1, step = 1, standard = false) {
+  constructor(data: unknown[], bins = 10, start = 1, step = 1, standard = false) {
     this.counter = new Counter();
     this.range = {};
     this.lookup = {};
@@ -173,7 +168,7 @@ export class NormalizedHistogram {
     this.setData(data);
   }
 
-  getBin = (_value: any) => {
+  getBin = (_value: unknown) => {
     const { step } = this.config;
     if (_value in this.lookup) return this.lookup[_value];
     const value = this.normalize(_value);
@@ -183,9 +178,9 @@ export class NormalizedHistogram {
     return bin;
   };
   // TODO: the bounds adjustment doesn't work
-  bins = (newMin?: number, newMax?: number) => {
+  bins = (_newMin?: number, _newMax?: number) => {
     // const res = [];
-    const { bins, start, step } = this.config;
+    const { bins, start: _start, step: _step } = this.config;
     const res: number[] = new Array(bins).fill(0);
     // for(let i = 0; i < bins; i += step){
     //   res[i] = 0
@@ -218,7 +213,7 @@ export class NormalizedHistogram {
     // return res;
   };
 
-  setData = (data: any[]) => {
+  setData = (data: unknown[]) => {
     this.range = {
       min: Number.MAX_SAFE_INTEGER,
       max: Number.MIN_SAFE_INTEGER,
@@ -239,7 +234,7 @@ export class NormalizedHistogram {
   };
 }
 
-export function mostCommon(iterable: any[]) {
+export function mostCommon(iterable: unknown[]) {
   let maxCount = 0;
   let maxKey;
 

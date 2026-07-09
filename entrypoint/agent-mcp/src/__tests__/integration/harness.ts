@@ -19,7 +19,6 @@ import crypto from "node:crypto";
 
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import { fileURLToPath } from "node:url";
 
 import * as entrypointSchema from "../../db/schema.js";
 import {
@@ -30,7 +29,6 @@ import {
   SessionStore,
   TaskStore,
   generateId,
-  nowIso,
 } from "@adhd/agent-store-runtime";
 import {
   BackgroundQueue,
@@ -49,13 +47,10 @@ import { AgentStore } from "../../store/agent-store.js";
 import { runMigrationsOn, MIGRATIONS_FOLDER } from "../../db/migrate-runner.js";
 import { startSseServer } from "../../streaming/sse-server.js";
 import { loadConfig } from "../../config.js";
-import { logger as pinoLogger } from "../../logger.js";
-import { emitTaskEvent, subscribeToTask } from "../../streaming/event-bus.js";
+import { emitTaskEvent } from "../../streaming/event-bus.js";
 import { eq } from "drizzle-orm";
 import type { EngineConfig, EngineLogger } from "@adhd/agent-engine-orchestrator";
 import type { AgentCreateInput } from "@adhd/agent-engine-orchestrator";
-
-const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 /** Combined drizzle schema for harness-level direct table access */
 const combinedSchema = {
@@ -114,18 +109,29 @@ export interface HarnessOptions {
 /** Build a test EngineLogger that is silent by default */
 function testLogger(level: "silent" | "warn" = "silent"): EngineLogger {
   if (level === "silent") {
-    return { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
+    return {
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      info: () => {},
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      warn: () => {},
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      error: () => {},
+      // eslint-disable-next-line @typescript-eslint/no-empty-function
+      debug: () => {},
+    };
   }
   return {
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     info: () => {},
     warn: (...args: unknown[]) => console.warn(...args),
     error: (...args: unknown[]) => console.error(...args),
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     debug: () => {},
   };
 }
 
 /** Build a test EngineConfig with defaults suitable for integration tests */
-function testConfig(opts: {
+function testConfig(_opts: {
   serverMaxToolLoops?: number;
 } = {}): EngineConfig {
   const env = {
@@ -207,20 +213,26 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
     sseServer = startSseServer(taskStore, 0, "127.0.0.1");
     await new Promise<void>((resolve) => {
       const readPort = () => {
-        const addr = sseServer!.address() as { port: number } | null;
+        if (!sseServer) throw new Error("sseServer not started");
+        const addr = sseServer.address() as { port: number } | null;
         ssePort = addr?.port;
         resolve();
       };
-      if (sseServer!.listening) readPort();
-      else sseServer!.once("listening", readPort);
+      const svr = sseServer;
+      if (!svr) throw new Error('sseServer not initialized');
+      if (svr.listening) readPort();
+      else svr.once("listening", readPort);
     });
   }
 
   // Build taskDeps — same shape as index.ts.
   const effectiveOrchestrator: Orchestrator = opts.defaultProvider
     ? ({
-        run: (input: Parameters<Orchestrator["run"]>[0]) =>
-          orchestrator.run({ ...input, provider: opts.defaultProvider! }),
+        run: (input: Parameters<Orchestrator["run"]>[0]) => {
+          const provider = opts.defaultProvider;
+          if (!provider) throw new Error("Harness: defaultProvider unexpectedly null");
+          return orchestrator.run({ ...input, provider });
+        },
       } as Orchestrator)
     : orchestrator;
 
@@ -254,7 +266,8 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
 
     for (const row of orphanedPending) {
       try {
-        await enqueueExistingTask(row.id, taskDepsRef.value!);
+        if (!taskDepsRef.value) throw new Error("Harness: taskDepsRef.value not initialized");
+        await enqueueExistingTask(row.id, taskDepsRef.value);
       } catch {
         // ignore failures in teardown
       }
@@ -263,7 +276,8 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
 
   const teardown = async (): Promise<void> => {
     if (sseServer) {
-      await new Promise<void>((resolve) => sseServer!.close(() => resolve()));
+      const srv = sseServer;
+      await new Promise<void>((resolve) => srv.close(() => resolve()));
     }
 
     await Promise.race([

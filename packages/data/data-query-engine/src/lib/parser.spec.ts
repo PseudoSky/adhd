@@ -1,5 +1,4 @@
-import { QueryExpression, BooleanExpression } from './expressions';
-import { DataView } from './query';
+import { BooleanExpression } from './expressions';
 import util from 'util';
 import { parseOrderBy, parseWhere } from './parser';
 const data = [

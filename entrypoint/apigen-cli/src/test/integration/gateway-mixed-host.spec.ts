@@ -24,6 +24,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 import {
@@ -34,7 +35,7 @@ import {
   type HostAdapter,
   type HostRequest,
   type InProcessRuntime,
-} from '@adhd/apigen-gateway';
+} from '@adhd/apigen-engine-gateway';
 import type { Operation, Transport } from '@adhd/apigen-core-client';
 
 // ---------------------------------------------------------------------------
@@ -73,14 +74,15 @@ function req(
 // REAL Python sidecar HostAdapter — spawns python3 + speaks line-JSON-RPC.
 // ---------------------------------------------------------------------------
 
-const PYTHON_PKG_DIR = path.resolve(
-  __dirname,
-  '..',
-  '..',
-  '..',
-  '..',
-  'python'
-);
+const PYTHON_PKG_DIR = (() => {
+  let dir = __dirname;
+  for (let i = 0; i < 12; i++) {
+    const candidate = path.join(dir, 'packages/apigen/python');
+    if (fs.existsSync(path.join(candidate, 'apigen_python'))) return candidate;
+    dir = path.dirname(dir);
+  }
+  return path.resolve(__dirname, '../../../../packages/apigen/python');
+})();
 
 interface PythonSidecar {
   adapter: HostAdapter;
@@ -138,7 +140,10 @@ function createPythonSidecar(host: string): PythonSidecar {
         // JSON-RPC response: {id, result} | {id, error}
         const id = msg['id'] as string | undefined;
         if (id !== undefined && pending.has(id)) {
-          const { resolve, reject } = pending.get(id)!;
+          const entry = pending.get(id);
+          expect(entry).toBeDefined();
+          if (!entry) return;
+          const { resolve, reject } = entry;
           pending.delete(id);
           if ('error' in msg) reject(msg['error']);
           else resolve(msg['result']);

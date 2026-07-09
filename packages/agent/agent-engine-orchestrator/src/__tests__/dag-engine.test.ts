@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
-import { TaskStore, tasksTable } from "@adhd/agent-store-runtime";
+import { TaskStore } from "@adhd/agent-store-runtime";
 import { DagEngine } from "../engine/dag-engine.js";
 import { generateId } from "../utils/ids.js";
 import { nowIso } from "../utils/timestamps.js";

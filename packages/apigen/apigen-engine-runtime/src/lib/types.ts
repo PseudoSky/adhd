@@ -3,7 +3,7 @@ import type { GeneratedSchemas, ComposedSchemas } from '@adhd/apigen-core-client
 export type { GeneratedSchemas, ComposedSchemas };
 
 export interface MiddlewareDef<
-  TEnvelope extends object = object,
+  _TEnvelope extends object = object,
   TContext extends object = object
 > {
   id: string;

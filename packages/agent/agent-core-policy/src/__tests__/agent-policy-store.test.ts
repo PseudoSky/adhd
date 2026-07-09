@@ -62,10 +62,13 @@ const openHandles: Database.Database[] = [];
 
 afterEach(() => {
   while (openHandles.length) {
-    try {
-      openHandles.pop()!.close();
-    } catch {
-      /* already closed */
+    const handle = openHandles.pop();
+    if (handle) {
+      try {
+        handle.close();
+      } catch {
+        /* already closed */
+      }
     }
   }
 });
@@ -167,7 +170,8 @@ describe('AgentPolicyStore — agent_policies junction', () => {
       const rows = store.listForAgent(TEST_AGENT_SLUG);
 
       expect(rows).toHaveLength(1);
-      const row = rows[0]!;
+      const row = rows[0];
+      if (!row) throw new Error('Expected row to exist');
 
       expect(row.agentSlug).toBe(TEST_AGENT_SLUG);
       expect(row.policySlug).toBe(MAX_REWORK_TEMPLATE.slug);
@@ -213,7 +217,8 @@ describe('AgentPolicyStore — agent_policies junction', () => {
     // No error should have been thrown — cross-package FK is absent.
     expect(caughtErr).toBeUndefined();
     expect(attached).toBeDefined();
-    expect(attached!.agentSlug).toBe(PHANTOM_AGENT_SLUG);
+    if (!attached) throw new Error('Expected attached to be defined');
+    expect(attached.agentSlug).toBe(PHANTOM_AGENT_SLUG);
 
     fs.unlinkSync(dbPath);
   });
@@ -265,7 +270,9 @@ describe('AgentPolicyStore — agent_policies junction', () => {
 
     const betaRows = store.listForAgent('agent-beta');
     expect(betaRows).toHaveLength(1);
-    expect(betaRows[0]!.policySlug).toBe(MAX_REWORK_TEMPLATE.slug);
+    const betaRow = betaRows[0];
+    if (!betaRow) throw new Error('Expected betaRows[0] to exist');
+    expect(betaRow.policySlug).toBe(MAX_REWORK_TEMPLATE.slug);
 
     const gammaRows = store.listForAgent('agent-gamma-no-policies');
     expect(gammaRows).toHaveLength(0);

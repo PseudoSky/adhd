@@ -271,15 +271,21 @@ describe('§8.1 rule 3 — Typed-extension ctx', () => {
 
     const a: Layer = async (call, next) => {
       call.ctx.set(Counter, new Counter());
-      call.ctx.get(Counter)!.count++;
+      const counterA = call.ctx.get(Counter);
+      if (!counterA) throw new Error('Counter not set');
+      counterA.count++;
       return next();
     };
     const b: Layer = async (call, next) => {
-      call.ctx.get(Counter)!.count++;
+      const counterB = call.ctx.get(Counter);
+      if (!counterB) throw new Error('Counter not set');
+      counterB.count++;
       return next();
     };
     const c: Layer = async (call, next) => {
-      call.ctx.get(Counter)!.count++;
+      const counterC = call.ctx.get(Counter);
+      if (!counterC) throw new Error('Counter not set');
+      counterC.count++;
       return next();
     };
 

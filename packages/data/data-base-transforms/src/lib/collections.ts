@@ -1,22 +1,22 @@
 import { isArray, isObject, isValue } from './filters';
 import { extractThen } from './function';
 
-export type BooleanFilter = (e: any) => boolean;
-export type ArrayOrObject = Record<string | number, any>;
-export type Selector<T> = (data: T, index: number, orig: T[]) => any;
+export type BooleanFilter = (e: unknown) => boolean;
+export type ArrayOrObject = Record<string | number, unknown>;
+export type Selector<T> = (data: T, index: number, orig: T[]) => unknown;
 export type ComparisonFunction<T> = (a: T, b: T) => 0 | 1 | -1;
 
-export const difference = (arrays: any[][]) =>
-  arrays.reduce((a, b) => a.filter((c: any) => !b.includes(c)));
-export const intersection = (arrays: any[][]) =>
-  arrays.reduce((a, b) => a.filter((c: any) => b.includes(c)));
-export const flattenDeep = (arr: any[][]): any[] =>
-  arr.flatMap((subArray, index) =>
+export const difference = (arrays: unknown[][]) =>
+  arrays.reduce((a, b) => a.filter((c: unknown) => !b.includes(c)));
+export const intersection = (arrays: unknown[][]) =>
+  arrays.reduce((a, b) => a.filter((c: unknown) => b.includes(c)));
+export const flattenDeep = (arr: unknown[][]): unknown[] =>
+  arr.flatMap((subArray, _index) =>
     Array.isArray(subArray) ? flattenDeep(subArray) : subArray
   );
-export const keyByArray = (array: any[], key: string) =>
+export const keyByArray = (array: Record<string, unknown>[], key: string) =>
   (array || []).reduce((r, x) => ({ ...r, [key ? x[key] : x]: x }), {});
-export const keyBy = (collection: Record<string, any> | [], key: string) => {
+export const keyBy = (collection: Record<string, unknown> | [], key: string) => {
   // keyBy for array and object
   const c = collection || {};
   return Array.isArray(c)
@@ -24,12 +24,12 @@ export const keyBy = (collection: Record<string, any> | [], key: string) => {
     : Object.values(keyByArray(c as [], key));
 };
 
-export function isMatchType(obj: any, target: any) {
+export function isMatchType(obj: unknown, target: unknown) {
   return typeof obj === typeof target;
 }
 
-export function isMatch(obj: any, target: any): boolean {
-  const stack: Array<[any, any]> = [[obj, target]];
+export function isMatch(obj: unknown, target: unknown): boolean {
+  const stack: Array<[unknown, unknown]> = [[obj, target]];
 
   while (stack.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
@@ -64,20 +64,20 @@ export function isMatch(obj: any, target: any): boolean {
 }
 
 export function overSome(checks: BooleanFilter[]) {
-  return (item: any) => checks.some((check) => check(item));
+  return (item: unknown) => checks.some((check) => check(item));
 }
 
 export function overEvery(checks: BooleanFilter[]) {
-  return (item: any) => checks.every((check) => check(item));
+  return (item: unknown) => checks.every((check) => check(item));
 }
 
-export function overEach(arr: any[]) {
-  return (...args: any[]) => arr.map((func) => func(...args));
+export function overEach(arr: ((...args: unknown[]) => unknown)[]) {
+  return (...args: unknown[]) => arr.map((func) => func(...args));
 }
 
 export function omitBy(orig: ArrayOrObject, check: BooleanFilter) {
   // TODO: change Check type to pass key and value in the case exclusions are key based
-  const obj: Record<string | number, any> = { ...orig };
+  const obj: Record<string | number, unknown> = { ...orig };
   return Object.entries(orig).reduce((res, [key, value]) => {
     if (!check(value)) res[key] = obj[key];
     return res;
@@ -93,10 +93,10 @@ export function pickBy(orig: ArrayOrObject, check: BooleanFilter) {
 }
 
 export function keySelect(key: string) {
-  return ({ [key]: res }: Record<string, any>) => res;
+  return ({ [key]: res }: Record<string, unknown>) => res;
 }
 
-export function pluck(arr: any[], key: string) {
+export function pluck(arr: Record<string, unknown>[], key: string) {
   return arr.map(keySelect(key));
 }
 
@@ -132,7 +132,7 @@ export function maxBy<T>(
   return minBy(collection, selector, compare);
 }
 
-export function defaultSort(a: any, b: any) {
+export function defaultSort(a: unknown, b: unknown) {
   if (a == b) return 0;
   return a > b ? 1 : -1;
 }
@@ -142,10 +142,10 @@ export function reverseSort(a: number, b: number) {
   return b > a ? 1 : -1;
 }
 
-export function first(arr: any[]) {
+export function first(arr: unknown[]) {
   return arr[0];
 }
-export function last(arr: any[]) {
+export function last(arr: unknown[]) {
   return arr[arr.length - 1];
 }
 
@@ -168,7 +168,7 @@ export const sortByKey = (key: string) => {
 export const sortBy = <T, P extends keyof T>(
   arr: T[],
   prop?: P,
-  cmp: ComparisonFunction<T[P] | any> = defaultSort
+  cmp: ComparisonFunction<T[P] | unknown> = defaultSort
 ) => (!prop ? arr.sort(cmp) : sortByProp(arr, prop, cmp));
 
 export function maxByProp<T, P extends keyof T>(arr: T[], prop: P) {
@@ -181,11 +181,11 @@ export function minByProp<T, P extends keyof T>(arr: T[], prop: P) {
   return sortByProp(arr, prop)[0];
 }
 
-export function filterExclude(arr: any[], obj = {}) {
+export function filterExclude(arr: unknown[], obj = {}) {
   return arr.filter((e) => !isMatch(e, obj));
 }
 
-export function filterInclude(arr: any[], obj = {}) {
+export function filterInclude(arr: unknown[], obj = {}) {
   return arr.filter((e) => isMatch(e, obj));
 }
 
@@ -193,7 +193,7 @@ export function filterInclude(arr: any[], obj = {}) {
 //   return arr.reduce((res, element) => Object.assign(res, {[element[key]]: element}) = (res[element[key]]||[]).concat([]))
 // }
 
-export function unique(arr: any[]) {
+export function unique(arr: unknown[]) {
   return arr.reduce((a, d) => {
     if (!a.includes(d)) {
       a.push(d);
@@ -203,7 +203,7 @@ export function unique(arr: any[]) {
 }
 
 export function uniqueByProp<
-  Entry extends Record<string, any>,
+  Entry extends Record<string, unknown>,
   Prop extends keyof Entry
 >(arr: Entry[], prop: Prop) {
   if (!prop || !arr) return arr;
@@ -219,12 +219,12 @@ export function uniqueByProp<
   }, [] as Entry[]);
 }
 
-export function uniqueBy(arr: any[], props: string[]) {
+export function uniqueBy(arr: Record<string, unknown>[], props: string[]) {
   if (!props || !props.length) return [];
   return props.reduce(uniqueByProp, arr);
 }
 
-export function indexBy(arr: any[], prop: string) {
+export function indexBy(arr: Record<string, unknown>[], prop: string) {
   if (!prop || !arr || !arr.length) return {};
   return arr.reduce((res, e) => {
     if (prop in e) res[e[prop]] = (res[e[prop]] || []).concat(e);
@@ -232,7 +232,7 @@ export function indexBy(arr: any[], prop: string) {
   }, {});
 }
 
-export function rangeByProp(arr: any[], prop: string) {
+export function rangeByProp(arr: Record<string, unknown>[], prop: string) {
   if (arr.length === 1) {
     return { key: prop, min: arr[0][prop], max: arr[0][prop] };
   }
@@ -245,7 +245,7 @@ export function rangeByProp(arr: any[], prop: string) {
   };
 }
 
-export function rangeByProps(arr: any[], props: string[]) {
+export function rangeByProps(arr: Record<string, unknown>[], props: string[]) {
   return props.map((prop) => rangeByProp(arr, prop));
 }
 

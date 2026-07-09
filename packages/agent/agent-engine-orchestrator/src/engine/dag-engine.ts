@@ -50,7 +50,8 @@ export class DagEngine {
         const queue = [...dependsOn];
 
         while (queue.length > 0) {
-            const id = queue.shift()!;
+            const id = queue.shift();
+            if (!id) throw new Error('Empty queue in validateNoCycle');
 
             if (id === newTaskId) {
                 throw new ToolError(

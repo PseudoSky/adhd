@@ -90,6 +90,7 @@ describe.skip('useFileDownload (original)', () => {
 
   it('should handle validation errors', async () => {
     const onError = vi.fn();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const invalidData = [{ id: 1, name: 'Test' }] as any; // Invalid types for validation
 
     const { result } = renderHook(() =>
@@ -219,7 +220,7 @@ describe.skip('useFileDownload (original)', () => {
     // Add assertions for cleanup if you have exposed ways to check it
   });
 
-  function useFileDownload(arg0: {
+  function useFileDownload(_arg0: {
     data: { id: number; name: string }[];
     options?: {
       validation?: { schema: Record<string, string> };
@@ -229,6 +230,7 @@ describe.skip('useFileDownload (original)', () => {
       compression?: boolean;
       encryption?: { enabled: boolean; password: string };
     };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }): any {
     throw new Error('Function not implemented.');
   }

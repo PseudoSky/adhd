@@ -34,6 +34,15 @@ import { describe, it, expect } from "vitest";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
+import {
+    agentTool,
+    taskTool,
+    resultTool,
+    agentToolInputSchema,
+    taskToolInputSchema,
+    resultInputSchema,
+} from "@adhd/agent-engine-orchestrator";
+import { taskEventsTable, tasksTable } from "@adhd/agent-store-runtime";
 
 const isLive = process.env["AGENT_MCP_LIVE"] === "1";
 
@@ -70,15 +79,7 @@ describe.skipIf(!isLive)(
             if (!isLive) return;
 
             const { buildHarness } = await import("./harness.js");
-            const { agentTool } = await import("@adhd/agent-engine-orchestrator");
-            const { taskTool, resultTool } = await import("@adhd/agent-engine-orchestrator");
-            const {
-                agentToolInputSchema,
-                taskToolInputSchema,
-                resultInputSchema,
-            } = await import("@adhd/agent-engine-orchestrator");
             const { toMcpInputSchema } = await import("../../server.js");
-            const { taskEventsTable, tasksTable } = await import("@adhd/agent-store-runtime");
             const { eq } = await import("drizzle-orm");
 
             const harness = await buildHarness();
@@ -245,10 +246,12 @@ describe.skipIf(!isLive)(
                 const sampleWorker = depth2[0];
                 const parent = sampleWorker.parentTaskId ? byId.get(sampleWorker.parentTaskId) : undefined;
                 expect(parent, "worker must have a fanout parent").toBeDefined();
-                expect(parent!.recursionDepth).toBe(1);
-                const grandparent = parent!.parentTaskId ? byId.get(parent!.parentTaskId) : undefined;
+                if (!parent) throw new Error("expected parent to be defined");
+                expect(parent.recursionDepth).toBe(1);
+                const grandparent = parent.parentTaskId ? byId.get(parent.parentTaskId) : undefined;
                 expect(grandparent, "fanout must have a coordinator parent").toBeDefined();
-                expect(grandparent!.recursionDepth).toBe(0);
+                if (!grandparent) throw new Error("expected grandparent to be defined");
+                expect(grandparent.recursionDepth).toBe(0);
             } finally {
                 await harness.teardown();
             }

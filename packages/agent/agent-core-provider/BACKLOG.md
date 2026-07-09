@@ -14,3 +14,13 @@ explicit condition that **the initiative is not complete until they are covered*
   loop. Add an `AGENT_MCP_LIVE`-gated test (lmstudio/claudecli) driving the adapter end-to-end.
 - **NB-3 — Lint debt.** 2 `no-non-null-assertion` warnings + 1 unused-dep (`@nx/dependency-checks`).
   Minor; sweep with the cross-package lint pass.
+
+---
+
+## Revalidation (2026-07-04) — all items verified against current source
+
+| Item | Status | Notes |
+|------|--------|-------|
+| NB-1 — ProviderAdapter not wired | **STILL OPEN** | `ProviderAdapter` defined in `packages/agent/agent-base-types/src/domain.ts:323`, implemented in `agent-core-provider/src/adapter/provider-adapter.ts`. Zero references from `entrypoint/agent-mcp/src/` or `agent-engine-orchestrator/src/`. The seam is defined + unit-tested but consumed by nothing. |
+| NB-2 — No live-model e2e test | **STILL OPEN** | Zero `AGENT_MCP_LIVE` matches in package. `stream()` is an intentional stub (yields resolved model name, not LLM output). Source comment: "Wiring into the live provider is agent-mcp-refactor's job (plan 6)." |
+| NB-3 — Lint debt | **PARTIALLY RESOLVED** | 2 `no-non-null-assertion` warnings remain at `packages/agent/agent-core-provider/src/__tests__/tool-format-store.test.ts:198-199`. The unused-dep (`tslib`) is now handled by `eslintrc.json` `ignoredDependencies: ["tslib"]` — no eslint output for dep checks. |

@@ -309,7 +309,9 @@ describe("estimateTokens", () => {
         ];
         const tokens = estimateTokens(msgs);
         expect(tokens).toBeGreaterThan(0);
-        expect(tokens).toBe(Math.ceil(msgs[0].content!.length / 4));
+        const content = msgs[0].content;
+        expect(content).not.toBeNull();
+        expect(tokens).toBe(Math.ceil(content.length / 4));
     });
 });
 

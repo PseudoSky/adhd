@@ -19,6 +19,8 @@ import type { IEnforcementError } from '@adhd/agent-base-types';
 export interface RatePolicyRules {
   /** Max number of model (LLM) calls per task. */
   maxModelCalls?: number;
+  /** Max number of tool calls per task. */
+  maxToolCalls?: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -48,7 +50,8 @@ export function makeRatePolicyError(
  */
 export function evaluateRatePolicy(
   rules: RatePolicyRules,
-  modelCalls: number
+  modelCalls: number,
+  toolCalls: number
 ): IEnforcementError | null {
   if (rules.maxModelCalls !== undefined && modelCalls >= rules.maxModelCalls) {
     return makeRatePolicyError(
@@ -56,6 +59,9 @@ export function evaluateRatePolicy(
       rules.maxModelCalls,
       modelCalls
     );
+  }
+  if (rules.maxToolCalls !== undefined && toolCalls >= rules.maxToolCalls) {
+    return makeRatePolicyError('maxToolCalls', rules.maxToolCalls, toolCalls);
   }
   return null;
 }

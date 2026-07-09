@@ -153,7 +153,6 @@ describe('CompositionStore', () => {
      *     would include comp-c when it must be excluded.
      */
     it('returns components ordered by position, respects pinned version, includes only matching context', () => {
-      const now = new Date().toISOString();
 
       // comp-a: create v1, then bump to v2
       componentStore.create({
@@ -217,20 +216,20 @@ describe('CompositionStore', () => {
       expect(result).toHaveLength(3);
 
       // [composition-junction.2] ordering by position ASC
-      expect(result[0]!.componentSlug).toBe('comp-b'); // pos=5
-      expect(result[1]!.componentSlug).toBe('comp-c'); // pos=7
-      expect(result[2]!.componentSlug).toBe('comp-a'); // pos=10
+      expect(result[0].componentSlug).toBe('comp-b'); // pos=5
+      expect(result[1].componentSlug).toBe('comp-c'); // pos=7
+      expect(result[2].componentSlug).toBe('comp-a'); // pos=10
 
       // [composition-junction.1] version_pin — comp-a must resolve to v1 not v2
-      expect(result[2]!.resolvedVersion).toBe(1);
-      expect(result[2]!.component.content).toBe('comp-a v1 content');
+      expect(result[2].resolvedVersion).toBe(1);
+      expect(result[2].component.content).toBe('comp-a v1 content');
 
       // comp-b resolves to latest (v1)
-      expect(result[0]!.resolvedVersion).toBe(1);
-      expect(result[0]!.component.content).toBe('comp-b v1 content');
+      expect(result[0].resolvedVersion).toBe(1);
+      expect(result[0].component.content).toBe('comp-b v1 content');
 
       // comp-c included because condition matched
-      expect(result[1]!.component.content).toBe('comp-c v1 content');
+      expect(result[1].component.content).toBe('comp-c v1 content');
     });
 
     it('excludes comp-c when context does NOT match its condition', () => {
@@ -245,8 +244,8 @@ describe('CompositionStore', () => {
       expect(slugs).not.toContain('comp-c');
 
       // Order still correct: comp-b before comp-a
-      expect(result[0]!.componentSlug).toBe('comp-b'); // pos=5
-      expect(result[1]!.componentSlug).toBe('comp-a'); // pos=10
+      expect(result[0].componentSlug).toBe('comp-b'); // pos=5
+      expect(result[1].componentSlug).toBe('comp-a'); // pos=10
     });
 
     it('resolves null version_pin to latest after a version bump', () => {
@@ -256,14 +255,15 @@ describe('CompositionStore', () => {
       const result = compositionStore.resolveComposition('test-agent', {});
       const compB = result.find((r) => r.componentSlug === 'comp-b');
 
-      expect(compB).toBeDefined();
+      expect(compB).not.toBeNull();
       // null pin → latest-at-resolve = v2
-      expect(compB!.resolvedVersion).toBe(2);
-      expect(compB!.component.content).toBe('comp-b v2 content');
+      expect(compB.resolvedVersion).toBe(2);
+      expect(compB.component.content).toBe('comp-b v2 content');
 
       // comp-a still pinned to v1
       const compA = result.find((r) => r.componentSlug === 'comp-a');
-      expect(compA!.resolvedVersion).toBe(1);
+      expect(compA).not.toBeNull();
+      expect(compA.resolvedVersion).toBe(1);
     });
   });
 
@@ -325,7 +325,7 @@ describe('CompositionStore', () => {
       });
 
       expect(result).toHaveLength(1);
-      expect(result[0]!.componentSlug).toBe('required-comp');
+      expect(result[0].componentSlug).toBe('required-comp');
     });
 
     it('includes a required component with null condition unconditionally (no error)', () => {

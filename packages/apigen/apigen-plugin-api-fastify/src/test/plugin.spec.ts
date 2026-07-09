@@ -1,6 +1,4 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import Fastify from 'fastify';
-import { dispatch } from '@adhd/apigen-engine-runtime';
 import { apiFastifyPlugin } from '../lib/plugin';
 import { generate } from '../lib/generate';
 import { run } from '../lib/run';

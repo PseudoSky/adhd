@@ -259,8 +259,9 @@ export async function run(input: RunInput): Promise<void> {
     // invoker rejects schema-violating input with ApiError{invalid_argument}
     // BEFORE the target function is ever called.
     const invoke = buildInvokerForPackage(pkg.schemas, usePlugins);
+    if (!pkg.fns) throw new Error(`Package "${pkg.id}" is missing fns`);
     const invokeOpts = {
-      fns: pkg.fns!,
+      fns: pkg.fns,
       createClient: pkg.createClient,
       schemas: pkg.schemas,
     };

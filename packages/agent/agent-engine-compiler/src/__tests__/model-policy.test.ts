@@ -41,10 +41,9 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 
 // Upstream store + seed APIs ([inv:real-rows-not-mocks])
 import { AgentStore, TaxonomyStore } from '@adhd/agent-store-prompts';
-import { ModelStore, seed as seedProvider } from '@adhd/agent-core-provider';
+import { seed as seedProvider } from '@adhd/agent-core-provider';
 import {
   AgentPolicyStore,
-  PolicyTemplateStore,
   seed as seedPolicy,
 } from '@adhd/agent-core-policy';
 

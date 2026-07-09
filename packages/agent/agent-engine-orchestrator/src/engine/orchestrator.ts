@@ -625,7 +625,8 @@ export class Orchestrator {
           if (hitlResults.has(tc.id)) {
             toolResult = hitlResults.get(tc.id);
           } else if (warningResults.has(tc.id)) {
-            const w = warningResults.get(tc.id)!;
+            const w = warningResults.get(tc.id);
+            if (!w) continue;
             toolResult = w.result;
             isError = w.isError;
           } else {

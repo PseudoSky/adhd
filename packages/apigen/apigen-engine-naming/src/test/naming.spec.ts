@@ -302,9 +302,10 @@ describe('checkCollisions', () => {
     }
 
     expect(caught).not.toBeNull();
-    expect(caught!.collisions.length).toBeGreaterThan(0);
+    const caughtError = caught as CollisionDetectedError;
+    expect(caughtError.collisions.length).toBeGreaterThan(0);
     // Both ids appear in at least one collision record.
-    const ids = caught!.collisions.flatMap((c) => c.ids);
+    const ids = caughtError.collisions.flatMap((c) => c.ids);
     expect(ids).toContain('ns/file-alpha');
     expect(ids).toContain('ns/file-beta');
   });

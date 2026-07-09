@@ -203,11 +203,11 @@ describe('DagClient', () => {
       const dag = await client.load();
       expect(dag.plan_kind).toBe('brownfield');
       const op = await client.getOperation('op-a');
-      expect(op).toBeDefined();
-      expect(op!.status).toBe('complete');
+      expect(op).not.toBeNull();
+      expect(op.status).toBe('complete');
       const ms = await client.getMilestone('m1');
-      expect(ms).toBeDefined();
-      expect(ms!.pending).toBeNull();
+      expect(ms).not.toBeNull();
+      expect(ms.pending).toBeNull();
     });
 
     it('throws when no dag exists', async () => {
@@ -227,8 +227,8 @@ describe('DagClient', () => {
     it('auto-loads dag on first access', async () => {
       serializer.setDag(makeFixtureDag());
       const op = await client.getOperation('op-a');
-      expect(op).toBeDefined();
-      expect(op!.id).toBe('op-a');
+      expect(op).not.toBeNull();
+      expect(op.id).toBe('op-a');
     });
   });
 
@@ -245,13 +245,16 @@ describe('DagClient', () => {
       serializer.setDag(makeFixtureDag());
       await client.updateOperationStatus('op-b', 'complete');
       const op = await client.getOperation('op-b');
-      expect(op!.status).toBe('complete');
+      expect(op).not.toBeNull();
+      expect(op.status).toBe('complete');
       const saved = await serializer.readDag();
-      const ops = Array.isArray(saved!.operations)
-        ? saved!.operations
-        : Object.values(saved!.operations);
+      expect(saved).not.toBeNull();
+      const ops = Array.isArray(saved.operations)
+        ? saved.operations
+        : Object.values(saved.operations);
       const found = ops.find((o) => o.id === 'op-b');
-      expect(found!.status).toBe('complete');
+      expect(found).not.toBeNull();
+      expect(found.status).toBe('complete');
     });
 
     it('throws for unknown operation', async () => {
@@ -267,7 +270,8 @@ describe('DagClient', () => {
       serializer.setDag(makeFixtureDag());
       await client.clearPending('m1');
       const ms = await client.getMilestone('m1');
-      expect(ms!.pending).toBeNull();
+      expect(ms).not.toBeNull();
+      expect(ms.pending).toBeNull();
     });
 
     it('throws for unknown milestone', async () => {
@@ -297,8 +301,9 @@ describe('DagClient', () => {
       };
       await client.appendDispatchLog(entry);
       const saved = await serializer.readDag();
-      expect(saved!.dispatch_log).toHaveLength(1);
-      expect(saved!.dispatch_log[0].id).toBe('log-1');
+      expect(saved).not.toBeNull();
+      expect(saved.dispatch_log).toHaveLength(1);
+      expect(saved.dispatch_log[0].id).toBe('log-1');
     });
   });
 

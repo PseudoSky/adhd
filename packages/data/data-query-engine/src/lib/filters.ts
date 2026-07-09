@@ -3,11 +3,11 @@ import { Transform as _ } from '@adhd/data-base-transforms';
 //   const all = cache.concat(args);
 //   return all.length >= fn.length ? fn(...all) : partialApply(fn, ...all);
 // };
-export function partialApply<F extends (...args: any[]) => any>(
+export function partialApply<F extends (...args: unknown[]) => unknown>(
   fn: F,
-  ...cache: any[]
-): (...args: any[]) => any {
-  return (...args: any[]) => {
+  ...cache: unknown[]
+): (...args: unknown[]) => unknown {
+  return (...args: unknown[]) => {
     const all = [...cache, ...args];
     return all.length >= fn.length ? fn(...all) : partialApply(fn, ...all);
   };
@@ -18,7 +18,7 @@ export function partialApply<F extends (...args: any[]) => any>(
 export const applyAll = <T, R>(fns: Array<(arg: T) => R | R[]>, obj: T): R[] =>
   fns.flatMap((f) => f(obj));
 const hasValues = (values: string | unknown[], target: unknown[]): boolean =>
-  target.every((v) => values.includes(v as any));
+  target.every((v) => values.includes(v as unknown));
 
 // export const applyAll = (fns: unknown[], obj: unknown) => fns.flatMap((f: (arg0: unknown) => any) => f(obj));
 // const hasValues = (values: string | any[], target: unknown[]) => target.every((v: unknown) => values.includes(v));
@@ -74,7 +74,7 @@ const matchesNRegex = (a: string, b: string) => !matchesRegex(a, b);
 const matchesNIRegex = (a: string, b: string) => !matchesIRegex(a, b);
 const isNull = (a: unknown, b: boolean) => _.isDefined(a) !== b;
 export type Filter = (...args: unknown[]) => boolean;
-export type FilterPartial = (...args: any[]) => Filter;
+export type FilterPartial = (...args: unknown[]) => Filter;
 /* SECTION: query filters */
 //https://github.com/hasura/graphql-engine/blob/b84db36ebb51acd5b51e1254c103f3097a7c2358/server/src-lib/Hasura/GraphQL/Resolve/BoolExp.hs
 export const operators: Record<string, FilterPartial> = {
@@ -108,7 +108,7 @@ export const operators: Record<string, FilterPartial> = {
 
 export const logicalOperators: Record<string, FilterPartial> = {
   _and: (ops, path = [], iter = (v: unknown, _pth: unknown) => _.isTrue(v)) => {
-    const opList = ops.map((q: unknown, i: unknown) => iter(q, [...path]));
+    const opList = ops.map((q: unknown, _i: unknown) => iter(q, [...path]));
     return (obj: unknown) => {
       const res = applyAll(opList, obj);
       const bool = res.every(_.isTrue);

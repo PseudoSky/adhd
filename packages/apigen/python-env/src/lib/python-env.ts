@@ -239,19 +239,53 @@ export function ensurePythonEnv(opts: IEnsurePythonEnvOptions = {}): IPythonEnv 
       )
     }
 
-    // Install apigen-python (+extras) from its OWN packaging — pyproject.toml
-    // is the single source of truth for what the Python host needs.
-    const spec = extras.length ? `${pythonPkgDir}[${extras.join(',')}]` : pythonPkgDir
-    const pipInstall = spawnSync(
-      python,
-      ['-m', 'pip', 'install', '--quiet', '--disable-pip-version-check', spec],
-      { encoding: 'utf8', timeout: 600_000 },
-    )
-    if (pipInstall.status !== 0) {
-      throw new Error(
-        `apigen-python-env: pip install "${spec}" failed (exit ${pipInstall.status}):\n` +
-        `${pipInstall.stderr}\nstdout:\n${pipInstall.stdout}`,
+    // Clean up any build/ or *.egg-info/ left from prior directory installs.
+    const oldBuildDir = path.join(pythonPkgDir, 'build')
+    if (fs.existsSync(oldBuildDir)) {
+      fs.rmSync(oldBuildDir, { recursive: true, force: true })
+    }
+    for (const entry of fs.readdirSync(pythonPkgDir)) {
+      if (entry.endsWith('.egg-info')) {
+        fs.rmSync(path.join(pythonPkgDir, entry), { recursive: true, force: true })
+      }
+    }
+
+    // Build a wheel in a temp directory so setuptools doesn't create
+    // build/ and *.egg-info/ inside the source tree.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-python-wheel-'))
+    try {
+      const buildResult = spawnSync(
+        python,
+        ['-m', 'pip', 'wheel', '--no-deps', '--wheel-dir', tmpDir, pythonPkgDir],
+        { encoding: 'utf8', timeout: 600_000 },
       )
+      if (buildResult.status !== 0) {
+        throw new Error(
+          `apigen-python-env: pip wheel failed (exit ${buildResult.status}):\n` +
+          `${buildResult.stderr}\nstdout:\n${buildResult.stdout}`,
+        )
+      }
+
+      const wheels = fs.readdirSync(tmpDir).filter(f => f.endsWith('.whl'))
+      if (wheels.length === 0) {
+        throw new Error('apigen-python-env: pip wheel produced no .whl file')
+      }
+
+      const wheelPath = path.join(tmpDir, wheels[0])
+      const spec = extras.length ? `${wheelPath}[${extras.join(',')}]` : wheelPath
+      const pipInstall = spawnSync(
+        python,
+        ['-m', 'pip', 'install', '--quiet', '--disable-pip-version-check', spec],
+        { encoding: 'utf8', timeout: 600_000 },
+      )
+      if (pipInstall.status !== 0) {
+        throw new Error(
+          `apigen-python-env: pip install "${spec}" failed (exit ${pipInstall.status}):\n` +
+          `${pipInstall.stderr}\nstdout:\n${pipInstall.stdout}`,
+        )
+      }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
     }
 
     const stamp: IVenvStamp = { pyprojectHash: wantHash, extras }

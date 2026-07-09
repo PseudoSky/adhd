@@ -3,9 +3,11 @@ import { CompressionStream, DecompressionStream } from 'node:stream/web';
 import { afterEach } from 'vitest';
 
 if (!globalThis.CompressionStream) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   globalThis.CompressionStream = CompressionStream as any;
 }
 if (!globalThis.DecompressionStream) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   globalThis.DecompressionStream = DecompressionStream as any;
 }
 // Cleanup after each test

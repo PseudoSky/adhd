@@ -14,21 +14,8 @@
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { extract } from '../lib/extract';
-import type { Operation } from '../lib/descriptor';
 
 const fixture = (name: string) => path.resolve(__dirname, 'fixtures', name);
-
-// ---------------------------------------------------------------------------
-// Helper
-// ---------------------------------------------------------------------------
-
-function findOp(ops: Operation[], id: string): Operation | undefined {
-  return ops.find((op) => op.id === id || op.id.endsWith('/' + id));
-}
-
-function opIds(ops: Operation[]): string[] {
-  return ops.map((op) => op.id);
-}
 
 // ---------------------------------------------------------------------------
 // Shape 1: Named function export

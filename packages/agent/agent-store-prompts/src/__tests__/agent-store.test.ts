@@ -115,8 +115,8 @@ describe('AgentStore + TaxonomyStore', () => {
 
       const list = taxonomyStore.listCategories();
       const found = list.find((c) => c.slug === 'infrastructure');
-      expect(found).toBeDefined();
-      expect(found!.position).toBe(10);
+      expect(found).not.toBeNull();
+      expect(found.position).toBe(10);
     });
 
     it('creates a subcategory with a parent_slug self-FK', () => {
@@ -162,12 +162,12 @@ describe('AgentStore + TaxonomyStore', () => {
       const positions = ordered.map((c) => c.position);
       for (let i = 1; i < positions.length; i++) {
         // position[i] >= position[i-1] (ASC)
-        expect(positions[i]).toBeGreaterThanOrEqual(positions[i - 1]!);
+        expect(positions[i]).toBeGreaterThanOrEqual(positions[i - 1]);
       }
 
       // Explicitly verify the lowest-position category appears first
-      expect(ordered[0]!.position).toBeLessThanOrEqual(
-        ordered[ordered.length - 1]!.position
+      expect(ordered[0].position).toBeLessThanOrEqual(
+        ordered[ordered.length - 1].position
       );
 
       // The cto-system (position 1) must come before product (position 5)
@@ -312,7 +312,7 @@ describe('AgentStore + TaxonomyStore', () => {
         status: 'active',
       });
       expect(result.length).toBe(1);
-      expect(result[0]!.slug).toBe('analytics-beta');
+      expect(result[0].slug).toBe('analytics-beta');
     });
   });
 

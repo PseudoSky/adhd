@@ -185,19 +185,19 @@ describe('compileAgent — yaml_frontmatter + json_object emit', () => {
       isSystem: true,
     });
 
-    const intro = componentStore.create({
+    componentStore.create({
       slug: COMP_INTRO,
       type: 'system',
       content: '# Agent Overview\n\nThis agent reviews code.',
     });
 
-    const body = componentStore.create({
+    componentStore.create({
       slug: COMP_BODY,
       type: 'system',
       content: '## Core Behaviour\n\nAlways be helpful.',
     });
 
-    const secure = componentStore.create({
+    componentStore.create({
       slug: COMP_SECURE,
       type: 'system',
       content: '## Security Criteria\n\nApply security checks.',

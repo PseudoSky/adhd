@@ -12,13 +12,14 @@
  * EnforcementEvent is "pre:model_request"-ONLY (decisions.md Decision 2).
  */
 
+import type { ExecutionContext } from '@adhd/agent-base-types';
 import { z } from 'zod';
 import type {
   IHookRegistry,
   Plugin,
   PluginContext,
   PluginFactory,
-  PreModelRequestPayload,
+  PostToolCallPayload,
   PostModelResponsePayload,
   TaskStartPayload,
 } from '@adhd/agent-base-types';
@@ -34,6 +35,12 @@ export const configSchema = z.object({
    * override_config (decisions.md Decision 3). Optional — no limit if absent.
    */
   maxModelCalls: z.number().int().positive().optional(),
+  /**
+   * Max number of tool calls per task.
+   * Mirrors maxModelCalls but for tool-call enforcement.
+   * Optional — no limit if absent.
+   */
+  maxToolCalls: z.number().int().positive().optional(),
 });
 
 export type RatePolicyConfig = z.infer<typeof configSchema>;
@@ -43,6 +50,7 @@ export type RatePolicyConfig = z.infer<typeof configSchema>;
 interface TaskAccumulator {
   taskId: string;
   modelCalls: number;
+  toolCalls: number;
 }
 
 // ── Plugin class ──────────────────────────────────────────────────────────────
@@ -76,6 +84,15 @@ class RatePolicyPlugin implements Plugin {
       }
     });
 
+    // Observational: increment tool-call count after each completed tool call.
+    hooks.register('post:tool_call', (p) => {
+      try {
+        this.onPostToolCall(p);
+      } catch {
+        /* observational */
+      }
+    });
+
     // Observational: clean up accumulator on terminal events.
     hooks.register('task:completed', (p) => {
       try {
@@ -100,8 +117,8 @@ class RatePolicyPlugin implements Plugin {
     });
 
     // Enforcement — throws propagate (NO try/catch wrapper).
-    // decisions.md Decision 2: registerEnforcement only accepts "pre:model_request".
     hooks.registerEnforcement('pre:model_request', (p) => this.enforce(p));
+    hooks.registerEnforcement('pre:tool_call', (p) => this.enforce(p));
   }
 
   // ── Observational handlers ────────────────────────────────────────────────
@@ -110,6 +127,7 @@ class RatePolicyPlugin implements Plugin {
     this.accumulators.set(p.executionContext.taskId, {
       taskId: p.executionContext.taskId,
       modelCalls: 0,
+      toolCalls: 0,
     });
   }
 
@@ -118,22 +136,28 @@ class RatePolicyPlugin implements Plugin {
     if (acc) acc.modelCalls += 1;
   }
 
+  private onPostToolCall(p: PostToolCallPayload): void {
+    const acc = this.accumulators.get(p.executionContext.taskId);
+    if (acc) acc.toolCalls += 1;
+  }
+
   private onTerminal(taskId: string): void {
     this.accumulators.delete(taskId);
   }
 
   // ── Enforcement ───────────────────────────────────────────────────────────
 
-  private enforce(p: PreModelRequestPayload): void {
+  private enforce(p: { executionContext: ExecutionContext }): void {
     const acc = this.accumulators.get(p.executionContext.taskId);
     // No accumulator (task:start not seen) — be permissive, not crashy.
     if (!acc) return;
 
     const rules: RatePolicyRules = {
       maxModelCalls: this.cfg.maxModelCalls,
+      maxToolCalls: this.cfg.maxToolCalls,
     };
 
-    const violation = evaluateRatePolicy(rules, acc.modelCalls);
+    const violation = evaluateRatePolicy(rules, acc.modelCalls, acc.toolCalls);
     if (violation !== null) throw violation;
   }
 }

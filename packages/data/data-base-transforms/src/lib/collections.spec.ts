@@ -168,23 +168,23 @@ describe('collections.ts', () => {
 
     const cmp = (a: number, b: number): 0 | -1 | 1 => (a < b ? 1 : -1);
     const compare = (a: number, b: number) => (a > b ? 1 : -1);
-    const check = (a: any, b: any) => (a === b ? 1 : -1);
-    const boolCheckTrue = (a: any) => true;
-    const boolCheckFalse = (a: any) => false;
-    const boolCheckExists = (a: any) => !!a;
-    const boolCheckNotExists = (a: any) => !a;
-    const boolCheckNotEqOne = (a: any) => a != 1;
+    const check = (a: unknown, b: unknown) => (a === b ? 1 : -1);
+    const boolCheckTrue = (_a: unknown) => true;
+    const _boolCheckFalse = (_a: unknown) => false;
+    const boolCheckExists = (a: unknown) => !!a;
+    const boolCheckNotExists = (a: unknown) => !a;
+    const boolCheckNotEqOne = (a: unknown) => a != 1;
     // const checkIsArray = () =>
-    const checks = [cmp, compare, check];
+    const _checks = [cmp, compare, check];
     const a = 10;
     const b = -10;
-    const step = 1;
-    const halfStep = 0.5;
-    const start = -10;
-    const stop = 10;
+    const _step = 1;
+    const _halfStep = 0.5;
+    const _start = -10;
+    const _stop = 10;
 
     const arr = ArrEx;
-    const array = ArrShift;
+    const _array = ArrShift;
     const arrays = [ArrEx, ArrShift];
     const collection = CollectionEx;
 
@@ -195,7 +195,7 @@ describe('collections.ts', () => {
     const key = 'key';
     const prop = 'sort';
     const target = { key: 'value', sort: 5 };
-    const selector = 'sort';
+    const _selector = 'sort';
     expect(difference(arrays)).toEqual([0, 2, 1]);
     expect(intersection(arrays)).toEqual([4, 5, 3]);
     expect(flattenDeep([[1, [4, [1], [null]]]])).toEqual([1, 4, 1, null]);
@@ -234,7 +234,7 @@ describe('collections.ts', () => {
     ]);
     expect(isMatchType(obj, target)).toEqual(true);
     expect(isMatch(obj, target)).toEqual(false);
-    expect(overSome([(e: any) => e == 0])(0)).toEqual(true);
+    expect(overSome([(e: unknown) => e == 0])(0)).toEqual(true);
     expect(overEvery([boolCheckExists, boolCheckNotEqOne])([])).toEqual(true);
     expect(overEvery([boolCheckExists, boolCheckNotExists])([])).toEqual(false);
     expect(

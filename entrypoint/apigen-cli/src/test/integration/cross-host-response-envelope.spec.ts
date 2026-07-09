@@ -53,13 +53,13 @@ import * as readline from 'node:readline';
 const CLI_PATH = (() => {
   let dir = __dirname;
   for (let i = 0; i < 12; i++) {
-    const candidate = path.join(dir, 'dist/packages/apigen/cli/index.js');
+    const candidate = path.join(dir, 'dist/entrypoint/apigen-cli/index.js');
     if (fs.existsSync(candidate)) return candidate;
     dir = path.dirname(dir);
   }
   return path.resolve(
     __dirname,
-    '../../../../../dist/packages/apigen/cli/index.js'
+    '../../../../../dist/entrypoint/apigen-cli/index.js'
   );
 })();
 

@@ -1,3 +1,46 @@
+## Package Scaffolding — Use `@adhd/workspace-codegen-nx` Generator
+
+**ALWAYS use `@adhd/workspace-codegen-nx` generators to scaffold new packages.** Never use `@nx/js:library`, `@nx/vite:lib`, or any other generic Nx generator — they produce incorrect project.json, tags, and Nx configuration for this monorepo.
+
+### Generator types (from `packages/workspace/workspace-codegen-nx/`)
+
+| Layer | Command | Usage |
+|-------|---------|-------|
+| **types** | `nx g @adhd/workspace-codegen-nx:types --group <domain> --name <name>` | Pure type/contract packages (zero deps, `access:public`) |
+| **base** | `nx g @adhd/workspace-codegen-nx:base --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Zero internal deps, roots of dep graph |
+| **core** | `nx g @adhd/workspace-codegen-nx:core --group <domain> --name <name> --nxLayer <layer> --platform <platform> [--access public] [--publish true]` | Depends only on base packages |
+| **engine** | `nx g @adhd/workspace-codegen-nx:engine --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Orchestration/wiring (depends on base + core) |
+| **store** | `nx g @adhd/workspace-codegen-nx:store --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Persistence/storage (depends on base + core) |
+| **entrypoint** | `nx g @adhd/workspace-codegen-nx:entrypoint --name <name> --nxLayer entrypoints --platform node [--access public] [--publish true]` | CLI/server/runner (lives under `entrypoint/`, not `packages/`) |
+
+### Naming convention
+
+Packages follow `<domain>-<layer>-<name>` and live at `packages/<domain>/<domain>-<layer>-<name>/`. Entrypoints live at `entrypoint/<name>/`.
+
+### Non-JS packages (Python, Rust)
+
+No Nx generator exists. Create manually with:
+- `project.json` using `command` targets (not `executor`)
+- `inputs` referencing `namedInputs` in `nx.json`
+- `"externalDependencies": []` in inputs to prevent pnpm-lock cross-contamination
+- `nx-release-publish` target for publishing
+
+### Python-specific
+- Plugin: `@nxlv/python` — provides `@nxlv/python:build`, `@nxlv/python:publish` executors
+- Lint: `ruff`, test: `pytest`
+- Publish: `@nxlv/python:publish` executor with `versionActions: "@nxlv/python/release/version-actions"`
+
+### Rust-specific
+- Plugin: `@monodon/rust` — provides `@monodon/rust:build`, `@monodon/rust:test`, `@monodon/rust:lint` executors
+- Publish: custom `nx-release-publish` target running `cargo publish`
+- Versioning: `useLegacyVersioning: true` in nx.json
+
+## Lint Responsibility
+
+- **MUST fix all lint warnings** in every file you modify. Run `npx nx lint <project>` after changes to verify.
+- **Pattern for bulk lint fixes:** `no-explicit-any` → replace `: any` with `: unknown`, `as any` with `as unknown`. `no-non-null-assertion` → add `if (!x) throw` guard before `!` access. `no-unused-vars` → prefix unused name with `_`.
+- **When a lint fix would change behavior** (e.g., `react-hooks/exhaustive-deps` where adding the dep causes a TS error), add `// eslint-disable-next-line <rule>` above the offending line with a comment explaining why.
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
