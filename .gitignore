@@ -115,3 +115,8 @@ adhd-environment.json.tmp
 # Agent scratch/artifacts — same class as .claude/ (already ignored). 61MB of
 # reports, reviews, and transcripts; never belongs in history.
 .opencode/
+
+# Root-level workspace/ is NOT part of this monorepo — it was an orphaned external
+# tool catalog committed by mistake (removed in 42fce475). Anchored with a leading
+# slash so it only matches the repo root, never the real packages/workspace project.
+/workspace/
