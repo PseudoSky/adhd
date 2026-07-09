@@ -28,7 +28,11 @@ export const orderBy =
 
 type QueryType = {
   raw?: QueryExpression;
-  where?: (() => boolean) | ((obj: unknown) => unknown);
+  // `compileWhere()` returns exactly `(obj: Record<string, unknown>) => boolean`.
+  // The old union also admitted `() => boolean`, which a 1-arg predicate is NOT
+  // assignable to ("target signature provides too few arguments", TS2322).
+  // No caller ever supplies a 0-arg predicate.
+  where?: (obj: Record<string, unknown>) => boolean;
   order_by?: (a: unknown, b: unknown) => number; // | string[];
   distinct_on?: string[];
   offset?: number;
@@ -53,13 +57,17 @@ type QueryType = {
 
 // TODO: Need to separate Query interface from QueryType
 //   Currently the functional interface and the raw type are mixed
+// These fields were widened to `unknown` by the any->unknown sweep, which made the
+// class violate the `QueryType` contract it declares (TS2416 on order_by /
+// distinct_on / limit). Restore the interface's own types — the class is the
+// implementation of that contract, not a looser one.
 export class Query implements QueryType {
   raw: QueryExpression;
-  where?: (() => boolean) | ((obj: unknown) => unknown);
-  order_by?: (a: unknown, b: unknown) => unknown; // | string[]);
-  distinct_on: unknown;
+  where?: (obj: Record<string, unknown>) => boolean;
+  order_by?: (a: unknown, b: unknown) => number; // | string[]);
+  distinct_on?: string[];
   offset = 0;
-  limit: unknown;
+  limit?: number;
   constructor(_query: QueryExpression = {}) {
     // const query = RawQuery(_query);
     this.raw = {};
@@ -123,7 +131,10 @@ export class DataView<T = unknown> {
   data: T[] = [];
   dataview: T[] = [];
   query: Query;
-  dirty: boolean;
+  // Assigned in every constructor branch, but only conditionally, so TS's
+  // strictPropertyInitialization cannot see it (TS2564). Initialise explicitly;
+  // the constructor immediately overwrites it.
+  dirty = false;
   logging: boolean;
   has_more = false;
   metrics = {
@@ -192,10 +203,20 @@ export class DataView<T = unknown> {
     if (!this.dirty || !this.data) return false;
     let res = [...this.data];
     this.metrics.total = res.length;
-    if (this.query.where) res = res.filter(this.query.where);
+    // `compileWhere()` and `uniqueBy()` are typed for `Record<string, unknown>`,
+    // while `DataView` stays generic over `T` for its callers. Constraining
+    // `T extends Record<string, unknown>` would break every consumer that passes an
+    // interface (interfaces have no index signature), so narrow at these two
+    // boundaries instead. Rows ARE records at runtime — that is the engine's premise.
+    if (this.query.where)
+      res = res.filter(this.query.where as unknown as (row: T) => boolean);
     this.metrics.total_matched = res.length;
     if (this.query.order_by) res = res.sort(this.query.order_by);
-    if (this.query.distinct_on) res = _.uniqueBy(res, this.query.distinct_on);
+    if (this.query.distinct_on)
+      res = _.uniqueBy(
+        res as unknown as Record<string, unknown>[],
+        this.query.distinct_on
+      ) as unknown as T[];
     this.metrics.total_distinct = res.length;
     if (this.query.offset) res = res.slice(this.query.offset);
     if (this.query.limit) {
