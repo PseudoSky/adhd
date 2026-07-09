@@ -17,7 +17,12 @@ if [ -z "$UV" ]; then
 fi
 
 case "${1:-}" in
-  build)   exec "$UV" run --python 3.10 -m build ;;
+  # `uv build` is uv's NATIVE PEP-517 frontend. The previous `uv run -m build`
+  # required the `build` package to be resolvable in the ephemeral env, which it
+  # is not (it was never a project dependency) — that failed as
+  # `No module named build` in a cold uv environment (BUG-ENV-PY-001). `uv build`
+  # needs no such dependency and emits the same sdist + wheel to dist/.
+  build)   exec "$UV" build --python 3.10 ;;
   test)    exec "$UV" run --python 3.10 -m pytest tests/ ;;
   # publish is intentionally NOT wired to real credentials here; TWINE/UV
   # tokens are supplied by the release environment, never committed.
