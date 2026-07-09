@@ -95,3 +95,19 @@ packages/ai/agent-mcp/src/__tests__/integration/fixtures/calc-server.log
 # Python packaging byproducts (pip building packages/apigen/python in-tree)
 *.egg-info/
 packages/apigen/python/build/
+
+# Cross-language runtime clients under packages/environment/*.
+# Build output + local toolchain envs are ephemeral and regenerable — never
+# tracked. (dist/ is already ignored above; these cover Rust/Python outputs.)
+.venv/
+.pytest_cache/
+packages/environment/environment-core-rs/target/
+
+# @adhd/environment resolved snapshots — contain PLAINTEXT values for fields
+# declared `secret: true` (no redaction exists in that package family; see
+# BACKLOG ENV-CORE-009). The `.tmp` sibling is left behind by `atomicWrite` if
+# the process dies mid-write (ENV-CORE-011). Never commit either.
+# Defense in depth: .githooks/check-no-credentials.js also blocks them by path,
+# so a `git add -f` cannot slip one through.
+adhd-environment.json
+adhd-environment.json.tmp
