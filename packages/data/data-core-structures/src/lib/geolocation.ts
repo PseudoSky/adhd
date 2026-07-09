@@ -83,12 +83,15 @@ export function Cardinal(collection: unknown[], props = DefaultProps) {
 export function Bbox<T = unknown>(
   collection: T[],
   props: PropMapping = DefaultProps
-) {
-  const [lon, lat] = Collections.rangeByProps(collection, [
-    props.longitude,
-    props.latitude,
-  ]);
-  return [lat.min, lon.min, lat.max, lon.max];
+): [number, number, number, number] {
+  const [lon, lat] = Collections.rangeByProps(
+    collection as unknown as Record<string, unknown>[],
+    [props.longitude, props.latitude]
+  );
+  // rangeByProps operates on Record<string, unknown> and can't know the
+  // field's value type; latitude/longitude are domain-known numerics, so
+  // narrow explicitly here rather than widening the shared utility.
+  return [lat.min as number, lon.min as number, lat.max as number, lon.max as number];
 }
 
 export function Region<Data = unknown>(

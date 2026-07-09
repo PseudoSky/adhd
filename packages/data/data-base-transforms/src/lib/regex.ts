@@ -53,11 +53,10 @@ const push = <T,>(arr: T[], ele: T): T[] => {
   return arr;
 };
 
-const contains = <T extends Record<string, unknown>>(
-  arr: T[],
-  key: keyof T,
-  val: number | string
-) => {
+// Private helper only ever called with Pattern[] (see filterPatterns below);
+// typed concretely against Pattern rather than a Record<string, unknown>
+// constraint, since Pattern's own fields aren't index-signature compatible.
+const contains = (arr: Pattern[], key: keyof Pattern, val: number | string) => {
   for (let i = 0; i < arr.length; i++) {
     if (arr[i][key] === val) {
       return true;
