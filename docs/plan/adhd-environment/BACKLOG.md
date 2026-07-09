@@ -23,3 +23,23 @@ Discovered during plan-orchestrator preflight (2026-07-08). Full detail in the r
 - **ENV-PLAN-012** — `run-audit.js --phase` doesn't filter (phase `contract` runs `audit-final.*`), and criteria resolve vs cwd while check `cmd`s are repo-root-relative → no working cwd. OPEN.
 
 - ADHDENV-BL-4: Criteria runnability — several criteria in criteria.json/audit_checks.js invoke `node -e 'require("./packages/.../src/<module>")'` on .ts source WITHOUT extension; Node cannot resolve extensionless .ts (confirmed v24, builder-engine.1/.7 line 111/119, runtime-core-node line 346). Fix: use `npx --yes tsx -e` (tsx resolves .ts + tsconfig paths), verified working by the builder-engine executor. ALSO verify the `require("@adhd/environment")`/`@adhd/environment-builder` criteria (lines 41/49/65/338/370) resolve at audit time — packages must be built AND node_modules-linked (executors noted no @adhd/* workspace symlinks). MUST fix before wave 4 audit-builder + runtime-core-node.
+- **ENV-PLAN-013** — `environment-core-py`/`-rs` are not nx projects; `audit-final`'s `--projects=environment-*` covers 4 of 6, skipping both cross-language runtimes. OPEN.
+- **ENV-PLAN-014** — `cargo-registry-token` blocker cites an `nx-release-publish` target that exists nowhere in the repo. OPEN.
+
+## Cross-language equivalence defects (code review of adopted work, 2026-07-08)
+Full detail: `packages/environment/BACKLOG.md`. All reproduced by execution.
+
+- **ENV-CORE-001** — CRITICAL. `generateFieldSchema`: Python/Rust emit `secret`/`env`/`scope`/`noEnv` that TS strips. Equivalence break **and** secret-metadata disclosure. OPEN.
+- **ENV-CORE-002** — CRITICAL. `contentHash`: astral keys sort by UTF-16 code unit in TS, code point in Python/Rust → the same config yields two different digests. OPEN.
+- **ENV-CORE-003** — HIGH. `projectEnvPrefix("foo.bar")` → `ADHD_FOO.BAR` (TS/Py) vs `ADHD_FOO_BAR` (Rust). OPEN.
+- **ENV-CORE-004** — MEDIUM. `contentHash` `key=value\n` serialization is non-injective; `{"a":"1\nb=2"}` collides with `{"a":"1","b":"2"}` — **and that collision IS the plan's pinned gate vector `4a73850f…`**. Spec defect in `contract-base-spec` (marked `complete`). OPEN.
+- **ENV-CORE-005** — LOW. Lone-surrogate key: TS substitutes U+FFFD, Python raises. OPEN.
+- **ENV-CORE-006** — LOW. Snapshot path built from `project`/`namespace` with no traversal guard. OPEN.
+- **ENV-CORE-007** — TEST-DEBT. Python + Rust suites are pure vector-replay; they cannot fail against ENV-CORE-001/002/003. This is how `runtime-py`/`runtime-rs` reached `complete` on green tests. OPEN.
+
+**Consequence for the state machine:** `contract-base-spec`, `runtime-py`, `runtime-rs` are marked `complete` but do not
+deliver cross-language equivalence. Their completions rest on vector-replay suites and build-proxy guards. They require
+amendment (`state-transition.js --amend`), not a fresh `--complete`.
+- **ENV-PLAN-016** — terminal DoD gate non-functional: README declares 8 `[dod.N]`, `criteria.json` has 0 `dod.*` ids, `audit-dod-mapping.js` is a stub → `current_state` can never become `done`. Negative controls are inert (empty set). OPEN, hard-blocks completion.
+- **ENV-PLAN-017** — `runtime-cli` guard greps for `function <name>` ×9; nine empty stubs pass it (proven by negative control). Implementation-shaped proxy. OPEN.
+- **ENV-PLAN-018** — `builder-snapshot-api` guard asserts `typeof m === "function"`; no-op methods pass. OPEN.

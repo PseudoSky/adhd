@@ -1,7 +1,12 @@
 #!/usr/bin/env sh
 #
-# Pre-commit hook — runs `nx affected lint` on the projects touched by the staged
-# changes and blocks the commit if lint fails.
+# Pre-commit hook. Two gates, in order:
+#   1. secret-scan  — blocks credentials from entering the repo (gitleaks + built-in rules)
+#   2. affected lint — runs `nx affected lint` on the projects touched by staged changes
+#
+# Secrets are checked FIRST and are cheap: a leaked credential is unrecoverable
+# once pushed (rotation, not reversion, is the fix), whereas a lint error is not.
+# Never reorder these.
 #
 # Activated repo-wide via `core.hooksPath=.githooks` (set by the root `prepare`
 # script on `npm install`, or manually: `git config core.hooksPath .githooks`).
@@ -16,6 +21,19 @@ fi
 
 files=$(printf '%s' "$staged" | paste -sd, -)
 
+# ── Gate 1: credentials ──────────────────────────────────────────────────────
+# A missing scanner must NEVER read as a pass — refuse the commit instead.
+hook_dir=$(dirname "$0")
+scanner="$hook_dir/check-no-credentials.js"
+if [ ! -f "$scanner" ]; then
+  echo "✖ pre-commit: $scanner is missing — refusing to commit without a secret scan."
+  exit 1
+fi
+
+echo "pre-commit: scanning staged changes for secrets…"
+node "$scanner" --staged || exit 1
+
+# ── Gate 2: lint ─────────────────────────────────────────────────────────────
 echo "pre-commit: running 'nx affected -t lint' on staged changes…"
 npx nx affected --target=lint --files="$files"
 status=$?
