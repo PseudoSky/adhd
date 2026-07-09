@@ -1,0 +1,134 @@
+{
+  "$schema": "https://adhd.dev/schemas/environment/cross-language-test-vectors.schema.json",
+  "specVersion": "0.0.5",
+  "description": "Pinned cross-language test vectors for the pure primitives exported by @adhd/environment-base-spec (contentHash, projectEnvPrefix, inferEnvVar, generateFieldSchema). The TypeScript, Python, and Rust runtime clients MUST reproduce every 'expected' value below from the corresponding 'input'. Never change an existing vector's expected value without updating all three language clients in the same change -- add new vectors instead of mutating pinned ones. Comparison semantics: contentHash/projectEnvPrefix/inferEnvVar expected values are exact strings (string equality). generateFieldSchema expected values must be compared by structural/deep equality of the parsed JSON object -- key insertion order is not semantically significant and different language implementations (e.g. a Python dict vs a Rust serde_json::Map) may legitimately emit keys in a different order.",
+  "knownDiscrepancy": {
+    "field": "contentHash[0]",
+    "note": "docs/plan/adhd-environment/contexts/_shared.md (def:contentHash) and contexts/contract-base-spec.md (Delta Spec #2) pin contentHash({b:'2',a:'1'}) to equal sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08. That hex digest is the well-known SHA-256 digest of the literal ASCII string 'test' (verified independently via shasum -a 256 and Python hashlib against that static string) -- it does not correspond to any reasonable canonicalization of {b:'2',a:'1'} under the documented algorithm (sorted key=value lines, each newline-terminated, then SHA-256, then sha256- prefix), nor under roughly 75 brute-forced variants of key/value separators, joins, trailing newlines, and JSON-canonicalization tried while implementing this contract. It is a placeholder value that was never actually computed. This file pins the CORRECT value produced by the literal documented algorithm: sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930, for the sorted serialization consisting of the line a=1 followed by the line b=2, each line newline-terminated. This is a real defect in the plan documents that also affects docs/plan/adhd-environment/scripts/criteria.json criterion audit-final.6, which currently asserts the wrong placeholder hash as a hard automated gate. Flagged to the orchestrator for correction across _shared.md, contract-base-spec.md, and criteria.json; NOT silently patched over by special-casing the implementation to emit the wrong hash for this one input."
+  },
+  "contentHash": [
+    {
+      "name": "spec-example-unsorted-input",
+      "description": "The canonical example from _shared.md / contract-base-spec.md / interfaces-architect.md -- input keys given out of sorted order to prove the function sorts before hashing.",
+      "input": { "b": "2", "a": "1" },
+      "expected": "sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"
+    },
+    {
+      "name": "spec-example-pre-sorted-input",
+      "description": "Same key/value pairs as spec-example-unsorted-input but already given in sorted order. Must produce the identical hash, proving output depends only on content, not input key order.",
+      "input": { "a": "1", "b": "2" },
+      "expected": "sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"
+    },
+    {
+      "name": "empty-object",
+      "description": "Zero entries serializes to the empty string.",
+      "input": {},
+      "expected": "sha256-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "single-entry",
+      "input": { "only": "value" },
+      "expected": "sha256-dbfbcd9561afcc042fee8c5a2dc6d86023dcfaf4470c6aaa7f6223ec78c6abce"
+    },
+    {
+      "name": "three-entries-unsorted",
+      "input": { "zeta": "26", "alpha": "1", "mid": "13" },
+      "expected": "sha256-33f679011bf14f8e272d92e5f6bf14704604719e63f60aaa12eb276cea413908"
+    }
+  ],
+  "projectEnvPrefix": [
+    {
+      "name": "agent-mcp",
+      "input": "agent-mcp",
+      "expected": "ADHD_AGENT_MCP"
+    },
+    {
+      "name": "decompile-cli",
+      "input": "decompile-cli",
+      "expected": "ADHD_DECOMPILE_CLI"
+    }
+  ],
+  "inferEnvVar": [
+    {
+      "name": "dotted-path",
+      "input": { "prefix": "ADHD_AGENT_MCP", "fieldPath": "db.path" },
+      "expected": "ADHD_AGENT_MCP_DB_PATH"
+    },
+    {
+      "name": "dashed-and-dotted-path",
+      "description": "Confirms both the dot and dash separators are folded to underscore per _shared.md (def:inferEnvVar) -- the more complete of the two plan descriptions; interfaces-architect.md section 2.4's shorthand only mentions the dot, but its own worked example never exercises a dash, so both readings agree there.",
+      "input": { "prefix": "ADHD_AGENT_MCP", "fieldPath": "provider-key.secret" },
+      "expected": "ADHD_AGENT_MCP_PROVIDER_KEY_SECRET"
+    },
+    {
+      "name": "deep-nested-path",
+      "input": { "prefix": "ADHD_AGENT_MCP", "fieldPath": "transport.port" },
+      "expected": "ADHD_AGENT_MCP_TRANSPORT_PORT"
+    }
+  ],
+  "generateFieldSchema": [
+    {
+      "name": "single-nested-field",
+      "description": "The canonical example from interfaces-architect.md section 2.4.",
+      "input": {
+        "server.port": { "type": "integer", "minimum": 1024 }
+      },
+      "expected": {
+        "type": "object",
+        "properties": {
+          "server": {
+            "type": "object",
+            "properties": {
+              "port": { "type": "integer", "minimum": 1024 }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "multiple-fields-shared-and-deep-parents",
+      "description": "Two fields sharing the db parent at different depths, plus an unrelated top-level field with an enum constraint -- proves parent-node reuse and multi-level nesting.",
+      "input": {
+        "db.path": { "type": "string", "default": "./data.sqlite" },
+        "db.pool.size": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 },
+        "logging.level": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"],
+          "default": "info"
+        }
+      },
+      "expected": {
+        "type": "object",
+        "properties": {
+          "db": {
+            "type": "object",
+            "properties": {
+              "path": { "type": "string", "default": "./data.sqlite" },
+              "pool": {
+                "type": "object",
+                "properties": {
+                  "size": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 }
+                }
+              }
+            }
+          },
+          "logging": {
+            "type": "object",
+            "properties": {
+              "level": {
+                "type": "string",
+                "enum": ["debug", "info", "warn", "error"],
+                "default": "info"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "empty-fields",
+      "input": {},
+      "expected": { "type": "object", "properties": {} }
+    }
+  ]
+}
