@@ -47,7 +47,7 @@ provider key and DB path would silently stop resolving.
 
 ```text
 read_only:  []
-mutates:    ["entrypoint/agent-mcp/adhd.environment.yaml", "entrypoint/agent-mcp/src/config.ts"]
+mutates:    ["entrypoint/agent-mcp/adhd.environment.yaml", "entrypoint/agent-mcp/src/environment.ts", "entrypoint/agent-mcp/src/config.ts", "entrypoint/agent-mcp/src/index.ts", "entrypoint/agent-mcp/src/server.ts", "entrypoint/agent-mcp/src/logger.ts", "entrypoint/agent-mcp/src/streaming/sse-server.ts", "entrypoint/agent-mcp/src/db/client.ts"]
 ```
 
 ---

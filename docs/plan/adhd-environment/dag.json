@@ -160,7 +160,13 @@
       "guard": "test ! -f entrypoint/agent-mcp/src/config.ts && npx --yes nx test agent-mcp",
       "artifacts": [
         "entrypoint/agent-mcp/adhd.environment.yaml",
-        "entrypoint/agent-mcp/src/config.ts"
+        "entrypoint/agent-mcp/src/environment.ts",
+        "entrypoint/agent-mcp/src/config.ts",
+        "entrypoint/agent-mcp/src/index.ts",
+        "entrypoint/agent-mcp/src/server.ts",
+        "entrypoint/agent-mcp/src/logger.ts",
+        "entrypoint/agent-mcp/src/streaming/sse-server.ts",
+        "entrypoint/agent-mcp/src/db/client.ts"
       ],
       "context": "contexts/refactor-agent-mcp.md",
       "notes": ""
