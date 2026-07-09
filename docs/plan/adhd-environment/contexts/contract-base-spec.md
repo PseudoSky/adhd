@@ -18,7 +18,7 @@ The `environment-base-spec` package is fully scaffolded with the canonical JSON 
 
 - **Delta Spec:**
   1. Write `spec/adhd-environment.schema.json` with all sections: project, namespace, version, directories, config, fieldSchema, provenance, envPrefix, envVars
-  2. Write `spec/cross-language-test-vectors.json` with contentHash test vector: `{b:"2",a:"1"}` → `"sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"`
+  2. Write `spec/cross-language-test-vectors.json` with contentHash test vector: `{b:"2",a:"1"}` → `"sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"`
   3. Write `src/index.ts` exporting: EnvironmentSnapshot, ProjectIdentity, ConfigFieldDefinition, ProvenanceEntry, DirectoryEntry, DirectoryType, ConfigScope, FieldType, ProvenanceSource, contentHash()
   4. Write `spec/SPEC.md` documenting the contract format
   5. Verify `npx nx build environment-base-spec` exits 0

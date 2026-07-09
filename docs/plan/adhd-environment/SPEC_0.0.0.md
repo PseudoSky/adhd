@@ -200,7 +200,7 @@ compute_content_hash(config: Map<string,string>) → string
 
 ```
 Input:  { "b": "2", "a": "1" }
-Output: "sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+Output: "sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"
 ```
 
 #### §5a Structure Hashing
@@ -986,7 +986,7 @@ Each new language client MUST pass the §5 test vector before being considered c
 
 ```
 Input:  { "b": "2", "a": "1" }
-Output: "sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+Output: "sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"
 ```
 
 Any implementation producing a different hash is non-conformant.

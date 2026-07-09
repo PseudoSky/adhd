@@ -361,7 +361,7 @@ compute_content_hash(config: Map<string,string>) → string
 
 ```
 Input:  { "b": "2", "a": "1" }
-Output: "sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+Output: "sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"
 ```
 
 #### §5a Structure Hashing (updated for v0.0.2)
@@ -1636,7 +1636,7 @@ Mirrors all TypeScript changes above. Updated files: `types.rs`, `directory_regi
 
 Shared test vectors in `environment-base-spec/spec/cross-language-test-vectors.json`:
 
-- **`contentHash`** — `{ b: "2", a: "1" }` → `sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08` (unchanged)
+- **`contentHash`** — `{ b: "2", a: "1" }` → `sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930` (unchanged)
 - **`structureHash`** — standard directory set with new line format: `state.data:primary:global\n` etc. → deterministic output
 - **`projectEnvPrefix`** — `"agent-mcp"` → `"ADHD_AGENT_MCP"` (unchanged)
 - **`namespaceEnvPrefix`** — `("agent-mcp", "production")` → `"ADHD_AGENT_MCP_PRODUCTION_"`, `("agent-mcp", "default")` → `"ADHD_AGENT_MCP"`
@@ -1728,7 +1728,7 @@ Each language client (TS, Python, Rust) runs against the SAME `cross-language-te
 - npm names: `@adhd/environment`, `@adhd/environment-base-spec`, `@adhd/environment-cli`, `adhd-environment` (Py), `adhd-environment` (Rs)
 - Zero external runtime deps for core logic (ajv is the only new dep for validation)
 - Directory types: `state.data`, `state.config`, `runtime.log`, `runtime.cache`, `runtime.pid`, `user.bin`, `user.custom`
-- `contentHash` test vector: `{b:"2",a:"1"}` → `sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08`
+- `contentHash` test vector: `{b:"2",a:"1"}` → `sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930`
 - Atomic writes (`.tmp` + `renameSync`)
 - Drift detection on `initialize()`: warn on new/removed, throw on type change and namespace conflict (+ scope change now)
 - `${VAR}` interpolation (single-level, leave unresolved as literal)
@@ -1755,7 +1755,7 @@ Each new language client MUST pass all test vectors in `cross-language-test-vect
 
 ```
 Input:  { "b": "2", "a": "1" }
-Output: "sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+Output: "sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"
 ```
 
 Additional gates:

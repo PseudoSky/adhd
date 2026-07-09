@@ -1187,7 +1187,7 @@ Everything not affected by Changes 1-5 is retained:
 - Type-first directory identification with optional name disambiguator
 - Namespaced environments (namespace in path, snapshot location, env prefix suffix)
 - System-scope directory roots (`/etc/adhd/`)
-- `contentHash` test vector: `{b:"2",a:"1"}` → `sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08`
+- `contentHash` test vector: `{b:"2",a:"1"}` → `sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930`
 - `structureHash` with `type:name:scope\n` format
 - Atomic writes (`.tmp` + `renameSync`)
 - Drift detection on build (warn on new/removed, throw on type/scope change, namespace conflict)
