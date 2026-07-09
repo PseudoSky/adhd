@@ -1,6 +1,6 @@
 # component-define — content-only upsert that enriches on write
 
-**Phase:** authoring · **Kind:** work · **Depends on:** discovery-tools · **Guard:** `npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/component-define.test.ts`
+**Phase:** authoring · **Kind:** work · **Depends on:** discovery-tools · **Guard:** `npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/component-define.test.ts`
 
 ---
 
@@ -47,7 +47,7 @@ exists for agents; `component_delete` closes the matching gap for components.
 
 ```text
 read_only:  []
-mutates:    ["packages/ai/agent-mcp/src/tools/authoring.ts", "packages/ai/agent-mcp/src/server.ts", "packages/ai/agent-mcp/src/__tests__/component-define.test.ts"]
+mutates:    ["entrypoint/agent-mcp/src/tools/authoring.ts", "entrypoint/agent-mcp/src/server.ts", "entrypoint/agent-mcp/src/__tests__/component-define.test.ts"]
 ```
 
 ---
@@ -55,7 +55,7 @@ mutates:    ["packages/ai/agent-mcp/src/tools/authoring.ts", "packages/ai/agent-
 ## Notes for executor
 
 - **This is a thin wrapper, not new enrichment logic.** The embed → links →
-  summary work belongs to `enrichComponent` in `@adhd/agent-registry`
+  summary work belongs to `enrichComponent` in `@adhd/agent-store-prompts`
   (`inv:additive-registry`). This tool only validates input, calls the bridge +
   pipeline, and shapes the `name`-keyed response. Do not re-implement enrichment
   in agent-mcp.

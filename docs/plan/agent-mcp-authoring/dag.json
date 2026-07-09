@@ -17,6 +17,8 @@
     "authoring-design": {
       "kind": "work",
       "phase": "architecture",
+      "model": "opus",
+      "effort": "hard",
       "depends_on": [],
       "guard": "python3 docs/plan/agent-mcp-authoring/scripts/audit_authoring.py --phase architecture",
       "artifacts": [
@@ -24,55 +26,61 @@
         "docs/plan/agent-mcp-authoring/contexts/authoring-design.md"
       ],
       "context": "contexts/authoring-design.md",
-      "notes": ""
+      "notes": "Design gate: confirm the renamed layout (@adhd/agent-store-prompts @ packages/agent/agent-store-prompts, agent-mcp @ entrypoint/agent-mcp) + record the modification manifest baseline-ref against real HEAD."
     },
     "embedding-substrate": {
       "kind": "work",
       "phase": "enrichment",
+      "model": "sonnet",
+      "effort": "medium",
       "depends_on": [
         "authoring-design"
       ],
-      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts",
+      "guard": "npx --yes nx test agent-store-prompts --testFile=packages/agent/agent-store-prompts/src/__tests__/embedding-substrate.test.ts",
       "artifacts": [
-        "packages/ai/agent-registry/package.json",
-        "packages/ai/agent-registry/src/enrich/embedding.ts",
-        "packages/ai/agent-registry/src/enrich/usecase-anchors.ts",
-        "packages/ai/agent-registry/src/enrich/cosine.ts",
-        "packages/ai/agent-registry/src/index.ts",
-        "packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts"
+        "packages/agent/agent-store-prompts/package.json",
+        "packages/agent/agent-store-prompts/src/enrich/embedding.ts",
+        "packages/agent/agent-store-prompts/src/enrich/usecase-anchors.ts",
+        "packages/agent/agent-store-prompts/src/enrich/cosine.ts",
+        "packages/agent/agent-store-prompts/src/index.ts",
+        "packages/agent/agent-store-prompts/src/__tests__/embedding-substrate.test.ts"
       ],
       "context": "contexts/embedding-substrate.md",
-      "notes": "Consumes @adhd/sox-embedding-provider + @adhd/sox-vector-store instead of building custom hash. See context for publish/link prerequisite."
+      "notes": "Consumes @adhd/sox-embedding-provider (fastembed bge-base-en-v1.5, 768d — no hash provider) + @adhd/sox-vector-store. See context for publish prerequisite and async wrapper."
     },
     "enrichment-pipeline": {
       "kind": "work",
       "phase": "enrichment",
+      "model": "sonnet",
+      "effort": "medium",
       "depends_on": [
         "embedding-substrate"
       ],
-      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts",
+      "guard": "npx --yes nx test agent-store-prompts --testFile=packages/agent/agent-store-prompts/src/__tests__/enrichment-pipeline.test.ts",
       "artifacts": [
-        "packages/ai/agent-registry/package.json",
-        "packages/ai/agent-registry/src/enrich/enrich-component.ts",
-        "packages/ai/agent-registry/src/enrich/summarize.ts",
-        "packages/ai/agent-registry/src/store/usecase-store.ts",
-        "packages/ai/agent-registry/src/index.ts",
-        "packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts"
+        "packages/agent/agent-store-prompts/package.json",
+        "packages/agent/agent-store-prompts/src/enrich/enrich-component.ts",
+        "packages/agent/agent-store-prompts/src/enrich/summarize.ts",
+        "packages/agent/agent-store-prompts/src/store/usecase-store.ts",
+        "packages/agent/agent-store-prompts/src/index.ts",
+        "packages/agent/agent-store-prompts/src/__tests__/enrichment-pipeline.test.ts"
       ],
       "context": "contexts/enrichment-pipeline.md",
-      "notes": "Consumes @adhd/sox-ingest extractiveSummary + @adhd/sox-embedding-provider embed + @adhd/sox-vector-store knn instead of building from scratch."
+      "notes": "Consumes @adhd/sox-ingest ingest() (summary+contentHash+tags) + embed + @adhd/sox-vector-store knn. extractiveSummary is NOT exported — use ingest().summary."
     },
     "name-slug-seam": {
       "kind": "work",
       "phase": "seam",
+      "model": "sonnet",
+      "effort": "medium",
       "depends_on": [
         "enrichment-pipeline"
       ],
-      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts",
+      "guard": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/name-slug-seam.test.ts",
       "artifacts": [
-        "packages/ai/agent-mcp/src/registry/name-slug.ts",
-        "packages/ai/agent-mcp/src/registry/registry-bridge.ts",
-        "packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts"
+        "entrypoint/agent-mcp/src/registry/name-slug.ts",
+        "entrypoint/agent-mcp/src/registry/registry-bridge.ts",
+        "entrypoint/agent-mcp/src/__tests__/name-slug-seam.test.ts"
       ],
       "context": "contexts/name-slug-seam.md",
       "notes": ""
@@ -80,15 +88,17 @@
     "discovery-tools": {
       "kind": "work",
       "phase": "discovery",
+      "model": "sonnet",
+      "effort": "medium",
       "depends_on": [
         "name-slug-seam"
       ],
-      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts",
+      "guard": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/discovery-tools.test.ts",
       "artifacts": [
-        "packages/ai/agent-mcp/src/tools/discovery.ts",
-        "packages/ai/agent-mcp/src/server.ts",
-        "packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts",
-        "packages/ai/agent-mcp/src/__tests__/discovery-bounded-output.test.ts"
+        "entrypoint/agent-mcp/src/tools/discovery.ts",
+        "entrypoint/agent-mcp/src/server.ts",
+        "entrypoint/agent-mcp/src/__tests__/discovery-tools.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/discovery-bounded-output.test.ts"
       ],
       "context": "contexts/discovery-tools.md",
       "notes": ""
@@ -96,14 +106,16 @@
     "component-define": {
       "kind": "work",
       "phase": "authoring",
+      "model": "sonnet",
+      "effort": "medium",
       "depends_on": [
         "discovery-tools"
       ],
-      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/component-define.test.ts",
+      "guard": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/component-define.test.ts",
       "artifacts": [
-        "packages/ai/agent-mcp/src/tools/authoring.ts",
-        "packages/ai/agent-mcp/src/server.ts",
-        "packages/ai/agent-mcp/src/__tests__/component-define.test.ts"
+        "entrypoint/agent-mcp/src/tools/authoring.ts",
+        "entrypoint/agent-mcp/src/server.ts",
+        "entrypoint/agent-mcp/src/__tests__/component-define.test.ts"
       ],
       "context": "contexts/component-define.md",
       "notes": ""
@@ -111,31 +123,35 @@
     "agent-define": {
       "kind": "work",
       "phase": "authoring",
+      "model": "sonnet",
+      "effort": "medium",
       "depends_on": [
         "component-define"
       ],
-      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/agent-define.test.ts",
+      "guard": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/agent-define.test.ts",
       "artifacts": [
-        "packages/ai/agent-mcp/src/tools/authoring.ts",
-        "packages/ai/agent-mcp/src/registry/composition-writer.ts",
-        "packages/ai/agent-mcp/src/server.ts",
-        "packages/ai/agent-mcp/src/__tests__/agent-define.test.ts"
+        "entrypoint/agent-mcp/src/tools/authoring.ts",
+        "entrypoint/agent-mcp/src/registry/composition-writer.ts",
+        "entrypoint/agent-mcp/src/server.ts",
+        "entrypoint/agent-mcp/src/__tests__/agent-define.test.ts"
       ],
       "context": "contexts/agent-define.md",
-      "notes": ""
+      "notes": "Transactional upsert across agent+composition+tool+policy stores; commits-or-rolls-back. Strongest implementation state (sonnet/medium)."
     },
     "compat-shim": {
       "kind": "work",
       "phase": "compat",
+      "model": "sonnet",
+      "effort": "medium",
       "depends_on": [
         "agent-define"
       ],
-      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/systemprompt-compat.test.ts",
+      "guard": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/systemprompt-compat.test.ts",
       "artifacts": [
-        "packages/ai/agent-mcp/src/tools/agent-crud.ts",
-        "packages/ai/agent-mcp/src/validation/agent.ts",
-        "packages/ai/agent-mcp/src/tools/guide.ts",
-        "packages/ai/agent-mcp/src/__tests__/systemprompt-compat.test.ts"
+        "entrypoint/agent-mcp/src/tools/agent-crud.ts",
+        "entrypoint/agent-mcp/src/validation/agent.ts",
+        "entrypoint/agent-mcp/src/tools/guide.ts",
+        "entrypoint/agent-mcp/src/__tests__/systemprompt-compat.test.ts"
       ],
       "context": "contexts/compat-shim.md",
       "notes": ""
@@ -143,26 +159,30 @@
     "versioning": {
       "kind": "work",
       "phase": "compat",
+      "model": "haiku",
+      "effort": "easy",
       "depends_on": [
         "compat-shim"
       ],
-      "guard": "npx --yes nx build agent-mcp",
+      "guard": "npx --yes nx build agent-mcp && test -f entrypoint/agent-mcp/CHANGELOG.md && grep -qE '^#+ *\\[?2\\.0\\.0' entrypoint/agent-mcp/CHANGELOG.md && grep -qi 'systemPrompt' entrypoint/agent-mcp/CHANGELOG.md",
       "artifacts": [
-        "packages/ai/agent-mcp/package.json",
-        "packages/ai/agent-mcp/CHANGELOG.md"
+        "entrypoint/agent-mcp/package.json",
+        "entrypoint/agent-mcp/CHANGELOG.md"
       ],
       "context": "contexts/versioning.md",
-      "notes": ""
+      "notes": "The 2.0.0 version bump has ALREADY landed on main (package.json is 2.0.0), so this state's ONLY real remaining deliverable is authoring entrypoint/agent-mcp/CHANGELOG.md documenting the breaking required->optional systemPrompt change + the PERMANENT compat-shim promise. The guard is RED at plan start (CHANGELOG.md is absent) and only goes green once that entry exists: it AND-chains nx build + CHANGELOG existence + a 2.0.0 heading + a systemPrompt mention (the permanent-shim promise is the versioning.1.tooth audit check). No src changes; docs-only. haiku/easy is fine — authoring a CHANGELOG entry is mechanical prose."
     },
     "composition-journey-e2e": {
       "kind": "work",
       "phase": "e2e",
+      "model": "sonnet",
+      "effort": "medium",
       "depends_on": [
         "versioning"
       ],
-      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
+      "guard": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
       "artifacts": [
-        "packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
         "docs/plan/agent-registry/demo/compose-via-mcp.mjs"
       ],
       "context": "contexts/composition-journey-e2e.md",
@@ -171,12 +191,14 @@
     "live-model-e2e": {
       "kind": "work",
       "phase": "e2e",
+      "model": "sonnet",
+      "effort": "medium",
       "depends_on": [
         "composition-journey-e2e"
       ],
-      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts",
+      "guard": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts",
       "artifacts": [
-        "packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts"
+        "entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts"
       ],
       "context": "contexts/live-model-e2e.md",
       "notes": ""
@@ -184,6 +206,8 @@
     "code-review": {
       "kind": "review",
       "phase": "audit",
+      "model": "opus",
+      "effort": "hard",
       "depends_on": [
         "live-model-e2e"
       ],
@@ -198,6 +222,8 @@
     "audit-final": {
       "kind": "audit",
       "phase": "audit",
+      "model": "opus",
+      "effort": "hard",
       "depends_on": [
         "code-review"
       ],

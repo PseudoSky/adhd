@@ -36,7 +36,7 @@ path and the agent-mcp byte-back-out guarantee both hold.
 > real ones) — the dependency is a documented sequencing relationship, recorded in
 > `CLOSEOUT.md` §sequencing, not a `depends_on_plans` edge.
 >
-> **HARD CONSTRAINT — agent-mcp back-out guarantee.** `packages/ai/agent-mcp/`
+> **HARD CONSTRAINT — agent-mcp back-out guarantee.** `entrypoint/agent-mcp/`
 > and `packages/agent/agent-base-types/` work today and the owner retains the right
 > to back them out. This plan is the FIRST sanctioned modifier and only under the
 > opt-in, reversible **modification manifest** recorded in `decisions.md`
@@ -65,7 +65,7 @@ out the whole definition lane and restore agent-mcp to its pre-plan bytes.
   — a flat blob with no shared components, no typed slots, no discovery. There is
   no way over MCP to ask "what role/rule/capability components exist for this
   task," to author a reusable component, or to compose an agent from components.
-  The registry (Plans 1–5) is reachable only via the `agent-registry compile` CLI
+  The registry (Plans 1–5) is reachable only via the `agent-store-prompts compile` CLI
   and direct store imports — invisible to a composing agent. The registry stores
   speak `slug`; there is no `name↔slug` seam, so a slug would leak on any wire.
 - **After:** an agent composes a new agent in one declarative `agent_define`
@@ -159,18 +159,18 @@ out the whole definition lane and restore agent-mcp to its pre-plan bytes.
   - given: a real registry + agent-mcp server reachable over the MCP wire, the compiler CLI bin, and a REAL provider available for the run step (default `claudecli` — the locally-authenticated `claude` CLI; gated by `AGENT_MCP_LIVE`/provider availability)
   - when: an MCP client drives the whole §7 journey end-to-end, with the discovery + `agent_define` wiring asserted deterministically and the `agent → task → result` run executed against the real provider
   - then: a freshly-composed agent runs a task through the real provider and returns a result, and the test imports no package src internals; when no real provider is available the RUN step skips (not fails) while the deterministic wiring assertions still run
-  - entrypoint: `an MCP client driving the §7 journey (prompt_types_list → component_search → component_read → tool_list → model_list → policy_list → component_define → agent_define → agent → task → result) over a real registry+agent-mcp server with the run step on a REAL provider, exercised by packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts`
-  - observable: `composition-journey-e2e.test.ts imports NO packages/ai/**/src/** path (only the MCP wire client + the compiler CLI bin); the composed prompt contains the discovered components in order (deterministic, always asserted); the agent→task→result run uses a REAL provider (no scripted/mock provider on the run path) and returns a result, skipping cleanly when no provider is available`
-  - negative-control: `reintroducing a deep src import into packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts (e.g. buildHarness / factory.ts) trips its static import-scan assertion and the test fails red; substituting a scripted/mock provider on the run path trips the real-provider guard`
+  - entrypoint: `an MCP client driving the §7 journey (prompt_types_list → component_search → component_read → tool_list → model_list → policy_list → component_define → agent_define → agent → task → result) over a real registry+agent-mcp server with the run step on a REAL provider, exercised by entrypoint/agent-mcp/src/__tests__/composition-journey-e2e.test.ts`
+  - observable: `composition-journey-e2e.test.ts imports NO packages/agent/**/src/** or entrypoint/**/src/** path (only the MCP wire client + the compiler CLI bin); the composed prompt contains the discovered components in order (deterministic, always asserted); the agent→task→result run uses a REAL provider (no scripted/mock provider on the run path) and returns a result, skipping cleanly when no provider is available`
+  - negative-control: `reintroducing a deep src import into entrypoint/agent-mcp/src/__tests__/composition-journey-e2e.test.ts (e.g. buildHarness / factory.ts) trips its static import-scan assertion and the test fails red; substituting a scripted/mock provider on the run path trips the real-provider guard`
   - delivered-by: `composition-journey-e2e`
 
 - `[dod.6]` **A REAL model walks the composition journey end-to-end across a real-provider MATRIX — `anthropic` (env OAuth / Claude Max keychain), `claudecli`, and `lmstudio` (OpenAI-compatible local) — each emitting the model-independent invariants; NEVER a scripted/mock provider. (behavioral)** — closes COVERAGE.md §B "No live-model e2e tests" for the authoring lane (CLAUDE.md verification standard #5).
   - given: the live matrix is enabled by `AGENT_MCP_LIVE=1`, and EACH provider's prerequisites are met — (1) `anthropic` with `useClaudeOauth:true` (macOS keychain, no API key), (2) `claudecli` (`claude` CLI installed, configured via `{claudePath,model}`), (3) `lmstudio` running and reachable at `LMSTUDIO_BASE_URL` (`{model,baseURL}`, OpenAI-compatible) — plus a seeded registry
   - when: for each available provider, the live model is tasked to compose and run an agent through that REAL provider + Orchestrator — `component_search → agent_define → agent → task`
   - then: on each provider the model ITSELF issues a real `agent_define` tool call a scripted provider could not fake, and the task completes (`stopReason: completed`); a provider whose prerequisites are absent is skipped (not failed) per-provider; the whole matrix is skipped offline when `AGENT_MCP_LIVE` is unset so CI stays offline
-  - entrypoint: `AGENT_MCP_LIVE=1 driving a real model across the {anthropic, claudecli, lmstudio} provider matrix through component_search → agent_define → agent → task via each real provider's Orchestrator, exercised by packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts`
+  - entrypoint: `AGENT_MCP_LIVE=1 driving a real model across the {anthropic, claudecli, lmstudio} provider matrix through component_search → agent_define → agent → task via each real provider's Orchestrator, exercised by entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts`
   - observable: `authoring-live-e2e.test.ts: for each enabled provider in {anthropic (useClaudeOauth keychain), claudecli, lmstudio (baseURL)} the model issues a real agent_define call (not fakeable by a scripted provider) and stopReason is completed; per-provider availability gates each case (skip-not-fail when creds/service absent); the whole matrix is skipped (not failed) when AGENT_MCP_LIVE is unset so CI stays offline; README/USAGE documents how to enable each provider`
-  - negative-control: `seeding packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts with an empty component registry makes the model's agent_define raise COMPONENT_NOT_FOUND on every enabled provider and the live run fails — proving each provider drives real composition, not a canned reply; swapping any provider for a scripted/mock provider trips the no-mock-on-live-path guard`
+  - negative-control: `seeding entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts with an empty component registry makes the model's agent_define raise COMPONENT_NOT_FOUND on every enabled provider and the live run fails — proving each provider drives real composition, not a canned reply; swapping any provider for a scripted/mock provider trips the no-mock-on-live-path guard`
   - delivered-by: `live-model-e2e`
 
 - `[dod.7]` **The flat `systemPrompt` authoring path is a deprecated permanent compat shim, mutually exclusive with components; the 11-tool runtime hot path and required-arg counts are unchanged. (behavioral)** — SPEC §8/§9/§14-F (agent-mcp@2.0.0).

@@ -46,23 +46,103 @@
       "phase": "enrichment",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts",
+      "cmd": "npx --yes nx test agent-store-prompts --testFile=packages/agent/agent-store-prompts/src/__tests__/embedding-substrate.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "embedding-substrate.2",
+      "phase": "enrichment",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-store-prompts --testFile=packages/agent/agent-store-prompts/src/__tests__/embedding-substrate.test.ts",
+      "expect": "exit0",
+      "note": "Shared cmd with embedding-substrate.1/.3 is intentional — the three criteria legitimately drive the same test FILE; discrimination lives in the paired embedding-substrate.2.tooth (AMA-017)."
+    },
+    {
+      "id": "embedding-substrate.2.tooth",
+      "phase": "enrichment",
+      "tier": null,
+      "kind": "present",
+      "pattern": "reopen|seedAnchors|no-op|idempotent",
+      "paths": [
+        "packages/agent/agent-store-prompts/src/__tests__/embedding-substrate.test.ts"
+      ],
+      "note": "Mirrors audit_authoring.py embedding-substrate.2.tooth verbatim so run-audit.js and the .py agree (AMA-017). GREP-BASED: asserts the test file mentions reopen/idempotence, NOT that its assertions bite — the executor must prove the assertion FAILS when the fix is reverted (negative control, repo rule §6.2)."
+    },
+    {
+      "id": "embedding-substrate.3",
+      "phase": "enrichment",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-store-prompts --testFile=packages/agent/agent-store-prompts/src/__tests__/embedding-substrate.test.ts",
+      "expect": "exit0",
+      "note": "Shared cmd with embedding-substrate.1/.2 is intentional — same test FILE; discrimination lives in the paired embedding-substrate.3.tooth (AMA-017)."
+    },
+    {
+      "id": "embedding-substrate.3.tooth",
+      "phase": "enrichment",
+      "tier": null,
+      "kind": "present",
+      "pattern": "openVectorStore|knn|bge-base-en-v1.5",
+      "paths": [
+        "packages/agent/agent-store-prompts/src/__tests__/embedding-substrate.test.ts"
+      ],
+      "note": "Mirrors audit_authoring.py embedding-substrate.3.tooth verbatim (AMA-017). GREP-BASED — mentions-only; the executor must prove teeth via a negative control, repo rule §6.2."
     },
     {
       "id": "enrichment-pipeline.1",
       "phase": "enrichment",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts",
+      "cmd": "npx --yes nx test agent-store-prompts --testFile=packages/agent/agent-store-prompts/src/__tests__/enrichment-pipeline.test.ts",
       "expect": "exit0"
+    },
+    {
+      "id": "enrichment-pipeline.2",
+      "phase": "enrichment",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-store-prompts --testFile=packages/agent/agent-store-prompts/src/__tests__/enrichment-pipeline.test.ts",
+      "expect": "exit0",
+      "note": "Shared cmd with enrichment-pipeline.1/.3 is intentional — same test FILE; discrimination lives in the paired enrichment-pipeline.2.tooth (AMA-017)."
+    },
+    {
+      "id": "enrichment-pipeline.2.tooth",
+      "phase": "enrichment",
+      "tier": null,
+      "kind": "present",
+      "pattern": "ingest|summary|100|trim",
+      "paths": [
+        "packages/agent/agent-store-prompts/src/__tests__/enrichment-pipeline.test.ts"
+      ],
+      "note": "Mirrors audit_authoring.py enrichment-pipeline.2.tooth verbatim (AMA-017). GREP-BASED — asserts the <100-char trim branch is mentioned, not that it bites; prove via negative control, repo rule §6.2."
+    },
+    {
+      "id": "enrichment-pipeline.3",
+      "phase": "enrichment",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-store-prompts --testFile=packages/agent/agent-store-prompts/src/__tests__/enrichment-pipeline.test.ts",
+      "expect": "exit0",
+      "note": "Shared cmd with enrichment-pipeline.1/.2 is intentional — same test FILE; discrimination lives in the paired enrichment-pipeline.3.tooth (AMA-017)."
+    },
+    {
+      "id": "enrichment-pipeline.3.tooth",
+      "phase": "enrichment",
+      "tier": null,
+      "kind": "present",
+      "pattern": "threshold|cosine|unrelated|negative",
+      "paths": [
+        "packages/agent/agent-store-prompts/src/__tests__/enrichment-pipeline.test.ts"
+      ],
+      "note": "Mirrors audit_authoring.py enrichment-pipeline.3.tooth verbatim (AMA-017). GREP-BASED — asserts the negative-control (unrelated -> no link) is mentioned; the executor must prove it actually FAILS when threshold gating is reverted, repo rule §6.2."
     },
     {
       "id": "name-slug-seam.1",
       "phase": "seam",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts",
+      "cmd": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/name-slug-seam.test.ts",
       "expect": "exit0"
     },
     {
@@ -70,7 +150,7 @@
       "phase": "discovery",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts",
+      "cmd": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/discovery-tools.test.ts",
       "expect": "exit0"
     },
     {
@@ -78,7 +158,7 @@
       "phase": "authoring",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/component-define.test.ts",
+      "cmd": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/component-define.test.ts",
       "expect": "exit0"
     },
     {
@@ -86,7 +166,7 @@
       "phase": "authoring",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/agent-define.test.ts",
+      "cmd": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/agent-define.test.ts",
       "expect": "exit0"
     },
     {
@@ -94,7 +174,7 @@
       "phase": "compat",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/systemprompt-compat.test.ts",
+      "cmd": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/systemprompt-compat.test.ts",
       "expect": "exit0"
     },
     {
@@ -104,15 +184,27 @@
       "kind": "present",
       "pattern": "\"version\": \"2\\.",
       "paths": [
-        "packages/ai/agent-mcp/package.json"
-      ]
+        "entrypoint/agent-mcp/package.json"
+      ],
+      "note": "package.json is a TRUE requirement but ALREADY green on main (2.0.0 landed) — it is proxy-only on its own. The real remaining deliverable (the CHANGELOG entry) is enforced by nodes.versioning.guard's compound grep + versioning.1.tooth below (AMA-016)."
+    },
+    {
+      "id": "versioning.1.tooth",
+      "phase": "compat",
+      "tier": null,
+      "kind": "present",
+      "pattern": "systemPrompt.*permanent|permanent.*compat|permanent.*shim|compat.*permanent|shim.*permanent",
+      "paths": [
+        "entrypoint/agent-mcp/CHANGELOG.md"
+      ],
+      "note": "Mirrors audit_authoring.py versioning.1.tooth verbatim (AMA-016). The 2.0.0 heading + a systemPrompt mention are AND-enforced by the dag guard; this tooth adds the substantive PERMANENT compat-shim promise (systemPrompt kept across 2.x, not sunset) which the guard does not check. grep -E / JS-RegExp parity, no lookahead."
     },
     {
       "id": "composition-journey-e2e.1",
       "phase": "e2e",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
+      "cmd": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
       "expect": "exit0"
     },
     {
@@ -120,7 +212,7 @@
       "phase": "e2e",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts",
+      "cmd": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts",
       "expect": "exit0"
     },
     {
@@ -128,7 +220,7 @@
       "phase": "discovery",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/discovery-bounded-output.test.ts",
+      "cmd": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/discovery-bounded-output.test.ts",
       "expect": "exit0"
     },
     {
@@ -136,8 +228,20 @@
       "phase": "authoring",
       "tier": null,
       "kind": "command",
-      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/component-define.test.ts",
-      "expect": "exit0"
+      "cmd": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/component-define.test.ts",
+      "expect": "exit0",
+      "note": "Shared cmd with component-define.1 is intentional — both drive the same test FILE; discrimination lives in the paired component-define.2.tool (AMA-017)."
+    },
+    {
+      "id": "component-define.2.tool",
+      "phase": "authoring",
+      "tier": null,
+      "kind": "present",
+      "pattern": "component_delete",
+      "paths": [
+        "entrypoint/agent-mcp/src/tools/authoring.ts"
+      ],
+      "note": "Mirrors audit_authoring.py component-define.2.tool verbatim (AMA-017): asserts component_delete is actually registered in the authoring lane, not merely tested."
     }
   ]
 }

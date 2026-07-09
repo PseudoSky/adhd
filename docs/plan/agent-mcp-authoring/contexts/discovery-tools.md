@@ -1,6 +1,6 @@
 # discovery-tools — the 11 read tools over the real registry/provider/policy stores
 
-**Phase:** discovery · **Kind:** work · **Depends on:** name-slug-seam · **Guard:** `npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts`
+**Phase:** discovery · **Kind:** work · **Depends on:** name-slug-seam · **Guard:** `npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/discovery-tools.test.ts`
 
 ---
 
@@ -18,7 +18,7 @@ seeded component ranks it above an unrelated one. Every result is `name`-keyed
 with no `slug` on the wire. Critically, all 11 land OUTSIDE the runtime delegation
 surface (`inv:11-tool-hot-path`): a delegated sub-agent still sees exactly the 11
 runtime tools and 0 discovery tools. Before this state the registry was reachable
-only via the `agent-registry compile` CLI and direct store imports — invisible to
+only via the `agent-store-prompts compile` CLI and direct store imports — invisible to
 an agent over MCP.
 
 **Every list/search tool is bounded by default (BUG-003).** `agent_list`,
@@ -29,7 +29,7 @@ score, NEVER the full `systemPrompt`/body inline. The full body is returned ONLY
 an explicit single-item read (`agent_read`/`component_read`) or an explicit
 `full:true`/over-limit opt-in. This is a real host constraint, not a nicety: against
 the live 46-agent store, an unbounded `agent_list` returned 464,821 chars / 692
-lines and **blew the host's tool-output token ceiling** (`packages/ai/agent-mcp/BACKLOG.md`
+lines and **blew the host's tool-output token ceiling** (`entrypoint/agent-mcp/BACKLOG.md`
 BUG-003), making the whole discovery lane unusable. A bounded default keeps every
 discovery call cheap and within budget regardless of corpus size.
 
@@ -50,7 +50,7 @@ discovery call cheap and within budget regardless of corpus size.
 
 ```text
 read_only:  []
-mutates:    ["packages/ai/agent-mcp/src/tools/discovery.ts", "packages/ai/agent-mcp/src/server.ts", "packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts", "packages/ai/agent-mcp/src/__tests__/discovery-bounded-output.test.ts"]
+mutates:    ["entrypoint/agent-mcp/src/tools/discovery.ts", "entrypoint/agent-mcp/src/server.ts", "entrypoint/agent-mcp/src/__tests__/discovery-tools.test.ts", "entrypoint/agent-mcp/src/__tests__/discovery-bounded-output.test.ts"]
 ```
 
 ---
@@ -70,6 +70,14 @@ mutates:    ["packages/ai/agent-mcp/src/tools/discovery.ts", "packages/ai/agent-
   filed each component), returning summaries + scores. A negative control that
   swaps the ranker for insertion-order must flip the "match ranks above unrelated"
   assertion red.
+- **Retrieval backend (decisions.md §D6 — DECIDED, not open).** Use raw
+  `@adhd/sox-vector-store` `knn()` (returns bare `{id, score}`) joined back to the
+  registry component row (`ComponentStore`, keyed by the same rowid) for the
+  renderable `name + type + summary + score` projection. `@adhd/sox-hybrid-search`
+  (FTS5 keyword channel + `NodeRecord` fields) is **DEFERRED** — adopting it would
+  add `@adhd/sox-graph-store` to the publish set (3→4) and a `drizzle-orm` version
+  skew, for a benefit (`dod.2`) that pure cosine already satisfies. Do NOT adopt
+  hybrid-search here; the keyword channel is logged in BACKLOG for a later plan.
 - **`agent_compile` consumes Plan 6** (`compileAgent` + the `composed_prompts`
   cache); it reports `cache: HIT|MISS`. Those Plan-6 deliverables are
   `assumed_baseline` and must be built before this state goes green.

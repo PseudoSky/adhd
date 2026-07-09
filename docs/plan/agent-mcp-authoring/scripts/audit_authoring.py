@@ -37,10 +37,16 @@ Criterion ID registry (referenced by gap-check.js):
   architecture phase:
     [authoring-design.1..4]
   final phase (everything above + work-state criteria + behavioral DoD checks):
-    [embedding-substrate.1] [enrichment-pipeline.1] [name-slug-seam.1]
-    [discovery-tools.1] [component-define.1] [agent-define.1] [compat-shim.1]
+    [embedding-substrate.1] [embedding-substrate.2] [embedding-substrate.3]
+    [enrichment-pipeline.1] [enrichment-pipeline.2] [enrichment-pipeline.3]
+    [name-slug-seam.1] [discovery-tools.1] [discovery-tools.2]
+    [component-define.1] [component-define.2] [agent-define.1] [compat-shim.1]
     [versioning.1] [composition-journey-e2e.1] [live-model-e2e.1]
     [dod.1] [dod.2] [dod.3] [dod.4] [dod.5] [dod.6] [dod.7] [dod.8]
+
+  Package identity (2026-07-08, AMA-014): the registry is @adhd/agent-store-prompts
+  at packages/agent/agent-store-prompts (nx project agent-store-prompts); agent-mcp
+  is at entrypoint/agent-mcp. The old packages/ai/* layout is gone.
 
 Exits 0 when all checks in the phase pass; exits 1 with a failure summary otherwise.
 """
@@ -56,8 +62,8 @@ from dataclasses import dataclass
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 PLAN = "docs/plan/agent-mcp-authoring"
 DECISIONS = f"{PLAN}/decisions.md"
-MCP = "packages/ai/agent-mcp"
-REG = "packages/ai/agent-registry"
+MCP = "entrypoint/agent-mcp"
+REG = "packages/agent/agent-store-prompts"
 MCP_TESTS = f"{MCP}/src/__tests__"
 REG_TESTS = f"{REG}/src/__tests__"
 TYPES = "packages/agent/agent-base-types"
@@ -136,10 +142,34 @@ def phase_final() -> list:
     r = phase_architecture()
 
     # ── work-state criteria (each drives its real test entrypoint) ──
-    r.append(check("embedding-substrate.1", "deterministic embedding + use-case anchors rank a match first",
-                   f"npx --yes nx test agent-registry --testFile={REG_TESTS}/embedding-substrate.test.ts"))
-    r.append(check("enrichment-pipeline.1", "enrichComponent embeds+resolves+summarizes; idempotent on identical content",
-                   f"npx --yes nx test agent-registry --testFile={REG_TESTS}/enrichment-pipeline.test.ts"))
+    r.append(check("embedding-substrate.1", "real fastembed(bge-base-en-v1.5,768d) embedding + use-case anchors rank a match first",
+                   f"npx --yes nx test agent-store-prompts --testFile={REG_TESTS}/embedding-substrate.test.ts"))
+    # embedding-substrate.2 — seedAnchors idempotence proven by REOPENING the store.
+    r.append(check("embedding-substrate.2", "seedAnchors: N anchors from seed data; re-run on a seeded store is a no-op; anchors survive a store reopen",
+                   f"npx --yes nx test agent-store-prompts --testFile={REG_TESTS}/embedding-substrate.test.ts"))
+    r.append(grep_present("embedding-substrate.2.tooth", "embedding test reopens the store and asserts seed idempotence (no-op on reseed)",
+                          "reopen|seedAnchors|no-op|idempotent",
+                          f"{REG_TESTS}/embedding-substrate.test.ts"))
+    # embedding-substrate.3 — real @adhd/sox-vector-store knn over the single bge space, ranked by cosine.
+    r.append(check("embedding-substrate.3", "vector-store: seeded anchors stored via openVectorStore; knn returns them ranked by cosine (matching anchor first)",
+                   f"npx --yes nx test agent-store-prompts --testFile={REG_TESTS}/embedding-substrate.test.ts"))
+    r.append(grep_present("embedding-substrate.3.tooth", "embedding test drives real @adhd/sox-vector-store knn over the bge-base-en-v1.5 space",
+                          "openVectorStore|knn|bge-base-en-v1.5",
+                          f"{REG_TESTS}/embedding-substrate.test.ts"))
+    r.append(check("enrichment-pipeline.1", "enrichComponent embeds+resolves+summarizes; idempotent on identical content (reopen-proven, byte-stable links+summary)",
+                   f"npx --yes nx test agent-store-prompts --testFile={REG_TESTS}/enrichment-pipeline.test.ts"))
+    # enrichment-pipeline.2 — the REAL observable of ingest().summary, BOTH branches (lead-N and the <100-char trim).
+    r.append(check("enrichment-pipeline.2", "summary = ingest().summary: lead-N sentences for >=100 chars; content.trim() for <100 chars (observable, both branches)",
+                   f"npx --yes nx test agent-store-prompts --testFile={REG_TESTS}/enrichment-pipeline.test.ts"))
+    r.append(grep_present("enrichment-pipeline.2.tooth", "enrichment test asserts the ingest() summary observable incl the <100-char trim branch",
+                          "ingest|summary|100|trim",
+                          f"{REG_TESTS}/enrichment-pipeline.test.ts"))
+    # enrichment-pipeline.3 — weight==cosine + NEGATIVE CONTROL: an unrelated component accrues zero links.
+    r.append(check("enrichment-pipeline.3", "link weight = cosine score; an unrelated component falls below threshold and accrues zero links (negative control)",
+                   f"npx --yes nx test agent-store-prompts --testFile={REG_TESTS}/enrichment-pipeline.test.ts"))
+    r.append(grep_present("enrichment-pipeline.3.tooth", "enrichment test proves threshold gating with a negative control (unrelated -> no link)",
+                          "threshold|cosine|unrelated|negative",
+                          f"{REG_TESTS}/enrichment-pipeline.test.ts"))
     r.append(check("name-slug-seam.1", "bridge translates name->slug inbound, strips slug outbound (no slug on the wire)",
                    f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/name-slug-seam.test.ts"))
     r.append(check("discovery-tools.1", "all discovery tools return name-keyed results over the real stores",
@@ -165,6 +195,16 @@ def phase_final() -> list:
                    f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/systemprompt-compat.test.ts"))
     r.append(grep_present("versioning.1", "package.json is agent-mcp@2.x",
                           '"version": "2\\.', f"{MCP}/package.json"))
+    # versioning.1.tooth (AMA-016) — the version bump ALREADY landed on main, so a
+    # bare package.json/build check is proxy-only (green before any work). The real
+    # remaining deliverable is the CHANGELOG entry. The dag guard AND-chains the
+    # 2.0.0 heading + a systemPrompt mention; this tooth adds the substantive
+    # PERMANENT-compat-shim promise the guard does not assert (systemPrompt kept as a
+    # permanent shim across 2.x, not sunset). Line-based grep -E / JS-RegExp parity
+    # (no lookahead) so criteria.json's mirror behaves identically.
+    r.append(grep_present("versioning.1.tooth", "CHANGELOG documents the required->optional systemPrompt break AND the permanent compat-shim promise",
+                          "systemPrompt.*permanent|permanent.*compat|permanent.*shim|compat.*permanent|shim.*permanent",
+                          f"{MCP}/CHANGELOG.md"))
     r.append(check("composition-journey-e2e.1", "SPEC §7 journey over MCP wire + compiler CLI; composed agent runs a task",
                    f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/composition-journey-e2e.test.ts"))
     r.append(check("live-model-e2e.1", "AGENT_MCP_LIVE-gated real-model journey; skips when unset; empty-registry teeth",
@@ -188,12 +228,12 @@ def phase_final() -> list:
     # The check ASSERTS the observable: static `grep -q` teeth prove the e2e test
     # carries (a) the no-src-import scan AND (b) the real-provider run-path guard
     # BEFORE the journey run is trusted (not a bare test run).
-    r.append(check("dod.5", "composition e2e statically asserts NO packages/ai/**/src import + REAL provider on the run path (grep -q teeth) THEN runs over MCP wire + CLI bin",
-                   "grep -qE 'no-src-import|importScan|packages/ai/[^ ]+/src' packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts "
-                   "&& grep -qE 'claudecli|anthropic|lmstudio|real.?provider|no-mock' packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts "
-                   "&& npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts"))
+    r.append(check("dod.5", "composition e2e statically asserts NO packages/agent/**/src or entrypoint/**/src deep import + REAL provider on the run path (grep -q teeth) THEN runs over MCP wire + CLI bin",
+                   "grep -qE 'no-src-import|importScan|packages/agent/[^ ]+/src|entrypoint/[^ ]+/src' entrypoint/agent-mcp/src/__tests__/composition-journey-e2e.test.ts "
+                   "&& grep -qE 'claudecli|anthropic|lmstudio|real.?provider|no-mock' entrypoint/agent-mcp/src/__tests__/composition-journey-e2e.test.ts "
+                   "&& npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/composition-journey-e2e.test.ts"))
     # [dod.5] tooth: the e2e test must itself contain the import-scan guard so a deep import is caught.
-    r.append(grep_present("dod.5.tooth", "composition e2e asserts NO packages/ai/**/src import is used",
+    r.append(grep_present("dod.5.tooth", "composition e2e asserts NO packages/agent/**/src or entrypoint/**/src deep import is used",
                           "src/|no-src-import|importScan|deep import",
                           f"{MCP_TESTS}/composition-journey-e2e.test.ts"))
     # [dod.5] tooth-2: the run path uses a REAL provider, not the scripted/mock double.
@@ -205,13 +245,13 @@ def phase_final() -> list:
     # stopReason/agent_define completion assertion, AND all three matrix providers
     # (anthropic + claudecli + lmstudio) BEFORE the gated real-model runs are trusted.
     r.append(check("dod.6", "live e2e asserts AGENT_MCP_LIVE skip-gate + stopReason/agent_define completion + {anthropic,claudecli,lmstudio} provider matrix (grep -q teeth) THEN runs the gated real-model journey per provider",
-                   "grep -qE 'AGENT_MCP_LIVE' packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts "
-                   "&& grep -qE 'stopReason|agent_define' packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts "
-                   "&& grep -qE 'anthropic' packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts "
-                   "&& grep -qE 'claudecli' packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts "
-                   "&& grep -qE 'lmstudio' packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts "
-                   "&& grep -qE 'useClaudeOauth|baseURL|LMSTUDIO_BASE_URL' packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts "
-                   "&& npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts"))
+                   "grep -qE 'AGENT_MCP_LIVE' entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts "
+                   "&& grep -qE 'stopReason|agent_define' entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts "
+                   "&& grep -qE 'anthropic' entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts "
+                   "&& grep -qE 'claudecli' entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts "
+                   "&& grep -qE 'lmstudio' entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts "
+                   "&& grep -qE 'useClaudeOauth|baseURL|LMSTUDIO_BASE_URL' entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts "
+                   "&& npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts"))
     # [dod.6] tooth: the live e2e must contain the skip-gate + completion assertion so an empty/canned run is caught.
     r.append(grep_present("dod.6.tooth", "live e2e asserts AGENT_MCP_LIVE skip-gate and stopReason completed",
                           "AGENT_MCP_LIVE|stopReason|completed",
@@ -236,7 +276,7 @@ def phase_final() -> list:
     # (c) agent-mcp builds clean at 2.0.0.
     r.append(check("dod.8.build", "agent-mcp builds clean", "npx --yes nx build agent-mcp"))
     # (d) The byte-back-out check: every changed agent-mcp src file is listed in the manifest.
-    #     Driven by a vendored helper that diffs `git` changes under packages/ai/agent-mcp{,-base-types}/src
+    #     Driven by a vendored helper that diffs `git` changes under entrypoint/agent-mcp/src + packages/agent/agent-base-types/src
     #     against the manifest's enumerated paths; PASS iff the change set is a subset of the manifest.
     r.append(check("dod.8.manifest-diff", "no agent-mcp src file changed outside the recorded manifest",
                    f"python3 {PLAN}/scripts/check_manifest.py"))

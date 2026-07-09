@@ -1,6 +1,6 @@
 # name-slug-seam — name↔slug translation bridge at the MCP boundary
 
-**Phase:** seam · **Kind:** work · **Depends on:** enrichment-pipeline · **Guard:** `npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts`
+**Phase:** seam · **Kind:** work · **Depends on:** enrichment-pipeline · **Guard:** `npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/name-slug-seam.test.ts`
 
 ---
 
@@ -36,7 +36,7 @@ not a store refactor.
 
 ```text
 read_only:  []
-mutates:    ["packages/ai/agent-mcp/src/registry/name-slug.ts", "packages/ai/agent-mcp/src/registry/registry-bridge.ts", "packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts"]
+mutates:    ["entrypoint/agent-mcp/src/registry/name-slug.ts", "entrypoint/agent-mcp/src/registry/registry-bridge.ts", "entrypoint/agent-mcp/src/__tests__/name-slug-seam.test.ts"]
 ```
 
 ---
