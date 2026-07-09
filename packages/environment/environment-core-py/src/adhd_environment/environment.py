@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Literal, Optional, Union
@@ -34,9 +35,78 @@ DEFAULT_ORG_NAMESPACE = "adhd"
 DEFAULT_NAMESPACE = "default"
 SNAPSHOT_FILENAME = "adhd-environment.json"
 
+#: contentHash serialization format version (mirrors
+#: ``CONTENT_HASH_FORMAT_VERSION`` in ``environment-base-spec/src/index.ts``).
+#: v2 == the length-prefixed, injective encoding (see :func:`content_hash`).
+CONTENT_HASH_FORMAT_VERSION = 2
+
+#: Reserved prefix marking a redacted secret reference (mirrors
+#: ``SECRET_REF_PREFIX`` in ``environment-base-spec``). A resolved config
+#: value of ``"adhd-secret-ref:ADHD_FOO_SECRET"`` means "read the secret from
+#: env var ``ADHD_FOO_SECRET`` at runtime"; the plaintext is never persisted.
+SECRET_REF_PREFIX = "adhd-secret-ref:"
+
+#: The genuine JSON-Schema keywords a field definition may contribute to a
+#: generated schema. adhd-specific metadata (``env``/``scope``/``secret``/
+#: ``noEnv``) is intentionally excluded (see :func:`generate_field_schema`).
+_JSON_SCHEMA_LEAF_KEYS = (
+    "type",
+    "default",
+    "description",
+    "minimum",
+    "maximum",
+    "enum",
+    "pattern",
+    "minLength",
+    "maxLength",
+    "items",
+)
+
 
 class EnvironmentError(Exception):
     """Base exception for all ``adhd_environment`` runtime errors."""
+
+
+class LoneSurrogateError(EnvironmentError):
+    """Raised by :func:`content_hash` when a key or value contains a lone
+    (unpaired) UTF-16 surrogate code point (U+D800--U+DFFF).
+
+    Such strings are not well-formed Unicode and have no canonical UTF-8
+    encoding. Rather than raising Python's low-level ``UnicodeEncodeError``
+    (the old behaviour, which diverged from TypeScript's silent U+FFFD
+    substitution), all ports reject them with this one, specified error
+    (ENV-CORE-005).
+    """
+
+    def __init__(self, location: str) -> None:
+        self.location = location
+        super().__init__(
+            f"contentHash: lone surrogate in {location} (not well-formed Unicode)"
+        )
+
+
+def _has_lone_surrogate(s: str) -> bool:
+    """True if ``s`` contains an unpaired UTF-16 surrogate code point."""
+    return any(0xD800 <= ord(ch) <= 0xDFFF for ch in s)
+
+
+def _validate_path_segment(segment: str, label: str) -> None:
+    """Reject a ``project``/``namespace`` value that could escape ``adhd_root``
+    when interpolated into a filesystem path (ENV-CORE-006).
+
+    Rejects empty strings, ``.``/``..``, path separators (``/`` or ``\\``),
+    embedded NUL, and absolute paths.
+    """
+    if not segment:
+        raise ValueError(f"{label} must be a non-empty path segment")
+    if segment in (".", ".."):
+        raise ValueError(f"{label} must not be '.' or '..': {segment!r}")
+    if "/" in segment or "\\" in segment or "\x00" in segment:
+        raise ValueError(
+            f"{label} must not contain path separators or NUL: {segment!r}"
+        )
+    if os.path.isabs(segment):
+        raise ValueError(f"{label} must not be an absolute path: {segment!r}")
 
 
 class SnapshotNotFoundError(EnvironmentError):
@@ -60,15 +130,20 @@ class SnapshotNotFoundError(EnvironmentError):
 def content_hash(config: dict[str, str]) -> str:
     """Return the ``sha256-``-prefixed content hash of a flat config map.
 
-    Serializes ``config`` as sorted ``key=value\\n`` lines -- sorted by
-    key, each line newline-terminated, concatenated with no other
-    separators -- then hashes the resulting UTF-8 bytes with SHA-256 and
-    returns ``"sha256-" + hexdigest``.
+    Uses the length-prefixed, **injective** serialization (format v2, see
+    ``environment-base-spec`` SPEC.md section 4.1):
 
-    Cross-language gate (must match TypeScript and Rust exactly)::
+      1. Reject any key or value containing a lone surrogate
+         (:class:`LoneSurrogateError`, ENV-CORE-005).
+      2. Sort keys ascending by Unicode code point (Python ``sorted`` already
+         orders by code point, matching Rust and the corrected TS port --
+         ENV-CORE-002).
+      3. For each key ``k``, emit ``f"{len_utf8(k)}:{k}={len_utf8(v)}:{v}\\n"``
+         where the length prefixes are UTF-8 byte counts.
+      4. SHA-256 the UTF-8 bytes; return ``"sha256-" + hexdigest``.
 
-        content_hash({"b": "2", "a": "1"})
-        == "sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"
+    The byte-length prefixes make the encoding injective: ``=`` or ``\\n``
+    inside a key/value can never be mistaken for a delimiter (ENV-CORE-004).
 
     Args:
         config: Flat mapping of string keys to string values. Order is
@@ -77,7 +152,17 @@ def content_hash(config: dict[str, str]) -> str:
     Returns:
         The ``sha256-``-prefixed lowercase hex digest.
     """
-    serialized = "".join(f"{key}={config[key]}\n" for key in sorted(config))
+    parts: list[str] = []
+    for key in sorted(config):
+        value = config[key]
+        if _has_lone_surrogate(key):
+            raise LoneSurrogateError("key")
+        if _has_lone_surrogate(value):
+            raise LoneSurrogateError("value")
+        key_len = len(key.encode("utf-8"))
+        value_len = len(value.encode("utf-8"))
+        parts.append(f"{key_len}:{key}={value_len}:{value}\n")
+    serialized = "".join(parts)
     digest = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
     return f"sha256-{digest}"
 
@@ -85,14 +170,16 @@ def content_hash(config: dict[str, str]) -> str:
 def project_env_prefix(project_name: str) -> str:
     """Infer the ``ADHD_``-prefixed env var prefix from a project name.
 
-    Algorithm: uppercase the project name, replace ``-`` with ``_``,
-    prepend ``"ADHD_"``.
+    Algorithm: uppercase the project name, fold both ``-`` **and** ``.`` to
+    ``_`` (so a dotted project name yields a legal POSIX env-var prefix --
+    ENV-CORE-003), prepend ``"ADHD_"``.
 
     Examples:
         ``project_env_prefix("agent-mcp")`` -> ``"ADHD_AGENT_MCP"``
         ``project_env_prefix("decompile-cli")`` -> ``"ADHD_DECOMPILE_CLI"``
+        ``project_env_prefix("foo.bar")`` -> ``"ADHD_FOO_BAR"``
     """
-    return "ADHD_" + project_name.upper().replace("-", "_")
+    return "ADHD_" + re.sub(r"[.-]", "_", project_name.upper())
 
 
 def infer_env_var(prefix: str, field_path: str) -> str:
@@ -136,9 +223,16 @@ def generate_field_schema(fields: dict[str, dict[str, Any]]) -> dict[str, Any]:
     (plain dict equality), not by serialized string, since other language
     implementations may legitimately emit keys in a different order.
 
+    Each leaf keeps ONLY genuine JSON-Schema keywords (``type``, ``default``,
+    ``description``, ``minimum``, ``maximum``, ``enum``, ``pattern``,
+    ``minLength``, ``maxLength``, ``items``). adhd-specific metadata
+    (``env``, ``scope``, ``secret``, ``noEnv``) is dropped -- copying it
+    verbatim leaked which fields are secrets and their env-var names
+    (ENV-CORE-001).
+
     Args:
         fields: Flat mapping of dot-separated field path to a JSON
-            Schema leaf field definition (passed through verbatim).
+            Schema leaf field definition.
 
     Returns:
         A nested JSON Schema object rooted at ``{"type": "object", ...}``.
@@ -151,12 +245,20 @@ def generate_field_schema(fields: dict[str, dict[str, Any]]) -> dict[str, Any]:
         for index, part in enumerate(parts):
             properties = node["properties"]
             if index == last_index:
-                properties[part] = dict(field_def)
+                properties[part] = _field_definition_to_json_schema(field_def)
             else:
                 if part not in properties:
                     properties[part] = {"type": "object", "properties": {}}
                 node = properties[part]
     return root
+
+
+def _field_definition_to_json_schema(field_def: dict[str, Any]) -> dict[str, Any]:
+    """Project a field definition onto its genuine JSON-Schema keywords only,
+    dropping adhd-specific metadata (``env``/``scope``/``secret``/``noEnv``).
+    Mirrors ``fieldDefinitionToJsonSchema`` in ``environment-base-spec``.
+    """
+    return {key: field_def[key] for key in _JSON_SCHEMA_LEAF_KEYS if key in field_def}
 
 
 # ---------------------------------------------------------------------------
@@ -215,6 +317,11 @@ class Environment:
         self.project: str = project
         self.namespace: str = namespace or DEFAULT_NAMESPACE
         self.scope: Optional[Scope] = scope
+
+        # ENV-CORE-006: guard against path traversal before interpolating
+        # project/namespace into the snapshot path.
+        _validate_path_segment(self.project, "project")
+        _validate_path_segment(self.namespace, "namespace")
 
         root = (
             Path(adhd_root)
@@ -295,6 +402,13 @@ class Environment:
             provenance = self._data.get("provenance", {}).get(dotted_path)
             if provenance is None or provenance.get("scope") != self.scope:
                 return None
+
+        # ENV-CORE-009: secret fields persist a reference, not the plaintext.
+        # Resolve the live value from the environment at read time (or None
+        # when the env var is unset).
+        if isinstance(node, str) and node.startswith(SECRET_REF_PREFIX):
+            env_var = node[len(SECRET_REF_PREFIX):]
+            return os.environ.get(env_var)
 
         return node
 

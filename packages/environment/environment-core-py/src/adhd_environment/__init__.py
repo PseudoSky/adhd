@@ -11,11 +11,14 @@ and 4.2 for the full API spec.
 """
 
 from .environment import (
+    CONTENT_HASH_FORMAT_VERSION,
     DEFAULT_NAMESPACE,
     DEFAULT_ORG_NAMESPACE,
+    SECRET_REF_PREFIX,
     SNAPSHOT_FILENAME,
     Environment,
     EnvironmentError,
+    LoneSurrogateError,
     Scope,
     SnapshotNotFoundError,
     content_hash,
@@ -25,11 +28,14 @@ from .environment import (
 )
 
 __all__ = [
+    "CONTENT_HASH_FORMAT_VERSION",
     "DEFAULT_NAMESPACE",
     "DEFAULT_ORG_NAMESPACE",
+    "SECRET_REF_PREFIX",
     "SNAPSHOT_FILENAME",
     "Environment",
     "EnvironmentError",
+    "LoneSurrogateError",
     "Scope",
     "SnapshotNotFoundError",
     "content_hash",
