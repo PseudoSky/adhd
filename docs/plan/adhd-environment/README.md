@@ -15,7 +15,7 @@ After: One checked-in YAML file + one `adhd-env build` command + one typed `new 
 ## Definition of Done
 
 - `[dod.1]` **All 6 packages build successfully (nx build, pytest, cargo test) (structural)** — All 6 packages build successfully (nx build, pytest, cargo test).
-  delivered-by: scaffold-workspace
+  delivered-by: [scaffold-workspace, docs-steward]
 
 - `[dod.2]` **adhd-env init --generate-config writes starter adhd.environment.yaml (structural)** — adhd-env init --generate-config writes starter adhd.environment.yaml.
   delivered-by: runtime-cli

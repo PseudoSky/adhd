@@ -30,7 +30,7 @@
   Reads a snapshot; exposes typed `env.get("config.*"|"path.*"|"env.*"|"provenance.*")`, bracket access,
   `env.hash`, `env.version`. No builder logic, no `.env`, no validation, no disk writes.
 - **[def:contentHash]** — `sha256-` hash of sorted `key=value\n` lines. Cross-language gate:
-  `contentHash({ b: "2", a: "1" })` === `"sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"`
+  `contentHash({ b: "2", a: "1" })` === `"sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"`
   in TS, Python, and Rust.
 - **[def:structureHash]** — hash of logical structure (`type:name:scope`), not absolute paths.
 

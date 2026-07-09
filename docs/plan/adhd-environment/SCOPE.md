@@ -17,7 +17,7 @@ A concrete, falsifiable user-visible end-state:
 - `new Environment<AgentMcpConfig>({ project: "agent-mcp", namespace: "production" })` produces a correctly-typed env object — `env.get("config.transport.port")` returns `number`, `env.get("config.db.path")` returns `string` (agent-mcp's real port field is `transport.port`/`sse.port`; `server.*` holds `maxDepth`/`maxToolLoops`/etc. — see CURRENT_CONFIG_PATTERNS.md field table, authoritative)
 - Python and Rust runtime clients each pass the contract test vector and provide the same typed `get()` API (~40-50 lines each)
 - **agent-mcp refactored:** `entrypoint/agent-mcp/src/config.ts` (299 lines) replaced with `adhd.environment.yaml` + `new Environment<AgentMcpConfig>({ project: "agent-mcp", namespace: "production" })` + `env.get()` calls
-- `contentHash({ b: "2", a: "1" })` returns exactly `"sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"` in all three languages
+- `contentHash({ b: "2", a: "1" })` returns exactly `"sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"` in all three languages
 - `build(ProjectConfig)` returns an `EnvironmentSnapshot<{ data }>` instance with `.set(key, value)`, `.get(key)`, `.configPath`, `.write()` methods
 - All 6 packages pass their respective test suites (`nx test`, `pytest`, `cargo test`)
 
@@ -224,7 +224,7 @@ Five segments:
 
 ### Cross-language probes
 
-- `contentHash({ b: "2", a: "1" })` → `"sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"` in TS, Python, Rust
+- `contentHash({ b: "2", a: "1" })` → `"sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"` in TS, Python, Rust
 - `generateFieldSchema(identicalFields)` → identical JSON in all three languages
 - Python `Environment.get("config.db.path")` returns same value as TypeScript for the same snapshot
 

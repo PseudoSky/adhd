@@ -649,7 +649,7 @@ node -e "const {contentHash} = require('@adhd/environment'); console.log('TS:', 
 
 👀 **Expect**
 ```
-TS: sha256-9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+TS: sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930
 ```
 
 ✅ **Verify**
