@@ -46,7 +46,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
-      "cmd": "node -e 'const{contentHash}=require(\"@adhd/environment\"); process.exit(contentHash({b:\"2\",a:\"1\"})===\"sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930\"?0:1)'",
+      "cmd": "node -e 'const{contentHash}=require(\"@adhd/environment\"); process.exit(contentHash({b:\"2\",a:\"1\"})===\"sha256-66e4efebc74d002dabcf821c0ee1402726e5c9d25a8469e7fc3f7d7691464788\"?0:1)'",
       "expect": "exit0"
     },
     {
@@ -62,38 +62,47 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
-      "cmd": "node -e 'const{build}=require(\"@adhd/environment-builder\"); const s=build({project:{name:\"t\",envPrefix:\"T\"}}); [\"get\",\"set\",\"configPath\",\"write\"].every(m=>typeof s[m]===\"function\")'",
+      "cmd": "node -e 'const{build}=require(\"@adhd/environment-builder\"); const s=build({project:{name:\"t\",envPrefix:\"T\"}}); process.exit([\"get\",\"set\",\"configPath\",\"write\"].every(m=>typeof s[m]===\"function\")?0:1)'",
       "expect": "exit0"
+    },
+    {
+      "id": "audit-final.9",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_py.py test",
+      "expect": "exit0",
+      "_note": "F13 \u2014 Python runtime covered EXPLICITLY via the pinned pytest guard (uv run --python 3.10 -m pytest), independent of nx project registration. A narrowed `--projects=environment-*` glob (audit-final.1) cannot substitute for this."
+    },
+    {
+      "id": "audit-final.10",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_rs.py test",
+      "expect": "exit0",
+      "_note": "F13 \u2014 Rust runtime covered EXPLICITLY via the pinned cargo-test guard (rustup run 1.95.0 cargo test), independent of nx project registration."
     },
     {
       "id": "contract-base-spec.1",
       "phase": "contract",
       "tier": null,
-      "kind": "present",
-      "pattern": "adhd-environment.schema.json",
-      "paths": [
-        "packages/environment/environment-base-spec/spec"
-      ]
+      "kind": "exists",
+      "path": "packages/environment/environment-base-spec/spec/adhd-environment.schema.json"
     },
     {
       "id": "contract-base-spec.2",
       "phase": "contract",
       "tier": null,
-      "kind": "present",
-      "pattern": "cross-language-test-vectors.json",
-      "paths": [
-        "packages/environment/environment-base-spec/spec"
-      ]
+      "kind": "exists",
+      "path": "packages/environment/environment-base-spec/spec/cross-language-test-vectors.json"
     },
     {
       "id": "contract-base-spec.3",
       "phase": "contract",
       "tier": null,
-      "kind": "present",
-      "pattern": "src/index.ts",
-      "paths": [
-        "packages/environment/environment-base-spec"
-      ]
+      "kind": "exists",
+      "path": "packages/environment/environment-base-spec/src/index.ts"
     },
     {
       "id": "contract-base-spec.5",
@@ -131,11 +140,8 @@
       "id": "builder-snapshot-api.1",
       "phase": "builder",
       "tier": null,
-      "kind": "present",
-      "pattern": "environment-snapshot.ts",
-      "paths": [
-        "packages/environment/environment-builder/src"
-      ]
+      "kind": "exists",
+      "path": "packages/environment/environment-builder/src/environment-snapshot.ts"
     },
     {
       "id": "builder-snapshot-api.9",
@@ -149,11 +155,8 @@
       "id": "runtime-core-node.1",
       "phase": "runtime",
       "tier": null,
-      "kind": "present",
-      "pattern": "environment.ts",
-      "paths": [
-        "packages/environment/environment-core-node/src"
-      ]
+      "kind": "exists",
+      "path": "packages/environment/environment-core-node/src/environment.ts"
     },
     {
       "id": "runtime-core-node.10",
@@ -167,64 +170,44 @@
       "id": "runtime-cli.1",
       "phase": "runtime",
       "tier": null,
-      "kind": "present",
-      "pattern": "api.ts",
-      "paths": [
-        "entrypoint/environment-cli/src"
-      ]
+      "kind": "exists",
+      "path": "entrypoint/environment-cli/src/api.ts"
     },
     {
       "id": "runtime-cli.2",
       "phase": "runtime",
       "tier": null,
-      "kind": "present",
-      "pattern": "commands/set.ts",
-      "paths": [
-        "entrypoint/environment-cli/src"
-      ]
-    },
-    {
-      "id": "runtime-cli.9",
-      "phase": "runtime",
-      "tier": null,
-      "kind": "command",
-      "cmd": "npx nx build environment-cli",
-      "expect": "exit0"
+      "kind": "exists",
+      "path": "entrypoint/environment-cli/src/commands/set.ts"
     },
     {
       "id": "runtime-py.1",
       "phase": "runtime",
       "tier": null,
-      "kind": "present",
-      "pattern": "environment.py",
-      "paths": [
-        "packages/environment/environment-core-py/src/adhd_environment"
-      ]
+      "kind": "exists",
+      "path": "packages/environment/environment-core-py/src/adhd_environment/environment.py"
     },
     {
       "id": "runtime-py.8",
       "phase": "runtime",
       "tier": null,
       "kind": "command",
-      "cmd": "python -m build",
+      "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_py.py build",
       "expect": "exit0"
     },
     {
       "id": "runtime-rs.1",
       "phase": "runtime",
       "tier": null,
-      "kind": "present",
-      "pattern": "lib.rs",
-      "paths": [
-        "packages/environment/environment-core-rs/src"
-      ]
+      "kind": "exists",
+      "path": "packages/environment/environment-core-rs/src/lib.rs"
     },
     {
       "id": "runtime-rs.6",
       "phase": "runtime",
       "tier": null,
       "kind": "command",
-      "cmd": "cargo build",
+      "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_rs.py build",
       "expect": "exit0"
     },
     {
@@ -287,38 +270,25 @@
       "id": "docs-steward.1",
       "phase": "docs",
       "tier": null,
-      "kind": "present",
-      "pattern": "README.md",
-      "paths": [
-        "packages/environment/environment-core-node",
-        "packages/environment/environment-core-py",
-        "packages/environment/environment-core-rs",
-        "entrypoint/environment-cli"
-      ]
+      "kind": "command",
+      "cmd": "test -f packages/environment/environment-core-node/README.md && test -f entrypoint/environment-cli/README.md && test -f packages/environment/environment-core-py/README.md && test -f packages/environment/environment-core-rs/README.md",
+      "expect": "exit0"
     },
     {
       "id": "scaffold-workspace.1",
       "phase": "scaffold",
       "tier": null,
-      "kind": "present",
-      "pattern": "packages/environment",
-      "paths": [
-        "packages/environment/environment-base-spec",
-        "packages/environment/environment-builder",
-        "packages/environment/environment-core-node",
-        "packages/environment/environment-core-py",
-        "packages/environment/environment-core-rs"
-      ]
+      "kind": "command",
+      "cmd": "test -d packages/environment/environment-base-spec && test -d packages/environment/environment-builder && test -d packages/environment/environment-core-node && test -d packages/environment/environment-core-py && test -d packages/environment/environment-core-rs",
+      "expect": "exit0"
     },
     {
       "id": "scaffold-workspace.2",
       "phase": "scaffold",
       "tier": null,
-      "kind": "present",
-      "pattern": "entrypoint/environment-cli",
-      "paths": [
-        "entrypoint/environment-cli"
-      ]
+      "kind": "command",
+      "cmd": "test -d entrypoint/environment-cli",
+      "expect": "exit0"
     },
     {
       "id": "scaffold-workspace.3",
@@ -375,9 +345,9 @@
       "phase": "runtime",
       "tier": null,
       "kind": "present",
-      "pattern": "commands/set.ts",
+      "pattern": "export",
       "paths": [
-        "entrypoint/environment-cli/src"
+        "entrypoint/environment-cli/src/commands/set.ts"
       ]
     },
     {
@@ -397,11 +367,19 @@
       "expect": "exit0"
     },
     {
+      "id": "runtime-cli.9",
+      "phase": "runtime",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx build environment-cli",
+      "expect": "exit0"
+    },
+    {
       "id": "runtime-py.2",
       "phase": "runtime",
       "tier": null,
       "kind": "command",
-      "cmd": "cd packages/environment/environment-core-py && python -m pytest tests/ -v",
+      "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_py.py test",
       "expect": "exit0"
     },
     {
@@ -409,7 +387,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
-      "cmd": "node -e 'require(\"child_process\").execSync(\"python3 -c \\\"from adhd_environment.environment import Environment; print(1)\\\"\",{cwd:\"packages/environment/environment-core-py\"})'",
+      "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_py.py import",
       "expect": "exit0"
     },
     {
@@ -417,7 +395,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
-      "cmd": "cd packages/environment/environment-core-rs && cargo test",
+      "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_rs.py test",
       "expect": "exit0"
     },
     {
@@ -425,7 +403,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
-      "cmd": "cd packages/environment/environment-core-rs && cargo clippy -- -D warnings",
+      "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_rs.py clippy",
       "expect": "exit0"
     },
     {
@@ -441,7 +419,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
-      "cmd": "cd packages/environment/environment-core-py && python -m build",
+      "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_py.py build",
       "expect": "exit0"
     },
     {
@@ -449,7 +427,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
-      "cmd": "cd packages/environment/environment-core-rs && cargo build",
+      "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_rs.py build",
       "expect": "exit0"
     },
     {

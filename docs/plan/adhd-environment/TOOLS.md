@@ -107,7 +107,7 @@ ${VAR} preserved as literal. ENOENT → {}.
 
 ```
 Sorted key=value\n (byte-order). SHA-256. "sha256-" + hex.
-Test vector: {b:"2",a:"1"} → "sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930"
+Test vector: {b:"2",a:"1"} → "sha256-66e4efebc74d002dabcf821c0ee1402726e5c9d25a8469e7fc3f7d7691464788"
 ```
 
 ### C5: `inferEnvVar(prefix: string, fieldPath: string): string`

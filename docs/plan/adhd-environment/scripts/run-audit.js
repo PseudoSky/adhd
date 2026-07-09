@@ -56,6 +56,32 @@ export function vendorStamp(scriptsDir) {
 /** The stamp for THIS runner instance (resolved from its own directory). */
 export const VENDOR_STAMP = vendorStamp(path.dirname(new URL(import.meta.url).pathname));
 
+// ── location anchoring (F12) ────────────────────────────────────────────────────
+// The runner MUST resolve its criteria file and execute its checks INDEPENDENTLY of
+// the invoker's cwd. `criteria.json` lives next to this script; every check `cmd` is
+// repo-root-relative (e.g. `cd packages/…`, `npx nx build …`). So we anchor two
+// paths off the script's own location, never `process.cwd()`:
+//   SCRIPT_DIR — where criteria.json sits (…​/docs/plan/<slug>/scripts).
+//   REPO_ROOT  — the nx workspace root; the cwd for EVERY check (grep + command).
+// This makes `node scripts/run-audit.js …` behave identically from the repo root
+// and from the plan dir (both fail modes in F12 defect (b)).
+export const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname);
+
+/** Walk up from `startDir` to the nearest nx workspace root (nx.json marker). */
+function findRepoRoot(startDir) {
+  let dir = startDir;
+  for (let i = 0; i < 16; i += 1) {
+    if (fs.existsSync(path.join(dir, "nx.json"))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  // Deterministic fallback: scripts → <slug> → plan → docs → repo root.
+  return path.resolve(startDir, "..", "..", "..", "..");
+}
+
+export const REPO_ROOT = findRepoRoot(SCRIPT_DIR);
+
 // ── inlined criteria model (mirror of scripts/lib/criteria.js) ─────────────────
 
 const KINDS = ["absent", "present", "exists", "command", "negative-control", "custom"];
@@ -118,7 +144,8 @@ function validateCriteriaDoc(doc) {
   return { schema_version: doc.schema_version ?? 1, criteria };
 }
 
-function phaseOrder(criteria) {
+/** The distinct phases declared by the criteria, in first-seen order. */
+function declaredPhases(criteria) {
   const order = [];
   const seen = new Set();
   for (const c of criteria) {
@@ -131,19 +158,41 @@ function phaseOrder(criteria) {
   return order;
 }
 
-function accumulatedPhases(criteria, phase) {
-  const order = phaseOrder(criteria);
-  if (phase === undefined || phase === null || phase === "") return new Set(order);
-  const idx = order.indexOf(phase);
-  if (idx === -1) {
-    throw new Error(`criteria: --phase "${phase}" is not a declared phase (have: ${order.join(", ") || "<none>"})`);
+/**
+ * EXACT phase selection (F12 defect (a)).
+ *
+ * `--phase X`      → ONLY criteria whose `phase === X`.
+ * `--phase X,Y,Z`  → the UNION of the named phases (each an exact match) — this is
+ *                    how the composite audit guards scope themselves (e.g. the
+ *                    builder gate runs `contract,builder`). It is a set membership
+ *                    test, never file-order accumulation.
+ * `--phase ""`/absent → every criterion (the whole-plan audit).
+ *
+ * The prior implementation derived an ordered phase list from FILE ORDER and then
+ * accumulated every phase at-or-before the target. Because the `audit` criteria are
+ * written first in criteria.json, EVERY `--phase` value silently dragged in the 12
+ * whole-system `audit` checks (`--phase contract` ran `audit-final.*`). Exact
+ * membership removes that laundering entirely.
+ */
+function selectCriteria(criteria, phaseSpec) {
+  if (phaseSpec === undefined || phaseSpec === null || phaseSpec === "") {
+    return criteria.slice();
   }
-  return new Set(order.slice(0, idx + 1));
-}
-
-function selectCriteria(criteria, phase) {
-  const phases = accumulatedPhases(criteria, phase);
-  return criteria.filter((c) => c.phase == null || phases.has(c.phase));
+  const declared = new Set(declaredPhases(criteria));
+  const wanted = String(phaseSpec)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const p of wanted) {
+    if (!declared.has(p)) {
+      throw new Error(
+        `criteria: --phase "${p}" is not a declared phase (have: ${[...declared].join(", ") || "<none>"})`,
+      );
+    }
+  }
+  const wset = new Set(wanted);
+  // EXACT: a criterion is selected iff its own phase is one of the requested phases.
+  return criteria.filter((c) => c.phase != null && wset.has(c.phase));
 }
 
 // ── per-kind execution ─────────────────────────────────────────────────────────
@@ -243,13 +292,79 @@ function argValue(args, flag) {
   return i >= 0 && i + 1 < args.length ? args[i + 1] : null;
 }
 
-function resolveCriteriaFile(args, cwd) {
+function resolveCriteriaFile(args) {
   const explicit = argValue(args, "--criteria");
-  if (explicit) return path.isAbsolute(explicit) ? explicit : path.join(cwd, explicit);
-  for (const cand of [path.join(cwd, "scripts", "criteria.json"), path.join(cwd, "criteria.json")]) {
+  if (explicit) return path.isAbsolute(explicit) ? explicit : path.join(REPO_ROOT, explicit);
+  // SCRIPT-DIR anchored (F12 defect (b)): criteria.json sits next to this script, so
+  // resolution does NOT depend on the invoker's cwd. REPO_ROOT fallbacks preserve the
+  // legacy lookup shape for any out-of-tree copy.
+  const cands = [
+    path.join(SCRIPT_DIR, "criteria.json"),
+    path.join(SCRIPT_DIR, "scripts", "criteria.json"),
+    path.join(REPO_ROOT, "scripts", "criteria.json"),
+    path.join(REPO_ROOT, "criteria.json"),
+  ];
+  for (const cand of cands) {
     if (fs.existsSync(cand)) return cand;
   }
   return null;
+}
+
+/**
+ * --self-test (F12): prove the selection contract without spawning any check.
+ * Asserts, purely against the criteria model:
+ *   1. `--phase X` selects ONLY criteria whose phase is exactly X (per declared phase);
+ *   2. absent `--phase` selects every criterion;
+ *   3. `--phase X,Y` selects exactly the union of X and Y (no unrelated phase leaks);
+ *   4. criteria.json resolves from the SCRIPT DIR (so the result is cwd-independent).
+ * Because resolution is script-anchored, the verdict is identical whether invoked
+ * from the repo root or the plan dir. Exit == number of failed assertions.
+ */
+function runSelfTest() {
+  const criteriaFile = resolveCriteriaFile([]);
+  const lines = [];
+  let failures = 0;
+  const fail = (l) => {
+    failures += 1;
+    lines.push(l);
+  };
+  if (!criteriaFile) {
+    process.stdout.write("[self-test.criteria-file] FAIL (no criteria.json resolved from script dir)\n");
+    process.exit(1);
+  }
+  lines.push(`[self-test.criteria-file] PASS (${criteriaFile})`);
+  const doc = JSON.parse(fs.readFileSync(criteriaFile, "utf8"));
+  const { criteria } = validateCriteriaDoc(doc);
+  const phases = declaredPhases(criteria);
+
+  for (const p of phases) {
+    const sel = selectCriteria(criteria, p);
+    const expected = criteria.filter((c) => c.phase === p).length;
+    const onlyThisPhase = sel.every((c) => c.phase === p);
+    const ok = onlyThisPhase && sel.length === expected && expected > 0;
+    if (ok) lines.push(`[self-test.phase-${p}] PASS (n=${sel.length}, only-phase=${onlyThisPhase})`);
+    else fail(`[self-test.phase-${p}] FAIL (selected ${sel.length}, expected ${expected}, only-phase=${onlyThisPhase})`);
+  }
+
+  const all = selectCriteria(criteria, "");
+  if (all.length === criteria.length) lines.push(`[self-test.all-phases] PASS (n=${all.length})`);
+  else fail(`[self-test.all-phases] FAIL (${all.length}/${criteria.length})`);
+
+  if (phases.length >= 2) {
+    const combo = [phases[0], phases[1]];
+    const sel = selectCriteria(criteria, combo.join(","));
+    const expected = criteria.filter((c) => combo.includes(c.phase)).length;
+    const onlyCombo = sel.every((c) => combo.includes(c.phase));
+    const ok = onlyCombo && sel.length === expected;
+    if (ok) lines.push(`[self-test.multi-${combo.join("+")}] PASS (n=${sel.length})`);
+    else fail(`[self-test.multi-${combo.join("+")}] FAIL (selected ${sel.length}, expected ${expected}, only-combo=${onlyCombo})`);
+  }
+
+  for (const l of lines) process.stdout.write(`${l}\n`);
+  process.stdout.write(
+    `self-test: ${failures === 0 ? "OK" : `${failures} FAILED`} — repo_root=${REPO_ROOT}, phases=[${phases.join(", ")}]\n`,
+  );
+  return failures;
 }
 
 /**
@@ -280,18 +395,24 @@ export function runCriteria(doc, { phase, cwd }) {
 
 function main() {
   const args = process.argv.slice(2);
-  const cwd = process.cwd();
+  // Checks are ALWAYS executed at the repo root (F12 defect (b)) — never the
+  // invoker's cwd — because every criterion `cmd` is repo-root-relative.
+  const cwd = REPO_ROOT;
 
   // Self-report the vendor stamp (used by gap-check / tooling, never gates).
   if (args.includes("--print-stamp")) {
     process.stdout.write(`${JSON.stringify(VENDOR_STAMP)}\n`);
     process.exit(0);
   }
+  // Self-test the phase-selection contract (F12) — no checks spawned.
+  if (args.includes("--self-test")) {
+    process.exit(runSelfTest());
+  }
   // --phase passthrough: an empty value means "all phases" (SPEC §4.3 pt 2).
   // argValue returns null when the flag is absent → treat as all phases too.
   const phaseRaw = args.includes("--phase") ? (argValue(args, "--phase") ?? "") : "";
 
-  const criteriaFile = resolveCriteriaFile(args, cwd);
+  const criteriaFile = resolveCriteriaFile(args);
   if (!criteriaFile) {
     // FAIL-CLOSED: no criteria file at all is the apigen pass=0/0 class.
     process.stdout.write("[audit.no-criteria] FAIL\n");

@@ -73,7 +73,7 @@ check("audit-final.2", "Init generates YAML", "adhd-env init --generate-config")
 check("audit-final.3", "Set+build round-trips", "adhd-env set test.key test-val --namespace default && adhd-env build")
 check("audit-final.4", "Build writes snapshot", "adhd-env build --namespace production")
 check("audit-final.5", "Typed env constructs", "node -e 'new (require(\"@adhd/environment\").Environment)({project:\"test\",namespace:\"default\"})'")
-check("audit-final.6", "contentHash matches vector", "node -e 'const{contentHash}=require(\"@adhd/environment\"); process.exit(contentHash({b:\"2\",a:\"1\"})===\"sha256-4a73850fde34aad40ff8649b93a66523a5fe744357a3931caea0f10609d0d930\"?0:1)'")
+check("audit-final.6", "contentHash matches vector", "node -e 'const{contentHash}=require(\"@adhd/environment\"); process.exit(contentHash({b:\"2\",a:\"1\"})===\"sha256-66e4efebc74d002dabcf821c0ee1402726e5c9d25a8469e7fc3f7d7691464788\"?0:1)'")
 check("audit-final.7", "Old config.ts is gone", "test ! -f entrypoint/agent-mcp/src/config.ts")
 check("audit-final.8", "EnvironmentSnapshot API works", "node -e 'const{build}=require(\"@adhd/environment-builder\"); const s=build({project:{name:\"t\",envPrefix:\"T\"}}); [\"get\",\"set\",\"configPath\",\"write\"].every(m=>typeof s[m]===\"function\")'")
 

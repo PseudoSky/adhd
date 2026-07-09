@@ -1,22 +1,30 @@
 #!/usr/bin/env python3
-"""guard_runtime_py.py — environment-pinned guard for the `runtime-py` state.
+"""guard_runtime_py.py — environment-pinned guard for the Python runtime.
 
-Replaces the bare, ambient-PATH guard `python -m build`. On this machine a bare
-`python`/`python3` resolves to miniconda base (3.13.11), so the original guard's
+Replaces bare, ambient-PATH `python -m build` / `python -m pytest`. On this
+machine a bare `python`/`python3` resolves to miniconda base (3.13.11), so the
 toolchain was nondeterministic between the executor's shell and a clean
-subprocess (see BACKLOG ENV-PLAN-002 / ENV-PLAN-005).
+subprocess (see BACKLOG ENV-PLAN-002 / ENV-PLAN-005). This guard resolves an
+EXPLICIT, pinned interpreter via `uv` (>=0.11.7) and runs against
+`requires-python = ">=3.10"`, matching the package's declared floor. It FAILS
+LOUDLY (non-zero + stderr) when `uv` is absent — never a silent skip.
 
-This guard resolves an EXPLICIT, pinned interpreter via `uv` (0.11.7) and builds
-the `environment-core-py` distribution with `uv run --python 3.10 -m build`,
-matching the package's declared `requires-python = ">=3.10"`. It FAILS LOUDLY
-(non-zero exit + stderr) when `uv` is absent — never a silent skip.
+Modes (positional arg; default `build` so the pre-existing no-arg dag guard for
+the `runtime-py` state is byte-for-byte unchanged):
+    build   uv run --python 3.10 -m build                  (dist builds)
+    test    uv run --python 3.10 -m pytest tests/ -q        (F13 pinned pytest)
+    import  uv run --python 3.10 python -c "<import smoke>" (F8 pinned import)
 
-Contract: RED (non-zero) until `runtime-py` implements the package
-(`src/adhd_environment/{__init__,environment}.py`) and it builds cleanly; GREEN
-(zero) afterwards. Being a repo-owned `python3 …​.py` invocation, the guard STRING
-is recognised as environment-pinned by the plan-state-machine env-pin heuristic.
+Every leg resolves its interpreter through the pinned uv toolchain, so this
+guard is INDEPENDENTLY pinned wherever it is invoked (a dag guard string OR a
+criteria.json `cmd`). It is the sanctioned replacement for any bare
+`python`/`pytest`/`build` leg an audit gate would otherwise launder past the
+substring-based env-pin heuristic (F8). Being a repo-owned `python3 …​.py`
+invocation, its guard STRING is recognised as environment-pinned.
+
+Contract: RED (non-zero) until the runtime is implemented and the requested
+verb passes; GREEN (zero) afterwards.
 """
-import os
 import shutil
 import subprocess
 import sys
@@ -26,6 +34,19 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[4]
 PKG_DIR = REPO_ROOT / "packages" / "environment" / "environment-core-py"
 PIN_PYTHON = "3.10"
+
+IMPORT_SMOKE = (
+    "import sys; sys.path.insert(0, 'src'); "
+    "from adhd_environment.environment import Environment; "
+    "print('import-ok', Environment.__name__)"
+)
+
+# mode -> argv appended after `uv run --python <PIN_PYTHON>`
+MODES = {
+    "build": ["-m", "build"],
+    "test": ["-m", "pytest", "tests/", "-q"],
+    "import": ["python", "-c", IMPORT_SMOKE],
+}
 
 
 def resolve_uv() -> str:
@@ -42,18 +63,23 @@ def resolve_uv() -> str:
 
 
 def main() -> int:
+    mode = sys.argv[1] if len(sys.argv) > 1 else "build"
+    if mode not in MODES:
+        sys.stderr.write(
+            f"guard_runtime_py: FATAL — unknown mode {mode!r} (want one of: {', '.join(MODES)})\n"
+        )
+        return 2
     if not PKG_DIR.is_dir():
         sys.stderr.write(f"guard_runtime_py: FATAL — package dir missing: {PKG_DIR}\n")
         return 2
     uv = resolve_uv()
-    cmd = [uv, "run", "--python", PIN_PYTHON, "-m", "build"]
-    sys.stderr.write(f"guard_runtime_py: running {' '.join(cmd)} in {PKG_DIR}\n")
+    cmd = [uv, "run", "--python", PIN_PYTHON, *MODES[mode]]
+    sys.stderr.write(f"guard_runtime_py[{mode}]: running {' '.join(cmd)} in {PKG_DIR}\n")
     proc = subprocess.run(cmd, cwd=str(PKG_DIR))
     if proc.returncode != 0:
         sys.stderr.write(
-            f"guard_runtime_py: RED — `uv run --python {PIN_PYTHON} -m build` "
-            f"exited {proc.returncode}. The environment-core-py distribution does "
-            "not build yet.\n"
+            f"guard_runtime_py[{mode}]: RED — exited {proc.returncode}. The "
+            "environment-core-py runtime does not satisfy this verb yet.\n"
         )
     return proc.returncode
 
