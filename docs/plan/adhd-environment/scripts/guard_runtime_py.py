@@ -11,7 +11,7 @@ LOUDLY (non-zero + stderr) when `uv` is absent — never a silent skip.
 
 Modes (positional arg; default `build` so the pre-existing no-arg dag guard for
 the `runtime-py` state is byte-for-byte unchanged):
-    build   uv run --python 3.10 -m build                  (dist builds)
+    build   uv build --python 3.10                        (dist builds; native uv frontend)
     test    uv run --python 3.10 -m pytest tests/ -q        (F13 pinned pytest)
     import  uv run --python 3.10 python -c "<import smoke>" (F8 pinned import)
 
@@ -41,11 +41,15 @@ IMPORT_SMOKE = (
     "print('import-ok', Environment.__name__)"
 )
 
-# mode -> argv appended after `uv run --python <PIN_PYTHON>`
+# mode -> FULL argv appended after `uv`.
+# `build` uses uv's NATIVE `uv build` frontend, NOT `uv run -m build`: the latter
+# requires the `build` package to be resolvable in the ephemeral env (it is not a
+# project dependency) and fails `No module named build` in a cold uv environment
+# (BUG-ENV-PY-001). `uv build` needs no such dependency and emits the same dist/.
 MODES = {
-    "build": ["-m", "build"],
-    "test": ["-m", "pytest", "tests/", "-q"],
-    "import": ["python", "-c", IMPORT_SMOKE],
+    "build": ["build", "--python", PIN_PYTHON],
+    "test": ["run", "--python", PIN_PYTHON, "-m", "pytest", "tests/", "-q"],
+    "import": ["run", "--python", PIN_PYTHON, "python", "-c", IMPORT_SMOKE],
 }
 
 
@@ -73,7 +77,7 @@ def main() -> int:
         sys.stderr.write(f"guard_runtime_py: FATAL — package dir missing: {PKG_DIR}\n")
         return 2
     uv = resolve_uv()
-    cmd = [uv, "run", "--python", PIN_PYTHON, *MODES[mode]]
+    cmd = [uv, *MODES[mode]]
     sys.stderr.write(f"guard_runtime_py[{mode}]: running {' '.join(cmd)} in {PKG_DIR}\n")
     proc = subprocess.run(cmd, cwd=str(PKG_DIR))
     if proc.returncode != 0:

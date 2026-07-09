@@ -1096,6 +1096,7 @@ Because these surface through `dependsOn` chains (`test → ^build → lint`), t
 
 
 ### BUG-ENV-PY-001 — `environment-core-py:build` fails: `No module named build` in the package `.venv`
+- **FIXED (2026-07-09):** `nx-run.sh` and `guard_runtime_py.py` now use uv's native `uv build --python 3.10` instead of `uv run --python 3.10 -m build`. The old form needed the `build` package resolvable in the ephemeral env (it was never a project dep) and failed `No module named build` in a cold uv environment. Verified: `nx build environment-core-py` exit 0 (builds sdist + wheel); all 3 guard modes exit 0.
 **Discovered:** 2026-07-09, same verification sweep. `nx run environment-core-py:build` runs `python -m build` but the package's `.venv` has no `build` module installed, so the build aborts (`/…/environment-core-py/.venv/bin/python: No module named build`).
 **Impact on the stash-merge:** NONE — merge touched zero Python/environment files (`git diff HEAD` empty for `packages/environment`).
 **Fix direction:** provision the `build` (PEP 517) module in the managed venv during the project's setup/bootstrap target so `python -m build` resolves.
