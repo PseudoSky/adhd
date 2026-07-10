@@ -9,12 +9,16 @@
 A composing agent can now read the full registry vocabulary over MCP. The 11
 discovery (read) tools from SPEC §6 are registered and serve real data over the
 actual registry/tool/provider/policy stores via the `registry-bridge`:
-`component_search` (semantic), `component_read`, `component_consumers`,
+`component_search` (hybrid FTS5+vector), `component_read`, `component_consumers`,
 `prompt_types_list`, `tool_list`, `model_list`, `policy_list`, `usecase_list`,
-`agent_read`, `agent_list`, and `agent_compile`. `component_search` resolves
-`query → use-cases → components` through the enrichment embedding and returns
-cheap, auto-ranked summaries (not full bodies) — a query semantically matching a
-seeded component ranks it above an unrelated one. Every result is `name`-keyed
+`agent_read`, `agent_list`, and `agent_compile`. `component_search` runs **real
+hybrid retrieval** (D6): an FTS5 keyword `textScore` (BM25 `MATCH` over component
+content) **fused** with a vector `vecScore` (`@adhd/sox-vector-store` `knn` over the
+enrichment embedding) via `@adhd/sox-hybrid-search`'s pure `normalize()` + `fuse()`,
+returning cheap, auto-ranked summaries (not full bodies). The quality bar is a
+**golden-set nDCG@5 ≥ 0.70 over a corpus salted with hard negatives** (the BEST
+component ranks at/near position 1) — NOT the old 1-vs-1 "a match beats one unrelated
+item" sanity check. Every result is `name`-keyed
 with no `slug` on the wire. Critically, all 11 land OUTSIDE the runtime delegation
 surface (`inv:11-tool-hot-path`): a delegated sub-agent still sees exactly the 11
 runtime tools and 0 discovery tools. Before this state the registry was reachable
@@ -44,13 +48,15 @@ discovery call cheap and within budget regardless of corpus size.
 - [discovery-tools.1] all 11 discovery tools return name-keyed results over the real registry stores
 
 - [discovery-tools.2] agent_list/component_search/*_list are bounded by default: a store seeded N>>limit (e.g. 60) returns <=limit summary-projected items with NO full systemPrompt/body inline and total output under a KB-scale ceiling; full body only via agent_read/component_read/full:true (BUG-003)
+
+- [discovery-tools.3] component_search retrieval QUALITY is proven by a golden-set nDCG@5>=0.70 over a corpus salted with hard negatives (distractors sharing query vocabulary but not the answer): ~15-30 graded-relevance tasks over an N>>k component corpus (reuse the >=60-item corpus from discovery-tools.2 where practical); the hybrid FTS5+vector ranker (fuse() of textScore+vecScore) scores nDCG@5>=0.70 (MRR reported alongside); NEGATIVE CONTROL WITH TEETH — reverting to a shuffled/insertion-order ranker drops nDCG below the floor and FAILS the test (proving a green nDCG means the BEST components are returned, not merely match>noise). Golden set + corpus are a fixture this state produces.
 ---
 
 ## Reservations
 
 ```text
 read_only:  []
-mutates:    ["entrypoint/agent-mcp/src/tools/discovery.ts", "entrypoint/agent-mcp/src/server.ts", "entrypoint/agent-mcp/src/__tests__/discovery-tools.test.ts", "entrypoint/agent-mcp/src/__tests__/discovery-bounded-output.test.ts"]
+mutates:    ["entrypoint/agent-mcp/src/tools/discovery.ts", "entrypoint/agent-mcp/src/server.ts", "entrypoint/agent-mcp/src/__tests__/discovery-tools.test.ts", "entrypoint/agent-mcp/src/__tests__/discovery-bounded-output.test.ts", "entrypoint/agent-mcp/src/__tests__/component-search-ndcg.test.ts", "entrypoint/agent-mcp/src/__tests__/fixtures/component-search-golden.json"]
 ```
 
 ---
@@ -65,19 +71,40 @@ mutates:    ["entrypoint/agent-mcp/src/tools/discovery.ts", "entrypoint/agent-mc
 - **Route everything through the `registry-bridge`, not the stores directly**, so
   `name↔slug` translation and the outbound slug-strip happen for free. A tool that
   imports a store and returns a raw row will leak a `slug` and fail the dod.4 scan.
-- **`component_search` is semantic, not substring.** It must embed the query and
-  rank via cosine against use-case anchors → components (the same embedding that
-  filed each component), returning summaries + scores. A negative control that
-  swaps the ranker for insertion-order must flip the "match ranks above unrelated"
-  assertion red.
-- **Retrieval backend (decisions.md §D6 — DECIDED, not open).** Use raw
-  `@adhd/sox-vector-store` `knn()` (returns bare `{id, score}`) joined back to the
-  registry component row (`ComponentStore`, keyed by the same rowid) for the
-  renderable `name + type + summary + score` projection. `@adhd/sox-hybrid-search`
-  (FTS5 keyword channel + `NodeRecord` fields) is **DEFERRED** — adopting it would
-  add `@adhd/sox-graph-store` to the publish set (3→4) and a `drizzle-orm` version
-  skew, for a benefit (`dod.2`) that pure cosine already satisfies. Do NOT adopt
-  hybrid-search here; the keyword channel is logged in BACKLOG for a later plan.
+- **`component_search` is HYBRID (FTS5 keyword + vector), not substring, not
+  vector-only.** It must compute BOTH channels and fuse them: (1) `textScore` — a
+  BM25 `MATCH` over the registry's own FTS5 virtual table on component content; (2)
+  `vecScore` — `@adhd/sox-vector-store` `knn()` over the enrichment embedding (the
+  same embedding that filed each component). Both channels key on the
+  `registry_component_versions.version_id` integer surrogate. Fuse via
+  `@adhd/sox-hybrid-search`'s pure `normalize()` + `fuse()` (normalize-before-combine;
+  degrades to a single channel when one is absent). Join the fused top-`limit` ids
+  back to the component row for the `name + type + summary + score` projection.
+  **Fusion is MULTIPLICATIVE** — a strong single signal can outrank a mixed pair, so
+  ranking quality MUST be measured (nDCG), never assumed.
+- **Retrieval backend (decisions.md §D6 — DECIDED: ADOPT hybrid, Option B).** Consume
+  `@adhd/sox-hybrid-search`'s pure fusion; the registry implements the channels over
+  its OWN store (FTS5 + `@adhd/sox-vector-store`). Do NOT wire `SqliteSearchBackend`
+  (it needs a `GraphBackend`, and graph-store's `node.kind` CHECK constraint —
+  `episode|entity|claim|community|session` — structurally forbids storing a registry
+  "component" as a node; Option A was rejected for exactly this). `@adhd/sox-graph-store`
+  is installed transitively (a hard hybrid-search dep, so it must be published) but its
+  runtime is NEVER loaded under Option B — you import only `fuse`/`normalize` from
+  hybrid-search plus `knn` from vector-store. The publish set is now **5**.
+- **Retrieval QUALITY is proven by a golden set (discovery-tools.3 / dod.2), with
+  TEETH.** Author `entrypoint/agent-mcp/src/__tests__/fixtures/component-search-golden.json`:
+  ~15–30 realistic tasks, each with graded relevance judgments over a component corpus
+  SALTED WITH HARD NEGATIVES (distractors sharing the query's vocabulary/topic but not
+  the answer — e.g. task "refresh an expired OAuth token" → relevant:[oauth-refresh,
+  token-store], distractors:[oauth-login, jwt-verify, api-key-rotate]). The corpus is
+  N≫k (reuse the ≥60-item corpus from discovery-tools.2 where practical). Assert
+  **nDCG@5 ≥ 0.70** (primary; report MRR alongside) in
+  `component-search-ndcg.test.ts`, driving the REAL `component_search` tool over the
+  bridge + real store — no mocks. **Negative control with teeth:** swap the fused
+  ranker for a shuffled/insertion-order ranker and the SAME test must go RED (nDCG
+  below the floor). Per repo §6.2 prove the teeth by actually running the shuffled
+  variant and confirming the failure — a grep that the token `nDCG` appears is not
+  proof the assertion bites.
 - **`agent_compile` consumes Plan 6** (`compileAgent` + the `composed_prompts`
   cache); it reports `cache: HIT|MISS`. Those Plan-6 deliverables are
   `assumed_baseline` and must be built before this state goes green.
