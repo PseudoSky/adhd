@@ -98,7 +98,9 @@
         "entrypoint/agent-mcp/src/tools/discovery.ts",
         "entrypoint/agent-mcp/src/server.ts",
         "entrypoint/agent-mcp/src/__tests__/discovery-tools.test.ts",
-        "entrypoint/agent-mcp/src/__tests__/discovery-bounded-output.test.ts"
+        "entrypoint/agent-mcp/src/__tests__/discovery-bounded-output.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/component-search-ndcg.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/fixtures/component-search-golden.json"
       ],
       "context": "contexts/discovery-tools.md",
       "notes": ""
@@ -237,8 +239,8 @@
   },
   "authored_with": {
     "plugin": "workflow",
-    "version": "0.8.23",
-    "hash": "1e4130a84aed"
+    "version": "0.8.25",
+    "hash": "961c3053dfab"
   },
   "goal": "An orchestrating agent composes a NEW agent from registry components over MCP only — prompt_types_list → component_search (auto-ranked) → component_read → tool_list/model_list/policy_list → agent_define/component_define (declarative idempotent upserts with auto-enrichment) → agent → task — without reading any agent file or store internals, while the 11-tool runtime hot path and agent-mcp byte-back-out guarantee both hold.",
   "depends_on_plans": [
