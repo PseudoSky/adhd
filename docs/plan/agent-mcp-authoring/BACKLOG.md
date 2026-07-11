@@ -188,3 +188,106 @@ All now recorded in `embedding-substrate.md`:
 
 ### SOX-DOC-004 — `embedding-provider`: `FastEmbedPoolConfig.batchSizes` doc says "overrides the default 32"
 - Actual `DEFAULT_BATCH_SIZE = 256` (`fastembed.ts:100`, confirmed at runtime). `FastEmbedPoolConfig` is itself unused by the factory.
+
+
+---
+
+## Architect specs — agent-mcp-authoring audit items (2026-07-11)
+
+Scope: `AMA-001`…`AMA-021`, `BUG-ORCH-001`, `BUG-ORCH-002`, `BUILD-ANY-001`, `BUILD-ANY-002`,
+`SEC-001`, `SEC-002`, `ENV-SEC-001`, `ENV-SEC-002`, `ENV-SEC-003`. Every ID above was
+triaged; only two are genuinely OPEN and spec-worthy (the credential leaks). All AMA-*
+items, including the two (`AMA-016`, `AMA-017`) whose BACKLOG.md status line still reads
+"OPEN", were independently re-verified against the live plan files
+(`docs/plan/agent-mcp-authoring/{dag,scripts/criteria}.json`, `contexts/_shared.md`,
+`human-blockers.json`) and found already remediated — see Regression guards below.
+
+---
+
+### Spec: ENV-SEC-001 (dup: SEC-001) — FontAwesome Pro npm `_authToken` hardcoded and pushed to a PUBLIC repo
+
+**Status.** Open (CRITICAL). **Owner action required: yes — token rotation is a human action** (fontawesome.com account access); no code change can substitute for it.
+
+**Problem.** A live-shaped FontAwesome Pro npm `_authToken` was committed as a literal value (not `${VAR}`) to `.github/scripts/setup-npmrc.sh`, executed by two CI workflows. The credential reached `origin/main` of `github.com/PseudoSky/adhd`, a **PUBLIC** repository, and — per the second correction in `BACKLOG.md` — is served in the file's content on the default branch's current tip today (the local fix commit was never pushed, 226 commits ahead of `origin/main` at time of discovery). Must be treated as harvested.
+
+**Evidence.** `BACKLOG.md` §ENV-SEC-001 (lines 853–861) and §"SEC-001 — SECOND CORRECTION" (lines 1047–1082); `.github/scripts/setup-npmrc.sh:6` (historical, now fixed in the local working tree — verified by `Read`, file now reads `: "${FONTAWESOME_TOKEN:?…}"` with no literal). Introduced `18d980b3`, still present at `faaddc56` (on `origin/main`), fix commit `48ab824f` (local-only, unpushed at audit time). No secret value is reproduced here.
+
+**Remediation design.**
+1. **Rotate/revoke at the provider now.** fontawesome.com → Account → Tokens → revoke the exposed token, issue a new one. This is the only step that closes the exposure — deleting the line from git does not un-expose a value already fetched by anyone who cloned the public repo.
+2. **Invalidate the old one** as part of step 1 (revocation and issuance are typically the same action at FontAwesome).
+3. **History scrubbing — recommendation: not required, optional hygiene.** The repo is public and the secret has been publicly readable since 2026-05-15 (`18d980b3`); rotation alone makes the exposed value worthless going forward, which is what actually stops the risk. A `git filter-repo --replace-text` + force-push rewrites every SHA in a repo other agents and worktrees are actively using, forces every clone to re-clone, and buys no additional safety once rotation has happened — the value is already public and assumed harvested regardless of whether it stays in history. Recommend: **rotate now, defer/skip history rewrite** unless there is an external audit/compliance requirement to prove the string is gone (in which case do it only after rotation, coordinated as a scheduled maintenance event).
+4. **Prevention — already landed and confirmed in place:** the working tree now reads `FONTAWESOME_TOKEN` from env behind a `: "${FONTAWESOME_TOKEN:?...}"` guard (`setup-npmrc.sh:18`) with `umask 077` on the written `.npmrc`; a native `adhd-npmrc-auth-token` gitleaks rule was added (`.gitleaks.toml:30`) and a matching `npmrc-auth-token` JS rule exists in `.githooks/check-no-credentials.js:121`. The pre-commit hook (`--staged`) blocks a re-introduction in any new commit; the `secret-scan` CI job (`.github/workflows/pull-request.yml:14-54`, gitleaks pinned to `8.30.1` with a checked-in sha256, `SECRET_SCAN_REQUIRE_GITLEAKS=1` hard-fails if the scanner can't run) blocks it again on every PR via `--range base head`. **Coverage caveat verified by reading the workflow:** the CI job runs `--range`, i.e. it scans only the PR's new commits — it does NOT re-scan full history on every run, so it would not itself have caught this leak retroactively; that requires a manual `--all` pass (already run once for this audit). This is correct and sufficient as an ongoing prevention mechanism; it is not a substitute for the one-time `--all` sweep already performed.
+
+**Acceptance criteria.**
+- FontAwesome dashboard shows the old token state = revoked, and a new token exists, before the next scheduled CI run that consumes `FONTAWESOME_TOKEN`.
+- `FONTAWESOME_TOKEN` is set as a GitHub Actions repo secret; `setup-npmrc.sh` run in CI succeeds with it set and fails loudly (`:?` guard) with it unset — prove both by running `.github/workflows/publish-embed-cdn.yml` and `build-docker.yml` once each post-rotation.
+- Negative control: stage a file containing a synthetic FontAwesome-shaped token literal (`//npm.fontawesome.com/:_authToken=<36-char-uuid-shape>`, not the real value) and confirm `node .githooks/check-no-credentials.js --staged` exits non-zero, rejecting the commit.
+- `git push` of the local `48ab824f` fix (or an equivalent commit) to `origin/main`, then re-verify `git show origin/main:.github/scripts/setup-npmrc.sh` no longer contains a literal token — closes the "served at the tip" exposure independent of history rewrite.
+- `gitleaks git --config .gitleaks.toml --all` re-run post-rotation still finds the historical hits (expected — rotation doesn't remove history) but the finding is now informational, not actionable.
+
+**Effort / risk.** Rotation: minutes, human-only, zero code risk. Pushing the already-written fix: trivial, low risk (single-line diff, already verified locally). History rewrite (if elected later): high coordination cost (force-push, every clone/worktree must re-clone, breaks any open PRs referencing old SHAs) — correctly deferred.
+
+---
+
+### Spec: ENV-SEC-002 (dup: SEC-002) — `nxCloudAccessToken` committed to `nx.json`, read-write scope
+
+**Status.** Open (CRITICAL). **Owner action required: yes — token rotation is a human action** (nx.app dashboard access); no code change can substitute for it.
+
+**Problem.** An Nx Cloud access token with **read-write** scope (confirmed by decoding the token's base64 trailing segment: `|read-write`) was committed to `nx.json` from the repository's very first commit (`87aac2a3`, 2024-05-04) and remained on `origin/main` for **765 days** before removal (`ce425400`, 2026-06-08). A write-scoped cache token lets an attacker poison remote-cache build artifacts served to every developer and CI run that trusts the cache — a supply-chain risk, not just a read leak. Repo is PUBLIC.
+
+**Evidence.** `BACKLOG.md` §ENV-SEC-002 (lines 863–868) and §"SEC-002 — Nx Cloud token: authoritative timeline" (lines 1017–1045). Value confirmed byte-identical (SHA-256 match) across `87aac2a3`, `a41c2acf`, `51fb123a~1`, `faaddc56`, `ce425400~1` — one credential, the whole exposure window. Note: an earlier claimed removal (`51fb123a`) never actually reached `main` (`git merge-base --is-ancestor 51fb123a HEAD` = false) — verifying removal against local `HEAD`/working tree instead of the *pushed* branch produced a false "fixed" read once already; do not repeat that mistake when confirming this rotation. `nx.json` in the current working tree has zero occurrences (verified via `grep -n "nxCloudAccessToken" nx.json` → no match).
+
+**Remediation design.**
+1. **Rotate/revoke at the provider now.** nx.app → workspace → Access Tokens → revoke the exposed read-write token, issue a new one scoped as narrowly as the workflow allows (read-only if write access isn't actually needed by CI).
+2. **Invalidate the old one** as part of revocation.
+3. **History scrubbing — same recommendation as ENV-SEC-001: optional, not required.** `origin/main`'s current tip is already clean (the value was fully removed from the branch by `ce425400`); only historical commits carry it. Because the value is already public (765 days exposed) and CI no longer references Nx Cloud at all per `ce425400`'s message ("remove all nx cloud references"), rotation fully closes the risk without needing a rewrite. Recommend: **rotate, then optionally batch this scrub together with the ENV-SEC-001 history rewrite if one is ever elected** (single force-push event, don't do two separate ones).
+4. **Prevention — already landed and confirmed in place:** a native `nx-cloud-access-token` rule exists in `.githooks/check-no-credentials.js:127`, enforced by the same pre-commit hook + `secret-scan` CI job described under ENV-SEC-001 (`.github/workflows/pull-request.yml`). Same `--range`-only coverage caveat applies (new commits only; the one-time `--all` sweep already found this).
+
+**Acceptance criteria.**
+- Nx Cloud dashboard shows the old token revoked and a replacement issued (or confirms Nx Cloud remains fully disabled per `ce425400`, in which case "rotation" = confirming no live token exists anywhere reachable, and documenting that CI does not need one).
+- Confirm no unexpected cache writes occurred during the exposure window (nx.app audit log, if retained) — document the check even if the log has since rolled off.
+- `nx.json` in the working tree and on `origin/main` both remain free of `nxCloudAccessToken` (already true — verify it stays true post-rotation, since rotation itself should never require re-adding the value to a tracked file; use `NX_CLOUD_ACCESS_TOKEN` env var only).
+- Negative control: stage an `nx.json` edit adding a synthetic `"nxCloudAccessToken": "<64-char-base64-shape>"` value and confirm `node .githooks/check-no-credentials.js --staged` exits non-zero.
+- `gitleaks git --config .gitleaks.toml --all` re-run post-rotation still finds the two historical introduction commits (expected, informational only).
+
+**Effort / risk.** Rotation: minutes, human-only, zero code risk (the working tree already doesn't use the token — `ce425400` disabled Nx Cloud entirely, so there's no downstream config to update). History rewrite: same deferred-hygiene tradeoff as ENV-SEC-001; batch the two if ever done.
+
+---
+
+### Note on ENV-SEC-003 (INFO, no full spec — not open in the actionable sense)
+
+`ENV-SEC-003` documents 2 gitleaks findings confirmed as false positives: an OAuth **client id**
+(`packages/ai/agent-mcp/src/providers/anthropic.ts` — a public identifier by design, not a
+secret) and a `curl` doc example with no credential (`packages/ai/agent-mcp/INSTALL.md`). Both
+paths (`packages/ai/agent-mcp/...`) no longer exist post-rename, and both patterns are already
+allowlisted in `.gitleaks.toml:87` (`OAUTH_CLIENT_ID\s*=\s*["'][0-9a-f-]{36}["']`) — verified by
+`Read`. No remediation action required; this closes the "6 further gitleaks findings" tail of
+SEC-002 alongside the two real credentials above (3 of the 6 were duplicate/history-only hits on
+the same two real secrets, already covered by the specs above; the remaining 2 are these
+allowlisted false positives — 2 + 1 dup mentioned in SEC-002's own accounting + 3 covered = 6).
+
+---
+
+### Regression guards (FIXED items)
+
+- **AMA-001** (`type:'hash'` provider doesn't exist) — guarded by `embedding-substrate.1` test (`nx test agent-store-prompts --testFile=embedding-substrate.test.ts`) plus sox-side smoke test confirming `type:'hash'` still throws `ResolutionError`; plan repaired to `type:'fastembed'`.
+- **AMA-002** (`extractiveSummary` not exported) — guarded by `enrichment-pipeline.2` + `.2.tooth` (pattern `ingest|summary|100|trim` in `enrichment-pipeline.test.ts`, `scripts/criteria.json:101-118`); plan repointed to `ingest()`/`@adhd/sox-memory-core`.
+- **AMA-003** (async factory declared sync) — guarded by `nx build agent-store-prompts` (a `Promise<EmbeddingProvider>` mismatch fails type-check); `embedding-substrate.1` exit0.
+- **AMA-004** (no resolvable npm path for sox packages) — guarded by `human-blockers.json:sox-package-publish` verification, now using dynamic `import()` (ESM-correct) instead of `require()`; 3 of 5 packages independently confirmed published+installable via fresh-dir probe (2026-07-09).
+- **AMA-005** (`sox-ingest` falsely documented `private:false`) — resolved upstream, commit `f4897aa`; guarded by the same `sox-package-publish` verification's `private === false` check.
+- **AMA-006** (self-contradicting publish-status prose) — corrected in `contexts/embedding-substrate.md` during post-repair pass; guarded by `gap-check` (0 gaps).
+- **AMA-007** (wrong relative path to sox-ecosystem) — corrected in D5/`_shared.md`; guarded by `env-pin-check --strict` (all 13 pinned, post-repair pass).
+- **AMA-008** (unsatisfiable `require()`-based verification) — fixed alongside AMA-004 (dynamic `import()`); guarded by `integrity-check` (clean, post-repair pass).
+- **AMA-009** (plan unaware of `sox-hybrid-search` et al.) — `_shared.md` table now lists 5 required packages incl. `sox-hybrid-search`/`sox-graph-store` (verified by `Read`, lines 40-50); guarded by `gap-check` (0 gaps).
+- **AMA-010** (platform:shared purity concern) — downgraded to a prose-only fix once `agent-store-prompts` was confirmed already tagged `platform:node` (`project.json`); no re-tag needed.
+- **AMA-011** (4 criteria had no audit check) — guarded by `gap-check` PASSED 0 gaps (post-repair verification, 2026-07-08).
+- **AMA-012** (stale `run-audit.js` vendor stamp) — re-vendored to `workflow@0.8.25+961c3053dfab`; guarded by the stamp check itself.
+- **AMA-013** (13 states unrated, no tier) — confirmed fixed by direct read of `dag.json`: `versioning` node now carries `"model":"haiku","effort":"easy"`.
+- **AMA-014** (plan targeted deleted `packages/ai/agent-registry`) — confirmed fixed by direct read of `_shared.md:6-15` (package-identity correction block) and `scripts/criteria.json` (guards now target `agent-store-prompts` / `packages/agent/agent-store-prompts/...`).
+- **AMA-015** (stale `_shared.md` env invariants: wrong workflow pin, dead worktree path) — confirmed fixed by direct read: `_shared.md:156-160` now pins `workflow/0.8.25` and points `.mcp.json` at `dist/entrypoint/agent-mcp/src/index.js`.
+- **AMA-016** (`versioning` guard was a no-op / already-green criterion) — confirmed fixed by direct read of `dag.json`: guard now AND-chains `nx build` + `CHANGELOG.md` existence + a `2.0.0` heading + a `systemPrompt` mention, and `versioning.1.tooth` (`scripts/criteria.json:192-201`) additionally requires the permanent-compat-shim promise text. Verified genuinely RED today (`entrypoint/agent-mcp/CHANGELOG.md` does not yet exist). *(BACKLOG.md's own status line still reads "OPEN" — stale; the fix is live in `dag.json`/`criteria.json`.)*
+- **AMA-017** (3 identical-`cmd` criteria per state, no discrimination) — confirmed fixed by direct read of `scripts/criteria.json`: `embedding-substrate.2/.3`, `enrichment-pipeline.2/.3`, and `component-define.2` each now have a paired `.tooth`/`.tool` criterion with a distinct grep pattern (lines 61-91, 109-139, 236-245), with explicit `(AMA-017)` provenance notes. *(BACKLOG.md's own status line still reads "OPEN" — stale; the fix is live in `criteria.json`.)*
+- **AMA-018 / AMA-019 / AMA-020 / AMA-021** (fastembed described from interface, not implementation — `FileSystemModelCache`, eager warmup/timeouts, `isDeterministic` contract, ignored `role`/no-op `warmUp`/L2-norm/chunking) — all four documented as FIXED directly in `contexts/embedding-substrate.md`/`_shared.md`/`decisions.md`; guarded by `gap-check`, `env-pin-check --strict`, `integrity-check`, and a 6/6 architecture audit re-run.
+- **BUG-ORCH-001** (`TS2451` redeclare broke `agent-engine-orchestrator`/`agent-mcp` build) — guarded by `nx build agent-engine-orchestrator` + `nx build agent-mcp` (both exit 0) and `nx test agent-engine-orchestrator` (49/49 at time of fix).
+- **BUG-ORCH-002** (poisoned MCP client-cache on failed connect, no retry) — guarded by `src/__tests__/registry-connect-retry.test.ts`, a real-component test (no mocks of the unit under test) with a proven negative control (reverting the `.catch` eviction turns the retry assertion red); `nx test agent-engine-orchestrator` 53/53.
+- **BUILD-ANY-001 / BUILD-ANY-002** (`any`→`unknown` sweep broke 5 builds) — fully closed via `BUG-LINT-ANY-002`'s completion pass; guarded by `nx build`/`nx test`/`nx lint` exit 0 across all five affected packages (`data-base-transforms` 104/104, `data-query-engine` 37/37, `data-core-structures` 1/1), with no `any` reintroduced (narrowing/generics only).
