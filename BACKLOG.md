@@ -2,6 +2,31 @@
 
 ## Bugs
 
+### BUG-AGENTMCP-001 — the built `dist` agent-mcp server cannot resolve its own `@adhd/*` workspace deps at runtime (`.mcp.json`'s dev entry is dead)
+**Discovered:** 2026-07-11, while registering agent-mcp as a global (user-scope) Claude Code MCP server.
+**Symptom:** running the dev entry from `.mcp.json` (`node dist/entrypoint/agent-mcp/src/index.js`, the `agent-mcp` server) exits immediately:
+```
+Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@adhd/agent-store-runtime'
+  imported from <repo>/dist/entrypoint/agent-mcp/src/index.js
+```
+Reproduced with a real MCP stdio handshake (initialize + tools/list) — the process dies before emitting any JSON-RPC, so the host sees a server that never connects.
+**Root cause:** `@adhd/*` specifiers are resolved **only by tsconfig `paths` at build time**. At runtime Node does ordinary `node_modules` resolution and finds nothing: root `package.json` declares **no `workspaces` field** (packageManager is `yarn@4.5.3`), so `node_modules/@adhd/` exists but is **empty** — no workspace links were ever created. `@nx/js:tsc` emits the bare `@adhd/…` imports verbatim into `dist/` and generates no package.json with resolvable deps, so every built entrypoint that imports a workspace package is affected — not just agent-mcp.
+**Consequences:** the `agent-mcp` entry in `.mcp.json` has presumably never worked; only `agent-mcp-published` (`npx -y @adhd/agent-mcp@latest`, deps resolved from the npm registry) does. Any check that imports the source or runs through vite/vitest (both honor tsconfig paths) passes while the shipped artifact is broken — exactly the bypass CLAUDE.md §6 warns about.
+**Fix direction (in order of preference):**
+1. Add a `workspaces` field to root `package.json` so the package manager links `@adhd/*` into `node_modules/` (most standard; fixes every entrypoint at once).
+2. Enable `generatePackageJson` on the `@nx/js:tsc` build targets so `dist/entrypoint/agent-mcp/package.json` carries resolvable deps.
+3. A `dist/node_modules/@adhd/<name> -> ../../packages/<group>/<name>` link step in the build (contained, but a workaround).
+
+**Do NOT** "fix" this by having a test import the built server's functions directly — that reaches inside the server instead of calling it like a host, and would keep the real defect green.
+**Status:** OPEN.
+
+### BUG-AGENTMCP-002 — stale `dist/` trees from a pre-move layout shadow current packages with duplicate `@adhd/*` names
+**Discovered:** 2026-07-11, while mapping `@adhd/*` name → `dist/` output path to work around `BUG-AGENTMCP-001`.
+**Symptom:** `dist/packages/ai/*`, `dist/packages/shared/*`, and `dist/packages/node-tools/*` are leftover build outputs from an older directory layout that no longer exists in source. They carry **duplicate package names** against the live `dist/packages/agent/*` outputs — e.g. `@adhd/agent-mcp` resolves to both `dist/entrypoint/agent-mcp` and `dist/packages/ai/agent-mcp`; `@adhd/agent-mcp-types` to both `dist/packages/ai/…` and `dist/packages/shared/…`; `@adhd/agent-mcp-budget` to both `dist/packages/ai/…` and `dist/packages/node-tools/…`.
+**Impact:** benign today (nothing resolves by scanning `dist/`), but it makes any name-keyed dist resolution — including fix option (3) of `BUG-AGENTMCP-001` — ambiguous and non-deterministic, and makes `dist/` misleading to read. Any link map must be derived from the **source** tree (`packages/*/*/package.json` → `dist/<projectRoot>`), never by globbing `dist/`.
+**Fix direction:** `npx nx reset` + a clean full build, then confirm the stale group dirs do not reappear (they should not — no source project maps to them). Deliberately **not** deleted at discovery time: removing directories is destructive and requires human approval per CLAUDE.md.
+**Status:** OPEN.
+
 ### BUG-APIGEN-016 — `apigen serve` / conformance test harness leaks orphaned flask/grpc server processes
 **Discovered:** 2026-07-03, while dispatching the doc-agent pipeline at `entrypoint/apigen-cli` (the agent's CLI "prove-it" ran `apigen serve`, which hung; investigating found the leak).
 **Status:** FIXED (2026-07-04). `serve.ts` now registers `process.on('uncaughtException')` and `process.on('unhandledRejection')` handlers that call `onSignal(SIGTERM)` to kill all children before re-throwing. `spawn()` calls use `detached: false` (same process group). New regression test proves orphan-free teardown on SIGTERM. SIGKILL remains an OS-level invariant that no Node code can circumvent.
