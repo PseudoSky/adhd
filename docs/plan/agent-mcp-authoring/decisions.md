@@ -199,7 +199,7 @@ Rationale + proven supply mechanics (2026-07-08):
   transitive publish risk:
   - `@adhd/sox-embedding-provider@0.1.0` (deps: `@huggingface/transformers`, `fastembed`)
   - `@adhd/sox-vector-store@0.1.0` (deps: `@lancedb/lancedb`, `apache-arrow`, `better-sqlite3`, `sqlite-vec`, `synckit`)
-  - `@adhd/sox-ingest@0.1.0` — consume the **`/core`** subpath (`node:crypto` only, dependency-free); the root barrel `.` pulls `web-tree-sitter`+`tree-sitter-wasms` via `AstChunker`, which `/core` avoids. Now `private:false` + owner-sanctioned as of commit `f4897aa` (was the ONLY one gated on sign-off; that gate is cleared).
+  - `@adhd/sox-ingest@0.1.0` — consume the **`/core`** subpath (`node:crypto` only at RUNTIME; the 55 MB tree-sitter deps are still INSTALLED — see BACKLOG SOX-DEP-001); the root barrel `.` pulls `web-tree-sitter`+`tree-sitter-wasms` via `AstChunker`, which `/core` avoids. Now `private:false` + owner-sanctioned as of commit `f4897aa` (was the ONLY one gated on sign-off; that gate is cleared).
 - **`@adhd/sox-analysis` and `@adhd/sox-memory-core` are NOT required** and are
   deliberately excluded (D-summary calls `ingest()` directly; analysis would drag
   `@adhd/sox-graph-store` along). See `_shared.md` and BACKLOG SOX-PKG-001.
@@ -248,32 +248,164 @@ confirm `@adhd/sox-ingest/core` resolves before that state starts.
 
 ---
 
-## D6. `component_search` retrieval backend — defer `@adhd/sox-hybrid-search` `[def:component-search-backend]`
+## D6. `component_search` retrieval backend — ADOPT `@adhd/sox-hybrid-search` (FTS5 keyword + vector fusion) `[def:component-search-backend]`
 
-**Decision: `component_search` uses raw `@adhd/sox-vector-store` `knn()` joined back
-to the registry component row for renderable fields; `@adhd/sox-hybrid-search` is
-DEFERRED (BACKLOG), not adopted now.**
+> ## ⟲ FLIP (2026-07-11, owner directive) — Option B → **Option A**. Supersedes the Option-B decision recorded below.
+>
+> **Directive.** "We should not be designing around things." The `@adhd/sox-*` data
+> packages (`embedding-provider`, `vector-store`, `ingest`, `graph-store`,
+> `hybrid-search`) were **built for this project** — to stand up a hybrid FTS5+vector
+> prompt-component registry. Standing up a *parallel* FTS5 inside the registry (Option B)
+> to avoid graph-store's memory-domain `kind` gate is exactly the "design-around" this
+> directive forbids, and it violates this repo's own "reuse packages, don't recreate"
+> rule (CLAUDE.md §8.1). Recorded upstream as sox-ecosystem **BL-304**.
+>
+> **Decision.** `component_search` **reuses sox's FTS5 directly**: components are written
+> as `@adhd/sox-graph-store` `node`s (`kind:'component'`), so graph-store's `fts_node`
+> triggers index them (BM25 text channel); `@adhd/sox-vector-store` supplies the vector
+> channel; and `@adhd/sox-hybrid-search`'s `SqliteSearchBackend(vec, graph).search()`
+> fuses them (`fuse()`/`normalize()`, degrade-to-single-signal). No bespoke
+> `component_fts`. The golden-set **nDCG@5 ≥ 0.70 over hard negatives** bar is unchanged.
+>
+> **Re-adjudication of the three "Why B over A" rejections recorded below:**
+> 1. **`node.kind` CHECK "structurally forbids components" (was decisive) — DISSOLVED.**
+>    graph-store is ours and was built for this use case; the fix is to make `kind`
+>    extensible (constructor-provided allowlist, default = the memory kinds; the registry
+>    passes `'component'`) — sox-ecosystem **BL-295**. This is the intended completion of
+>    the package, not a schema fork or a misused kind. Safe for the live memory system:
+>    `memory-core` creates its own `node` table with its own CHECK, so graph-store's
+>    `CREATE TABLE IF NOT EXISTS` no-ops there — relaxing graph-store's DDL only loosens
+>    tables graph-store itself creates (e.g. the registry's fresh, greenfield DB).
+> 2. **Double-storage / drift of component bodies — ACCEPTED tradeoff (this one is real).**
+>    Option A indexes each component's searchable projection (name/summary/content, keyed
+>    to the `version_id` integer surrogate) as a graph-store node; graph-store's triggers
+>    then auto-maintain `fts_node`. That is a second write path vs. the canonical
+>    `registry_component_versions` row — a genuine sync surface. Accepted as the price of
+>    reuse-over-fork and bounded by: (a) `component_define`/`component_delete` is the
+>    **single write choke point**, (b) a parity test asserting every live component
+>    version has exactly one graph-store node and vice-versa, (c) graph-store owning the
+>    FTS maintenance (triggers) so we never hand-sync the index. Note Option B was **not**
+>    free of duplication either — it copies component content into its own FTS5 index; the
+>    Option-A delta is one trigger-maintained node row.
+> 3. **`drizzle-orm` version skew becomes a RUNTIME concern — DISSOLVED.** graph-store
+>    declares `drizzle-orm@^0.42.0` but **does not use it** (no `src` reference;
+>    sox-ecosystem **BL-303**) — the store is raw SQL over `better-sqlite3`. So there is no
+>    drizzle-coupled runtime path to execute under Option A; the `0.42`-vs-registry-`0.45`
+>    skew is an install-tree fact only, identical to Option B. (Confirm BL-303 during the
+>    graph-store fix.)
+>
+> **New dependency (blocking `discovery-tools` + the publish).** graph-store must SHIP the
+> enabling fixes before the registry can wire `SqliteSearchBackend`:
+> **BL-295** (extensible `kind`), **BL-293** (`createGraphBackend` applies schema or fails
+> loudly — no silent `no such table: node`), **BL-294** (surface a degrade signal so a
+> filter/namespace miss can't silently collapse fusion to vector-only), **BL-303** (prune
+> the unused drizzle dep). These are folded into `human-blockers.json:sox-package-publish`
+> — `@adhd/sox-graph-store@0.1.0` and `@adhd/sox-hybrid-search@0.1.0` must publish **with**
+> these fixes, green across graph-store's consumers (memory-core, analysis, hybrid-search).
+>
+> **Downstream reconciliation (this flip touches, and must stay consistent with):**
+> `contexts/discovery-tools.md` (component_define writes a `kind:'component'` node;
+> component_search calls `SqliteSearchBackend`, not a bespoke `component_fts`),
+> `scripts/criteria.json` + `scripts/audit_authoring.py` (the `discovery-tools` teeth now
+> drive the real sox FTS5 path + the parity test), `contexts/_shared.md` (D6 summary),
+> `human-blockers.json` (graph-store-fix precondition above), `README.md`. `state.json`
+> is NOT touched (no state has executed; `schema_version` stays 2).
 
-Rationale:
+---
 
-- The DoD (`dod.2`) requires only that a semantically-matching component ranks above
-  an unrelated one — **pure cosine `knn()` satisfies that**. `knn()` returns bare
-  `{ id, score }`, but the registry already owns the component row keyed by that same
-  rowid (`ComponentStore`), so a `rowid → row` join yields `name + type + summary +
-  score` for the bounded summary projection (`discovery-tools.2` / BUG-003) **without**
-  importing hybrid-search or mirroring the corpus into a sox `NodeRecord`/FTS5 schema.
-- **Adopting `@adhd/sox-hybrid-search` now costs more than it returns here:** it would
-  add exactly ONE extra package to the publish set (`@adhd/sox-graph-store`, since
-  hybrid-search deps = embedding-provider + graph-store + vector-store), turning the
-  3-package blocker into 4, AND `@adhd/sox-graph-store` pins `drizzle-orm@^0.42.0`
-  while `@adhd/agent-store-prompts` is on `drizzle-orm@0.45.2` — a version skew to
-  reconcile. Its benefit (an FTS5 keyword channel + `normalize`-before-`fuse`
-  ranking over native `NodeRecord` fields) is real but not DoD-required, and would
-  require filing components into hybrid-search's own node schema.
-- **Deferred, with a written home:** the FTS5 keyword channel is a genuine future
-  enhancement for `component_search` and is logged in BACKLOG for a later plan. If a
-  future requirement needs keyword+vector fusion, revisit this decision and accept
-  the 3→4 publish cost + the drizzle reconciliation.
+### (SUPERSEDED 2026-07-11 by the FLIP above) Original D6 decision — Option B follows for history:
+
+
+**Decision (2026-07-10, owner — FLIPS the earlier defer): `component_search` uses
+REAL hybrid retrieval — FTS5 keyword `textScore` + vector `vecScore` fused by
+`@adhd/sox-hybrid-search` — via integration Option B (own the channels, consume the
+fusion). Pure cosine `knn()` alone is NOT adopted.**
+
+**Why the earlier defer died.** The defer was justified solely by "pure cosine
+`knn()` already satisfies `dod.2`" — where `dod.2`'s bar was the weak 1-vs-1 sanity
+check ("a match ranks above AN unrelated one"). That bar is replaced (see the DoD
+rewrite): `dod.2` now demands a **golden-set nDCG@5 ≥ 0.70 over a corpus salted with
+hard negatives** (distractors that share query vocabulary but are not the answer).
+Raw kNN under-ranks a component whose *body* contains the literal query term (e.g.
+"OAuth") but whose *summary* uses other words — the semantic channel alone dilutes
+the exact-term signal, and nDCG@5 ≥ 0.70 over hard negatives is not reliably
+reachable on kNN alone. The keyword channel is now load-bearing, so hybrid-search is
+adopted now, not deferred.
+
+**Integration shape — Option B (own the channels, consume the fusion) — CHOSEN,
+verified against the real `@adhd/agent-store-prompts` store schema.**
+
+Verified facts (read 2026-07-10):
+- `@adhd/sox-hybrid-search` exports the **pure** `fuse()`, `normalize()`,
+  `fuseWithBreakdown()` (each takes `{ id, textScore?, vecScore? }[]`, `id:number`),
+  plus the `SearchBackend` interface, `SqliteSearchBackend`, and
+  `search(backend, query, opts)` (`hybrid-search/src/index.ts` — confirmed).
+  `normalize()` supports `min_max | L2 | z_score`; `fuse()`/`search()` normalize
+  each channel BEFORE combining and **degrade to a single signal** when the other is
+  absent (never errors on a missing channel — the package invariant).
+- `SqliteSearchBackend`'s constructor **requires `(vec: VectorBackend, graph:
+  GraphBackend, opts?)`** — its FTS5 text channel is `@adhd/sox-graph-store`'s
+  `searchNodes` + FTS5 triggers over `NodeRecord`s.
+- `@adhd/sox-graph-store` is a hard dependency of the hybrid-search package, so it is
+  installed (and must be PUBLISHED) **whichever option is chosen**.
+- The registry store (`packages/agent/agent-store-prompts/src/store/component-store.ts`)
+  is `better-sqlite3` + `drizzle-orm@0.45.2` with a head/version split:
+  `registry_components` (slug PK) + `registry_component_versions` (**`version_id`
+  integer surrogate PK**, per-slug content). That integer `version_id` is the natural
+  numeric key for both the vector-store space and an FTS5 virtual table.
+
+Option B: **the registry implements the `SearchBackend` interface over its OWN
+store** — an FTS5 virtual table (`component_fts`) over component `content`/summary
+for `textScore` via `MATCH bm25`, `@adhd/sox-vector-store` `knn()` for `vecScore`,
+both keyed on the `version_id` integer surrogate — and calls hybrid-search's pure
+`normalize()` + `fuse()` to combine them. `component_search` then returns
+`fuse(candidates).slice(0, limit)` joined back to the component row for the bounded
+`name + type + summary + score` projection (`discovery-tools.2` / BUG-003). This is
+REAL FTS5 + vector fusion and still "consume the hard part" (normalize-before-fuse,
+degrade-to-single-signal are hybrid-search's, not re-implemented).
+
+**Why B over A (consume `SqliteSearchBackend` wholesale) — recorded rejection.**
+Option A would register each component's name/summary/body as `@adhd/sox-graph-store`
+`NodeRecord`s (FTS5 auto-maintained by the store's triggers), keyed to the component
+rowid, and call `SqliteSearchBackend(vec, graph).search(query)`. Rejected — the first
+reason is decisive, and was proven by driving the installed tarballs (coordinator
+evidence, 2026-07-10):
+1. **graph-store's schema STRUCTURALLY forbids components (decisive).**
+   `@adhd/sox-graph-store`'s `node.kind` column carries `CHECK (kind IN
+   ('episode','entity','claim','community','session'))` — memory-domain kinds only. A
+   registry "component" is none of them, so Option A can only shoehorn components in
+   by misusing an unrelated kind or forking graph-store's schema. Option B never
+   touches graph-store's node model: the registry adds its OWN FTS5 virtual table over
+   its OWN `registry_component_versions` table. (Executor footguns Option A also
+   carries, recorded for completeness: `createGraphBackend(db)` does not apply the
+   schema — you get `no such table: node` until a separate `applySchema()`; and
+   `SqliteSearchBackend`'s text channel is filter/namespace-sensitive — a mismatched
+   `query.filters` makes the FTS channel silently contribute nothing and the fusion
+   collapses to vector-only with no signal.)
+2. **Double-storage of component bodies.** The registry already owns the canonical
+   component text in `registry_component_versions`; Option A mirrors every body into
+   a parallel graph-store node table that must be kept in sync on every
+   `component_define`/`component_delete` — a second write path and a drift surface.
+   Option B's FTS5 virtual table indexes the existing content in place (an additive
+   migration on the store the registry already owns), no mirror.
+3. **`drizzle-orm` version skew becomes a RUNTIME concern.** `@adhd/sox-graph-store`
+   pins `drizzle-orm@^0.42.0` (`>=0.42 <0.43`), which the registry's `0.45.2` does
+   NOT satisfy, so node resolution installs a second nested `drizzle-orm@0.42.x`.
+   Under Option A the registry **executes** graph-store's drizzle-coupled code paths
+   (two live drizzle majors in one process); under Option B graph-store is installed
+   only transitively (via the hybrid-search dep) and **its runtime is never loaded** —
+   we consume only hybrid-search's pure `fuse()`/`normalize()` + `@adhd/sox-vector-store` —
+   so the skew stays a pure install-tree fact, never a runtime one.
+
+Both options publish the same 5-package set (graph-store rides in transitively either
+way — it must be published so hybrid-search resolves); B is preferred purely for
+schema-fit/storage/coupling, not publish count. Fusion is MULTIPLICATIVE (a strong
+single signal can beat a mixed pair), so the ranking MUST be measured by the golden-set
+nDCG proof (`dod.2` / `discovery-tools.3`), never assumed from "hybrid is on."
+
+**Invariants preserved.** `component_search` output stays name-keyed with no `slug`
+on the wire (`[inv:no-slug-on-wire]`); the fused result is still the bounded
+summary-projection (`discovery-tools.2`), never full bodies inline.
 
 ---
 
