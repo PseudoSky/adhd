@@ -33,5 +33,8 @@
   "homepage": "https://github.com/PseudoSky/adhd/tree/main/entrypoint/agent-mcp#readme",
   "bugs": {
     "url": "https://github.com/PseudoSky/adhd/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
