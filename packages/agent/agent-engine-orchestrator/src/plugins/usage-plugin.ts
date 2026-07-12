@@ -124,6 +124,11 @@ export class UsagePlugin implements Plugin {
           maxTokens: acc?.maxTokens ?? null,
           cacheReadTokens: tokenUsage?.cacheReadTokens ?? null,
           cacheCreationTokens: tokenUsage?.cacheCreationTokens ?? null,
+          uncachedInputTokens: tokenUsage?.uncachedInputTokens ?? null,
+          reasoningTokens: tokenUsage?.reasoningTokens ?? null,
+          // First call for this task: its input IS the peak so far.
+          peakContextTokens: inputTokens,
+          peakContextAt: 1,
           createdAt: nowIso(),
         })
         .onConflictDoUpdate({
@@ -140,6 +145,22 @@ export class UsagePlugin implements Plugin {
             cacheCreationTokens: sql`COALESCE(${
               taskUsageTable.cacheCreationTokens
             }, 0) + ${tokenUsage?.cacheCreationTokens ?? 0}`,
+            uncachedInputTokens: sql`COALESCE(${
+              taskUsageTable.uncachedInputTokens
+            }, 0) + ${tokenUsage?.uncachedInputTokens ?? 0}`,
+            reasoningTokens: sql`COALESCE(${
+              taskUsageTable.reasoningTokens
+            }, 0) + ${tokenUsage?.reasoningTokens ?? 0}`,
+            // PEAK, not sum. Every other column here accumulates; this one must not —
+            // conflating cumulative-billed with peak-context is what made a 715K run look
+            // like a 715K context when the real high-water mark was 43K (FINDING-ORCH-007).
+            peakContextTokens: sql`MAX(COALESCE(${
+              taskUsageTable.peakContextTokens
+            }, 0), ${inputTokens})`,
+            // Record WHICH call peaked, but only when this call is the new peak.
+            peakContextAt: sql`CASE WHEN ${inputTokens} > COALESCE(${
+              taskUsageTable.peakContextTokens
+            }, 0) THEN ${taskUsageTable.modelCalls} + 1 ELSE ${taskUsageTable.peakContextAt} END`,
           },
         })
         .run();

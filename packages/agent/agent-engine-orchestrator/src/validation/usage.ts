@@ -31,12 +31,23 @@ export const groupedUsageRowSchema = z.object({
 export type GroupedUsageRow = z.infer<typeof groupedUsageRowSchema>;
 
 export const usageSummarySchema = z.object({
+  /** CUMULATIVE billed input across model calls. NOT a context size — see peakContextTokens. */
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
   modelCalls: z.number().int().nonnegative(),
   toolCallCount: z.number().int().nonnegative(),
   latencyMs: z.number().int().nonnegative(),
   stopReason: z.string().optional(),
+  /** Full-price (cache-miss) input. This — not inputTokens — is what actually drives cost. */
+  uncachedInputTokens: z.number().int().nonnegative(),
+  /** Discounted cache-hit input (~50x cheaper than a miss on deepseek-v4-flash). */
+  cacheReadTokens: z.number().int().nonnegative(),
+  /** Cache-write input (premium on Anthropic/OpenAI; free on DeepSeek/Gemini). */
+  cacheCreationTokens: z.number().int().nonnegative(),
+  /** Reasoning tokens (reasoning models); billed as output. */
+  reasoningTokens: z.number().int().nonnegative(),
+  /** PEAK single-call input — the real context high-water mark (a MAX, not a sum). */
+  peakContextTokens: z.number().int().nonnegative(),
 });
 
 export type UsageSummary = z.infer<typeof usageSummarySchema>;

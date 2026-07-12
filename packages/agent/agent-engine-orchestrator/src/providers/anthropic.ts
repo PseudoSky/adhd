@@ -7,6 +7,7 @@ import { nowIso } from "../utils/timestamps.js";
 import { resolveToolCallName } from "../clients/tool-naming.js";
 
 import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
+import type { TokenUsage } from "@adhd/agent-base-types";
 import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
 
@@ -36,6 +37,45 @@ const MODEL_MAX_TOKENS: [prefix: string, maxTokens: number][] = [
     ["claude-3-sonnet",           4_096],
     ["claude-3-haiku",            4_096],
 ];
+
+/**
+ * Anthropic is the ONE provider whose headline `input_tokens` EXCLUDES cached tokens —
+ * it reports only the uncached tail after the last cache breakpoint. OpenAI, DeepSeek and
+ * Gemini all report an INCLUSIVE headline.
+ *
+ * So the true total input Anthropic processed is:
+ *   input_tokens + cache_read_input_tokens + cache_creation_input_tokens
+ *
+ * Storing the raw `input_tokens` in the same column as the other providers' inclusive
+ * headline systematically UNDER-COUNTS Anthropic spend (on a cache-warm run most input
+ * lives in cache_read) and makes budget caps bite openai-provider agents far sooner than
+ * anthropic ones for identical real usage. See BUG-ORCH-010.
+ */
+export function normaliseAnthropicUsage(
+    sdkUsage: {
+        input_tokens: number;
+        output_tokens: number;
+        cache_read_input_tokens?: number | null;
+        cache_creation_input_tokens?: number | null;
+    },
+    stopReason: string,
+    maxTokens: number
+): TokenUsage {
+    const cacheRead = sdkUsage.cache_read_input_tokens ?? 0;
+    const cacheWrite = sdkUsage.cache_creation_input_tokens ?? 0;
+    const uncached = sdkUsage.input_tokens;
+
+    return {
+        // Reconstruct the true total — do NOT pass Anthropic's headline through directly.
+        inputTokens: uncached + cacheRead + cacheWrite,
+        outputTokens: sdkUsage.output_tokens,
+        uncachedInputTokens: uncached,
+        cacheReadTokens: cacheRead,
+        cacheCreationTokens: cacheWrite,
+        stopReason,
+        maxTokens,
+    };
+}
 
 function defaultMaxTokens(model: string, config: EngineConfig): number {
     for (const [prefix, maxTokens] of MODEL_MAX_TOKENS) {
@@ -254,14 +294,11 @@ export class AnthropicProvider implements LLMProvider {
                 message,
                 stopReason: toolCalls.length > 0 ? "tool_calls" : "completed",
                 rawUsage: sdkUsage,
-                usage: {
-                    inputTokens: sdkUsage.input_tokens,
-                    outputTokens: sdkUsage.output_tokens,
-                    stopReason: normalisedStopReason,
-                    maxTokens: this.providerConfig.maxTokens ?? defaultMaxTokens(effectiveModel, this.config),
-                    cacheReadTokens: sdkUsage.cache_read_input_tokens ?? undefined,
-                    cacheCreationTokens: sdkUsage.cache_creation_input_tokens ?? undefined,
-                },
+                usage: normaliseAnthropicUsage(
+                    sdkUsage,
+                    normalisedStopReason,
+                    this.providerConfig.maxTokens ?? defaultMaxTokens(effectiveModel, this.config)
+                ),
             };
         };
 

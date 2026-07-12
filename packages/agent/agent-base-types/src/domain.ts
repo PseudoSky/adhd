@@ -1,10 +1,40 @@
+/**
+ * Normalised, provider-neutral token accounting for a SINGLE model call.
+ *
+ * Providers disagree on whether their headline input count includes cached tokens:
+ *   - Anthropic  `input_tokens`   EXCLUDES cache (add cache_read + cache_creation for the true total)
+ *   - OpenAI     `prompt_tokens`  INCLUDES cache (`cached_tokens` is a subset)
+ *   - DeepSeek   `prompt_tokens`  INCLUDES cache (`prompt_tokens = hit + miss`)
+ *   - Gemini     `promptTokenCount` INCLUDES cache
+ *
+ * Storing each provider's raw headline in one field makes cross-provider totals,
+ * budget caps and cost math silently wrong (Anthropic under-counts). So providers
+ * MUST normalise into the shape below at their boundary.
+ * See docs/ideas/provider-caching-research.md.
+ */
 export interface TokenUsage {
+  /**
+   * TOTAL input the model actually processed for this call:
+   * `uncachedInputTokens + cacheReadTokens + cacheCreationTokens`.
+   * Uniform across providers regardless of their own convention. This — not any
+   * provider's raw headline — is what budget caps and context arithmetic key off.
+   *
+   * NOTE: summed across a task's model calls this is CUMULATIVE BILLED input, which
+   * is NOT a context size. Peak context is tracked separately (`peakContextTokens`).
+   */
   inputTokens: number;
   outputTokens: number;
   stopReason?: string; // normalised stop reason (see [ref:normalised-stop-reason])
   maxTokens?: number; // configured max_tokens from agent provider config
-  cacheReadTokens?: number; // Anthropic cache_read_input_tokens (undefined for other providers)
-  cacheCreationTokens?: number; // Anthropic cache_creation_input_tokens (undefined for other providers)
+
+  /** Full-price input: the part that missed cache. */
+  uncachedInputTokens?: number;
+  /** Discounted cache-hit input (Anthropic cache_read, OpenAI/DeepSeek cached_tokens / hit). */
+  cacheReadTokens?: number;
+  /** Cache-WRITE input. Billed at a premium on Anthropic (1.25x/2x) and OpenAI GPT-5.6+ (1.25x); free on DeepSeek/Gemini. */
+  cacheCreationTokens?: number;
+  /** Reasoning tokens burned before visible output (reasoning models). Billed as output. */
+  reasoningTokens?: number;
 }
 
 export type TaskStatus =

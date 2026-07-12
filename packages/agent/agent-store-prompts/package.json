@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-store-prompts",
-  "version": "0.0.1",
+  "version": "2.1.0",
   "description": "Prompt component registry for agent composition: stores prompt types, components, agent compositions, and context rules",
   "type": "module",
   "publishConfig": {
@@ -35,5 +35,15 @@
     "vite": "~5.0.13",
     "vite-plugin-dts": "~3.8.3",
     "vitest": "^1.6.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/agent/agent-store-prompts"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-store-prompts#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
   }
 }

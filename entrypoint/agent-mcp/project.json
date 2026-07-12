@@ -3,7 +3,11 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "entrypoint/agent-mcp/src",
   "projectType": "library",
-  "tags": ["entrypoint:mcp", "pkg-class:entrypoint", "platform:node"],
+  "tags": [
+    "entrypoint:mcp",
+    "pkg-class:entrypoint",
+    "platform:node"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
@@ -11,7 +15,21 @@
         "main": "entrypoint/agent-mcp/src/index.ts",
         "outputPath": "dist/entrypoint/agent-mcp",
         "tsConfig": "entrypoint/agent-mcp/tsconfig.lib.json",
-        "assets": ["entrypoint/agent-mcp/*.json", "entrypoint/agent-mcp/drizzle"]
+        "assets": [
+          "entrypoint/agent-mcp/*.json",
+          "entrypoint/agent-mcp/drizzle",
+          "entrypoint/agent-mcp/*.md",
+          "entrypoint/agent-mcp/llms.txt",
+          "entrypoint/agent-mcp/LICENSE",
+          {
+            "glob": "**/*.md",
+            "input": "entrypoint/agent-mcp/docs",
+            "output": "docs",
+            "ignore": [
+              "marketing/**"
+            ]
+          }
+        ]
       }
     },
     "test": {

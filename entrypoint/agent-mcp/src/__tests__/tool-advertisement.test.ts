@@ -249,7 +249,7 @@ describe("toNameOnlyTools", () => {
 // ---------------------------------------------------------------------------
 
 describe("Orchestrator tool advertisement", () => {
-    it("default mode is 'names': slim tools on the wire, full doc prepended to the system message", async () => {
+    it("default mode is 'full': the complete JSON schema goes on the wire (BUG-ORCH-013 / 2.0.1 parity)", async () => {
         const ctx = makeCtx();
         const { provider, requests } = capturingProvider(["completed"]);
         await run(ctx, provider, [systemMessage(ctx.sessionId), userMessage(ctx.sessionId)]);
@@ -257,9 +257,25 @@ describe("Orchestrator tool advertisement", () => {
         expect(requests).toHaveLength(1);
         const [request] = requests;
 
-        // Wire tools are name-only — the rich schema must NOT be serialized.
-        expect(request.tools).toHaveLength(1);
+        // Full function-schema on the wire — the rich inputSchema (incl. its properties) is serialized.
         if (!request.tools) throw new Error("expected tools");
+        expect(JSON.stringify(request.tools)).toContain(SECRET);
+
+        // The system message is the untouched original — no tool doc prepended in 'full' mode.
+        const system = request.messages[0];
+        expect(system.role).toBe("system");
+        expect(system.content).not.toContain("## Available Tools");
+    });
+
+    it("explicit mode 'names' still slims tools and moves the doc into the system message", async () => {
+        const ctx = makeCtx({ toolAdvertisement: "names" });
+        const { provider, requests } = capturingProvider(["completed"]);
+        await run(ctx, provider, [systemMessage(ctx.sessionId), userMessage(ctx.sessionId)]);
+
+        const [request] = requests;
+        if (!request.tools) throw new Error("expected tools");
+
+        // Wire tools are name-only — the rich schema must NOT be serialized.
         expect(request.tools[0].inputSchema).toEqual({
             type: "object",
             properties: {},
@@ -269,7 +285,6 @@ describe("Orchestrator tool advertisement", () => {
 
         // Full documentation rides in the system message, BEFORE the original prompt.
         const system = request.messages[0];
-        expect(system.role).toBe("system");
         expect(system.content).toContain("## Available Tools");
         expect(system.content).toContain(SECRET);
         expect(system.content.indexOf("## Available Tools")).toBeLessThan(
@@ -289,7 +304,7 @@ describe("Orchestrator tool advertisement", () => {
     });
 
     it("synthesizes a system message carrying the doc when the task has none", async () => {
-        const ctx = makeCtx();
+        const ctx = makeCtx({ toolAdvertisement: "names" });
         const { provider, requests } = capturingProvider(["completed"]);
         await run(ctx, provider, [userMessage(ctx.sessionId)]);
 
@@ -308,7 +323,7 @@ describe("Orchestrator tool advertisement", () => {
     });
 
     it("keeps the doc-carrying system message byte-identical across turns (cache-stable prefix)", async () => {
-        const ctx = makeCtx();
+        const ctx = makeCtx({ toolAdvertisement: "names" });
         const { provider, requests } = capturingProvider(["tool_call", "completed"]);
         await run(ctx, provider, [systemMessage(ctx.sessionId), userMessage(ctx.sessionId)]);
 
@@ -354,6 +369,6 @@ describe("Orchestrator per-turn event payloads", () => {
 
         const requests = events.filter(e => e.type === "MODEL_REQUEST");
         expect(requests).toHaveLength(1);
-        expect(requests[0].payload.toolAdvertisement).toBe("names");
+        expect(requests[0].payload.toolAdvertisement).toBe("full");
     });
 });

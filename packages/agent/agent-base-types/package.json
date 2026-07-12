@@ -1,8 +1,18 @@
 {
   "name": "@adhd/agent-base-types",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "dependencies": {},
   "main": "./index.js",
   "module": "./index.mjs",
-  "typings": "./index.d.ts"
+  "typings": "./index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/agent/agent-base-types"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-base-types#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
 }

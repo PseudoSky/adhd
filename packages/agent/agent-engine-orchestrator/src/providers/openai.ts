@@ -8,6 +8,7 @@ import { resolveToolCallName } from "../clients/tool-naming.js";
 import type { EngineConfig } from "../interfaces.js";
 
 import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
+import type { TokenUsage } from "@adhd/agent-base-types";
 
 import type {
     LLMProvider,
@@ -15,6 +16,51 @@ import type {
     ProviderChatResponse,
     ToolDefinition,
 } from "./types.js";
+
+/**
+ * OpenAI-compatible usage payloads report cached input two different ways:
+ *   - OpenAI:   `prompt_tokens_details.cached_tokens`
+ *   - DeepSeek: `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`
+ * Both are INCLUSIVE — `prompt_tokens` already contains the cached portion
+ * (DeepSeek documents `prompt_tokens = hit + miss` explicitly).
+ *
+ * Cache-hit vs cache-miss input differs 50x in price on deepseek-v4-flash
+ * ($0.0028/M vs $0.14/M), so dropping these fields hides the largest cost signal
+ * in the system. See BUG-ORCH-009.
+ */
+export function normaliseOpenAIUsage(
+    sdkUsage: { prompt_tokens: number; completion_tokens: number },
+    stopReason: string,
+    maxTokens?: number
+): TokenUsage {
+    // DeepSeek's cache fields are not in the OpenAI SDK's CompletionUsage type, but they
+    // are present on the wire (`prompt_tokens = hit + miss`, documented). Widen to read them.
+    const usage = sdkUsage as {
+        prompt_tokens: number;
+        completion_tokens: number;
+        prompt_tokens_details?: { cached_tokens?: number };
+        completion_tokens_details?: { reasoning_tokens?: number };
+        prompt_cache_hit_tokens?: number;
+        prompt_cache_miss_tokens?: number;
+    };
+
+    const cacheRead = usage.prompt_cache_hit_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? 0;
+    // Prefer the provider's own miss count; otherwise derive it (the headline is inclusive).
+    const uncached = usage.prompt_cache_miss_tokens ?? Math.max(0, usage.prompt_tokens - cacheRead);
+
+    return {
+        // Already the true total on this family — the headline includes cached tokens.
+        inputTokens: usage.prompt_tokens,
+        outputTokens: usage.completion_tokens,
+        uncachedInputTokens: uncached,
+        cacheReadTokens: cacheRead,
+        // No OpenAI-compatible endpoint we target bills a separate cache write today.
+        cacheCreationTokens: 0,
+        reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? undefined,
+        stopReason,
+        maxTokens,
+    };
+}
 
 function toOpenAIMessages(messages: Message[]): ChatCompletionMessageParam[] {
     return messages.map(message => {
@@ -159,16 +205,7 @@ export class OpenAIProvider implements LLMProvider {
                 message,
                 stopReason: toolCalls.length > 0 ? "tool_calls" : "completed",
                 rawUsage: sdkUsage,
-                usage: sdkUsage
-                    ? {
-                        inputTokens: sdkUsage.prompt_tokens,
-                        outputTokens: sdkUsage.completion_tokens,
-                        cacheReadTokens: sdkUsage.prompt_tokens_details?.cached_tokens ?? undefined,
-                        cacheCreationTokens: undefined,
-                        stopReason: normalisedStopReason,
-                        maxTokens: this.providerConfig.maxTokens,
-                    }
-                    : undefined,
+                usage: sdkUsage ? normaliseOpenAIUsage(sdkUsage, normalisedStopReason, this.providerConfig.maxTokens) : undefined,
             };
         };
 

@@ -1,58 +1,22 @@
 # @adhd/agent-engine-compiler
 
-Registry-family store for agent-engine-compiler: drizzle-backed SQLite tables sharing the one registry database.
+Compilation and code-generation tooling for @adhd/agent-mcp. Generates agent prompts, tool schemas, validation, and optimizations at build time.
 
-A `platform:node` registry-family package: a Drizzle-backed store over **one
-shared SQLite file** (`REGISTRY_DATABASE_PATH` / `DATABASE_PATH`, default
-`./data/registry.db`). It owns the tables prefixed **`compiler_`** and never
-ATTACHes another database or declares a cross-package SQL foreign key — those
-keys are logical and resolved at compile time.
+**Status:** Compiler (shipped v0.0.1)  
+**Package:** `npm install @adhd/agent-engine-compiler`  
+**Consumers:** `@adhd/agent-mcp`
 
-Scaffolded by `@adhd/agent-nx` (`nx g @adhd/agent-nx:registry-package compiler`).
-The rules every registry package must follow live in
-[`../agent-nx/REGISTRY-PACKAGE-RULES.md`](../agent-nx/REGISTRY-PACKAGE-RULES.md);
-this package's local copy of the invariants is in [`./CLAUDE.md`](./CLAUDE.md).
+## What it does
 
-## Layout
+- **Agent schema generation** — derives tool schemas and agent config from type definitions
+- **Prompt optimization** — compiles system prompts with tool descriptions and error guidance
+- **Validation generation** — creates Zod schemas for runtime input validation
+- **Registry integration** — optional compilation with agent registries for metadata
 
-```
-src/
-  db/
-    client.ts         shared-file better-sqlite3 connection (WAL) + Drizzle db
-    schema.ts         Drizzle tables — all prefixed `compiler_`
-    migrate.ts        runMigrations() — applies ./drizzle migrations
-    migrate-runner.ts FK-safe migrator (reused by tests)
-  __tests__/          real-DB, close+reopen store tests
-  index.ts            public barrel
-drizzle/              drizzle-kit generated migrations (shipped in the package)
-```
+## Architecture
 
-## Commands
+- Part of the 6-package agent framework family
+- Depends on: `@adhd/agent-base-types`
+- Depended on by: `@adhd/agent-mcp` (optional; used for optimized builds)
 
-```bash
-# Build (emits to dist/, ships the drizzle/ migrations as assets).
-nx build agent-engine-compiler
-
-# Test (real on-disk SQLite + real migrations; gate on the EXIT CODE).
-nx test agent-engine-compiler
-
-# Type-check without emitting.
-nx typecheck agent-engine-compiler
-
-# Generate a new migration from src/db/schema.ts into ./drizzle.
-nx db:generate agent-engine-compiler
-
-# Apply pending migrations to the database.
-nx db:migrate agent-engine-compiler
-```
-
-`build`, `test`, and `typecheck` inherit caching and the `^build` dependency
-from the workspace `nx.json` `targetDefaults` — do not redefine `cache` or
-`dependsOn` in this package's `project.json`.
-
-## Adding a table
-
-1. Define it in `src/db/schema.ts` with the `compiler_` prefix.
-2. `nx db:generate agent-engine-compiler` to write the migration into `drizzle/`.
-3. Export the table (and any store class) from `src/index.ts`.
-4. Add a real-DB, close+reopen test under `src/__tests__/`.
+See `/entrypoint/agent-mcp/docs/architecture-and-security.md` for the full agent runtime architecture.

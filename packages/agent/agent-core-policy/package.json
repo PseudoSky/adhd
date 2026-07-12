@@ -1,7 +1,7 @@
 {
   "name": "@adhd/agent-core-policy",
-  "version": "0.0.1",
-  "description": "Policy engine for @adhd/agent-mcp — permission, safety, audit, rate, scope, compliance, and quality policies with SQLite/Drizzle persistence",
+  "version": "2.1.0",
+  "description": "Policy engine for @adhd/agent-mcp \u2014 permission, safety, audit, rate, scope, compliance, and quality policies with SQLite/Drizzle persistence",
   "type": "module",
   "publishConfig": {
     "access": "public"
@@ -26,7 +26,7 @@
     "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2",
     "zod": "4.4.3",
-    "@adhd/agent-base-types": "2.0.0"
+    "@adhd/agent-base-types": "^2.1.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -37,5 +37,15 @@
     "vite": "~5.0.13",
     "vite-plugin-dts": "~3.8.3",
     "vitest": "^1.6.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/agent/agent-core-policy"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-core-policy#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
   }
 }
