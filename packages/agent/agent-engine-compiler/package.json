@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-engine-compiler",
-  "version": "0.0.1",
+  "version": "2.1.0",
   "description": "Registry-family store for agent-compiler: drizzle-backed SQLite tables sharing the one registry database.",
   "type": "module",
   "publishConfig": {
@@ -28,10 +28,10 @@
   "dependencies": {
     "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2",
-    "@adhd/agent-store-prompts": "0.0.1",
-    "@adhd/agent-store-tools": "0.0.1",
-    "@adhd/agent-core-provider": "0.1.0",
-    "@adhd/agent-core-policy": "*"
+    "@adhd/agent-store-prompts": "^2.1.0",
+    "@adhd/agent-store-tools": "^2.1.0",
+    "@adhd/agent-core-provider": "^2.1.0",
+    "@adhd/agent-core-policy": "^2.1.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -42,5 +42,15 @@
     "vite": "~5.0.13",
     "vite-plugin-dts": "~3.8.3",
     "vitest": "^1.6.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/agent/agent-engine-compiler"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-engine-compiler#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
   }
 }

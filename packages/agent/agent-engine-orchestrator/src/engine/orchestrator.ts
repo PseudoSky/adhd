@@ -18,6 +18,12 @@ import {
   toNameOnlyTools,
   type ToolAdvertisementMode,
 } from './tool-advertisement.js';
+import {
+  estimateMessageTokens,
+  groupIntoAtomicUnits,
+  decideCompaction,
+  compactMessages,
+} from './context-window.js';
 
 // ── HITL (Human-in-the-Loop) support ─────────────────────────────────────────
 
@@ -155,10 +161,15 @@ export class Orchestrator {
         tools.push(HITL_BUILTIN_TOOL_DEFINITION);
       }
 
+      // Default to 'full' JSON function-schemas — the contract models are trained on, and
+      // what published 2.0.1 always sent. Full schemas are STATIC, so they sit in the cached
+      // prefix and bill at the cache-hit rate after the first call, making name-only's payload
+      // saving marginal while its reliability cost (malformed calls -> retries) is real.
+      // 'names' remains available as an explicit opt-in. See BUG-ORCH-013.
       const advertisementMode: ToolAdvertisementMode =
         executionContext.agentDefinition.provider.type === 'claudecli'
           ? 'full'
-          : (executionContext.agentDefinition.toolAdvertisement ?? 'names');
+          : (executionContext.agentDefinition.toolAdvertisement ?? 'full');
       const advertisedTools =
         advertisementMode === 'names' ? toNameOnlyTools(tools) : tools;
       const toolDocSystemMessage: Message | null = (() => {
@@ -180,10 +191,82 @@ export class Orchestrator {
         };
       })();
 
+      // The provider's own reported prompt_tokens from the last call — the exact, free
+      // ground truth for the real context size. Undefined before the first call.
+      let lastReportedContext: number | undefined;
+      const providerModel =
+        'model' in executionContext.agentDefinition.provider
+          ? executionContext.agentDefinition.provider.model
+          : undefined;
+
       let looping = true;
       while (looping) {
         if (signal.aborted) {
           throw new ToolError('PROVIDER_ERROR', 'Task was cancelled');
+        }
+
+        // Cache-preserving context management (BUG-ORCH-008): don't trim from the front
+        // every call. Let history grow append-only, and only when the REAL context nears
+        // the model's true window compact the middle into one summary — rarely, so the
+        // cached prefix survives between compactions.
+        {
+          const decision = decideCompaction(
+            lastReportedContext,
+            currentMessages,
+            providerModel,
+          );
+          if (decision.shouldCompact) {
+            const before = currentMessages.length;
+            const compacted = await compactMessages(
+              currentMessages,
+              async (toSummarise) => {
+                const summary = await provider.chat({
+                  messages: [
+                    {
+                      id: generateId(),
+                      sessionId: executionContext.sessionId,
+                      role: 'system',
+                      content:
+                        'Summarise the following conversation excerpt concisely, preserving ' +
+                        'decisions, facts, file paths, and any state a continuation would need. ' +
+                        'Output only the summary.',
+                      createdAt: nowIso(),
+                    },
+                    ...toSummarise.map((m) => ({
+                      ...m,
+                      // Flatten tool traffic to plain text so the summariser needs no tools.
+                      role: m.role === 'tool' ? ('user' as const) : m.role,
+                      content: flattenForSummary(m),
+                      toolCalls: undefined,
+                      toolResults: undefined,
+                    })),
+                  ],
+                  tools: undefined,
+                  signal,
+                });
+                return summary.message.content ?? '';
+              },
+            );
+            if (compacted.length < before) {
+              currentMessages.length = 0;
+              currentMessages.push(...compacted);
+              lastReportedContext = undefined; // recompute against the compacted history
+              logger.debug(
+                { taskId, before, after: currentMessages.length, window: decision.window },
+                'context compacted',
+              );
+              taskStore.appendEvent({
+                taskId,
+                type: 'CONTEXT_COMPACTED',
+                payload: {
+                  messagesBefore: before,
+                  messagesAfter: currentMessages.length,
+                  window: decision.window,
+                  threshold: decision.threshold,
+                },
+              });
+            }
+          }
         }
 
         const composedSignal = AbortSignal.any([
@@ -339,6 +422,10 @@ export class Orchestrator {
           assistantMessage
         );
         currentMessages.push(assistantMessage);
+        // Record the provider's own context measurement to drive compaction decisions.
+        if (providerResponse.usage?.inputTokens !== undefined) {
+          lastReportedContext = providerResponse.usage.inputTokens;
+        }
         await hooks.emit('post:model_response', {
           executionContext,
           stopReason: providerResponse.stopReason,
@@ -790,21 +877,43 @@ export class Orchestrator {
 
 /**
  * Estimate-then-drop window for context-limit enforcement.
- * Always preserves the system message at index 0.
+ *
+ * Always preserves the system message at index 0, then keeps the most recent
+ * atomic units that fit the budget, dropping contiguously from the oldest end.
+ * Contiguity matters: skipping an oversized unit and then keeping an older,
+ * smaller one would punch a hole in the middle of the history and orphan a
+ * `tool` message from its `assistant` call.
+ *
+ * The most recent unit is always retained even if it alone exceeds the limit,
+ * so the loop makes progress; an genuinely oversized turn surfaces as the
+ * provider's own context-window error rather than as a silently empty history.
  */
-function windowMessages(messages: Message[], limit: number): Message[] {
-    const preserved = messages[0]?.role === 'system' ? [messages[0]] : [];
-    const rest = messages.slice(preserved.length);
-    // Estimate tokens at ~4 chars/token
-    let tokens = preserved.reduce((n, m) => n + (m.content?.length ?? 0) / 4, 0);
-    const result: Message[] = [...preserved];
-    for (let i = rest.length - 1; i >= 0 && tokens < limit; i--) {
-        const msg = rest[i];
-        const msgTokens = (msg.content?.length ?? 0) / 4;
-        if (tokens + msgTokens <= limit) {
-            result.splice(preserved.length, 0, msg);
-            tokens += msgTokens;
-        }
+/** Render a message as plain text for the summariser (which is called without tools). */
+function flattenForSummary(m: Message): string {
+    if (m.content) return m.content;
+    if (m.toolResults) return `[tool result] ${JSON.stringify(m.toolResults.map((r) => r.result))}`;
+    if (m.toolCalls) {
+        return `[tool calls] ${JSON.stringify(m.toolCalls.map((c) => ({ tool: c.tool, args: c.arguments })))}`;
     }
-    return result;
+    return '';
+}
+
+export function windowMessages(messages: Message[], limit: number): Message[] {
+    const preserved = messages[0]?.role === 'system' ? [messages[0]] : [];
+    const units = groupIntoAtomicUnits(messages.slice(preserved.length));
+
+    let tokens = preserved.reduce((n, m) => n + estimateMessageTokens(m), 0);
+    const kept: Message[][] = [];
+
+    for (let i = units.length - 1; i >= 0; i--) {
+        const unitTokens = units[i].reduce((n, m) => n + estimateMessageTokens(m), 0);
+        const isMostRecent = i === units.length - 1;
+        if (!isMostRecent && tokens + unitTokens > limit) {
+            break;
+        }
+        kept.unshift(units[i]);
+        tokens += unitTokens;
+    }
+
+    return [...preserved, ...kept.flat()];
 }

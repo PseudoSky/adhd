@@ -377,6 +377,19 @@ agent-mcp uses pino logger writing to stderr. Enable debug via:
 
 ## Context Explosion — Root Cause & Fixes
 
+> **CORRECTION (2026-07-11, see BACKLOG FINDING-ORCH-007):** the "710K" framing below is
+> misleading and led to optimizing the wrong variable. `inputTokens` is **cumulative billed
+> input summed across model calls**, NOT a context size. Verified on the wire (raw request
+> capture, `~/dev/agent-mcp-wiretap/`): a run reported at 715K had a **peak single-call
+> context of 43K** — because stateless chat APIs re-send the whole history every call, so
+> cumulative billing grows ~quadratically with tool-call count while the actual context
+> stays small. The real levers are therefore (a) **preserve the prefix cache** — DeepSeek
+> cache-hit is ~50x cheaper than a miss, and the FIFO context limiter deployed below was
+> *busting* the cache and causing ~70% of spend (BUG-ORCH-008), and (b) **cap tool-result
+> size at the source** (the original 330K `directory_tree` dump). A context *limiter* is the
+> wrong tool: it caps a peak that was never the problem. Read the section below as historical
+> context, not current guidance.
+
 ### The 710K DeepSeek Incident (2026-06-30)
 
 A `dispatch-optimizer-impl` agent running on DeepSeek consumed 710K input tokens
