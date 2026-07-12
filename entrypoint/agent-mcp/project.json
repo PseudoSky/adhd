@@ -16,7 +16,7 @@
         "outputPath": "dist/entrypoint/agent-mcp",
         "tsConfig": "entrypoint/agent-mcp/tsconfig.lib.json",
         "assets": [
-          "entrypoint/agent-mcp/*.json",
+          "entrypoint/agent-mcp/package.json",
           "entrypoint/agent-mcp/drizzle",
           "entrypoint/agent-mcp/*.md",
           "entrypoint/agent-mcp/llms.txt",
@@ -36,6 +36,23 @@
       "executor": "@nx/vite:test",
       "options": {
         "config": "entrypoint/agent-mcp/vite.config.ts"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": [
+        "build",
+        "test"
+      ],
+      "options": {
+        "packageRoot": "dist/{projectRoot}"
+      }
+    }
+  },
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "dist/{projectRoot}",
+        "currentVersionResolver": "git-tag"
       }
     }
   }
