@@ -17,7 +17,11 @@
         "tsConfig": "entrypoint/agent-mcp/tsconfig.lib.json",
         "assets": [
           "entrypoint/agent-mcp/package.json",
-          "entrypoint/agent-mcp/drizzle",
+          {
+            "input": "entrypoint/agent-mcp",
+            "glob": "drizzle/**/*",
+            "output": "."
+          },
           "entrypoint/agent-mcp/*.md",
           "entrypoint/agent-mcp/llms.txt",
           "entrypoint/agent-mcp/LICENSE",
