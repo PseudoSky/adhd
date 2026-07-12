@@ -14,5 +14,8 @@
   "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-base-types#readme",
   "bugs": {
     "url": "https://github.com/PseudoSky/adhd/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
