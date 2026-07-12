@@ -1,7 +1,7 @@
 {
   "name": "@adhd/agent-store-runtime",
-  "version": "0.0.1",
-  "description": "Runtime state stores for sessions, tasks, and usage tracking — extracted from agent-mcp",
+  "version": "2.1.0",
+  "description": "Runtime state stores for sessions, tasks, and usage tracking \u2014 extracted from agent-mcp",
   "type": "module",
   "publishConfig": {
     "access": "public"
@@ -20,7 +20,7 @@
     "typecheck": "tsc -p tsconfig.lib.json --noEmit"
   },
   "dependencies": {
-    "@adhd/agent-base-types": "2.0.0",
+    "@adhd/agent-base-types": "^2.1.0",
     "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2",
     "uuid": "14.0.0",
@@ -33,5 +33,15 @@
     "typescript": "^5.5.0",
     "vite": "~5.0.13",
     "vitest": "^1.6.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/agent/agent-store-runtime"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-store-runtime#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
   }
 }

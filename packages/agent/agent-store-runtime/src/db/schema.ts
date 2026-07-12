@@ -138,6 +138,9 @@ export const taskUsageTable = sqliteTable(
         agentName: text("agent_name").notNull(),
         providerType: text("provider_type").notNull(),
         model: text("model").notNull(),
+        // CUMULATIVE across the task's model calls (SUM). Because chat APIs are stateless,
+        // the whole history is re-sent every call, so this is billed spend — NOT a context
+        // size. Do not read it as one. See peakContextTokens. (FINDING-ORCH-007)
         inputTokens: integer("input_tokens").notNull().default(0),
         outputTokens: integer("output_tokens").notNull().default(0),
         toolCallCount: integer("tool_call_count").notNull().default(0),
@@ -148,6 +151,16 @@ export const taskUsageTable = sqliteTable(
         maxTokens: integer("max_tokens"),
         cacheReadTokens: integer("cache_read_input_tokens"),
         cacheCreationTokens: integer("cache_creation_input_tokens"),
+        // Full-price (cache-miss) input. Cache-hit vs cache-miss is a 50x price difference
+        // on deepseek-v4-flash, so this — not inputTokens — is what actually drives cost.
+        uncachedInputTokens: integer("uncached_input_tokens"),
+        // Reasoning tokens (reasoning models); billed as output.
+        reasoningTokens: integer("reasoning_tokens"),
+        // PEAK single-call input (MAX, not SUM) — the real context high-water mark, and the
+        // only number that may be compared against a model's context window.
+        peakContextTokens: integer("peak_context_tokens"),
+        // Which model call (1-based) hit that peak.
+        peakContextAt: integer("peak_context_at"),
         createdAt: text("created_at").notNull(),
     },
     (table) => [

@@ -36,6 +36,17 @@ export interface UsageQueryResult {
   };
 }
 
+/**
+ * `inputTokens` is CUMULATIVE BILLED input across model calls — the whole history is
+ * re-sent on every call, so it is not a context size and must never be compared against a
+ * model's context window. `peakContextTokens` is the real high-water mark and is a MAX,
+ * so it is maxed here rather than summed. Conflating the two is what produced a "710K
+ * context" post-mortem for a run whose largest context was 43K (FINDING-ORCH-007).
+ *
+ * Cache fields are surfaced because cache-hit vs cache-miss input is a 50x price
+ * difference — without them a caller cannot tell a cheap run from an expensive one of
+ * identical token count (BUG-ORCH-009).
+ */
 function summarise(rows: TaskUsageRow[]): UsageSummary {
   return rows.reduce<UsageSummary>(
     (acc, row) => ({
@@ -45,6 +56,12 @@ function summarise(rows: TaskUsageRow[]): UsageSummary {
       toolCallCount: acc.toolCallCount + (row.toolCallCount ?? 0),
       latencyMs: acc.latencyMs + (row.latencyMs ?? 0),
       stopReason: mostSevereStr(acc.stopReason, row.stopReason ?? undefined),
+      uncachedInputTokens: acc.uncachedInputTokens + (row.uncachedInputTokens ?? 0),
+      cacheReadTokens: acc.cacheReadTokens + (row.cacheReadTokens ?? 0),
+      cacheCreationTokens: acc.cacheCreationTokens + (row.cacheCreationTokens ?? 0),
+      reasoningTokens: acc.reasoningTokens + (row.reasoningTokens ?? 0),
+      // MAX across rows — deliberately NOT a sum.
+      peakContextTokens: Math.max(acc.peakContextTokens, row.peakContextTokens ?? 0),
     }),
     {
       inputTokens: 0,
@@ -52,6 +69,11 @@ function summarise(rows: TaskUsageRow[]): UsageSummary {
       modelCalls: 0,
       toolCallCount: 0,
       latencyMs: 0,
+      uncachedInputTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      reasoningTokens: 0,
+      peakContextTokens: 0,
     }
   );
 }

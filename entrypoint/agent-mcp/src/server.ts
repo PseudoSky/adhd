@@ -47,6 +47,7 @@ import {
 import { usageQuery, type Database } from '@adhd/agent-engine-orchestrator';
 import {
   ToolError,
+  assertEnvNamesAllowed,
   agentCreateInputSchema,
   agentReadInputSchema,
   agentUpdateInputSchema,
@@ -541,14 +542,18 @@ export function createServer(deps: ServerDeps): Server {
 
     try {
       switch (name) {
-        case 'agent_create':
+        case 'agent_create': {
+          const createInput = agentCreateInputSchema.parse(args);
+          // Reject non-ADHD_AGENT_-prefixed env names at create time (BUG-ORCH-011).
+          assertEnvNamesAllowed(createInput.provider, config, ['provider']);
           return toMcpContent(
-            agentCreate(agentCreateInputSchema.parse(args), {
+            agentCreate(createInput, {
               agentStore: deps.agentStore,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               sessionStore: crudSessionStore,
             })
           );
+        }
 
         case 'agent_read':
           return toMcpContent(
@@ -559,14 +564,18 @@ export function createServer(deps: ServerDeps): Server {
             })
           );
 
-        case 'agent_update':
+        case 'agent_update': {
+          const updateInput = agentUpdateInputSchema.parse(args);
+          // Reject non-ADHD_AGENT_-prefixed env names at update time (BUG-ORCH-011).
+          assertEnvNamesAllowed(updateInput.patch.provider, config, ['patch', 'provider']);
           return toMcpContent(
-            agentUpdate(agentUpdateInputSchema.parse(args), {
+            agentUpdate(updateInput, {
               agentStore: deps.agentStore,
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               sessionStore: crudSessionStore,
             })
           );
+        }
 
         case 'agent_delete':
           return toMcpContent(

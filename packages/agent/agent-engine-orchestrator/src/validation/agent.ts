@@ -154,6 +154,32 @@ export function buildEnvNameGuard(config: EngineConfig) {
   return { envNameGuard };
 }
 
+/**
+ * Validate a parsed agent_create / agent_update payload's provider env-var names against
+ * the config's allowlist, throwing a ZodError on the first violation — the create-time
+ * guard the published 2.0.1 server applies via `.superRefine`.
+ *
+ * The static input schemas can't carry this refinement because the allowlist predicate
+ * lives on `config` (not available at module scope after the engine refactor). Call this
+ * immediately after `.parse()` at each tool call site. See BUG-ORCH-011.
+ */
+export function assertEnvNamesAllowed(
+  provider: ProviderConfig | undefined,
+  config: EngineConfig,
+  providerPath: (string | number)[] = ['provider']
+): void {
+  const { envNameGuard } = buildEnvNameGuard(config);
+  const issues: z.ZodIssue[] = [];
+  const ctx = {
+    addIssue: (issue: z.ZodIssue) => issues.push(issue),
+    path: [],
+  } as unknown as z.RefinementCtx;
+  envNameGuard(provider, ctx, providerPath);
+  if (issues.length > 0) {
+    throw new z.ZodError(issues);
+  }
+}
+
 export const agentCreateInputSchema = agentDefinitionSchema
   .omit({
     version: true,

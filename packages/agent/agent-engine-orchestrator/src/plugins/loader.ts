@@ -83,6 +83,13 @@ export function findConfigFile(
   const globalAdhd = resolve(homedir(), '.adhd', 'agent-mcp', 'config.json');
   if (existsSync(globalAdhd)) return globalAdhd;
 
+  // Back-compat: the published 2.0.1 loader used ~/.agent-mcp/config.json. The engine
+  // refactor moved the global path under ~/.adhd/ and stopped checking the old one, so a
+  // user's existing global plugin config would silently stop loading. Keep honouring it.
+  // See BUG-ORCH-014.
+  const globalLegacy = resolve(homedir(), '.agent-mcp', 'config.json');
+  if (existsSync(globalLegacy)) return globalLegacy;
+
   return null;
 }
 
