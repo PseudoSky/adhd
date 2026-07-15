@@ -39,7 +39,7 @@ Criterion ID registry (referenced by gap-check.js):
   final phase (everything above + work-state criteria + behavioral DoD checks):
     [embedding-substrate.1] [embedding-substrate.2] [embedding-substrate.3]
     [enrichment-pipeline.1] [enrichment-pipeline.2] [enrichment-pipeline.3]
-    [name-slug-seam.1] [discovery-tools.1] [discovery-tools.2]
+    [name-slug-seam.1] [discovery-tools.1] [discovery-tools.2] [discovery-tools.3]
     [component-define.1] [component-define.2] [agent-define.1] [compat-shim.1]
     [versioning.1] [composition-journey-e2e.1] [live-model-e2e.1]
     [dod.1] [dod.2] [dod.3] [dod.4] [dod.5] [dod.6] [dod.7] [dod.8]
@@ -180,6 +180,17 @@ def phase_final() -> list:
     # blowout cannot recur). Real tools over the bridge + real store; no mocks.
     r.append(check("discovery-tools.2", "BUG-003: agent_list/component_search/*_list bounded by default (N>>limit -> <=limit summary items, no full body inline, output under ceiling)",
                    f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/discovery-bounded-output.test.ts"))
+    # discovery-tools.3 (D6 flip) — component_search retrieval QUALITY: a golden-set
+    # nDCG@5>=0.70 proof over a corpus salted with hard negatives, driving the REAL
+    # hybrid (FTS5 textScore + vector vecScore, fused via @adhd/sox-hybrid-search)
+    # component_search over the bridge + real store. Negative control WITH TEETH: a
+    # shuffled/insertion-order ranker drops nDCG below the floor and the SAME test goes
+    # red (repo §6.2). Replaces the old 1-vs-1 "match beats one unrelated item" bar.
+    r.append(check("discovery-tools.3", "component_search golden-set nDCG@5>=0.70 over a hard-negative corpus (BEST components ranked first), REAL hybrid ranker over the bridge; shuffled-ranker negative control drops below floor",
+                   f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/component-search-ndcg.test.ts"))
+    r.append(grep_present("discovery-tools.3.tooth", "nDCG test carries the golden-set fixture, the nDCG@5 metric, AND the shuffled-ranker negative control (teeth); prove they bite via §6.2 negative control",
+                          "nDCG|ndcg",
+                          f"{MCP_TESTS}/component-search-ndcg.test.ts"))
     r.append(check("component-define.1", "component_define upsert enriches on write, version-bumps on change, idempotent",
                    f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/component-define.test.ts"))
     # component-define.2 — component_delete pairs creation with deletion. Behavioral
@@ -214,9 +225,25 @@ def phase_final() -> list:
     # [dod.1] component_define auto-enrichment (content-only -> summary+use_cases+weights)
     r.append(check("dod.1", "component_define returns auto-derived summary+use_cases (no agent-supplied weights); idempotent",
                    f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/component-define.test.ts"))
-    # [dod.2] component_search semantic auto-ranking
-    r.append(check("dod.2", "component_search ranks a semantically-matching component above an unrelated one",
-                   f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/discovery-tools.test.ts"))
+    # [dod.2] component_search retrieval QUALITY — the golden-set nDCG proof (D6 flip).
+    # The check ASSERTS the observable: grep -q teeth prove the nDCG test carries the
+    # golden-set fixture, the nDCG@5 metric, AND the shuffled-ranker negative control
+    # BEFORE the gated real run is trusted (not a bare test run). Replaces the weak
+    # 1-vs-1 "a match beats one unrelated item" bar — which any non-broken embedder
+    # passed and which did NOT prove the BEST components are returned.
+    r.append(check("dod.2", "component_search returns the BEST components: golden-set nDCG@5>=0.70 over a hard-negative corpus (grep -q teeth: golden fixture + nDCG@5 + shuffled-ranker negative control) THEN runs the REAL hybrid ranker over the bridge",
+                   f"grep -qE 'nDCG|ndcg' {MCP_TESTS}/component-search-ndcg.test.ts "
+                   f"&& grep -qE 'golden' {MCP_TESTS}/component-search-ndcg.test.ts "
+                   f"&& grep -qE 'shuffle|shuffled|insertion.?order' {MCP_TESTS}/component-search-ndcg.test.ts "
+                   f"&& npx --yes nx test agent-mcp --testFile={MCP_TESTS}/component-search-ndcg.test.ts"))
+    # [dod.2] tooth: the nDCG test must itself carry the golden-set fixture + the nDCG@5
+    # metric + a shuffled-ranker negative control, so a vacuous "return match>noise" test
+    # is caught structurally. GREP-BASED (mentions-only) — the executor MUST prove the
+    # nDCG assertion FAILS under the shuffled ranker (repo §6.2), never treat green as proof.
+    r.append(check("dod.2.tooth", "nDCG test carries golden-set fixture + nDCG@5 metric + shuffled-ranker negative control (all three)",
+                   f"grep -qE 'nDCG|ndcg' {MCP_TESTS}/component-search-ndcg.test.ts "
+                   f"&& grep -qE 'golden' {MCP_TESTS}/component-search-ndcg.test.ts "
+                   f"&& grep -qE 'shuffle|shuffled|insertion.?order' {MCP_TESTS}/component-search-ndcg.test.ts"))
     # [dod.3] agent_define one declarative idempotent upsert
     r.append(check("dod.3", "agent_define composes in one upsert; idempotent re-define = changed:false, no version bump",
                    f"npx --yes nx test agent-mcp --testFile={MCP_TESTS}/agent-define.test.ts"))

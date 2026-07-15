@@ -11,6 +11,8 @@ const { values: args } = parseArgs({
     "agent":          { type: "string",  short: "a", default: "" },
     "include-history":{ type: "boolean", short: "h", default: false },
     "limit":          { type: "string",  short: "n", default: "" },
+    "json":           { type: "boolean", short: "j", default: false },
+    "follow":         { type: "boolean", short: "F", default: false },
   },
   allowPositionals: true,
 });
@@ -19,12 +21,16 @@ const verbose = args["full"] as boolean;
 const filterAgent = (args["agent"] || "").trim();
 const includeHistory = args["include-history"] as boolean;
 const limit = parseInt(args["limit"] || "0", 10) || 0;
+const jsonOut = args["json"] as boolean;
+const follow = args["follow"] as boolean;
 
 const defaultMaxLen = verbose ? 100000 : 2000;
 
 const dbPath = process.env["ADHD_AGENT_DATABASE_PATH"]
   ?? path.join(os.homedir(), ".adhd", "agent-mcp", "agents.db");
 
+// In follow mode we replay history (0) or start from the live tail (-1);
+// in one-shot mode the full stored transcript is always the result set.
 let lastRowId = includeHistory ? 0 : -1;
 let shownCount = 0;
 
@@ -75,26 +81,27 @@ interface EventRow {
 type ToolCallEntry = { id?: string; callId?: string; server?: string; tool?: string; arguments?: Record<string, unknown> };
 type ToolResultEntry = { toolCallId?: string; id?: string; callId?: string; result?: unknown; content?: unknown; text?: unknown; isError?: boolean };
 
-function poll(): void {
-  if (limit > 0 && shownCount >= limit) {
-    process.exit(0);
-  }
+interface SessionMsgs { tc: ToolCallEntry[]; tr: ToolResultEntry[]; content: string }
 
-  const db = open();
+/** A single rendered event — the shared shape behind both text and JSON output. */
+interface TailRecord {
+  rowid: number;
+  createdAt: string;
+  type: string;
+  agent: string;
+  sessionId: string | null;
+  taskId: string;
+  model: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  detail: string;
+}
 
-  if (lastRowId === -1) {
-    const maxRow = db.prepare("SELECT MAX(rowid) as m FROM task_events").get() as { m: number };
-    lastRowId = maxRow.m ?? 0;
-    db.close();
-    return;
-  }
-
-  let whereExtra = "";
-  if (filterAgent) {
-    whereExtra = " AND u.agent_name = ?";
-  }
-
-  const rows = db.prepare(`
+/** Fetch matching events with rowid greater than `sinceRowId`, oldest first. */
+function queryRows(db: Database.Database, sinceRowId: number): EventRow[] {
+  const whereExtra = filterAgent ? " AND u.agent_name = ?" : "";
+  const params = filterAgent ? [sinceRowId, filterAgent] : [sinceRowId];
+  return db.prepare(`
     SELECT
       e.rowid,
       e.type,
@@ -111,14 +118,17 @@ function poll(): void {
     LEFT JOIN tasks t ON t.id = e.task_id
     WHERE e.rowid > ?${whereExtra}
     ORDER BY e.rowid ASC
-  `).all(...(filterAgent ? [lastRowId, filterAgent] : [lastRowId])) as EventRow[];
+  `).all(...params) as EventRow[];
+}
 
+/** Aggregate the recent tool-call/result/content messages for every session in `rows`. */
+function buildMsgCache(db: Database.Database, rows: EventRow[], msgLimit: number): Record<string, SessionMsgs> {
   const sessionIds = [...new Set(rows.map(r => r.sessionId).filter((s): s is string => !!s))];
-  const msgCache: Record<string, { tc: ToolCallEntry[]; tr: ToolResultEntry[]; content: string }> = {};
+  const cache: Record<string, SessionMsgs> = {};
   for (const sid of sessionIds) {
     const msgs = db.prepare(
-      "SELECT tool_calls, tool_results, content FROM messages WHERE session_id = ? ORDER BY created_at DESC LIMIT 10"
-    ).all(sid) as Array<{ tool_calls: string | null; tool_results: string | null; content: string | null }>;
+      "SELECT tool_calls, tool_results, content FROM messages WHERE session_id = ? ORDER BY created_at DESC LIMIT ?"
+    ).all(sid, msgLimit) as Array<{ tool_calls: string | null; tool_results: string | null; content: string | null }>;
     const allTc: ToolCallEntry[] = [];
     const allTr: ToolResultEntry[] = [];
     let latestContent = "";
@@ -127,125 +137,187 @@ function poll(): void {
       if (m.tool_results) try { allTr.push(...JSON.parse(m.tool_results) as ToolResultEntry[]); } catch { /* skip */ }
       if (m.content) latestContent = m.content;
     }
-    msgCache[sid] = { tc: allTc, tr: allTr, content: latestContent };
+    cache[sid] = { tc: allTc, tr: allTr, content: latestContent };
+  }
+  return cache;
+}
+
+/** Build the human-readable detail string for one event. */
+function buildDetail(row: EventRow, tcList: ToolCallEntry[], trList: ToolResultEntry[], msgContent: string): string {
+  const parsed: Payload = row.payload ? JSON.parse(row.payload) : null;
+  const p = parsed ?? {};
+
+  switch (row.type) {
+    case "MODEL_REQUEST": {
+      const model = row.model ?? p["model"] ?? "?";
+      const mc = p["messageCount"] ?? p["messagesCount"] ?? p["message_count"] ?? "?";
+      const tc = p["toolCount"] ?? p["tool_count"] ?? "?";
+      return `model=${model} messages=${mc} tools=${tc}`;
+    }
+    case "MODEL_RESPONSE": {
+      const stop = p["stopReason"] ?? p["stop_reason"] ?? p["stop"] ?? "?";
+      let content = msgContent ?? "";
+      if (content) {
+        if (!verbose && content.length > 500) content = content.slice(0, 500) + "...";
+        return `${stop} ${content}`;
+      }
+      const msgCount = p["messageCount"] ?? p["messagesCount"] ?? p["message_count"] ?? "?";
+      const toolCount = p["toolCount"] ?? p["tool_count"] ?? "?";
+      return `${stop} msgs=${msgCount} tools=${toolCount}`;
+    }
+    case "TOOL_CALL": {
+      const tool = p["tool"] ?? p["name"] ?? "?";
+      const callId = p["callId"] ?? "";
+      const tcMatch = tcList.find((t: ToolCallEntry) => t.id === callId || t.callId === callId);
+      const argObj = tcMatch?.arguments ?? {};
+      const argsStr = JSON.stringify(argObj);
+      const trimmed = !verbose && argsStr.length > 500 ? argsStr.slice(0, 500) + "..." : argsStr;
+      return `${tool} ${trimmed}`;
+    }
+    case "TOOL_RESULT": {
+      const tool = p["tool"] ?? "?";
+      const callId = p["callId"] ?? "";
+      const err = p["isError"] ? " ERROR" : "";
+      const trMatch = trList.find((t: ToolResultEntry) => t.toolCallId === callId || t.id === callId || t.callId === callId);
+      const result = trMatch?.result ?? trMatch?.content ?? trMatch?.text ?? p["content"] ?? p["result"] ?? "";
+      let resultStr = typeof result === "string" ? result : JSON.stringify(result, null, verbose ? 2 : 0);
+      if (!verbose && resultStr.length > 2000) resultStr = resultStr.slice(0, 2000) + "...";
+      return `${tool}${err} ${resultStr}`;
+    }
+    case "TASK_COMPLETED": {
+      const text = p["result"] ?? p["text"] ?? p["content"] ?? p["error"] ?? "";
+      if (!text) return "";
+      const s = typeof text === "string" ? text : JSON.stringify(text);
+      if (verbose) return s;
+      return s.length > 2000 ? s.slice(0, 2000) + "..." : s;
+    }
+    case "TASK_FAILED":
+      return `Error: ${pretty(JSON.stringify(p), 500)}`;
+    default:
+      return pretty(row.payload, 500);
+  }
+}
+
+/** Compact token annotation for the text renderer. */
+function buildTokens(row: EventRow): string {
+  if (!(row.taskId && row.inputTokens != null && row.inputTokens > 0)) return "";
+  if (row.type === "MODEL_REQUEST") {
+    const s = row.inputTokens >= 1000 ? `${(row.inputTokens / 1000).toFixed(1)}K` : `${row.inputTokens}`;
+    return `in=${s}`;
+  }
+  if (row.type === "MODEL_RESPONSE" && row.outputTokens != null && row.outputTokens > 0) {
+    const s = row.outputTokens >= 1000 ? `${(row.outputTokens / 1000).toFixed(1)}K` : `${row.outputTokens}`;
+    return `out=${s}`;
+  }
+  return "";
+}
+
+function toRecord(row: EventRow, cache: Record<string, SessionMsgs>): TailRecord {
+  const msgData = row.sessionId ? cache[row.sessionId] : undefined;
+  const detail = buildDetail(row, msgData?.tc ?? [], msgData?.tr ?? [], msgData?.content ?? "");
+  return {
+    rowid: row.rowid,
+    createdAt: row.createdAt,
+    type: row.type,
+    agent: row.agentName ?? "?",
+    sessionId: row.sessionId,
+    taskId: row.taskId,
+    model: row.model,
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    detail,
+  };
+}
+
+function renderLine(rec: TailRecord, row: EventRow): string {
+  const sess = rec.sessionId ? rec.sessionId.slice(0, 8) : "ephemeral";
+  const tokenDisplay = buildTokens(row);
+  return `${ts()} ${rec.agent.padEnd(18)} ${sess.padEnd(8)} ${rec.type.padEnd(15)} ${tokenDisplay.padStart(12)} ${rec.detail}`;
+}
+
+function emit(rec: TailRecord, row: EventRow): void {
+  if (jsonOut) {
+    // NDJSON: one self-contained object per line, stream-friendly.
+    console.log(JSON.stringify(rec));
+    return;
+  }
+  for (const part of renderLine(rec, row).split("\n")) {
+    console.log(part);
+  }
+}
+
+/** Follow mode: poll the DB every 500ms and stream new events forever. */
+function poll(): void {
+  if (limit > 0 && shownCount >= limit) {
+    process.exit(0);
   }
 
+  const db = open();
+
+  if (lastRowId === -1) {
+    const maxRow = db.prepare("SELECT MAX(rowid) as m FROM task_events").get() as { m: number };
+    lastRowId = maxRow.m ?? 0;
+    db.close();
+    return;
+  }
+
+  const rows = queryRows(db, lastRowId);
+  const cache = buildMsgCache(db, rows, 10);
+
   for (const row of rows) {
-    if (limit > 0 && shownCount >= limit) { process.exit(0); }
+    if (limit > 0 && shownCount >= limit) { db.close(); process.exit(0); }
     lastRowId = row.rowid;
     shownCount++;
-
-    const time = ts();
-    const agent = row.agentName ?? "?";
-    const sess = row.sessionId ? row.sessionId.slice(0, 8) : "ephemeral";
-
-    const parsed: Payload = row.payload ? JSON.parse(row.payload) : null;
-    const p = parsed ?? {};
-
-    const msgData = row.sessionId ? msgCache[row.sessionId] : undefined;
-    const tcList = msgData?.tc ?? [];
-    const trList = msgData?.tr ?? [];
-    const msgContent = msgData?.content ?? "";
-
-    let detail = "";
-
-    switch (row.type) {
-      case "MODEL_REQUEST": {
-        const model = row.model ?? p["model"] ?? "?";
-        const mc = p["messageCount"] ?? p["messagesCount"] ?? p["message_count"] ?? "?";
-        const tc = p["toolCount"] ?? p["tool_count"] ?? "?";
-        detail = `model=${model} messages=${mc} tools=${tc}`;
-        break;
-      }
-      case "MODEL_RESPONSE": {
-        const stop = p["stopReason"] ?? p["stop_reason"] ?? p["stop"] ?? "?";
-        let content = msgContent ?? "";
-        if (content) {
-          if (!verbose && content.length > 500) content = content.slice(0, 500) + "...";
-          detail = `${stop} ${content}`;
-        } else {
-          const msgCount = p["messageCount"] ?? p["messagesCount"] ?? p["message_count"] ?? "?";
-          const toolCount = p["toolCount"] ?? p["tool_count"] ?? "?";
-          detail = `${stop} msgs=${msgCount} tools=${toolCount}`;
-        }
-        break;
-      }
-      case "TOOL_CALL": {
-        const tool = p["tool"] ?? p["name"] ?? "?";
-        const callId = p["callId"] ?? "";
-        const tcMatch = tcList.find((t: ToolCallEntry) => t.id === callId || t.callId === callId);
-        const args = tcMatch?.arguments ?? {};
-        const argsStr = JSON.stringify(args);
-        const trimmed = !verbose && argsStr.length > 500 ? argsStr.slice(0, 500) + "..." : argsStr;
-        detail = `${tool} ${trimmed}`;
-        break;
-      }
-      case "TOOL_RESULT": {
-        const tool = p["tool"] ?? "?";
-        const callId = p["callId"] ?? "";
-        const err = p["isError"] ? " ERROR" : "";
-        const trMatch = trList.find((t: ToolResultEntry) => t.toolCallId === callId || t.id === callId || t.callId === callId);
-        const result = trMatch?.result ?? trMatch?.content ?? trMatch?.text ?? p["content"] ?? p["result"] ?? "";
-        let resultStr = typeof result === "string" ? result : JSON.stringify(result, null, verbose ? 2 : 0);
-        if (!verbose && resultStr.length > 2000) resultStr = resultStr.slice(0, 2000) + "...";
-        detail = `${tool}${err} ${resultStr}`;
-        break;
-      }
-      case "TASK_COMPLETED": {
-        const text = p["result"] ?? p["text"] ?? p["content"] ?? p["error"] ?? "";
-        if (text) {
-          const s = typeof text === "string" ? text : JSON.stringify(text);
-          if (verbose) {
-            detail = s;
-          } else {
-            detail = s.length > 2000 ? s.slice(0, 2000) + "..." : s;
-          }
-        }
-        break;
-      }
-      case "TASK_FAILED": {
-        detail = `Error: ${pretty(JSON.stringify(p), 500)}`;
-        break;
-      }
-      default:
-        detail = pretty(row.payload, 500);
-    }
-
-    let tokenDisplay = "";
-    if (row.taskId && row.inputTokens != null && row.inputTokens > 0) {
-      if (row.type === "MODEL_REQUEST") {
-        const s = row.inputTokens >= 1000 ? `${(row.inputTokens / 1000).toFixed(1)}K` : `${row.inputTokens}`;
-        tokenDisplay = `in=${s}`;
-      } else if (row.type === "MODEL_RESPONSE" && row.outputTokens != null && row.outputTokens > 0) {
-        const s = row.outputTokens >= 1000 ? `${(row.outputTokens / 1000).toFixed(1)}K` : `${row.outputTokens}`;
-        tokenDisplay = `out=${s}`;
-      }
-    }
-
-    const line = `${time} ${agent.padEnd(18)} ${sess.padEnd(8)} ${row.type.padEnd(15)} ${tokenDisplay.padStart(12)} ${detail}`;
-    for (const part of line.split("\n")) {
-      console.log(part);
-    }
+    emit(toRecord(row, cache), row);
   }
 
   db.close();
 }
 
-console.log(`agent-mcp-tail -- ${dbPath}`);
-if (verbose) console.log("  --full: no truncation");
-if (filterAgent) console.log("  --agent: " + filterAgent);
-if (includeHistory) console.log("  --include-history");
-if (limit > 0) console.log("  --limit: " + limit);
+/** One-shot mode: return the full stored transcript once, then exit. */
+function runOnce(): void {
+  const db = open();
+  const rows = queryRows(db, 0);
+  // Full transcript wanted, so pull deeper message history than the live tail.
+  const cache = buildMsgCache(db, rows, verbose ? 5000 : 1000);
+  let records = rows.map(row => ({ rec: toRecord(row, cache), row }));
+  if (limit > 0) records = records.slice(-limit);
+  db.close();
+
+  if (jsonOut) {
+    console.log(JSON.stringify(records.map(r => r.rec), null, verbose ? 2 : 0));
+  } else {
+    for (const { rec, row } of records) {
+      for (const part of renderLine(rec, row).split("\n")) {
+        console.log(part);
+      }
+    }
+  }
+}
+
+// --- banner (suppressed in JSON mode so stdout stays pure JSON) ---
+if (!jsonOut) {
+  console.log(`agent-mcp-tail -- ${dbPath}`);
+  if (verbose) console.log("  --full: no truncation");
+  if (filterAgent) console.log("  --agent: " + filterAgent);
+  if (includeHistory) console.log("  --include-history");
+  if (limit > 0) console.log("  --limit: " + limit);
+  console.log(`  --mode: ${follow ? "follow (polling)" : "one-shot"}`);
+}
 
 const startDb = open();
 const count = startDb.prepare("SELECT COUNT(*) as c FROM task_events").get() as { c: number };
 if (count.c === 0) {
   const devPath = path.join(process.cwd(), "data", "agent-mcp", "agents-dev.db");
-  if (existsSync(devPath)) {
+  if (existsSync(devPath) && !jsonOut) {
     console.log("Warning: empty -- try ADHD_AGENT_DATABASE_PATH=" + devPath);
   }
 }
 startDb.close();
-console.log(`${ts()} --- started ---`);
 
-setInterval(poll, 500);
+if (follow) {
+  if (!jsonOut) console.log(`${ts()} --- started ---`);
+  setInterval(poll, 500);
+} else {
+  runOnce();
+}

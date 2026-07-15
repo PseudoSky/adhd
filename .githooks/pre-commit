@@ -2,7 +2,8 @@
 #
 # Pre-commit hook. Two gates, in order:
 #   1. secret-scan  — blocks credentials from entering the repo (gitleaks + built-in rules)
-#   2. affected lint — runs `nx affected lint` on the projects touched by staged changes
+#   2. affected lint — runs `nx affected lint --fix` on the projects touched by staged
+#      changes, then re-stages what the fix rewrote (derives deps, blocks on unfixable errors)
 #
 # Secrets are checked FIRST and are cheap: a leaked credential is unrecoverable
 # once pushed (rotation, not reversion, is the fix), whereas a lint error is not.
@@ -33,17 +34,44 @@ fi
 echo "pre-commit: scanning staged changes for secrets…"
 node "$scanner" --staged || exit 1
 
-# ── Gate 2: lint ─────────────────────────────────────────────────────────────
-echo "pre-commit: running 'nx affected -t lint' on staged changes…"
-npx nx affected --target=lint --files="$files"
+# ── Gate 2: lint (auto-fix + re-stage) ───────────────────────────────────────
+# Runs `nx affected -t lint --fix` so fixable issues are corrected automatically —
+# notably @nx/dependency-checks, which DERIVES each package.json's deps from its
+# actual imports (no hand-maintained dep lists). Whatever the fix rewrites is then
+# re-staged so it lands in THIS commit. Files that already had unstaged edits before
+# the hook ran are left untouched. Any unfixable lint error still blocks the commit.
+echo "pre-commit: running 'nx affected -t lint --fix' on staged changes…"
+# Snapshot worktree-dirty files BEFORE the fix. Temp files (not process
+# substitution) keep this POSIX-sh compatible — git runs hooks under `sh`.
+dirty_before=$(mktemp)
+git diff --name-only | sort -u > "$dirty_before"
+
+# --skip-nx-cache is REQUIRED: `eslint --fix` mutates source files as a side effect,
+# which nx does not track as a cacheable output. On a cache hit nx replays the pass/fail
+# but never re-applies the fix, so a repeated break would slip through. Force it to run.
+npx nx affected --target=lint --fix --files="$files" --skip-nx-cache
 status=$?
+
+# Re-stage files the autofix changed, excluding ones already dirty beforehand.
+dirty_after=$(mktemp)
+git diff --name-only | sort -u > "$dirty_after"
+restage=$(comm -13 "$dirty_before" "$dirty_after")
+rm -f "$dirty_before" "$dirty_after"
+if [ -n "$restage" ]; then
+  echo "pre-commit: auto-fixed and re-staging:"
+  printf '%s\n' "$restage" | while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    printf '  + %s\n' "$f"
+    git add -- "$f"
+  done
+fi
 
 if [ "$status" -ne 0 ]; then
   echo ""
-  echo "✖ pre-commit: affected lint failed — fix the errors above before committing."
+  echo "✖ pre-commit: affected lint failed (unfixable errors above) — fix and re-commit."
   echo "  (bypass in an emergency with: git commit --no-verify)"
   exit 1
 fi
 
-echo "✓ pre-commit: affected lint clean."
+echo "✓ pre-commit: affected lint clean (deps auto-derived)."
 exit 0

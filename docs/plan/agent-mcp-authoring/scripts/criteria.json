@@ -242,6 +242,35 @@
         "entrypoint/agent-mcp/src/tools/authoring.ts"
       ],
       "note": "Mirrors audit_authoring.py component-define.2.tool verbatim (AMA-017): asserts component_delete is actually registered in the authoring lane, not merely tested."
+    },
+    {
+      "id": "discovery-tools.3",
+      "phase": "discovery",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=entrypoint/agent-mcp/src/__tests__/component-search-ndcg.test.ts",
+      "expect": "exit0",
+      "note": "D6 flip (2026-07-10): component_search retrieval QUALITY proven by a golden-set nDCG@5>=0.70 over a hard-negative corpus, driving the REAL hybrid ranker (FTS5 textScore + vector vecScore fused via @adhd/sox-hybrid-search) over the bridge. Discrimination + negative-control teeth live in discovery-tools.3.tooth and dod.2.tooth."
+    },
+    {
+      "id": "discovery-tools.3.tooth",
+      "phase": "discovery",
+      "tier": null,
+      "kind": "present",
+      "pattern": "nDCG|ndcg",
+      "paths": [
+        "entrypoint/agent-mcp/src/__tests__/component-search-ndcg.test.ts"
+      ],
+      "note": "Mirrors audit_authoring.py discovery-tools.3.tooth verbatim. GREP-BASED — asserts the nDCG test mentions the nDCG metric; the executor MUST prove the nDCG assertion FAILS under a shuffled ranker (negative control, repo rule §6.2). Full three-token teeth (nDCG + golden + shuffle) are AND-enforced in dod.2 / dod.2.tooth."
+    },
+    {
+      "id": "dod.2.tooth",
+      "phase": "discovery",
+      "tier": null,
+      "kind": "command",
+      "cmd": "grep -qE 'nDCG|ndcg' entrypoint/agent-mcp/src/__tests__/component-search-ndcg.test.ts && grep -qE 'golden' entrypoint/agent-mcp/src/__tests__/component-search-ndcg.test.ts && grep -qE 'shuffle|shuffled|insertion.?order' entrypoint/agent-mcp/src/__tests__/component-search-ndcg.test.ts",
+      "expect": "exit0",
+      "note": "Mirrors audit_authoring.py dod.2.tooth verbatim (D6 flip). AND-chains all three teeth — the golden-set fixture, the nDCG@5 metric, and the shuffled-ranker negative control must ALL be present so a vacuous 'match>noise' test is caught structurally. GREP-BASED — the executor proves the assertion bites via §6.2 negative control, never treats green as proof."
     }
   ]
 }
