@@ -10,7 +10,8 @@
     "layer:data",
     "platform:python",
     "access:domain",
-    "publish:pypi"
+    "publish:pypi",
+    "build:custom"
   ],
   "targets": {
     "build": {

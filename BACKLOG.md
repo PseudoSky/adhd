@@ -27,6 +27,18 @@ Reproduced with a real MCP stdio handshake (initialize + tools/list) — the pro
 **Fix direction:** `npx nx reset` + a clean full build, then confirm the stale group dirs do not reappear (they should not — no source project maps to them). Deliberately **not** deleted at discovery time: removing directories is destructive and requires human approval per CLAUDE.md.
 **Status:** OPEN.
 
+### BUG-AGENTMCP-003 — DeepSeek (OpenAI-compat) provider path emits a `tool`-role message with no preceding `tool_calls`, hard-failing the task with a 400
+**Discovered:** 2026-07-15, reading the full `typescript-deepseek` transcript via `agent-mcp-tail -a typescript-deepseek -h` (an earlier ephemeral run, not the `1c43f9da` session).
+**Symptom:** a task run under the `typescript-deepseek` agent (provider `openai`, model `deepseek-v4-flash`, `baseURL https://api.deepseek.com/v1`) died mid-loop with:
+```
+TASK_FAILED  Error: {"error":"Provider call failed: 400 Messages with role 'tool' must be a response to a preceding message with 'tool_calls'"}
+```
+The failing request was the ~13th model call in the loop (`messages=24`), after several turns that each issued **two parallel tool calls** (`filesystem__*` + `shell__shell_exec`) where the `shell` call frequently returned an error/timeout.
+**Root cause (suspected):** when the engine reconstructs the OpenAI-format message array for the DeepSeek endpoint, a `role:"tool"` result is serialized without the immediately-preceding `assistant` message carrying the matching `tool_calls` entry — most likely triggered by **partial failures among parallel tool calls** (one call errors/times out, its result is still appended, but the paired assistant `tool_calls` message is dropped or reordered). Anthropic-native providers tolerate the shape; DeepSeek/OpenAI-compat validates it strictly and 400s. Not reproduced on the Anthropic-backed agents.
+**Impact:** any DeepSeek/OpenAI-compat agent that runs multi/parallel tool calls with intermittent tool errors can hard-fail an otherwise-recoverable task. `typescript-deepseek` is the only such agent registered today, so blast radius is currently one agent.
+**Fix direction:** in the OpenAI-compat message serializer, guarantee the invariant `every {role:"tool"} is immediately preceded by an {role:"assistant", tool_calls:[…]} containing its tool_call_id` — i.e. never emit a tool result whose call wasn't emitted, and keep assistant tool_calls + their results contiguous even when a subset errored. Add a regression fixture that replays a turn with 2 parallel calls where one errors.
+**Status:** OPEN.
+
 ### BUG-APIGEN-016 — `apigen serve` / conformance test harness leaks orphaned flask/grpc server processes
 **Discovered:** 2026-07-03, while dispatching the doc-agent pipeline at `entrypoint/apigen-cli` (the agent's CLI "prove-it" ran `apigen serve`, which hung; investigating found the leak).
 **Status:** FIXED (2026-07-04). `serve.ts` now registers `process.on('uncaughtException')` and `process.on('unhandledRejection')` handlers that call `onSignal(SIGTERM)` to kill all children before re-throwing. `spawn()` calls use `detached: false` (same process group). New regression test proves orphan-free teardown on SIGTERM. SIGKILL remains an OS-level invariant that no Node code can circumvent.

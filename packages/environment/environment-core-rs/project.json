@@ -10,7 +10,8 @@
     "layer:data",
     "platform:rust",
     "access:domain",
-    "publish:crates"
+    "publish:crates",
+    "build:custom"
   ],
   "targets": {
     "build": {

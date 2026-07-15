@@ -128,13 +128,13 @@ out the whole definition lane and restore agent-mcp to its pre-plan bytes.
   - negative-control: `stubbing the enrichment to skip embedding makes the use_cases array empty → the assertion fails`
   - delivered-by: `embedding-substrate, enrichment-pipeline, component-define`
 
-- `[dod.2]` **An agent discovers components for a task by intent, auto-ranked, one call per slot. (behavioral)** — GOAL §Maintainability-Discovery; replaces manual taxonomy navigation (SPEC §6.2).
-  - given: a registry holding components of several types, some matching a task intent and some unrelated
-  - when: the agent calls `component_search({query, type})` with the task intent
-  - then: components semantically matching the intent rank above unrelated ones, returned as cheap summaries
-  - entrypoint: `component_search MCP tool ({query,type?,shared?,limit?})`
-  - observable: `returns ranked results [{name,type,summary,score,shared}] where a query semantically matching a seeded component ranks it above an unrelated one (score-ordered); restricting type fills exactly one grammar slot`
-  - negative-control: `replacing the semantic ranker with insertion-order returns the unrelated component first → assertion fails`
+- `[dod.2]` **An agent discovers the BEST components for a task by intent — auto-ranked, one call per slot — proven by a golden-set nDCG@5 ≥ 0.70 over a corpus salted with hard negatives. (behavioral)** — GOAL §Maintainability-Discovery; replaces manual taxonomy navigation (SPEC §6.2). D6 (2026-07-10) adopts real FTS5+vector hybrid fusion; this bar replaces the old 1-vs-1 "a match beats one unrelated item" sanity check (which any non-broken embedder passed and which never proved retrieval QUALITY).
+  - given: a golden set of ~15–30 realistic tasks with graded relevance judgments over an N≫k component corpus SALTED WITH HARD NEGATIVES (distractors sharing the query's vocabulary/topic but not the answer — e.g. "refresh an expired OAuth token" → relevant:[oauth-refresh, token-store], distractors:[oauth-login, jwt-verify, api-key-rotate])
+  - when: `component_search` runs the REAL hybrid ranker (FTS5 keyword `textScore` + vector `vecScore` fused via `@adhd/sox-hybrid-search`'s pure `normalize()`+`fuse()`) for each golden task over the bridge + real store
+  - then: retrieval scores nDCG@5 ≥ 0.70 (the BEST component ranks at/near position 1), MRR reported alongside; and a shuffled/insertion-order ranker drops nDCG below the 0.70 floor (negative control with teeth)
+  - entrypoint: `component_search MCP tool (hybrid FTS5 textScore + vector vecScore fused via @adhd/sox-hybrid-search), exercised by entrypoint/agent-mcp/src/__tests__/component-search-ndcg.test.ts`
+  - observable: `over the golden set (hard-negative corpus, N≫k) component_search scores nDCG@5 ≥ 0.70 (MRR alongside) so the BEST component ranks at/near position 1; results are name-keyed bounded summaries [{name,type,summary,score}]; NOT merely "a match ranks above one unrelated item"`
+  - negative-control: `swapping the fused ranker for a shuffled/insertion-order ranker in entrypoint/agent-mcp/src/__tests__/component-search-ndcg.test.ts drops nDCG@5 below the 0.70 floor and the test fails red`
   - delivered-by: `discovery-tools`
 
 - `[dod.3]` **An agent composes a NEW agent from components in ONE declarative idempotent upsert. (behavioral)** — GOAL §Maintainability-Onboarding (compose without reading another agent's file); SPEC §5.2/§7.

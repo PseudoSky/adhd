@@ -27,7 +27,7 @@
       "cache": true,
       "inputs": ["default", "^production", { "externalDependencies": ["typescript"] }],
       "options": {
-        "command": "tsc -p packages/dispatch/dispatch-spec/tsconfig.lib.json --noEmit"
+        "command": "tsc -p packages/dispatch/dispatch-base-spec/tsconfig.lib.json --noEmit"
       }
     },
     "build": {
