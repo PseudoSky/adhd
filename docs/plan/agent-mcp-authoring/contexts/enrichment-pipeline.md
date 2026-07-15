@@ -30,7 +30,7 @@ SHA-256 content hash the idempotence gate needs, and free deterministic tags.
 > `core.ts` imports only `node:crypto` and exports `ingest`, `hexSha256`,
 > `splitIntoChunksSentence` (+ `IngestResult`/`IngestOpts`/`IngestChunk`). The root
 > barrel `@adhd/sox-ingest` additionally re-exports `AstChunker`, which pulls
-> `web-tree-sitter` + `tree-sitter-wasms`; `/core` avoids both native deps. (CAVEAT:
+> `web-tree-sitter` + `tree-sitter-wasms`; `/core` avoids LOADING both native deps at runtime, but NOT installing them — they are hard `dependencies` of the package (~55 MB), so `npm install` pulls them either way (BACKLOG SOX-DEP-001). (CAVEAT:
 > the `./core` export is currently uncommitted upstream — the `sox-package-publish`
 > blocker re-verifies it resolves before this state runs.)
 
@@ -147,7 +147,7 @@ mutates:    [
 
 ## Notes for executor
 
-- **Consume, don't build.** Import `ingest` from `@adhd/sox-ingest/core` (dep-free —
+- **Consume, don't build.** Import `ingest` from `@adhd/sox-ingest/core` (runtime-dep-free —
   `node:crypto` only; the root barrel would drag in `web-tree-sitter`). Import the
   embedder from `./embedding.js`. Import `openVectorStore`/use the `knn` method from
   `@adhd/sox-vector-store`. The new code is the registry-specific orchestrator wiring

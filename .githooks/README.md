@@ -12,7 +12,7 @@ git config core.hooksPath .githooks
 
 | Hook | What it does |
 |---|---|
-| `pre-commit` | **1.** `check-no-credentials.js --staged` — blocks credentials from entering the repo. **2.** `nx affected -t lint --files=<staged>` — blocks on lint errors. |
+| `pre-commit` | **1.** `check-no-credentials.js --staged` — blocks credentials from entering the repo. **2.** `nx affected -t lint --fix --files=<staged>` — auto-fixes fixable issues (incl. `@nx/dependency-checks`, which derives each `package.json`'s deps from its imports), re-stages what it rewrote, and blocks on any unfixable lint error. |
 
 Secrets are checked **first** and are cheap. A leaked credential is *unrecoverable*
 once pushed — the fix is rotation, not reversion — whereas a lint error is not.
