@@ -9,7 +9,8 @@
     "orchestrator",
     "plugins",
     "storage",
-    "tools"
+    "tools",
+    "cli"
   ],
   "terminal": "done",
   "nodes": {},
