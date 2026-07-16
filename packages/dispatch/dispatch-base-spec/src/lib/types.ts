@@ -1,7 +1,7 @@
 /**
  * types.ts — Complete TypeScript type system for the dispatch plan ecosystem.
  *
- * Source: docs/plan/dispatch-optimizer/PROPOSED_DAG_STRUCTURE.md
+ * Source: docs/plan/dispatch-completion/superseded/dispatch-optimizer/PROPOSED_DAG_STRUCTURE.md
  * Design decisions: D-01 through D-18 in DECISIONS.md
  *
  * Field provenance: dag | derived | scheduler | optimizer | clock | gitnexus

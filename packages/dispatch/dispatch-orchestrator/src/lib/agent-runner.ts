@@ -47,7 +47,7 @@ export interface DispatchUsageSummary {
  * is this task's own model calls, `subtree` includes delegated sub-tasks.
  * Per-turn usage breakdown does not exist on the wire and must not be
  * assumed (dag.json milestones["agent-runner"] description; see also
- * docs/plan/dispatch-production/contexts/tests-real-e2e.md).
+ * docs/plan/dispatch-completion/superseded/dispatch-production/contexts/tests-real-e2e.md).
  */
 export interface DispatchUsageReport {
   direct: DispatchUsageSummary;
@@ -57,7 +57,7 @@ export interface DispatchUsageReport {
 
 /**
  * The synthesized single-entry turns[] record described by the agent-runner
- * milestone (docs/plan/dispatch-production/dag.json, operation
+ * milestone (docs/plan/dispatch-completion/superseded/dispatch-production/dag.json, operation
  * agent-runner.1): `{ input_tokens, output_tokens, model_calls }`.
  *
  * NOTE — deliberately NOT `@adhd/dispatch-base-spec`'s `Turn` type: `Turn`
@@ -105,7 +105,7 @@ export function usageToTurns(
 // ── IDispatchAgentRunner ─────────────────────────────────────────────────────
 //
 // The seam between the dispatch system and its execution backend. See
-// docs/plan/dispatch-production/dag.json milestones["agent-runner"].
+// docs/plan/dispatch-completion/superseded/dispatch-production/dag.json milestones["agent-runner"] (superseded; retained as provenance).
 // ---------------------------------------------------------------------------
 
 export interface IDispatchAgentRunner {
@@ -301,7 +301,7 @@ function defaultClientFactory(
 /**
  * Real `IDispatchAgentRunner` implementation over agent-mcp's MCP tool
  * surface (`agent_read`, `agent_create`, `task`, `result`, `task_cancel`) —
- * see docs/plan/dispatch-production/dag.json milestones["agent-runner"] for
+ * see docs/plan/dispatch-completion/superseded/dispatch-production/dag.json milestones["agent-runner"] (superseded; retained as provenance) for
  * the full seam contract, and packages/ai/agent-mcp/README.md for the tool
  * reference this implementation was written against.
  */

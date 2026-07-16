@@ -77,7 +77,7 @@ interface FiredTask {
  * compiled prompt for the most recent fire of a given agent to
  * `<debugDir>/agent-<slug>.md` so a human (or a snapshot test) can inspect
  * exactly what the orchestrator would have sent — see dag.json operation
- * agent-runner.2 and docs/plan/dispatch-production/contexts/tests-real-e2e.md.
+ * agent-runner.2 and docs/plan/dispatch-completion/superseded/dispatch-production/contexts/tests-real-e2e.md.
  */
 export class MockAgentRunner implements IDispatchAgentRunner {
   /** Every unit passed to `ensureAgent()`, in call order. */

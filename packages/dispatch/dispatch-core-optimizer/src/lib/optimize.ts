@@ -1,7 +1,7 @@
 /**
  * optimize.ts — greedy dispatch-unit packer (milestone optimizer-core).
  *
- * GREEDY PACKER ONLY, per docs/plan/dispatch-production/dag.json milestones
+ * GREEDY PACKER ONLY, per docs/plan/dispatch-completion/superseded/dispatch-production/dag.json milestones
  * ["optimizer-core"]:
  *   1. Partition eligible milestones by shape.kind family AND model tier — never
  *      mixed in one DispatchUnit.
