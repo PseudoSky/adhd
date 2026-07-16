@@ -111,6 +111,13 @@
       "kind": "command",
       "cmd": "npx nx run-many -t test,build -p dispatch-plugin-gitnexus",
       "expect": "exit0"
+    },
+    {
+      "id": "plugin-gitnexus.2",
+      "phase": "plugins",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/dispatch/dispatch-plugin-gitnexus/src/index.ts"
     }
   ]
 }
