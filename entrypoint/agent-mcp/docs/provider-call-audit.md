@@ -323,8 +323,14 @@ cache-read ≈ $0.003/M (~47× cheaper), output ≈ $0.28/M. agent-mcp does not 
 - Cost model this confirms: [`docs/ideas/context-and-cache-strategy.md`](../../../docs/ideas/context-and-cache-strategy.md)
   §3 (cumulative billed input) and §6 (redesigned usage reporting).
 
-**Caveat.** OpenCode `run` (non-interactive) repeatedly stalled on the multi-step
-tool loop for this model; the successful measurement was an interactive run. Cache
-warmth differs between harnesses (OpenCode's run 2 was warm from prior calls, 81%
-cache-read; agent-mcp 88%), which affects the miss counts but not the qualitative
-conclusion — the prefix-size gap dominates.
+**Caveat.** The measured OpenCode run is the permitted run. Earlier
+non-interactive `opencode run` attempts appeared to "hang" — but that was a
+harness-invocation error on the measurer's side, **not** a model, provider, or
+OpenCode fault: the runs were launched **without granting permission to execute the
+required tools** (e.g. `npx nx lint`), so OpenCode correctly blocked awaiting tool
+approval, and the wait was then misread as a provider stall and killed. (A `pwd`
+probe succeeding earlier was misleading — it did not require the same approval.)
+Nothing here reflects on OpenCode's reliability. Cache warmth also differs between
+harnesses (OpenCode's run was warm from prior calls, ~81% cache-read; agent-mcp
+88%), which affects the miss counts but not the qualitative conclusion — the
+prefix-size gap dominates.
