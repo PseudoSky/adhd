@@ -18,6 +18,7 @@
 
 - [optimizer-client.1] optimizer and client build+test green
 
+- [optimizer-client.2] optimize() sets execution_mode on units
 ---
 
 ## Reservations
