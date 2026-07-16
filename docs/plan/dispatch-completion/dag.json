@@ -134,6 +134,19 @@
       ],
       "context": "contexts/plugin-io.md",
       "notes": ""
+    },
+    "plugin-gitnexus": {
+      "kind": "work",
+      "phase": "plugins",
+      "depends_on": [
+        "orch-audit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/dispatch/dispatch-plugin-gitnexus/src/index.ts"
+      ],
+      "context": "contexts/plugin-gitnexus.md",
+      "notes": ""
     }
   },
   "authored_with": {
