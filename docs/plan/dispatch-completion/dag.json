@@ -213,6 +213,21 @@
       ],
       "context": "contexts/tools-audit.md",
       "notes": ""
+    },
+    "cli-complete": {
+      "kind": "work",
+      "phase": "cli",
+      "depends_on": [
+        "orch-audit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "entrypoint/dispatch-cli/package.json",
+        "entrypoint/dispatch-cli/project.json",
+        "entrypoint/dispatch-cli/src/lib/core.ts"
+      ],
+      "context": "contexts/cli-complete.md",
+      "notes": ""
     }
   },
   "authored_with": {
