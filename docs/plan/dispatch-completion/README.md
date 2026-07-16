@@ -10,13 +10,11 @@ A dispatch lead ("Priya") who authors `dag.json` plans and drives them through t
 
 Before: a `DispatchUnit` has no `execution_mode`; a complete milestone still reads `eligible`; a mid-cycle runner failure throws and leaves no trace; snapshots can corrupt on JSON round-trip; there is no SQLite backend, no file/blast-radius enrichment, no npx binary, and the DEBT-DISPATCH cluster is open. After: each edge is closed with a teeth-bearing test, the deferred capabilities ship, the orphan package is gone, and all 10 dispatch projects build+test green and are release-ready.
 
-## Definition of Done
-
-_Authored below via `plan-scaffold.js add-dod`._
-
 ## Source artifacts
 
 `SCOPE.md` (objective, pinned-vs-resolve), `USE_CASES.md`, `demo/DEMO.md` (DoD source, validator-passing), `TOOLS.md` (build-vs-reuse), `RECONCILIATION.md` (ship-vs-outstanding ledger), `PLAN_STATE_MACHINE_PROPOSAL.md` (topology), `APPROVAL.md` (committed sign-off), `BACKLOG.md` (plan-owned DEBT-DISPATCH items — source of truth).
+
+## Definition of Done
 
 - `[dod.1]` **All 10 dispatch projects build+test green: nx run-many -t test,build across dispatch-base-spec,-core-client,-serializer-json,-serializer-sqlite,-core-optimizer,-orchestrator,-plugin-io,-plugin-gitnexus,-tools,-cli exits 0. (structural)** — All 10 dispatch projects build+test green: nx run-many -t test,build across dispatch-base-spec,-core-client,-serializer-json,-serializer-sqlite,-core-optimizer,-orchestrator,-plugin-io,-plugin-gitnexus,-tools,-cli exits 0..
 
@@ -85,3 +83,5 @@ _Authored below via `plan-scaffold.js add-dod`._
 - `[dod.12]` **dispatch is npx-invocable (bin field + built bin/); snapshot/status/run report a missing dag file consistently with the path (DEBT-022/025); dispatch-base-types is deleted. (structural)** — dispatch is npx-invocable (bin field + built bin/); snapshot/status/run report a missing dag file consistently with the path (DEBT-022/025); dispatch-base-types is deleted..
 
 - `[dod.13]` **Every carried DEBT-DISPATCH item in this plan's BACKLOG.md is either fixed-with-a-teeth-bearing test or closed with a dated live-source verdict; no silent carry. (structural)** — Every carried DEBT-DISPATCH item in this plan's BACKLOG.md is either fixed-with-a-teeth-bearing test or closed with a dated live-source verdict; no silent carry..
+
+- `[dod.1]` **All 10 dispatch projects build+test green: nx run-many -t test,build across dispatch-base-spec,-core-client,-serializer-json,-serializer-sqlite,-core-optimizer,-orchestrator,-plugin-io,-plugin-gitnexus,-tools,-cli exits 0. (structural)** — All 10 dispatch projects build+test green: nx run-many -t test,build across dispatch-base-spec,-core-client,-serializer-json,-serializer-sqlite,-core-optimizer,-orchestrator,-plugin-io,-plugin-gitnexus,-tools,-cli exits 0..
