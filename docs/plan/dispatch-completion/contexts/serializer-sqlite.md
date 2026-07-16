@@ -18,6 +18,7 @@
 
 - [serializer-sqlite.1] dispatch-serializer-sqlite builds+tests green (incl. json-parity test)
 
+- [serializer-sqlite.2] sqlite serializer entry exists
 ---
 
 ## Reservations

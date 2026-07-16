@@ -126,6 +126,13 @@
       "kind": "command",
       "cmd": "npx nx run-many -t test,build -p dispatch-serializer-sqlite",
       "expect": "exit0"
+    },
+    {
+      "id": "serializer-sqlite.2",
+      "phase": "storage",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/dispatch/dispatch-serializer-sqlite/src/index.ts"
     }
   ]
 }
