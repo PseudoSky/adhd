@@ -83,3 +83,5 @@ _Authored below via `plan-scaffold.js add-dod`._
   - negative-control: `remove the referential-integrity guard -> cycle accepted, test red`
 
 - `[dod.12]` **dispatch is npx-invocable (bin field + built bin/); snapshot/status/run report a missing dag file consistently with the path (DEBT-022/025); dispatch-base-types is deleted. (structural)** — dispatch is npx-invocable (bin field + built bin/); snapshot/status/run report a missing dag file consistently with the path (DEBT-022/025); dispatch-base-types is deleted..
+
+- `[dod.13]` **Every carried DEBT-DISPATCH item in this plan's BACKLOG.md is either fixed-with-a-teeth-bearing test or closed with a dated live-source verdict; no silent carry. (structural)** — Every carried DEBT-DISPATCH item in this plan's BACKLOG.md is either fixed-with-a-teeth-bearing test or closed with a dated live-source verdict; no silent carry..
