@@ -18,6 +18,7 @@
 
 - [cli-complete.1] dispatch-cli builds+tests green
 
+- [cli-complete.2] dispatch-cli declares a bin field
 ---
 
 ## Reservations
