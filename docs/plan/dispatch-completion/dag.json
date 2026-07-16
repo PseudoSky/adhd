@@ -95,6 +95,19 @@
       ],
       "context": "contexts/orchestrator-harden.md",
       "notes": ""
+    },
+    "causal-replan": {
+      "kind": "work",
+      "phase": "orchestrator",
+      "depends_on": [
+        "orchestrator-harden"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts"
+      ],
+      "context": "contexts/causal-replan.md",
+      "notes": ""
     }
   },
   "authored_with": {
