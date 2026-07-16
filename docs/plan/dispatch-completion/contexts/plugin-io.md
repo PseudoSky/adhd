@@ -18,6 +18,7 @@
 
 - [plugin-io.1] dispatch-plugin-io builds+tests green
 
+- [plugin-io.2] plugin-io package entry exists
 ---
 
 ## Reservations

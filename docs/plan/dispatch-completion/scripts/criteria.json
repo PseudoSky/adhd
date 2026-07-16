@@ -96,6 +96,13 @@
       "kind": "command",
       "cmd": "npx nx run-many -t test,build -p dispatch-plugin-io",
       "expect": "exit0"
+    },
+    {
+      "id": "plugin-io.2",
+      "phase": "plugins",
+      "tier": null,
+      "kind": "exists",
+      "path": "packages/dispatch/dispatch-plugin-io/src/index.ts"
     }
   ]
 }
