@@ -241,6 +241,19 @@
       ],
       "context": "contexts/cli-audit.md",
       "notes": ""
+    },
+    "optimizer-algorithms": {
+      "kind": "work",
+      "phase": "algorithms",
+      "depends_on": [
+        "opt-audit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/dispatch/dispatch-core-optimizer/src/lib/algorithms/index.ts"
+      ],
+      "context": "contexts/optimizer-algorithms.md",
+      "notes": ""
     }
   },
   "authored_with": {
