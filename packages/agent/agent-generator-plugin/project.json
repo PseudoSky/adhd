@@ -14,12 +14,13 @@
   "tags": ["layer:logic", "platform:node"],
   "targets": {
     "build": {
-      "executor": "@nx/vite:build",
+      "executor": "@nx/js:tsc",
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist/packages/agent/agent-generator-plugin",
         "main": "packages/agent/agent-generator-plugin/src/index.ts",
         "tsConfig": "packages/agent/agent-generator-plugin/tsconfig.lib.json",
+        "clean": true,
         "assets": [
           "packages/agent/agent-generator-plugin/*.md",
           {

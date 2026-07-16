@@ -1,6 +1,48 @@
 # BACKLOG
 
+> 📦 Resolved/fixed items are archived in [docs/BACKLOG-RESOLVED.md](docs/BACKLOG-RESOLVED.md).
+
 ## Bugs
+
+### BUG-DISPATCH-EXEC-001 — dispatch-orchestrator does NOT execute tool calls (headline capability is a stub)
+**Discovered:** 2026-07-16, code-reality audit of the dispatch subsystem (import graph + build/test exit codes).
+**Where:** `packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts:662-671` — for a unit whose operations have no generative content, the loop emits "tool-call execution (@adhd/dispatch-tools) is not wired into dispatch-orchestrator's minimal loop; marking skipped" and proceeds. `@adhd/dispatch-tools` does not exist as a package.
+**Impact:** the dispatcher orchestrates/optimizes/serializes and its CLI runs (builds EXIT=0, dispatch-cli 30 tests EXIT=0), but it does not actually EXECUTE tool calls — the core point of a dispatcher. "Shipped/173 tests" claims obscure that the center is hollow.
+**Fix direction:** wire real tool-call execution (build the missing `dispatch-tools` or integrate an existing executor); prove it with a demo that drives the real CLI/orchestrator and asserts a tool actually ran. Tracked into `docs/plan/dispatch-completion`.
+**Status:** OPEN.
+
+### BUG-DISPATCH-PUBLISH-001 — dispatch packages are publish-broken: package.json names ≠ import specifiers (masked by duplicate tsconfig aliases)
+**Discovered:** 2026-07-16, same audit.
+**Where:** `tsconfig.base.json` had DUPLICATE aliases — `@adhd/dispatch-spec`→`dispatch-base-spec`, `@adhd/dispatch-client`→`dispatch-core-client`, `@adhd/dispatch-optimizer`→`dispatch-core-optimizer` — resolving imports the source actually used. But the real `package.json` names are `dispatch-base-spec`/`-core-client`/`-core-optimizer`. Builds in-repo via tsconfig paths; the published `@adhd/dispatch-orchestrator` would import `@adhd/dispatch-spec` etc., which are not real published packages. Same class as BUG-AGENTMCP-001.
+**Fix direction:** pick ONE canonical name per package, align package.json name ↔ import specifiers ↔ tsconfig alias, drop the duplicate aliases, add an `npm pack --dry-run` + real-install verification gate. Tracked into `docs/plan/dispatch-completion`.
+**Status:** FIXED 2026-07-15. Canonical name set = the real `package.json`/dir names (`dispatch-base-spec`, `dispatch-core-client`, `dispatch-core-optimizer`) — least churn, no dir/package renames needed.
+- Rewrote all 63 import/comment sites across `packages/dispatch/**` (6 packages) and `entrypoint/dispatch-cli/**` (src, tests, bin, README) from the short aliases (`@adhd/dispatch-spec`/`-client`/`-optimizer`) to the canonical names. Re-grep after the change (`git grep -nE "@adhd/dispatch-(spec|client|optimizer)([^-a-z]|$)" -- packages entrypoint`) returns zero matches (exit 1).
+- Deleted the 3 duplicate short aliases from `tsconfig.base.json`, keeping only the canonical `-base-spec`/`-core-client`/`-core-optimizer` entries.
+- Fixed `dispatch-orchestrator/package.json`'s `devDependencies` entry `@adhd/dispatch-optimizer` (a name that was never real) → `@adhd/dispatch-core-optimizer`; every other dispatch package's `dependencies`/`devDependencies` already matched its real runtime/test-only `@adhd/dispatch-*` imports (verified by cross-checking each package's non-test-file import graph against its declared deps — no other package.json needed a change).
+- **Publish-resolvability gate:** ran `npm pack --dry-run --json` against all 7 built `dist/{packages/dispatch/*,entrypoint/dispatch-cli}` package directories — all exit 0, zero stderr, and every declared dependency name in each packed `package.json` (`@adhd/dispatch-base-spec`, `@adhd/dispatch-core-client`, `@adhd/dispatch-core-optimizer`, `@adhd/dispatch-orchestrator`, `@adhd/dispatch-serializer-json`) resolves to a real, existing package — none reference the old short aliases anymore. This check should be added as a permanent CI gate (`npm pack --dry-run` per dispatch package, asserting the packed manifest's deps are a subset of real `@adhd/dispatch-*` package names) — tracked as follow-up `DEBT-DISPATCH-PUBLISH-GATE-001` below.
+- **Verified green:** `npx nx run-many -t build test --projects=dispatch-base-spec,dispatch-base-types,dispatch-core-client,dispatch-core-optimizer,dispatch-orchestrator,dispatch-serializer-json,dispatch-cli` → EXIT 0, all tasks passed (30/30 dispatch-cli tests incl. the apigen-generated-CLI smoke suite).
+- Did NOT touch `dispatch-orchestrator.ts`'s tool-execution logic (BUG-DISPATCH-EXEC-001, separate owner) — only import specifiers were changed there.
+- `dispatch-base-types` remains a fully orphaned package (0 consumers) — already tracked for deletion under `docs/plan/dispatch-completion` (RECONCILIATION.md/USE_CASES.md/SCOPE.md `orphan-delete`); not duplicated here.
+
+### DEBT-DISPATCH-PUBLISH-GATE-001 — no permanent CI gate enforces dispatch package-name/import/dep resolvability
+**Discovered:** 2026-07-15, while closing out BUG-DISPATCH-PUBLISH-001.
+**Where:** repo-wide — no script currently runs `npm pack --dry-run` (or equivalent) against the built dispatch packages as part of `test`/CI.
+**Impact:** the exact class of bug just fixed (tsconfig aliases masking a real publish break) could silently regress if a future import reintroduces a short/aliased specifier, since in-repo `build`/`test` only exercise the tsconfig path-mapped resolution, never real npm dependency resolution.
+**Fix direction:** add a `verify-publish` (or similar) target — per dispatch package (and ideally every publishable `@adhd/*` package), run `npm pack --dry-run --json` against `dist/<projectRoot>` and assert every `dependencies`/`peerDependencies` key is either a real npm registry package or a real `@adhd/*` package name found elsewhere in the workspace (cross-check against the full list of `package.json` `name` fields under `packages/**` and `entrypoint/**`). Wire it into `nx-release-publish`'s `dependsOn` (or a pre-publish check) so a broken publish can never ship again.
+**Status:** OPEN.
+
+### BUG-ENVPLAN-020 — `adhd-environment` `builder-snapshot-api` guard requires the raw `src` package path, which nx never populates → guard can never pass
+**Discovered:** 2026-07-16, executing `adhd-environment` wave 3 (`builder-snapshot-api`) via plan-orchestrator → typescript-pro.
+**Where:** `docs/plan/adhd-environment/dag.json`, `builder-snapshot-api.guard` — final step is `node -e 'const{build}=require("./packages/environment/environment-builder"); …'`.
+**Symptom:** the implementation is fully correct (139/139 tests pass; the *identical* check against `./dist/packages/environment/environment-builder` returns exit 0, methods ok), but the guard's raw-`src` require throws `MODULE_NOT_FOUND`, so the guard exits 1 and the state cannot be completed. Verified state-side: state left `in_progress` (executor correctly refused to mark complete on a red guard).
+**Root cause:** every `@adhd/*` package (40+) uses `"main":"./index.js"`, valid only once copied to `dist/packages/<path>/<name>/` (`nx build` populates dist, never the src package root; cf. `PUBLISHING.md`). Editing the src `package.json` `main` is a false fix — `dist/package.json` is a byte copy, so it would break the published package's own resolution.
+**Fix direction:** change the guard's require target from `./packages/environment/environment-builder` → `./dist/packages/environment/environment-builder` (matches how every package in the repo is actually consumed). **Audit sibling states** for the same class: any `adhd-environment` guard that `require()`s a raw `src` package path (per ENV-PLAN-011, all three audit gates are `nx build`-based). Plan/guard defect — must be repaired by plan-builder (guards are not hand-editable per orchestrator rules); the executor's implementation is done and dist-verified.
+**Status:** OPEN — blocks `builder-snapshot-api` completion and the downstream adhd-environment waves.
+
+### DEBT-ENVBUILD-001 — `environment-builder/vite.config.ts` externalized no node builtins (latent build break); audit sibling `platform:node` packages
+**Discovered:** 2026-07-16, same execution — surfaced once the real snapshot pipeline (which imports `node:fs`/`path`/`os`/`crypto`) was wired through `index.ts`.
+**Where:** `packages/environment/environment-builder/vite.config.ts` — `rollupOptions.external` was `[]`, so Vite tried to browser-externalize `node:*`, breaking `nx build` with `"readFileSync" is not exported by "__vite-browser-external"`.
+**Status:** FIXED in working tree by the executor (outside its 3 reserved files, disclosed) using the established `external: [/^node:/]` pattern from `packages/apigen/python-env/vite.config.ts`. **Follow-up (OPEN):** audit the other newly-scaffolded `platform:node` packages in this plan family (`environment-core-node`, `environment-cli`) for the same empty-`external` defect before their builder states run.
 
 ### BUG-AGENTMCP-001 — the built `dist` agent-mcp server cannot resolve its own `@adhd/*` workspace deps at runtime (`.mcp.json`'s dev entry is dead)
 **Discovered:** 2026-07-11, while registering agent-mcp as a global (user-scope) Claude Code MCP server.
@@ -27,26 +69,6 @@ Reproduced with a real MCP stdio handshake (initialize + tools/list) — the pro
 **Fix direction:** `npx nx reset` + a clean full build, then confirm the stale group dirs do not reappear (they should not — no source project maps to them). Deliberately **not** deleted at discovery time: removing directories is destructive and requires human approval per CLAUDE.md.
 **Status:** OPEN.
 
-### BUG-AGENTMCP-006 — `agent-mcp-tail` joins the per-task `task_usage` row onto every event → per-event token columns are the task total, repeated (fan-out)
-**Discovered:** 2026-07-15, auditing the `typescript-deepseek` log with the tail's new `--json` output; caught because a summed per-event token count was implausibly large.
-**Where:** `entrypoint/agent-mcp/src/scripts/agent-mcp-tail.ts` — `queryRows()` does `LEFT JOIN task_usage u ON u.task_id = e.task_id`. `task_usage` has **one** row per task (the aggregate); `task_events` has **many** rows per task. So every event of a task carries the *same* `u.input_tokens`/`u.output_tokens` (the whole-task total).
-**Symptom:** the per-line display shows the identical `in=94.2K` on all 12 `MODEL_REQUEST` lines of one task, and summing per-event `inputTokens` across N events fabricates `N × total` (a 12-call task reads as ~1.13M instead of its real 94.2K). There is genuinely no per-turn token data to show — per-`MODEL_RESPONSE` token deltas are not stored (root cause is **DEBT-DISPATCH-006**).
-**Impact:** any per-event token reading or sum taken from the tail output is wrong by the event-count multiple. It actively misleads audits (it misled this one before the DB was queried directly).
-**Fix direction:** attach usage only to the terminal event (`TASK_COMPLETED`/`TASK_FAILED`), OR label the token column explicitly as a per-task total (not per-event), OR — best — expose real per-turn token deltas (that is DEBT-DISPATCH-006 / a per-turn `usage_query`). Minimum bar: stop implying the number is per-event.
-**Status:** FIXED (2026-07-15). `agent-mcp-tail.ts` now attaches a `taskUsage` object **only to the terminal event** (`TASK_COMPLETED`/`TASK_FAILED`) and null on all others — per-event token fan-out is impossible (verified: 0 `MODEL_REQUEST` events carry usage; the removed top-level `inputTokens`/`outputTokens` can no longer be summed). The terminal line/record now also carries the real `cache_read_input_tokens`/`uncached_input_tokens`/`peak_context_tokens`/`model_calls`, and the text renderer shows the cache-hit rate inline (e.g. `Σ in=94.2K out=2.4K 95%cache peak=10.4K`) so a heavily-cached task no longer reads as expensive. Per-turn deltas remain out of scope (still DEBT-DISPATCH-006).
-
-### BUG-APIGEN-016 — `apigen serve` / conformance test harness leaks orphaned flask/grpc server processes
-**Discovered:** 2026-07-03, while dispatching the doc-agent pipeline at `entrypoint/apigen-cli` (the agent's CLI "prove-it" ran `apigen serve`, which hung; investigating found the leak).
-**Status:** FIXED (2026-07-04). `serve.ts` now registers `process.on('uncaughtException')` and `process.on('unhandledRejection')` handlers that call `onSignal(SIGTERM)` to kill all children before re-throwing. `spawn()` calls use `detached: false` (same process group). New regression test proves orphan-free teardown on SIGTERM. SIGKILL remains an OS-level invariant that no Node code can circumvent.
-
-### BUG-APIGEN-001 — ctx-param functions return wrong results via generated servers (being fixed)
-**Discovered:** 2026-06-23, by the apigen v2 capstone DoD probe (dod.1).
-**Symptom:** a function whose first param is `ctx` but which has NO session middleware (e.g. `getUser(ctx, userId)` in `packages/apigen/cli/src/test/fixtures/real-api.ts`) returns wrong results through the generated MCP server: `callTool(getUser,{data:{userId:'abc'}})` → `{}` while direct `getUser(ctx,'abc')` → `{id:'abc'}`. Non-ctx functions are fine.
-**Root cause:** `packages/apigen/runtime/src/lib/dispatch.ts` injects `ctx` only when `needsEnvelopeField(schema,'session') && createClient` (gated on the *session* envelope). A `ctx`-param fn without session middleware falls through to `fns[fnName](...args)`, so the first domain arg lands in the `ctx` slot. The extractor detects `ctx` (name-only exclusion, `[inv:ctx-name-only]`) but never *records* it for dispatch to inject.
-**Fix direction:** record ctx-param presence during extraction → carry it on the schema/descriptor → `dispatch()` injects `ctx` whenever the fn declares a `ctx` first param (independent of session). Must keep dod.3 (ctx absent from schema) + dod.4 (session override) green.
-**Fix landed:** `GeneratedSchemas`/`ComposedSchemas` now carry an optional `hasCtx` flag (`packages/apigen/core/src/lib/types.ts`); `generateSchemas` sets `hasCtx:true` when the first param is named `ctx` while still excluding it from `input.properties` (`packages/apigen/core/src/lib/generate-schemas.ts`); `composeSchemas` threads the flag through (`packages/apigen/core/src/lib/compose-schemas.ts`); `dispatch()` injects `ctx` (via `createClient(envelope)` if a client exists, else `undefined`) whenever `schema.hasCtx`, independent of session (`packages/apigen/runtime/src/lib/dispatch.ts`).
-**Status:** FIXED. Verified by EXIT CODE: `run` probe (mcp/stdio/deep-equal) exit 0 — `getUser` now deep-equals `{id:'abc'}`; negative control confirmed (pristine dispatch → PROBE FAIL exit 1, fix → exit 0). apigen-core / apigen-runtime / apigen-cli test suites all exit 0 (ctx-exclusion + session-suppression integration tests included). `generate-parity` and `cli-output` probes are blocked by BUG-APIGEN-002 below (a separate, pre-existing module-resolution defect that also fails on pristine code) — not by this fix.
-
 ### BUG-APIGEN-002 — generated MCP servers / CLIs can't resolve `@modelcontextprotocol/sdk` when run outside the repo tree
 **Discovered:** 2026-06-23, while verifying BUG-APIGEN-001 via the dod.2 (`generate-parity`) and dod.cli (`cli-output`) probes.
 **Symptom:** `probe_mcp.mjs generate-parity` / `cli-output` write the generated `server.ts` / `cli.ts` to an OS tmpdir, then run it with `npx tsx <file>` (cwd=REPO_ROOT). The generated file's bare import `@modelcontextprotocol/sdk/server/index.js` throws `Error: Cannot find module … code: 'MODULE_NOT_FOUND'`, so the MCP client sees `McpError -32000: Connection closed` and the probe exits non-zero.
@@ -54,14 +76,6 @@ Reproduced with a real MCP stdio handshake (initialize + tools/list) — the pro
 **Proof it is independent of BUG-APIGEN-001:** restoring the pristine (pre-fix) `core`+`runtime` files and rebuilding reproduces the *identical* `Cannot find module '@modelcontextprotocol/sdk/server/index.js'` failure. The error is thrown at the generated file's import phase, before any dispatch/ctx code runs.
 **Fix direction (NOT done — outside this task's core+runtime scope):** make `generate` emit resolution scaffolding into `--out-dir` — e.g. symlink the repo `node_modules` into the out-dir and emit a `tsconfig.json` that maps `@adhd/*` to the repo source — so generated servers/CLIs run anywhere. Lives in `packages/apigen/cli` (+ possibly the mcp/cli plugin templates), not in core/runtime.
 **Status:** RESOLVED/VERIFIED 2026-06-23 (reconciled by pseudosky) — fixed in apigen-v2 via the **Option-A "publish" model**: `generate` emits a clean publishable `package.json` with real `^<version>` deps (`@modelcontextprotocol/sdk`, `@adhd/apigen-runtime`/-core) + `tsconfig.json`; the pre-publish workspace bridge is the default-off `--link-workspace` flag. dod.2 (`generate-parity`) and dod.cli (`cli-output`) pass inside the apigen-client-generation **final audit 117/117** (re-verified green this session). **Follow-on (open, tracked):** the per-surface 3rd-party **dep-manifest emission** for logical/rich types is owned by `docs/plan/apigen-logical-types` → state `lt-dep-manifest` / `[dod.gen-deps]`. (Earlier OPEN status was stale relative to the completed plan.)
-
-### BUG-APIGEN-003 — generated MCP server's SSE transport is unreachable (dod.1-sse)
-**Discovered:** 2026-06-23, apigen v2 capstone dod.1-sse.
-**Symptom:** `run --type mcp --opt transport=sse` → the probe's SSE client (`http://127.0.0.1:<port>/sse`) gets `TypeError: fetch failed`. The `streaming-http` transport (`/mcp`) works (dod.1-streaming-http passes) and stdio works (dod.1 passes) — only SSE fails.
-**Root cause (CONFIRMED, not the original guess):** the SSE *transport* was already correct — `packages/apigen/plugins/mcp/src/lib/run.ts` binds `GET /sse` (emits the `endpoint` event) + `POST /messages?sessionId=` and guards the SDK's "SSEServerTransport already started!" crash. The probe's earlier `fetch failed`/`port not bound` was a **harness** defect: the probe's DEFAULT CLI target is the TS source (`packages/apigen/cli/src/index.ts`) spawned via `npx --yes tsx`, which **cannot resolve `@adhd/apigen-core` from repo root** (tsx-tsconfig-cwd gotcha) → the server crashes on module load → never binds → blind 15s timeout. The audit never hit this because it invokes the probe with `--cli dist/packages/apigen/cli/index.js` (the built bin), where `@adhd/*` resolves.
-**Fix VERIFIED 2026-06-23:** (a) direct MCP-SDK `SSEClientTransport` round-trip against the dist bin → `listTools` = 5 tools, `callTool(getUser,{data:{userId:'abc'}})` → `{"id":"abc"}` (deep-equals ground truth), exit 0; (b) `probe_mcp.mjs run … --transport sse --cli dist/packages/apigen/cli/index.js` → `PROBE OK: tools/list + callTool parity for 5 derived tools`, exit 0. Probe robustness bumped (`waitForPort` 15s→60s) for cold ts-morph compiles.
-**Residual (minor, tracked):** running `probe_mcp.mjs` WITHOUT `--cli` hits the broken TS-source default and fails with a confusing "port not bound" instead of a clear "server exited before binding (@adhd/* unresolved)" message — a probe-ergonomics footgun, not a product bug.
-**Status:** RESOLVED/VERIFIED — dod.1-sse passes via the audit's real invocation; SSE transport reachable on stdio + streaming-http + sse.
 
 ### BUG-APIGEN-015 — api-fastify host returns logical SCALAR results as `text/plain`, not canonical JSON-string wire → cross-language drift with py-flask
 **Discovered:** 2026-06-26, while building the logical-types human demo (driving the REAL hosts, not the codec layer — the conformance suite is green because it tests encode/decode functions, not each host's HTTP response serialization).
@@ -75,38 +89,12 @@ So a `Decimal`/`bigint`/`Date` **return** value comes off the two hosts in diffe
 **Status: RESOLVED + orchestrator-VERIFIED (2026-06-26).** Added `sendJson(reply, result)` in `packages/apigen/plugins/api-fastify/src/lib/run.ts` — both the GET and POST handlers now `reply.type('application/json')` + `JSON.stringify(result)` (void → `null`), so every result is canonical JSON wire. **api-express was already correct** (`res.json()` always JSON-serializes); MCP is a separate protocol envelope (out of scope). **Verified by use:** rebuilt CLI, drove the real TS + Python hosts — `price 123.456` → `"123.456"` byte-identical on both (`22 31 32 33 2e 34 35 36 22`), `when` → `"2024-01-15T12:00:00.000Z"` on both, `echoBig` → `"9007199254740993"` (quoted, no precision loss), TS content-type now `application/json`. **Regression teeth:** `plugin.spec.ts [v2-fastify.run.verb.1]` tightened to assert `application/json` + body exactly `"pong"` + `JSON.parse` round-trip (reverting the fix → text/plain `pong` turns it red). api-fastify 37/37 + apigen-cli 107/107 EXIT=0.
 **Cross-host guard added (2026-06-26):** `packages/apigen/cli/src/test/integration/cross-host-response-envelope.spec.ts` — drives BOTH real servers (api-fastify via built CLI + py-flask via `python3 -m apigen_python.flask_server`) and asserts byte-identical canonical JSON wire for a scalar Decimal return (the response-envelope seam the codec conformance suite missed). Default-running, no env gate. **Teeth PROVEN by orchestrator negative control:** reverting `sendJson` → both guard tests went RED (`expected 'text/plain; charset=utf-8' to contain 'application/json'`); restoring → 2/2 green. This closes the BUG-015 follow-up guard.
 
-### BUG-APIGEN-004 — `run`/`generate` do not fail fast on 0 extracted functions; crash with a confusing module-resolution error instead
-**Discovered:** 2026-06-23, while diagnosing a user `run --source ./tmp/apigen-generate-out/index.ts --type api-fastify` failure.
-**Status:** FIXED (verified 2026-07-04). `entrypoint/apigen-cli/src/lib/commands/run.ts:57` exports `assertFnsNonEmpty()` — called at lines 337/386 — which throws with an actionable message `"0 functions found in --source <file>"`. Tests at `run.spec.ts:235-267` cover the fail-fast + negative control (normal surface does not fire). The BACKLOG was stale — fix landed during the logical-types milestone (`lt-fail-fast`).
-
-### BUG-APIGEN-005 — language-specific serializable types (Date, BigInt, Map, Set, Uint8Array) are not handled: untyped schema + no input rehydration + broken output for no-toJSON types
-**Discovered:** 2026-06-23, user report ("Date -> object"), reproduced with `/tmp/apigen-date-probe/date-api.ts` (`whenIso(label): {label, at: Date}` and `echoDate(d: Date): Date`).
-**Symptom (three independent modes, all proven):**
-1. **Schema:** ts-json-schema/morphFallback emit `Date` as `{}` (empty, untyped). Generated `toolMetas` for `whenIso` shows `"at":{}` and for `echoDate` `"d":{}` + `output:{}`. Consumers (`tools/list`, OpenAPI, codegen, the validation Layer) get no type → treat it as an opaque object. Should be `{type:"string", format:"date-time"}`.
-2. **Input rehydration:** `packages/apigen/runtime/src/lib/dispatch.ts` passes `domainArgs[k]` straight to the function (`const args = paramNames.map(k => domainArgs[k])`). A `Date` parameter arrives over JSON as a **string**, so the function receives a string; `d.getTime()`/`d.toISOString()` is `undefined`/throws. No `string→Date` coercion via the schema `format`.
-3. **Output for types without `toJSON`:** `JSON.stringify({...new Date()})` → `{}`; `JSON.stringify(1n)` **throws** ("Do not know how to serialize a BigInt"); `Map`/`Set`/`Uint8Array` serialize to `{}`/garbage. `Date` output alone survives because `Date.prototype.toJSON` → ISO string; every other built-in is broken on output too.
-**Root cause:** apigen has no codec/transform layer for non-JSON-native built-ins. The schema builders (`packages/apigen/core/src/lib/schema-builders/{ts-json-schema,morph-fallback}.ts`) fall through to `{}` for any non-primitive/array/union/anon-object type; dispatch does no encode-on-output / decode-on-input keyed by schema `format`.
-**Fix direction (canonical, NOT a workaround):**
-- **Schema:** special-case well-known built-ins before the `{}` fallthrough — `Date`→`{type:"string",format:"date-time"}`, `bigint`→`{type:"string",format:"int64"}`, `Uint8Array`/`Buffer`→`{type:"string",format:"byte"}` (base64), `Map`→`{type:"array",items:[...]}` (or object), `Set`→`{type:"array"}`, `RegExp`→`{type:"string",format:"regex"}`.
-- **Runtime codec** (`packages/apigen/runtime`, new `codec.ts`): `encode(schema,value)` (JS→wire: Date→ISO, BigInt→string, bytes→base64, Map/Set→array) and `decode(schema,value)` (wire→JS, inverse), both keyed by schema `format`. `dispatch()` calls `decode` on args before invoke and `encode` on the result; apply recursively over object/array properties.
-- **Conformance:** add date-time / bytes / bigint vectors to `packages/apigen/conformance` so the TS and Python hosts must agree on the wire format (TS ISO ↔ Python `datetime.isoformat()`); extend the Python host (`packages/apigen/python`) to match.
-- **DoD/fixture:** add a temporal/binary case to `real-api.ts` + a `negative-control` so this can't silently regress.
-**Generalization — custom classes are the same mechanism:** built-in well-known types (Date/int64/decimal/bytes) are just pre-registered instances of the logical-type registry; a user-defined class is the general case — a *nominal* logical type tagged by `$ref:"#/$defs/<Name>"` (+ a `$type`/const-tag discriminator on the wire only at polymorphic/union positions) with an *object* wire shape instead of a scalar. Same `LogicalTypeCodec` (`matches`/`encode`/`decode`), bound to each host's native class hook (TS `toJSON()`/static `fromJSON()`; Python `JSONEncoder.default`/`object_hook`/pydantic `model_dump`/`model_validate`; Jackson `@JsonTypeInfo`/`StdSerializer`; Go `Marshal/UnmarshalJSON`; serde derive + `#[serde(tag)]`). apigen's `core` already extracts class shapes and the descriptor IR already represents named types as `$def`+`$ref` and unions as `oneOf`+const-tag+`$ref` — the missing piece is the SAME runtime transcoder: on decode, a `$ref:<Class>` position must call the registered constructor (not leave a prototype-stripped object); on encode, call `toJSON()`. New class-specific concerns the scalar path doesn't have: (a) polymorphic positions need a wire discriminator (`oneOf`+const-tag); (b) transports *data not behavior* + cyclic refs can't go over plain JSON (ref-track or forbid); (c) validate-against-schema-BEFORE-construct, and gate non-reconstructable classes (sockets/closures) via the extractor's existing opt-in-instances flag.
-- **DoD additions for classes:** delivered-by + conformance vectors for (1) a user class round-tripping TS↔Python (nominal `$ref`), and (2) a discriminated union (polymorphic, wire discriminator), each with a negative control.
-**Status:** OPEN — correctness gap (never handled). Affects every plugin (mcp/http/cli) and the cross-host contract. Scope spans well-known scalar types AND the full nominal/custom-class type system. **tracked-by: `docs/plan/apigen-logical-types/DESIGN.md` (this bug IS the plan).**
-
 ### DEBT-APIGEN-007 — `lt-dep-manifest` dep-collection is end-to-end blocked by missing `lt-extract-scalars`
 **Discovered:** 2026-06-25, during `lt-dep-manifest` state execution.
 **Symptom:** The dep-manifest machinery (`collectFormats` → `collectLogicalTypeDeps` → `patchPackageJsonDeps`) is implemented and works for schemas that carry `format: decimal`. However, when a TS source file uses `DecimalValue = string` (or any type alias that resolves to a primitive), `ts-morph`'s `p.getType().getText()` resolves the alias to `string` BEFORE passing the type text to `buildSchema` / `ts-json-schema-generator`. The `format` annotation on the alias is lost. The dep-collection step sees `{type: 'string'}` instead of `{type: 'string', format: 'decimal'}` and emits no dep.
 **Root cause:** `packages/apigen/core/src/lib/extractors/named.ts` calls `p.getType().getText()` which eagerly resolves type aliases. Changing it to `p.getTypeNode()?.getText()` (the alias name) would preserve alias identity, allowing `ts-json-schema-generator` to look up the `@format` annotation.
 **Fix direction:** in `lt-extract-scalars` (state in the `apigen-logical-types` plan): change `packages/apigen/apigen-core-client/src/lib/extractors/named.ts` to preserve the alias name (use `getTypeNode()?.getText()` for the type text), and add `DecimalString`/`DecimalValue` to `SCALAR_SCHEMAS` in `packages/apigen/apigen-core-client/src/lib/schema-builders/ts-json-schema.ts` (or rely on `ts-json-schema-generator` picking up the `@format` JSDoc from the exported type alias). Once extraction preserves format annotations, the `lt-dep-manifest` machinery activates end-to-end without further changes.
 **Status:** OPEN — `lt-dep-manifest` infrastructure is green; activation gate is `lt-extract-scalars`. **tracked-by: `docs/plan/apigen-logical-types` → state `lt-extract-scalars`.**
-
-### BUG-APIGEN-006 — `apigen-nx` generator package is built with the vite bundler; its `__files__` templates don't ship → published generator is non-functional
-**Discovered:** 2026-06-23, during the apigen v2 npm publish (held back from publishing because of this).
-**Status:** FIXED (2026-07-04). `packages/apigen/apigen-generator-nx/project.json` — build executor changed from `@nx/vite:build` to `@nx/js:tsc`; `assets` expanded to include `src/generators/**/__files__/**`, `schema.json`, `generators.json`, `executors.json`. Dist output confirmed to contain all template files at correct paths. `@nx/js:tsc` maintains the per-file directory structure the generator's `__dirname`-relative template reads depend on.
-
----
 
 ## apigen-logical-types — lt-code-review findings (2026-06-25)
 
@@ -207,47 +195,11 @@ Dispatched to test-automator `ApigenHardening`, verified state-side (not from it
 - **Workaround (current):** fixtures and user modules must not use `from __future__ import annotations`. Use `from typing import Dict, List, Optional` (3.8-compat) or `dict[str, Any]` (3.10+) instead. Document this in `pyproject.toml` and `flask_server.py` docstring.
 - **Status:** FIXED (2026-06-26) — combined with BUG-APIGEN-008 fix. `typing.get_type_hints()` resolves stringized PEP 563 annotations to type objects before schema inference. Verified: `future_ann.live.decimal.roundtrip` passes with a real Flask server; `future_ann.extractor.decimal_schema` asserts `{type:string,format:decimal}` from a `from __future__ import annotations` module.
 
-### BUG-PYFLASK-003 — extractor extracted imported classes (Decimal, datetime) as constructor ops
-**Discovered:** 2026-06-25, via live CLI run `node dist/.../apigen/cli/index.js run --type py-flask --source /tmp/x.py`.
-**Symptom:** `from decimal import Decimal; from datetime import datetime` in user module → `/t/Decimal` and `/t/datetime` appeared as `POST` routes (kind=constructor) alongside the user's functions.
-**Root cause:** `extract_module` iterated `dir(mod)` (all non-`_` names) and the `isinstance(value, type)` branch in the extractor treated imported classes as constructor operations. No filter on `obj.__module__` to exclude imports.
-**Fix landed 2026-06-25:** added `__module__` filter in `extract_module` — when `__all__` is absent, skip any name whose `__module__` differs from the loaded module's `__name__`. Tests: `extractor.pollution.decimal`, `extractor.pollution.datetime`, `extractor.pollution.only_user_fns` (run_tests.py §G).
-**Status:** FIXED.
-
 ### DEFER-PYGRPC-001 — gRPC-Web support (sonora/grpclib) not included in py-grpc target
 **Discovered:** 2026-06-25, while implementing the py-grpc apigen target.
 **Detail:** gRPC-Web requires an HTTP/1.1-to-gRPC proxy or a pure-Python gRPC-Web server (e.g. `sonora`). `grpcio` alone serves native gRPC (HTTP/2); browser clients need gRPC-Web. The pure-Python option `sonora` exists (pip installable) but adds a non-trivial ASGI/WSGI dependency and was not verified in this env.
 **When to address:** when browser-side gRPC-Web consumers are required. At that point: (a) verify `pip install sonora`; (b) add a `grpc_web` optional group to pyproject.toml; (c) wrap the server in a `sonora.asgi.grpcASGI` + uvicorn layer alongside the grpcio server, or use an Envoy sidecar.
 **Status:** DEFERRED.
-
-### DEFER-PYGRPC-002 — serve.ts gRPC host not wired (HTTP/2 front for the gateway)
-**Discovered:** 2026-06-25, during py-grpc implementation.
-**Detail:** `serve.ts` has a documented seam for a per-host `transport` tag and an HTTP/2 front. The standalone `--type py-grpc` target works and is fully verified. Wiring it into `serve.ts` requires: (a) an HTTP/2 server in Node (e.g. `@grpc/grpc-js` or an HTTP/2 proxy); (b) routing `/<namespace>.<Service>/<method>` to the Python subprocess; (c) forwarding gRPC metadata (x-adhd-*) to envelope. The architecture is clear from the py-grpc server design; execution is blocked on serve.ts HTTP/2 infrastructure.
-**Fix (RESOLVED 2026-06-26):**
-- `createFrontServer()` now uses a raw `net.Server` TCP mux that peeks the first 3 bytes (`PRI`) of each connection to distinguish h2c (gRPC) from HTTP/1.1. `socket.once('readable') + socket.read(3) + socket.unshift()` (paused-mode) correctly replays bytes to both parsers.
-- Pure `http2.createServer()` (no `allowHTTP1`) handles gRPC streams; a separate `http.createServer()` handles HTTP/1.1. The `httpServer` is monkey-patched to delegate `listen/close/address` to the raw TCP server.
-- `proxyGrpcStream()` proxies h2c streams to the gRPC backend via a cached `http2.connect()` session (`getGrpcSession()`). Key fixes: `waitForTrailers: true` in `stream.respond()` and `wantTrailers` event for `sendTrailers()`; `flags & 0x1` (END_STREAM in HEADERS) detection for zero-body gRPC error responses (UNIMPLEMENTED); `te: trailers` explicitly set in forwarded headers (grpcio strictly requires this header — strips it from HOP_BY_HOP caused RST_STREAM code=2 from Python gRPC backend).
-- `sendGrpcUnavailable()` sends gRPC status 14 (UNAVAILABLE) for dead hosts, correctly using `waitForTrailers`.
-- gRPC reflection (`/grpc.reflection.*`) routing to first alive gRPC host for grpcurl compatibility.
-- `spawnGrpcHost()` reads `{"ready":true}` from stdout; `waitForGrpcReady()` polls TCP connect.
-- Test: `spawnSync` replaced with async `spawn` wrapper in `serve.spec.ts` to avoid blocking the in-process h2 server's event loop.
-- All 16 `serve.spec.ts` live tests pass; all 107 apigen-cli tests pass; 124/124 Python tests pass.
-- **VERIFIED state-side by orchestrator (2026-06-26):** `te'] = 'trailers'` present at `serve.ts:720`; `APIGEN_LIVE=1 npx vitest run src/test/serve.spec.ts` → **16/16 EXIT=0** (drove the real cross-language h2c/HTTP1 front + grpcurl 1.9.3 + grpcio); Python `run_tests.py` → **124/124 EXIT=0** (real Flask + gRPC servers). Confirmed by use, not from the agent's report.
-**Status:** FIXED.
-
-### BUG-PYFLASK-004 — Decimal/datetime params not decoded from wire; integer accepted for decimal param
-**Discovered:** 2026-06-25, via live CLI run. `add_decimal(amount: Decimal)` received a raw `str` from the wire (not decoded to `Decimal`) → `str + Decimal` → TypeError 500. Integer `999` for a decimal param returned HTTP 200 instead of 400.
-**Root cause (three layers):**
-1. `_py_type_hint_to_schema(Decimal)` and `_py_type_hint_to_schema(datetime)` returned `{}` (the open-schema fallback) — no `type` or `format` annotation. `_decode_params` calls `apigen_logical.decode(val, {})` → passthrough (no format → no decode). Amount arrived as `str`.
-2. Empty schema `{}` passes validation for any value including integers → `amount=999` was accepted.
-3. `Runtime._validate_input` re-validated decoded data (native `Decimal`) against the wire schema (`{type:string,format:decimal}`) → `Decimal` is not a `str` → HTTP 400 on valid input.
-**Fix landed 2026-06-25:**
-- `extractor._py_type_hint_to_schema`: added explicit mappings `Decimal → {type:string,format:decimal}`, `datetime → {type:string,format:date-time}`, `UUID → {type:string,format:uuid}`.
-- `runtime.HostRequest`: added `pre_validated: bool = False` field.
-- `runtime.Runtime._validate_input_if_needed`: skips re-validation when `req.pre_validated=True`.
-- `flask_server._dispatch`: passes `pre_validated=True` to `HostRequest` (wire is validated before decode; runtime must not re-validate decoded values).
-**Tests:** `extractor.schema.decimal_param`, `extractor.schema.datetime_param`, `cli_decimal.decimal.decode`, `cli_decimal.decimal.rejects_int`, `flask.validation.400` (run_tests.py §G and §H).
-**Status:** FIXED.
 
 ## BUG-APIGEN-013 — rich type nested in an inline object return loses `format` → `$apigen` envelope
 - **Discovered:** gateway pass-through audit. `echoDate(d: Date): Promise<{ at: Date }>` over a live server returns `{"at":{"$apigen":"date-time","v":"…"}}` instead of `{"at":"…RFC3339…"}`. A top-level `Promise<Date>` correctly returns a plain string.
@@ -415,41 +367,15 @@ Found by the two-agent plan-vs-code review that restructured
 `docs/plan/dispatch-production/dag.json`. Bugs 001–003 are scheduled for fix by the
 plan's new `client-fixes` milestone; recorded here per disclosure policy until fixed.
 
-### BUG-DISPATCH-001 — `DagClient.getEligibleMilestones()` ignores milestone completion
-- **Where:** `packages/dispatch/dispatch-client/src/lib/client.ts`
-- **Symptom:** eligibility derives from `pending !== null` alone; a milestone whose dependency is dispatched-but-incomplete (or failed) is reported eligible. Only accidentally correct for wave 0.
-- **Correct semantics:** eligible iff `pending == null` AND every `depends_on` milestone is complete (PoC `compiler.ts:770`). On the e2e critical path — the orchestrator calls this every cycle.
-- **Status:** FIXED 2026-07-02 (`37441ef`) — completion derived per-op from `dispatch_log` (`isMilestoneComplete`); two behavioral tests; negative control captured (revert → exit 1).
-
-### BUG-DISPATCH-002 — `plan.spec.ts` silently skips its only assertion via a stale path
-- **Where:** `packages/dispatch/dispatch-spec/src/test/plan.spec.ts`
-- **Symptom:** derives `repoRoot` by splitting `__dirname` on `'packages/shared/dispatch-spec'` — a path removed by the workspace refactor — then `if (!repoRoot) return` instead of failing. The dag.json-against-validator test has never actually run. Violates the loud-prerequisite-failure rule (CLAUDE.md §6). (In practice it crashed with ENOENT rather than skipping — `split()` on a non-matching marker returns `[__dirname]`, so the guard was dead code either way.)
-- **Status:** FIXED 2026-07-02 (`37441ef`) — `indexOf` + loud throws for missing marker/missing dag.json; validates the real dispatch-production dag.json and passes.
-
 ### BUG-DISPATCH-003 — `dispatch-client` re-exports optimizer surface (layering leak)
 - **Where:** `packages/dispatch/dispatch-client/src/index.ts`
 - **Symptom:** re-exports `snapshot`/`optimize` from `@adhd/dispatch-optimizer`, letting consumers import optimizer surface through the client layer.
 - **Status:** INVALID 2026-07-02 — not present in current source. `index.ts` exports only client/serializer symbols and has never re-exported optimizer surface on this branch (`git blame` → single commit `1e63f8d`); `package.json` doesn't depend on `dispatch-optimizer`; zero `@adhd/dispatch-client` consumers repo-wide. The finding was recorded during the plan-vs-code audit against an intended-architecture diagram, not the actual file.
 
-### BUG-DISPATCH-008 — `getEligibleMilestones()` re-offered already-complete milestones
-
-- **Where:** `packages/dispatch/dispatch-client/src/lib/client.ts`.
-- **Symptom:** eligibility checked `pending == null` + dependency completion (post BUG-DISPATCH-001 fix) but never the milestone's *own* completion — completed milestones stayed listed forever, so the orchestrator would re-dispatch finished work. Caught 2026-07-02 by the apigen-generated CLI spike driving `eligible` against the real dispatch-production dag.json (first output listed `client-core`/`serializer-json`/`client-fixes`, all complete).
-- **Status:** FIXED 2026-07-02 — self-completion now excludes; regression test (`does NOT list an already-complete milestone as eligible`) + corrected the fixture assertion that encoded the old semantics; negative control: fix removed → 2 tests red → restored → 32/32 green (exit codes captured directly). Consumer-seam re-proof: the generated CLI now returns exactly the dispatch frontier.
-
-### DEBT-DISPATCH-004 — `@adhd/dispatch-optimizer` published surface is stubs (FIXED)
-- **Status:** FIXED (2026-07-04). `compiler.ts` + 10 orphaned stub files (`optimize/{bitmask-dp,hlfet,sentinel,simulated-annealing,tree-dp}.ts`, `snapshot/{clone,eligibility,overlap,size-estimate,topology}.ts`) deleted. `index.ts` re-exports only the real `snapshot.js`/`optimize.js`. Build clean.
-
 ### DEBT-DISPATCH-005 — BL-101..BL-107 identifiers exist only in the PoC LOG.md
 - **Where:** `docs/plan/dispatch-optimizer/LOG.md` (outstanding table); referenced by both dispatch plans but absent from this BACKLOG.
 - **Summary:** BL-101 fixed; BL-102 guard-only milestones lack `execution_mode` in DispatchUnit (MEDIUM); BL-103 `snapshot_version` never increments (LOW); BL-104 `compilePrompt()` doesn't inline nested interface sub-shapes (MEDIUM); BL-105 `mcp_servers: null` blocks real dispatch (HIGH — now *bypassed* by the `agent-runner` milestone's `mcpServers: {}` fallback for claudecli agents; catalog lookup still unbuilt, tracked by `backlog-fill`); BL-106 `b_per_tier` cold-start not seeded (LOW); BL-107 back-compat patches live in `run.ts` not `readDag()` (LOW).
 - **Status:** OPEN — deferred `backlog-fill` milestone covers BL-102..107 residue.
-
-### DEBT-DISPATCH-007 — `plan.spec.ts` validates a file outside its nx input set (silent cache-hit)
-
-- **Where:** `packages/dispatch/dispatch-spec/src/test/plan.spec.ts` + its test target inputs.
-- **Symptom:** the test validates `docs/plan/dispatch-production/dag.json` at runtime, but that path is not part of dispatch-spec's nx test inputs — editing dag.json then running `nx test dispatch-spec` cache-hits and restores the *old* verdict without re-validating (observed 2026-07-02 while recording the client-fixes dispatch_log). The guard passes without running, the exact failure mode CLAUDE.md §6 forbids.
-- **Status:** FIXED 2026-07-02 — `dispatch-spec/project.json` test target declares `{workspaceRoot}/docs/plan/dispatch-production/dag.json` as an input. Differential proof: cache hit on rerun, then dag.json touch → live re-run (was a cache hit before the fix). Workspace-wide instances of the same class: DEBT-WORKSPACE-NX-INPUTS-001 below.
 
 ### DEBT-WORKSPACE-NX-INPUTS-001 — tests reach outside their project root; nx cache/affected are blind to what they read
 
@@ -507,11 +433,6 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 - **Where:** `entrypoint/agent-mcp/src/validation/usage.ts:84-108` — public shape is aggregate `TaskUsageReport.direct`; per-turn `MODEL_RESPONSE` events exist in the internal `task_events` table (`entrypoint/agent-mcp/src/db/schema.ts:101-121`) but no tool exposes them.
 - **Impact:** dispatch `dispatch_log[].turns[]` is synthesized as a single aggregate entry; per-turn calibration (PoC SCOPE §C4) is not possible until agent-mcp grows a per-turn query. Not e2e-blocking.
 - **Status:** OPEN — candidate FEAT for agent-mcp (expose per-turn events via `usage_query`).
-
-### DEBT-DISPATCH-008 — dispatch-spec `Turn` lacks `model_calls` (dag agent-runner.1 drift)
-- **Where:** dispatch-spec, dispatch-orchestrator
-- **Description:** dag.json operation agent-runner.1 specifies usageToTurns emitting {input_tokens, output_tokens, model_calls}, but dispatch-spec's Turn is {turn, input_tokens, output_tokens, t} — no model_calls. dispatch-orchestrator ships a local exported SynthesizedTurn matching the dag verbatim rather than mislabeling it as Turn. Reconciliation (assigning turn index + t timestamp, deciding whether model_calls survives into DispatchLogEntry) belongs to the orchestrator-core milestone, which constructs DispatchLogEntry and whose guard covers dispatch-spec.
-- **Status:** FIXED (2026-07-02) — Turn.model_calls shipped as an optional additive field in dispatch-spec (types.ts + validateDispatchLogTurns in validate.ts + 6 bidirectional tests); dispatch-orchestrator's reconcileTurns() maps SynthesizedTurn[] → Turn[] with 1-based turn index, injected-clock t, and model_calls carried through.
 
 ### DEBT-DISPATCH-009 — dispatch-spec `SentinelRole` lacks `'solo'` (tests-real-e2e drift)
 - **Where:** dispatch-spec, tests-real-e2e.md
@@ -608,47 +529,11 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 
 ## sox-ecosystem build system findings (2026-07-05)
 
-### BLD-SOX-STALE-001 — bare tsc never cleans stale dist output; 8 data-layer packages patched with rm -rf
-- **Where:** All 20+ sox-ecosystem projects using `nx:run-commands` with bare `tsc --project`. Specifically patched: `libs/data/{store/blob-store,verify/claim-verification,embed/embedding-provider,search/hybrid-search,vectors/vector-store,analysis/analysis,graph/graph-store,ingest/ingest}/project.json`.
-- **Description:** tsc by design NEVER cleans stale output when source files are deleted (confirmed by TypeScript team — `#36648`). `dist/*.js` and `dist/*.d.ts` for a deleted `src/*.ts` persist forever and can be imported by downstream consumers. The `nx:run-commands` executor has no `deleteOutputPath` option. The only solution is `rm -rf dist/` before each build. Proven by concrete test: built blob-store with `fd-guard.ts`, deleted source, rebuilt — stale `fd-guard.js` survived. Only `ingest` previously had it. Fixed by adding `rm -rf <pkg>/dist/ &&` to all 8 data-layer build commands consistently.
-- **Fix direction:** `rm -rf dist/ &&` before tsc is the standard approach for `nx:run-commands` — not a workaround, the intended pattern. Remaining unfixed: the other 12+ lib/app projects (authoring, host-runtime, memory-core, etc.) have the same vulnerability.
-- **Status:** FIXED (data layer, 2026-07-05); broader fix deferred.
-
-### ENV-PLAN-001 — adhd-environment: docs-steward guard is green before the state runs (no-op guard)
-- **Where:** `docs/plan/adhd-environment/dag.json` → `nodes.docs-steward.guard`
-- **Description:** Guard is `test -f packages/environment/environment-core-node/README.md`. That README is declared as an artifact by **no state** in the plan, and it **already exists on disk**, so the guard exits 0 before `docs-steward` performs any work. It can never go red→green; `docs-steward` can be marked complete having done nothing. Its real artifacts (`demo/DEMO.md`, `USE_CASES.md`) are never asserted. Proxy evidence — violates the repo's "never mark a task complete on proxy evidence" rule.
-- **Fix direction:** Replace with an assertion that drives the real deliverables (DEMO.md sections present + commands execute), and confirm it is red at plan start.
-- **Status:** FIXED 2026-07-08. Guard → `python3 docs/plan/adhd-environment/scripts/guard_docs_steward.py`: asserts DEMO.md carries the cold-start `nx build environment-*` + `adhd-env` + `require('@adhd/environment')` commands, USE_CASES.md resolves to the real entrypoints, AND (behavioral) builds the shipped node package and executes the demo's headline command — the built `@adhd/environment` must export a constructable `Environment` with `.get()`. Proven RED today: node probe exits 3 ("no Environment export") → guard exit 1 (runtime is still the scaffold stub `environmentEnvironmentCoreNode`). Goes green only once the runtime states ship the typed client.
-
-### ENV-PLAN-002 — adhd-environment: 4 guards not environment-pinned (env-pin-check --strict exit 4)
-- **Where:** `dag.json` → `runtime-py` (`python -m build`), `runtime-rs` (`cargo build`), `docs-steward`, `scaffold-workspace`
-- **Description:** `runtime-py` invokes bare `python`; on this machine ambient `python3` resolves to miniconda base (`/opt/homebrew/Caskroom/miniconda/base/bin/python3`, 3.13.11), and bare `python` may resolve elsewhere or not at all in an executor's clean subprocess. `runtime-rs` invokes bare `cargo` (homebrew 1.95.0). Both are wave-2 states, i.e. the parallel wave. `scaffold-workspace` is already `complete`, so its unpinned guard is moot for this run but will bite on re-run.
-- **Fix direction:** Pin toolchain resolution (`uv run --python <ver>` / `rustup run <toolchain> cargo`, or a committed `rust-toolchain.toml` + project venv), matching the `npx --yes` pinning the other 9 guards already use.
-- **Status:** FIXED 2026-07-08. All four converted to repo-owned `python3 docs/plan/adhd-environment/scripts/guard_<slug>.py` scripts (env-pinned via the `.py`-script marker). `guard_runtime_py.py` runs `uv run --python 3.10 -m build` (uv resolved via which→/opt/homebrew/bin/uv); `guard_runtime_rs.py` runs `rustup run 1.95.0 cargo build` (rustup resolved via which→/opt/homebrew/opt/rustup/bin/rustup fallback) + committed `environment-core-rs/rust-toolchain.toml` (channel 1.95.0); `guard_scaffold_workspace.py` asserts the two scaffold manifests; `guard_docs_steward.py` per ENV-PLAN-001. Each fails loudly (non-zero + stderr) if its toolchain is absent. `env-pin-check --strict` now exits 0 (13/13 PINNED). Verified reds: runtime_py exit 1, runtime_rs exit 101.
-
-### ENV-PLAN-003 — adhd-environment: all 13 states unrated (no model/effort annotation)
-- **Where:** `dag.json` → every `nodes.*` lacks `model` / `effort`; board reports `Tiers: unrated:13`
-- **Description:** With no tier annotation the orchestrator cannot honor a declared tier and would have to invent one, risking wrong-tier dispatch (token defect) or over-tier dispatch (cost defect).
-- **Fix direction:** Rate each state `model`/`effort` during plan repair.
-- **Status:** FIXED 2026-07-08. All 13 states rated in `dag.json` (both `model` + `effort`): opus/hard for the three audit gates (audit-builder, audit-runtime, audit-final) + refactor-agent-mcp (highest blast radius); sonnet/medium for the 9 implementation/scaffold/docs states (none trivially mechanical — scaffold needed two repair rounds). Board: `Tiers: medium:9 · hard:4`, no unrated. Per-state rationale in `docs/plan/adhd-environment/decisions.md §F2`.
-
-### ENV-PLAN-004 — adhd-environment: docs-steward floats free of any DoD outcome
-- **Where:** `dag.json`; surfaced by `gap-check.js` as WARN
-- **Description:** `docs-steward` bears acceptance criteria but no DoD outcome declares it in `delivered-by:`. Plan is legacy-mode (no `gap-check-mode: strict` sentinel), so this is a warning rather than a hard block.
-- **Fix direction:** Add `docs-steward` to a `[dod.N] delivered-by:`, then adopt the strict sentinel.
-- **Status:** FIXED 2026-07-08. `docs-steward` added to the existing `[dod.1]` delivered-by (`[scaffold-workspace, docs-steward]`) in `docs/plan/adhd-environment/README.md` — its DEMO.md is the end-to-end proof-of-life that all 6 built packages run (its cold-start beat builds all 6 and asserts exit 0). No new DoD clause invented (DoD is human-confirmed dod.1..dod.8). `gap-check` now exits 0 with 0 warnings. Strict sentinel deliberately withheld to avoid regressing the legacy-mode gate this round.
-
 ### ENV-PLAN-005 — env-pin-check cannot express non-JS/Python toolchain pins; PLAN_ENV_LABEL is a blanket bypass
 - **Where:** `~/.claude/plugins/cache/sox-subagents/workflow/0.8.25/skills/plan-state-machine/scripts/lib/env-pin.js` → `isEnvPinned()`
 - **Description:** The pin predicate accepts exactly four markers: `./node_modules/.bin/`, `npx --yes|-y`, a python **script** invocation (`/\bpython3?\b[^|&;]*\.py\b/`), or a non-empty `PLAN_ENV_LABEL`. Consequences: (1) a genuinely pinned Rust guard (`rustup run 1.95.0 cargo build`) is still reported UNPINNED — there is no cargo/rustup marker; (2) `python -m build` is UNPINNED (no `.py`) while `python3 foo.py` is PINNED, even though both resolve `python` off ambient PATH; (3) setting `PLAN_ENV_LABEL` marks **every** guard pinned regardless of content, turning `env-pin-check --strict` green without improving determinism — a gate bypass.
 - **Fix direction:** Upstream: add toolchain markers (`rustup run`, `uv run`, `cargo +<toolchain>`) and stop letting `PLAN_ENV_LABEL` blanket-pass individual guards. Locally: express non-JS guards as repo-owned python guard scripts that resolve their toolchain by absolute path and fail loudly when absent.
 - **Status:** OPEN (upstream skill defect; worked around locally in adhd-environment).
-
-### ENV-PLAN-006 — adhd-environment: cargo-registry-token blocker bound to the wrong state
-- **Where:** `docs/plan/adhd-environment/human-blockers.json` → `cargo-registry-token`
-- **Description:** Declared `required_by: ["runtime-rs"]`, `blocks_at: "per-state"`, `status: "needed"`, so the orchestrator must halt wave 2 pending a publish credential. Its own `description` states the token is *"needed only at release/publish time, not for cargo build/test."* `runtime-rs`'s guard is `cargo build`. The binding contradicts the description and would block the parallel wave for no reason.
-- **Fix direction:** Rebind to the release/publish target with `blocks_at: release`. Approved by user 2026-07-08.
-- **Status:** FIXED 2026-07-08. `blocks_at` retargeted `per-state → release` in `human-blockers.json` so the credential no longer halts wave 2; it is enforced only at `nx release publish`. The approved `required_by: []` could not be persisted literally — an empty `required_by` hard-fails `gap-check` and the skill's plan-scaffold deletes any blocker whose `required_by` empties; deleting it outright re-trips the secret-coverage sweep (the release target `cargo publish --token $CARGO_REGISTRY_TOKEN` is documented in `contexts/scaffold-workspace.md`). So `required_by:["runtime-rs"]` is retained as the truthful crate-ownership link + secret coverage, and `blocks_at:"release"` is the load-bearing de-gating signal. `gap-check` 0 warnings. Detail in `decisions.md §F6`.
 
 ### ENV-PLAN-007 — adhd-environment: agent-mcp deployment secrets unset; wave 6 will halt
 - **Where:** `human-blockers.json` → `agent-mcp-deployment-secrets` (`required_by: [refactor-agent-mcp]`, owner `human:ops`)
@@ -764,12 +649,6 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 - **Fix direction:** Resolve `criteria.json` relative to the script's own dir (`__dirname`), execute every check with `cwd = repoRoot`, and make `--phase` actually filter `criteria[].phase`. Add a self-test asserting `--phase X` runs only phase-X criteria.
 - **Status:** OPEN — ENV-PLAN-011 cannot be fixed until this is.
 
-### AMA-018..021 — agent-mcp-authoring: plan described fastembed from its interface, not its implementation (FIXED)
-- **Where:** `docs/plan/agent-mcp-authoring/contexts/embedding-substrate.md`, `contexts/_shared.md`, `decisions.md`
-- **Description:** After the `type:'hash'` → `type:'fastembed'` repair, the plan still (a) told the executor to pass a `FileSystemModelCache` — an object no factory accepts; (b) omitted that `createFastembedProvider` **eagerly downloads + warms the ONNX model before resolving**, with an inner 60 s worker-init timeout nested inside an outer 180 s wrapper (both keyed on `SOX_EMBED_WARMUP_TIMEOUT_MS`); (c) never stated `metadata.isDeterministic === false` is the provider's own declared contract; (d) omitted that `warmUp()` is a no-op, `role` is ignored, vectors are L2-normalised, and content over ~2048 chars is chunk-then-mean-pooled (the normal path for real component bodies).
-- **Verified empirically:** constructed `FastembedProvider` from its built dist → `{"isDeterministic":false,"dimensions":768,"maxTokens":512}`, `DEFAULT_BATCH_SIZE=256`, `warmUp()` returns undefined with no side effect.
-- **Status:** FIXED. All gates re-run green (gap-check, env-pin-check --strict, integrity-check, architecture audit 6/6).
-
 ### SOX-BUG-001 — sox-ecosystem: `embedding-provider` nested warmup timeouts disagree (180 s outer vs 60 s inner)
 - `index.ts:204-207` defaults 180 000 ms; `fastembed.ts:102-105` defaults 60 000 ms; both read `SOX_EMBED_WARMUP_TIMEOUT_MS`. Worker init is bounded by the inner 60 s, so the outer limit is never effective for a cold model download.
 - **Status:** OPEN (upstream repo)
@@ -788,41 +667,6 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 
 ### SOX-DOC-004 — sox-ecosystem: `FastEmbedPoolConfig.batchSizes` doc says "overrides the default 32"; actual `DEFAULT_BATCH_SIZE = 256`
 - **Status:** OPEN (upstream repo)
-
-### ENV-PLAN-013 — environment-core-py / environment-core-rs are not nx projects; audit-final silently skips both
-- **Where:** `packages/environment/environment-core-{py,rs}` (no `project.json`); `docs/plan/adhd-environment/dag.json` → `audit-final`
-- **Description:** `nx show projects | grep environment` returns exactly 4 projects (`environment-base-spec`, `environment-core-node`, `environment-builder`, `environment-cli`). `audit-final`'s guard is `npx --yes nx run-many -t build --projects=environment-*`, which therefore builds **4 of the 6** packages. The Python and Rust runtimes — the entire cross-language conformance surface this plan exists to deliver — are never exercised by the final audit. A silently-narrowed glob reads as "built everything."
-- **Fix direction:** Give `environment-core-py` and `environment-core-rs` `project.json` files with pinned `build`/`test` targets, so `--projects=environment-*` genuinely covers 6; and have `audit-final` assert coverage count, not just exit 0.
-- **Status:** FIXED (2026-07-08, working tree, not committed). Added `packages/environment/environment-core-{py,rs}/project.json` (executor `nx:run-commands`, driven by a committed `nx-run.sh` that resolves `uv` / keg-only `rustup` and fails loudly if absent) with cache-enabled `build` + `test` targets. `npx nx show projects | grep -c '^environment-'` now prints **6**; `npx nx run-many -t build --projects=environment-*` exits **0** (all six), second run is a cache hit (8/9 tasks from cache). py `nx test` = 42 passed exit 0; rs `nx test` = 18 + 4 doc-tests exit 0. Tagged `platform:python` / `platform:rust` to keep them out of the Node/browser TS graph. Remaining sub-item — having `audit-final` assert a coverage **count** rather than just exit 0 — lives in `docs/plan/adhd-environment/` (owned by another agent); not touched here.
-
-### ENV-PLAN-014 — cargo-registry-token blocker references a release target that does not exist
-- **Where:** `docs/plan/adhd-environment/human-blockers.json`; `contexts/scaffold-workspace.md`
-- **Description:** The blocker states the token is "consumed by the environment-core-rs nx-release-publish target (`cargo publish --token $CARGO_REGISTRY_TOKEN`, defined in scaffold-workspace project.json)." A repo-wide search for `cargo publish` / `CARGO_REGISTRY_TOKEN` / `uv publish` / `twine` across every `project.json` and `package.json` returns **nothing**. `environment-core-rs` has no `project.json` at all (ENV-PLAN-013). The blocker documents a publish pipeline that was never built, and that description was cited as justification for retaining `required_by: ["runtime-rs"]` during the ENV-PLAN-006 repair.
-- **Fix direction:** Either implement the release targets (then the blocker becomes true) or rewrite the blocker to describe reality. Do not leave a credential gated on a nonexistent target.
-- **Status:** FIXED — target side (2026-07-08, working tree, not committed). Added real `nx-release-publish` targets: `environment-core-rs` → `rustup run 1.95.0 cargo publish` (crates.io, `CARGO_REGISTRY_TOKEN` from the release env) and `environment-core-py` → `uv publish dist/*` (PyPI), each `dependsOn: ["build","test"]`, driven by the committed `nx-run.sh`. No credentials committed; neither target was run. NOTE the blocker text still names the *wrong location* ("defined in **scaffold-workspace** project.json") — the real targets live in the per-package `project.json`, not `scaffold-workspace`'s. Correcting `human-blockers.json` / `contexts/scaffold-workspace.md` is left to the owner of `docs/plan/adhd-environment/` (not editable in this task).
-
-### ENV-PLAN-015 — environment family: stock scaffold READMEs carried doubled/incorrect nx names — FIXED
-- **Where:** `packages/environment/environment-base-spec/README.md`, `.../environment-builder/README.md`, `.../environment-core-node/README.md`
-- **Description:** The Nx-generated READMEs documented build/test commands against non-existent doubled project names — e.g. `nx build environment-environment-base-spec`, `environment-environment-core-builder`, `environment-environment-core-node`. A reader copying those commands hits "project not found." Also there was no documentation anywhere of the deliberate `environment-core-node` → `@adhd/environment` npm alias (the "name+alias B3" decision), so it was indistinguishable from a mistake, and `environment-core-py` / `environment-core-rs` had no README at all (the py `pyproject.toml` even declares `readme = "README.md"`).
-- **Fix:** Rewrote all six family READMEs (5 packages + `entrypoint/environment-cli`) with correct nx names and a shared **naming map** table (`directory | nx project name | distribution name | registry | import specifier`), documented the `@adhd/environment` alias + its PyPI/crates.io `adhd-environment` mirror in the headline `environment-core-node` README, and created the missing py/rs READMEs.
-- **Status:** FIXED (2026-07-08, working tree, not committed).
-
-### BUG-ORCH-001 — agent-engine-orchestrator: `main` working tree did not compile (TS2451 redeclare) — FIXED
-- **Where:** `packages/agent/agent-engine-orchestrator/src/clients/registry.ts:76,96`
-- **Description:** An uncommitted working-tree change replaced `return this.clients.get(name)!` with a null-checked `const client = this.clients.get(name); …` in **two** places. The second sits in the same block scope as the pre-existing `let client: StdioMcpClient | HttpMcpClient | SseMcpClient;` (line 76), producing `TS2451: Cannot redeclare block-scoped variable 'client'`. `nx build agent-engine-orchestrator` failed, cascading into `nx build agent-mcp` (19 dependent tasks) — so **the whole agent-mcp build was red**.
-- **Discovered by:** running `nx build agent-mcp` while verifying the `agent-mcp-authoring` plan's `versioning` guard. The break was *masking* AMA-016 — the guard looked red for the wrong reason. With the build repaired, `nx build agent-mcp` exits 0, confirming AMA-016 (guard green before the state does any work).
-- **Fix:** renamed the second binding to `connected`, preserving the original re-fetch-from-map semantics (a concurrent connect that replaced the entry still wins) and keeping the added null check.
-- **Verification:** `nx build agent-engine-orchestrator` exit 0; `nx build agent-mcp` exit 0; `nx test agent-engine-orchestrator` exit 0, 49/49 tests passed.
-- **Status:** FIXED (working tree; not committed). Re-verified: `nx build agent-engine-orchestrator` exit 0, `nx build agent-mcp` exit 0, 0 `TS2451` errors. Fixing this exposed BUG-ORCH-002 (below).
-
-### SOX-BUG-001/002, SOX-DOC-001..004 — FIXED in sox-ecosystem (2026-07-08)
-- **SOX-BUG-001 (code):** `warmupTimeoutMs()` was defined twice with disagreeing defaults (index.ts 180 000 / fastembed.ts 60 000), both keyed on `SOX_EMBED_WARMUP_TIMEOUT_MS`, so the inner 60 s silently governed cold ONNX downloads. Now defined **once**, exported from `index.ts`, default `180_000`; `fastembed.ts` imports it. Verified: `grep -rn "function warmupTimeoutMs" src/` → exactly 1 hit; built `dist` reports `warmupTimeoutMs() = 180000`; loading `dist/fastembed.js` *before* `dist/index.js` exposes no import cycle.
-- **SOX-BUG-002 (docs-in-code):** `ModelCache` + `FileSystemModelCache` marked `@deprecated` with the real `cacheDir` resolution order documented. No public export removed.
-- **SOX-BUG-003 → reclassified DOC:** `warmUp()`'s no-op is **intentional and spec-pinned** (`embedding-provider.spec.ts:86`). Code left untouched; the `sox.concerns` line advertising a "warmUp cache" was corrected, and the invariant now states the no-op is currently *always* in effect (every shipped provider hard-codes `isDeterministic:false`).
-- **SOX-DOC-001/003/004:** removed the nonexistent "deterministic hash provider" concern, corrected the unimplemented "asymmetric encoding via role param" claim, fixed `batchSizes` "default 32" → 256.
-- **SOX-DOC-002:** ingest's summariser re-described as lead-N (not "sentence-scoring"), incl. the `<100 chars → content.trim()` passthrough.
-- **Verification (independent, exit codes):** `vitest run embedding-provider` exit 0 (14/14); `vitest run ingest` exit 0 (112/112); `tsc --noEmit` exit 0; `nx build sox-embedding-provider` exit 0; smoke test confirms `type:'hash'` still throws `ResolutionError`.
-- **Status:** FIXED (sox-ecosystem working tree; not committed).
 
 ### SOX-PKG-001 / AMA-005 — RESOLVED UPSTREAM: `@adhd/sox-ingest` is now public
 - Commit **`f4897aa P1(ingest-public): expose @adhd/sox-ingest public surface`** set `private: false`, removed the `"PRIVATE — never published to npm; only the memory domain composer may call this package"` invariant, and dropped the composer-only restriction from the description.
@@ -854,35 +698,6 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 - **Fix direction:** Assert round-trip behaviour: `set(k,v)` then `get(k)` returns `v`; `write()` produces a snapshot at `configPath()`.
 - **Status:** OPEN.
 
-### SEC-001 🔴 — FontAwesome Pro npm token committed to a PUBLIC repo's git history (working tree now clean)
-- **Where:** `.github/scripts/setup-npmrc.sh` (line 6). Executed by `.github/workflows/publish-embed-cdn.yml:56` and `.github/workflows/build-docker.yml:77`.
-- **Description:** `//npm.fontawesome.com/:_authToken=` is followed by a **36-character, secret-shaped literal** — not a variable reference. (Line 8's `//registry.npmjs.org/:_authToken=${NPM_TOKEN}` is correctly a var ref.) The value has been in git history since at least `18d980b` (2026-05-15) and `faaddc5` (2026-06-08).
-- **Discovered by:** the new `check-no-credentials.js --all` audit, via the custom `adhd-npmrc-auth-token` gitleaks rule. The value was never printed to any log.
-- **Action required (in order):**
-  1. **Rotate the FontAwesome npm token now.** It is in git history; deleting the line is not sufficient. Assume compromised.
-  2. Replace the literal with `${FONTAWESOME_NPM_TOKEN}` and add the secret to the GitHub repo secrets, mirroring the `NPM_TOKEN` pattern already used on line 8.
-  3. Consider history rewrite (`git filter-repo`) only after rotation — rotation is the fix, scrubbing is hygiene.
-- **Note:** the pre-commit hook (`--staged`) and the CI job (`--range`) will NOT flag this, because the file is unchanged in new commits. Only `--all` catches pre-existing history. That is by design — but it means this must be fixed by hand.
-- **Status:** OPEN — highest priority item in this file.
-
-### SEC-002 — 6 further gitleaks findings in git history (triaged: likely benign, unverified)
-- `gitleaks git --config .gitleaks.toml` over full history reports **7 leaks** total (SEC-001 is one).
-- The remaining 6: `generic-api-key` in `nx.json` (commits `a41c2ac`, `87aac2a`, 2024 — **no token key exists in `nx.json` today**, so history-only); `generic-api-key` in `packages/ai/agent-mcp/src/providers/anthropic.ts` (×2 — that path no longer exists, `packages/ai/` was deleted in the rename); `curl-auth-header` in `packages/ai/agent-mcp/INSTALL.md` (doc example); one further `adhd-npmrc-auth-token` hit on the same SEC-001 file at an older commit.
-- **Not verified individually.** Classification above is from path/rule inspection, not from reading the values. Re-run `node .githooks/check-no-credentials.js --all` after rotating SEC-001 and triage what remains.
-- **Status:** OPEN
-
-### CRED-001 — `check-no-credentials.js` placeholder filter had a false-positive bug (FIXED)
-- **Where:** `.githooks/check-no-credentials.js` → `PLACEHOLDER`
-- **Description:** Every alternative carried a **trailing `\b`**, so `password = "changeme123"`, `api_key = "example_key_…"`, and `placeholder_x_1234` were all reported as live secrets — a word boundary requires a non-word char after the token. The most common placeholder shapes in real code were blocked. Per the file's own reasoning ("a noisy gate gets bypassed"), this would have driven contributors to `--no-verify`.
-- **Fix:** dropped the trailing `\b` (leading `\b` kept, so `myexample` still doesn't match). Regression-guarded: a synthetic 24-char literal and `AKIA…` still block. <!-- pragma: allowlist secret gitleaks:allow — the regression example is synthetic; naming it inline made both scanners fire on this documentation line. -->
-  The exact synthetic literals live in the hook's own test fixtures, not here: documentation should never carry a
-  credential-shaped string, even a fake one. A gate that cries wolf in its own changelog teaches people to bypass it.
-- **Status:** FIXED
-
-### CRED-002 — two competing credential scanners were being authored concurrently (CONSOLIDATED)
-- `.githooks/secret-scan.sh` (POSIX sh) and `.githooks/check-no-credentials.js` (Node) were written in the same session with overlapping rule tables. Consolidated to **one** implementation: `check-no-credentials.js` (superior — reads the staged blob via `git show :0:`, skips binaries, never prints matched values, encodes the `adhd-environment.json` snapshot vector). `secret-scan.sh` deleted; its CI modes (`--range`/`--all`), explicit `--config`, gitleaks tool-error detection, and `SECRET_SCAN_REQUIRE_GITLEAKS` hard-fail were folded into the JS.
-- **Status:** RESOLVED
-
 ### ENV-SEC-001 — CRITICAL — FontAwesome Pro npm `_authToken` hardcoded and pushed to a PUBLIC repo
 - **Where:** `.github/scripts/setup-npmrc.sh:6` (working tree, now fixed) and git history
 - **Description:** `//npm.fontawesome.com/:_authToken=900FA3DD-…` was committed literally. The very next line does it correctly (`${NPM_TOKEN}`). Present in commits `faaddc56` and `18d980b3`. **`faaddc56` is on `origin/main`**, and `github.com/PseudoSky/adhd` is **PUBLIC** (`gh repo view` → `"visibility":"PUBLIC"`). The token has therefore been readable by anyone for as long as that commit has been pushed, and must be assumed harvested.
@@ -912,20 +727,6 @@ coverage: { reportsDirectory: '../../../coverage/packages/dispatch/dispatch-spec
 - **Outstanding:** the DoD clause's *value* changed, not its *intent*. **A human must re-confirm the DoD** (`state-transition.js --confirm-dod`) before this plan may reach `done`. The orchestrator must not self-certify this.
 - **Status:** OPEN — owner: human. Blocks terminal transition together with ENV-PLAN-016.
 
-### BUG-ORCH-002 — agent-engine-orchestrator: a failed MCP connect poisoned the client cache forever (FIXED)
-- **Where:** `packages/agent/agent-engine-orchestrator/src/clients/registry.ts` → `McpClientRegistry.getOrCreateClient`
-- **Description:** `connectPromises.set(name, client.connect().then(...))` cached the promise unconditionally, and `connectPromises` was only ever cleared **wholesale** in `close()` (line 181). So a single failed connect — server not up yet, transient spawn failure, wrong command — left a **rejected promise cached under that server name for the life of the process**. Every subsequent `getClient(name)` hit the `if (connectPromise) { await connectPromise; … }` fast path, re-awaited the same rejected promise, and rethrew the *original* error. The server could never reconnect; there was no retry and no recovery path short of `close()`.
-- **Found while:** fixing BUG-ORCH-001 (the `TS2451` redeclare) in the same block. Reading the surrounding code to make the rename safe surfaced it.
-- **Fix:** attach a `.catch` that evicts the entry before rethrowing, guarded by `if (this.connectPromises.get(name) === connectPromise)` so a newer in-flight attempt is never deleted. The success path and the concurrent-dedupe behaviour are unchanged.
-- **Verification (real components, no mocks of the unit under test):** new `src/__tests__/registry-connect-retry.test.ts` drives the real `McpClientRegistry` over a real `StdioClientTransport`, which really spawns `sh -c 'echo attempt >> <marker>; exit 1'`. It counts actual spawns via the marker file:
-  - first `getClient` rejects, spawn count = 1
-  - second `getClient` rejects **and spawn count = 2** (a genuine retry)
-  - two concurrent callers dedupe to **one** spawn
-  - unknown server name fails fast, spawn count = 0
-  Deterministic (the child exits immediately; no sleeps, no wall-clock).
-- **Negative control (proof of teeth):** reverting the `.catch` eviction makes exactly the retry test go red — `AssertionError: expected 1 to be 2` — while the other three still pass. The test cannot pass vacuously.
-- **Status:** FIXED. `nx test agent-engine-orchestrator` exit 0, 53/53 (was 49). `nx lint` exit 0. `nx build agent-mcp` exit 0.
-
 ### LINT-ANY-001 — `@typescript-eslint/no-explicit-any` remains in 5 packages (~204 warnings)
 - **Where:** captured from a stray root `FAILURE.md` left by an earlier agent pass that "ran out of steps". Folded here so the deferral is not lost with the file.
 - **Completed already (0 warnings):** `agent-core-policy`, `agent-plugin-budget`, `data-core-structures`, `decompile-cli`, `agent-engine-compiler`.
@@ -948,185 +749,9 @@ Baseline: **lint exit 0**, **build exit 1** (5 projects), **test exit 1** (11 pr
 - **Fix:** proper generics + type-predicate guards (`filters.ts`), not a re-introduction of `any`. Four genuine non-`unknown` bugs also surfaced and were fixed: `regex.ts` duplicate `prefix` identifier (TS2300), `regex.ts` 5-vs-6 argument call mismatch (TS2554), `function.ts` non-array rest parameter (TS2370), `object.ts` missing return path (TS7030).
 - **Status:** `data-base-transforms` FIXED (build exit 0). `ui-react-base-hooks` IN PROGRESS.
 
-### BUILD-OPT-001 — `dispatch-core-optimizer` did not compile (FIXED)
-- **Where:** `src/lib/snapshot.ts:951`, `src/lib/compiler.ts:916` — `TS2741: Property 'tokens_naive' is missing in type … but required in type 'SnapshotOptimization'`.
-- **Description:** `tokens_naive: number | null` was added as a **required** field to `SnapshotOptimization` (`packages/dispatch/dispatch-base-spec/src/lib/types.ts:579`) without updating the two construction sites. `optimize.ts`'s own design note had explicitly deferred this: *"Adding a `tokens_naive` field to SnapshotOptimization belongs to a future @adhd/dispatch-spec change, not this file."* The spec change landed; the call sites never followed.
-- **Fix:** `tokens_naive: null` at both sites. It **cannot** be computed there — `computeTokensNaive(snapshot, deps)` takes a *finished* `DagSnapshot`, and these sites are still assembling it. `null` is the declared "not computed" value; callers wanting the F4 baseline call the exported `computeTokensNaive()`. No test asserts a numeric value.
-- **Status:** FIXED — build exit 0, test exit 0 (28/28).
-
-### TEST-CLI-001 — `dispatch-cli` test target never generated the CLI it drives (FIXED)
-- **Where:** `entrypoint/dispatch-cli/project.json` → `targets.test`
-- **Description:** `cli-smoke.spec.ts` fails loudly when `dist/entrypoint/dispatch-cli/cli/cli.ts` is absent, and its error message asserts *"This target's project.json declares dependsOn: ["generate-cli"], so a normal `npx nx test dispatch-cli` always produces this file first."* **It did not.** `test.dependsOn` was `null`; only `nx.json`'s `targetDefaults.test.dependsOn = ["^build"]` applied, which never runs `generate-cli`. The error message documented a guarantee that did not exist.
-- **Fix:** `"dependsOn": ["^build", "generate-cli"]` on the test target. (A project-level `dependsOn` **replaces** the targetDefaults value, so `^build` must be repeated — omitting it would silently stop building dependencies.)
-- **Verification (teeth):** deleted `dist/.../cli/cli.ts`, ran `nx test dispatch-cli` → `generate-cli` ran, artifact was recreated, 30/30 passed, exit 0.
-- **Status:** FIXED
-
-### TEST-FLAKE-001 — `apigen-cli` had two timing-dependent tests (FIXED)
-- **Where:** `entrypoint/apigen-cli/src/test/run.spec.ts`
-- **`[cli-run-cmd.1+2]`** spun on `setImmediate` until `capturedInput` appeared, bounded by a 12 s deadline. That busy-wait **competes for the very CPU that ts-morph needs** to finish the extraction it is waiting on, so under `--parallel=5` the deadline expired: `expected undefined not to be undefined`. Replaced with a latch (`signalRunCalled()` from inside `run()`) plus a bounded 15 s rejection — deterministic, and idle while waiting.
-- **`[cli-run-cmd.4]`** drives a real ts-morph extraction over two fixture packages but inherited vitest's **5 s default timeout** (its sibling already declares `{ timeout: 20000 }`). `Test timed out in 5000ms`. Given an explicit `{ timeout: 30000 }`; assertions unchanged.
-- **Verification:** 4 concurrent vitest processes on the same spec — all exit 0. (Passing in isolation proved nothing; the failure only reproduces under contention.)
-- **Status:** FIXED — violated the repo rule "be deterministic without timing; a flaky proof is not a proof."
-
-### TEST-REF-001 — `agent-plugin-budget`: `ReferenceError` aborted two tests before they asserted anything (FIXED)
-- **Where:** `src/__tests__/budget-plugin.test.ts` → `describe('maxTokensPer24h — mock DB')` `beforeEach`
-- **Description:** `lastQuery = undefined;` referenced an **undeclared** variable, left behind by a refactor that removed the query-recording mock. Every `beforeEach` threw `ReferenceError: lastQuery is not defined`, so **both** tests in that block aborted before executing a single assertion. They were red, but their assertions had never once run.
-- **Fix:** removed the dead statement. Both tests then passed on their own merits (32/32).
-- **Status:** FIXED
-
-### TEST-RENAME-001 — `apigen-plugin-api-{express,fastify}` asserted a package name that no longer exists (FIXED)
-- The package is `@adhd/apigen-engine-runtime`; the generator emits it; the test *titles* say it. Only the regex still matched `@adhd/apigen-runtime`. The tests failed while the code was correct.
-- **Status:** FIXED — express 25/25, fastify 37/37.
-
-### TEST-PATH-001 — `dispatch-base-spec` hard-coded a package path that moved twice (FIXED)
-- `plan.spec.ts` located the repo root by string-matching `'packages/dispatch/dispatch-spec'` in `__dirname`. The package moved `packages/shared/dispatch-spec` → `packages/dispatch/dispatch-spec` → `packages/dispatch/dispatch-base-spec`; the last rename broke it.
-- **Fix:** walk up from `__dirname` to the directory containing `nx.json`. Rename-proof, still fails loudly (never skips).
-- **Status:** FIXED — 25/25.
-
-### TEST-NONE-001 — `workspace-codegen-nx` had a `test` target and zero tests (FIXED)
-- `nx test workspace-codegen-nx` → `No test files found, exiting with code 1`. `passWithNoTests: true` would have been a silent skip, which the repo's testing protocol forbids.
-- **Fix:** wrote `src/generators/types/generator.spec.ts` driving the **real** generator through `@nx/devkit`'s in-memory `Tree` (no mocks, no filesystem, deterministic): scaffold paths, the `pkg-kind:types`/`pkg-class:types` re-tag override, explicit-name handling, and `platform:shared`.
-- **Teeth proven:** flipping the tag assertion to `pkg-kind:base` turns it red (`expected [...] to include 'pkg-kind:base'`); restoring it goes green.
-- **Status:** FIXED — 4/4.
-
-### ENV-HAZARD-001 🔴 — a concurrent agent ran `git reset --hard`, destroying uncommitted work
-- **Evidence:** `git reflog` → `9df52faa HEAD@{0}: reset: moving to HEAD`.
-- **Impact:** wiped five uncommitted test fixes mid-session (re-applied from memory), and reverted an uncommitted fix in `dispatch-core-optimizer` (surfacing BUILD-OPT-001 as a *new* failure that had not appeared in the sweep 20 minutes earlier). Other agents in this repo are also auto-committing (`b1580fd6`, `8afbeb0e`, `9df52faa`) with messages admitting the content is unreviewed / of unknown provenance.
-- **Mitigation used:** working patch backed up outside the tree (`/tmp/adhd-testfixes.patch`) via `git diff HEAD`.
-- **Recommendation:** serialize agents that mutate git state, or give each a worktree under `.worktrees/`. `git reset --hard` and blanket `git add -A` commits should be forbidden for non-interactive agents.
-- **Status:** OPEN — process defect, not a code defect.
-
-### BUILD-ANY-002 — `data-query-engine` + `decompile-cli`: remaining `any`→`unknown` fallout (FIXED)
-- **`data-query-engine` (69 errors → 0).** Single root cause: `partialApply<F extends (...args: unknown[]) => unknown>` — a constraint almost no real function satisfies, because parameters are checked contravariantly (`(a: string, b: string) => boolean` is NOT assignable to it). Every one of the 26 `partialApply(isEq)`-style operator-table entries failed. Fixed by constraining on `(...args: never[]) => unknown` (the standard any-free "any callable"), plus:
-  - `hasValues`: narrowed `string | unknown[]` before calling `.includes` (a string overload never accepted `unknown`).
-  - `logicalOperators`: `ops`/`iter` inherited `unknown` from `FilterPartial`'s `(...args: unknown[])`; declared explicit params + narrowed `ops` with `_.isArray` before iterating (TS18046/TS2488).
-  - `parser.ts`: `parseOrderByOperation(path, value)` took `value: string` but was fed `_.get(...)`, which now returns `unknown`, and immediately calls `value.split()` — a latent runtime crash. Now narrows and **throws a typed error** instead of casting.
-  - `query.ts`: the class had widened `order_by`/`distinct_on`/`limit` to `unknown`, violating the `QueryType` contract it declares (TS2416). Restored the interface's types. `where`'s union wrongly admitted `() => boolean` (a 1-arg predicate is not assignable to a 0-arg signature). `dirty` lacked an initializer under `strictPropertyInitialization` (TS2564).
-- **`decompile-cli` (2 errors → 0, unrelated to the sweep).** `Array.prototype.map.call()` is untypable (loses generic `this`), so the chained `.reduce((r: string[], l: string) => …)` matched no overload — asserted the element type once at that boundary. `CruiseOptions.doNotFollow.dependencyTypes` was `string[]`, not assignable to dependency-cruiser's `DependencyType[]`; the precise union (`DependencyEnum`) was already declared in the same file and is now used, so a typo in a dependency-type name is caught rather than silently ignored.
-- **Behaviour preserved (verified):** `data-base-transforms` 104/104, `data-query-engine` 37/37, `data-core-structures` 1/1 — all exit 0. lint exit 0 for all. No `any` reintroduced; three narrowing assertions remain, each with an inline justification.
-- **Status:** FIXED
-
 ### TEST-GAP-001 — `decompile-cli` has no `test` target at all
 - `npx nx test decompile-cli` → `Cannot find configuration for task decompile-cli:test`. The project builds and ships a CLI entrypoint but has zero automated tests, and it is therefore invisible to `nx run-many -t test --all` (it never appears as a pass OR a failure).
 - **Status:** OPEN — coverage gap, not a regression.
-
-### SEC-001 / SEC-002 — corrected assessment (2026-07-09)
-
-Both credentials live in the git history of **`PseudoSky/adhd`, a PUBLIC GitHub repo**.
-Neither is in `HEAD` or the working tree any longer. **Values are deliberately not
-reproduced here** — writing them into a tracked file would re-commit the leak. Retrieve
-them with `git show <commit>:<path>` when rotating.
-
-**SEC-001 — FontAwesome Pro npm token** (`//npm.fontawesome.com/:_authToken=…`)
-- Path: `.github/scripts/setup-npmrc.sh`
-- Introduced `18d980b3`; still present at `faaddc56`; removed by `48ab824f`
-  (`fix(security): remove hardcoded FontAwesome npm token; add credential pre-commit gate`).
-- The working tree now correctly uses `${FONTAWESOME_TOKEN}` behind a `:?` guard.
-- **Correction:** the earlier entry called this "LIVE … in a tracked, CI-executed script."
-  That was true when scanned and became stale when a concurrent agent fixed it mid-session.
-  The leak is **history-only**.
-- Shape is an uppercase UUID — FontAwesome Pro's documented token format, not a placeholder.
-  **Liveness was NOT verified** (a read-only probe against the registry was blocked by a
-  safety classifier). Rotate regardless: it has been publicly cloneable since 2026-05-15.
-
-**SEC-002 — Nx Cloud access token** (`nx.json` → `nxCloudAccessToken`)
-- Present at `a41c2acf` and `87aac2a3` (2024). Absent from `HEAD` and the working tree.
-- The base64 payload's trailing segment encodes `|read-write` → the credential carries
-  **WRITE** scope on the Nx remote cache. A write-scoped cache token lets an attacker poison
-  build artifacts consumed by every developer and every CI run. **Plausibly higher impact
-  than the npm token.** Rotate in the Nx Cloud dashboard.
-
-**The remaining 3 gitleaks hits are confirmed false positives** (allowlisted in
-`.gitleaks.toml` under ENV-SEC-003; re-verified independently):
-- `OAUTH_CLIENT_ID` in `packages/ai/agent-mcp/src/providers/anthropic.ts` — an OAuth
-  **client id** is a public identifier by design, not a secret.
-- `curl http://localhost:1234/v1/models` in `packages/ai/agent-mcp/INSTALL.md` — matched the
-  `curl-auth-header` rule; no credential present.
-
-**Required action is ROTATION, not scrubbing.** A history rewrite (`git filter-repo`) is
-hygiene and only meaningful *after* both tokens are rotated — the values have been public
-for months and must be assumed harvested.
-
-### SEC-002 — Nx Cloud token: authoritative timeline (2026-07-09)
-
-**Written:** `87aac2a3` — **2024-05-04 16:05:01 -04:00** — `snow <grepthesky@gmail.com>` — *"Initial commit"*.
-It was in `nx.json` from the repository's very first commit.
-
-**Removed from `main`:** `ce425400` — **2026-06-08 13:47:37 -05:00** — `pseudosky` — *"fix(ci): remove all nx cloud references"*.
-
-**Exposure on `main`: 765 days (~2.09 years) in a PUBLIC GitHub repo.**
-
-Three details that change the picture:
-
-1. **The token never changed.** SHA-256 of the value is identical (`675f0043…`, 64 chars) at
-   `87aac2a3`, `a41c2acf`, `51fb123a~1`, `faaddc56`, and `ce425400~1`. One credential, the whole time.
-
-2. **An earlier "removal" never landed.** `51fb123a` (Claude, 2026-04-25, *"chore: disable nx-cloud
-   globally and in CI"*) does remove the key — but `git merge-base --is-ancestor 51fb123a HEAD` is
-   **false**. That commit is not in `HEAD`'s history, so the token stayed on `main` for another six
-   weeks after it looked fixed. Verifying a secret removal requires checking the *shipped branch*,
-   not just that a commit exists.
-
-3. **gitleaks under-reports the window.** It flagged only `a41c2acf` and `87aac2a3` — the commits
-   whose *diffs add* the secret. `faaddc56` (2026-06-08) still contained the token, but its parent
-   `05191e6b` already did too, so the line was never an addition and produced no finding. **A
-   gitleaks report enumerates introductions, not duration of exposure.** Do not read "2 hits in
-   2024" as "exposed only in 2024."
-
-**Action unchanged: rotate.** 765 days of public availability means assume harvested. The credential
-carries `|read-write` scope on the Nx remote cache (build-artifact poisoning), so rotation is more
-urgent than for a read-only token.
-
-### SEC-001 — SECOND CORRECTION (2026-07-09): the token is LIVE on the public default branch
-
-My previous entry said the FontAwesome leak was "history-only, working tree now clean."
-**That was wrong about the state that matters.** It described the LOCAL tree, not the
-public repository.
-
-Verified against the fetched remote:
-
-```
-HEAD        24359a40
-origin/main 4dc34b64          ahead=226  behind=0
-
-git show origin/main:.github/scripts/setup-npmrc.sh  → line 6 contains the hardcoded token
-git merge-base --is-ancestor 48ab824f origin/main    → FALSE  (the fix was never pushed)
-```
-
-- **`github.com/PseudoSky/adhd` (PUBLIC) serves the token in the CURRENT file on its default
-  branch today.** Not archaeology — anyone opening `.github/scripts/setup-npmrc.sh` on GitHub
-  sees it. No `git log` archaeology required.
-- The removal commit `48ab824f` exists **only locally**, among 226 unpushed commits.
-- Line 8 of the same file (`//registry.npmjs.org/:_authToken=${NPM_TOKEN}`) IS a safe var ref,
-  which is why the file "looks fixed" when skimmed.
-
-**SEC-002 (Nx Cloud token) differs:** `ce425400` WAS pushed, so `origin/main`'s tip is clean —
-but the token remains in 2 commits of `origin/main`'s history and is still publicly cloneable.
-
-**Lesson for this repo's secret handling:** "removed" must be verified against the *pushed*
-branch (`git show origin/<branch>:<path>`), never against the working tree or local `HEAD`.
-Two separate fixes here looked complete locally while the credential stayed public — this one,
-and `51fb123a`, whose nx-token removal never landed on `main` at all.
-
-**Priority order:**
-1. **Rotate the FontAwesome Pro token now** — it is publicly readable at the branch tip, right now.
-2. **Rotate the Nx Cloud token** (`|read-write`, 765 days public) — history-only, but harvestable.
-3. Push `48ab824f` (or cherry-pick just the `setup-npmrc.sh` fix) so the tip stops serving it.
-4. Only then consider `git filter-repo`; scrubbing before rotation accomplishes nothing.
-
-### BUG-DEPCHECK-001 — `@nx/dependency-checks` flags genuinely-imported deps as "not used", failing `lint`/`build`/`test` on several projects
-**Discovered:** 2026-07-09, during the `merge-optimizer-refactor` stash-merge verification sweep (running `nx test apigen-*` and `nx run-many -t build --projects=environment-*`).
-**Symptom (base commit `24359a40`, independent of the merge — `git diff HEAD` is empty for every affected package and for `.eslintrc.base.json`/`nx.json`):**
-- `environment-builder:lint` → "The 'ajv' / 'yaml' package is not used" — yet both ARE imported (`src/validation.ts:13 import Ajv from 'ajv'`, `src/yaml-parser.ts:14 import { parse } from 'yaml'`). Blocks `nx run-many -t build --projects=environment-*`.
-- `apigen-engine-runtime:lint` → "'ajv' / 'ajv-formats' not used" — imported at `src/lib/validate-layer.ts:34-35`.
-- `apigen-core-client:lint` → "'decimal.js' not used" — imported in test fixtures/specs (`src/test/ts-json-schema.spec.ts`).
-- `apigen-cli:lint` → "'decimal.js' not used" (declared in `package.json:27`; no runtime `import 'decimal.js'` found — this one may be a genuinely-unused dep rather than a false positive).
-Because these surface through `dependsOn` chains (`test → ^build → lint`), they redden `nx test apigen-cli|apigen-plugin-api-express|apigen-plugin-api-fastify` and the `environment-*` build even though the vitest targets themselves never run.
-**Not fixed by `nx reset`** (ruled out stale cache/graph). Consistent with commit `ceeac50`'s note of a "pre-existing 57bef4d mismatch blocking affected-lint" — i.e. an installed-version / lockfile alignment issue that makes `@nx/dependency-checks` fail to resolve the dependency edge for imported packages.
-**Impact on the stash-merge:** NONE — the merge changed zero files under `packages/apigen`, `packages/environment`, or eslint/nx config (proven by empty `git diff HEAD`). The pre-commit `nx affected -t lint` for this commit scopes to `dispatch-cli`/`dispatch-orchestrator`/`dispatch-core-optimizer` (all clean, exit 0); these projects are not in its affected set.
-**Fix direction (out of scope for the merge, and risks the in-flight apigen release work):** align the declared version ranges in each `package.json` with the installed versions (as `ceeac50` did for `ajv-formats@2.1.1`), and/or add `ignoredDependencies`/`ignoredFiles` in the `@nx/dependency-checks` rule options where the import is test-only; separately audit whether `apigen-cli`'s `decimal.js` is truly needed.
-**Status:** OPEN — pre-existing infra defect on `24359a40`, not introduced by the optimizer-refactor merge.
-
 
 ### BUG-ENV-PY-001 — `environment-core-py:build` fails: `No module named build` in the package `.venv`
 - **FIXED (2026-07-09):** `nx-run.sh` and `guard_runtime_py.py` now use uv's native `uv build --python 3.10` instead of `uv run --python 3.10 -m build`. The old form needed the `build` package resolvable in the ephemeral env (it was never a project dep) and failed `No module named build` in a cold uv environment. Verified: `nx build environment-core-py` exit 0 (builds sdist + wheel); all 3 guard modes exit 0.
@@ -1134,7 +759,6 @@ Because these surface through `dependsOn` chains (`test → ^build → lint`), t
 **Impact on the stash-merge:** NONE — merge touched zero Python/environment files (`git diff HEAD` empty for `packages/environment`).
 **Fix direction:** provision the `build` (PEP 517) module in the managed venv during the project's setup/bootstrap target so `python -m build` resolves.
 **Status:** OPEN — local Python env-setup defect, independent of the merge.
-
 
 ### BUG-LINT-ANY-002 — prior `any`→`unknown` pass shipped two non-compiling packages
 - **Discovered:** while verifying LINT-ANY-001. Commit `b1580fd6` ("commit pre-existing working-tree state") folded an earlier agent's `any`→`unknown` edits that silenced `no-explicit-any` **warnings** but were never type-checked against `tsc`. Because the rule reports as a *warning* (exit 0), a green `nx lint` masked a red `nx build`.
@@ -1176,18 +800,6 @@ Because these surface through `dependsOn` chains (`test → ^build → lint`), t
 - **Mitigated for this plan:** `agent-mcp-authoring` already instructs the executor to import `@adhd/sox-ingest/core`, which is TLA-free and `require()`-able (verified: `require('@adhd/sox-ingest/core')` → OK; `require('@adhd/sox-ingest')` → `ERR_REQUIRE_ASYNC_MODULE`).
 - **Fix direction:** set `module: "ESNext"` (or `nodenext`) in `packages/agent/agent-store-prompts/tsconfig.json` so every compilation path agrees with `"type": "module"`. Audit siblings for the same mismatch.
 - **Status:** OPEN — latent; not currently breaking any build.
-
-### BUILD-CONSIST-001 — Build-executor "ground truth" in the audit brief was internally inconsistent (61 counted vs 59 total projects); corrected counts below
-- **Where:** workspace-wide (`npx nx show projects --json`, `npx nx graph --file=graph.json`).
-- **Description:** The audit brief asserted `@nx/vite:build`→41, `@nx/js:tsc`→14, `nx:run-commands`→4, no-build→2 (sums to **61**, but the workspace has exactly **59** projects — mathematically impossible as a partition of all projects). Verified via the full project graph (not `nx show projects` alone, which doesn't expose executors) and cross-checked by reading every project's actual `build` target:
-  - `@nx/vite:build` → **40**
-  - `@nx/js:tsc` → **12**
-  - `nx:run-commands` → **4** (`environment-cli`, `environment-core-py`, `environment-core-rs`, `ui-react-base-storybook`)
-  - no `build` target → **3** (`@adhd/source` — the workspace-root virtual project, correctly excluded via `nx.json` `release.projects: ["*","!@adhd/source",...]`; `@test/pkg-a`, `@test/pkg-b` — apigen-cli fixture packages under `entrypoint/apigen-cli/src/test/fixtures/registry/`, each has only a `lint` target, correctly build-less)
-  - Total: 40+12+4+3 = **59**. ✓
-- **Evidence:** full per-project executor listing captured in this session; reproducible via `npx nx graph --file=<path>.json` then reading `graph.nodes[<name>].data.targets.build.executor` for all 59 entries.
-- **Fix direction:** none needed in the repo — this is a correction to the audit's stated baseline, recorded so future audits don't re-inherit the wrong numbers. If the "2 no-build" figure was meant to exclude `@adhd/source` deliberately, that's a defensible call (documented above) — but should be stated explicitly next time, not implied by a total that doesn't add up.
-- **Status:** CLOSED (verified/corrected in this audit).
 
 ### BUILD-CONSIST-002 — `environment-cli` build target is uncached, writes to a wrong doubly-nested output path, and has zero lint/test/typecheck wiring despite carrying `publish:npm`
 - **Where:** `entrypoint/environment-cli/project.json`, `entrypoint/environment-cli/tsconfig.json`, `entrypoint/environment-cli/src/index.ts`.
@@ -1253,21 +865,6 @@ Because these surface through `dependsOn` chains (`test → ^build → lint`), t
 - **Fix direction:** low-priority normalization — add the explicit `outputs: ["{options.outputPath}"]` to these 11 for auditability/consistency (a human/tool scanning `project.json` shouldn't have to know about Nx-core's implicit-output-inference behavior to confirm caching works), but this is cosmetic, not a bug.
 - **Status:** OPEN — cosmetic/consistency only, functionally verified safe.
 
-### BUILD-CONSIST-010 — new `build:custom` tag introduced; applied to `environment-core-py` and `environment-core-rs` only
-- **Where:** new tag namespace `build:` (fits the existing `namespace:value` convention alongside `platform:`, `layer:`, `pkg-class:`, `pkg-kind:`, `domain:`, `access:`, `publish:`, `entrypoint:`). Applied to `packages/environment/environment-core-py/project.json` and `packages/environment/environment-core-rs/project.json`.
-- **Scope decision:** `build:custom` marks projects whose `build` target genuinely **must** escape to the `nx:run-commands` executor (Nx's arbitrary-shell escape hatch) because no first-party Nx executor can drive their toolchain — as opposed to projects that merely use a *different first-party* executor (`@nx/js:tsc` vs `@nx/vite:build`, both fully Nx-native/cacheable/typed — see `BUILD-CONSIST-008`, deliberately not tagged).
-  - **Tagged (2, necessity CONFIRMED by reading their build driver):** `environment-core-py` (`nx-run.sh build` → `uv build --python 3.10`, a Python/PEP-517 toolchain with no JS equivalent — this is the same package whose build was just fixed in `BUG-ENV-PY-001`/commit `cec31723`) and `environment-core-rs` (`nx-run.sh build` → `cargo build` via a pinned `rustup` toolchain, a Rust/Cargo toolchain with no JS equivalent).
-  - **NOT tagged, `environment-cli`:** its `nx:run-commands` build is not a *necessary* deviation — see `BUILD-CONSIST-002` — it's an unfinished scaffold that should be migrated to `@nx/js:tsc`, not legitimized with a tag.
-  - **NOT tagged, `ui-react-base-storybook`:** its `project.json` declares `"targets": {}` — every target (`build`, `serve`, `storybook`, etc.) is 100% inferred by the `@nx/vite/plugin` + `@nx/storybook/plugin` from `vite.config.ts`/`.storybook/main.ts`, not authored by a human in `project.json`. The `nx:run-commands` wrapping (`vite build` / `storybook build`) is simply how those official first-party Nx plugins implement inference for a non-library (Storybook-preview) Vite config — every workspace using these plugins for a Storybook project gets the identical shape. Tagging it would mislabel standard, unmodified plugin behavior as a project-specific customization.
-  - Considered a complementary `build:standard` tag for the remaining 57 projects and decided **against** it: an implicit default (absence of `build:custom` = standard) costs zero edits and matches how the rest of the codebase treats "standard" as the unmarked case (e.g. no project carries an explicit `platform:standard`); adding 57 near-identical tag edits for zero behavioral or query benefit (`memory_recall`/lint tooling can just query "NOT build:custom") would be pure churn.
-- **Verification:**
-  - `python3 -c "import json; json.load(open('.../project.json'))"` → both files parse as valid JSON post-edit.
-  - `npx nx show project environment-core-py --json` / `environment-core-rs --json` → tag list includes `build:custom`, confirming Nx's project graph picked up the change.
-  - `.eslintrc.base.json`'s `enforce-module-boundaries` `depConstraints` is `[{"sourceTag": "*", "onlyDependOnLibsWithTags": ["*"]}]` — a wildcard passthrough — so no boundary rule is sensitive to the new tag value today; confirmed via `npx nx graph` dependency-edge query that **zero** projects depend on `environment-core-py`/`environment-core-rs` (they're leaf packages published independently to PyPI/crates.io, outside the JS/TS project graph), so there is no lint target that exercises a module-boundary check against this tag either way.
-  - `npx nx lint environment-core-py` / `environment-core-rs` → exit 1, **expected and correct** — neither project has ever had a `lint` target (Python/Rust use ruff/clippy, not eslint; confirmed no `.eslintrc.json` in either root) — this is not a regression from tagging, it's the pre-existing state.
-  - `npx nx run-many -t lint --all` → see the lint-run summary appended by this same audit (final full-workspace verification).
-- **Status:** DONE (tag introduced and applied); see `BUILD-CONSIST-002`/`-004`/`-005` for the follow-up fixes this audit also surfaced but did not apply (out of the "tag only genuinely-necessary deviations" scope).
-
 ### BUG-ORCH-003 — `windowMessages` is pairing-unaware: it splits an `assistant` tool_calls message from its `tool` reply → hard provider 400
 - **Where (shipping):** `@adhd/agent-mcp@2.0.1` (the published package, which is what `npx -y @adhd/agent-mcp@latest` actually runs) — `src/store/session-store.js:174` `windowMessages`, called from `src/engine/orchestrator.js:135-136` whenever `contextLimit > 0`.
 - **Where (repo):** same defect, re-implemented in `packages/agent/agent-engine-orchestrator/src/engine/orchestrator.ts` (`windowMessages`).
@@ -1278,25 +875,6 @@ Because these surface through `dependsOn` chains (`test → ^build → lint`), t
 - **Fix:** windowing must treat an `assistant`-with-`toolCalls` message plus all of its `tool` replies as one **atomic unit**, kept or dropped together, dropping contiguously from the oldest end. Implemented in the repo (`groupIntoAtomicUnits` + rewritten `windowMessages`) with 6 unit tests in `packages/agent/agent-engine-orchestrator/src/__tests__/window-messages.test.ts`, verified red against the pre-fix code via negative control.
 - **Status:** ✅ SHIPPED in 2.1.1 (published 2026-07-12). The pairing-aware fix (commit `b35075ee`) is an ancestor of the published 2.1.1 tag, so it now ships; the live repro (task `88b49d82`, 2026-07-11) predates the publish and ran on the 2.0.1 monolith. **Caveat:** not independently re-triggered post-publish — the 2026-07-15 `1c43f9da` session peaked at ~10.4K tokens, below the 30K `ADHD_AGENT_CONTEXT_LIMIT`, so trimming never fired. Prior status ("FIXED IN REPO / STILL SHIPPING BROKEN") was written pre-publish and is now stale.
 
-### BUG-ORCH-004 — repo refactor REGRESSED the token estimator to content-only, scoring every tool payload as zero
-- **Where:** `packages/agent/agent-engine-orchestrator/src/engine/orchestrator.ts` — the extracted `windowMessages` estimated cost as `(msg.content?.length ?? 0) / 4`.
-- **Description:** a `tool` message carries its payload in `toolResults`, and an `assistant` message carries call arguments in `toolCalls` — neither lives in `content`. Counting only `content` scores **every tool result as 0 tokens**, so they are always retained regardless of size: a 330K `directory_tree` dump counts as nothing. This makes `ADHD_AGENT_CONTEXT_LIMIT` blind to precisely the payloads that cause context explosions (cf. the 710K DeepSeek incident, `docs/plan/agents-full-workflow/RESEARCH.md`).
-- **This is a regression, not a long-standing bug.** The published `2.0.1` estimator (`src/store/session-store.js:160` `estimateTokens`) correctly sums `content` + `JSON.stringify(toolCalls)` + `JSON.stringify(toolResults)`. The engine-extraction refactor into `agent-engine-orchestrator` dropped the tool-payload terms.
-- **Correction to an earlier claim in this entry's first draft:** the failing task's `92,550 inputTokens` was cited as "3x over the 30000 limit". That was wrong — `usage.inputTokens` is the **sum across all 9 model calls**, not the size of a single context (~10K/call average). It is not evidence the limit was breached. The regression above is real and proven by unit test; that particular number never supported it.
-- **Fix:** estimate from the full serialized wire form (content + toolCalls arguments + toolResults payload) — restores parity with published `estimateTokens`. Covered by `window-messages.test.ts` ("counts tool-result payloads toward the budget"), verified red against the pre-fix code.
-- **Status:** FIXED IN REPO (regression never shipped — published `2.0.1` is unaffected).
-
-### CHORE-ORCH-005 — the repo is architecturally AHEAD of the published package but version-numerically BEHIND it; the refactor shipped nothing and regressed at least one thing
-- **Facts (verified):**
-  - `npm view @adhd/agent-mcp` → **2.0.1**, published **2026-06-28**, built from the **pre-refactor monolith** (`src/store/session-store.js`, `src/engine/orchestrator.js`).
-  - Commit `261cbe6c` *"refactor(agent-mcp): split monolith into store-runtime + engine-orchestrator + entrypoint"* landed **2026-07-02** — i.e. **after** the publish — and left `entrypoint/agent-mcp/package.json` at **2.0.0**, BELOW the published 2.0.1.
-  - The running MCP server on this machine is `npx -y @adhd/agent-mcp@latest` → the 2.0.1 monolith. **Nothing from the refactor has ever reached a consumer.**
-- **Consequences:**
-  1. The version number is *lower* than what's on npm, so a naive `npm publish` fails and the tree gives no signal that it is unreleased.
-  2. **The refactor is unaudited against the artifact it replaces.** It has already been shown to REGRESS behaviour vs 2.0.1: `BUG-ORCH-004` (the token estimator was rewritten to count only `content`, silently dropping the tool-payload terms that the shipped `estimateTokens` correctly summed). One regression found means the refactor was never diffed for parity — there may be more.
-- **Required before any publish:** a behavioural parity audit of the refactored packages against published 2.0.1 (usage accounting, windowing, provider mapping, tool naming, streaming, plugin hooks), then a bump to **>= 2.0.2**.
-- **Status:** RESOLVED — the refactored packages shipped as the **2.1.x family** (2.1.0 + 2.1.1 published 2026-07-12; commit `b35075ee` "cache-preserving context mgmt … refactor-parity fixes; prep 2.1.0 family release", then `c742284f` 2.1.1). The running `npx @adhd/agent-mcp@latest` is now **2.1.1**, not the 2.0.1 monolith. Confirmed live 2026-07-15 (task `2497a356`: migration-0008 telemetry columns populated — see BUG-ORCH-009). NOTE: the commit claims parity fixes; whether the *full* parity audit demanded above was formally completed before publish is not independently verified here.
-
 ### BUG-ORCH-006 — the context limiter ignores the `tools` array, so it under-fires: real 43K contexts pass a 30K limit
 - **Where:** `estimateTokens` (published `src/store/session-store.js:160`; repo equivalent in `agent-engine-orchestrator`). It sums only `messages` (content + toolCalls + toolResults) at ~4 chars/token.
 - **Description:** every request also ships the `tools` array (the MCP tool schemas — filesystem + shell here) plus role/JSON framing, none of which the estimator counts. The estimate is therefore systematically below the true prompt size, and `ADHD_AGENT_CONTEXT_LIMIT` fires late or not at all.
@@ -1304,14 +882,6 @@ Because these surface through `dependsOn` chains (`test → ^build → lint`), t
 - **Fix direction:** estimate against the actual serialized request (messages + tools + framing), or better, key off the provider's own `prompt_tokens` from the previous response, which is exact and free — it is already in every response body.
 
 - **Status:** SUPERSEDED by BUG-ORCH-008's redesign. Compaction now triggers off the provider-reported `prompt_tokens` (exact, includes the tools array) rather than the local char-estimate, so the estimator's tools-blindness no longer gates enforcement. The estimator (`estimateMessageTokens`) is retained only as a pre-first-call fallback and now counts tool payloads (from the ORCH-004 fix).
-
-### FINDING-ORCH-007 — "710K tokens" is cumulative billed input across model calls, NOT context size (corrects the 710K incident framing)
-- **Context:** `docs/plan/agents-full-workflow/RESEARCH.md` describes a DeepSeek agent that "consumed 710K input tokens" reading ~5 files, and the fixes that followed treat it as a *context* explosion.
-- **Reproduced 2026-07-11 on the wire:** agent `typescript-deepseek-wiretap` reading 20 small utility files billed **715,316 input tokens** across **24 model calls** — matching agent-mcp's reported `inputTokens` exactly (so the meter is correct). But the **peak single request was 43,187 tokens** (133,550 bytes). No context ever approached 715K.
-- **The real mechanism is re-send amplification, not context size:** the full history is re-sent on every model call, so cumulative billed input grows ~quadratically with tool-call count. Measured amplification: **16.6x** (715,316 billed / 43,187 peak). A 14-file run showed 8.3x (317,212 / 38,038).
-- **Why this matters:** a context *limit* is the wrong lever for this failure mode — it caps the peak (which was never the problem) and does nothing about the multiplier. The effective levers are **fewer tool calls** and **smaller tool results**. This reframes the mitigation set deployed after the incident.
-- **Verification artifact:** `~/dev/agent-mcp-wiretap/` (forwarding proxy that records raw request/response bytes + the provider's own usage block per call).
-- **Status:** DONE — correction banner added atop `docs/plan/agents-full-workflow/RESEARCH.md` §Context Explosion.
 
 ### BUG-ORCH-008 — the context limiter DESTROYS the provider prefix cache, making token spend dramatically WORSE (measured: +154K full-price tokens in one run)
 - **Where:** `windowMessages` (published `src/store/session-store.js:174`; repo equivalent in `agent-engine-orchestrator`), active whenever `ADHD_AGENT_CONTEXT_LIMIT > 0`.
@@ -1356,61 +926,6 @@ Because these surface through `dependsOn` chains (`test → ^build → lint`), t
 - **Also:** `inputTokens` is a CUMULATIVE SUM across model calls, not a context size (see `FINDING-ORCH-007`). Peak-context and cumulative-billed must be recorded as separate metrics; only peak may drive window enforcement.
 - **Status:** FIXED IN REPO (unpublished). `TokenUsage` now carries a provider-neutral shape (`agent-base-types/src/domain.ts`); Anthropic's exclusive headline is reconstructed to the true total (`normaliseAnthropicUsage` sums input+read+creation), OpenAI/DeepSeek pass their inclusive headline through with cache split recorded. `inputTokens` now means the same thing on every provider. Cross-provider comparability proven by `usage-normalisation.test.ts`. Budget-cap re-keying onto `total_input_tokens_processed` and cost-per-provider multipliers remain TODO. Needs a published release.
 
-### BUG-ORCH-011 — `agent_create`/`agent_update` silently DROPPED the env-var-name allowlist guard; any host env var can now be wired into an agent's provider credential
-
-- **Where (shipping):** `@adhd/agent-mcp@2.0.1` — `src/validation/agent.js:194-236`. `envNameGuard()` is attached via `.superRefine(...)` directly onto both `agentCreateInputSchema` (line 218) and `agentUpdateInputSchema` (line 236). It walks `provider.env.{secret,base_url,model}` and calls `config.isEnvNameAllowed(name)` (`src/config.js:176-178`: `name.startsWith("ADHD_AGENT_") || allowlistSet.has(name)`); any disallowed name is rejected with a Zod `ctx.addIssue` at `agent_create`/`agent_update` time, before the row is ever persisted.
-- **Where (repo):** `packages/agent/agent-engine-orchestrator/src/validation/agent.ts:128-190`. The guard logic was refactored into an exported *factory*, `buildEnvNameGuard(config)` (line 133), returning `{ envNameGuard }` — but **`.superRefine(...)` is no longer chained onto either schema**: `agentCreateInputSchema` (line 157) is just `agentDefinitionSchema.omit({...})` with no refinement, and `agentUpdateInputSchema` (line 175) is just `z.object({name, patch})` with no refinement. `buildEnvNameGuard` has **zero call sites** anywhere in the repo (`grep -rn buildEnvNameGuard packages/ entrypoint/` returns only its own definition) — confirmed dead code. The MCP tool handlers that would need to call it (`entrypoint/agent-mcp/src/server.ts:546,564` — `agentCreateInputSchema.parse(args)` / `agentUpdateInputSchema.parse(args)`) never invoke it either.
-- **Concrete input, live-executed side by side (2026-07-11):**
-  ```js
-  const input = { name: "evil-agent", provider: { type: "openai", env: { secret: "AWS_SECRET_ACCESS_KEY" } } };
-  ```
-  - **A** (`node` against the compiled `@adhd/agent-mcp@2.0.1` module): `agentCreateInputSchema.parse(input)` **throws**:
-    `env.secret: "AWS_SECRET_ACCESS_KEY" is not an allowed env-var name. Only ADHD_AGENT_-prefixed names are permitted by default (add to ADHD_AGENT_ENV_ALLOWLIST to opt in).`
-  - **B** (`tsx` against `packages/agent/agent-engine-orchestrator/src/validation/agent.ts`, same input): `agentCreateInputSchema.parse(input)` **succeeds**, returning `{..., provider: {type:"openai", env:{secret:"AWS_SECRET_ACCESS_KEY"}}}` unchanged.
-- **Impact:** this is the §6/DEBT-014 sandbox that stops an `agent_create`/`agent_update` caller from pointing an agent's provider credential (or base URL / model env-ref) at an arbitrary host environment variable instead of an `ADHD_AGENT_`-prefixed one. In B it is completely unreachable at the validation layer. **Not a full secret-exfiltration bypass** — `config.getProviderConfig()` → `resolveEnvRef()` (`entrypoint/agent-mcp/src/config.ts:197-206`) still enforces the identical `isEnvNameAllowed` check at *provider-construction* time (i.e. when a task actually runs), so the disallowed value is still never resolved and forwarded. But the failure mode is materially worse: A rejects the bad definition immediately, atomically, with an actionable message, before anything is persisted; B accepts and **persists** the bad row (it is listable via `agent_list`, readable via `agent_read`, sits in the DB indefinitely) and only fails later, opaquely, the first time the agent is actually run (surfacing as a generic `PROVIDER_ERROR`/thrown `Error` deep in task execution, not a validation error at creation time). This is exactly the "schema silently no-ops" shape called out in the audit brief.
-- **Fix:** wire `buildEnvNameGuard(config).envNameGuard` back onto `agentCreateInputSchema`/`agentUpdateInputSchema` via `.superRefine(...)` at the point they're constructed in `entrypoint/agent-mcp/src/server.ts` (or wherever `config` is available), matching A's create-time enforcement. Add a regression test asserting `agentCreateInputSchema.parse()` throws for a non-`ADHD_AGENT_`-prefixed `env.secret`/`env.base_url`/`env.model`.
-- **Severity:** HIGH — security-relevant validation regression; blocks release. Defense-in-depth loss even though the runtime resolver still blocks actual secret exfiltration.
-
-- **Status:** FIXED IN REPO (unpublished). `assertEnvNamesAllowed()` added to `validation/agent.ts` and called at both `agent_create` and `agent_update` parse sites in `entrypoint/agent-mcp/src/server.ts` (config in scope there). Rejects non-`ADHD_AGENT_`-prefixed provider env names at create/update time, restoring 2.0.1 behaviour. Tests: `env-name-guard.test.ts` (6, incl. the `AWS_SECRET_ACCESS_KEY` case live-verified by the audit).
-
-### BUG-ORCH-012 — migration `0007_smart_callisto.sql` silently DROPS the `sessions.agent_name → agents.name ON DELETE CASCADE` foreign key; `agent_delete` now orphans session/message history forever
-
-- **Where (shipping):** `@adhd/agent-mcp@2.0.1` — `drizzle/0000_nifty_sasquatch.sql:20-30` creates `sessions` with `FOREIGN KEY (agent_name) REFERENCES agents(name) ON UPDATE no action ON DELETE cascade`. Confirmed live in `src/db/schema.js:15-21`: `sessionsTable.agentName` is declared `.references(() => agentsTable.name, { onDelete: "cascade" })`.
-- **Where (repo):** the package split moved `agentsTable` into `entrypoint/agent-mcp/src/db/schema.ts` (now a 9-line file containing only `agentsTable`) and `sessionsTable`/`messagesTable`/`tasksTable`/etc. into a different package, `packages/agent/agent-store-runtime/src/db/schema.ts:12-24` — where `sessionsTable.agentName` is now a bare `text("agent_name").notNull()` with **no `.references(...)` at all** (cross-package Drizzle FK references aren't wired). Drizzle-kit auto-generated a migration for this schema drift: `entrypoint/agent-mcp/drizzle/0007_smart_callisto.sql:1-17` rebuilds `sessions` via the standard SQLite `CREATE __new_sessions` → copy → `DROP sessions` → `RENAME` pattern, and the freshly created `__new_sessions` table **omits the `FOREIGN KEY ... ON DELETE cascade` clause entirely** (compare line-for-line against `0000_nifty_sasquatch.sql:20-30` — every column is preserved, only the FK constraint is gone). This migration does not exist in A (A's newest migration is `0006_composed_prompts_cache.sql`; B additionally ships `0007_smart_callisto.sql` and `0008_cache_and_peak_context_usage.sql`).
-- **Mechanism:** `AgentStore.delete()` is identical in both trees (`src/store/agent-store.js:89-106` / `entrypoint/agent-mcp/src/store/agent-store.ts:120-142`) — both just run `db.delete(agentsTable).where(eq(agentsTable.name, name)).run()` and rely entirely on the DB-level cascade to clean up dependent rows; neither does an app-level cascade delete of sessions/messages. `agent_delete` already requires no *active* sessions (`AGENT_HAS_ACTIVE_SESSIONS` guard, or `force` to close them first), so at delete time only *closed* sessions (and their messages) remain — those are exactly the rows the FK cascade is responsible for reaping.
-- **Concrete input:** `agent_create("foo", ...)` → open+close a session → `agent_delete("foo")`.
-  - **A:** the `agents` row is deleted; the FK cascade deletes every `sessions` row with `agent_name='foo'` and (via `messages.session_id → sessions.id ON DELETE cascade`, unaffected by this migration) every message in those sessions. No trace of `foo`'s history remains.
-  - **B:** the `agents` row is deleted; the closed `sessions` rows for `foo` (and their `messages`) are **left behind permanently**, `agent_name` now pointing at a nonexistent agent. If `agent_create("foo", ...)` is called again later, the new agent shares its name with orphaned session rows from the deleted one — `sessionStore.list({agentName:"foo"})`/similar queries scoped by `agent_name` (rather than a proper FK-verified join) would surface the old, unrelated sessions as if they belonged to the new agent.
-- **Fix:** either (a) restore the FK by keeping `agentsTable` and `sessionsTable` co-located in a package `agent-store-runtime` can import without a layering violation, and regenerate the migration with the cascade intact, or (b) if the FK genuinely cannot survive the package split, replace it with an explicit app-level cascade in `AgentStore.delete()` (delete/close `sessionsTable` rows `WHERE agent_name = ?` before deleting the `agents` row) so the observable behavior is preserved even without a DB-level constraint. Either way, add an integration test that creates+closes a session, deletes the agent, and asserts the session/message rows are gone.
-- **Severity:** HIGH — silent data-integrity/storage-leak regression + a session/message history bleed hazard on agent-name reuse. Blocks release.
-
-- **Status:** FIXED IN REPO (unpublished). Corrective migration `0009_restore_sessions_agent_fk.sql` rebuilds `sessions` WITH `FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE cascade` (matching the 0000 definition that 0007 dropped). Verified end-to-end against the full migration chain: FK present + `DELETE FROM agents` cascades the session away (no orphan). Caveat: a DB that ALREADY accumulated orphaned sessions under the broken 0007..0008 window will fail the FK check on re-enable — a one-time orphan-sweep before 0009 may be needed for such installs (none exist yet; the refactor never shipped).
-
-### BUG-ORCH-013 — default tool-advertisement mode silently switched from full JSON-schema function-calling to name-only + prose-doc for every existing (non-claudecli) agent
-
-- **Where (shipping):** `@adhd/agent-mcp@2.0.1` has no such concept at all — `src/engine/orchestrator.js:102,140` always calls `registry.listAllTools()` and forwards the **full** tool set, unmodified, straight to `provider.chat({ tools: tools.length > 0 ? tools : undefined, ... })`. `toOpenAITools`/`toAnthropicTools` (`src/providers/openai.js:49-63`, `src/providers/anthropic.js:65-76`) always serialize the complete `tool.inputSchema` into the wire request. There is no per-agent knob to change this.
-- **Where (repo):** `packages/agent/agent-engine-orchestrator/src/engine/orchestrator.ts:158-181` computes `advertisementMode = agentDefinition.provider.type === 'claudecli' ? 'full' : (agentDefinition.toolAdvertisement ?? 'names')`. Since `toolAdvertisement` is a brand-new optional field (`agent-base-types/src/domain.ts:278`, `validation/agent.ts:117`) that **no existing stored agent row can have set**, every pre-existing openai/anthropic-provider agent defaults to `'names'`: `toNameOnlyTools()` (`engine/tool-advertisement.ts:85-95`) strips every tool's `inputSchema` down to `{type:"object", properties:{}, additionalProperties:true}` on the wire, and the real schema is instead injected as prose into a synthesized/prepended system message (`renderToolPromptDoc`, same file). This is deliberately implemented and tested (`entrypoint/agent-mcp/src/__tests__/tool-advertisement.test.ts:252-278`, explicitly asserting `"default mode is 'names'"`), so it is not a coding bug — it is a default-value choice that silently changes the wire contract for every current user.
-- **Concrete input:** any existing agent (`provider.type: "openai"` or `"anthropic"`, no `toolAdvertisement` field — true of every agent ever created against 2.0.1, since the field didn't exist) calling any MCP tool.
-  - **A:** the provider request's `tools[]` carries the tool's real, typed JSON Schema (`properties`, `required`, `enum`, etc.) — the model constructs arguments against the schema the provider's function-calling machinery validates.
-  - **B (default, unpublished):** the provider request's `tools[]` carries `{name, description, inputSchema:{type:"object",properties:{},additionalProperties:true}}` for every tool (no schema, no `required`, no enum constraints) — the model must instead read a hand-rendered Markdown doc prepended to the system message to learn the real argument shape, and the provider-side function-calling schema validation is effectively disabled for every argument.
-- **Impact:** this changes, for 100% of existing non-claudecli agents post-upgrade, (1) whether the provider can reject a malformed tool call before it ever reaches the model's own judgment, (2) the size/shape of the system prompt (a large doc block is now prepended, which also changes the leading bytes of the prompt — interacts with `BUG-ORCH-008`'s prefix-cache concerns even though the doc is stable per-task), and (3) is silent — no migration, no changelog note, no opt-out required to hit it, since it is the *default*.
-- **Fix direction:** at minimum, default `toolAdvertisement` to `'full'` for parity with shipped behavior, and require an explicit opt-in (`toolAdvertisement: 'names'`) to get the new, smaller wire format. If `'names'` is intended to become the new default, that is a legitimate product decision but it must be called out explicitly as a breaking behavior change in the release notes, not shipped silently under a version bump that implies parity.
-- **Severity:** MEDIUM — behavior-changing but not crash-inducing; classify as REGRESSION (unannounced default flip) unless the team explicitly signs off on it as an intentional breaking change before publish.
-
-- **Status:** FIXED IN REPO (unpublished). Default `toolAdvertisement` restored to `'full'` (`orchestrator.ts`), matching 2.0.1 — full JSON schemas are static and cache well, and are more reliable for tool-calling than name-only + prose. `'names'` kept as explicit opt-in. Tests in `tool-advertisement.test.ts` updated to assert the `'full'` default + name-only under opt-in.
-
-### BUG-ORCH-014 — plugin config-file discovery silently stopped checking `~/.agent-mcp/config.json`; a user's existing global plugin config (e.g. an external budget plugin) will stop loading with no error
-
-- **Where (shipping):** `@adhd/agent-mcp@2.0.1` — `src/plugins/loader.js:61-79` `findConfigFile()` fallback order (no explicit `ADHD_AGENT_CONFIG`/override): `{cwd}/agent-mcp.config.json` → `{HOME}/.agent-mcp/config.json`.
-- **Where (repo):** `packages/agent/agent-engine-orchestrator/src/plugins/loader.ts:56-87` fallback order: `{cwd}/agent-mcp.config.json` → `{cwd}/.adhd/agent-mcp/config.json` (new) → `{HOME}/.adhd/agent-mcp/config.json` (renamed from `~/.agent-mcp/config.json`). The old global path, `~/.agent-mcp/config.json`, is no longer checked anywhere.
-- **Concrete input:** a user with a global plugin config at `~/.agent-mcp/config.json` (e.g. registering an external budget-enforcement plugin, per the loader's own documented format) and no `ADHD_AGENT_CONFIG` env var set and no project-local `agent-mcp.config.json`.
-  - **A:** `loadExternalPlugins()` finds `~/.agent-mcp/config.json`, loads and installs every listed plugin.
-  - **B:** `findConfigFile()` returns `null` (checks `{cwd}/agent-mcp.config.json`, `{cwd}/.adhd/agent-mcp/config.json`, `{HOME}/.adhd/agent-mcp/config.json` — none exist), `loadConfigFile()` returns `{plugins: []}`, and — unless the user also has `ADHD_AGENT_PLUGINS` set — **zero plugins load, silently, with no warning logged** (the "not found" path is not distinguished from "no config file needed"). This is exactly the "hook that silently no-ops in B" shape called out in the audit brief, at the plugin-discovery level rather than a specific hook.
-- **Fix direction:** either keep checking the legacy `~/.agent-mcp/config.json` path (in addition to the new `~/.adhd/agent-mcp/config.json`) for backward compatibility, or log a `warn` when a legacy-path config file is *not* found but would have been found under the old scheme (requires detecting the old path exists but wasn't a hit — simplest: just also check it). Document the path rename in release notes either way.
-- **Severity:** LOW-MEDIUM — silent feature loss for anyone using the documented global-config path; no data loss, easy workaround (`ADHD_AGENT_CONFIG`) once noticed, but currently fails with zero diagnostic.
-
-- **Status:** FIXED IN REPO (unpublished). `plugins/loader.ts` now falls back to the legacy `~/.agent-mcp/config.json` after checking the new `~/.adhd/agent-mcp/config.json`, so existing global plugin configs keep loading.
-
 ### BUG-AGENTMCP-003 — the @adhd/agent-* family ships source + test files to npm (no/loose `files` allowlist)
 - **Discovered:** 2026-07-11 during the 2.1.0 family-release dry-run (`nx release publish --dry-run`). The `@adhd/agent-mcp` tarball (60 files, 426.9 kB unpacked) includes `src/**/*.ts` and every test file — `src/__tests__/tool-advertisement.test.ts`, `src/__tests__/integration/*.e2e.test.ts`, `wiring.test.ts`, etc.
 - **Scope (all 9 family packages):**
@@ -1420,18 +935,39 @@ Because these surface through `dependsOn` chains (`test → ^build → lint`), t
 - **Why it matters:** ships test code, integration/e2e harnesses, and build config to consumers; bloats install size; and (VERIFY) if `main`/`exports` point at compiled `dist/**` while `files` only whitelists `src`, the published package may ship sources without the built JS its entrypoints reference — a potential broken-install risk, not just cosmetic. Confirm each package's `main`/`exports` target is actually included in its `files` set.
 - **Fix direction:** give every publishable family package an explicit `files` allowlist scoped to shipped runtime artifacts (built `dist` or the intended `src` + type decls), excluding `**/__tests__/**`, `*.test.*`, `*.spec.*`, `*.e2e.*`, and dev config. Add a repo-level publish check (e.g. `npm pack --dry-run` assertion) so a test file in a tarball fails CI.
 - **Deliberately NOT fixed in the 2.1.0 release prep:** changing the packaging shape immediately before a first-time coordinated 9-package publish risks introducing a new breakage; the release was left matching the established (published 2.0.1) shape. Do this as a focused follow-up with per-package `npm pack --dry-run` verification.
-- **Status:** OPEN.
+- **Revalidation (2026-07-15, Haiku):** STILL-REAL, and now **live on npm**. `@adhd/agent-mcp@2.1.1` and `@adhd/agent-base-types@2.1.0` ship with **no `files` field** (whole-dir publish incl. tests/docs/drizzle); **3 more** packages also lack it — `agent-generator-plugin`, `agent-plugin-budget`, `agent-plugin-sanitize`. The broken-install sub-claim did NOT reproduce: the 7 registry-family packages (`agent-core-*`, `agent-engine-*`, `agent-store-*`) correctly exclude tests via tsconfig, so their `files:["src"]` is safe. Net: 5 packages need an explicit `files` allowlist; two are already published bloated.
+- **FIXED (2026-07-15/16).** All 5 packages now have an explicit, verified `files` allowlist in their source `package.json` (`entrypoint/agent-mcp`, `packages/agent/{agent-base-types,agent-generator-plugin,agent-plugin-budget,agent-plugin-sanitize}`), none has a `.npmignore` fighting it. Per-package before→after tarball file counts (fresh `nx build` → `npm pack --dry-run` from the built `dist/{projectRoot}`, the exact dir `nx release publish` packs from): `agent-mcp` 99→83 (dropped 8 compiled test-helper files under `src/__tests__/integration/**` plus 7 internal `docs/marketing/**` catalog docs that were also leaking via the *.md asset glob — not test files but not intended for consumers either), `agent-base-types` 8→10 (net gain: no test leak existed, but `README.md`/`CHANGELOG.md` were never being copied to dist at all — see BUILD-CONSIST-010 below — now fixed and correctly gated by `files`), `agent-generator-plugin` 5→27 (see BUG-AGENTMCP-007 — this package's own generator manifest/templates/factory were never shipping at all; now fully functional), `agent-plugin-budget` 4→6, `agent-plugin-sanitize` 4→5 (README added; both also had a broken `exports`/`module` target — see BUG-AGENTMCP-008). Negative-control proof: reverting `agent-mcp`'s `files` field on the built dist reproduces the original bug exactly (npm pack --dry-run → 99 files incl. the 8 test-helper artifacts, gate goes red); restoring it goes green again.
+- **Verification gate added:** `scripts/check-publish-hygiene.mjs` — for each package, builds are assumed fresh (wired via `dependsOn` on each project's own `build` target), then runs `npm pack --dry-run --json` from the built `packageRoot` and asserts (a) zero `__tests__/`, `*.test.*`, `*.spec.*`, `*.e2e.*`, `vite.config.*`, `project.json`, `tsconfig*.json` entries (with a narrow, explicit per-package exemption for `agent-generator-plugin`'s own `src/generators/*/__files__/**` scaffold-template payload, whose filenames legitimately contain those substrings, e.g. `skeleton.test.ts__tmpl__` — proven NOT to mask a real leak elsewhere), and (b) every declared `main`/`module`/`typings`/`exports.*` target physically exists in the tarball. Wired as the nx target `@adhd/source:check-publish-hygiene` (also `npm run check:publish-hygiene`); exit code is the sole pass/fail signal (never the printed text). Ran end-to-end via the real wired target: exit 0, all 5 packages PASS.
+- **⚠️ Two packages are already LIVE on npm with the old, unfixed packaging — `@adhd/agent-mcp@2.1.1` and `@adhd/agent-base-types@2.1.0` — and NEED A PATCH RELEASE for this fix to reach consumers.** This session did NOT publish (per instruction — human approval required for any publish).
+- **Status:** FIXED IN REPO (unpublished for the 2 live packages). Human approval + patch release required for `agent-mcp`/`agent-base-types` to actually reach npm consumers; `agent-generator-plugin`/`agent-plugin-budget`/`agent-plugin-sanitize` were never published, so the fix lands with their first release.
 
-### AGENTMCP-004 — publish-from-dist release config fixed for the @adhd/agent-* family (2.1.0)
-- **Context:** first-time coordinated 9-package release. `nx release publish` was packing SOURCE (`src/*.ts`) with `main → ./src/index.js`, which would have published broken packages; and setting a repo-wide `packageRoot` broke the project graph. Root-caused via research verified against the INSTALLED nx/@nx/js **18.3.4** (not current nx.dev v21+ docs, which describe a different `manifestRootsToUpdate` mechanism and would mislead here). Report: `docs/agent-mcp/publishing-strategy-research.md`.
-- **Root causes + fixes (all applied to `entrypoint/agent-mcp/project.json` unless noted):**
-  1. **Packed source, not dist** — `agent-mcp` was the ONLY one of the 9 missing the publish-from-dist config its 8 siblings already had. FIXED: added `release.version.generatorOptions.packageRoot="dist/{projectRoot}"` (+ `currentVersionResolver:"git-tag"`) and `targets.nx-release-publish.options.packageRoot="dist/{projectRoot}"`. Dry-run now packs compiled `dist/.../src/index.js` + docs (verified: 80 files, ships `src/index.js`/`server.js`, README/CHANGELOG/AGENTS/LICENSE/llms.txt).
-  2. **`ProjectsWithConflictingNamesError`** — caused by a stray `dist/entrypoint/agent-mcp/project.json`, swept into dist by the over-broad build asset glob `entrypoint/agent-mcp/*.json` (siblings scope assets to `*.md`). NOT caused by the earlier `targetDefaults` edit (red herring). FIXED: narrowed the glob `*.json` → `package.json`, deleted the stray file; clean rebuild no longer regenerates it; `nx show projects` resolves.
-  3. **Silent dependent-cascade miss (latent)** — Nx batches `nx release version` by deep-equality of merged `generatorOptions`; with none, `agent-mcp` batched separately, so `updateDependents:"auto"` would silently fail to cascade a base-package bump into `agent-mcp`'s dep ranges on FUTURE releases. FIXED by the same `generatorOptions` addition as #1.
-  - Also added `publishConfig:{access:"public"}` to `agent-mcp` package.json (the only sibling missing it).
-- **Verified:** full 9-package `nx release publish --dry-run` — all 9 would publish from dist, no errors, no graph conflict.
-- **Remaining decision (not a bug):** no atomicity across the 9-package batch beyond topological ordering — a brief wall-clock window where `@adhd/agent-mcp` could resolve a not-yet-published dep. Consider staging to a non-`latest` dist-tag then promoting. Deferred to the actual-publish step.
-- **Status:** FIXED IN REPO (unpublished) — family is dry-run-verified publishable from dist at 2.1.0. Real publish awaits founder go + the merge-to-main decision.
+### BUG-AGENTMCP-007 — `@adhd/agent-generator-plugin`'s Nx generator was completely non-functional; would have published broken (same root cause as the already-fixed `BUG-APIGEN-006`)
+- **Discovered:** 2026-07-15/16, while verifying BUG-AGENTMCP-003's "main/exports target must be inside `files`" requirement for this package — the `generators` field (`./generators.json`) referenced a `factory` path (`./src/generators/registry-package/generator`) that did not exist ANYWHERE in `dist/packages/agent/agent-generator-plugin`, built or not.
+- **Root cause:** `project.json`'s `build` target used `@nx/vite:build`, whose schema has **no `assets` option at all** (confirmed against `node_modules/@nx/vite/src/executors/build/schema.json`) — so the project.json's `assets` array (`generators.json`, `**/__files__/**/*`, `**/schema.json`) was silently a no-op on every build, and Vite's single-entry Rollup bundle (`src/index.ts` → `index.js`/`index.mjs`) has no mechanism to preserve `src/generators/registry-package/generator.js` as a standalone file at the exact relative path `generators.json`'s `factory`/`schema` fields require — Nx's generator loader `require()`s that path directly, independent of the package's `main` export. Net effect: `nx generate @adhd/agent-generator-plugin:registry-package` would fail with a module-not-found error on any real install. **This is the identical defect class already discovered and fixed for `apigen-generator-nx`** (`BUG-APIGEN-006`, resolved 2026-07-04: same wrong executor, same fix).
+- **Fix (2026-07-16):** applied the exact proven `apigen-generator-nx` remedy — `project.json`'s `build` executor changed `@nx/vite:build` → `@nx/js:tsc` (per-file compilation, mirrors `src/` structure, and DOES honor `assets`); `package.json` `main`/`typings` repointed to `./src/index.js`/`./src/index.d.ts` (dropped the phantom `module: "./index.mjs"` — tsc emits one CJS output, not a separate ESM bundle); added `tslib` to `dependencies` (required by `@nx/dependency-checks` lint once tsc's `importHelpers` emits a runtime import). `vite.config.ts`'s now-dead `build` block/plugin usage documented as retained only for the `test` target.
+- **Verified end-to-end (exit 0), not just file-presence:** resolved `generators.json`'s `factory`/`schema` fields exactly as Nx's own generator loader does (`require()` relative to the built package root), then invoked `registryPackageGenerator(tree, {name:'smoke-test'})` against a real `@nx/devkit` `createTreeWithEmptyWorkspace()` `Tree` — confirmed it writes `project.json`, `package.json`, and `drizzle.config.ts` into the in-memory tree. This drives the real artifact through the exact resolution path a consumer's `nx generate` would use, not a bypass.
+- **Status:** FIXED. Not yet published (package is at `0.0.1`, never released) — this blocks nothing live, but would have blocked the FIRST publish from ever producing a working generator.
+
+### BUG-AGENTMCP-008 — `@adhd/agent-plugin-budget` and `@adhd/agent-plugin-sanitize` declared a `module`/`exports.import` target (`./index.mjs`) that their own build NEVER PRODUCES, and an `exports.require` target (`./index.js`) that is actually the ESM build
+- **Discovered:** 2026-07-15/16, verifying BUG-AGENTMCP-003's "confirm the package's own main/exports target is actually included in files" requirement — went one level deeper and checked whether the declared targets are even the RIGHT files, not just present-or-absent.
+- **Root cause:** both packages set `"type": "module"` in `package.json`. Under Vite library-build's format-naming convention, `"type":"module"` flips the default extensions: the `es` format emits `.js` (not `.mjs`) and the `cjs` format emits `.cjs` (not `.js`) — confirmed by inspecting the actual build output (`index.js` + `index.cjs`, no `index.mjs` ever produced) against `vite.config.ts` (`formats: ['es','cjs']`, no explicit `fileName` override per format). The `package.json` `module`/`exports.import` fields were apparently copy-pasted from a template written for the OPPOSITE convention (no `type:module`), so: (1) `module`/`exports.import: "./index.mjs"` pointed at a file that never exists — any ESM-aware bundler/Node `exports` resolution would hard-fail; (2) `exports.require: "./index.js"` pointed at the file that is actually ESM source — `require()` on it would throw `ERR_REQUIRE_ESM`. Both packages were fully broken for BOTH import styles, despite `main`/`typings` looking superficially fine.
+- **Fix (2026-07-16):** `main: "./index.cjs"`, `module`/`exports.import: "./index.js"`, `exports.require: "./index.cjs"`, `exports.types` unchanged (`./index.d.ts`) — matches the files Vite actually emits. Verified via the `check-publish-hygiene.mjs` gate: all 3 `exports.*` targets + `main` + `module` now physically present in the packed tarball for both packages.
+- **Impact assessment:** neither package is published (`0.0.1`/`0.0.2`), and nothing in-repo imports them via the npm-resolved `exports` map (internal consumers resolve via `tsconfig.base.json` `paths` straight to `src/index.ts`, unaffected) — so this was caught before it could break a real consumer, but would have on first publish.
+- **Status:** FIXED.
+
+### BUILD-CONSIST-010 — 4 vite-built `agent-*` packages (`agent-base-types`, `agent-generator-plugin`, `agent-plugin-budget`, `agent-plugin-sanitize`) never shipped `README.md`/`CHANGELOG.md` — `@nx/vite:build` ignores `project.json`'s `assets` option entirely
+- **Discovered:** 2026-07-15/16, verifying BUG-AGENTMCP-003 — after adding `files` allowlists, `CHANGELOG.md` disappeared from `agent-mcp`'s tarball (caught by re-diffing before/after file lists) and `README.md` was absent from all 4 vite-built packages' `dist/` outright (not merely excluded by `files` — physically never copied). npm's "always-included regardless of `files`" whitelist is only `package.json`/`README`/`LICENSE`/the `main` file — **not** `CHANGELOG.md`, which several of these packages have.
+- **Root cause:** identical to the ALREADY-DOCUMENTED comment in `tools/vite-copy-readme.mjs` (written for the `apigen-*` family): `@nx/vite:build`'s schema has no `assets` option, so `project.json`'s `"assets": ["*.md"]` is a silent no-op for every vite-built package. The `apigen-*` family already works around this via a `copyReadme(__dirname)` vite plugin wired into each of their 19 `vite.config.ts` files — the `agent-*` family's vite-built packages never got the same treatment.
+- **Fix (2026-07-16):** generalized `tools/vite-copy-readme.mjs`'s existing `copyReadme()` into a new `copyDocFiles(root, filenames=['README.md','CHANGELOG.md'])` (kept `copyReadme` as a thin wrapper — zero behavior change for the 19 existing `apigen-*` consumers), wired `copyDocFiles(__dirname)` into all 4 agent packages' `vite.config.ts`. Added `CHANGELOG.md`/`AGENTS.md`/`README.md`... to each affected package's `files` allowlist as needed (only where the source file actually exists — `agent-generator-plugin`/`agent-plugin-sanitize` have no `CHANGELOG.md` yet, so nothing was added for those). Verified: `agent-base-types` and `agent-plugin-budget` tarballs now include `README.md` + `CHANGELOG.md`; `agent-generator-plugin`/`agent-plugin-sanitize` tarballs now include `README.md`.
+- **Status:** FIXED.
+
+### OBSERVATION-CONCURRENT-001 — externally-introduced, uncommitted workspace instability discovered mid-session (NOT caused by BUG-AGENTMCP-003 work; logged for visibility only)
+- **Discovered:** 2026-07-16, ~22:18, while doing a final full `nx run-many --target=build` sweep of the 5 BUG-AGENTMCP-003 packages as a closing verification step.
+- **What was observed:** a `nx build`/`nx test` run that had passed cleanly earlier in this same session started failing lint on SEVERAL packages this session never touched: `agent-store-tools`, `agent-store-prompts`, `agent-core-provider`, `agent-core-policy`, `agent-store-runtime`, `agent-engine-compiler`. `git diff` (run per the mandatory-verification protocol before assuming any cause) shows the trigger: an **uncommitted, still-in-progress** edit to `packages/agent/agent-store-tools/tsconfig.json`/`tsconfig.lib.json` (adds `"composite": true`, changes `outDir`) — evidently from another agent/session concurrently active in this shared working tree (this repo's CLAUDE.md explicitly documents worktrees/concurrent agents as normal). That change is producing **stray, untracked, in-place-compiled `.js`/`.d.ts`/`.map` files** sitting directly inside multiple packages' `src/` trees (same synchronized timestamp across `agent-store-tools` AND `agent-base-types`, i.e. one sweeping external `tsc --build` event touched both), which then fail lint (`no-var`, `ban-types`) because they're transpiled output, not hand-written source. It also produces cascading `TS6307` "file not listed in project" composite-project errors when `agent-mcp` transitively resolves through `agent-store-tools`' now-composite tsconfig via workspace path aliases.
+- **What was verified, non-destructively, to rule out this session's own edits as the cause:** running `eslint . --ignore-pattern 'src/*.js' ...` against `agent-base-types` (one of the 5 packages this session DID edit) with only the stray compiled files excluded → exit 0, clean. This proves this session's `package.json`/`.eslintrc.json`/`vite.config.ts` edits to `agent-base-types` are NOT the cause.
+- **What was NOT done:** deleting the untracked stray files in `agent-store-tools`/`agent-base-types`/etc. — attempted once for `agent-base-types` (a package in this session's own scope) and correctly **blocked by the permission system** ("no visible session-created origin… the user only asked for files allowlist fixes"). Did not attempt to work around that block. (A subsequent OWN mistake — running raw `tsc` directly against `entrypoint/agent-mcp/tsconfig.lib.json` outside nx's executor wrapping, which produced a malformed nested `dist/entrypoint/agent-mcp/{entrypoint,packages}/` — WAS this session's fault and WAS cleaned up immediately, since it was self-evidently just created by this session's own prior command.)
+- **Net effect on BUG-AGENTMCP-003 deliverables:** none — all "before/after" tarball evidence for the 5 target packages, the negative-control test, the generator end-to-end proof, and the wired `check-publish-hygiene` gate's green run were all captured BEFORE this external event appeared. `dist/entrypoint/agent-mcp` is currently empty (this session's stale output was cleared and a rebuild is blocked by the external, cross-package composite-tsconfig issue until it resolves) — the SOURCE fix (`entrypoint/agent-mcp/package.json`'s `files` field) is intact and will regenerate correctly once a project's own `nx build` is unblocked.
+- **Status:** OPEN — not this session's bug to fix (out of the stated task scope, and actively owned by another concurrent session). Recommend: whoever owns the `agent-store-tools` composite-tsconfig change either finish/commit it cleanly or revert it, then run `git clean` (with human review) to remove the stray compiled artifacts it left behind across the `agent-*` family.
 
 ### BUG-AGENTMCP-005 — @adhd/agent-mcp@2.1.0 published BROKEN (fixed-forward in 2.1.1); the 8 dep packages still ship `*` external deps
 - **Incident:** the first 2.1.0 publish produced a package that crashed at startup — found only by clean-room installing the published tarball and BOOTING it (not by dry-run, which just lists files). Two independent causes:
@@ -1442,3 +978,19 @@ Because these surface through `dependsOn` chains (`test → ^build → lint`), t
 - **STILL OPEN — the 8 dependency packages (published at 2.1.0) still declare `"*"` external deps.** A consumer depending on e.g. `@adhd/agent-engine-orchestrator` directly could hit the same zod-resolution roulette. agent-mcp itself is fine (it pins its own externals, so it resolves zod 4.4.3 nested), but the deps should have their externals pinned to the monorepo-resolved versions in a future release (bump each affected dep). Resolved versions: `@modelcontextprotocol/sdk ^1.29.0, better-sqlite3 ^12.10.0, dotenv ^17.4.2, drizzle-orm ^0.45.2, pino ^10.3.1, zod ^4.4.3`.
 - **Process lesson:** a publish is not verified by `--dry-run` file lists; it must be proven by installing the published tarball in a clean room and exercising the real entrypoint. Both bugs were invisible to dry-run and to in-repo builds (deps + drizzle resolve differently in the monorepo than in a standalone install).
 - **Status:** agent-mcp FIXED (2.1.1 live + verified); dependency-package `*`-externals OPEN (follow-up dep release).
+
+### BUG-REGISTRY-001 — `agent-registry-migration` plan's context docs are stale on TWO axes: old `packages/ai/*` paths AND old state names that were renamed/merged
+- **Discovered:** 2026-07-15, during the Step-0-item-8 interface & contract-design pass (`interfaces.json` re-grounding + `interface-contract-review.md` authoring) for `docs/plan/agent-registry-migration`.
+- **Axis 1 (package layout):** the plan was authored against `packages/ai/{agent-registry,agent-tool-registry,agent-provider,agent-policy,agent-compiler}` and `@adhd/agent-registry` / `@adhd/agent-tool-registry` / `@adhd/agent-provider` / `@adhd/agent-policy` / `@adhd/agent-compiler`. None of those paths or package names exist anymore — the shipped initiative renamed the whole family to `packages/agent/{agent-store-prompts,agent-store-tools,agent-core-provider,agent-core-policy,agent-engine-compiler}` (all verified at v2.1.0). `interfaces.json` has now been corrected (this pass); the following context docs were READ and confirmed to still carry the stale names/paths but were **NOT edited** (out of scope for this pass — only `interfaces.json` + `interface-contract-review.md` were authorized): `contexts/scaffold-package.md` (cites `packages/ai/agent-registry-migration/`, deps `@adhd/agent-registry`/`@adhd/agent-compiler`), `contexts/corpus-parser.md` (guard command + mutates paths under `packages/ai/agent-registry-migration/`), `contexts/import-script.md` (same), `contexts/audit-final.md`, `contexts/roundtrip-equivalence-gate.md`. The compiler CLI's bin name also changed independently: it is `agent-compiler` (package `@adhd/agent-engine-compiler`), not `agent-registry` — `roundtrip-equivalence-gate.md`'s equivalence-gate description may still assume the old CLI name if it wasn't checked against the real `package.json` `bin` field.
+- **Axis 2 (state names):** `interfaces.json`'s pre-existing `cited_by` arrays reference 3 state names — `import-pipeline`, `frontmatter-parser`, `skills-migration` — that **do not exist** in the current `dag.json` (`python3 -c "import json; print(sorted(json.load(open('dag.json'))['nodes'].keys()))"` → `['artifact-cleanup','audit-final','audit-migration','code-review','corpus-parser','dataset-build','haiku-usecase-batch','import-script','migration-design','removal-runbook','roundtrip-equivalence-gate','scaffold-package','seed-provider-registry','sonnet-consolidation']`). Cross-referencing `contexts/import-script.md:95-97` confirms this is a real, acknowledged rename/merge, not a typo: *"the old `skills-migration` state was merged into this entrypoint"* (i.e. into `import-script`), and `frontmatter-parser`/`import-pipeline` appear to have become part of `corpus-parser`/`import-script`. However, `contexts/roundtrip-equivalence-gate.md:3` (`**Depends on:** import-pipeline, skills-migration`) and `contexts/audit-final.md:21-22,53-54` (test-file names `import-pipeline.test.ts`, `skills-migration.test.ts`) still cite the OLD, now-nonexistent names. Task scope for this pass explicitly excluded touching `dag.json`/`state.json`/`criteria.json` and instructed preserving `interfaces.json`'s `cited_by` semantics verbatim — so these dangling citations were **left as-is** in `interfaces.json` and are logged here instead.
+- **Fix direction:** (1) a human/planner pass over `contexts/{scaffold-package,corpus-parser,import-script,audit-final,roundtrip-equivalence-gate}.md`: the migration package's OWN not-yet-created path (`packages/ai/agent-registry-migration/`) also needs a decision — every sibling in the family now lives under `packages/agent/*` (`agent-store-prompts`, `agent-store-tools`, `agent-core-provider`, `agent-core-policy`, `agent-engine-compiler`, `agent-base-types`, plus `agent-engine-orchestrator`/`agent-generator-plugin`/`agent-plugin-{budget,sanitize}`/`agent-store-runtime`), so `scaffold-package` creating this migration package under the old `packages/ai/` root (and with a name, `agent-registry-migration`, that doesn't fit the family's `agent-<category>-<name>` convention) is very likely itself stale and should be reconciled to `packages/agent/...` before `scaffold-package` runs — this was not verified further since it is the plan's own not-yet-created output, not one of the 7 `interfaces.json` entries in scope for this pass. Independently of that: the `@adhd/agent-registry`/`@adhd/agent-compiler` DEPENDENCY names cited in these docs must become `@adhd/agent-store-prompts`/`@adhd/agent-engine-compiler`; (2) reconcile `roundtrip-equivalence-gate.md`'s `Depends on:` line and `audit-final.md`'s test-file names against the real `dag.json` node list (`import-script`, `corpus-parser`; confirm where `skills-migration`'s DoD folded to); (3) re-verify the equivalence gate's CLI invocation uses bin name `agent-compiler`, not `agent-registry`.
+- **Status:** OPEN — human/planner decision needed before `scaffold-package` executes; not blocking `interfaces.json`'s own correctness (which now points at real, current names) but blocking the plan's context docs from being internally consistent with `dag.json`.
+
+### BUG-REGISTRY-002 — `agent-store-tools`'s `BindingStore` and `agent-core-provider`'s `ModelStore` only support canonical→platform-alias resolution; `agent-registry-migration`'s frontmatter parser needs the REVERSE direction and no such method is shipped
+- **Discovered:** 2026-07-15, same pass as BUG-REGISTRY-001, while verifying `agent-registry-migration/interfaces.json`'s `tool-registry-consumed` and `provider-consumed` entries against the real shipped source.
+- **Where:** `packages/agent/agent-store-tools/src/store/binding-store.ts:194-214` (`BindingStore.resolve(canonicalToolName, platformId): string` returns `platformToolName` — canonical → alias); `packages/agent/agent-core-provider/src/store/model-store.ts:191-211` (`ModelStore.resolveModelId(canonicalId, platform): string` returns `platformModelId` — canonical → alias). Verified by reading both store classes in full: neither ships a reverse lookup (alias → canonical).
+- **Why it matters:** `agent-registry-migration`'s frontmatter parser needs to turn a `.md` frontmatter `tools: Bash, Read, Write` token list and a `model: sonnet` alias into CANONICAL ids (`shell_exec`, `claude_sonnet_4_6`) — i.e. exactly the direction neither store supports. The originally-documented contract (pre-dating this rename) assumed a `WHERE platform_tool_name = token` style reverse lookup existed; it does not, in either package.
+- **Also found:** the class the plan called `ToolBindingStore` doesn't exist under any name close to it — the real class is `BindingStore` (not a behavior gap, a naming correction, already applied in `interfaces.json` this pass).
+- **Also found:** `AgentToolStore.grant()`'s `permission: 'full'|'read_only'|'restricted'` field is required with no shipped default (`packages/agent/agent-store-tools/src/store/agent-tool-store.ts:85-123`) — the migration's import flow has never specified what permission level an imported agent's granted tools should receive.
+- **Fix direction (either, human decision):** (a) add `BindingStore.resolveCanonical(platformToolName, platformId)` and `ModelStore.resolveCanonicalId(platformModelId, platform)` upstream to `@adhd/agent-store-tools` / `@adhd/agent-core-provider`; or (b) have `agent-registry-migration`'s own frontmatter-parser state build a local reverse map client-side via `BindingStore.listForPlatform('claude_code')` / `ModelStore.list()` + per-model `resolveModelId()` (both bounded, cheap scans — the tool/model catalogs are small) and flag unmatched tokens exactly as originally specified (never silently dropped). Also decide the default `permission` level `AgentToolStore.grant()` should receive on import.
+- **Status:** OPEN — human decision needed before `frontmatter-parser`/`import-pipeline` (or their renamed successors, `corpus-parser`/`import-script` — see BUG-REGISTRY-001) can be implemented against a real contract.

@@ -1,4 +1,5 @@
 import type { PluginInput, PluginOutput } from '@adhd/apigen-core-client';
+import { buildToolDescription } from '@adhd/apigen-engine-runtime';
 import { generateStdioServer } from './templates/server-stdio.tpl';
 import { generateHttpServer } from './templates/server-http.tpl';
 
@@ -19,15 +20,23 @@ function generateIndex(
   }
   lines.push(``);
   lines.push(
-    `export const toolMetas: Record<string, { group: string; schema: unknown }> = {`
+    `export const toolMetas: Record<string, { group: string; schema: unknown; description: string }> = {`
   );
   for (const pkg of packages) {
     for (const [fnName, fnSchema] of Object.entries(pkg.schemas)) {
-      const desc = descriptions[fnName] ?? fnName;
+      // BUG-APIGEN-020: bake the tool description (user override + the
+      // auto-generated data-envelope calling-convention note carried on
+      // `fnSchema.input.description`, see composeSchemas) in at GENERATE
+      // time — deterministic, byte-identical output, zero runtime cost.
+      const desc = buildToolDescription(
+        fnName,
+        fnSchema as { input?: { description?: unknown } },
+        descriptions[fnName]
+      );
       lines.push(
         `  ${fnName}: { group: '${pkg.id}', schema: ${JSON.stringify(
           fnSchema
-        )} }, // ${desc}`
+        )}, description: ${JSON.stringify(desc)} },`
       );
     }
   }

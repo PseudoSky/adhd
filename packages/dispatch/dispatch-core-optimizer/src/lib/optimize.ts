@@ -33,7 +33,7 @@ import type {
   KindFamily,
   ModelTier,
   OperationSnapshot,
-} from '@adhd/dispatch-spec';
+} from '@adhd/dispatch-base-spec';
 
 import { lookupFileSizes, siBytesAsTokens } from './size-tokens.js';
 
@@ -543,11 +543,11 @@ export function optimize(
  * has no tokens_naive field, and optimize()'s return type is fixed at
  * DispatchUnit[], so there's no type-safe way to attach it to the snapshot
  * from inside this module without either mutating the input (breaking the
- * "does not mutate its input" contract) or editing @adhd/dispatch-spec
+ * "does not mutate its input" contract) or editing @adhd/dispatch-base-spec
  * (outside this milestone's file scope). This named export is the type-safe
  * alternative: the value is computed, testable, and available to any caller
  * that wants "packed vs naive". Adding a `tokens_naive` field to
- * SnapshotOptimization belongs to a future @adhd/dispatch-spec change, not
+ * SnapshotOptimization belongs to a future @adhd/dispatch-base-spec change, not
  * this file.
  */
 export function computeTokensNaive(

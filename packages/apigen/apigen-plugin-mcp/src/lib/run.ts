@@ -7,7 +7,12 @@ import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { dispatch, createLogger, describeParams } from '@adhd/apigen-engine-runtime';
+import {
+  dispatch,
+  createLogger,
+  describeParams,
+  buildToolDescription,
+} from '@adhd/apigen-engine-runtime';
 import type { Logger } from '@adhd/apigen-engine-runtime';
 import type { RunInput } from '@adhd/apigen-core-client';
 import { envelopeMetaKey } from '@adhd/apigen-naming';
@@ -71,7 +76,14 @@ function buildMcpServer(
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: Object.entries(toolMetas).map(([name, meta]) => ({
       name,
-      description: descriptions[name] ?? name,
+      // BUG-APIGEN-020: combine the caller-supplied override (toolDescriptions
+      // option) with the auto-generated data-envelope calling-convention note
+      // carried on the composed schema's input.description.
+      description: buildToolDescription(
+        name,
+        meta.schema as { input?: { description?: unknown } },
+        descriptions[name]
+      ),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       inputSchema: (meta.schema as any).input,
     })),

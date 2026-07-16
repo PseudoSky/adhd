@@ -1,12 +1,12 @@
 # release-ready — STATE_NAME
 
-**Phase:** release · **Kind:** work · **Depends on:** test-audit · **Guard:** `true`
+**Phase:** release · **Kind:** work · **Depends on:** test-audit · **Guard:** `npx --yes nx run-many -t test,build -p dispatch-base-spec,dispatch-core-client,dispatch-serializer-json,dispatch-serializer-sqlite,dispatch-core-optimizer,dispatch-orchestrator,dispatch-plugin-io,dispatch-plugin-gitnexus,dispatch-tools,dispatch-cli`
 
 ---
 
 ## Goal
 
-<What is true after this state that was not true before?>
+All ten dispatch projects build+test green (twice = cache-proven), versions bump 0.0.1→0.1.0, the plan BACKLOG is fully closed, and the portfolio links are updated — release-ready.
 
 ---
 
@@ -31,4 +31,4 @@ mutates:    ["package.json"]
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+Terminal work state. Human-gated `nx release publish` is a follow-on (out of scope). Reconcile BACKLOG.md (every row closed, no `status: OPEN` — dod.13 forcing function). [inv:nx-cache].

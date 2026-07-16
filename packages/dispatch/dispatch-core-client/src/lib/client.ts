@@ -5,7 +5,7 @@ import type {
   MilestoneDag,
   OperationDag,
   OperationStatus,
-} from '@adhd/dispatch-spec';
+} from '@adhd/dispatch-base-spec';
 import type { IDagSerializer } from './serializer.js';
 
 export interface IDagClient {

@@ -1,4 +1,6 @@
 import { SCALAR_SCHEMAS } from './ts-json-schema';
+import { detectDiscriminator } from './morph-walk';
+import { X_APIGEN_LOGICAL } from '@adhd/apigen-base-logical';
 
 /**
  * Recursive fallback schema builder for primitive, array, union, and anonymous object types.
@@ -53,7 +55,15 @@ export function morphFallback(
     if (variants.every((v) => v.startsWith("'"))) {
       return { type: 'string', enum: variants.map((v) => v.replace(/'/g, '')) };
     }
-    return { anyOf: variants.map((v) => morphFallback(v, depth + 1, aliases)) };
+    // BUG-APIGEN-019: `oneOf` (exactly one variant matches), not `anyOf` —
+    // see the matching rationale in morph-walk.ts's union branch.
+    const variantSchemas = variants.map((v) => morphFallback(v, depth + 1, aliases));
+    const discriminator = detectDiscriminator(variantSchemas);
+    return {
+      oneOf: variantSchemas,
+      ...(discriminator ? { discriminator } : {}),
+      [X_APIGEN_LOGICAL]: 'union',
+    };
   }
   // Anonymous object: { key: type; key2: type2 }
   if (t.startsWith('{') && t.endsWith('}')) {

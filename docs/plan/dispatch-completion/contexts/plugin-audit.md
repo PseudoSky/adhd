@@ -1,6 +1,6 @@
 # plugin-audit — STATE_NAME
 
-**Phase:** plugins · **Kind:** audit · **Depends on:** plugin-io, plugin-gitnexus · **Guard:** `true`
+**Phase:** plugins · **Kind:** audit · **Depends on:** plugin-io, plugin-gitnexus · **Guard:** `python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase plugins`
 
 ---
 

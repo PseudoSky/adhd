@@ -59,7 +59,7 @@ function fail(err: unknown): never {
 
 program
   .command('validate')
-  .description("validate a plan dag.json against @adhd/dispatch-spec's structural validator")
+  .description("validate a plan dag.json against @adhd/dispatch-base-spec's structural validator")
   .requiredOption('--dag-path <path>', "path to the plan's dag.json")
   .action(async (opts: { dagPath: string }) => {
     try {

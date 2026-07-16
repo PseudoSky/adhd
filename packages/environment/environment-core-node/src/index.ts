@@ -1,1 +1,2 @@
-export * from './lib/environment-environment-core-node';
+export { Environment, EnvironmentError, SnapshotNotFoundError } from './environment';
+export type { EnvironmentParams } from '@adhd/environment-base-spec';

@@ -9,10 +9,16 @@
       }
     }
   },
-  "tags": ["layer:logic", "platform:node"],
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
         "outputPath": "dist/packages/apigen/apigen-plugin-cli-output",
         "emptyOutDir": true
@@ -28,7 +34,10 @@
       }
     },
     "nx-release-publish": {
-      "dependsOn": ["build", "test"],
+      "dependsOn": [
+        "build",
+        "test"
+      ],
       "executor": "@nx/js:release-publish",
       "options": {
         "packageRoot": "dist/{projectRoot}"

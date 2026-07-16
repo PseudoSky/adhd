@@ -1,6 +1,6 @@
 # algo-audit — STATE_NAME
 
-**Phase:** algorithms · **Kind:** audit · **Depends on:** optimizer-algorithms · **Guard:** `true`
+**Phase:** algorithms · **Kind:** audit · **Depends on:** optimizer-algorithms · **Guard:** `python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase algorithms`
 
 ---
 

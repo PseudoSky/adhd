@@ -71,7 +71,7 @@ the criterion<->check mirror resolves grep_present/exists checks, not just check
   final phase (everything above + removal + behavioral DoD checks + audit-final):
     [removal-runbook.1] [removal-runbook.2] [removal-runbook.3]
     [audit-final.1]
-    [dod.1] [dod.2] [dod.3] [dod.4] [dod.5] [dod.6]
+    [dod.1] [dod.2] [dod.3] [dod.4] [dod.5] [dod.6] [dod.7]
 
 Exits 0 when all checks in the phase pass; exits 1 with a failure summary otherwise.
 """
@@ -303,6 +303,10 @@ def phase_final() -> list:
     # [dod.6] structural — platform:node lib registered + depends on registry+compiler
     r.append(grep_present("dod.6", "agent-registry-migration registered platform:node + deps registry+compiler",
                           "platform:node", f"{PKG}/project.json"))
+    # [dod.7] structural — superseded-scope closeout: provider seed populated + initiative artifacts committed
+    r.append(check("dod.7", "provider registry seed present AND agent-registry closeout artifacts git-tracked",
+                   "git ls-files --error-unmatch docs/plan/agent-registry/CLOSEOUT.md docs/plan/agent-registry/COVERAGE.md docs/plan/agent-registry/DEMO.md "
+                   "&& grep -qE 'seedProviders|seedModels|seedBindings' packages/agent/agent-core-provider/src/seed/index.ts"))
     r.append(check("audit-final.1", "final audit self-consistent", "true"))
     return r
 

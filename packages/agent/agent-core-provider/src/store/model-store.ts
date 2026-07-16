@@ -209,4 +209,49 @@ export class ModelStore {
 
     return row.platformModelId;
   }
+
+  /**
+   * Resolve a platform-specific model id back to its canonical model id.
+   *
+   * The reverse of `resolveModelId`. Design decision (BUG-REGISTRY-002):
+   * implemented as an upstream store method rather than a client-side scan
+   * over `list()` + per-model `resolveModelId()` calls — this store already
+   * owns the single source of truth for the (model_id, platform) <->
+   * platform_model_id mapping, so the reverse lookup belongs here too,
+   * backed by the same table and PK, instead of being re-derived by every
+   * caller (agent-registry-migration's frontmatter parser resolving a
+   * `model: sonnet` alias to `claude_sonnet_4_6`, today; others tomorrow).
+   *
+   * (platform_model_id, platform) is not itself a declared unique
+   * constraint — the table's real PK is (model_id, platform). Seeding two
+   * canonical models under the same alias on one platform is a data-
+   * authoring bug upstream of this method; this resolves to the first
+   * matching row, mirroring `resolveModelId`'s not-found semantics.
+   *
+   * The `WHERE platform = ?` clause is the same gating filter as
+   * `resolveModelId` — omitting it would collapse aliases across platforms.
+   *
+   * Throws MODEL_BINDING_NOT_FOUND if no row exists for (platformModelId, platform).
+   */
+  resolveCanonicalId(platformModelId: string, platform: string): string {
+    const row = this.db
+      .select()
+      .from(modelPlatformBindings)
+      .where(
+        and(
+          eq(modelPlatformBindings.platformModelId, platformModelId),
+          eq(modelPlatformBindings.platform, platform)
+        )
+      )
+      .get();
+
+    if (!row) {
+      throw new ModelStoreError(
+        'MODEL_BINDING_NOT_FOUND',
+        `No binding for platform model id '${platformModelId}' on platform '${platform}'`
+      );
+    }
+
+    return row.modelId;
+  }
 }

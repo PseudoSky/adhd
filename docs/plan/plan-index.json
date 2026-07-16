@@ -33,7 +33,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.512Z"
+      "updated_at": "2026-07-16T01:13:22.559Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "adhd-environment",
@@ -95,7 +96,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.513Z"
+      "updated_at": "2026-07-16T01:13:22.561Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "agent-compiler",
@@ -135,7 +137,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.514Z"
+      "updated_at": "2026-07-16T01:13:22.561Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "agent-mcp-authoring",
@@ -148,40 +151,43 @@
         "docs/plan/agent-mcp-authoring/scripts/audit_authoring.py",
         "docs/plan/agent-mcp-authoring/scripts/review_gate.py",
         "docs/plan/agent-registry/demo/compose-via-mcp.mjs",
-        "packages/ai/agent-mcp/CHANGELOG.md",
-        "packages/ai/agent-mcp/package.json",
-        "packages/ai/agent-mcp/src/__tests__/agent-define.test.ts",
-        "packages/ai/agent-mcp/src/__tests__/authoring-live-e2e.test.ts",
-        "packages/ai/agent-mcp/src/__tests__/component-define.test.ts",
-        "packages/ai/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
-        "packages/ai/agent-mcp/src/__tests__/discovery-bounded-output.test.ts",
-        "packages/ai/agent-mcp/src/__tests__/discovery-tools.test.ts",
-        "packages/ai/agent-mcp/src/__tests__/name-slug-seam.test.ts",
-        "packages/ai/agent-mcp/src/__tests__/systemprompt-compat.test.ts",
-        "packages/ai/agent-mcp/src/registry/composition-writer.ts",
-        "packages/ai/agent-mcp/src/registry/name-slug.ts",
-        "packages/ai/agent-mcp/src/registry/registry-bridge.ts",
-        "packages/ai/agent-mcp/src/server.ts",
-        "packages/ai/agent-mcp/src/tools/agent-crud.ts",
-        "packages/ai/agent-mcp/src/tools/authoring.ts",
-        "packages/ai/agent-mcp/src/tools/discovery.ts",
-        "packages/ai/agent-mcp/src/tools/guide.ts",
-        "packages/ai/agent-mcp/src/validation/agent.ts",
-        "packages/ai/agent-registry/package.json",
-        "packages/ai/agent-registry/src/__tests__/embedding-substrate.test.ts",
-        "packages/ai/agent-registry/src/__tests__/enrichment-pipeline.test.ts",
-        "packages/ai/agent-registry/src/enrich/cosine.ts",
-        "packages/ai/agent-registry/src/enrich/embedding.ts",
-        "packages/ai/agent-registry/src/enrich/enrich-component.ts",
-        "packages/ai/agent-registry/src/enrich/summarize.ts",
-        "packages/ai/agent-registry/src/enrich/usecase-anchors.ts",
-        "packages/ai/agent-registry/src/index.ts",
-        "packages/ai/agent-registry/src/store/usecase-store.ts"
+        "entrypoint/agent-mcp/CHANGELOG.md",
+        "entrypoint/agent-mcp/package.json",
+        "entrypoint/agent-mcp/src/__tests__/agent-define.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/authoring-live-e2e.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/component-define.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/component-search-ndcg.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/composition-journey-e2e.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/discovery-bounded-output.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/discovery-tools.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/fixtures/component-search-golden.json",
+        "entrypoint/agent-mcp/src/__tests__/name-slug-seam.test.ts",
+        "entrypoint/agent-mcp/src/__tests__/systemprompt-compat.test.ts",
+        "entrypoint/agent-mcp/src/registry/composition-writer.ts",
+        "entrypoint/agent-mcp/src/registry/name-slug.ts",
+        "entrypoint/agent-mcp/src/registry/registry-bridge.ts",
+        "entrypoint/agent-mcp/src/server.ts",
+        "entrypoint/agent-mcp/src/tools/agent-crud.ts",
+        "entrypoint/agent-mcp/src/tools/authoring.ts",
+        "entrypoint/agent-mcp/src/tools/discovery.ts",
+        "entrypoint/agent-mcp/src/tools/guide.ts",
+        "entrypoint/agent-mcp/src/validation/agent.ts",
+        "packages/agent/agent-store-prompts/package.json",
+        "packages/agent/agent-store-prompts/src/__tests__/embedding-substrate.test.ts",
+        "packages/agent/agent-store-prompts/src/__tests__/enrichment-pipeline.test.ts",
+        "packages/agent/agent-store-prompts/src/enrich/cosine.ts",
+        "packages/agent/agent-store-prompts/src/enrich/embedding.ts",
+        "packages/agent/agent-store-prompts/src/enrich/enrich-component.ts",
+        "packages/agent/agent-store-prompts/src/enrich/summarize.ts",
+        "packages/agent/agent-store-prompts/src/enrich/usecase-anchors.ts",
+        "packages/agent/agent-store-prompts/src/index.ts",
+        "packages/agent/agent-store-prompts/src/store/usecase-store.ts"
       ],
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.514Z"
+      "updated_at": "2026-07-16T01:13:22.562Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "agent-mcp-refactor",
@@ -224,7 +230,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.515Z"
+      "updated_at": "2026-07-16T01:13:22.562Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "agent-policy",
@@ -259,7 +266,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.515Z"
+      "updated_at": "2026-07-16T01:13:22.563Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "agent-provider",
@@ -297,7 +305,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.516Z"
+      "updated_at": "2026-07-16T01:13:22.563Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "agent-provider-credentialing",
@@ -342,7 +351,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.516Z"
+      "updated_at": "2026-07-16T01:13:22.564Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "agent-registry-migration",
@@ -394,7 +404,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.516Z"
+      "updated_at": "2026-07-16T01:13:22.564Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "agent-registry-release",
@@ -417,7 +428,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.517Z"
+      "updated_at": "2026-07-16T01:13:22.564Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "agent-registry-schema",
@@ -452,7 +464,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.517Z"
+      "updated_at": "2026-07-16T01:13:22.565Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "agent-tool-registry",
@@ -488,7 +501,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.517Z"
+      "updated_at": "2026-07-16T01:13:22.565Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "apigen-client-generation",
@@ -648,7 +662,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.519Z"
+      "updated_at": "2026-07-16T01:13:22.566Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "apigen-logical-types",
@@ -684,7 +699,206 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.519Z"
+      "updated_at": "2026-07-16T01:13:22.567Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
+    },
+    {
+      "plan": "dispatch-completion",
+      "dir": "dispatch-completion",
+      "status": "published",
+      "mutate_set": [
+        "entrypoint/dispatch-cli/package.json",
+        "entrypoint/dispatch-cli/project.json",
+        "entrypoint/dispatch-cli/src/lib/core.ts",
+        "entrypoint/dispatch-cli/src/test/integration/real-e2e.ts",
+        "package.json",
+        "packages/dispatch/dispatch-base-spec/src/lib/types.ts",
+        "packages/dispatch/dispatch-base-spec/src/lib/validate.ts",
+        "packages/dispatch/dispatch-core-client/src/lib/client.ts",
+        "packages/dispatch/dispatch-core-optimizer/src/lib/algorithms/index.ts",
+        "packages/dispatch/dispatch-core-optimizer/src/lib/optimize.ts",
+        "packages/dispatch/dispatch-core-optimizer/src/lib/snapshot.ts",
+        "packages/dispatch/dispatch-core-optimizer/src/test/golden.spec.ts",
+        "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts",
+        "packages/dispatch/dispatch-plugin-gitnexus/src/index.ts",
+        "packages/dispatch/dispatch-plugin-io/src/index.ts",
+        "packages/dispatch/dispatch-serializer-sqlite/src/index.ts",
+        "packages/dispatch/dispatch-tools/src/index.ts",
+        "scripts/audit_algo-audit.py",
+        "scripts/audit_audit-final.py",
+        "scripts/audit_cli-audit.py",
+        "scripts/audit_opt-audit.py",
+        "scripts/audit_orch-audit.py",
+        "scripts/audit_plugin-audit.py",
+        "scripts/audit_spec-audit.py",
+        "scripts/audit_storage-audit.py",
+        "scripts/audit_test-audit.py",
+        "scripts/audit_tools-audit.py",
+        "scripts/audit_triage.py"
+      ],
+      "read_only_set": [],
+      "reservations": {
+        "triage": {
+          "mutates": [
+            "scripts/audit_triage.py"
+          ],
+          "read_only": []
+        },
+        "spec-foundations": {
+          "mutates": [
+            "packages/dispatch/dispatch-base-spec/src/lib/types.ts",
+            "packages/dispatch/dispatch-base-spec/src/lib/validate.ts"
+          ],
+          "read_only": []
+        },
+        "spec-audit": {
+          "mutates": [
+            "scripts/audit_spec-audit.py"
+          ],
+          "read_only": []
+        },
+        "optimizer-client": {
+          "mutates": [
+            "packages/dispatch/dispatch-core-client/src/lib/client.ts",
+            "packages/dispatch/dispatch-core-optimizer/src/lib/optimize.ts",
+            "packages/dispatch/dispatch-core-optimizer/src/lib/snapshot.ts"
+          ],
+          "read_only": []
+        },
+        "opt-audit": {
+          "mutates": [
+            "scripts/audit_opt-audit.py"
+          ],
+          "read_only": []
+        },
+        "orchestrator-harden": {
+          "mutates": [
+            "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts"
+          ],
+          "read_only": []
+        },
+        "causal-replan": {
+          "mutates": [
+            "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts"
+          ],
+          "read_only": []
+        },
+        "orch-audit": {
+          "mutates": [
+            "scripts/audit_orch-audit.py"
+          ],
+          "read_only": []
+        },
+        "plugin-io": {
+          "mutates": [
+            "packages/dispatch/dispatch-plugin-io/src/index.ts"
+          ],
+          "read_only": []
+        },
+        "plugin-gitnexus": {
+          "mutates": [
+            "packages/dispatch/dispatch-plugin-gitnexus/src/index.ts"
+          ],
+          "read_only": []
+        },
+        "plugin-audit": {
+          "mutates": [
+            "scripts/audit_plugin-audit.py"
+          ],
+          "read_only": []
+        },
+        "serializer-sqlite": {
+          "mutates": [
+            "packages/dispatch/dispatch-serializer-sqlite/src/index.ts"
+          ],
+          "read_only": []
+        },
+        "storage-audit": {
+          "mutates": [
+            "scripts/audit_storage-audit.py"
+          ],
+          "read_only": []
+        },
+        "dispatch-tools": {
+          "mutates": [
+            "packages/dispatch/dispatch-tools/src/index.ts"
+          ],
+          "read_only": []
+        },
+        "tools-audit": {
+          "mutates": [
+            "scripts/audit_tools-audit.py"
+          ],
+          "read_only": []
+        },
+        "cli-complete": {
+          "mutates": [
+            "entrypoint/dispatch-cli/package.json",
+            "entrypoint/dispatch-cli/project.json",
+            "entrypoint/dispatch-cli/src/lib/core.ts"
+          ],
+          "read_only": []
+        },
+        "cli-audit": {
+          "mutates": [
+            "scripts/audit_cli-audit.py"
+          ],
+          "read_only": []
+        },
+        "optimizer-algorithms": {
+          "mutates": [
+            "packages/dispatch/dispatch-core-optimizer/src/lib/algorithms/index.ts"
+          ],
+          "read_only": []
+        },
+        "algo-audit": {
+          "mutates": [
+            "scripts/audit_algo-audit.py"
+          ],
+          "read_only": []
+        },
+        "tests-hardening": {
+          "mutates": [
+            "packages/dispatch/dispatch-core-optimizer/src/test/golden.spec.ts"
+          ],
+          "read_only": []
+        },
+        "test-audit": {
+          "mutates": [
+            "scripts/audit_test-audit.py"
+          ],
+          "read_only": []
+        },
+        "release-ready": {
+          "mutates": [
+            "package.json"
+          ],
+          "read_only": []
+        },
+        "audit-final": {
+          "mutates": [
+            "scripts/audit_audit-final.py"
+          ],
+          "read_only": []
+        },
+        "live-e2e": {
+          "mutates": [
+            "entrypoint/dispatch-cli/src/test/integration/real-e2e.ts"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": true,
+        "validate": null,
+        "package_artifact": "entrypoint/dispatch-cli/src/test/cli-smoke.spec.ts"
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-16T03:33:05.790Z"
     },
     {
       "plan": "hitl-interrupts",
@@ -704,7 +918,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.520Z"
+      "updated_at": "2026-07-16T01:13:22.568Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "parallel-tool-execution",
@@ -722,7 +937,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.520Z"
+      "updated_at": "2026-07-16T01:13:22.568Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "task-dependency-dag",
@@ -742,7 +958,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.520Z"
+      "updated_at": "2026-07-16T01:13:22.568Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "task-schema-foundation",
@@ -763,7 +980,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.521Z"
+      "updated_at": "2026-07-16T01:13:22.569Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "task-streaming-sse",
@@ -786,7 +1004,8 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.521Z"
+      "updated_at": "2026-07-16T01:13:22.569Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     },
     {
       "plan": "usage-tracking",
@@ -822,8 +1041,10 @@
       "references": [],
       "assumed_baseline": [],
       "depends_on": [],
-      "updated_at": "2026-07-09T03:43:18.522Z"
+      "updated_at": "2026-07-16T01:13:22.570Z",
+      "verified_at": "2026-07-16T01:43:11.209Z"
     }
   ],
-  "updated_at": "2026-07-09T03:43:18.529Z"
+  "updated_at": "2026-07-16T03:33:05.798Z",
+  "verified_at": null
 }

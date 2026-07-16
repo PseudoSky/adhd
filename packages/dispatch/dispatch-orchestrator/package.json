@@ -7,7 +7,7 @@
     "@adhd/dispatch-core-client": "0.0.1"
   },
   "devDependencies": {
-    "@adhd/dispatch-optimizer": "0.0.1",
+    "@adhd/dispatch-core-optimizer": "0.0.1",
     "@adhd/dispatch-serializer-json": "0.0.1"
   },
   "main": "./index.js",

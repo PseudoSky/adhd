@@ -1,12 +1,12 @@
 # spec-foundations — STATE_NAME
 
-**Phase:** spec · **Kind:** work · **Depends on:** triage · **Guard:** `true`
+**Phase:** spec · **Kind:** work · **Depends on:** triage · **Guard:** `npx --yes nx run-many -t test,build -p dispatch-base-spec`
 
 ---
 
 ## Goal
 
-<What is true after this state that was not true before?>
+`@adhd/dispatch-spec` exports `ExecutionMode` and `ICalibrationStore`, promotes own-completion into the D-07 `eligible` definition, enforces the extended `provider` enum, and guards against `Infinity` — the ripple-root every downstream package inherits.
 
 ---
 
@@ -33,4 +33,4 @@ mutates:    ["packages/dispatch/dispatch-base-spec/src/lib/types.ts", "packages/
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+Closes DEBT-005/BL-102 (ExecutionMode union), DEBT-013 (eligible own-completion — the spec definition, so every consumer inherits the guard), DEBT-018 (ICalibrationStore interface), DEBT-019 (provider enum + enforce in validate.ts), DEBT-014 (reject/clamp absent tiers). Land these BEFORE consumers (advisory P6). Reference impl in `dispatch-backlog-fill/SOLUTIONS.md` (stale `packages/shared/` paths → `packages/dispatch/`). [inv:teeth] [inv:layer-purity] (zero-dep shared).

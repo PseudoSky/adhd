@@ -182,17 +182,6 @@
         }
       }
     },
-    "@nx/rollup:rollup": {
-      "cache": true,
-      "dependsOn": [
-        "^build",
-        "lint"
-      ],
-      "inputs": [
-        "production",
-        "^production"
-      ]
-    },
     "@nx/js:tsc": {
       "cache": true,
       "dependsOn": [

@@ -1,6 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import type { DispatchUnit } from '@adhd/dispatch-spec';
+import type { DispatchUnit, ProviderConfig } from '@adhd/dispatch-base-spec';
 
 // ---------------------------------------------------------------------------
 // ── WIRE-MIRROR TYPES ────────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ export interface DispatchUsageReport {
  * milestone (docs/plan/dispatch-production/dag.json, operation
  * agent-runner.1): `{ input_tokens, output_tokens, model_calls }`.
  *
- * NOTE — deliberately NOT `@adhd/dispatch-spec`'s `Turn` type: `Turn`
+ * NOTE — deliberately NOT `@adhd/dispatch-base-spec`'s `Turn` type: `Turn`
  * (packages/dispatch/dispatch-spec/src/lib/types.ts) has `turn`/`t` fields
  * and carries no `model_calls`, so it cannot literally hold this shape.
  * Reconciling a `SynthesizedTurn` into a real `Turn` for
@@ -180,6 +180,78 @@ export class AgentMcpToolError extends Error {
 
 const ERROR_CODE_PATTERN = /^\[([A-Z_]+)\]\s*([\s\S]*)$/;
 
+/**
+ * Mirrors agent-mcp's real, wire-level provider payload accepted by
+ * `agent_create`/`agent_update` (`providerConfigSchema`, a discriminated
+ * union of exactly `'anthropic' | 'openai' | 'claudecli'` —
+ * packages/agent/agent-engine-orchestrator/src/validation/agent.ts). These
+ * are the SAME 3 values `@adhd/dispatch-base-spec`'s `ProviderType`/
+ * `ProviderConfig.type` already restrict `DispatchUnit.provider` to
+ * (types.ts:84) — DeepSeek is not a 4th type on either side: it dispatches as
+ * `type: 'openai'` with a DeepSeek `model`/`baseURL`, exactly matching the
+ * real production `typescript-deepseek` agent definition (verified against
+ * `~/.adhd/agent-mcp/agents.db`: `{type:'openai', model:'deepseek-v4-flash',
+ * baseURL:'https://api.deepseek.com/v1',
+ * env:{secret:'ADHD_AGENT_DEEPSEEK_SECRET'}}`).
+ */
+export interface McpAgentProviderConfig {
+  type: 'anthropic' | 'openai' | 'claudecli';
+  model?: string;
+  env?: { secret: string };
+  baseURL?: string;
+  timeoutMs?: number;
+  retryConfig?: { retries: number; minTimeout: number; maxTimeout: number; factor: number };
+}
+
+/**
+ * Translates `DispatchUnit.provider` (dispatch-base-spec's snake_case
+ * `ProviderConfig`) into the camelCase payload agent-mcp's real
+ * `agent_create` tool accepts. THE FIX: `ensureAgent` previously hardcoded an
+ * unconditional `{ type: 'claudecli' }` here regardless of `unit.provider` —
+ * every field the DAG author configured via `dag.providers` (threaded onto
+ * each unit by dispatch-orchestrator's `resolveUnitProviderAndTokens`) was
+ * silently discarded, so the real (`dryRun: false`) path could never reach
+ * DeepSeek (or any provider other than claudecli) no matter what the DAG
+ * specified. Now a `type: 'openai'` unit with a DeepSeek `model_id`/
+ * `base_url`/`env_secret` really dispatches to DeepSeek.
+ *
+ * `null` (no provider configured — every pre-fix caller, including
+ * MockAgentRunner fixtures and the real-e2e claudecli live gate) preserves
+ * the exact pre-fix default: a bare `{ type: 'claudecli' }` agent, no other
+ * keys — verified byte-for-byte against `agent-runner.spec.ts`'s existing
+ * `ensureAgent` assertions, which still pass unmodified.
+ */
+export function toAgentMcpProviderConfig(
+  provider: ProviderConfig | null
+): McpAgentProviderConfig {
+  if (!provider) return { type: 'claudecli' };
+
+  if (provider.type === 'claudecli') {
+    const config: McpAgentProviderConfig = { type: 'claudecli' };
+    if (provider.model_id) config.model = provider.model_id;
+    if (provider.timeout_ms) config.timeoutMs = provider.timeout_ms;
+    return config;
+  }
+
+  // 'anthropic' | 'openai' — DeepSeek and any other OpenAI-compatible
+  // endpoint dispatch through 'openai' + model_id/base_url (see doc comment
+  // above).
+  const config: McpAgentProviderConfig = { type: provider.type };
+  if (provider.model_id) config.model = provider.model_id;
+  if (provider.base_url) config.baseURL = provider.base_url;
+  if (provider.env_secret) config.env = { secret: provider.env_secret };
+  if (provider.timeout_ms) config.timeoutMs = provider.timeout_ms;
+  if (provider.retry_config) {
+    config.retryConfig = {
+      retries: provider.retry_config.retries,
+      minTimeout: provider.retry_config.min_timeout,
+      maxTimeout: provider.retry_config.max_timeout,
+      factor: provider.retry_config.factor,
+    };
+  }
+  return config;
+}
+
 export interface AgentMcpRunnerConfig {
   /**
    * Command used to spawn the agent-mcp MCP server (e.g. `"node"` or
@@ -294,7 +366,7 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
     // stub (PoC compiler.ts:1788) that would otherwise block e2e.
     await this.callTool('agent_create', {
       name: unit.agent_name,
-      provider: { type: 'claudecli' },
+      provider: toAgentMcpProviderConfig(unit.provider),
       systemPrompt: unit.prompt ?? undefined,
       mcpServers: {},
     });

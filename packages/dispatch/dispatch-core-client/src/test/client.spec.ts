@@ -2,7 +2,7 @@ import type {
   DagJson,
   DagSnapshot,
   DispatchLogEntry,
-} from '@adhd/dispatch-spec';
+} from '@adhd/dispatch-base-spec';
 import { DagClient, createDagClient } from '../lib/client.js';
 import type { IDagSerializer } from '../lib/serializer.js';
 

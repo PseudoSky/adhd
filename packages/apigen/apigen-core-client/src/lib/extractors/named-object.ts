@@ -1,5 +1,6 @@
 import { type SourceFile } from 'ts-morph';
 import type { FnMeta } from './named';
+import { extractParamDefault } from './param-defaults';
 
 /**
  * Mode 3: find `export const <name> = { ... }`; each property whose value
@@ -44,6 +45,11 @@ export function extractNamedObject(
           name: p.getName(),
           type: p.getTypeAtLocation(varDecl).getText(),
           optional,
+          defaultValue: extractParamDefault(
+            paramDecl,
+            p.getName(),
+            varDecl.getVariableStatement()
+          ),
         };
       }),
       returnType: sig.getReturnType().getText(),

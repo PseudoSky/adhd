@@ -140,8 +140,8 @@
       "@adhd/data-core-structures": [
         "./packages/data/data-core-structures/src/index.ts"
       ],
-      "@adhd/data-core-structures-query-engine": [
-        "./packages/data/data-core-structures/data-query-engine/src/index.ts"
+      "@adhd/data-query-engine": [
+        "./packages/data/data-query-engine/src/index.ts"
       ],
       "@adhd/decompile-cli": ["./entrypoint/decompile-cli/src/index.ts"],
       "@adhd/dispatch-base-spec": [
@@ -151,16 +151,10 @@
         "./packages/dispatch/dispatch-base-types/src/index.ts"
       ],
       "@adhd/dispatch-cli": ["./entrypoint/dispatch-cli/src/index.ts"],
-      "@adhd/dispatch-client": [
-        "./packages/dispatch/dispatch-core-client/src/index.ts"
-      ],
       "@adhd/dispatch-core-client": [
         "./packages/dispatch/dispatch-core-client/src/index.ts"
       ],
       "@adhd/dispatch-core-optimizer": [
-        "./packages/dispatch/dispatch-core-optimizer/src/index.ts"
-      ],
-      "@adhd/dispatch-optimizer": [
         "./packages/dispatch/dispatch-core-optimizer/src/index.ts"
       ],
       "@adhd/dispatch-orchestrator": [
@@ -168,9 +162,6 @@
       ],
       "@adhd/dispatch-serializer-json": [
         "./packages/dispatch/dispatch-serializer-json/src/index.ts"
-      ],
-      "@adhd/dispatch-spec": [
-        "./packages/dispatch/dispatch-base-spec/src/index.ts"
       ],
       "@adhd/environment-base-spec": [
         "./packages/environment/environment-base-spec/src/index.ts"

@@ -11,8 +11,8 @@ generated CLI is a disposable projection of it.
 
 | Command | Reads/writes | What it does |
 |---|---|---|
-| `validate --dag-path <p>` | read-only | `@adhd/dispatch-spec`'s structural validator over the dag file. |
-| `snapshot --dag-path <p>` | read-only | Real `DagClient` + `@adhd/dispatch-optimizer`'s `snapshot()`, cold-start B/context-window defaults. |
+| `validate --dag-path <p>` | read-only | `@adhd/dispatch-base-spec`'s structural validator over the dag file. |
+| `snapshot --dag-path <p>` | read-only | Real `DagClient` + `@adhd/dispatch-core-optimizer`'s `snapshot()`, cold-start B/context-window defaults. |
 | `optimize --dag-path <p>` | read-only | Snapshot + the greedy `optimize()` — the next batch of `DispatchUnit`s that would be packed. |
 | `eligible --dag-path <p>` | read-only | `DagClient.getEligibleMilestones()` — milestone slugs whose deps are complete per `dispatch_log`. |
 | `status --dag-path <p>` | read-only | Per-milestone `{ status, loggedOperationIds, tokensEstimated, tokensActual }`. |
@@ -71,7 +71,7 @@ Vitest spec — it lives outside `src/**/*.{spec,test}.ts` on purpose, so `nx
 test dispatch-cli` never picks it up) that drives the FULL
 `docs/plan/dispatch-production` product lifecycle through real components:
 a real `DagClient` + `createJsonFileSerializer` writing an actual `dag.json`
-under `tmp/dispatch-cli/e2e/`, `@adhd/dispatch-optimizer`'s real
+under `tmp/dispatch-cli/e2e/`, `@adhd/dispatch-core-optimizer`'s real
 `snapshot()`/`optimize()`, `@adhd/dispatch-orchestrator`'s real
 `orchestrateCycle()`, and this package's own `bin/cli.ts` spawned as a real
 child process for every CLI-facing assertion. Eight required scenarios run

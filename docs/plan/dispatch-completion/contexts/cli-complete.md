@@ -1,12 +1,12 @@
 # cli-complete — STATE_NAME
 
-**Phase:** cli · **Kind:** work · **Depends on:** orch-audit · **Guard:** `true`
+**Phase:** cli · **Kind:** work · **Depends on:** orch-audit · **Guard:** `npx --yes nx run-many -t test,build -p dispatch-cli`
 
 ---
 
 ## Goal
 
-<What is true after this state that was not true before?>
+`dispatch` is npx-invocable (bin field + esbuild build-bin), calibrate rejects a bad tier before constructing the runner, all `*Core` fns report a missing dag file consistently, poll-internal duplicates are deleted, and `dispatch-base-types` is removed.
 
 ---
 
@@ -33,4 +33,4 @@ mutates:    ["entrypoint/dispatch-cli/package.json", "entrypoint/dispatch-cli/pr
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+Closes DEBT-022 (bin + esbuild target; decompile's @nx/js:tsc precedent), DEBT-024 (lazy runner factory), DEBT-025 (shared missing-file guard), DEBT-023 (delete cli poll dupes, consume exported POLL_TERMINAL_STATUSES/pollUntilTerminal). Delete orphan `dispatch-base-types` (dod.12). Keep hand-written `bin/cli.ts` canonical; the apigen generated-CLI $ref crash stays deferred (out of scope).

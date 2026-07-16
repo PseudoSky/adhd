@@ -6,6 +6,23 @@
     "agent-mcp": "./src/index.js",
     "agent-mcp-tail": "./src/scripts/agent-mcp-tail.js"
   },
+  "files": [
+    "src",
+    "drizzle",
+    "docs",
+    "llms.txt",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "!src/**/__tests__/**",
+    "!src/**/*.test.*",
+    "!src/**/*.spec.*",
+    "!src/**/*.e2e.*",
+    "!docs/marketing/**",
+    "!**/vite.config.*",
+    "!**/project.json",
+    "!**/tsconfig*.json",
+    "!**/coverage/**"
+  ],
   "dependencies": {
     "@adhd/agent-store-runtime": "^2.1.0",
     "@adhd/agent-store-prompts": "^2.1.0",
