@@ -94,3 +94,12 @@ Before: a `DispatchUnit` has no `execution_mode`; a complete milestone still rea
   - observable: `each unit.execution_mode is one of generative|tool-call|guard-only`
   - negative-control: `revert the assembleUnit derivation in dispatch-core-optimizer -> test red`
   - delivered-by: `optimizer-client, spec-foundations`
+
+- `[dod.3]` **A complete milestone reports eligible:false from the spec snapshot definition. (behavioral)** — A complete milestone reports eligible:false from the spec snapshot definition..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `nx test dispatch-base-spec`
+  - observable: `snapshot.milestones[x].eligible === false when x is complete`
+  - negative-control: `revert the own-completion promotion in dispatch-base-spec -> test red`
+  - delivered-by: `spec-foundations`
