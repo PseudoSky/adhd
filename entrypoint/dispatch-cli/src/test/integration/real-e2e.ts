@@ -70,7 +70,7 @@
  *   real component, just not a nonexistent CLI subcommand.
  * DRIFT-2 (author / scenario 2): the milestone text says an agent calls
  *   "dag.milestone_add" / "dag.operation_add" MCP tools. The `tools-mcp`
- *   milestone is DEFERRED (docs/plan/dispatch-production/dag.json) and those
+ *   milestone is DEFERRED (docs/plan/dispatch-completion/superseded/dispatch-production/dag.json) and those
  *   tools do not exist on any MCP surface. The plan is authored directly
  *   through the real `DagClient`/serializer instead (load -> mutate the
  *   in-memory `DagJson` -> `saveDag`), which is exactly the same I/O contract

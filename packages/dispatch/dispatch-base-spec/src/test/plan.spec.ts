@@ -26,12 +26,35 @@ function findWorkspaceRoot(start: string): string {
   }
 }
 
+/**
+ * The only real dispatch-schema (`milestones`/`operations`) dag.json in the repo.
+ *
+ * `dispatch-production` was superseded by `dispatch-completion` (2026-07-16) and its
+ * dir was relocated under `dispatch-completion/superseded/` — it is retained as
+ * PROVENANCE, and this test consumes its dag.json purely as a real-world FIXTURE for
+ * `validateDagJson`. Do not "repair" the dead package paths inside it (see
+ * `docs/plan/dispatch-completion/superseded/README.md`).
+ *
+ * Candidate locations are probed in order so a future relocation degrades to a loud,
+ * actionable failure rather than a silent skip.
+ */
+const DAG_FIXTURE_CANDIDATES = [
+  'docs/plan/dispatch-completion/superseded/dispatch-production/dag.json',
+  'docs/plan/dispatch-production/dag.json', // pre-2026-07-16 location
+];
+
 describe('plan', () => {
-  it('validates dispatch-production dag.json', () => {
+  it('validates the dispatch-production dag.json fixture', () => {
     const repoRoot = findWorkspaceRoot(__dirname);
-    const planPath = join(repoRoot, 'docs/plan/dispatch-production/dag.json');
-    if (!existsSync(planPath)) {
-      throw new Error(`plan.spec.ts: dag.json not found at ${planPath}`);
+    const planPath = DAG_FIXTURE_CANDIDATES.map((c) => join(repoRoot, c)).find((p) =>
+      existsSync(p)
+    );
+    if (!planPath) {
+      throw new Error(
+        `plan.spec.ts: dispatch dag.json fixture not found. Tried:\n` +
+          DAG_FIXTURE_CANDIDATES.map((c) => `  - ${join(repoRoot, c)}`).join('\n') +
+          `\nIf the plan moved again, add its new path to DAG_FIXTURE_CANDIDATES.`
+      );
     }
     const dag = JSON.parse(readFileSync(planPath, 'utf-8'));
     const r = validateDagJson(dag);

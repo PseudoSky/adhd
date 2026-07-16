@@ -16,7 +16,7 @@
  * `@adhd/dispatch-core-optimizer` (snapshot/optimize), and
  * `@adhd/dispatch-orchestrator` (the scheduling cycle + agent-mcp runner).
  *
- * See docs/plan/dispatch-production/dag.json milestones["cli"] (ops cli.1,
+ * See docs/plan/dispatch-completion/superseded/dispatch-production/dag.json milestones["cli"] (ops cli.1,
  * cli.2) for the shape contract this file implements.
  *
  * TWO command routers exist for THIS SAME contract: the apigen-generated one
