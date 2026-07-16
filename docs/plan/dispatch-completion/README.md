@@ -121,3 +121,12 @@ Before: a `DispatchUnit` has no `execution_mode`; a complete milestone still rea
   - observable: `after a correction completes, downstream depends_on points at it and the cycle terminates all-complete not no-eligible-work`
   - negative-control: `revert the rewire in dispatch-orchestrator -> resume ends no-eligible-work, test red`
   - delivered-by: `causal-replan`
+
+- `[dod.6]` **The SQLite serializer reload equals the JSON serializer reload of the same dag (adapter parity). (behavioral)** — The SQLite serializer reload equals the JSON serializer reload of the same dag (adapter parity)..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `nx test dispatch-serializer-sqlite`
+  - observable: `write-then-read via sqlite adapter equals write-then-read via json serializer on normalized form`
+  - negative-control: `corrupt the sqlite read mapping in dispatch-serializer-sqlite -> parity assertion red`
+  - delivered-by: `serializer-sqlite`
