@@ -62,6 +62,14 @@
       "paths": [
         "packages/dispatch/dispatch-core-optimizer/src/lib/optimize.ts"
       ]
+    },
+    {
+      "id": "orchestrator-harden.1",
+      "phase": "orchestrator",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx run-many -t test,build -p dispatch-orchestrator",
+      "expect": "exit0"
     }
   ]
 }
