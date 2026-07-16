@@ -16,7 +16,19 @@
     "release"
   ],
   "terminal": "done",
-  "nodes": {},
+  "nodes": {
+    "triage": {
+      "kind": "audit",
+      "phase": "triage",
+      "depends_on": [],
+      "guard": "true",
+      "artifacts": [
+        "scripts/audit_triage.py"
+      ],
+      "context": "contexts/triage.md",
+      "notes": ""
+    }
+  },
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.29",
