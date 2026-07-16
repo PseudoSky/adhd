@@ -141,6 +141,14 @@
       "kind": "command",
       "cmd": "npx nx run-many -t test,build -p dispatch-tools",
       "expect": "exit0"
+    },
+    {
+      "id": "cli-complete.1",
+      "phase": "cli",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx run-many -t test,build -p dispatch-cli",
+      "expect": "exit0"
     }
   ]
 }
