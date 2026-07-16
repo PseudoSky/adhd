@@ -149,6 +149,16 @@
       "kind": "command",
       "cmd": "npx nx run-many -t test,build -p dispatch-cli",
       "expect": "exit0"
+    },
+    {
+      "id": "cli-complete.2",
+      "phase": "cli",
+      "tier": null,
+      "kind": "present",
+      "pattern": "\"bin\"",
+      "paths": [
+        "entrypoint/dispatch-cli/package.json"
+      ]
     }
   ]
 }
