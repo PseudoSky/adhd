@@ -54,6 +54,21 @@
       ],
       "context": "contexts/spec-audit.md",
       "notes": ""
+    },
+    "optimizer-client": {
+      "kind": "work",
+      "phase": "optimizer-client",
+      "depends_on": [
+        "spec-audit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/dispatch/dispatch-core-optimizer/src/lib/optimize.ts",
+        "packages/dispatch/dispatch-core-optimizer/src/lib/snapshot.ts",
+        "packages/dispatch/dispatch-core-client/src/lib/client.ts"
+      ],
+      "context": "contexts/optimizer-client.md",
+      "notes": ""
     }
   },
   "authored_with": {
