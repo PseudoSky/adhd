@@ -82,6 +82,19 @@
       ],
       "context": "contexts/opt-audit.md",
       "notes": ""
+    },
+    "orchestrator-harden": {
+      "kind": "work",
+      "phase": "orchestrator",
+      "depends_on": [
+        "opt-audit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts"
+      ],
+      "context": "contexts/orchestrator-harden.md",
+      "notes": ""
     }
   },
   "authored_with": {
