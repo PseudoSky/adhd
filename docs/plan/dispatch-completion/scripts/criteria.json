@@ -70,6 +70,16 @@
       "kind": "command",
       "cmd": "npx nx run-many -t test,build -p dispatch-orchestrator",
       "expect": "exit0"
+    },
+    {
+      "id": "orchestrator-harden.2",
+      "phase": "orchestrator",
+      "tier": null,
+      "kind": "absent",
+      "pattern": "ICalibrationPlaceholder",
+      "paths": [
+        "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts"
+      ]
     }
   ]
 }

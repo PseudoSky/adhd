@@ -18,6 +18,7 @@
 
 - [orchestrator-harden.1] orchestrator builds+tests green
 
+- [orchestrator-harden.2] ICalibrationPlaceholder is replaced by the real store
 ---
 
 ## Reservations
