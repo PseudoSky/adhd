@@ -30,6 +30,16 @@ against code, or ask.
 | `superseded/dispatch-completion/demo/` | **preserved** — the dispatcher demo |
 | `superseded/agent-registry/demo/` | **preserved** — the registry ingest/run demo |
 
+## Companion artifact (read alongside SYNTHESIS.md)
+
+[`docs/architecture/agent-dispatch-systems.md`](../../architecture/agent-dispatch-systems.md)
+— the current-state and target diagrams, verified against code rather than plan docs. It
+carries a **"NOT collisions — intended design"** section listing things that look broken
+and are not (plugins having zero static importers; the two DAGs being two altitudes; the
+name↔slug seam; `enforcement` as descriptive metadata). **Read that section before
+"fixing" anything** — five such false positives were raised and refuted in the session
+that produced this directory.
+
 ## What is NOT in scope of this directory
 
 `adhd-environment`, `apigen-*`, `infrastructure-backlog`, and `workspace-cleanup` remain

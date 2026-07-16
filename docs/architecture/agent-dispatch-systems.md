@@ -6,6 +6,21 @@ Every box/edge below was verified by reading source or `nx graph` — not inferr
 plan doc. Plans describe *intent*; this describes *reality*. Where they disagree, the
 plan is wrong.
 
+> **Companion:** [`docs/plan/agent-final/SYNTHESIS.md`](../plan/agent-final/SYNTHESIS.md)
+> is the inventory this map was built for — what is verifiably real, what the (now
+> quarantined) plans claimed, and the open questions. The entire agent+dispatch plan
+> corpus was superseded into
+> [`docs/plan/agent-final/superseded/`](../plan/agent-final/superseded/README.md);
+> **do not resume any plan from there.**
+>
+> **Design intent that governs all of this:** the registry packages exist for
+> **separability and reuse** of independently manageable concepts — agent definitions
+> need not depend on provider functionality; provider impl/config need not depend on
+> plugins or system prompts; tool definitions are agnostic. The goal is that each is
+> reusable in other contexts (e.g. an agent-building UI over the authoring system alone,
+> or provider configs with their own security parameters). **Judge every "defect" below
+> against that intent** — §2 lists five that looked like defects and were not.
+
 ---
 
 ## 1. CURRENT STATE (as of 2026-07-16)
