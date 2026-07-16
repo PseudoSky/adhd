@@ -310,6 +310,19 @@
       ],
       "context": "contexts/release-ready.md",
       "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "release",
+      "depends_on": [
+        "release-ready"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "scripts/audit_audit-final.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
     }
   },
   "authored_with": {
