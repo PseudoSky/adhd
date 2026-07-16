@@ -10,7 +10,8 @@
     "plugins",
     "storage",
     "tools",
-    "cli"
+    "cli",
+    "algorithms"
   ],
   "terminal": "done",
   "nodes": {},
