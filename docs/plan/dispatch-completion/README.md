@@ -143,3 +143,5 @@ Before: a `DispatchUnit` has no `execution_mode`; a complete milestone still rea
 - `[dod.8]` **validateDagJson rejects an unknown dispatch_log[].provider and accepts claudecli/teammate (DEBT-019); calibrate rejects a bad model tier before constructing the runner (DEBT-024). (structural)** — validateDagJson rejects an unknown dispatch_log[].provider and accepts claudecli/teammate (DEBT-019); calibrate rejects a bad model tier before constructing the runner (DEBT-024)..
 
 - `[dod.9]` **A DagSnapshot round-trips JSON.stringify/parse with no Infinity->null corruption in context_window_per_tier (DEBT-014). (structural)** — A DagSnapshot round-trips JSON.stringify/parse with no Infinity->null corruption in context_window_per_tier (DEBT-014)..
+
+- `[dod.10]` **optimizer-algorithms is data-gated: HELD with a recorded baseline when <15%/<3 cycles, else the cascade beats greedy on >=1 golden fixture (REQ-012). (structural)** — optimizer-algorithms is data-gated: HELD with a recorded baseline when <15%/<3 cycles, else the cascade beats greedy on >=1 golden fixture (REQ-012)..
