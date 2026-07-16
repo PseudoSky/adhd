@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [optimizer-algorithms.1] optimizer (algorithms held or shipped) builds+tests green
 
 ---
 

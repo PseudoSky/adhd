@@ -167,6 +167,14 @@
       "kind": "command",
       "cmd": "bash -c '! test -d packages/dispatch/dispatch-base-types'",
       "expect": "exit0"
+    },
+    {
+      "id": "optimizer-algorithms.1",
+      "phase": "algorithms",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx run-many -t test,build -p dispatch-core-optimizer",
+      "expect": "exit0"
     }
   ]
 }
