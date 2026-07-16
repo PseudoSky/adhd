@@ -122,5 +122,20 @@
       "dod.5",
       "dod.6"
     ]
+  },
+  "interfaces_provenance": {
+    "confirmed_at": "2026-07-16T02:13:48.852Z",
+    "by": "plan-orchestrator",
+    "agent": "architect-reviewer",
+    "note": "Interface contract-design pass: 7 entries re-grounded from defunct packages/ai/* to shipped packages/agent/* (agent-store-prompts, agent-store-tools, agent-core-policy, agent-core-provider, agent-engine-compiler); verified against real source; residual packages/ai refs are historical dependency-edge prose.",
+    "iface_ids": [
+      "better-sqlite3",
+      "yaml",
+      "registry-consumed",
+      "tool-registry-consumed",
+      "provider-consumed",
+      "policy-consumed",
+      "compiler-consumed"
+    ]
   }
 }
