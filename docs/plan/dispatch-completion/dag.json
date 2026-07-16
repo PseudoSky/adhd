@@ -1,8 +1,10 @@
 {
   "schema_version": 2,
   "title": "Dispatch Completion",
-  "plan_kind": "greenfield",
-  "phases": [],
+  "plan_kind": "brownfield",
+  "phases": [
+    "triage"
+  ],
   "terminal": "done",
   "nodes": {},
   "authored_with": {
