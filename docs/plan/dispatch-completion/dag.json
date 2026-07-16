@@ -8,7 +8,8 @@
     "optimizer-client",
     "orchestrator",
     "plugins",
-    "storage"
+    "storage",
+    "tools"
   ],
   "terminal": "done",
   "nodes": {},
