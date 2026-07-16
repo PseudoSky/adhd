@@ -141,3 +141,5 @@ Before: a `DispatchUnit` has no `execution_mode`; a complete milestone still rea
   - delivered-by: `plugin-io, plugin-gitnexus`
 
 - `[dod.8]` **validateDagJson rejects an unknown dispatch_log[].provider and accepts claudecli/teammate (DEBT-019); calibrate rejects a bad model tier before constructing the runner (DEBT-024). (structural)** — validateDagJson rejects an unknown dispatch_log[].provider and accepts claudecli/teammate (DEBT-019); calibrate rejects a bad model tier before constructing the runner (DEBT-024)..
+
+- `[dod.9]` **A DagSnapshot round-trips JSON.stringify/parse with no Infinity->null corruption in context_window_per_tier (DEBT-014). (structural)** — A DagSnapshot round-trips JSON.stringify/parse with no Infinity->null corruption in context_window_per_tier (DEBT-014)..
