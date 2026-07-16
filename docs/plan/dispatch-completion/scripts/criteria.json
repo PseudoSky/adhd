@@ -16,6 +16,14 @@
       "kind": "command",
       "cmd": "bash -c '! grep -q \"\\\"@adhd/dispatch-spec\\\"\" tsconfig.base.json'",
       "expect": "exit0"
+    },
+    {
+      "id": "spec-foundations.1",
+      "phase": "spec",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx run-many -t test,build -p dispatch-base-spec",
+      "expect": "exit0"
     }
   ]
 }
