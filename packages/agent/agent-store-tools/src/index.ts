@@ -40,6 +40,7 @@ export type {
 export {
   AgentToolStore,
   AgentToolStoreError,
+  DEFAULT_PERMISSION_LEVEL,
 } from './store/agent-tool-store.js';
 export type {
   AgentToolGrant,

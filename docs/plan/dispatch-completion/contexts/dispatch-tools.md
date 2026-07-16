@@ -1,12 +1,12 @@
 # dispatch-tools — STATE_NAME
 
-**Phase:** tools · **Kind:** work · **Depends on:** opt-audit · **Guard:** `true`
+**Phase:** tools · **Kind:** work · **Depends on:** opt-audit · **Guard:** `npx --yes nx run-many -t test,build -p dispatch-tools`
 
 ---
 
 ## Goal
 
-<What is true after this state that was not true before?>
+`@adhd/dispatch-tools` exposes MCP tools (`dag.milestone_add`/`pending_clear`) that author a valid dag through `DagClient` and reject cycle-forming edits.
 
 ---
 
@@ -31,4 +31,4 @@ mutates:    ["packages/dispatch/dispatch-tools/src/index.ts"]
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+Phase-0-gated: if EXEC-001 already shipped the full dispatch-tools package (its execution primitives), narrow this to any authoring-API gap or drop entirely (triage decides). DagClient is the sole CRUD authority ([inv:adapter-pattern], P2). Teeth (dod.11): tool-authored dag validates; a cycle-forming add is rejected and the dag is unchanged.

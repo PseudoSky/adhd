@@ -5,6 +5,18 @@
   "main": "./index.js",
   "module": "./index.mjs",
   "typings": "./index.d.ts",
+  "files": [
+    "*.js",
+    "*.mjs",
+    "*.d.ts",
+    "CHANGELOG.md",
+    "!*.test.*",
+    "!*.spec.*",
+    "!*.e2e.*",
+    "!vite.config.*",
+    "!project.json",
+    "!tsconfig*.json"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",

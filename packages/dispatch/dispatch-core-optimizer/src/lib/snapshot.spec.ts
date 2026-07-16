@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { snapshot, topoSortMilestones } from './snapshot.js';
-import type { DagSnapshot } from '@adhd/dispatch-spec';
+import type { DagSnapshot } from '@adhd/dispatch-base-spec';
 import {
   deepFreeze,
   defaultDeps,

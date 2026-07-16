@@ -150,3 +150,83 @@ describe('composeSchemas', () => {
     expect(Object.keys(getUserInput.properties)).toContain('session');
   });
 });
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-017 — additionalProperties:false (unknown params rejected, not ignored)
+// ---------------------------------------------------------------------------
+
+describe('composeSchemas — BUG-APIGEN-017: additionalProperties:false', () => {
+  it('top-level (envelope + data) schema rejects unknown properties', () => {
+    const composed = composeSchemas(domainSchemas, []);
+    const getUserInput = composed['getUser'].input as {
+      additionalProperties?: unknown;
+    };
+    // This is the exact assertion that catches the regression: if a future
+    // change drops `additionalProperties: false` from the composed schema,
+    // this goes from `false` back to `undefined` and the test fails.
+    expect(getUserInput.additionalProperties).toBe(false);
+  });
+
+  it('the nested "data" wrapper also rejects unknown properties (zero-arg tools included)', () => {
+    const composed = composeSchemas(domainSchemas, []);
+
+    const getUserData = (
+      composed['getUser'].input as { properties: Record<string, unknown> }
+    ).properties['data'] as { additionalProperties?: unknown };
+    expect(getUserData.additionalProperties).toBe(false);
+
+    // BUG-APIGEN-017's reported symptom: a ZERO-ARGUMENT tool (`listAll`)
+    // silently accepted a bogus `{ data: { provider: '...' } }` envelope.
+    const listAllData = (
+      composed['listAll'].input as { properties: Record<string, unknown> }
+    ).properties['data'] as { additionalProperties?: unknown };
+    expect(listAllData.additionalProperties).toBe(false);
+  });
+
+  it('additionalProperties:false holds regardless of middleware envelope fields', () => {
+    const composed = composeSchemas(domainSchemas, [
+      sessionMiddleware,
+      authMiddleware,
+    ]);
+    const getUserInput = composed['getUser'].input as {
+      additionalProperties?: unknown;
+    };
+    expect(getUserInput.additionalProperties).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-020 — the "data" envelope + naming convention is documented
+// ---------------------------------------------------------------------------
+
+describe('composeSchemas — BUG-APIGEN-020: envelope calling-convention documentation', () => {
+  it('every composed schema carries a top-level description explaining the "data" envelope', () => {
+    const composed = composeSchemas(domainSchemas, []);
+    for (const [fnName, schema] of Object.entries(composed)) {
+      const input = schema.input as { description?: unknown };
+      expect(typeof input.description, `${fnName} missing description`).toBe(
+        'string'
+      );
+      expect(input.description).toMatch(/"data"/);
+    }
+  });
+
+  it('a zero-parameter tool notes the envelope is an empty object, not that params exist', () => {
+    const composed = composeSchemas(domainSchemas, []);
+    const listAllInput = composed['listAll'].input as { description: string };
+    expect(listAllInput.description).toMatch(/empty object/);
+  });
+
+  it('when a middleware contributes an envelope field, the description names it and explains it is NOT part of "data"', () => {
+    const composed = composeSchemas(domainSchemas, [sessionMiddleware]);
+    const getUserInput = composed['getUser'].input as { description: string };
+    expect(getUserInput.description).toMatch(/"session"/);
+    expect(getUserInput.description).toMatch(/NOT domain data/);
+  });
+
+  it('with no middleware, the description does not mention envelope fields at all', () => {
+    const composed = composeSchemas(domainSchemas, []);
+    const getUserInput = composed['getUser'].input as { description: string };
+    expect(getUserInput.description).not.toMatch(/NOT domain data/);
+  });
+});

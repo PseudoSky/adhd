@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { DagJson, DagSnapshot } from '@adhd/dispatch-spec';
-import type { IDagSerializer } from '@adhd/dispatch-client';
+import type { DagJson, DagSnapshot } from '@adhd/dispatch-base-spec';
+import type { IDagSerializer } from '@adhd/dispatch-core-client';
 
 /**
  * Normalizes a DAG object, converting legacy object-based operations format to array format.

@@ -214,6 +214,57 @@ export class BindingStore {
   }
 
   /**
+   * [def:resolveCanonical] — The reverse of [def:resolve].
+   *
+   * Returns the canonical tool_name for (platformToolName, platformId), or
+   * throws BINDING_NOT_FOUND if no binding exists for that exact pair.
+   *
+   * Design decision (BUG-REGISTRY-002): implemented as an upstream store
+   * method rather than a client-side scan. The store already owns the single
+   * source of truth for the (tool_name, platform_id) <-> platform_tool_name
+   * mapping — a caller-side scan (`listForPlatform` + linear search) would
+   * just re-derive this same query outside the store, duplicating the
+   * lookup logic for every consumer (agent-registry-migration's frontmatter
+   * parser today, anything else tomorrow) instead of once, here. Reusing the
+   * store also means both directions are backed by the exact same table and
+   * index (`idx_bindings_platform`), so forward and reverse resolution can
+   * never drift apart.
+   *
+   * NOTE: (platform_tool_name, platform_id) is not itself a declared unique
+   * constraint — the table's real PK is (tool_name, platform_id). A binding
+   * catalog that seeds two different canonical tools under the same alias on
+   * one platform is a data-authoring bug upstream of this method (the seed
+   * data must keep aliases unique per platform for the reverse mapping to be
+   * well-defined); this method resolves to the first matching row, mirroring
+   * the same not-found semantics as [def:resolve].
+   *
+   * MUST filter on BOTH platform_tool_name AND platform_id — same rationale
+   * as [dod.1] on `resolve()`: omitting the platform filter would let a
+   * same-named alias on a different platform resolve to the wrong tool.
+   */
+  resolveCanonical(platformToolName: string, platformId: string): string {
+    const row = this.db
+      .select()
+      .from(toolPlatformBindingsTable)
+      .where(
+        and(
+          eq(toolPlatformBindingsTable.platformToolName, platformToolName),
+          eq(toolPlatformBindingsTable.platformId, platformId)
+        )
+      )
+      .get();
+
+    if (!row) {
+      throw new BindingStoreError(
+        'BINDING_NOT_FOUND',
+        `No binding found for platform tool name '${platformToolName}' on platform '${platformId}'`
+      );
+    }
+
+    return row.toolName;
+  }
+
+  /**
    * List all bindings for a given platform.
    * Used by @adhd/agent-engine-compiler to build the platform's tools: header.
    */

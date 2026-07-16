@@ -11,6 +11,9 @@
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
         "main": "entrypoint/agent-mcp/src/index.ts",
         "outputPath": "dist/entrypoint/agent-mcp",

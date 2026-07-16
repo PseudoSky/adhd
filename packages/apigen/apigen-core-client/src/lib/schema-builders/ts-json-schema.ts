@@ -10,7 +10,8 @@ import type { Config, CompletedConfig } from 'ts-json-schema-generator';
 import type { Project, SourceFile } from 'ts-morph';
 import { morphFallback } from './morph-fallback';
 import { buildMapSetTupleSchema } from './map-set-tuple';
-import { withResolvedType, walkType } from './morph-walk';
+import { withResolvedType, walkType, detectDiscriminator } from './morph-walk';
+import { X_APIGEN_LOGICAL } from '@adhd/apigen-base-logical';
 import {
   fileVersion,
   persistentSchemasFor,
@@ -510,6 +511,31 @@ function findDanglingRefs(
   return dangling;
 }
 
+/**
+ * BUG-APIGEN-019: if `schema` has a top-level `anyOf` (ts-json-schema-generator's
+ * rendering of a TS union), rewrite it to `oneOf` — a TS union is "exactly one
+ * of these shapes", which `oneOf` models correctly and `anyOf` does not — and
+ * attach an advisory `discriminator` when the branches share a common literal
+ * tag property. A no-op for any schema without a top-level `anyOf` (including
+ * ones ts-json-schema-generator already emits as `oneOf`).
+ */
+function normalizeTopLevelUnion(
+  schema: Record<string, unknown>
+): Record<string, unknown> {
+  const anyOf = schema['anyOf'];
+  if (!Array.isArray(anyOf) || anyOf.length < 2) return schema;
+  const variants = anyOf as Record<string, unknown>[];
+  const discriminator = detectDiscriminator(variants);
+  const rest: Record<string, unknown> = { ...schema };
+  delete rest['anyOf'];
+  return {
+    ...rest,
+    oneOf: variants,
+    ...(discriminator ? { discriminator } : {}),
+    [X_APIGEN_LOGICAL]: rest[X_APIGEN_LOGICAL] ?? 'union',
+  };
+}
+
 function runScalarAwareGenerator(
   config: Config,
   cacheable: boolean,
@@ -861,7 +887,13 @@ async function buildSchemaUncached(
       };
       // Path 1 keys off the stable real source file → cache the built program.
       const schema = runScalarAwareGenerator(config, true, session);
-      return schema as Record<string, unknown>;
+      // BUG-APIGEN-019: ts-json-schema-generator resolves a NAMED union type
+      // alias (e.g. `type Foo = A | B`) directly here (Path 1 never falls
+      // through to morph-walk for named types) and emits `anyOf` in its own
+      // schema — normalize the top-level union the same way Path 2/3 do, so
+      // named and inline union return types get the same `oneOf` +
+      // discriminator treatment.
+      return normalizeTopLevelUnion(schema as Record<string, unknown>);
     } catch {
       // Fall through to alias-injection path for anonymous / inline types.
     }

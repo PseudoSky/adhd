@@ -33,6 +33,7 @@
 // signatures (`Record`), arrays of complex types, and unions.
 
 import type { Node, Project, SourceFile, Type } from 'ts-morph';
+import { X_APIGEN_LOGICAL } from '@adhd/apigen-base-logical';
 
 /** Async element-schema builder — the shared `buildSchema` entrypoint, injected to avoid a circular import. */
 export type RecurseBuildSchema = (
@@ -165,7 +166,20 @@ export async function walkType(
     const variants = await Promise.all(
       members.map((m) => walkType(m, recurse, depth + 1))
     );
-    return { anyOf: variants };
+    // BUG-APIGEN-019: a TS union means the runtime value is EXACTLY ONE of
+    // these shapes — `oneOf` (mutually exclusive) is the semantically correct
+    // JSON-Schema keyword, not `anyOf` (any-match, which permits ambiguity
+    // and collapses towards a permissive schema when one arm is broad, e.g.
+    // `Record<string, unknown>`). When the variants also share a common
+    // literal-discriminant property (the `{ kind: 'dog' } | { kind: 'cat' }`
+    // shape), attach an advisory `discriminator` so consumers don't have to
+    // structurally diff the branches to know which one matched.
+    const discriminator = detectDiscriminator(variants);
+    return {
+      oneOf: variants,
+      ...(discriminator ? { discriminator } : {}),
+      [X_APIGEN_LOGICAL]: 'union',
+    };
   }
 
   // --- arrays ---------------------------------------------------------------
@@ -253,4 +267,79 @@ export async function walkType(
   // Anything else (intersections we can't frame, `unknown`, `any`, etc.) →
   // permissive empty schema, preserving the prior generator's behaviour.
   return {};
+}
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-019 — discriminator detection for inline (non-nominal) unions
+// ---------------------------------------------------------------------------
+
+/** Advisory discriminator metadata attached to a `oneOf` union fragment. */
+export interface InlineDiscriminator {
+  /** Name of the property shared by every branch that carries a distinct literal value. */
+  propertyName: string;
+  /**
+   * Literal value → JSON-Pointer into this schema's own `oneOf` array
+   * (e.g. `"dog": "#/oneOf/0"`). Inline branches have no `$ref`/`$defs`
+   * identity of their own, so — unlike `union.ts`'s $ref-based
+   * `buildUnionSchema` — the mapping target is a same-document pointer.
+   */
+  mapping: Record<string, string>;
+}
+
+/**
+ * Looks for a property name present in EVERY variant's schema whose value is
+ * a single-value string/number `enum` (i.e. a literal, such as `kind: 'dog'`)
+ * and whose literal values are pairwise distinct across variants. When found,
+ * returns the discriminator metadata; otherwise `undefined` — a plain `oneOf`
+ * (no discriminator) still correctly models "exactly one of these variants"
+ * even when the variants have no shared literal tag (e.g. a domain interface
+ * unioned with `Record<string, unknown>`).
+ */
+export function detectDiscriminator(
+  variants: ReadonlyArray<Record<string, unknown>>
+): InlineDiscriminator | undefined {
+  if (variants.length < 2) return undefined;
+
+  const propSets: Array<Record<string, unknown>> = [];
+  for (const v of variants) {
+    if (v['type'] !== 'object') return undefined;
+    const props = v['properties'];
+    if (!props || typeof props !== 'object') return undefined;
+    propSets.push(props as Record<string, unknown>);
+  }
+
+  const candidateNames = Object.keys(propSets[0]).filter((name) =>
+    propSets.every((p) => Object.prototype.hasOwnProperty.call(p, name))
+  );
+
+  for (const name of candidateNames) {
+    const values: string[] = [];
+    let allSingleLiteral = true;
+    for (const props of propSets) {
+      const propSchema = props[name] as Record<string, unknown> | undefined;
+      const isLiteralType =
+        propSchema &&
+        (propSchema['type'] === 'string' || propSchema['type'] === 'number');
+      const enumValues = propSchema?.['enum'];
+      if (
+        !isLiteralType ||
+        !Array.isArray(enumValues) ||
+        enumValues.length !== 1
+      ) {
+        allSingleLiteral = false;
+        break;
+      }
+      values.push(String(enumValues[0]));
+    }
+    if (!allSingleLiteral) continue;
+    if (new Set(values).size !== values.length) continue; // must be pairwise distinct
+
+    const mapping: Record<string, string> = {};
+    values.forEach((v, i) => {
+      mapping[v] = `#/oneOf/${i}`;
+    });
+    return { propertyName: name, mapping };
+  }
+
+  return undefined;
 }

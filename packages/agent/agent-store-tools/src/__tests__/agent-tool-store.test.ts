@@ -12,6 +12,7 @@ import * as schema from '../db/schema.js';
 import {
   AgentToolStore,
   AgentToolStoreError,
+  DEFAULT_PERMISSION_LEVEL,
 } from '../store/agent-tool-store.js';
 import type {
   AgentToolStoreErrorCode,
@@ -321,6 +322,107 @@ describe('AgentToolStore — persistence (close + reopen proves disk write)', ()
     expect(grants[0].contextCondition).toEqual(condition);
 
     closeDb(sqlite2);
+  });
+});
+
+// ──────────────────────────────────────────────
+// AgentToolStore.grant() — default `permission` — BUG-REGISTRY-002
+//
+// Design decision: `permission` becomes optional on AgentToolGrantInput,
+// defaulting to DEFAULT_PERMISSION_LEVEL ('full') when omitted, while an
+// EXPLICITLY-supplied value is still persisted verbatim (the pre-existing
+// [dod.3] negative-control above already proves that path; this block
+// proves the NEW default-fallback path, plus a negative control that the
+// default is specifically 'full' and not silently coerced to anything else).
+// ──────────────────────────────────────────────
+
+describe('AgentToolStore.grant() — default permission — BUG-REGISTRY-002', () => {
+  let tmpDir: string;
+  let dbPath: string;
+  let sqlite: InstanceType<typeof Database>;
+  let store: AgentToolStore;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-tool-registry-default-permission-')
+    );
+    dbPath = path.join(tmpDir, 'registry.db');
+    const { sqlite: s, db } = openDb(dbPath);
+    sqlite = s;
+    seedToolAndType(db);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    store = new AgentToolStore(db as any);
+  });
+
+  afterEach(() => {
+    try {
+      closeDb(sqlite);
+    } catch {
+      /* already closed */
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("DEFAULT_PERMISSION_LEVEL is exported and equals 'full'", () => {
+    // Pins the decided default value itself — this breaks if the constant's
+    // value is ever changed without an explicit, reviewed decision.
+    expect(DEFAULT_PERMISSION_LEVEL).toBe('full');
+  });
+
+  it('grant() applies DEFAULT_PERMISSION_LEVEL when permission is omitted', () => {
+    const grant = store.grant({
+      agentSlug: 'imported-agent',
+      toolName: 'file_read',
+      // permission omitted entirely — this is the migration import-flow shape
+    });
+
+    expect(grant.permission).toBe(DEFAULT_PERMISSION_LEVEL);
+    expect(grant.permission).toBe('full');
+  });
+
+  it("[dod.negative-control] omitted permission is NOT coerced to 'read_only' or 'restricted'", () => {
+    const grant = store.grant({
+      agentSlug: 'imported-agent-2',
+      toolName: 'file_read',
+    });
+
+    // This test would FAIL if the implementation defaulted to any level
+    // other than the decided DEFAULT_PERMISSION_LEVEL ('full').
+    expect(grant.permission).not.toBe('read_only');
+    expect(grant.permission).not.toBe('restricted');
+    expect(grant.permission).toBe('full');
+  });
+
+  it('an explicitly-supplied permission still wins over the default (not silently overridden)', () => {
+    const grant = store.grant({
+      agentSlug: 'explicit-agent',
+      toolName: 'file_read',
+      permission: 'restricted',
+    });
+
+    // Proves the default fallback (`??`) never clobbers an explicit value —
+    // this is the same invariant the pre-existing [dod.3] test guards,
+    // re-asserted here against the now-optional field.
+    expect(grant.permission).toBe('restricted');
+    expect(grant.permission).not.toBe(DEFAULT_PERMISSION_LEVEL);
+  });
+
+  it('[inv:reopen-proves-persistence] the applied default survives close+reopen', () => {
+    store.grant({
+      agentSlug: 'imported-agent-3',
+      toolName: 'file_read',
+    });
+
+    closeDb(sqlite);
+
+    const { sqlite: sqlite2, db: db2 } = openDb(dbPath);
+    sqlite = sqlite2;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const store2 = new AgentToolStore(db2 as any);
+
+    const grants = store2.listForAgent('imported-agent-3');
+    expect(grants).toHaveLength(1);
+    expect(grants[0].permission).toBe('full');
   });
 });
 

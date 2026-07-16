@@ -7,8 +7,8 @@
  * exercising the FULL dispatch-production product lifecycle end-to-end: cold
  * start -> author -> snapshot/optimize -> dispatch -> a second cycle -> a
  * guard failure -> its correction -> process resume. Every component is
- * REAL: `@adhd/dispatch-client`'s `DagClient` + `@adhd/dispatch-serializer-json`'s
- * real file serializer (atomic writes to a real file on disk), `@adhd/dispatch-optimizer`'s
+ * REAL: `@adhd/dispatch-core-client`'s `DagClient` + `@adhd/dispatch-serializer-json`'s
+ * real file serializer (atomic writes to a real file on disk), `@adhd/dispatch-core-optimizer`'s
  * real `snapshot()`/`optimize()`, `@adhd/dispatch-orchestrator`'s real
  * `orchestrateCycle()`, and `packages/dispatch/dispatch-cli/bin/cli.ts` (the
  * hand-written, fully-working CLI fallback) spawned as a real child process
@@ -76,7 +76,7 @@
  *   in-memory `DagJson` -> `saveDag`), which is exactly the same I/O contract
  *   the (not-yet-built) MCP tools would eventually sit in front of.
  * DRIFT-3 (snapshot+optimize / scenario 3): the milestone text asserts
- *   `sentinel_role === 'solo'`. `@adhd/dispatch-spec`'s real `SentinelRole`
+ *   `sentinel_role === 'solo'`. `@adhd/dispatch-base-spec`'s real `SentinelRole`
  *   type is `'prewarm' | 'payload'` only (types.ts) — `'solo'` is not a
  *   member. `optimize()`'s `assembleUnit` always emits `sentinel_role: null`
  *   (sentinel-fanout role assignment is explicitly deferred — see its own
@@ -214,10 +214,10 @@ import type {
   OperationDag,
   ProviderConfig,
   ValidationResult,
-} from '@adhd/dispatch-spec';
-import { createDagClient } from '@adhd/dispatch-client';
+} from '@adhd/dispatch-base-spec';
+import { createDagClient } from '@adhd/dispatch-core-client';
 import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
-import { snapshot, optimize } from '@adhd/dispatch-optimizer';
+import { snapshot, optimize } from '@adhd/dispatch-core-optimizer';
 import {
   orchestrateCycle,
   MockAgentRunner,

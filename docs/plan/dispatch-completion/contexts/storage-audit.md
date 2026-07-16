@@ -1,6 +1,6 @@
 # storage-audit — STATE_NAME
 
-**Phase:** storage · **Kind:** audit · **Depends on:** serializer-sqlite · **Guard:** `true`
+**Phase:** storage · **Kind:** audit · **Depends on:** serializer-sqlite · **Guard:** `python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase storage`
 
 ---
 

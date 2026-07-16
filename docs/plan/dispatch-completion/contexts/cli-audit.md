@@ -1,6 +1,6 @@
 # cli-audit — STATE_NAME
 
-**Phase:** cli · **Kind:** audit · **Depends on:** cli-complete · **Guard:** `true`
+**Phase:** cli · **Kind:** audit · **Depends on:** cli-complete · **Guard:** `python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase cli`
 
 ---
 

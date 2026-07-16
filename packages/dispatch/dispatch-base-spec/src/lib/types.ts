@@ -421,6 +421,16 @@ export interface DispatchResult {
   guard_result: GuardResult | null;
   guard_output: string | null;
   guard_ran_at: string | null;
+  /**
+   * Real outcome payload for `type: "tool-call"` operations (BUG-DISPATCH-EXEC-001
+   * / D-13, D-18). `null`/absent for every other op kind (generative,
+   * automated-guard). On success, the tool handler's own return value (e.g.
+   * `{ path, to }` for `fs.move`, `{ slug }` for `dag.add-milestone`). On
+   * failure, `{ error: string }` — never a silent 'skipped' with no payload.
+   * Optional for backward compatibility: every `dispatch_log` entry written
+   * before this field existed remains valid without it.
+   */
+  tool_result?: unknown | null;
 }
 export interface DispatchNote {
   level: 'info' | 'warn' | 'error';

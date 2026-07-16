@@ -2,7 +2,7 @@
  * core.spec.ts — integration tests for dispatch-cli's DI'd core, driven
  * through REAL components: real dag.json files under `tmp/dispatch-cli/`
  * written via `createJsonFileSerializer`/`createDagClient`, real
- * `@adhd/dispatch-optimizer` `snapshot()`/`optimize()` (transitively, inside
+ * `@adhd/dispatch-core-optimizer` `snapshot()`/`optimize()` (transitively, inside
  * `core.ts`), real `@adhd/dispatch-orchestrator` `orchestrateCycle()`. The
  * only test double anywhere in this file is `MockAgentRunner` — the
  * documented external boundary (a real agent-mcp dispatch is a paid
@@ -18,10 +18,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-import { createDagClient } from '@adhd/dispatch-client';
+import { createDagClient } from '@adhd/dispatch-core-client';
 import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
 import { MockAgentRunner } from '@adhd/dispatch-orchestrator';
-import type { DagJson } from '@adhd/dispatch-spec';
+import type { DagJson } from '@adhd/dispatch-base-spec';
 
 import {
   assertModelTier,

@@ -412,10 +412,17 @@ describe('url', () => {
   });
 
   it('forceHttp option with forceHttps', () => {
-    const e = normalizeUrl('https://www.sindresorhus.com', {
-      forceHttp: true,
-      forceHttps: true,
-    });
+    // normalizeUrl throws on bad options (real callers isValidUrl/getPatch
+    // both wrap it in try/catch) — it does not return the Error.
+    let e: Error;
+    try {
+      normalizeUrl('https://www.sindresorhus.com', {
+        forceHttp: true,
+        forceHttps: true,
+      });
+    } catch (err) {
+      e = err as Error;
+    }
     expectEqual(
       expect,
       e.message,
@@ -679,15 +686,33 @@ describe('url', () => {
   });
 
   it('invalid urls', () => {
-    let e;
-    e = normalizeUrl('http://');
-    expectEqual(expect, e.message, 'Invalid URL: http://');
+    // normalizeUrl throws (see forceHttp/forceHttps test above) — catch it.
+    const captureError = (fn: () => unknown): Error => {
+      try {
+        fn();
+      } catch (err) {
+        return err as Error;
+      }
+      throw new Error('expected normalizeUrl to throw');
+    };
 
-    e = normalizeUrl('/');
-    expectEqual(expect, e.message, 'Invalid URL: /');
+    expectEqual(
+      expect,
+      captureError(() => normalizeUrl('http://')).message,
+      'Invalid URL: http://'
+    );
 
-    e = normalizeUrl('/relative/path/');
-    expectEqual(expect, e.message, 'Invalid URL: /relative/path/');
+    expectEqual(
+      expect,
+      captureError(() => normalizeUrl('/')).message,
+      'Invalid URL: /'
+    );
+
+    expectEqual(
+      expect,
+      captureError(() => normalizeUrl('/relative/path/')).message,
+      'Invalid URL: /relative/path/'
+    );
   });
 
   it('remove duplicate pathname slashes', () => {
@@ -740,8 +765,13 @@ describe('url', () => {
   // });
 
   it('data URL', () => {
-    // Invalid URL.
-    const e = normalizeUrl('data:');
+    // Invalid URL — normalizeUrl throws (see 'invalid urls' test above).
+    let e: Error;
+    try {
+      normalizeUrl('data:');
+    } catch (err) {
+      e = err as Error;
+    }
     expectEqual(expect, e.message, 'Invalid URL: data:');
 
     // Strip default MIME type

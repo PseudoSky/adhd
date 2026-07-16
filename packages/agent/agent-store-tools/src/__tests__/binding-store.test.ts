@@ -437,6 +437,21 @@ describe('BindingStore.resolve — [def:resolve] / [dod.1] [platform-and-binding
     closeDb(sqlite);
   });
 
+  it('resolveCanonical throws BINDING_NOT_FOUND for unknown platform tool name', () => {
+    const { sqlite, db } = openDb(dbPath);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bindingStore = new BindingStore(db as any);
+
+    bindingStore.seedPlatform(CLAUDE_CODE_PLATFORM);
+
+    expectBindingStoreError(
+      () => bindingStore.resolveCanonical('NoSuchAlias', 'claude_code'),
+      'BINDING_NOT_FOUND'
+    );
+
+    closeDb(sqlite);
+  });
+
   it('[inv:reopen-proves-persistence] platform rows survive a close+reopen', () => {
     // ── Write phase ───────────────────────────────────────────────────────
     const { sqlite: sqlite1, db: db1 } = openDb(dbPath);
@@ -465,5 +480,152 @@ describe('BindingStore.resolve — [def:resolve] / [dod.1] [platform-and-binding
     expect(byId['openai'].supportsToolSelection).toBe(false);
 
     closeDb(sqlite2);
+  });
+});
+
+// ──────────────────────────────────────────────
+// Tests: BindingStore.resolveCanonical — BUG-REGISTRY-002
+//
+// Design decision: an upstream reverse-lookup method (alias -> canonical),
+// not a client-side scan — see the JSDoc on resolveCanonical() in
+// binding-store.ts for the rationale. This is exactly the direction
+// agent-registry-migration's frontmatter parser needs: a `tools:` token
+// (e.g. "Bash") plus the source platform -> the canonical tool id
+// ("shell_exec").
+// ──────────────────────────────────────────────
+
+describe('BindingStore.resolveCanonical — BUG-REGISTRY-002 reverse lookup', () => {
+  let tmpDir: string;
+  let dbPath: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-binding-resolve-canonical-')
+    );
+    dbPath = path.join(tmpDir, 'registry.db');
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  /** Seed shell_exec bound to "Bash" on claude_code and "bash" on claude_api. */
+  function seedTwoPlatformBindings(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    db: any
+  ): void {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toolStore = new ToolStore(db as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bindingStore = new BindingStore(db as any);
+
+    toolStore.seedToolType(IO_TYPE);
+    toolStore.create(SHELL_EXEC_TOOL);
+    bindingStore.seedPlatform(CLAUDE_CODE_PLATFORM);
+    bindingStore.seedPlatform(CLAUDE_API_PLATFORM);
+
+    bindingStore.createBinding({
+      toolName: 'shell_exec',
+      platformId: 'claude_code',
+      platformToolName: 'Bash',
+      availability: 'available',
+    });
+    bindingStore.createBinding({
+      toolName: 'shell_exec',
+      platformId: 'claude_api',
+      platformToolName: 'bash',
+      availability: 'available',
+    });
+  }
+
+  it('[inv:reopen-proves-persistence] resolveCanonical inverts resolve after close+reopen (alias -> canonical)', () => {
+    const { sqlite: sqlite1, db: db1 } = openDb(dbPath);
+    seedTwoPlatformBindings(db1);
+    closeDb(sqlite1);
+
+    const { sqlite: sqlite2, db: db2 } = openDb(dbPath);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bindingStore = new BindingStore(db2 as any);
+
+    expect(bindingStore.resolveCanonical('Bash', 'claude_code')).toBe(
+      'shell_exec'
+    );
+    expect(bindingStore.resolveCanonical('bash', 'claude_api')).toBe(
+      'shell_exec'
+    );
+
+    closeDb(sqlite2);
+  });
+
+  it('[dod.roundtrip] canonical -> alias -> canonical is the identity, for every seeded platform', () => {
+    const { sqlite, db } = openDb(dbPath);
+    seedTwoPlatformBindings(db);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bindingStore = new BindingStore(db as any);
+
+    for (const platformId of ['claude_code', 'claude_api']) {
+      const alias = bindingStore.resolve('shell_exec', platformId);
+      const roundTripped = bindingStore.resolveCanonical(alias, platformId);
+      expect(roundTripped).toBe('shell_exec');
+    }
+
+    closeDb(sqlite);
+  });
+
+  it('[dod.negative-control] resolveCanonical honors the platform filter — the same alias means different things per platform', () => {
+    // This test would FAIL if resolveCanonical ignored platformId and matched
+    // the first row with a given platform_tool_name across all platforms.
+    const { sqlite, db } = openDb(dbPath);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toolStore = new ToolStore(db as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bindingStore = new BindingStore(db as any);
+
+    toolStore.seedToolType(IO_TYPE);
+    toolStore.create(SHELL_EXEC_TOOL);
+    toolStore.create(FILE_READ_TOOL);
+    bindingStore.seedPlatform(CLAUDE_CODE_PLATFORM);
+    bindingStore.seedPlatform(CLAUDE_API_PLATFORM);
+
+    // Same alias string "T" means shell_exec on claude_code but file_read on
+    // claude_api — a deliberately adversarial fixture for the negative
+    // control (real catalogs would not do this; the test proves the
+    // platform_id filter, not "realistic" seed data).
+    bindingStore.createBinding({
+      toolName: 'shell_exec',
+      platformId: 'claude_code',
+      platformToolName: 'T',
+      availability: 'available',
+    });
+    bindingStore.createBinding({
+      toolName: 'file_read',
+      platformId: 'claude_api',
+      platformToolName: 'T',
+      availability: 'available',
+    });
+
+    expect(bindingStore.resolveCanonical('T', 'claude_code')).toBe(
+      'shell_exec'
+    );
+    expect(bindingStore.resolveCanonical('T', 'claude_api')).toBe(
+      'file_read'
+    );
+
+    closeDb(sqlite);
+  });
+
+  it('resolveCanonical throws BINDING_NOT_FOUND for a known alias on the wrong platform', () => {
+    const { sqlite, db } = openDb(dbPath);
+    seedTwoPlatformBindings(db);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bindingStore = new BindingStore(db as any);
+
+    // "Bash" is claude_code's alias, not claude_api's ("bash", lowercase).
+    expectBindingStoreError(
+      () => bindingStore.resolveCanonical('Bash', 'claude_api'),
+      'BINDING_NOT_FOUND'
+    );
+
+    closeDb(sqlite);
   });
 });

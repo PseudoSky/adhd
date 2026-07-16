@@ -9,12 +9,40 @@
  * (the apigen `pass=0/0` drift class).
  *
  * Usage:
- *   node scripts/run-audit.js [--phase <phase>] [--criteria <file>]
+ *   node scripts/run-audit.js [--phase <phase>] [--criteria <file>] [--repo-root <path>]
  *
- *   --phase  ""   run all phases (the Python harness's empty-phase shape)
- *   --phase  X    run phase X + every phase ordered before it (accumulation)
- *   --criteria    path to the criteria file (default: scripts/criteria.json,
- *                 then <planDir>/criteria.json relative to cwd)
+ *   --phase       ""   run all phases (the Python harness's empty-phase shape)
+ *   --phase       X    run phase X + every phase ordered before it (accumulation)
+ *   --criteria         path to the criteria file (default: scripts/criteria.json,
+ *                      then <planDir>/criteria.json relative to cwd)
+ *   --repo-root        explicit repo root (BL-96(1) opt-in, see below). Falls
+ *                      back to `git rev-parse --show-toplevel` from cwd, then
+ *                      to cwd itself, when omitted.
+ *
+ * BL-96(1) — cwd resolution is OPT-IN, never implicit (migration note):
+ * The runner's own cwd is whatever the caller sets (state-transition.js runs it
+ * with `cwd: planDir` so plan-relative paths — the common case — resolve
+ * unqualified). A criterion authored with a REPO-ROOT-relative path (e.g.
+ * `libs/foo/bar.ts` from a plan several directories deep) silently fails to
+ * resolve against planDir cwd — that was BL-96's reported defect (4/128 checks
+ * failed in one run). The declined `604d` inbox note explored unifying guard +
+ * audit onto one shared cwd outright but was correctly declined: that requires
+ * a path-relativity convention decision plus a live-plan migration sweep, and
+ * flipping the DEFAULT cwd for every criterion in every in-flight plan risks
+ * silently breaking correctly-authored plan-relative paths.
+ *
+ * Instead, resolution is explicit per-criterion and additive-only — a criterion
+ * unsets `cwd` (the default) keeps running exactly as before (planDir/whatever
+ * the caller's cwd is); an author who needs a repo-root-relative check opts in
+ * with `"cwd": "repo-root"` (kinds `exists`/`present`/`absent`/`command`/
+ * `custom`/`negative-control`), which resolves against `--repo-root` (or the
+ * git toplevel autodetected from cwd when the flag is absent). Every
+ * `command`/`custom`/`negative-control` child process ALSO always receives a
+ * `REPO_ROOT` env var (regardless of the per-criterion `cwd` field) so a shell
+ * command can `cd "$REPO_ROOT"` itself without a schema opt-in at all. Zero
+ * live plan (grep across the repo, 2026-07-09) currently authors a
+ * `criteria.json`, so this is a pure addition with no migration required for
+ * any existing plan.
  *
  * Contract (SPEC §4.3):
  *   - one `[id] PASS/FAIL` per line, on its OWN line, flushed (pt 3);
@@ -102,6 +130,13 @@ function normalizeCriterion(raw, index) {
   if (raw.kind === "custom" && raw.args !== undefined && !Array.isArray(raw.args)) {
     throw new Error(`criteria: ${where} (kind custom) "args" must be an array`);
   }
+  // BL-96(1) — optional, additive-only cwd-resolution opt-in. Unset (default)
+  // keeps the criterion resolving against the runner's own cwd (unchanged
+  // behavior for every existing plan). "repo-root" opts a single criterion
+  // into resolving against --repo-root instead — see module header.
+  if (raw.cwd !== undefined && raw.cwd !== "plan" && raw.cwd !== "repo-root") {
+    throw new Error(`criteria: ${where} "cwd" must be "plan" or "repo-root" when present`);
+  }
   return { id: raw.id, phase: raw.phase ?? null, tier: typeof raw.tier === "number" ? raw.tier : null, kind: raw.kind, ...raw };
 }
 
@@ -173,11 +208,26 @@ function grepMatches(pattern, paths, cwd) {
   return false;
 }
 
-/** Run a shell command; return { code, out } with combined stdout+stderr. */
-function runShell(cmd, cwd) {
-  const r = spawnSync(cmd, { shell: true, cwd, encoding: "utf8" });
+/** Run a shell command; return { code, out } with combined stdout+stderr.
+ *  `env` (optional) is merged over process.env for the child — used to expose
+ *  REPO_ROOT (BL-96(1)) without changing the child's cwd. */
+function runShell(cmd, cwd, env) {
+  const r = spawnSync(cmd, { shell: true, cwd, encoding: "utf8", env: env ? { ...process.env, ...env } : process.env });
   const out = `${r.stdout || ""}${r.stderr || ""}`;
   return { code: typeof r.status === "number" ? r.status : 1, out };
+}
+
+/**
+ * BL-96(1) — resolve the base directory a criterion's paths/spawn-cwd resolve
+ * against. Default ("plan", i.e. `c.cwd` unset) is the runner's own cwd —
+ * byte-identical to pre-BL-96 behavior. A criterion that opts in with
+ * `"cwd": "repo-root"` resolves against `repoRoot` instead, falling back to
+ * `cwd` itself when no repo root could be determined (never throws — a
+ * criterion missing a resolvable repo root degrades to the old behavior
+ * rather than crashing the whole audit run).
+ */
+function resolveBase(c, cwd, repoRoot) {
+  return c.cwd === "repo-root" && repoRoot ? repoRoot : cwd;
 }
 
 /**
@@ -185,19 +235,24 @@ function runShell(cmd, cwd) {
  * `captured` accumulates child stdout/stderr ONLY for the run log — it is never
  * scanned for `[id]` markers (SCOPE §4 #7).
  */
-function evaluate(c, cwd, captured) {
+function evaluate(c, cwd, captured, repoRoot) {
+  const base = resolveBase(c, cwd, repoRoot);
+  // Always exposed to command/custom/negative-control children, independent of
+  // the per-criterion cwd opt-in — lets a shell command `cd "$REPO_ROOT"` on
+  // its own without touching the schema (BL-96(1)).
+  const childEnv = { REPO_ROOT: repoRoot || cwd };
   switch (c.kind) {
     case "absent":
       // pass iff NO path matches the pattern (the expect_empty case).
-      return { pass: !grepMatches(c.pattern, c.paths, cwd) };
+      return { pass: !grepMatches(c.pattern, c.paths, base) };
     case "present":
-      return { pass: grepMatches(c.pattern, c.paths, cwd) };
+      return { pass: grepMatches(c.pattern, c.paths, base) };
     case "exists": {
-      const full = path.isAbsolute(c.path) ? c.path : path.join(cwd, c.path);
+      const full = path.isAbsolute(c.path) ? c.path : path.join(base, c.path);
       return { pass: fs.existsSync(full) };
     }
     case "command": {
-      const { code, out } = runShell(c.cmd, cwd);
+      const { code, out } = runShell(c.cmd, base, childEnv);
       captured.push(`# [${c.id}] command exit=${code}\n${out}`);
       const expect = c.expect ?? "exit0";
       if (expect === "marker") return { pass: out.includes(c.marker) };
@@ -205,7 +260,7 @@ function evaluate(c, cwd, captured) {
     }
     case "custom": {
       const args = Array.isArray(c.args) ? c.args : [];
-      const r = spawnSync("node", [c.script, ...args], { cwd, encoding: "utf8" });
+      const r = spawnSync("node", [c.script, ...args], { cwd: base, encoding: "utf8", env: { ...process.env, ...childEnv } });
       const out = `${r.stdout || ""}${r.stderr || ""}`;
       captured.push(`# [${c.id}] custom ${c.script} exit=${r.status}\n${out}`);
       // custom stdout is NEVER parsed for markers; pass iff exit 0.
@@ -215,8 +270,8 @@ function evaluate(c, cwd, captured) {
       // positive→mutate→assert positive now FAILS→restore (always restore).
       let pass = false;
       try {
-        runShell(c.mutate, cwd);
-        const { code, out } = runShell(c.positive, cwd);
+        runShell(c.mutate, base, childEnv);
+        const { code, out } = runShell(c.positive, base, childEnv);
         captured.push(`# [${c.id}] neg-control positive-under-mutation exit=${code}\n${out}`);
         const expect = c.expect ?? "exit0";
         // The positive check must now FAIL: for exit0 that means non-zero;
@@ -227,7 +282,7 @@ function evaluate(c, cwd, captured) {
         captured.push(`# [${c.id}] neg-control error: ${e.message}`);
         pass = false;
       } finally {
-        runShell(c.restore, cwd);
+        runShell(c.restore, base, childEnv);
       }
       return { pass };
     }
@@ -257,8 +312,12 @@ function resolveCriteriaFile(args, cwd) {
  * `[id] PASS/FAIL` strings (one per criterion). Pure-ish: it does spawn child
  * processes per kind, but does not write stdout — the caller flushes lines so
  * tests can both capture and assert the failure count directly.
+ *
+ * `repoRoot` (BL-96(1), optional) is threaded to each criterion's evaluation —
+ * only criteria that opt in with `"cwd": "repo-root"` are affected; every
+ * command/custom/negative-control child also gets it as `$REPO_ROOT` regardless.
  */
-export function runCriteria(doc, { phase, cwd }) {
+export function runCriteria(doc, { phase, cwd, repoRoot }) {
   const { criteria } = validateCriteriaDoc(doc);
   const selected = selectCriteria(criteria, phase);
   const lines = [];
@@ -267,7 +326,7 @@ export function runCriteria(doc, { phase, cwd }) {
   for (const c of selected) {
     let pass;
     try {
-      pass = evaluate(c, cwd, captured).pass;
+      pass = evaluate(c, cwd, captured, repoRoot).pass;
     } catch (e) {
       captured.push(`# [${c.id}] evaluation error: ${e.message}`);
       pass = false;
@@ -276,6 +335,21 @@ export function runCriteria(doc, { phase, cwd }) {
     lines.push(`[${c.id}] ${pass ? "PASS" : "FAIL"}`);
   }
   return { failures, total: selected.length, lines, captured };
+}
+
+/**
+ * BL-96(1) — resolve the repo root for the "cwd": "repo-root" opt-in. Explicit
+ * `--repo-root` wins; otherwise autodetect via `git rev-parse --show-toplevel`
+ * from `cwd` (best-effort — a non-repo cwd or missing git yields null, which
+ * `resolveBase` treats as "no opt-in available", degrading to unchanged
+ * behavior rather than throwing).
+ */
+function resolveRepoRoot(args, cwd) {
+  const explicit = argValue(args, "--repo-root");
+  if (explicit) return path.isAbsolute(explicit) ? explicit : path.join(cwd, explicit);
+  const r = spawnSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8" });
+  const out = (r.stdout || "").trim();
+  return typeof r.status === "number" && r.status === 0 && out ? out : null;
 }
 
 function main() {
@@ -290,6 +364,7 @@ function main() {
   // --phase passthrough: an empty value means "all phases" (SPEC §4.3 pt 2).
   // argValue returns null when the flag is absent → treat as all phases too.
   const phaseRaw = args.includes("--phase") ? (argValue(args, "--phase") ?? "") : "";
+  const repoRoot = resolveRepoRoot(args, cwd);
 
   const criteriaFile = resolveCriteriaFile(args, cwd);
   if (!criteriaFile) {
@@ -310,7 +385,7 @@ function main() {
 
   let result;
   try {
-    result = runCriteria(doc, { phase: phaseRaw, cwd });
+    result = runCriteria(doc, { phase: phaseRaw, cwd, repoRoot });
   } catch (e) {
     process.stdout.write("[audit.bad-criteria] FAIL\n");
     process.stderr.write(`run-audit: ${e.message}\n`);

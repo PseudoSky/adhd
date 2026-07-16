@@ -27,6 +27,13 @@ export const groupedUsageRowSchema = z.object({
   avgLatencyMs: z.number().nonnegative(),
   cacheReadTokens: z.number().int().nonnegative().nullable(),
   cacheCreationTokens: z.number().int().nonnegative().nullable(),
+  /** Full-price (cache-miss) input. This — not inputTokens — drives real cost per group.
+   * BUG-ORCH-009 follow-up: previously dropped from the grouped view. */
+  uncachedInputTokens: z.number().int().nonnegative().nullable(),
+  /** Reasoning tokens (reasoning models); billed as output. */
+  reasoningTokens: z.number().int().nonnegative().nullable(),
+  /** PEAK single-call input across the group (a MAX, not a SUM) — see peakContextTokens. */
+  peakContextTokens: z.number().int().nonnegative().nullable(),
 });
 export type GroupedUsageRow = z.infer<typeof groupedUsageRowSchema>;
 

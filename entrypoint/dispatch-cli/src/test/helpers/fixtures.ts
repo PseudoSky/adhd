@@ -15,7 +15,7 @@ import type {
   MilestoneDag,
   OperationDag,
   ProviderConfig,
-} from '@adhd/dispatch-spec';
+} from '@adhd/dispatch-base-spec';
 
 /** A guard command that always passes — cheap, real, no network. */
 export const PASS_GUARD = 'node -e "process.exit(0)"';
@@ -131,7 +131,7 @@ export function makeFixtureDag(overrides: Partial<DagJson> = {}): DagJson {
  * rules this package's commands rely on: `DagClient.isMilestoneComplete`
  * (`getEligibleMilestones`, used by `eligibleCore`) requires every one of
  * the milestone's own operation ids to have a `status: 'complete'` result;
- * `@adhd/dispatch-optimizer`'s `deriveMilestoneStatus` (`snapshot()`, used
+ * `@adhd/dispatch-core-optimizer`'s `deriveMilestoneStatus` (`snapshot()`, used
  * by `snapshotCore`/`optimizeCore`/`statusCore`) requires a `'<slug>.guard'`
  * result with `guard_result: 'pass'`. A REAL orchestrator cycle
  * (`dispatchUnit` in `@adhd/dispatch-orchestrator`) always writes both in

@@ -83,6 +83,41 @@ export interface InternalExtractionSession extends ExtractionSession {
   statVersion(pathStr: string): string;
 }
 
+/**
+ * DEBT-APIGEN-CACHE-001: recursively walks `sf`'s local (non-`node_modules`)
+ * `import`/`export ... from` targets, refreshing each visited file from disk
+ * before descending into ITS imports (so edits to files 2+ hops away are
+ * also detected), and accumulates every visited file path into `seen`.
+ *
+ * Pure AST-level module resolution (`getModuleSpecifierSourceFile()`) — this
+ * does not require the type checker to have run, so it's cheap enough to run
+ * once per `sourceFileFor()` call (once per extraction entry file per run),
+ * not once per `buildSchema()` call.
+ */
+function collectReferencedFiles(sf: SourceFile, seen: Set<string>): void {
+  const specifierSourceFiles = [
+    ...sf.getImportDeclarations().map((d) => d.getModuleSpecifierSourceFile()),
+    ...sf.getExportDeclarations().map((d) => d.getModuleSpecifierSourceFile()),
+  ];
+  for (const target of specifierSourceFiles) {
+    if (!target) continue; // unresolved (bare package import, ambient module, …)
+    const targetPath = target.getFilePath();
+    if (targetPath.includes('/node_modules/')) continue;
+    if (seen.has(targetPath)) continue;
+    seen.add(targetPath);
+    try {
+      target.refreshFromFileSystemSync();
+    } catch {
+      // Deleted/unreadable — leave as last-known content; the outer
+      // statVersion() call will still pick up a changed mtime/size if the
+      // file is later restored, and a genuinely missing file simply stops
+      // contributing to the composite version (matches fileVersion()'s own
+      // 'nostat' sentinel behavior for a missing entry file).
+    }
+    collectReferencedFiles(target, seen);
+  }
+}
+
 /** Compute a file's `mtimeMs:size` version string (uncached). */
 export function fileVersion(pathStr: string): string {
   try {
@@ -239,6 +274,26 @@ export function createExtractionSession(): ExtractionSession {
         sf.refreshFromFileSystemSync();
       }
       entry?.fileVersions.set(filePath, version);
+
+      // DEBT-APIGEN-CACHE-001: also snapshot every LOCAL file this entry file
+      // transitively imports (a type imported from another file, changed
+      // without the entry file itself changing, was previously invisible to
+      // `persistentSchemasFor`'s composite version stamp — it only tracked
+      // whichever files happened to ALSO be extraction entry points in this
+      // process). Refreshing each visited file from disk before reading its
+      // own imports keeps the walk correct for changes N hops deep (e.g. the
+      // entry imports B, B's on-disk content changed and now imports a new
+      // C — refreshing B surfaces that new edge). node_modules is excluded:
+      // we only chase the user's own source graph, not vendored .d.ts churn.
+      if (entry) {
+        const seen = new Set<string>([filePath]);
+        collectReferencedFiles(sf, seen);
+        for (const refPath of seen) {
+          if (refPath === filePath) continue;
+          entry.fileVersions.set(refPath, this.statVersion(refPath));
+        }
+      }
+
       return sf;
     },
 

@@ -6,12 +6,55 @@ interface SlimMiddleware {
 }
 
 /**
+ * BUG-APIGEN-020: builds the human-readable calling-convention note that
+ * apigen stamps onto every composed input schema's top-level `description`.
+ *
+ * Consumers (agents, MCP hosts) otherwise have to discover by trial and error
+ * that (a) ALL domain parameters are wrapped in a `data: {}` envelope, and
+ * (b) any transport-level envelope fields (session, auth token, …) are NOT
+ * part of `data` — for MCP specifically they travel via
+ * `arguments._meta["x-<pluginId>-<field>"]` (see `@adhd/apigen-naming`
+ * `envelopeMetaKey`), not as sibling properties of `data`.
+ */
+function buildEnvelopeDescription(
+  envelopeFieldNames: readonly string[],
+  hasDomainParams: boolean
+): string {
+  const parts: string[] = [
+    `apigen calling convention: all domain parameters go inside a "data" envelope — ` +
+      `e.g. { "data": { ... } }` +
+      (hasDomainParams ? '.' : ' (an empty object for this zero-parameter tool).'),
+  ];
+  if (envelopeFieldNames.length > 0) {
+    parts.push(
+      `Field(s) ${envelopeFieldNames
+        .map((f) => `"${f}"`)
+        .join(', ')} are transport-level envelope metadata, NOT domain data — ` +
+        `do not nest them under "data". Over MCP they are read from ` +
+        `arguments._meta["x-<pluginId>-<field>"] (default pluginId "adhd"); ` +
+        `see @adhd/apigen-naming's envelopeMetaKey/envelopeCliFlag/envelopeEnvVar ` +
+        `for the HTTP-header / CLI-flag / env-var equivalents.`
+    );
+  }
+  return parts.join(' ');
+}
+
+/**
  * Merges domain schemas with middleware envelope fields.
  *
  * The `data: {}` wrapper is **always present** even for zero-param functions
  * [inv:data-wrapper-always-present]. Override a middleware with `false` to
  * suppress its envelope contribution for a specific function
  * [inv:false-suppresses-middleware].
+ *
+ * BUG-APIGEN-017: both the top-level (envelope + data) object and the nested
+ * `data` object are generated with `additionalProperties: false` so MCP hosts
+ * (and any other JSON-Schema-validating consumer) reject unknown parameters
+ * instead of silently discarding them.
+ *
+ * BUG-APIGEN-020: the top-level schema also carries a `description` that
+ * documents the `data` envelope + any transport-envelope fields — see
+ * {@link buildEnvelopeDescription}.
  */
 export function composeSchemas(
   domainSchemas: GeneratedSchemas,
@@ -44,9 +87,11 @@ export function composeSchemas(
     }
 
     // data: {} wrapper — always present, even for zero-param fns [inv:data-wrapper-always-present]
+    // BUG-APIGEN-017: additionalProperties:false — unknown domain params are rejected, not ignored.
     const dataSchema: Record<string, unknown> = {
       type: 'object',
       properties: domainProperties,
+      additionalProperties: false,
       ...(domainRequired.length > 0 ? { required: domainRequired } : {}),
     };
 
@@ -55,6 +100,14 @@ export function composeSchemas(
         type: 'object',
         properties: { ...envelopeProperties, data: dataSchema },
         required: [...envelopeRequired, 'data'],
+        // BUG-APIGEN-017: reject any property that isn't a declared envelope
+        // field or the "data" wrapper — no silently-ignored junk params.
+        additionalProperties: false,
+        // BUG-APIGEN-020: document the envelope/data calling convention inline.
+        description: buildEnvelopeDescription(
+          Object.keys(envelopeProperties),
+          Object.keys(domainProperties).length > 0
+        ),
       },
       output: fnSchema.output,
       // Carry the ctx-param flag through to dispatch (BUG-APIGEN-001).

@@ -204,9 +204,13 @@ interface BudgetAccumulator {
   agentName: string;
   providerType: string;
   startedAtMs: number;
+  // `inputTokens` is already the provider-neutral TOTAL (uncached + cache-read +
+  // cache-creation summed at the provider boundary — see BUG-ORCH-010's
+  // normaliseAnthropicUsage/normaliseOpenAIUsage). There is deliberately no separate
+  // cacheTokens accumulator here: adding cache totals on top of inputTokens would
+  // double-count the cached portion (the bug this comment replaces).
   inputTokens: number;
   outputTokens: number;
-  cacheTokens: number;
   modelCalls: number;
   totalModelMs: number;
   modelCallStartMs?: number;
@@ -216,7 +220,6 @@ interface BudgetAccumulator {
 interface UsageTotals {
   inputTokens: number;
   outputTokens: number;
-  cacheTokens: number;
   modelCalls: number;
 }
 
@@ -306,7 +309,6 @@ class BudgetPlugin implements Plugin {
       startedAtMs: Date.now(),
       inputTokens: 0,
       outputTokens: 0,
-      cacheTokens: 0,
       modelCalls: 0,
       totalModelMs: 0,
       toolCalls: new Map(),
@@ -323,10 +325,10 @@ class BudgetPlugin implements Plugin {
     if (!acc) return;
     const usage = p.tokenUsage;
     if (usage) {
+      // usage.inputTokens is already the true total (BUG-ORCH-010) — do not also add
+      // usage.cacheReadTokens/cacheCreationTokens, they are a subset of it, not additive.
       acc.inputTokens += usage.inputTokens ?? 0;
       acc.outputTokens += usage.outputTokens ?? 0;
-      acc.cacheTokens +=
-        (usage.cacheReadTokens ?? 0) + (usage.cacheCreationTokens ?? 0);
     }
     acc.modelCalls += 1;
     if (acc.modelCallStartMs !== undefined) {
@@ -401,10 +403,9 @@ class BudgetPlugin implements Plugin {
       ? {
           inputTokens: acc.inputTokens,
           outputTokens: acc.outputTokens,
-          cacheTokens: acc.cacheTokens,
           modelCalls: acc.modelCalls,
         }
-      : { inputTokens: 0, outputTokens: 0, cacheTokens: 0, modelCalls: 0 };
+      : { inputTokens: 0, outputTokens: 0, modelCalls: 0 };
 
     if (scope === 'task' || !this.db) return inMem;
 
@@ -413,14 +414,13 @@ class BudgetPlugin implements Plugin {
         prepare: (sql: string) => {
           get: (
             ...args: unknown[]
-          ) =>
-            | { input: number; output: number; cache: number; calls: number }
-            | undefined;
+          ) => { input: number; output: number; calls: number } | undefined;
         };
       };
-      let row:
-        | { input: number; output: number; cache: number; calls: number }
-        | undefined;
+      // NOTE (BUG-ORCH-010): input_tokens is already the provider-neutral total
+      // (uncached + cache-read + cache-creation) — do not also SUM the cache columns
+      // here, they are a subset of input_tokens, not additive.
+      let row: { input: number; output: number; calls: number } | undefined;
 
       if (scope === 'session' && sessionId) {
         row = db
@@ -428,7 +428,6 @@ class BudgetPlugin implements Plugin {
             `SELECT
                COALESCE(SUM(tu.input_tokens), 0) AS input,
                COALESCE(SUM(tu.output_tokens), 0) AS output,
-               COALESCE(SUM(COALESCE(tu.cache_read_input_tokens,0) + COALESCE(tu.cache_creation_input_tokens,0)), 0) AS cache,
                COALESCE(SUM(tu.model_calls), 0) AS calls
              FROM task_usage tu
              JOIN tasks t ON tu.task_id = t.id
@@ -441,7 +440,6 @@ class BudgetPlugin implements Plugin {
             `SELECT
                COALESCE(SUM(input_tokens), 0) AS input,
                COALESCE(SUM(output_tokens), 0) AS output,
-               COALESCE(SUM(COALESCE(cache_read_input_tokens,0) + COALESCE(cache_creation_input_tokens,0)), 0) AS cache,
                COALESCE(SUM(model_calls), 0) AS calls
              FROM task_usage
              WHERE agent_name = ? AND task_id != ?`
@@ -453,7 +451,6 @@ class BudgetPlugin implements Plugin {
             `SELECT
                COALESCE(SUM(input_tokens), 0) AS input,
                COALESCE(SUM(output_tokens), 0) AS output,
-               COALESCE(SUM(COALESCE(cache_read_input_tokens,0) + COALESCE(cache_creation_input_tokens,0)), 0) AS cache,
                COALESCE(SUM(model_calls), 0) AS calls
              FROM task_usage
              WHERE task_id != ?`
@@ -465,7 +462,6 @@ class BudgetPlugin implements Plugin {
         return {
           inputTokens: (row.input ?? 0) + inMem.inputTokens,
           outputTokens: (row.output ?? 0) + inMem.outputTokens,
-          cacheTokens: (row.cache ?? 0) + inMem.cacheTokens,
           modelCalls: (row.calls ?? 0) + inMem.modelCalls,
         };
       }
@@ -493,13 +489,19 @@ class BudgetPlugin implements Plugin {
 
       let row: { total: number } | undefined;
 
+      // NOTE (BUG-ORCH-010): `input_tokens` already IS the provider-neutral total
+      // (uncached + cache-read + cache-creation summed at the provider boundary —
+      // see normaliseAnthropicUsage / normaliseOpenAIUsage). Adding
+      // cache_read_input_tokens/cache_creation_input_tokens on top here would
+      // double-count the cached portion and trip a windowed 'tokens' cap
+      // (e.g. maxTokensPer24h) far earlier than real usage.
       if (scope === 'session') {
         const excl = excludeTaskId ? ' AND tu.task_id != ?' : '';
         const params: unknown[] = [id, since];
         if (excludeTaskId) params.push(excludeTaskId);
         row = db
           .prepare(
-            `SELECT COALESCE(SUM(tu.input_tokens + tu.output_tokens + COALESCE(tu.cache_read_input_tokens,0) + COALESCE(tu.cache_creation_input_tokens,0)), 0) AS total
+            `SELECT COALESCE(SUM(tu.input_tokens + tu.output_tokens), 0) AS total
              FROM task_usage tu
              JOIN tasks t ON tu.task_id = t.id
              WHERE t.session_id = ? AND tu.created_at >= ?${excl}`
@@ -511,7 +513,7 @@ class BudgetPlugin implements Plugin {
         if (excludeTaskId) params.push(excludeTaskId);
         row = db
           .prepare(
-            `SELECT COALESCE(SUM(input_tokens + output_tokens + COALESCE(cache_read_input_tokens,0) + COALESCE(cache_creation_input_tokens,0)), 0) AS total
+            `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
              FROM task_usage
              WHERE agent_name = ? AND created_at >= ?${excl}`
           )
@@ -522,7 +524,7 @@ class BudgetPlugin implements Plugin {
         if (excludeTaskId) params.push(excludeTaskId);
         row = db
           .prepare(
-            `SELECT COALESCE(SUM(input_tokens + output_tokens + COALESCE(cache_read_input_tokens,0) + COALESCE(cache_creation_input_tokens,0)), 0) AS total
+            `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
              FROM task_usage
              WHERE created_at >= ?${excl}`
           )
@@ -560,7 +562,6 @@ class BudgetPlugin implements Plugin {
 
     snap['inputTokens'] = acc.inputTokens;
     snap['outputTokens'] = acc.outputTokens;
-    snap['cacheTokens'] = acc.cacheTokens;
     snap['calls'] = acc.modelCalls;
     snap['wallClock'] = Date.now() - acc.startedAtMs;
     snap['modelMs'] = acc.totalModelMs;
@@ -629,10 +630,14 @@ class BudgetPlugin implements Plugin {
         base = snap[`${scopeKey}outputTokens`] ?? snap['outputTokens'];
         break;
       case 'tokens':
+        // NOTE (BUG-ORCH-010): `inputTokens` is the provider-neutral TOTAL input a call
+        // processed — uncachedInputTokens + cacheReadTokens + cacheCreationTokens are
+        // already summed into it at the provider boundary (normaliseAnthropicUsage /
+        // normaliseOpenAIUsage). Adding `cacheTokens` again here would double-count the
+        // cached portion and trip 'tokens'/maxTotalTokens caps far earlier than real usage.
         base =
           (snap[`${scopeKey}inputTokens`] ?? snap['inputTokens']) +
-          (snap[`${scopeKey}outputTokens`] ?? snap['outputTokens']) +
-          snap['cacheTokens'];
+          (snap[`${scopeKey}outputTokens`] ?? snap['outputTokens']);
         break;
       case 'calls':
         base = snap[`${scopeKey}calls`] ?? snap['calls'];

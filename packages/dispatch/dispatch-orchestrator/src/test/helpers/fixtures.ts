@@ -1,4 +1,4 @@
-import type { DispatchUnit } from '@adhd/dispatch-spec';
+import type { DispatchUnit } from '@adhd/dispatch-base-spec';
 
 /**
  * Builds a structurally-valid `DispatchUnit` for tests, with sane defaults
@@ -24,7 +24,7 @@ export function makeUnit(overrides: Partial<DispatchUnit> = {}): DispatchUnit {
     tokens_estimated: 1000,
     fits_context_window: true,
     // NOTE: tests-real-e2e.md scenario 3 asserts `sentinel_role === "solo"`,
-    // but @adhd/dispatch-spec's actual `SentinelRole` type only allows
+    // but @adhd/dispatch-base-spec's actual `SentinelRole` type only allows
     // 'prewarm' | 'payload' (types.ts) — a second dag/types.ts discrepancy
     // discovered alongside the Turn.model_calls gap (see agent-runner.ts
     // SynthesizedTurn doc comment). `null` ("not yet resolved by the

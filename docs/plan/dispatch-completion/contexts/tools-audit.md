@@ -1,6 +1,6 @@
 # tools-audit — STATE_NAME
 
-**Phase:** tools · **Kind:** audit · **Depends on:** dispatch-tools · **Guard:** `true`
+**Phase:** tools · **Kind:** audit · **Depends on:** dispatch-tools · **Guard:** `python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase tools`
 
 ---
 

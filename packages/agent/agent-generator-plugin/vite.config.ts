@@ -4,6 +4,15 @@ import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 
+// NOTE: this project's `build` target now uses `@nx/js:tsc` (not this vite
+// config's `build` block) — @nx/js:tsc mirrors the src/ directory structure
+// and honors project.json's `assets` array (README, generators.json, the
+// generator's __files__ templates, schema.json), which `@nx/vite:build`'s
+// single-entry Rollup bundle could not (BUG-AGENTMCP-003/007: the bundle
+// never produced a standalone `generator.js` at the path this package's own
+// `generators.json` factory field requires). This config is retained only
+// for the `test` target below.
+
 export default defineConfig({
   root: __dirname,
   cacheDir: '../../../node_modules/.vite/packages/ai/agent-nx',

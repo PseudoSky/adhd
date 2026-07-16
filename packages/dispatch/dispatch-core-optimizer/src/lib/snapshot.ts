@@ -38,8 +38,8 @@ import type {
   ShapeOpSnapshot,
   ShapeSnapshot,
   SnapshotOptimization,
-} from '@adhd/dispatch-spec';
-import { WRITE_CLASS_ACTIONS, assertValidSnapshot } from '@adhd/dispatch-spec';
+} from '@adhd/dispatch-base-spec';
+import { WRITE_CLASS_ACTIONS, assertValidSnapshot } from '@adhd/dispatch-base-spec';
 
 import { lookupFileSizes, siBytesAsTokens } from './size-tokens.js';
 
