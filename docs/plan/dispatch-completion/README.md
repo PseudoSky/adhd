@@ -81,3 +81,5 @@ _Authored below via `plan-scaffold.js add-dod`._
   - entrypoint: `nx test dispatch-tools`
   - observable: `a tool-authored 3-milestone dag passes validateDagJson with no orphans/cycles; a cycle-forming milestone_add is rejected and the dag is unchanged`
   - negative-control: `remove the referential-integrity guard -> cycle accepted, test red`
+
+- `[dod.12]` **dispatch is npx-invocable (bin field + built bin/); snapshot/status/run report a missing dag file consistently with the path (DEBT-022/025); dispatch-base-types is deleted. (structural)** — dispatch is npx-invocable (bin field + built bin/); snapshot/status/run report a missing dag file consistently with the path (DEBT-022/025); dispatch-base-types is deleted..
