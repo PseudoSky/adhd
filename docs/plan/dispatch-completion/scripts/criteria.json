@@ -88,6 +88,14 @@
       "kind": "command",
       "cmd": "npx nx run-many -t test,build -p dispatch-orchestrator",
       "expect": "exit0"
+    },
+    {
+      "id": "plugin-io.1",
+      "phase": "plugins",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx run-many -t test,build -p dispatch-plugin-io",
+      "expect": "exit0"
     }
   ]
 }
