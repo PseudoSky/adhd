@@ -19,6 +19,7 @@
 - [spec-foundations.1] dispatch-base-spec builds and tests green
 
 - [spec-foundations.2] ExecutionMode is exported from the spec
+- [spec-foundations.3] ICalibrationStore is formalized in the spec
 ---
 
 ## Reservations

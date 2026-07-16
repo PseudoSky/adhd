@@ -34,6 +34,16 @@
       "paths": [
         "packages/dispatch/dispatch-base-spec/src/lib/types.ts"
       ]
+    },
+    {
+      "id": "spec-foundations.3",
+      "phase": "spec",
+      "tier": null,
+      "kind": "present",
+      "pattern": "ICalibrationStore",
+      "paths": [
+        "packages/dispatch/dispatch-base-spec/src/lib/types.ts"
+      ]
     }
   ]
 }
