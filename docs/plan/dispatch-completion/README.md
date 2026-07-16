@@ -43,3 +43,11 @@ _Authored below via `plan-scaffold.js add-dod`._
   - entrypoint: `nx test dispatch-orchestrator`
   - observable: `a runner that rejects mid-fire yields a status:failed log entry and orchestrateCycle does not throw`
   - negative-control: `remove the per-unit try/catch -> uncaught rejection, test red`
+
+- `[dod.5]` **Causal replan rewires downstream depends_on onto an injected correction and the resumed run reaches terminal. (behavioral)** — Causal replan rewires downstream depends_on onto an injected correction and the resumed run reaches terminal..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `nx test dispatch-orchestrator`
+  - observable: `after a correction completes, downstream depends_on points at it and the cycle terminates all-complete not no-eligible-work`
+  - negative-control: `revert the rewire -> resume ends no-eligible-work, test red`
