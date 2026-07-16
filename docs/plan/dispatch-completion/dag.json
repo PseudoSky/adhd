@@ -5,7 +5,8 @@
   "phases": [
     "triage",
     "spec",
-    "optimizer-client"
+    "optimizer-client",
+    "orchestrator"
   ],
   "terminal": "done",
   "nodes": {},
