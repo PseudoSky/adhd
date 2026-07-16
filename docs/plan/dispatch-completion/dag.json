@@ -267,6 +267,22 @@
       ],
       "context": "contexts/algo-audit.md",
       "notes": ""
+    },
+    "tests-hardening": {
+      "kind": "work",
+      "phase": "tests",
+      "depends_on": [
+        "plugin-audit",
+        "storage-audit",
+        "tools-audit",
+        "cli-audit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/dispatch/dispatch-core-optimizer/src/test/golden.spec.ts"
+      ],
+      "context": "contexts/tests-hardening.md",
+      "notes": ""
     }
   },
   "authored_with": {
