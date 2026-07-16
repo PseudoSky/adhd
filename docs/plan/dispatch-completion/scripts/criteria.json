@@ -133,6 +133,14 @@
       "tier": null,
       "kind": "exists",
       "path": "packages/dispatch/dispatch-serializer-sqlite/src/index.ts"
+    },
+    {
+      "id": "dispatch-tools.1",
+      "phase": "tools",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx run-many -t test,build -p dispatch-tools",
+      "expect": "exit0"
     }
   ]
 }
