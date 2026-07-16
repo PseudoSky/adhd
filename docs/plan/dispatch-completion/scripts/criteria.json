@@ -183,6 +183,14 @@
       "kind": "command",
       "cmd": "npx nx run-many -t test,build -p dispatch-core-optimizer",
       "expect": "exit0"
+    },
+    {
+      "id": "release-ready.1",
+      "phase": "release",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx run-many -t test,build -p dispatch-base-spec,dispatch-core-client,dispatch-serializer-json,dispatch-serializer-sqlite,dispatch-core-optimizer,dispatch-orchestrator,dispatch-plugin-io,dispatch-plugin-gitnexus,dispatch-tools,dispatch-cli",
+      "expect": "exit0"
     }
   ]
 }
