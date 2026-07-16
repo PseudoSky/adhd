@@ -304,6 +304,11 @@ Filed as `BUG-ORCH-009` in `BACKLOG.md` (§9). Fix is specified in §6.
 
 ## 3. Cost model: how cumulative billed input actually scales
 
+> **Empirical confirmation (2026-07-15):** a measured head-to-head of agent-mcp vs
+> OpenCode on the identical DeepSeek task — including how the prefix size drives the
+> billed cache-miss — is in
+> [`entrypoint/agent-mcp/docs/provider-call-audit.md`](../../entrypoint/agent-mcp/docs/provider-call-audit.md) §6.
+
 Stateless chat APIs resend the full message history on every call. Let `H_i` be the
 context size (tokens) sent on call `i`, and model it as growing by roughly a
 constant increment `Δ` per tool-call round: `H_i ≈ H_0 + (i-1)·Δ`.
