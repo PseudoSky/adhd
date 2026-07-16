@@ -69,6 +69,19 @@
       ],
       "context": "contexts/optimizer-client.md",
       "notes": ""
+    },
+    "opt-audit": {
+      "kind": "audit",
+      "phase": "optimizer-client",
+      "depends_on": [
+        "optimizer-client"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "scripts/audit_opt-audit.py"
+      ],
+      "context": "contexts/opt-audit.md",
+      "notes": ""
     }
   },
   "authored_with": {
