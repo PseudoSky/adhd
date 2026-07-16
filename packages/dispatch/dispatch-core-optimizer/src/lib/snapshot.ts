@@ -1,7 +1,7 @@
 /**
  * snapshot.ts — computes the fully-derived DagSnapshot from a dag.json document.
  *
- * Ported from docs/plan/dispatch-optimizer/src/compiler.ts §snapshot() (SCOPE.md §N1).
+ * Ported from docs/plan/dispatch-completion/superseded/dispatch-optimizer/src/compiler.ts §snapshot() (SCOPE.md §N1).
  * PURE computation: no fs/path/node imports anywhere in this module. Every file-size
  * lookup goes through `deps.fileSizes` (batched once per snapshot() call) with graceful
  * degradation to 0 when undefined — see size-tokens.ts.

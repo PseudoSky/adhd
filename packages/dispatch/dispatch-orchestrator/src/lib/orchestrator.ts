@@ -8,8 +8,8 @@
  * (turns + op results + guard results) -> persist dag. `orchestrate()` repeats
  * `orchestrateCycle()` until a cycle reports `terminal: true`.
  *
- * See docs/plan/dispatch-production/dag.json milestones["orchestrator-core"],
- * docs/plan/dispatch-optimizer/{SCOPE.md,DECISIONS.md,WORKFLOW.md}, and
+ * See docs/plan/dispatch-completion/superseded/dispatch-production/dag.json milestones["orchestrator-core"],
+ * docs/plan/dispatch-completion/superseded/dispatch-optimizer/{SCOPE.md,DECISIONS.md,WORKFLOW.md}, and
  * packages/ai/agent-mcp/README.md for the design this composes.
  *
  * COMPOSITION, NOT REIMPLEMENTATION — eligibility/completion semantics belong
