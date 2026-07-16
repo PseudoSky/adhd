@@ -161,6 +161,19 @@
       ],
       "context": "contexts/plugin-audit.md",
       "notes": ""
+    },
+    "serializer-sqlite": {
+      "kind": "work",
+      "phase": "storage",
+      "depends_on": [
+        "orch-audit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/dispatch/dispatch-serializer-sqlite/src/index.ts"
+      ],
+      "context": "contexts/serializer-sqlite.md",
+      "notes": ""
     }
   },
   "authored_with": {
