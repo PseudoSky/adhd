@@ -18,11 +18,11 @@
       "end_ref": "65d9159eaa833a2e3f0a463fcf116fd742b774c3"
     },
     "builder-snapshot-api": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-07-16T02:02:54.225Z",
-      "done_at": null,
+      "done_at": "2026-07-16T02:32:22.123Z",
       "start_ref": "4ae7ca4d331eceefe8a2aa6e18a3090aed50ada0",
-      "end_ref": null
+      "end_ref": "d39300ab7379097910a18df5f2920d293e7d43e6"
     },
     "audit-builder": {
       "status": "pending",
@@ -155,6 +155,18 @@
       "audit_criteria_total": 41,
       "by": "plan-orchestrator",
       "note": "environment-core-rs port; 18 unit+4 doctest; all cross-language vectors pass; cargo build+clippy green"
+    },
+    {
+      "ts": "2026-07-16T02:32:22.123Z",
+      "from": "builder-snapshot-api",
+      "to": "builder-snapshot-api",
+      "start_ref": "4ae7ca4d331eceefe8a2aa6e18a3090aed50ada0",
+      "end_ref": "d39300ab7379097910a18df5f2920d293e7d43e6",
+      "audit_exit": 16,
+      "audit_criteria_passed": 7,
+      "audit_criteria_total": 23,
+      "by": "plan-orchestrator",
+      "note": "EnvironmentSnapshot<T> + build() implemented; 139/139 tests; atomic write w/ negative-control; guard dist-path exit 0 (BUG-ENVPLAN-020 fixed)"
     }
   ],
   "amendment_log": [
@@ -215,7 +227,7 @@
     "version": "0.8.28",
     "hash": "6e17cc7c7603"
   },
-  "current_state": "builder-snapshot-api",
+  "current_state": "audit-builder",
   "dod_provenance": {
     "confirmed_at": "2026-07-08T07:12:02.530Z",
     "by": "pseudosky",
