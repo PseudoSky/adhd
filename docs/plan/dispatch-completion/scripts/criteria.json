@@ -103,6 +103,14 @@
       "tier": null,
       "kind": "exists",
       "path": "packages/dispatch/dispatch-plugin-io/src/index.ts"
+    },
+    {
+      "id": "plugin-gitnexus.1",
+      "phase": "plugins",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx run-many -t test,build -p dispatch-plugin-gitnexus",
+      "expect": "exit0"
     }
   ]
 }
