@@ -73,3 +73,11 @@ _Authored below via `plan-scaffold.js add-dod`._
 - `[dod.9]` **A DagSnapshot round-trips JSON.stringify/parse with no Infinity->null corruption in context_window_per_tier (DEBT-014). (structural)** — A DagSnapshot round-trips JSON.stringify/parse with no Infinity->null corruption in context_window_per_tier (DEBT-014)..
 
 - `[dod.10]` **optimizer-algorithms is data-gated: HELD with a recorded baseline when <15%/<3 cycles, else the cascade beats greedy on >=1 golden fixture (REQ-012). (structural)** — optimizer-algorithms is data-gated: HELD with a recorded baseline when <15%/<3 cycles, else the cascade beats greedy on >=1 golden fixture (REQ-012)..
+
+- `[dod.11]` **dispatch-tools authors a valid dag through DagClient and rejects a cycle-forming edit. (behavioral)** — dispatch-tools authors a valid dag through DagClient and rejects a cycle-forming edit..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `nx test dispatch-tools`
+  - observable: `a tool-authored 3-milestone dag passes validateDagJson with no orphans/cycles; a cycle-forming milestone_add is rejected and the dag is unchanged`
+  - negative-control: `remove the referential-integrity guard -> cycle accepted, test red`
