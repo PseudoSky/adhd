@@ -41,6 +41,19 @@
       ],
       "context": "contexts/spec-foundations.md",
       "notes": ""
+    },
+    "spec-audit": {
+      "kind": "audit",
+      "phase": "spec",
+      "depends_on": [
+        "spec-foundations"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "scripts/audit_spec-audit.py"
+      ],
+      "context": "contexts/spec-audit.md",
+      "notes": ""
     }
   },
   "authored_with": {
