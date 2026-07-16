@@ -7,7 +7,8 @@
     "spec",
     "optimizer-client",
     "orchestrator",
-    "plugins"
+    "plugins",
+    "storage"
   ],
   "terminal": "done",
   "nodes": {},
