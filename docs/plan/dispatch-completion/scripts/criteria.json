@@ -159,6 +159,14 @@
       "paths": [
         "entrypoint/dispatch-cli/package.json"
       ]
+    },
+    {
+      "id": "cli-complete.3",
+      "phase": "cli",
+      "tier": null,
+      "kind": "command",
+      "cmd": "bash -c '! test -d packages/dispatch/dispatch-base-types'",
+      "expect": "exit0"
     }
   ]
 }

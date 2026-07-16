@@ -19,6 +19,7 @@
 - [cli-complete.1] dispatch-cli builds+tests green
 
 - [cli-complete.2] dispatch-cli declares a bin field
+- [cli-complete.3] orphaned dispatch-base-types is deleted
 ---
 
 ## Reservations
