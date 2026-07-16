@@ -4,7 +4,7 @@ Audit of what agent-mcp sends to the provider API each turn and what it stores i
 the DB. Compared against the standard ReAct loop pattern used by OpenCode and Claude
 Code.
 
-**Date:** 2026-07-02
+**Date:** 2026-07-02 · **Updated:** 2026-07-15 (added §6 — measured agent-mcp-vs-OpenCode benchmark)
 **Trigger:** investigating 262k input tokens for a 15-turn, 775-line implementation task.
 
 ---
@@ -156,6 +156,11 @@ The critical difference: **agent-mcp has no tool pruning.** Claude Code sends on
 the tools relevant to the current task. OpenCode gates tools by permission mode.
 agent-mcp sends every tool from every connected MCP server on every turn.
 
+> **Measured update (2026-07-15):** §6 runs the identical task through both harnesses
+> on the same DeepSeek model. Counter-intuitively OpenCode is the *heavier* one here
+> — its `build` agent ships a **~32K** prefix per call vs agent-mcp's ~5K — so agent-mcp
+> came out **~3× cheaper**, not more expensive. See [§6](#6-empirical-head-to-head-agent-mcp-vs-opencode-measured-2026-07-15).
+
 ---
 
 ## 4. Opportunities
@@ -252,3 +257,74 @@ This matches the observed average of ~17,500/turn × 15 turns = 262,590.
 conversation history is.** But the tool schemas ARE the dominant cost on
 early turns, and they compound the problem by bloating the prefix that
 rides along in every turn.
+
+---
+
+## 6. Empirical head-to-head: agent-mcp vs OpenCode (measured 2026-07-15)
+
+Section 3 compares by *pattern*; this section is the *measured* run. It settles a
+recurring claim that "the same task costs ~92K through agent-mcp but basically
+nothing on OpenCode."
+
+**Method.** Identical two prompts run on the **same model** (`deepseek-v4-flash`,
+DeepSeek API) through both harnesses:
+1. *Tool-surface* — "describe your complete tool surface."
+2. *Packages+lint* — "list `packages/`, then run `nx lint <project>`, report the result."
+
+Usage read from each tool's own store (not estimated): agent-mcp from `task_usage`
+(`usage_query`); OpenCode from `~/.local/share/opencode/opencode.db` → `session`
+(`tokens_input` = uncached/cache-miss, `tokens_cache_read` = cache-hit — verified by
+reproducing OpenCode's own reported `cost` from the split). agent-mcp runs were
+fresh ephemeral tasks on published **2.1.1** (post `BUG-ORCH-008` cache fix), after
+the local `nx` graph was repaired (so no `nx` hangs inflate the call count).
+
+**Result — the packages+lint task (the "92K" one):**
+
+| metric | agent-mcp | OpenCode |
+|---|---|---|
+| system+tools **prefix per call** | **~5K** | **~32K** (`build` agent: full toolset every call) |
+| **uncached input (billed full-price)** | **6,249** | **31,002** |
+| cache-read input (cheap) | 47,616 | 129,408 |
+| gross input (uncached + cache-read) | 53,865 | 160,410 |
+| output | 1,590 | 509 |
+| model calls | ~10 | ~4–5 |
+| **cost** | **~$0.0015** (derived) | **$0.0049** (OpenCode-reported) |
+
+DeepSeek rates back-solved from OpenCode's reported costs: uncached ≈ $0.14/M,
+cache-read ≈ $0.003/M (~47× cheaper), output ≈ $0.28/M. agent-mcp does not emit a
+`$` figure, so its cost is derived with those rates.
+
+**Findings.**
+1. **The direction is opposite the claim.** On billed (uncached) tokens OpenCode
+   used **~5×** more; on cost, **~3×** more. agent-mcp is the *cheaper* harness on
+   these prompts, not 92K-worse.
+2. **Prefix size is the driver — and it confirms §3's thesis.** OpenCode ships a
+   ~32K system+tools prefix; agent-mcp ~5K (with `toolAdvertisement:"names"`, §4).
+   A fresh session's cold cache-miss therefore costs OpenCode ~31K full-price vs
+   agent-mcp ~6K. Caching makes both cheap in absolute terms (sub-cent), but the
+   **lean-prefix harness wins on the miss side.**
+3. **The "92K" was a units error.** The original agent-mcp figure was *gross input
+   with cache* (95% cache-hit → ~5K actually billed); comparing that to a billed
+   number overstates spend ~15×. It was further inflated to a bogus "1.13M" by the
+   per-event token fan-out in `agent-mcp-tail` — see `BUG-AGENTMCP-006`.
+4. **agent-mcp's real inefficiency is round-trips, not tokens.** It took ~10 calls
+   vs OpenCode's ~4–5, because its sandboxed shell forbids `&&`/pipes so the model
+   can't chain `ls && nx lint` in one call (§3: no tool pruning + fine-grained
+   tools). That costs **latency and gross tokens**, but caching absorbs the dollar
+   impact and the smaller prefix more than compensates on cost.
+
+**Cross-references.**
+- Cache correctness (why agent-mcp caches well on 2.1.1): `BUG-ORCH-008`
+  (cache-preserving compaction, shipped 2.1.1) — `BACKLOG.md`.
+- Usage-telemetry gaps: `BUG-ORCH-009` + its 2026-07-15 follow-up (`usage_query`
+  `group_by`/`summary` still drop `uncachedInputTokens`) — `BACKLOG.md`.
+- Measurement artifact that produced the bogus 1.13M: `BUG-AGENTMCP-006` (FIXED —
+  `agent-mcp-tail` now attaches usage only to the terminal event).
+- Cost model this confirms: [`docs/ideas/context-and-cache-strategy.md`](../../../docs/ideas/context-and-cache-strategy.md)
+  §3 (cumulative billed input) and §6 (redesigned usage reporting).
+
+**Caveat.** OpenCode `run` (non-interactive) repeatedly stalled on the multi-step
+tool loop for this model; the successful measurement was an interactive run. Cache
+warmth differs between harnesses (OpenCode's run 2 was warm from prior calls, 81%
+cache-read; agent-mcp 88%), which affects the miss counts but not the qualitative
+conclusion — the prefix-size gap dominates.
