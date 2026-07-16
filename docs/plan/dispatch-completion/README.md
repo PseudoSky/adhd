@@ -35,3 +35,11 @@ _Authored below via `plan-scaffold.js add-dod`._
   - entrypoint: `nx test dispatch-base-spec`
   - observable: `snapshot.milestones[x].eligible === false when x is complete`
   - negative-control: `revert the own-completion promotion -> test red`
+
+- `[dod.4]` **A mid-cycle runner failure is recorded as a failed dispatch_log entry, not thrown. (behavioral)** — A mid-cycle runner failure is recorded as a failed dispatch_log entry, not thrown..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `nx test dispatch-orchestrator`
+  - observable: `a runner that rejects mid-fire yields a status:failed log entry and orchestrateCycle does not throw`
+  - negative-control: `remove the per-unit try/catch -> uncaught rejection, test red`
