@@ -12,7 +12,8 @@
     "tools",
     "cli",
     "algorithms",
-    "tests"
+    "tests",
+    "release"
   ],
   "terminal": "done",
   "nodes": {},
