@@ -18,6 +18,7 @@
 
 - [plugin-gitnexus.1] dispatch-plugin-gitnexus builds+tests green
 
+- [plugin-gitnexus.2] plugin-gitnexus package entry exists
 ---
 
 ## Reservations
