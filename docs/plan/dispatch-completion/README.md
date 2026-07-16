@@ -59,3 +59,11 @@ _Authored below via `plan-scaffold.js add-dod`._
   - entrypoint: `nx test dispatch-serializer-sqlite`
   - observable: `write-then-read via sqlite adapter equals write-then-read via json serializer on normalized form`
   - negative-control: `corrupt the sqlite read mapping -> parity assertion red`
+
+- `[dod.7]` **IO and gitnexus enrichment plugins inject real signal; the optimizer stays pure with null deps. (behavioral)** — IO and gitnexus enrichment plugins inject real signal; the optimizer stays pure with null deps..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `nx test dispatch-plugin-io dispatch-plugin-gitnexus`
+  - observable: `pairwise_overlap non-zero for file-sharing milestones with IO plugin; blast_radius non-null with gitnexus plugin; optimize() still valid with null deps`
+  - negative-control: `null-inject the plugin -> overlap zero (baseline), and optimizer purity test stays green`
