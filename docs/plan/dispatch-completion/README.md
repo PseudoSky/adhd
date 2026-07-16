@@ -85,3 +85,12 @@ Before: a `DispatchUnit` has no `execution_mode`; a complete milestone still rea
 - `[dod.13]` **Every carried DEBT-DISPATCH item in this plan's BACKLOG.md is either fixed-with-a-teeth-bearing test or closed with a dated live-source verdict; no silent carry. (structural)** — Every carried DEBT-DISPATCH item in this plan's BACKLOG.md is either fixed-with-a-teeth-bearing test or closed with a dated live-source verdict; no silent carry..
 
 - `[dod.1]` **All 10 dispatch projects build+test green: nx run-many -t test,build across dispatch-base-spec,-core-client,-serializer-json,-serializer-sqlite,-core-optimizer,-orchestrator,-plugin-io,-plugin-gitnexus,-tools,-cli exits 0. (structural)** — All 10 dispatch projects build+test green: nx run-many -t test,build across dispatch-base-spec,-core-client,-serializer-json,-serializer-sqlite,-core-optimizer,-orchestrator,-plugin-io,-plugin-gitnexus,-tools,-cli exits 0..
+
+- `[dod.2]` **Every DispatchUnit from optimize() carries a non-null execution_mode discriminant. (behavioral)** — Every DispatchUnit from optimize() carries a non-null execution_mode discriminant..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `nx test dispatch-core-optimizer`
+  - observable: `each unit.execution_mode is one of generative|tool-call|guard-only`
+  - negative-control: `revert the assembleUnit derivation in dispatch-core-optimizer -> test red`
+  - delivered-by: `optimizer-client, spec-foundations`
