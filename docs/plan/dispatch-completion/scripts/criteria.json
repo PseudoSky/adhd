@@ -22,7 +22,7 @@
       "phase": "spec",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx run-many -t test,build -p dispatch-base-spec",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-base-spec",
       "expect": "exit0"
     },
     {
@@ -50,7 +50,7 @@
       "phase": "optimizer-client",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx run-many -t test,build -p dispatch-core-optimizer,dispatch-core-client",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-core-optimizer,dispatch-core-client",
       "expect": "exit0"
     },
     {
@@ -68,7 +68,7 @@
       "phase": "orchestrator",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx run-many -t test,build -p dispatch-orchestrator",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-orchestrator",
       "expect": "exit0"
     },
     {
@@ -86,7 +86,7 @@
       "phase": "orchestrator",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx run-many -t test,build -p dispatch-orchestrator",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-orchestrator",
       "expect": "exit0"
     },
     {
@@ -94,7 +94,7 @@
       "phase": "plugins",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx run-many -t test,build -p dispatch-plugin-io",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-plugin-io",
       "expect": "exit0"
     },
     {
@@ -109,7 +109,7 @@
       "phase": "plugins",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx run-many -t test,build -p dispatch-plugin-gitnexus",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-plugin-gitnexus",
       "expect": "exit0"
     },
     {
@@ -124,7 +124,7 @@
       "phase": "storage",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx run-many -t test,build -p dispatch-serializer-sqlite",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-serializer-sqlite",
       "expect": "exit0"
     },
     {
@@ -139,7 +139,7 @@
       "phase": "tools",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx run-many -t test,build -p dispatch-tools",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-tools",
       "expect": "exit0"
     },
     {
@@ -147,7 +147,7 @@
       "phase": "cli",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx run-many -t test,build -p dispatch-cli",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-cli",
       "expect": "exit0"
     },
     {
@@ -173,7 +173,7 @@
       "phase": "algorithms",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx run-many -t test,build -p dispatch-core-optimizer",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-core-optimizer",
       "expect": "exit0"
     },
     {
@@ -181,7 +181,7 @@
       "phase": "tests",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx run-many -t test,build -p dispatch-core-optimizer",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-core-optimizer",
       "expect": "exit0"
     },
     {
@@ -189,7 +189,15 @@
       "phase": "release",
       "tier": null,
       "kind": "command",
-      "cmd": "npx nx run-many -t test,build -p dispatch-base-spec,dispatch-core-client,dispatch-serializer-json,dispatch-serializer-sqlite,dispatch-core-optimizer,dispatch-orchestrator,dispatch-plugin-io,dispatch-plugin-gitnexus,dispatch-tools,dispatch-cli",
+      "cmd": "npx --yes nx run-many -t test,build -p dispatch-base-spec,dispatch-core-client,dispatch-serializer-json,dispatch-serializer-sqlite,dispatch-core-optimizer,dispatch-orchestrator,dispatch-plugin-io,dispatch-plugin-gitnexus,dispatch-tools,dispatch-cli",
+      "expect": "exit0"
+    },
+    {
+      "id": "live-e2e.1",
+      "phase": "tests",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test dispatch-cli",
       "expect": "exit0"
     }
   ]
