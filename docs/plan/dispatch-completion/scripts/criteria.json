@@ -52,6 +52,16 @@
       "kind": "command",
       "cmd": "npx nx run-many -t test,build -p dispatch-core-optimizer,dispatch-core-client",
       "expect": "exit0"
+    },
+    {
+      "id": "optimizer-client.2",
+      "phase": "optimizer-client",
+      "tier": null,
+      "kind": "present",
+      "pattern": "execution_mode",
+      "paths": [
+        "packages/dispatch/dispatch-core-optimizer/src/lib/optimize.ts"
+      ]
     }
   ]
 }
