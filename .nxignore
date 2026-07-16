@@ -4,3 +4,8 @@
 # ProjectsWithConflictingNamesError. (.gitignore already lists .claude/, but
 # .nxignore makes the intent explicit and independent of git-ignore semantics.)
 .claude
+# Same class: the repo convention (CLAUDE.md §Bash) puts agent worktrees at
+# <project>/.worktrees/. Without this line, EVERY worktree breaks EVERY commit
+# via the pre-commit `nx affected` hook (ProjectsWithConflictingNamesError) —
+# proven live 2026-07-16 by .worktrees/agent-mcp-usage-accounting.
+.worktrees
