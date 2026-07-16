@@ -139,3 +139,5 @@ Before: a `DispatchUnit` has no `execution_mode`; a complete milestone still rea
   - observable: `pairwise_overlap non-zero for file-sharing milestones with IO plugin; blast_radius non-null with gitnexus plugin; optimize() still valid with null deps`
   - negative-control: `null-inject the dispatch-plugin-io plugin -> overlap zero (baseline), optimizer purity test stays green`
   - delivered-by: `plugin-io, plugin-gitnexus`
+
+- `[dod.8]` **validateDagJson rejects an unknown dispatch_log[].provider and accepts claudecli/teammate (DEBT-019); calibrate rejects a bad model tier before constructing the runner (DEBT-024). (structural)** — validateDagJson rejects an unknown dispatch_log[].provider and accepts claudecli/teammate (DEBT-019); calibrate rejects a bad model tier before constructing the runner (DEBT-024)..
