@@ -228,6 +228,19 @@
       ],
       "context": "contexts/cli-complete.md",
       "notes": ""
+    },
+    "cli-audit": {
+      "kind": "audit",
+      "phase": "cli",
+      "depends_on": [
+        "cli-complete"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "scripts/audit_cli-audit.py"
+      ],
+      "context": "contexts/cli-audit.md",
+      "notes": ""
     }
   },
   "authored_with": {
