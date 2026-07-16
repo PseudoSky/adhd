@@ -297,6 +297,19 @@
       ],
       "context": "contexts/test-audit.md",
       "notes": ""
+    },
+    "release-ready": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": [
+        "test-audit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "package.json"
+      ],
+      "context": "contexts/release-ready.md",
+      "notes": ""
     }
   },
   "authored_with": {
