@@ -199,6 +199,14 @@
       "kind": "command",
       "cmd": "npx --yes nx test dispatch-cli",
       "expect": "exit0"
+    },
+    {
+      "id": "live-e2e.2",
+      "phase": "tests",
+      "tier": null,
+      "kind": "command",
+      "cmd": "bash -c 'if [ \"$AGENT_MCP_LIVE\" = \"1\" ]; then AGENT_MCP_LIVE=1 npx --yes nx test dispatch-cli; else echo \"[live-e2e.2] WARNING: paid deepseek live assertion SKIPPED (set AGENT_MCP_LIVE=1 to run it)\"; fi'",
+      "expect": "exit0"
     }
   ]
 }

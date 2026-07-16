@@ -18,6 +18,7 @@
 
 - [live-e2e.1] default-running structural: real agent-mcp subprocess spawn + MCP stdio handshake (initialize + tools/list), no paid call
 
+- [live-e2e.2] env-gated paid live: dispatch run --no-dry-run drives real deepseek (self-skips with a visible warning when AGENT_MCP_LIVE unset)
 ---
 
 ## Reservations
