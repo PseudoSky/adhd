@@ -11,7 +11,8 @@
     "storage",
     "tools",
     "cli",
-    "algorithms"
+    "algorithms",
+    "tests"
   ],
   "terminal": "done",
   "nodes": {},
