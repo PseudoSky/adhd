@@ -21,13 +21,13 @@
       "depends_on": [],
       "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
       "artifacts": [
-        "packages/ai/agent-provider/src/seed/providers.ts",
-        "packages/ai/agent-provider/src/seed/models.ts",
-        "packages/ai/agent-provider/src/seed/bindings.ts",
-        "packages/ai/agent-provider/src/seed/index.ts",
-        "packages/ai/agent-provider/src/store/provider-store.ts",
-        "packages/ai/agent-provider/src/store/model-store.ts",
-        "packages/ai/agent-provider/src/store/tool-format-store.ts"
+        "packages/agent/agent-core-provider/src/seed/providers.ts",
+        "packages/agent/agent-core-provider/src/seed/models.ts",
+        "packages/agent/agent-core-provider/src/seed/bindings.ts",
+        "packages/agent/agent-core-provider/src/seed/index.ts",
+        "packages/agent/agent-core-provider/src/store/provider-store.ts",
+        "packages/agent/agent-core-provider/src/store/model-store.ts",
+        "packages/agent/agent-core-provider/src/store/tool-format-store.ts"
       ],
       "context": "contexts/seed-provider-registry.md",
       "notes": "Inherited from agent-provider-credentialing dod.1 registry-seed clause — the credentialing runtime was implemented out-of-band by docs/mcp-env/SPEC.md, but the registry seed rows (provider_providers, provider_models, platform-bindings, tool-formats) were never populated."
@@ -232,7 +232,7 @@
   },
   "authored_with": {
     "plugin": "workflow",
-    "version": "0.8.23",
-    "hash": "1e4130a84aed"
+    "version": "0.8.28",
+    "hash": "6e17cc7c7603"
   }
 }
