@@ -18,6 +18,7 @@
 
 - [triage.1] EXEC-001 landed: the tool-call skipped-stub warn is gone from orchestrator
 
+- [triage.2] PUBLISH-001 landed: duplicate short alias @adhd/dispatch-spec removed from tsconfig
 ---
 
 ## Reservations
