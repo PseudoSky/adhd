@@ -154,3 +154,5 @@ Before: a `DispatchUnit` has no `execution_mode`; a complete milestone still rea
   - observable: `a tool-authored 3-milestone dag passes validateDagJson with no orphans/cycles; a cycle-forming milestone_add is rejected and the dag is unchanged`
   - negative-control: `remove the referential-integrity guard in dispatch-tools -> cycle accepted, test red`
   - delivered-by: `dispatch-tools`
+
+- `[dod.12]` **dispatch is npx-invocable (bin field + built bin/); snapshot/status/run report a missing dag file consistently with the path (DEBT-022/025); dispatch-base-types is deleted. (structural)** — dispatch is npx-invocable (bin field + built bin/); snapshot/status/run report a missing dag file consistently with the path (DEBT-022/025); dispatch-base-types is deleted..
