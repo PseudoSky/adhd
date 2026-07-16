@@ -41,8 +41,16 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      // External packages that should not be bundled into your library.
-      external: [],
+      // Node-only package (platform:node): never bundle node builtins.
+      // (BUG, pre-existing: this was `external: []`, which made Vite try to
+      // browser-externalize `node:fs`/`node:path`/`node:os`/`node:crypto` —
+      // producing a build-breaking `"readFileSync" is not exported by
+      // "__vite-browser-external"` error. Latent because index.ts previously
+      // only re-exported an unused `lib/` stub, so no file that imports a
+      // `node:*` builtin was ever reachable from the build entrypoint until
+      // `builder-snapshot-api` wired the real pipeline together. See
+      // `packages/apigen/python-env/vite.config.ts` for the same fix.)
+      external: [/^node:/],
     },
   },
 

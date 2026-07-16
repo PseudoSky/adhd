@@ -37,10 +37,35 @@ export interface AgentToolGrant {
 export interface AgentToolGrantInput {
   agentSlug: string;
   toolName: string;
-  permission: PermissionLevel;
+  /**
+   * Omit to fall back to `DEFAULT_PERMISSION_LEVEL` ('full').
+   *
+   * Design decision (BUG-REGISTRY-002): the import flow (agent-registry-
+   * migration's frontmatter parser) has no source signal for permission
+   * level — a frontmatter `tools: Bash, Read, Write` list carries no
+   * full/read_only/restricted qualifier. Defaulting to 'full' preserves the
+   * pre-migration behavior (the tool was simply usable, unrestricted, on the
+   * source platform) rather than silently *introducing* a restriction the
+   * original agent never had — the migration's whole point is round-trip
+   * equivalence ([inv:zero-loss-before-removal]), and an invented
+   * 'restricted'/'read_only' default would be a fabricated capability loss.
+   * `@adhd/agent-engine-compiler`'s `resolveTools` does not currently gate
+   * tool-header emission on `permission` at all (only binding `availability`
+   * does), so this default is inert today and only becomes load-bearing once
+   * permission-aware enforcement is added — 'full' is still the correct
+   * choice then, for the same round-trip reason.
+   */
+  permission?: PermissionLevel;
   /** Omit or pass null to mean "always applies". */
   contextCondition?: Record<string, unknown> | null;
 }
+
+/**
+ * The permission level `AgentToolStore.grant()` applies when `permission` is
+ * omitted from the input. See `AgentToolGrantInput.permission` for the
+ * rationale (BUG-REGISTRY-002).
+ */
+export const DEFAULT_PERMISSION_LEVEL: PermissionLevel = 'full';
 
 // ──────────────────────────────────────────────
 // Typed error codes
@@ -65,8 +90,12 @@ export class AgentToolStoreError extends Error {
 // Constructor accepts a BetterSQLite3Database so tests can inject their own
 // connection without touching the production singleton in client.ts.
 //
-// CRITICAL: grant() persists the `permission` argument verbatim. Do not
-// hardcode a default — the [dod.3] negative-control breaks on exactly this.
+// CRITICAL: grant() persists an EXPLICITLY-SUPPLIED `permission` argument
+// verbatim — it must never coerce a caller-supplied value to some other
+// level. Do not hardcode the persisted value — the [dod.3] negative-control
+// breaks on exactly this. `permission` is optional as of BUG-REGISTRY-002:
+// when omitted, and ONLY when omitted, grant() falls back to
+// DEFAULT_PERMISSION_LEVEL ('full') — see AgentToolGrantInput.permission.
 // ──────────────────────────────────────────────
 
 export class AgentToolStore {
@@ -79,6 +108,10 @@ export class AgentToolStore {
    *
    * agent_slug is a LOGICAL reference — no FK check is performed against any
    * agents table ([inv:no-cross-pkg-fk]). Any string is accepted.
+   *
+   * `permission` may be omitted; it then defaults to `DEFAULT_PERMISSION_LEVEL`
+   * ('full') — see `AgentToolGrantInput.permission` for the rationale
+   * (BUG-REGISTRY-002). When supplied, it is persisted verbatim.
    *
    * Throws GRANT_ALREADY_EXISTS if the (agent_slug, tool_name) pair exists.
    */
@@ -104,8 +137,10 @@ export class AgentToolStore {
     const grant: AgentToolGrant = {
       agentSlug: input.agentSlug,
       toolName: input.toolName,
-      // Persist verbatim — CRITICAL for [dod.3] negative-control
-      permission: input.permission,
+      // Persist an explicitly-supplied value verbatim — CRITICAL for the
+      // [dod.3] negative-control. Only fall back to the default when the
+      // caller omitted `permission` entirely (BUG-REGISTRY-002).
+      permission: input.permission ?? DEFAULT_PERMISSION_LEVEL,
       contextCondition: input.contextCondition ?? null,
     };
 

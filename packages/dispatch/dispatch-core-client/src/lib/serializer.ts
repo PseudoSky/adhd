@@ -1,4 +1,4 @@
-import type { DagJson, DagSnapshot } from '@adhd/dispatch-spec';
+import type { DagJson, DagSnapshot } from '@adhd/dispatch-base-spec';
 
 export interface IDagSerializer {
   readDag(): Promise<DagJson | null>;

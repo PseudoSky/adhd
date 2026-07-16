@@ -1260,3 +1260,145 @@ async function enforcePreTool(
   await hooks.emit('pre:tool_call', payload);
   await hooks.enforce('pre:tool_call', payload);
 }
+
+// ── Cache-token double-count (BUG-ORCH-010) ─────────────────────────────────
+//
+// Since the shipped BUG-ORCH-010 provider-neutral fix, `TokenUsage.inputTokens` is
+// ALREADY the true total the model processed — `uncachedInputTokens + cacheReadTokens
+// + cacheCreationTokens` are summed into it at the provider boundary
+// (normaliseAnthropicUsage / normaliseOpenAIUsage; see
+// packages/agent/agent-engine-orchestrator/src/providers/{anthropic,openai}.ts). A
+// consumer that adds cacheReadTokens/cacheCreationTokens on top of inputTokens again
+// double-counts the cached portion. These tests drive the REAL plugin/hook seam
+// (createPlugin + HookRegistry, exactly how the orchestrator wires it) with a
+// tokenUsage payload shaped the way the real providers actually emit it.
+describe('cache-token double-count (BUG-ORCH-010)', () => {
+  let hooks: HookRegistry;
+
+  beforeEach(() => {
+    hooks = new HookRegistry();
+  });
+
+  it('does not double-count cache tokens in the tokens cap field (task scope, in-memory)', async () => {
+    const plugin = createPlugin({
+      db: null,
+      config: configSchema.parse({ maxTotalTokens: 150 }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await enforcePreModel(hooks, ctx);
+
+    // Real (post-normalisation) shape: inputTokens ALREADY includes the cache-read
+    // and cache-creation portions: 10 uncached + 80 cache-read + 10 cache-creation = 100.
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: {
+        inputTokens: 100,
+        outputTokens: 40,
+        cacheReadTokens: 80,
+        cacheCreationTokens: 10,
+      },
+    });
+
+    // Real total = inputTokens(100) + outputTokens(40) = 140, under the 150 cap -> must PASS.
+    // A double-count would add cacheReadTokens+cacheCreationTokens (90) again, producing
+    // 230 >= 150 -> a premature BUDGET_EXCEEDED that never should have fired.
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+  });
+
+  it('control: the same cap DOES block once genuine (non-cache-inflated) usage reaches it', async () => {
+    // Proves the fix isn't "never block" — a cap still fires on real usage growth.
+    const plugin = createPlugin({
+      db: null,
+      config: configSchema.parse({ maxTotalTokens: 150 }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await enforcePreModel(hooks, ctx);
+
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: {
+        inputTokens: 120,
+        outputTokens: 40,
+        cacheReadTokens: 80,
+        cacheCreationTokens: 10,
+      },
+    });
+
+    // Real total = 120 + 40 = 160 >= 150 -> must block.
+    await expect(enforcePreModel(hooks, ctx)).rejects.toMatchObject({
+      message: expect.stringContaining('tokens'),
+    });
+  });
+
+  it('does not double-count cache tokens in the windowed tokens total (agent scope + maxTokensPer24h)', async () => {
+    // A real (fake) DB standing in for better-sqlite3: returns a row already reflecting
+    // correct provider-neutral totals for prior tasks, and records the exact SQL text so
+    // the assertion can catch a regression that re-adds cache columns into the SUM.
+    let windowSql = '';
+    const mockDb = {
+      prepare(sql: string) {
+        return {
+          get(..._params: unknown[]) {
+            if (sql.includes('created_at')) {
+              windowSql = sql;
+              // Prior 24h usage: 100k input(already-total) + 20k output = 120k real tokens.
+              return { total: 120_000 };
+            }
+            return undefined;
+          },
+        };
+      },
+    };
+
+    const plugin = createPlugin({
+      db: mockDb,
+      config: pluginConfigSchema.parse({
+        defaults: {
+          scope: 'agent',
+          caps: [
+            {
+              field: 'tokens',
+              maximum: 130_000,
+              window: 'PT24H',
+              scope: 'agent',
+            },
+          ],
+        },
+      }),
+    });
+    await plugin.install(hooks);
+    const ctx = makeCtx();
+
+    await hooks.emit('task:start', { executionContext: ctx, messages: [] });
+    await enforcePreModel(hooks, ctx);
+
+    // This call's own real usage: 5k total. 120k (window) + 5k (this call) = 125k < 130k -> PASS.
+    await hooks.emit('post:model_response', {
+      executionContext: ctx,
+      stopReason: 'stop',
+      toolCallCount: 0,
+      tokenUsage: {
+        inputTokens: 4_800,
+        outputTokens: 200,
+        cacheReadTokens: 4_000,
+        cacheCreationTokens: 200,
+      },
+    });
+
+    await expect(enforcePreModel(hooks, ctx)).resolves.toBeUndefined();
+    // The regression this guards against: the SQL summing cache columns on top of
+    // input_tokens/output_tokens again.
+    expect(windowSql).not.toMatch(/cache_read_input_tokens|cache_creation_input_tokens/);
+    expect(windowSql).toMatch(/input_tokens \+ output_tokens/);
+  });
+});

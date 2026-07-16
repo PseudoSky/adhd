@@ -28,14 +28,14 @@ import type {
   ModelTier,
   OperationDag,
   ValidationResult,
-} from '@adhd/dispatch-spec';
-import { validateDagJson } from '@adhd/dispatch-spec';
-import { createDagClient, type IDagClient } from '@adhd/dispatch-client';
+} from '@adhd/dispatch-base-spec';
+import { validateDagJson } from '@adhd/dispatch-base-spec';
+import { createDagClient, type IDagClient } from '@adhd/dispatch-core-client';
 import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
 import {
   optimize as computeOptimize,
   snapshot as computeSnapshot,
-} from '@adhd/dispatch-optimizer';
+} from '@adhd/dispatch-core-optimizer';
 import {
   AgentMcpRunner,
   DEFAULT_B_PER_TIER,
@@ -139,7 +139,7 @@ export async function validateCore(dagPath: string): Promise<ValidationResult> {
 // ── snapshot / optimize / eligible ──────────────────────────────────────────
 // ---------------------------------------------------------------------------
 
-/** Real `DagClient` load + `@adhd/dispatch-optimizer`'s `snapshot()`. Read-only. */
+/** Real `DagClient` load + `@adhd/dispatch-core-optimizer`'s `snapshot()`. Read-only. */
 export async function snapshotCore(dagPath: string): Promise<DagSnapshot> {
   await guardDagExists(dagPath);
   const dag = await buildClient(dagPath).load();
@@ -176,7 +176,7 @@ export interface MilestoneStatusEntry {
 /**
  * Per-milestone status report: `status`/`tokensEstimated`/`tokensActual` are
  * carried straight from the current `DagSnapshot` (never recomputed —
- * `@adhd/dispatch-optimizer`'s `snapshot()` is the single source of truth for
+ * `@adhd/dispatch-core-optimizer`'s `snapshot()` is the single source of truth for
  * completion semantics); `loggedOperationIds` is derived locally from
  * `dag.operations` + `dag.dispatch_log`, the one piece `MilestoneSnapshot`
  * doesn't already carry. Read-only.

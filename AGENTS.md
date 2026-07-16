@@ -42,6 +42,12 @@ No Nx generator exists. Create manually with:
 - **When a lint fix would change behavior** (e.g., `react-hooks/exhaustive-deps` where adding the dep causes a TS error), add `// eslint-disable-next-line <rule>` above the offending line with a comment explaining why.
 - **`package.json` deps are auto-derived — do NOT hand-maintain them.** The pre-commit hook (`.githooks/pre-commit`) runs `nx affected -t lint --fix --skip-nx-cache` on staged changes and re-stages what it rewrites. `@nx/dependency-checks` (base ESLint config, `error`-level) derives each package's `dependencies` from its actual imports, so adding/removing an `import` and committing (or running `npx nx lint <project> --fix`) updates `package.json` for you; CI blocks on any unfixable lint. `--skip-nx-cache` is load-bearing — on a cache hit nx would replay the pass without re-applying the fix. See [`.githooks/README.md`](./.githooks/README.md).
 
+## Build & Type-Checking — NEVER run `tsc` directly
+
+- **BANNED: `tsc`, `tsc -b`, `tsc --build`, or any bare `tsc` invocation.** Always go through the Nx executor — `npx nx build <project>` to compile, `npx nx typecheck <project>` to check types. Same for isolating a single type error: use `npx nx typecheck <project>`, never bare `tsc`.
+- **Why it's banned:** each package's base `tsconfig.json` sets no `outDir` (only `tsconfig.lib.json` does). Raw `tsc -b` therefore emits compiled `.js` / `.d.ts` / `.js.map` / `.d.ts.map` / `tsconfig.tsbuildinfo` **directly into `src/`**, next to the real source — polluting the tree and breaking lint. One diagnostic `tsc -b` misfire produced **331 stray untracked files across 8 packages** in a single incident. The Nx executor respects the `outDir` split and emits only to `dist/`.
+- If you genuinely believe a direct `tsc` run is required, **stop and ask a human** — do not run it to "just check something."
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 

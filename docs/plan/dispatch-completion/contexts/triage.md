@@ -1,12 +1,12 @@
 # triage — STATE_NAME
 
-**Phase:** triage · **Kind:** audit · **Depends on:** none · **Guard:** `true`
+**Phase:** triage · **Kind:** audit · **Depends on:** none · **Guard:** `python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase triage`
 
 ---
 
 ## Goal
 
-<What is true after this state that was not true before?>
+Both preconditions are confirmed landed (V0) and the carried DEBT ledger is reconciled against live source before any work begins.
 
 ---
 
@@ -32,4 +32,4 @@ mutates:    ["scripts/audit_triage.py"]
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+Verify [def:preconditions]: run the triage criteria (BUG-DISPATCH-EXEC-001 = the `is not wired into` warn is gone from orchestrator.ts; BUG-DISPATCH-PUBLISH-001 = the duplicate `@adhd/dispatch-spec` alias is gone from tsconfig.base.json). If either fails, HALT and report — this plan depends on them. Then re-verify every row in `BACKLOG.md` against live source (six items already drifted to fixed — see RECONCILIATION.md §C); if EXEC-001 shipped the full `dispatch-tools` package, narrow/drop the `dispatch-tools` state. Confirm `dispatch-base-types` is still orphaned (0 importers) before scheduling its delete.

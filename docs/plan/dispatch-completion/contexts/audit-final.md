@@ -1,6 +1,6 @@
 # audit-final — STATE_NAME
 
-**Phase:** release · **Kind:** audit · **Depends on:** release-ready · **Guard:** `true`
+**Phase:** release · **Kind:** audit · **Depends on:** release-ready · **Guard:** `python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase dod`
 
 ---
 

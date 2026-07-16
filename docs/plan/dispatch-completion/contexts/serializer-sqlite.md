@@ -1,12 +1,12 @@
 # serializer-sqlite — STATE_NAME
 
-**Phase:** storage · **Kind:** work · **Depends on:** orch-audit · **Guard:** `true`
+**Phase:** storage · **Kind:** work · **Depends on:** orch-audit · **Guard:** `npx --yes nx run-many -t test,build -p dispatch-serializer-sqlite`
 
 ---
 
 ## Goal
 
-<What is true after this state that was not true before?>
+`@adhd/dispatch-serializer-sqlite` persists+reloads a dag identically to the JSON serializer (adapter parity), and confirms BL-107 back-compat load lives in `normalizeDag`.
 
 ---
 
@@ -32,4 +32,4 @@ mutates:    ["packages/dispatch/dispatch-serializer-sqlite/src/index.ts"]
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+New package satisfying the identical `IDagSerializer` contract ([inv:adapter-pattern]). Closes DEBT-005/BL-107. Teeth (dod.6): sqlite reload equals json reload on the normalized form; corrupt the read mapping → parity red. SQLite store under `tmp/` in tests ([inv:ephemeral-tmp]).

@@ -1,6 +1,6 @@
 # spec-audit — STATE_NAME
 
-**Phase:** spec · **Kind:** audit · **Depends on:** spec-foundations · **Guard:** `true`
+**Phase:** spec · **Kind:** audit · **Depends on:** spec-foundations · **Guard:** `python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase spec`
 
 ---
 

@@ -1,6 +1,6 @@
 import { mkdirSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, sep } from 'node:path';
-import type { DispatchUnit } from '@adhd/dispatch-spec';
+import type { DispatchUnit } from '@adhd/dispatch-base-spec';
 import type {
   DispatchTaskStatus,
   DispatchUsageReport,

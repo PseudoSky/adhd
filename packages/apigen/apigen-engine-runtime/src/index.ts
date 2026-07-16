@@ -56,3 +56,5 @@ export type {
 } from './lib/logical/union-codec';
 export { tsHostBinding, WELL_KNOWN_TS_CODECS } from './lib/logical/host-ts';
 export type { HostBinding } from './lib/logical/host-ts';
+export { buildToolDescription } from './lib/tool-description';
+export type { ToolDescriptionSchema } from './lib/tool-description';

@@ -1,9 +1,16 @@
 import { type SourceFile } from 'ts-morph';
+import { extractParamDefault } from './param-defaults';
 
 /** Metadata for a single extracted function. */
 export type FnMeta = {
   name: string;
-  params: { name: string; type: string; optional: boolean }[];
+  params: {
+    name: string;
+    type: string;
+    optional: boolean;
+    /** BUG-APIGEN-018: raw source text of the param's default value, if any. */
+    defaultValue?: string;
+  }[];
   returnType: string;
 };
 
@@ -22,6 +29,7 @@ export function extractNamed(sf: SourceFile): FnMeta[] {
         name: p.getName(),
         type: p.getTypeNode()?.getText() ?? p.getType().getText(),
         optional: p.isOptional() || p.hasInitializer(),
+        defaultValue: extractParamDefault(p, p.getName(), fn),
       })),
       returnType: fn.getReturnType().getText(),
     });
@@ -58,6 +66,11 @@ export function extractNamed(sf: SourceFile): FnMeta[] {
           name: p.getName(),
           type: paramDecl?.getTypeNode()?.getText() ?? p.getTypeAtLocation(decl).getText(),
           optional,
+          defaultValue: extractParamDefault(
+            paramDecl,
+            p.getName(),
+            statement
+          ),
         };
       }),
       returnType: sig.getReturnType().getText(),

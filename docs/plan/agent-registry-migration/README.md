@@ -197,6 +197,22 @@ Source: claude-agents") — **not** in this `adhd` monorepo. Therefore:
     `nx build agent-registry-migration` exits 0.
   - delivered-by: `scaffold-package`
 
+- `[dod.7]` **Superseded-scope closeout: the two inherited residual items are
+  reconciled against landed work — the provider registry lookup rows (providers,
+  models, platform-bindings, tool-formats) are populated by an idempotent seed in the
+  shipped `@adhd/agent-core-provider`, and the agent-registry initiative closeout
+  artifacts under `docs/plan/agent-registry/` are committed (git-tracked), not stray.**
+  (structural)
+  - Proven by `[seed-provider-registry.1..3]` (the real `@adhd/agent-core-provider`
+    seed exports + row constants + its reopen/idempotency roundtrip test) and
+    `[artifact-cleanup.1..3]` (`CLOSEOUT.md`/`COVERAGE.md`/`DEMO.md` exist AND resolve
+    under `git ls-files --error-unmatch`).
+  - Note: both items appear already-satisfied by out-of-band work that has since
+    landed; a human should confirm-and-mark rather than re-execute (see the
+    reconciliation notes in `contexts/seed-provider-registry.md` +
+    `contexts/artifact-cleanup.md`).
+  - delivered-by: `seed-provider-registry, artifact-cleanup`
+
 ---
 
 ## State graph

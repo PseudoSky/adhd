@@ -1,6 +1,28 @@
+import Database from "better-sqlite3";
 import { describe, expect, it, beforeEach } from "vitest";
 import { UsageClient } from "../runtime/usage-client.js";
 import type { ExecutionContext, TokenUsage } from "@adhd/agent-base-types";
+
+const TASK_USAGE_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS task_usage (
+    task_id TEXT PRIMARY KEY NOT NULL,
+    root_task_id TEXT,
+    agent_name TEXT NOT NULL,
+    provider_type TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_tokens INTEGER DEFAULT 0 NOT NULL,
+    output_tokens INTEGER DEFAULT 0 NOT NULL,
+    tool_call_count INTEGER DEFAULT 0 NOT NULL,
+    model_calls INTEGER DEFAULT 0 NOT NULL,
+    latency_ms INTEGER DEFAULT 0 NOT NULL,
+    is_complete INTEGER DEFAULT 0 NOT NULL,
+    stop_reason TEXT,
+    max_tokens INTEGER,
+    cache_read_input_tokens INTEGER,
+    cache_creation_input_tokens INTEGER,
+    created_at TEXT NOT NULL
+);
+`;
 
 function makeExecutionContext(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
     return {
@@ -181,5 +203,133 @@ describe("UsageClient", () => {
         expect(totals.inputTokens).toBe(350);
         expect(totals.outputTokens).toBe(150);
         expect(totals.modelCalls).toBe(3);
+    });
+});
+
+// ── Cache-token double-count in getUsageInWindow (BUG-ORCH-010) ────────────
+//
+// `input_tokens` in task_usage is already the provider-neutral TOTAL a call
+// processed (uncachedInputTokens + cacheReadTokens + cacheCreationTokens summed at
+// the provider boundary — see agent-engine-orchestrator's normaliseAnthropicUsage /
+// normaliseOpenAIUsage, BUG-ORCH-010). Summing cache_read_input_tokens /
+// cache_creation_input_tokens on top of input_tokens again double-counts the cached
+// portion of a windowed usage total. This drives the REAL better-sqlite3 engine
+// (not a mock) against the real production schema, so the fixed SQL text is proven,
+// not just asserted by inspection.
+describe("UsageClient.getUsageInWindow — cache-token double-count (BUG-ORCH-010)", () => {
+    function makeRealDb() {
+        const sqlite = new Database(":memory:");
+        sqlite.exec(TASK_USAGE_TABLE_SQL);
+        return sqlite;
+    }
+
+    function insertTaskUsage(
+        sqlite: InstanceType<typeof Database>,
+        row: {
+            taskId: string;
+            agentName: string;
+            inputTokens: number;
+            outputTokens: number;
+            cacheReadTokens: number;
+            cacheCreationTokens: number;
+            createdAt: string;
+        }
+    ): void {
+        sqlite
+            .prepare(
+                `INSERT INTO task_usage
+                    (task_id, agent_name, provider_type, model, input_tokens, output_tokens,
+                     cache_read_input_tokens, cache_creation_input_tokens, created_at)
+                 VALUES (?, ?, 'openai', 'gpt-4o-mini', ?, ?, ?, ?, ?)`
+            )
+            .run(
+                row.taskId,
+                row.agentName,
+                row.inputTokens,
+                row.outputTokens,
+                row.cacheReadTokens,
+                row.cacheCreationTokens,
+                row.createdAt
+            );
+    }
+
+    it("sums to the real (non-double-counted) total for an agent-scoped window", () => {
+        const sqlite = makeRealDb();
+        const now = new Date().toISOString();
+
+        // Row 1: input_tokens(100) already includes cache_read(80) + cache_creation(10)
+        // — the shape real providers actually emit post-BUG-ORCH-010 normalisation.
+        insertTaskUsage(sqlite, {
+            taskId: "t1",
+            agentName: "test-agent",
+            inputTokens: 100,
+            outputTokens: 40,
+            cacheReadTokens: 80,
+            cacheCreationTokens: 10,
+            createdAt: now,
+        });
+        // Row 2: a cold call, no cache.
+        insertTaskUsage(sqlite, {
+            taskId: "t2",
+            agentName: "test-agent",
+            inputTokens: 60,
+            outputTokens: 20,
+            cacheReadTokens: 0,
+            cacheCreationTokens: 0,
+            createdAt: now,
+        });
+
+        const client = new UsageClient(sqlite);
+        const total = client.getUsageInWindow("agent", "test-agent");
+
+        // Real total = (100+40) + (60+20) = 220. A double-count would additionally
+        // add cache_read+cache_creation (90) on top, producing 310.
+        expect(total).toBe(220);
+    });
+
+    it("excludes the current task and respects the time window", () => {
+        const sqlite = makeRealDb();
+        const now = new Date();
+        const old = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
+
+        insertTaskUsage(sqlite, {
+            taskId: "current",
+            agentName: "test-agent",
+            inputTokens: 999,
+            outputTokens: 999,
+            cacheReadTokens: 999,
+            cacheCreationTokens: 999,
+            createdAt: now.toISOString(),
+        });
+        insertTaskUsage(sqlite, {
+            taskId: "too-old",
+            agentName: "test-agent",
+            inputTokens: 500,
+            outputTokens: 500,
+            cacheReadTokens: 100,
+            cacheCreationTokens: 0,
+            createdAt: old,
+        });
+        insertTaskUsage(sqlite, {
+            taskId: "in-window",
+            agentName: "test-agent",
+            inputTokens: 30,
+            outputTokens: 10,
+            cacheReadTokens: 20,
+            cacheCreationTokens: 0,
+            createdAt: now.toISOString(),
+        });
+
+        const client = new UsageClient(sqlite);
+        const total = client.getUsageInWindow(
+            "agent",
+            "test-agent",
+            24 * 60 * 60 * 1000,
+            "current"
+        );
+
+        // Only "in-window" counts: 30 + 10 = 40. "current" excluded by taskId,
+        // "too-old" excluded by the 24h window.
+        expect(total).toBe(40);
     });
 });

@@ -289,7 +289,8 @@
       "phase": "tests",
       "depends_on": [
         "tests-hardening",
-        "algo-audit"
+        "algo-audit",
+        "live-e2e"
       ],
       "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase tests",
       "artifacts": [
@@ -331,7 +332,7 @@
         "cli-audit",
         "orch-audit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx test dispatch-cli",
       "artifacts": [
         "entrypoint/dispatch-cli/src/test/integration/real-e2e.ts"
       ],

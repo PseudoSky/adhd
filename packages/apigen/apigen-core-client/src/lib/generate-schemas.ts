@@ -7,6 +7,7 @@ import { extractDefault } from './extractors/default-export';
 import { extractNamedObject } from './extractors/named-object';
 import { buildSchema } from './schema-builders/ts-json-schema';
 import { createExtractionSession, internalSession } from './extraction-session';
+import { applyParamDefault } from './extractors/param-defaults';
 
 /**
  * Reads a TypeScript source file and returns `GeneratedSchemas` — domain schemas only,
@@ -38,7 +39,12 @@ export async function generateSchemas(
     const project = session.projectFor(tsconfig);
     const sf: SourceFile = session.sourceFileFor(filePath, tsconfig);
 
-    type FnParam = { name: string; type: string; optional: boolean };
+    type FnParam = {
+      name: string;
+      type: string;
+      optional: boolean;
+      defaultValue?: string;
+    };
     type FnInfo = { name: string; params: FnParam[]; returnType: string };
 
     let fns: FnInfo[];
@@ -64,13 +70,19 @@ export async function generateSchemas(
 
       const properties: Record<string, unknown> = {};
       for (const p of domainParams) {
-        properties[p.name] = await buildSchema(
-          project,
-          sf,
-          p.type,
-          tsconfig,
-          session
-        );
+        const built = await buildSchema(project, sf, p.type, tsconfig, session);
+        // buildSchema's results are memoized by reference (session/persistent
+        // caches) and MUST be treated as immutable by callers — shallow-clone
+        // before mutating so per-param `default`/`description` never leaks
+        // across other params or functions sharing the same type text.
+        const propSchema: Record<string, unknown> = { ...built };
+        // BUG-APIGEN-018: surface the TS initializer / JSDoc @default as both
+        // the native JSON-Schema `default` keyword and a human-readable note
+        // in `description`.
+        if (p.defaultValue !== undefined) {
+          applyParamDefault(propSchema, p.defaultValue);
+        }
+        properties[p.name] = propSchema;
       }
 
       // Unwrap Promise<T> → T for the output schema

@@ -6,16 +6,28 @@
   "publishConfig": {
     "access": "public"
   },
-  "main": "./index.js",
-  "module": "./index.mjs",
+  "main": "./index.cjs",
+  "module": "./index.js",
   "typings": "./index.d.ts",
   "exports": {
     ".": {
-      "import": "./index.mjs",
-      "require": "./index.js",
+      "import": "./index.js",
+      "require": "./index.cjs",
       "types": "./index.d.ts"
     }
   },
+  "files": [
+    "index.js",
+    "index.cjs",
+    "index.d.ts",
+    "CHANGELOG.md",
+    "!*.test.*",
+    "!*.spec.*",
+    "!*.e2e.*",
+    "!vite.config.*",
+    "!project.json",
+    "!tsconfig*.json"
+  ],
   "peerDependencies": {
     "@adhd/agent-base-types": "*"
   },

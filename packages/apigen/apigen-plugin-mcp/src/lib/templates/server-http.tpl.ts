@@ -40,7 +40,10 @@ const mcpServer = new Server({ name: 'apigen-mcp', version: '1.0.0' }, { capabil
 mcpServer.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: Object.entries(toolMetas).map(([name, meta]) => ({
     name,
-    description: name,
+    // BUG-APIGEN-020: description baked at generate time by generate.ts —
+    // documents the "data" envelope calling convention (+ any envelope
+    // fields) so consumers don't have to discover it by trial and error.
+    description: (meta as any).description ?? name,
     inputSchema: (meta.schema as any).input,
   })),
 }))

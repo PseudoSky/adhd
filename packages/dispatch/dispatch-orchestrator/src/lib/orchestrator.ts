@@ -13,9 +13,9 @@
  * packages/ai/agent-mcp/README.md for the design this composes.
  *
  * COMPOSITION, NOT REIMPLEMENTATION — eligibility/completion semantics belong
- * entirely to @adhd/dispatch-optimizer's `snapshot()`/`optimize()` (D-07,
+ * entirely to @adhd/dispatch-core-optimizer's `snapshot()`/`optimize()` (D-07,
  * SCOPE.md §N1 step 4 `deriveMilestoneStatus`, §N2 step 1
- * `selectPackableMilestones`) and to @adhd/dispatch-client's `DagClient`. This
+ * `selectPackableMilestones`) and to @adhd/dispatch-core-client's `DagClient`. This
  * module's only job is to drive real dispatch (agent-mcp via
  * `IDispatchAgentRunner`) and real guard verification, then write results back
  * into the exact shape those two already understand: a milestone becomes
@@ -30,6 +30,8 @@
 
 import { randomUUID } from 'node:crypto';
 import { exec as execCallback } from 'node:child_process';
+import * as fsp from 'node:fs/promises';
+import * as nodePath from 'node:path';
 
 import type {
   DagJson,
@@ -44,8 +46,8 @@ import type {
   OperationDag,
   OperationStatus,
   Turn,
-} from '@adhd/dispatch-spec';
-import type { IDagClient } from '@adhd/dispatch-client';
+} from '@adhd/dispatch-base-spec';
+import type { IDagClient } from '@adhd/dispatch-core-client';
 
 import type {
   DispatchTaskStatus,
@@ -94,6 +96,30 @@ export type GuardExecFn = (
   timeoutMs: number
 ) => Promise<GuardExecResult>;
 
+/**
+ * Real outcome of executing a single `type: "tool-call"` operation (see
+ * `ToolCallExecFn`). `result` is the handler's own return payload on success;
+ * `error` is a human-readable message on failure. Never a bare boolean —
+ * every outcome carries enough payload to become `DispatchResult.tool_result`
+ * verbatim.
+ */
+export interface ToolCallResult {
+  ok: boolean;
+  result?: unknown;
+  error?: string;
+}
+
+/**
+ * Injectable tool-call executor — the seam BUG-DISPATCH-EXEC-001 fixes.
+ * Production default: `defaultToolCallExec` (real in-process execution of the
+ * D-13/D-18 dag-mutation + fs verbs). Tests can inject a scripted double for
+ * deterministic failure-path coverage without touching the real filesystem.
+ */
+export type ToolCallExecFn = (
+  op: OperationDag,
+  dag: DagJson
+) => Promise<ToolCallResult> | ToolCallResult;
+
 // ---------------------------------------------------------------------------
 // ── OPTIONAL / FUTURE-FACING SEAMS ───────────────────────────────────────────
 // ---------------------------------------------------------------------------
@@ -111,7 +137,7 @@ export interface IOrchestratorIoPlugin {
 
 /**
  * `plugins.gitnexus` — reserved for future wiring. As of this milestone,
- * @adhd/dispatch-optimizer's `snapshot()` has NO parameter that consumes a
+ * @adhd/dispatch-core-optimizer's `snapshot()` has NO parameter that consumes a
  * gitnexus signal: `blast_radius`, `conflict`, and shape-op
  * `from`/`breaking`/`severity` are internal TODO stubs hardcoded inside
  * snapshot.ts (not threaded through `IOptimizerDeps`). This field exists only
@@ -124,7 +150,7 @@ export type IOrchestratorGitnexusPlugin = Record<string, unknown>;
 /**
  * Placeholder for the future B-calibration store (SCOPE.md §C4 / §Open
  * Decisions #2 — `~/.adhd/dispatch-calibration.json`). No `ICalibrationStore`
- * export exists in `@adhd/dispatch-spec` today (verified absent). Deliberately
+ * export exists in `@adhd/dispatch-base-spec` today (verified absent). Deliberately
  * minimal per orchestrator-core's brief ("do NOT invent a rich interface"):
  * read-only access to whatever calibrated per-tier B values a future
  * calibration utility has persisted. Unused by the fast path —
@@ -141,9 +167,9 @@ export interface ICalibrationPlaceholder {
 // ---------------------------------------------------------------------------
 
 /**
- * The subset of `@adhd/dispatch-optimizer`'s surface the orchestrator drives.
+ * The subset of `@adhd/dispatch-core-optimizer`'s surface the orchestrator drives.
  * Injected (rather than imported directly) so this module never depends on
- * `@adhd/dispatch-optimizer` at the source level — the fixed pipeline
+ * `@adhd/dispatch-core-optimizer` at the source level — the fixed pipeline
  * (snapshot -> enrich -> optimize -> dispatch -> poll -> record) stays fully
  * DI-composable, and a caller can inject a fake for pure unit tests of the
  * dispatch/guard/replan machinery without pulling in the real optimizer.
@@ -156,7 +182,7 @@ export interface IOptimizerLike {
 export interface OrchestratorDeps {
   /** Loads/saves dag.json. Construct via `createDagClient(createJsonFileSerializer(path))`. */
   client: IDagClient;
-  /** Real `{ snapshot, optimize }` from `@adhd/dispatch-optimizer`, or a test double. */
+  /** Real `{ snapshot, optimize }` from `@adhd/dispatch-core-optimizer`, or a test double. */
   optimizer: IOptimizerLike;
   /** Real `AgentMcpRunner` or `MockAgentRunner` (see `./agent-runner.js`). */
   runner: IDispatchAgentRunner;
@@ -183,6 +209,18 @@ export interface OrchestratorDeps {
   guardExec?: GuardExecFn;
   /** Per-guard timeout, ms. Default: `DEFAULT_GUARD_TIMEOUT_MS` (5 minutes — "generous"). */
   guardTimeoutMs?: number;
+  /**
+   * Executes `type: "tool-call"` operations for real (BUG-DISPATCH-EXEC-001).
+   * Default: `defaultToolCallExec`, scoped to `toolsRoot`.
+   */
+  toolCallExec?: ToolCallExecFn;
+  /**
+   * Filesystem root `fs.move`/`fs.delete`/`fs.scaffold` tool-call ops are
+   * confined to (paths escaping this root are rejected as a failed outcome,
+   * never executed). Default: `process.cwd()`. Only consumed by the default
+   * `toolCallExec` — ignored if `toolCallExec` is injected.
+   */
+  toolsRoot?: string;
   /**
    * Safety cap for `orchestrate()`'s multi-cycle loop only (NOT consumed by
    * `orchestrateCycle()`, which always runs exactly one cycle regardless).
@@ -213,6 +251,7 @@ interface ResolvedDeps {
   poll: PollConfig;
   guardExec: GuardExecFn;
   guardTimeoutMs: number;
+  toolCallExec: ToolCallExecFn;
   continueOnError: boolean;
 }
 
@@ -222,7 +261,7 @@ interface ResolvedDeps {
 
 /**
  * SCOPE.md §Open Decisions #2 cold-start recommendation. Matches
- * @adhd/dispatch-optimizer's own shipped test default
+ * @adhd/dispatch-core-optimizer's own shipped test default
  * (src/test/fixtures.ts `defaultDeps()`) so the two packages agree on what
  * "uncalibrated" means.
  */
@@ -322,7 +361,188 @@ function defaultGuardExec(
   });
 }
 
+// ---------------------------------------------------------------------------
+// ── Tool-call execution (BUG-DISPATCH-EXEC-001) ─────────────────────────────
+//
+// `type: "tool-call"` ops (D-13/D-18) were, until this fix, never actually
+// executed — the loop below existed only to mark them 'skipped' and warn
+// that `@adhd/dispatch-tools` "is not wired in". That package does not exist.
+// Rather than fake a fix (still marking 'skipped' but suppressing the
+// warning) or boiling the ocean (standing up a whole new publishable MCP
+// server package for four dag-mutation verbs the orchestrator already has
+// full in-memory access to), this executes the D-13 dag-mutation verbs
+// (`dag.set-field`, `dag.clear-pending`, `dag.add-milestone`,
+// `dag.append-dispatch-log`) and the D-13 fs verbs (`fs.move`, `fs.delete`,
+// `fs.scaffold`) for REAL, in-process — exactly where D-18's `automated`
+// actions already run, and exactly what a same-process `@adhd/dispatch-tools`
+// client would have had to do anyway (mutate the same `dag: DagJson` this
+// module already owns for the whole cycle and persists via `deps.client`).
+// Injectable via `ToolCallExecFn` for tests/future real-MCP-server swap-in;
+// `defaultToolCallExec` is the production default.
+// ---------------------------------------------------------------------------
+
+function requireStringArg(args: Record<string, unknown>, key: string): string {
+  const value = args[key];
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`missing required string arg '${key}'`);
+  }
+  return value;
+}
+
+const UNSAFE_PATH_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Minimal dot-path setter scoped to `dag.json`'s own JSON shape (e.g.
+ * `"milestones.a.pending"`, `"optimization.b_override"`). Rejects prototype-
+ * polluting segments and paths whose parent doesn't already resolve to an
+ * object — `dag.set-field` sets an existing field, it never silently
+ * scaffolds new nested structure.
+ */
+function setDagField(dag: DagJson, fieldPath: string, value: unknown): void {
+  const segments = fieldPath.split('.');
+  if (segments.length === 0 || segments.some((s) => UNSAFE_PATH_SEGMENTS.has(s) || s === '')) {
+    throw new Error(`unsafe or empty path '${fieldPath}'`);
+  }
+  const lastSeg = segments[segments.length - 1];
+  const parentSegs = segments.slice(0, -1);
+  if (lastSeg === undefined) {
+    throw new Error(`unsafe or empty path '${fieldPath}'`);
+  }
+  let cursor: Record<string, unknown> = dag as unknown as Record<string, unknown>;
+  for (const seg of parentSegs) {
+    const next = cursor[seg];
+    if (next === null || typeof next !== 'object') {
+      throw new Error(`path '${fieldPath}' does not resolve (missing/non-object segment '${seg}')`);
+    }
+    cursor = next as Record<string, unknown>;
+  }
+  cursor[lastSeg] = value;
+}
+
+/**
+ * Resolves an `fs.*` tool-call path relative to `root`, rejecting anything
+ * that escapes it (`..` traversal, absolute paths outside root). A
+ * maliciously- or buggily-authored dag.json must never be able to move/
+ * delete/scaffold files outside the configured tools root.
+ */
+function resolveToolPath(root: string, rel: string): string {
+  const rootResolved = nodePath.resolve(root);
+  const resolved = nodePath.resolve(rootResolved, rel);
+  if (resolved !== rootResolved && !resolved.startsWith(rootResolved + nodePath.sep)) {
+    throw new Error(`path '${rel}' escapes tools root '${root}'`);
+  }
+  return resolved;
+}
+
+/**
+ * Real, in-process execution for `type: "tool-call"` operations. See the
+ * module-level comment above for why this lives here rather than in a new
+ * `@adhd/dispatch-tools` package. Never throws — every failure mode (bad
+ * args, unknown action, fs error) resolves to `{ ok: false, error }`.
+ */
+async function defaultToolCallExec(
+  op: OperationDag,
+  dag: DagJson,
+  toolsRoot: string
+): Promise<ToolCallResult> {
+  const args = (op.args ?? {}) as Record<string, unknown>;
+  try {
+    switch (op.action) {
+      case 'dag.set-field': {
+        const fieldPath = requireStringArg(args, 'path');
+        const value = args['value'];
+        setDagField(dag, fieldPath, value);
+        return { ok: true, result: { path: fieldPath, value } };
+      }
+      case 'dag.clear-pending': {
+        const slug = requireStringArg(args, 'milestone');
+        const milestone = dag.milestones[slug];
+        if (!milestone) {
+          return { ok: false, error: `unknown milestone '${slug}'` };
+        }
+        milestone.pending = null;
+        return { ok: true, result: { milestone: slug, pending: null } };
+      }
+      case 'dag.add-milestone': {
+        const slug = requireStringArg(args, 'slug');
+        if (dag.milestones[slug]) {
+          return { ok: false, error: `milestone '${slug}' already exists` };
+        }
+        const input = (args['milestone'] ?? {}) as Partial<MilestoneDag>;
+        const created: MilestoneDag = {
+          description: input.description ?? '',
+          authored_by: input.authored_by ?? op.authored_by,
+          pending: input.pending ?? null,
+          triggered_by: input.triggered_by ?? null,
+          phase: input.phase ?? '',
+          depends_on: input.depends_on ?? [],
+          agent: input.agent ?? null,
+          model: input.model ?? null,
+          effort: input.effort ?? null,
+          two_stage: input.two_stage ?? false,
+          read_only: input.read_only ?? [],
+          guard: input.guard ?? null,
+        };
+        if (input.rationale !== undefined) created.rationale = input.rationale;
+        dag.milestones[slug] = created;
+        return { ok: true, result: { slug } };
+      }
+      case 'dag.append-dispatch-log': {
+        const input = (args['entry'] ?? {}) as Partial<DispatchLogEntry>;
+        const nowIso = new Date().toISOString();
+        const entry: DispatchLogEntry = {
+          id: input.id ?? randomUUID(),
+          kind: input.kind ?? 'execution',
+          provider: input.provider ?? 'local',
+          model: input.model ?? null,
+          agent: input.agent ?? GUARD_EXEC_AGENT_LABEL,
+          effort: input.effort ?? null,
+          started_at: input.started_at ?? nowIso,
+          completed_at: input.completed_at ?? nowIso,
+          operations: input.operations ?? [],
+          turns: input.turns ?? [],
+          results: input.results ?? [],
+          notes: input.notes ?? [],
+        };
+        dag.dispatch_log.push(entry);
+        return { ok: true, result: { id: entry.id } };
+      }
+      case 'fs.move': {
+        const from = resolveToolPath(toolsRoot, requireStringArg(args, 'from'));
+        const to = resolveToolPath(toolsRoot, requireStringArg(args, 'to'));
+        await fsp.mkdir(nodePath.dirname(to), { recursive: true });
+        await fsp.rename(from, to);
+        return { ok: true, result: { from, to } };
+      }
+      case 'fs.delete': {
+        const target = resolveToolPath(toolsRoot, requireStringArg(args, 'path'));
+        const recursive = args['recursive'] === true;
+        await fsp.rm(target, { recursive, force: false });
+        return { ok: true, result: { path: target } };
+      }
+      case 'fs.scaffold': {
+        const target = resolveToolPath(toolsRoot, requireStringArg(args, 'path'));
+        const content = typeof args['content'] === 'string' ? (args['content'] as string) : '';
+        await fsp.mkdir(nodePath.dirname(target), { recursive: true });
+        await fsp.writeFile(target, content, 'utf8');
+        return {
+          ok: true,
+          result: { path: target, bytes: Buffer.byteLength(content, 'utf8') },
+        };
+      }
+      default:
+        return {
+          ok: false,
+          error: `tool-call action '${op.action}' has no registered executor`,
+        };
+    }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 function resolveDeps(deps: OrchestratorDeps): ResolvedDeps {
+  const toolsRoot = deps.toolsRoot ?? process.cwd();
   return {
     client: deps.client,
     optimizer: deps.optimizer,
@@ -336,6 +556,7 @@ function resolveDeps(deps: OrchestratorDeps): ResolvedDeps {
     poll: { ...DEFAULT_POLL, ...deps.poll },
     guardExec: deps.guardExec ?? defaultGuardExec,
     guardTimeoutMs: deps.guardTimeoutMs ?? DEFAULT_GUARD_TIMEOUT_MS,
+    toolCallExec: deps.toolCallExec ?? ((op, dagArg) => defaultToolCallExec(op, dagArg, toolsRoot)),
     continueOnError: deps.continueOnError ?? true,
   };
 }
@@ -389,7 +610,7 @@ export interface CycleResult {
  * usage shape — no `turn` index or timestamp) into real `Turn[]` for
  * `DispatchLogEntry.turns`: assigns a 1-based `turn` index, stamps `t` from
  * the injected clock, and carries `model_calls` through via the newly-added
- * optional `Turn.model_calls` field (@adhd/dispatch-spec `types.ts`).
+ * optional `Turn.model_calls` field (@adhd/dispatch-base-spec `types.ts`).
  */
 function reconcileTurns(synthesized: SynthesizedTurn[], clock: ClockFn): Turn[] {
   return synthesized.map((s, i) => ({
@@ -632,6 +853,20 @@ async function dispatchUnit(
   let opResultStatus: OperationStatus;
   const hasRealDispatch = unit.prompt != null;
 
+  // Build operation lookup up front — needed both for real tool-call
+  // execution (BUG-DISPATCH-EXEC-001) and for per-operation automated-guard
+  // routing further below, regardless of which dispatch path this unit takes.
+  const opLookup = new Map<string, OperationDag>();
+  for (const op of dag.operations as OperationDag[]) {
+    opLookup.set(op.id, op);
+  }
+
+  // Real per-op tool-call outcomes, keyed by op id. Populated below when this
+  // unit has no generative content; consulted while building `results[]` so
+  // each tool-call op's true outcome (never a blanket status) reaches the
+  // dispatch_log — this is the fix for BUG-DISPATCH-EXEC-001.
+  const toolCallOutcomes = new Map<string, ToolCallResult>();
+
   if (hasRealDispatch) {
     await deps.runner.ensureAgent(unit);
     const fired = await deps.runner.fire(unit);
@@ -657,19 +892,48 @@ async function dispatchUnit(
       });
     }
   } else if (unit.operations.length > 0) {
-    // Non-empty operations with no prompt — either tool-call ops (e.g.
-    // dag-mutation per D-13) or automated guard ops. Real tool-call
-    // execution requires @adhd/dispatch-tools, which is not wired into
-    // this minimal loop (see dag.json milestones ["dispatch-tools"] /
-    // ["hardening-complete"]). Automated guard ops are executed inline
-    // below via op-level guard routing. Mark the default status 'skipped'
-    // for any ops not handled by a specific path; milestone guard(s) still
-    // verify the outcome.
+    // Non-empty operations with no prompt — tool-call ops (D-13 dag-mutation
+    // + fs verbs) are executed for REAL below via `deps.toolCallExec`
+    // (BUG-DISPATCH-EXEC-001 fix). Automated guard ops are executed inline
+    // further down via op-level guard routing. Any OTHER automated action
+    // (dag.inject/dag.wait/non-guard exec) has no registered executor yet
+    // and is honestly marked 'skipped' — never silently claimed complete.
+    let anyUnhandled = false;
+    for (const opId of unit.operations) {
+      const opDag = opLookup.get(opId);
+      if (!opDag) {
+        anyUnhandled = true;
+        continue;
+      }
+      if (opDag.type === 'tool-call') {
+        const outcome = await deps.toolCallExec(opDag, dag);
+        toolCallOutcomes.set(opId, outcome);
+        if (!outcome.ok) {
+          notes.push({
+            level: 'error',
+            text: `unit '${unit.id}': tool-call op '${opId}' (action '${opDag.action}') failed: ${outcome.error ?? 'unknown error'}`,
+          });
+        }
+        continue;
+      }
+      if (opDag.type === 'automated' && opDag.action === 'guard') {
+        continue; // handled by the automated-guard loop below
+      }
+      anyUnhandled = true;
+    }
+
+    if (anyUnhandled) {
+      notes.push({
+        level: 'warn',
+        text: `unit '${unit.id}': one or more operations have no registered executor (only tool-call and automated-guard ops are wired) — marking those 'skipped', proceeding to milestone guard(s)`,
+      });
+    }
+    // Default fill for any op NOT individually resolved above (unhandled
+    // ones only — real tool-call outcomes and automated guards each
+    // overwrite their own entry below, never regressing to a false
+    // 'complete'). Deliberately not 'failed': a tool-call/guard-only unit
+    // still deserves its milestone guard(s) to run (see `shouldRunGuards`).
     opResultStatus = 'skipped';
-    notes.push({
-      level: 'warn',
-      text: `unit '${unit.id}': ${unit.operations.length} operation(s) with no generative content — tool-call execution (@adhd/dispatch-tools) is not wired into dispatch-orchestrator's minimal loop; marking skipped, proceeding to milestone guard(s)`,
-    });
   } else {
     // True guard-only milestone(s) (D-12): zero operations at all.
     opResultStatus = 'complete'; // vacuous — results[] below will be empty
@@ -679,19 +943,29 @@ async function dispatchUnit(
     });
   }
 
-  const results: DispatchResult[] = unit.operations.map((opId) => ({
-    op_id: opId,
-    status: opResultStatus,
-    guard_result: null,
-    guard_output: null,
-    guard_ran_at: null,
-  }));
-
-  // Build operation lookup for per-operation guard routing.
-  const opLookup = new Map<string, OperationDag>();
-  for (const op of dag.operations as OperationDag[]) {
-    opLookup.set(op.id, op);
-  }
+  const results: DispatchResult[] = unit.operations.map((opId) => {
+    const toolOutcome = toolCallOutcomes.get(opId);
+    if (toolOutcome) {
+      return {
+        op_id: opId,
+        status: toolOutcome.ok ? 'complete' : 'failed',
+        guard_result: null,
+        guard_output: null,
+        guard_ran_at: null,
+        tool_result: toolOutcome.ok
+          ? (toolOutcome.result ?? null)
+          : { error: toolOutcome.error ?? 'unknown error' },
+      };
+    }
+    return {
+      op_id: opId,
+      status: opResultStatus,
+      guard_result: null,
+      guard_output: null,
+      guard_ran_at: null,
+      tool_result: null,
+    };
+  });
 
   const shouldRunDispatchedGuards = opResultStatus !== 'failed';
 

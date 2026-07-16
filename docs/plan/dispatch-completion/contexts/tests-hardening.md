@@ -1,12 +1,12 @@
 # tests-hardening — STATE_NAME
 
-**Phase:** tests · **Kind:** work · **Depends on:** plugin-audit, storage-audit, tools-audit, cli-audit · **Guard:** `true`
+**Phase:** tests · **Kind:** work · **Depends on:** plugin-audit, storage-audit, tools-audit, cli-audit · **Guard:** `npx --yes nx run-many -t test,build -p dispatch-core-optimizer`
 
 ---
 
 ## Goal
 
-<What is true after this state that was not true before?>
+Golden snapshot/optimize fixtures, the algorithm suite (gated), the stepwise-dispatch A/B experiment, and the dispatch-instance nx-inputs fix all land green.
 
 ---
 
@@ -31,4 +31,4 @@ mutates:    ["packages/dispatch/dispatch-core-optimizer/src/test/golden.spec.ts"
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+Closes DEBT-WORKSPACE-NX-INPUTS-001 (dispatch-package instances only — the workspace-wide sweep is out of scope). Golden fixtures + stepwise-ab record per-turn tokens with an artifact-equivalence assertion; a negative A/B result is persisted as a packing input, not a default. [inv:nx-cache] (prove hits by running twice).

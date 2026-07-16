@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { DagSnapshot } from '@adhd/dispatch-spec';
+import type { DagSnapshot } from '@adhd/dispatch-base-spec';
 
 import { snapshot } from './snapshot.js';
 import { computeTokensNaive, optimize } from './optimize.js';

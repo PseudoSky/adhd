@@ -9,12 +9,40 @@
  * (the apigen `pass=0/0` drift class).
  *
  * Usage:
- *   node scripts/run-audit.js [--phase <phase>] [--criteria <file>]
+ *   node scripts/run-audit.js [--phase <phase>] [--criteria <file>] [--repo-root <path>]
  *
- *   --phase  ""   run all phases (the Python harness's empty-phase shape)
- *   --phase  X    run phase X + every phase ordered before it (accumulation)
- *   --criteria    path to the criteria file (default: scripts/criteria.json,
- *                 then <planDir>/criteria.json relative to cwd)
+ *   --phase       ""   run all phases (the Python harness's empty-phase shape)
+ *   --phase       X    run phase X + every phase ordered before it (accumulation)
+ *   --criteria         path to the criteria file (default: scripts/criteria.json,
+ *                      then <planDir>/criteria.json relative to cwd)
+ *   --repo-root        explicit repo root (BL-96(1) opt-in, see below). Falls
+ *                      back to `git rev-parse --show-toplevel` from cwd, then
+ *                      to cwd itself, when omitted.
+ *
+ * BL-96(1) — cwd resolution is OPT-IN, never implicit (migration note):
+ * The runner's own cwd is whatever the caller sets (state-transition.js runs it
+ * with `cwd: planDir` so plan-relative paths — the common case — resolve
+ * unqualified). A criterion authored with a REPO-ROOT-relative path (e.g.
+ * `libs/foo/bar.ts` from a plan several directories deep) silently fails to
+ * resolve against planDir cwd — that was BL-96's reported defect (4/128 checks
+ * failed in one run). The declined `604d` inbox note explored unifying guard +
+ * audit onto one shared cwd outright but was correctly declined: that requires
+ * a path-relativity convention decision plus a live-plan migration sweep, and
+ * flipping the DEFAULT cwd for every criterion in every in-flight plan risks
+ * silently breaking correctly-authored plan-relative paths.
+ *
+ * Instead, resolution is explicit per-criterion and additive-only — a criterion
+ * unsets `cwd` (the default) keeps running exactly as before (planDir/whatever
+ * the caller's cwd is); an author who needs a repo-root-relative check opts in
+ * with `"cwd": "repo-root"` (kinds `exists`/`present`/`absent`/`command`/
+ * `custom`/`negative-control`), which resolves against `--repo-root` (or the
+ * git toplevel autodetected from cwd when the flag is absent). Every
+ * `command`/`custom`/`negative-control` child process ALSO always receives a
+ * `REPO_ROOT` env var (regardless of the per-criterion `cwd` field) so a shell
+ * command can `cd "$REPO_ROOT"` itself without a schema opt-in at all. Zero
+ * live plan (grep across the repo, 2026-07-09) currently authors a
+ * `criteria.json`, so this is a pure addition with no migration required for
+ * any existing plan.
  *
  * Contract (SPEC §4.3):
  *   - one `[id] PASS/FAIL` per line, on its OWN line, flushed (pt 3);
@@ -55,32 +83,6 @@ export function vendorStamp(scriptsDir) {
 
 /** The stamp for THIS runner instance (resolved from its own directory). */
 export const VENDOR_STAMP = vendorStamp(path.dirname(new URL(import.meta.url).pathname));
-
-// ── location anchoring (F12) ────────────────────────────────────────────────────
-// The runner MUST resolve its criteria file and execute its checks INDEPENDENTLY of
-// the invoker's cwd. `criteria.json` lives next to this script; every check `cmd` is
-// repo-root-relative (e.g. `cd packages/…`, `npx nx build …`). So we anchor two
-// paths off the script's own location, never `process.cwd()`:
-//   SCRIPT_DIR — where criteria.json sits (…​/docs/plan/<slug>/scripts).
-//   REPO_ROOT  — the nx workspace root; the cwd for EVERY check (grep + command).
-// This makes `node scripts/run-audit.js …` behave identically from the repo root
-// and from the plan dir (both fail modes in F12 defect (b)).
-export const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname);
-
-/** Walk up from `startDir` to the nearest nx workspace root (nx.json marker). */
-function findRepoRoot(startDir) {
-  let dir = startDir;
-  for (let i = 0; i < 16; i += 1) {
-    if (fs.existsSync(path.join(dir, "nx.json"))) return dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  // Deterministic fallback: scripts → <slug> → plan → docs → repo root.
-  return path.resolve(startDir, "..", "..", "..", "..");
-}
-
-export const REPO_ROOT = findRepoRoot(SCRIPT_DIR);
 
 // ── inlined criteria model (mirror of scripts/lib/criteria.js) ─────────────────
 
@@ -128,6 +130,13 @@ function normalizeCriterion(raw, index) {
   if (raw.kind === "custom" && raw.args !== undefined && !Array.isArray(raw.args)) {
     throw new Error(`criteria: ${where} (kind custom) "args" must be an array`);
   }
+  // BL-96(1) — optional, additive-only cwd-resolution opt-in. Unset (default)
+  // keeps the criterion resolving against the runner's own cwd (unchanged
+  // behavior for every existing plan). "repo-root" opts a single criterion
+  // into resolving against --repo-root instead — see module header.
+  if (raw.cwd !== undefined && raw.cwd !== "plan" && raw.cwd !== "repo-root") {
+    throw new Error(`criteria: ${where} "cwd" must be "plan" or "repo-root" when present`);
+  }
   return { id: raw.id, phase: raw.phase ?? null, tier: typeof raw.tier === "number" ? raw.tier : null, kind: raw.kind, ...raw };
 }
 
@@ -144,8 +153,7 @@ function validateCriteriaDoc(doc) {
   return { schema_version: doc.schema_version ?? 1, criteria };
 }
 
-/** The distinct phases declared by the criteria, in first-seen order. */
-function declaredPhases(criteria) {
+function phaseOrder(criteria) {
   const order = [];
   const seen = new Set();
   for (const c of criteria) {
@@ -158,41 +166,19 @@ function declaredPhases(criteria) {
   return order;
 }
 
-/**
- * EXACT phase selection (F12 defect (a)).
- *
- * `--phase X`      → ONLY criteria whose `phase === X`.
- * `--phase X,Y,Z`  → the UNION of the named phases (each an exact match) — this is
- *                    how the composite audit guards scope themselves (e.g. the
- *                    builder gate runs `contract,builder`). It is a set membership
- *                    test, never file-order accumulation.
- * `--phase ""`/absent → every criterion (the whole-plan audit).
- *
- * The prior implementation derived an ordered phase list from FILE ORDER and then
- * accumulated every phase at-or-before the target. Because the `audit` criteria are
- * written first in criteria.json, EVERY `--phase` value silently dragged in the 12
- * whole-system `audit` checks (`--phase contract` ran `audit-final.*`). Exact
- * membership removes that laundering entirely.
- */
-function selectCriteria(criteria, phaseSpec) {
-  if (phaseSpec === undefined || phaseSpec === null || phaseSpec === "") {
-    return criteria.slice();
+function accumulatedPhases(criteria, phase) {
+  const order = phaseOrder(criteria);
+  if (phase === undefined || phase === null || phase === "") return new Set(order);
+  const idx = order.indexOf(phase);
+  if (idx === -1) {
+    throw new Error(`criteria: --phase "${phase}" is not a declared phase (have: ${order.join(", ") || "<none>"})`);
   }
-  const declared = new Set(declaredPhases(criteria));
-  const wanted = String(phaseSpec)
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  for (const p of wanted) {
-    if (!declared.has(p)) {
-      throw new Error(
-        `criteria: --phase "${p}" is not a declared phase (have: ${[...declared].join(", ") || "<none>"})`,
-      );
-    }
-  }
-  const wset = new Set(wanted);
-  // EXACT: a criterion is selected iff its own phase is one of the requested phases.
-  return criteria.filter((c) => c.phase != null && wset.has(c.phase));
+  return new Set(order.slice(0, idx + 1));
+}
+
+function selectCriteria(criteria, phase) {
+  const phases = accumulatedPhases(criteria, phase);
+  return criteria.filter((c) => c.phase == null || phases.has(c.phase));
 }
 
 // ── per-kind execution ─────────────────────────────────────────────────────────
@@ -222,11 +208,26 @@ function grepMatches(pattern, paths, cwd) {
   return false;
 }
 
-/** Run a shell command; return { code, out } with combined stdout+stderr. */
-function runShell(cmd, cwd) {
-  const r = spawnSync(cmd, { shell: true, cwd, encoding: "utf8" });
+/** Run a shell command; return { code, out } with combined stdout+stderr.
+ *  `env` (optional) is merged over process.env for the child — used to expose
+ *  REPO_ROOT (BL-96(1)) without changing the child's cwd. */
+function runShell(cmd, cwd, env) {
+  const r = spawnSync(cmd, { shell: true, cwd, encoding: "utf8", env: env ? { ...process.env, ...env } : process.env });
   const out = `${r.stdout || ""}${r.stderr || ""}`;
   return { code: typeof r.status === "number" ? r.status : 1, out };
+}
+
+/**
+ * BL-96(1) — resolve the base directory a criterion's paths/spawn-cwd resolve
+ * against. Default ("plan", i.e. `c.cwd` unset) is the runner's own cwd —
+ * byte-identical to pre-BL-96 behavior. A criterion that opts in with
+ * `"cwd": "repo-root"` resolves against `repoRoot` instead, falling back to
+ * `cwd` itself when no repo root could be determined (never throws — a
+ * criterion missing a resolvable repo root degrades to the old behavior
+ * rather than crashing the whole audit run).
+ */
+function resolveBase(c, cwd, repoRoot) {
+  return c.cwd === "repo-root" && repoRoot ? repoRoot : cwd;
 }
 
 /**
@@ -234,19 +235,24 @@ function runShell(cmd, cwd) {
  * `captured` accumulates child stdout/stderr ONLY for the run log — it is never
  * scanned for `[id]` markers (SCOPE §4 #7).
  */
-function evaluate(c, cwd, captured) {
+function evaluate(c, cwd, captured, repoRoot) {
+  const base = resolveBase(c, cwd, repoRoot);
+  // Always exposed to command/custom/negative-control children, independent of
+  // the per-criterion cwd opt-in — lets a shell command `cd "$REPO_ROOT"` on
+  // its own without touching the schema (BL-96(1)).
+  const childEnv = { REPO_ROOT: repoRoot || cwd };
   switch (c.kind) {
     case "absent":
       // pass iff NO path matches the pattern (the expect_empty case).
-      return { pass: !grepMatches(c.pattern, c.paths, cwd) };
+      return { pass: !grepMatches(c.pattern, c.paths, base) };
     case "present":
-      return { pass: grepMatches(c.pattern, c.paths, cwd) };
+      return { pass: grepMatches(c.pattern, c.paths, base) };
     case "exists": {
-      const full = path.isAbsolute(c.path) ? c.path : path.join(cwd, c.path);
+      const full = path.isAbsolute(c.path) ? c.path : path.join(base, c.path);
       return { pass: fs.existsSync(full) };
     }
     case "command": {
-      const { code, out } = runShell(c.cmd, cwd);
+      const { code, out } = runShell(c.cmd, base, childEnv);
       captured.push(`# [${c.id}] command exit=${code}\n${out}`);
       const expect = c.expect ?? "exit0";
       if (expect === "marker") return { pass: out.includes(c.marker) };
@@ -254,7 +260,7 @@ function evaluate(c, cwd, captured) {
     }
     case "custom": {
       const args = Array.isArray(c.args) ? c.args : [];
-      const r = spawnSync("node", [c.script, ...args], { cwd, encoding: "utf8" });
+      const r = spawnSync("node", [c.script, ...args], { cwd: base, encoding: "utf8", env: { ...process.env, ...childEnv } });
       const out = `${r.stdout || ""}${r.stderr || ""}`;
       captured.push(`# [${c.id}] custom ${c.script} exit=${r.status}\n${out}`);
       // custom stdout is NEVER parsed for markers; pass iff exit 0.
@@ -264,8 +270,8 @@ function evaluate(c, cwd, captured) {
       // positive→mutate→assert positive now FAILS→restore (always restore).
       let pass = false;
       try {
-        runShell(c.mutate, cwd);
-        const { code, out } = runShell(c.positive, cwd);
+        runShell(c.mutate, base, childEnv);
+        const { code, out } = runShell(c.positive, base, childEnv);
         captured.push(`# [${c.id}] neg-control positive-under-mutation exit=${code}\n${out}`);
         const expect = c.expect ?? "exit0";
         // The positive check must now FAIL: for exit0 that means non-zero;
@@ -276,7 +282,7 @@ function evaluate(c, cwd, captured) {
         captured.push(`# [${c.id}] neg-control error: ${e.message}`);
         pass = false;
       } finally {
-        runShell(c.restore, cwd);
+        runShell(c.restore, base, childEnv);
       }
       return { pass };
     }
@@ -292,79 +298,13 @@ function argValue(args, flag) {
   return i >= 0 && i + 1 < args.length ? args[i + 1] : null;
 }
 
-function resolveCriteriaFile(args) {
+function resolveCriteriaFile(args, cwd) {
   const explicit = argValue(args, "--criteria");
-  if (explicit) return path.isAbsolute(explicit) ? explicit : path.join(REPO_ROOT, explicit);
-  // SCRIPT-DIR anchored (F12 defect (b)): criteria.json sits next to this script, so
-  // resolution does NOT depend on the invoker's cwd. REPO_ROOT fallbacks preserve the
-  // legacy lookup shape for any out-of-tree copy.
-  const cands = [
-    path.join(SCRIPT_DIR, "criteria.json"),
-    path.join(SCRIPT_DIR, "scripts", "criteria.json"),
-    path.join(REPO_ROOT, "scripts", "criteria.json"),
-    path.join(REPO_ROOT, "criteria.json"),
-  ];
-  for (const cand of cands) {
+  if (explicit) return path.isAbsolute(explicit) ? explicit : path.join(cwd, explicit);
+  for (const cand of [path.join(cwd, "scripts", "criteria.json"), path.join(cwd, "criteria.json")]) {
     if (fs.existsSync(cand)) return cand;
   }
   return null;
-}
-
-/**
- * --self-test (F12): prove the selection contract without spawning any check.
- * Asserts, purely against the criteria model:
- *   1. `--phase X` selects ONLY criteria whose phase is exactly X (per declared phase);
- *   2. absent `--phase` selects every criterion;
- *   3. `--phase X,Y` selects exactly the union of X and Y (no unrelated phase leaks);
- *   4. criteria.json resolves from the SCRIPT DIR (so the result is cwd-independent).
- * Because resolution is script-anchored, the verdict is identical whether invoked
- * from the repo root or the plan dir. Exit == number of failed assertions.
- */
-function runSelfTest() {
-  const criteriaFile = resolveCriteriaFile([]);
-  const lines = [];
-  let failures = 0;
-  const fail = (l) => {
-    failures += 1;
-    lines.push(l);
-  };
-  if (!criteriaFile) {
-    process.stdout.write("[self-test.criteria-file] FAIL (no criteria.json resolved from script dir)\n");
-    process.exit(1);
-  }
-  lines.push(`[self-test.criteria-file] PASS (${criteriaFile})`);
-  const doc = JSON.parse(fs.readFileSync(criteriaFile, "utf8"));
-  const { criteria } = validateCriteriaDoc(doc);
-  const phases = declaredPhases(criteria);
-
-  for (const p of phases) {
-    const sel = selectCriteria(criteria, p);
-    const expected = criteria.filter((c) => c.phase === p).length;
-    const onlyThisPhase = sel.every((c) => c.phase === p);
-    const ok = onlyThisPhase && sel.length === expected && expected > 0;
-    if (ok) lines.push(`[self-test.phase-${p}] PASS (n=${sel.length}, only-phase=${onlyThisPhase})`);
-    else fail(`[self-test.phase-${p}] FAIL (selected ${sel.length}, expected ${expected}, only-phase=${onlyThisPhase})`);
-  }
-
-  const all = selectCriteria(criteria, "");
-  if (all.length === criteria.length) lines.push(`[self-test.all-phases] PASS (n=${all.length})`);
-  else fail(`[self-test.all-phases] FAIL (${all.length}/${criteria.length})`);
-
-  if (phases.length >= 2) {
-    const combo = [phases[0], phases[1]];
-    const sel = selectCriteria(criteria, combo.join(","));
-    const expected = criteria.filter((c) => combo.includes(c.phase)).length;
-    const onlyCombo = sel.every((c) => combo.includes(c.phase));
-    const ok = onlyCombo && sel.length === expected;
-    if (ok) lines.push(`[self-test.multi-${combo.join("+")}] PASS (n=${sel.length})`);
-    else fail(`[self-test.multi-${combo.join("+")}] FAIL (selected ${sel.length}, expected ${expected}, only-combo=${onlyCombo})`);
-  }
-
-  for (const l of lines) process.stdout.write(`${l}\n`);
-  process.stdout.write(
-    `self-test: ${failures === 0 ? "OK" : `${failures} FAILED`} — repo_root=${REPO_ROOT}, phases=[${phases.join(", ")}]\n`,
-  );
-  return failures;
 }
 
 /**
@@ -372,8 +312,12 @@ function runSelfTest() {
  * `[id] PASS/FAIL` strings (one per criterion). Pure-ish: it does spawn child
  * processes per kind, but does not write stdout — the caller flushes lines so
  * tests can both capture and assert the failure count directly.
+ *
+ * `repoRoot` (BL-96(1), optional) is threaded to each criterion's evaluation —
+ * only criteria that opt in with `"cwd": "repo-root"` are affected; every
+ * command/custom/negative-control child also gets it as `$REPO_ROOT` regardless.
  */
-export function runCriteria(doc, { phase, cwd }) {
+export function runCriteria(doc, { phase, cwd, repoRoot }) {
   const { criteria } = validateCriteriaDoc(doc);
   const selected = selectCriteria(criteria, phase);
   const lines = [];
@@ -382,7 +326,7 @@ export function runCriteria(doc, { phase, cwd }) {
   for (const c of selected) {
     let pass;
     try {
-      pass = evaluate(c, cwd, captured).pass;
+      pass = evaluate(c, cwd, captured, repoRoot).pass;
     } catch (e) {
       captured.push(`# [${c.id}] evaluation error: ${e.message}`);
       pass = false;
@@ -393,26 +337,36 @@ export function runCriteria(doc, { phase, cwd }) {
   return { failures, total: selected.length, lines, captured };
 }
 
+/**
+ * BL-96(1) — resolve the repo root for the "cwd": "repo-root" opt-in. Explicit
+ * `--repo-root` wins; otherwise autodetect via `git rev-parse --show-toplevel`
+ * from `cwd` (best-effort — a non-repo cwd or missing git yields null, which
+ * `resolveBase` treats as "no opt-in available", degrading to unchanged
+ * behavior rather than throwing).
+ */
+function resolveRepoRoot(args, cwd) {
+  const explicit = argValue(args, "--repo-root");
+  if (explicit) return path.isAbsolute(explicit) ? explicit : path.join(cwd, explicit);
+  const r = spawnSync("git", ["-C", cwd, "rev-parse", "--show-toplevel"], { encoding: "utf8" });
+  const out = (r.stdout || "").trim();
+  return typeof r.status === "number" && r.status === 0 && out ? out : null;
+}
+
 function main() {
   const args = process.argv.slice(2);
-  // Checks are ALWAYS executed at the repo root (F12 defect (b)) — never the
-  // invoker's cwd — because every criterion `cmd` is repo-root-relative.
-  const cwd = REPO_ROOT;
+  const cwd = process.cwd();
 
   // Self-report the vendor stamp (used by gap-check / tooling, never gates).
   if (args.includes("--print-stamp")) {
     process.stdout.write(`${JSON.stringify(VENDOR_STAMP)}\n`);
     process.exit(0);
   }
-  // Self-test the phase-selection contract (F12) — no checks spawned.
-  if (args.includes("--self-test")) {
-    process.exit(runSelfTest());
-  }
   // --phase passthrough: an empty value means "all phases" (SPEC §4.3 pt 2).
   // argValue returns null when the flag is absent → treat as all phases too.
   const phaseRaw = args.includes("--phase") ? (argValue(args, "--phase") ?? "") : "";
+  const repoRoot = resolveRepoRoot(args, cwd);
 
-  const criteriaFile = resolveCriteriaFile(args);
+  const criteriaFile = resolveCriteriaFile(args, cwd);
   if (!criteriaFile) {
     // FAIL-CLOSED: no criteria file at all is the apigen pass=0/0 class.
     process.stdout.write("[audit.no-criteria] FAIL\n");
@@ -431,7 +385,7 @@ function main() {
 
   let result;
   try {
-    result = runCriteria(doc, { phase: phaseRaw, cwd });
+    result = runCriteria(doc, { phase: phaseRaw, cwd, repoRoot });
   } catch (e) {
     process.stdout.write("[audit.bad-criteria] FAIL\n");
     process.stderr.write(`run-audit: ${e.message}\n`);

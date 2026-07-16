@@ -12,7 +12,7 @@ import type {
   IOptimizerDeps,
   MilestoneDag,
   OperationDag,
-} from '@adhd/dispatch-spec';
+} from '@adhd/dispatch-base-spec';
 
 /** Recommended cold-start defaults per SCOPE.md Open Decision #2. */
 export function defaultDeps(overrides: Partial<IOptimizerDeps> = {}): IOptimizerDeps {

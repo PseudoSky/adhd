@@ -4,7 +4,7 @@
  * Real components throughout: real `createJsonFileSerializer` writing to a
  * synthetic dag.json under `tmp/dispatch-orchestrator/orchestrator-spec/`,
  * real `DagClient`, real `snapshot()`/`optimize()` from
- * `@adhd/dispatch-optimizer`, real `node:child_process` guard execution
+ * `@adhd/dispatch-core-optimizer`, real `node:child_process` guard execution
  * against cheap real commands (`node -e "process.exit(0|1)"`). The only test
  * double is `MockAgentRunner` — the documented external boundary (a real
  * agent-mcp dispatch is a paid third-party model call; see
@@ -24,10 +24,10 @@ import type {
   MilestoneDag,
   OperationDag,
   ProviderConfig,
-} from '@adhd/dispatch-spec';
-import { createDagClient } from '@adhd/dispatch-client';
+} from '@adhd/dispatch-base-spec';
+import { createDagClient } from '@adhd/dispatch-core-client';
 import { createJsonFileSerializer } from '@adhd/dispatch-serializer-json';
-import { snapshot, optimize } from '@adhd/dispatch-optimizer';
+import { snapshot, optimize } from '@adhd/dispatch-core-optimizer';
 
 import { MockAgentRunner } from './helpers/mock-agent-runner.js';
 import type { DispatchTaskStatus, IDispatchAgentRunner } from '../lib/agent-runner.js';
@@ -480,16 +480,40 @@ describe('orchestrateCycle — guard-only milestones (D-12)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// (6) tool-call-only units — not wired into this minimal loop; marked
-//     'skipped' (never a false 'complete'), guard still verifies
+// (6) tool-call-only units — BUG-DISPATCH-EXEC-001: real execution.
+//
+// Prior to the fix, EVERY tool-call op — regardless of action/args — was
+// blanket-marked 'skipped' with a "@adhd/dispatch-tools is not wired in"
+// warning and NOTHING was ever actually done: no dag mutation, no file
+// touched, no real outcome recorded. These tests drive the REAL
+// `orchestrateCycle` (real DagClient, real snapshot/optimize, real
+// dispatch_log persistence to disk) and assert the CONSUMER-VISIBLE outcome:
+// the dag.json on disk is actually mutated / the file actually moved, exists,
+// or was deleted, AND `DispatchResult.tool_result` carries the real payload
+// — never a bare 'skipped'.
+//
+// NEGATIVE CONTROL (verified manually against the pre-fix orchestrator.ts via
+// a throwaway `git worktree add .worktrees/negctrl-exec001 HEAD` checkout of
+// this exact test file): every `it` below that asserts `status === 'complete'`
+// with a populated `tool_result` FAILS against the old code — the old loop
+// always set every non-generative op's status to the single literal
+// 'skipped' and never called any executor, so `tool_result` never exists and
+// `status` is never 'complete'. Worktree removed after verification.
 // ---------------------------------------------------------------------------
 
-describe('orchestrateCycle — tool-call-only units', () => {
-  it('marks a non-empty tool-call-only unit "skipped" (never "complete"), and still runs its guard', async () => {
+describe('orchestrateCycle — real tool-call execution (BUG-DISPATCH-EXEC-001)', () => {
+  it('dag.set-field: really mutates the persisted dag and records a real tool_result', async () => {
     const { dagPath, runner, deps } = await setupScenario(
-      'tool-call-only',
+      'tool-call-set-field',
       makeDag({
-        operations: [makeOp({ type: 'tool-call', action: 'dag.set-field', shape: null })],
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'dag.set-field',
+            args: { path: 'milestones.a.pending', value: 'blocked-by-review' },
+            shape: null,
+          }),
+        ],
       })
     );
 
@@ -498,11 +522,297 @@ describe('orchestrateCycle — tool-call-only units', () => {
     expect(runner.firedUnits).toHaveLength(0); // no generative content -> no agent dispatch
 
     const reloaded = await reload(dagPath);
+
+    // CONSUMER OUTCOME 1: the field was really set on the persisted dag.
+    expect(reloaded.milestones['a']?.pending).toBe('blocked-by-review');
+
+    // CONSUMER OUTCOME 2: the op's own dispatch_log result reflects real
+    // execution, never the old blanket 'skipped'.
     const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
-    expect(opResult?.status).toBe('skipped');
+    expect(opResult?.status).toBe('complete');
+    expect(opResult?.tool_result).toEqual({
+      path: 'milestones.a.pending',
+      value: 'blocked-by-review',
+    });
 
     const guardResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.guard');
-    expect(guardResult?.guard_result).toBe('pass'); // guard still ran independently
+    expect(guardResult?.guard_result).toBe('pass'); // guard still runs independently
+  });
+
+  it('dag.clear-pending: really clears a DIFFERENT milestone\'s pending field', async () => {
+    // A milestone that is itself pending is 'pending-surfaced', never
+    // 'pending' (deriveMilestoneStatus), so selectPackableMilestones excludes
+    // it from packing — it cannot carry the op that clears its OWN pending
+    // field in the same cycle. Real usage is exactly this shape: a distinct
+    // (non-pending, eligible) milestone carries the `dag.clear-pending` op
+    // that targets the blocked one by slug (e.g. a human-answer-resolution
+    // milestone clearing the milestone it unblocks).
+    const { dagPath, deps } = await setupScenario(
+      'tool-call-clear-pending',
+      makeDag({
+        milestones: {
+          a: makeMilestone({ pending: 'needs-human-review' }),
+          clearer: makeMilestone({ depends_on: [] }),
+        },
+        operations: [
+          makeOp({
+            id: 'clearer.1',
+            milestone: 'clearer',
+            type: 'tool-call',
+            action: 'dag.clear-pending',
+            args: { milestone: 'a' },
+            shape: null,
+          }),
+        ],
+        terminal: ['a', 'clearer'],
+      })
+    );
+
+    await orchestrateCycle(deps);
+
+    const reloaded = await reload(dagPath);
+    expect(reloaded.milestones['a']?.pending).toBeNull();
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'clearer.1');
+    expect(opResult?.status).toBe('complete');
+    expect(opResult?.tool_result).toEqual({ milestone: 'a', pending: null });
+  });
+
+  it('dag.add-milestone: really adds a new milestone to the persisted dag', async () => {
+    const { dagPath, deps } = await setupScenario(
+      'tool-call-add-milestone',
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'dag.add-milestone',
+            args: {
+              slug: 'b',
+              milestone: { description: 'injected milestone', phase: 'test', guard: PASS_GUARD },
+            },
+            shape: null,
+          }),
+        ],
+      })
+    );
+
+    await orchestrateCycle(deps);
+
+    const reloaded = await reload(dagPath);
+    expect(reloaded.milestones['b']).toBeDefined();
+    expect(reloaded.milestones['b']?.description).toBe('injected milestone');
+    expect(reloaded.milestones['b']?.guard).toBe(PASS_GUARD);
+
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('complete');
+    expect(opResult?.tool_result).toEqual({ slug: 'b' });
+  });
+
+  it('dag.add-milestone: fails cleanly (no throw) when the slug already exists', async () => {
+    const { dagPath, deps } = await setupScenario(
+      'tool-call-add-milestone-conflict',
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'dag.add-milestone',
+            args: { slug: 'a', milestone: { description: 'dup' } },
+            shape: null,
+          }),
+        ],
+      })
+    );
+
+    await orchestrateCycle(deps);
+
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('failed');
+    expect(opResult?.tool_result).toEqual({ error: "milestone 'a' already exists" });
+  });
+
+  it('dag.append-dispatch-log: really appends an extra entry to dispatch_log', async () => {
+    const { dagPath, deps } = await setupScenario(
+      'tool-call-append-log',
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'dag.append-dispatch-log',
+            args: { entry: { agent: 'injected-by-tool-call' } },
+            shape: null,
+          }),
+        ],
+      })
+    );
+
+    await orchestrateCycle(deps);
+
+    const reloaded = await reload(dagPath);
+    // The tool-injected entry PLUS this unit's own real dispatch_log entry.
+    expect(reloaded.dispatch_log).toHaveLength(2);
+    expect(reloaded.dispatch_log.some((e) => e.agent === 'injected-by-tool-call')).toBe(true);
+
+    const opResult = reloaded.dispatch_log[1]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('complete');
+    expect(opResult?.tool_result).toHaveProperty('id');
+  });
+
+  it('fs.scaffold: really writes a file to disk under the configured tools root', async () => {
+    const name = 'tool-call-fs-scaffold';
+    const dir = path.join(TMP_ROOT, name);
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'fs.scaffold',
+            args: { path: 'scaffolded/hello.txt', content: 'hello from a real tool-call' },
+            shape: null,
+          }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+
+    await orchestrateCycle(deps);
+
+    const written = path.join(dir, 'scaffolded', 'hello.txt');
+    expect(fs.existsSync(written)).toBe(true);
+    expect(fs.readFileSync(written, 'utf-8')).toBe('hello from a real tool-call');
+
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('complete');
+    expect(opResult?.tool_result).toEqual({
+      path: written,
+      bytes: Buffer.byteLength('hello from a real tool-call', 'utf8'),
+    });
+  });
+
+  it('fs.move: really moves a file on disk', async () => {
+    const name = 'tool-call-fs-move';
+    const dir = path.join(TMP_ROOT, name);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'source.txt'), 'move me', 'utf-8');
+
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'fs.move',
+            args: { from: 'source.txt', to: 'moved/destination.txt' },
+            shape: null,
+          }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+
+    await orchestrateCycle(deps);
+
+    expect(fs.existsSync(path.join(dir, 'source.txt'))).toBe(false);
+    const moved = path.join(dir, 'moved', 'destination.txt');
+    expect(fs.existsSync(moved)).toBe(true);
+    expect(fs.readFileSync(moved, 'utf-8')).toBe('move me');
+
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('complete');
+  });
+
+  it('fs.delete: really deletes a file on disk', async () => {
+    const name = 'tool-call-fs-delete';
+    const dir = path.join(TMP_ROOT, name);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'doomed.txt'), 'delete me', 'utf-8');
+
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({ type: 'tool-call', action: 'fs.delete', args: { path: 'doomed.txt' }, shape: null }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+
+    await orchestrateCycle(deps);
+
+    expect(fs.existsSync(path.join(dir, 'doomed.txt'))).toBe(false);
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('complete');
+  });
+
+  it('fs.delete: rejects a path that escapes the configured tools root — never executes it', async () => {
+    const name = 'tool-call-fs-delete-escape';
+    const dir = path.join(TMP_ROOT, name);
+    const { dagPath, deps } = await setupScenario(
+      name,
+      makeDag({
+        operations: [
+          makeOp({
+            type: 'tool-call',
+            action: 'fs.delete',
+            args: { path: '../../../etc/hosts' },
+            shape: null,
+          }),
+        ],
+      })
+    );
+    deps.toolsRoot = dir;
+
+    await orchestrateCycle(deps);
+
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('failed');
+    expect((opResult?.tool_result as { error?: string } | null)?.error).toContain('escapes tools root');
+  });
+
+  it('an op missing required args fails cleanly with a real error, never a silent skip', async () => {
+    const { dagPath, deps } = await setupScenario(
+      'tool-call-missing-args',
+      makeDag({
+        operations: [
+          makeOp({ type: 'tool-call', action: 'dag.set-field', args: null, shape: null }),
+        ],
+      })
+    );
+
+    await orchestrateCycle(deps);
+
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('failed');
+    expect((opResult?.tool_result as { error?: string } | null)?.error).toContain(
+      "missing required string arg 'path'"
+    );
+    // Guard still runs independently even though the tool-call op failed —
+    // the milestone guard remains the authoritative verification signal.
+    const guardResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.guard');
+    expect(guardResult?.guard_result).toBe('pass');
+  });
+
+  it('an unregistered tool-call action (reserved/future AST-executor case) fails cleanly, never crashes the cycle', async () => {
+    const { dagPath, deps } = await setupScenario(
+      'tool-call-unregistered-action',
+      makeDag({
+        operations: [makeOp({ type: 'tool-call', action: 'create', args: {}, shape: null })],
+      })
+    );
+
+    await expect(orchestrateCycle(deps)).resolves.toBeDefined();
+
+    const reloaded = await reload(dagPath);
+    const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
+    expect(opResult?.status).toBe('failed');
+    expect((opResult?.tool_result as { error?: string } | null)?.error).toContain(
+      "no registered executor"
+    );
   });
 });
 

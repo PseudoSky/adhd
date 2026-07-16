@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import type { DagJson, DagSnapshot } from '@adhd/dispatch-spec';
+import type { DagJson, DagSnapshot } from '@adhd/dispatch-base-spec';
 import { createJsonFileSerializer, normalizeDag } from './index';
 
 // Repo-canonical ephemeral root (CLAUDE.md): write-only test artifacts go under

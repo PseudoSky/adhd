@@ -1,12 +1,12 @@
 # optimizer-client — STATE_NAME
 
-**Phase:** optimizer-client · **Kind:** work · **Depends on:** spec-audit · **Guard:** `true`
+**Phase:** optimizer-client · **Kind:** work · **Depends on:** spec-audit · **Guard:** `npx --yes nx run-many -t test,build -p dispatch-core-optimizer,dispatch-core-client`
 
 ---
 
 ## Goal
 
-<What is true after this state that was not true before?>
+`optimize()` sets `execution_mode` per unit, increments `snapshot_version`, resolves `mcp_servers` from a catalog, splits systemPrompt/prompt, and round-trips snapshots JSON-safe; the client inherits the eligible-own-completion guard.
 
 ---
 
@@ -32,4 +32,4 @@ mutates:    ["packages/dispatch/dispatch-core-optimizer/src/lib/optimize.ts", "p
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+Closes DEBT-005/BL-102 wire (derive execution_mode in assembleUnit), BL-103 (snapshot_version), BL-105 (mcp_servers catalog), DEBT-012 (systemPrompt/prompt split — prompt-compiler), DEBT-014 (round-trip test, teeth), DEBT-013 client-side. Optimizer stays pure ([inv:layer-purity]); every new import uses [def:import-alias] standard names.

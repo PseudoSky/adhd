@@ -178,7 +178,16 @@ export const normalizeUrl = (
     urlString = urlString.replace(PROTOCOL_MATCH, options.defaultProtocol);
   }
 
-  const urlObj = new URLParser(urlString);
+  let urlObj: InstanceType<typeof URLParser>;
+  try {
+    urlObj = new URLParser(urlString);
+  } catch {
+    // The native `URL` constructor throws a bare `TypeError [ERR_INVALID_URL]`
+    // with no reference to the offending input. `InvalidUrlError` exists
+    // (and is already re-exported via `ErrorTypes`) precisely for this path
+    // but was never wired to the throw site — do so here.
+    throw InvalidUrlError(urlString);
+  }
 
   if (options.forceHttp && options.forceHttps) {
     throw BadOptionsError();

@@ -1,14 +1,14 @@
 /**
  * size-tokens.ts — shared file-size → token-count helpers for snapshot.ts and optimize.ts.
  *
- * Internal to the package; not part of the public @adhd/dispatch-optimizer surface.
+ * Internal to the package; not part of the public @adhd/dispatch-core-optimizer surface.
  * Exists to avoid duplicating the same batched-lookup + bytes→tokens logic in both
  * snapshot.ts and optimize.ts (both need it; neither owns it).
  *
  * PURE: no fs/path/node imports. All file-size knowledge is injected via
  * IOptimizerDeps.fileSizes and resolved with graceful degradation to 0.
  */
-import type { IOptimizerDeps } from '@adhd/dispatch-spec';
+import type { IOptimizerDeps } from '@adhd/dispatch-base-spec';
 
 /** §C3 — chars per token by file type (for si_bytes → tokens conversion). */
 const CHARS_PER_TOKEN: Record<string, number> = {

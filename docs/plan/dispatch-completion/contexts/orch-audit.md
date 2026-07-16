@@ -1,6 +1,6 @@
 # orch-audit — STATE_NAME
 
-**Phase:** orchestrator · **Kind:** audit · **Depends on:** causal-replan · **Guard:** `true`
+**Phase:** orchestrator · **Kind:** audit · **Depends on:** causal-replan · **Guard:** `python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase orchestrator`
 
 ---
 

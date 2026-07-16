@@ -41,8 +41,17 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      // External packages that should not be bundled into your library.
-      external: [],
+      // Node-only package (platform:node): never bundle node builtins.
+      // (BUG, pre-existing, ENV-CORE-014 fix pass: this was `external: []`,
+      // which made Vite try to browser-externalize `node:fs`/`node:path`/
+      // `node:os` — producing a build-breaking `"isAbsolute" is not exported
+      // by "__vite-browser-external"` error. Latent because `src/index.ts`
+      // previously only re-exported an unused `lib/` scaffold stub, so no
+      // file importing a `node:*` builtin was ever reachable from the build
+      // entrypoint until the real `Environment` runtime client was wired in
+      // here. Same fix already applied in the sibling `environment-builder`
+      // package's `vite.config.ts` — see its comment for the same root cause.)
+      external: [/^node:/],
     },
   },
 

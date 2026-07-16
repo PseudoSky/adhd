@@ -8,22 +8,22 @@
     "pkg-kind:entrypoint",
     "pkg-class:entrypoint",
     "layer:entrypoints",
-    "platform:node",
-    "access:public",
-    "publish:npm"
+    "platform:node"
   ],
   "targets": {
     "build": {
-      "executor": "nx:run-commands",
-      "cache": true,
-      "inputs": [
-        "production",
-        "^production",
-        { "externalDependencies": ["typescript"] }
-      ],
-      "outputs": ["{workspaceRoot}/dist/entrypoint/entrypoint/environment-cli"],
+      "executor": "@nx/js:tsc",
+      "outputs": ["{options.outputPath}"],
+      "generatePackageJson": true,
+      "updateBuildableProjectDepsInPackageJson": true,
+      "buildableProjectDepsInPackageJsonType": "dependencies",
       "options": {
-        "command": "tsc -p entrypoint/environment-cli/tsconfig.json"
+        "outputPath": "dist/entrypoint/environment-cli",
+        "tsConfig": "entrypoint/environment-cli/tsconfig.lib.json",
+        "packageJson": "entrypoint/environment-cli/package.json",
+        "main": "entrypoint/environment-cli/src/index.ts",
+        "assets": ["entrypoint/environment-cli/*.md"],
+        "createLockFile": false
       }
     }
   }

@@ -188,13 +188,19 @@ export class UsageClient {
 
       let row: { total: number } | undefined;
 
+      // NOTE (BUG-ORCH-010): input_tokens is already the provider-neutral TOTAL a call
+      // processed — uncachedInputTokens + cacheReadTokens + cacheCreationTokens are
+      // summed into it at the provider boundary (normaliseAnthropicUsage /
+      // normaliseOpenAIUsage in agent-engine-orchestrator). Adding
+      // cache_read_input_tokens/cache_creation_input_tokens on top here would
+      // double-count the cached portion of a windowed usage total.
       if (scope === 'session') {
         const excludeClause = excludeTaskId ? ' AND tu.task_id != ?' : '';
         const params: unknown[] = [id, since];
         if (excludeTaskId) params.push(excludeTaskId);
         row = db
           .prepare(
-            `SELECT COALESCE(SUM(tu.input_tokens + tu.output_tokens + COALESCE(tu.cache_read_input_tokens,0) + COALESCE(tu.cache_creation_input_tokens,0)), 0) AS total
+            `SELECT COALESCE(SUM(tu.input_tokens + tu.output_tokens), 0) AS total
                          FROM task_usage tu
                          JOIN tasks t ON tu.task_id = t.id
                          WHERE t.session_id = ? AND tu.created_at >= ?${excludeClause}`
@@ -206,7 +212,7 @@ export class UsageClient {
         if (excludeTaskId) params.push(excludeTaskId);
         row = db
           .prepare(
-            `SELECT COALESCE(SUM(input_tokens + output_tokens + COALESCE(cache_read_input_tokens,0) + COALESCE(cache_creation_input_tokens,0)), 0) AS total
+            `SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
                          FROM task_usage
                          WHERE agent_name = ? AND created_at >= ?${excludeClause}`
           )

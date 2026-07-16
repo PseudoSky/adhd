@@ -33,6 +33,14 @@ export interface UsageQueryResult {
     totalToolCalls: number;
     totalModelCalls: number;
     taskCount: number;
+    /** Full-price (cache-miss) input — the actual cost driver, not totalInputTokens
+     * (BUG-ORCH-009 follow-up gap: previously dropped from this summary block). */
+    totalUncachedInputTokens: number;
+    totalCacheReadTokens: number;
+    totalCacheCreationTokens: number;
+    totalReasoningTokens: number;
+    /** PEAK single-call input across every row in scope (a MAX, not a SUM). */
+    peakContextTokens: number;
   };
 }
 
@@ -128,6 +136,13 @@ export function usageQuery(db: Database, input: TaskUsageInput): UsageQueryResul
         avgLatencyMs:       sql<number>`avg(case when ${taskUsageTable.latencyMs} > 0 then ${taskUsageTable.latencyMs} else null end)`,
         cacheReadTokens:    sql<number | null>`sum(${taskUsageTable.cacheReadTokens})`,
         cacheCreationTokens: sql<number | null>`sum(${taskUsageTable.cacheCreationTokens})`,
+        // BUG-ORCH-009 follow-up: these were dropped from the grouped view even though
+        // the non-grouped (raw rows) path always had them — folded in the same way
+        // cacheReadTokens/cacheCreationTokens already were.
+        uncachedInputTokens: sql<number | null>`sum(${taskUsageTable.uncachedInputTokens})`,
+        reasoningTokens:    sql<number | null>`sum(${taskUsageTable.reasoningTokens})`,
+        // MAX across the group, deliberately NOT a sum (FINDING-ORCH-007).
+        peakContextTokens:  sql<number | null>`max(${taskUsageTable.peakContextTokens})`,
       })
       .from(taskUsageTable)
       .leftJoin(tasksTable, eq(taskUsageTable.taskId, tasksTable.id))
@@ -142,11 +157,28 @@ export function usageQuery(db: Database, input: TaskUsageInput): UsageQueryResul
     const totalToolCalls    = groups.reduce((n, r) => n + r.toolCallCount, 0);
     const totalModelCalls   = groups.reduce((n, r) => n + r.modelCalls, 0);
     const taskCount         = groups.reduce((n, r) => n + r.taskCount, 0);
+    const totalUncachedInputTokens = groups.reduce((n, r) => n + (r.uncachedInputTokens ?? 0), 0);
+    const totalCacheReadTokens = groups.reduce((n, r) => n + (r.cacheReadTokens ?? 0), 0);
+    const totalCacheCreationTokens = groups.reduce((n, r) => n + (r.cacheCreationTokens ?? 0), 0);
+    const totalReasoningTokens = groups.reduce((n, r) => n + (r.reasoningTokens ?? 0), 0);
+    // MAX across groups — deliberately NOT a sum.
+    const peakContextTokens = groups.reduce((n, r) => Math.max(n, r.peakContextTokens ?? 0), 0);
 
     return {
       rows: [],
       groups,
-      summary: { totalInputTokens, totalOutputTokens, totalToolCalls, totalModelCalls, taskCount },
+      summary: {
+        totalInputTokens,
+        totalOutputTokens,
+        totalToolCalls,
+        totalModelCalls,
+        taskCount,
+        totalUncachedInputTokens,
+        totalCacheReadTokens,
+        totalCacheCreationTokens,
+        totalReasoningTokens,
+        peakContextTokens,
+      },
     };
   }
 
@@ -166,6 +198,12 @@ export function usageQuery(db: Database, input: TaskUsageInput): UsageQueryResul
       totalToolCalls: rows.reduce((n, r) => n + (r.toolCallCount ?? 0), 0),
       totalModelCalls: rows.reduce((n, r) => n + (r.modelCalls ?? 0), 0),
       taskCount: rows.length,
+      totalUncachedInputTokens: rows.reduce((n, r) => n + (r.uncachedInputTokens ?? 0), 0),
+      totalCacheReadTokens: rows.reduce((n, r) => n + (r.cacheReadTokens ?? 0), 0),
+      totalCacheCreationTokens: rows.reduce((n, r) => n + (r.cacheCreationTokens ?? 0), 0),
+      totalReasoningTokens: rows.reduce((n, r) => n + (r.reasoningTokens ?? 0), 0),
+      // MAX across rows — deliberately NOT a sum (FINDING-ORCH-007).
+      peakContextTokens: rows.reduce((n, r) => Math.max(n, r.peakContextTokens ?? 0), 0),
     },
   };
 }

@@ -159,6 +159,75 @@ describe('persistent tier: reuse across sessions, refresh on edit', () => {
   });
 });
 
+describe('DEBT-APIGEN-CACHE-001: cross-file type changes invalidate the persistent schema cache', () => {
+  it('editing an IMPORTED (non-entry) file is picked up even though the entry file itself never changes', async () => {
+    const sharedPath = path.join(dir, 'cache-shared.ts');
+    const entryPath = path.join(dir, 'cache-entry.ts');
+    fs.writeFileSync(sharedPath, `export interface Shared { a: string }\n`);
+    // Entry file is written ONCE and never rewritten in this test — the
+    // whole point is that ITS version stamp alone must not gate the cache.
+    fs.writeFileSync(
+      entryPath,
+      `import type { Shared } from './cache-shared';\n` +
+        `export async function getShared(): Promise<Shared> { return { a: '' } as Shared }\n`
+    );
+
+    const s1 = createExtractionSession();
+    const before = await generateSchemas({ sourceFile: entryPath, session: s1 });
+    s1.dispose();
+    const beforeProps = (before.schemas['getShared'].output as {
+      properties: Record<string, unknown>;
+    }).properties;
+    expect(beforeProps).toHaveProperty('a');
+    expect(beforeProps).not.toHaveProperty('bExtra');
+
+    // Rewrite ONLY the imported file — a different byte size guarantees a
+    // different `mtimeMs:size` version stamp deterministically, sidestepping
+    // any filesystem mtime-resolution flakiness (no sleep needed).
+    fs.writeFileSync(
+      sharedPath,
+      `export interface Shared { a: string; bExtra: number }\n`
+    );
+
+    const s2 = createExtractionSession();
+    const after = await generateSchemas({ sourceFile: entryPath, session: s2 });
+    s2.dispose();
+    const afterProps = (after.schemas['getShared'].output as {
+      properties: Record<string, unknown>;
+    }).properties;
+
+    // Before DEBT-APIGEN-CACHE-001's fix, `persistentSchemasFor` versioned
+    // ONLY the entry file — since `entryPath` never changed, this would
+    // incorrectly return the STALE cached schema (missing `bExtra`).
+    expect(afterProps).toHaveProperty('bExtra');
+    expect(afterProps).toHaveProperty('a');
+  });
+
+  it('two sessions over an UNCHANGED entry+imported-file pair still hit the persistent cache (no regression to always-miss)', async () => {
+    const sharedPath = path.join(dir, 'cache-shared-stable.ts');
+    const entryPath = path.join(dir, 'cache-entry-stable.ts');
+    fs.writeFileSync(sharedPath, `export interface Stable { z: number }\n`);
+    fs.writeFileSync(
+      entryPath,
+      `import type { Stable } from './cache-shared-stable';\n` +
+        `export async function getStable(): Promise<Stable> { return { z: 1 } as Stable }\n`
+    );
+
+    const s1 = createExtractionSession();
+    await generateSchemas({ sourceFile: entryPath, session: s1 });
+    s1.dispose();
+
+    const s2 = createExtractionSession();
+    const i2 = internalSession(s2);
+    await generateSchemas({ sourceFile: entryPath, session: s2 });
+    s2.dispose();
+
+    // Nothing changed on disk — must be a pure cache hit, not a rebuild.
+    expect(i2.stats.schemaCacheHits).toBeGreaterThan(0);
+    expect(i2.stats.schemaCacheMisses).toBe(0);
+  });
+});
+
 describe('probe hygiene on the shared Project', () => {
   it('anonymous-type resolution leaves the SourceFile text unchanged', async () => {
     const session = createExtractionSession();

@@ -10,9 +10,9 @@
     "decompile": "./bin/decompile.js"
   },
   "scripts": {
-    "build": "nx run decompile:build",
-    "watch": "nx run decompile:build --watch",
-    "cli": "node dist/packages/decompile"
+    "build": "nx run decompile-cli:build",
+    "watch": "nx run decompile-cli:build --watch",
+    "cli": "node dist/entrypoint/decompile-cli"
   },
   "dependencies": {
     "acorn": "^8.14.1",

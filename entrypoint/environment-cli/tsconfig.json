@@ -1,7 +1,20 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "../../dist/entrypoint"
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "baseUrl": "../../",
+    "ignoreDeprecations": "6.0",
+    "esModuleInterop": true,
+    "target": "es6",
+    "sourceMap": true,
+    "allowSyntheticDefaultImports": true
   },
-  "include": ["src"]
+  "files": [],
+  "include": [],
+  "references": [
+    {
+      "path": "./tsconfig.lib.json"
+    }
+  ]
 }

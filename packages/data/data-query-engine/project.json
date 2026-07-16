@@ -22,7 +22,8 @@
         "{options.outputPath}"
       ],
       "dependsOn": [
-        "^build"
+        "^build",
+        "lint"
       ],
       "options": {
         "outputPath": "dist/packages/data/data-query-engine",

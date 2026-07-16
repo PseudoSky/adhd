@@ -1,12 +1,12 @@
 # plugin-gitnexus — STATE_NAME
 
-**Phase:** plugins · **Kind:** work · **Depends on:** orch-audit · **Guard:** `true`
+**Phase:** plugins · **Kind:** work · **Depends on:** orch-audit · **Guard:** `npx --yes nx run-many -t test,build -p dispatch-plugin-gitnexus`
 
 ---
 
 ## Goal
 
-<What is true after this state that was not true before?>
+`@adhd/dispatch-plugin-gitnexus` runs a blast-radius enrichment pass between snapshot() and optimize(), populating `blast_radius` on ops by wrapping the repo's GitNexus MCP.
 
 ---
 
@@ -32,4 +32,4 @@ mutates:    ["packages/dispatch/dispatch-plugin-gitnexus/src/index.ts"]
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+New package (node). Reuse the existing GitNexus MCP (`gitnexus_impact`/`gitnexus_context`) — do not reimplement AST analysis. Teeth (dod.7): a high-fan-in op carries non-null blast_radius; null-injection stays valid. [inv:layer-purity].

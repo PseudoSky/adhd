@@ -1,5 +1,6 @@
 import { type SourceFile } from 'ts-morph';
 import type { FnMeta } from './named';
+import { extractParamDefault } from './param-defaults';
 
 /**
  * Mode 2: read `export default { ... }` object literal; each property whose
@@ -42,6 +43,11 @@ export function extractDefault(sf: SourceFile): FnMeta[] {
           name: p.getName(),
           type: p.getTypeAtLocation(exportAssign).getText(),
           optional,
+          defaultValue: extractParamDefault(
+            paramDecl,
+            p.getName(),
+            exportAssign
+          ),
         };
       }),
       returnType: sig.getReturnType().getText(),

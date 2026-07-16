@@ -11,9 +11,9 @@
  * lives in `./lib/core.ts` instead, which this file calls into.
  *
  * This CLI does no business logic of its own — it is a thin command router
- * over the real dispatch-production stack: `@adhd/dispatch-spec` (validation),
- * `@adhd/dispatch-client` + `@adhd/dispatch-serializer-json` (dag I/O),
- * `@adhd/dispatch-optimizer` (snapshot/optimize), and
+ * over the real dispatch-production stack: `@adhd/dispatch-base-spec` (validation),
+ * `@adhd/dispatch-core-client` + `@adhd/dispatch-serializer-json` (dag I/O),
+ * `@adhd/dispatch-core-optimizer` (snapshot/optimize), and
  * `@adhd/dispatch-orchestrator` (the scheduling cycle + agent-mcp runner).
  *
  * See docs/plan/dispatch-production/dag.json milestones["cli"] (ops cli.1,
@@ -28,7 +28,7 @@
  * Both read this file and only this file — it remains the single contract.
  */
 
-import type { DagSnapshot, DispatchUnit, ValidationResult } from '@adhd/dispatch-spec';
+import type { DagSnapshot, DispatchUnit, ValidationResult } from '@adhd/dispatch-base-spec';
 import type { CycleResult } from '@adhd/dispatch-orchestrator';
 import {
   buildProductionAgentMcpRunner,
@@ -45,7 +45,7 @@ import {
 } from './lib/core.js';
 
 /**
- * Validates a plan `dag.json` against `@adhd/dispatch-spec`'s structural
+ * Validates a plan `dag.json` against `@adhd/dispatch-base-spec`'s structural
  * validator (`validateDagJson`). Read-only — never mutates the dag.
  *
  * Via the apigen-GENERATED CLI this currently crashes (see `run`'s JSDoc for
@@ -59,7 +59,7 @@ export async function validate(dagPath: string): Promise<ValidationResult> {
 
 /**
  * Computes a fresh `DagSnapshot` for `dagPath`: a real `DagClient` load, then
- * `@adhd/dispatch-optimizer`'s `snapshot()` using cold-start B / context-window
+ * `@adhd/dispatch-core-optimizer`'s `snapshot()` using cold-start B / context-window
  * defaults (no calibration file is consulted). Read-only.
  *
  * Via the apigen-GENERATED CLI this currently crashes (see `run`'s JSDoc for

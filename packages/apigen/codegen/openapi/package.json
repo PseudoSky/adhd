@@ -6,5 +6,9 @@
   "typings": "./index.d.ts",
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@adhd/apigen-core-client": "^0.1.0",
+    "@adhd/apigen-engine-naming": "^0.1.1"
   }
 }

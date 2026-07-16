@@ -1,6 +1,6 @@
 # test-audit — STATE_NAME
 
-**Phase:** tests · **Kind:** audit · **Depends on:** tests-hardening, algo-audit · **Guard:** `true`
+**Phase:** tests · **Kind:** audit · **Depends on:** tests-hardening, algo-audit · **Guard:** `python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase tests`
 
 ---
 

@@ -58,7 +58,7 @@
       "depends_on": [
         "builder-engine"
       ],
-      "guard": "test -f packages/environment/environment-builder/src/environment-snapshot.ts && npx --yes nx build environment-builder && node -e 'const{build}=require(\"./packages/environment/environment-builder\"); const s=build({project:{name:\"t\",envPrefix:\"T\"}}); process.exit([\"get\",\"set\",\"configPath\",\"write\"].every(m=>typeof s[m]===\"function\")?0:1)'",
+      "guard": "test -f packages/environment/environment-builder/src/environment-snapshot.ts && npx --yes nx build environment-builder && node -e 'const{build}=require(\"./dist/packages/environment/environment-builder\"); const s=build({project:{name:\"t\",envPrefix:\"T\"}}); process.exit([\"get\",\"set\",\"configPath\",\"write\"].every(m=>typeof s[m]===\"function\")?0:1)'",
       "artifacts": [
         "packages/environment/environment-builder/src/environment-snapshot.ts",
         "packages/environment/environment-builder/src/index.ts",

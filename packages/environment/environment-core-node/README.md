@@ -8,6 +8,34 @@ implementation of the environment spec. Published to npm as the unprefixed
 npm install @adhd/environment
 ```
 
+## Usage
+
+```ts
+import { Environment } from '@adhd/environment';
+
+const env = new Environment({ project: 'agent-mcp', namespace: 'production' });
+
+env.get('config.transport.port');       // typed/nested config value
+env.get('path.state.data');              // resolved directory path
+env.get('env.OPENAI_API_KEY');           // recorded env var
+env.get('provenance.transport.port');    // where the value came from
+env['config.transport.port'];            // bracket-access shorthand for get()
+```
+
+`Environment` is a **thin runtime client**: it only reads a pre-built
+`adhd-environment.json` snapshot (produced by `@adhd/environment-builder`) and
+exposes typed accessors. It never parses YAML, merges fields, generates a
+schema, validates, creates directories, or loads `.env` files.
+
+**Secret-reference resolution:** a `config.*` field whose value was redacted
+at build time into an `adhd-secret-ref:<ENV_VAR>` reference (see
+`@adhd/environment-builder`'s `redactSecrets`) is resolved from
+`process.env` at read time in `Environment.get` — the caller always gets the
+live secret value (or `undefined` if the env var is unset), never the
+literal reference string. This matches the read-side behavior already
+implemented in the Python (`environment-core-py`) and Rust
+(`environment-core-rs`) runtime clients (ENV-CORE-009 / ENV-CORE-014).
+
 ## Building & testing
 
 - Build: `nx build environment-core-node`

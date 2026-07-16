@@ -13,7 +13,9 @@
     "lint": "nx run-many --targets=lint --configuration=production",
     "test": "nx run-many --targets=test --configuration=production",
     "version:old": "nx run-many --targets=version --configuration=production",
-    "publish:old": "nx run-many --targets=publish --configuration=production"
+    "publish:old": "nx run-many --targets=publish --configuration=production",
+    "check:publish-hygiene": "nx run @adhd/source:check-publish-hygiene",
+    "logs:agent": "node dist/packages/ai/agent-mcp/src/scripts/agent-mcp-tail.js"
   },
   "private": true,
   "dependencies": {
