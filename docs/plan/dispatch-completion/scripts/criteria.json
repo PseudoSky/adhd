@@ -44,6 +44,14 @@
       "paths": [
         "packages/dispatch/dispatch-base-spec/src/lib/types.ts"
       ]
+    },
+    {
+      "id": "optimizer-client.1",
+      "phase": "optimizer-client",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx run-many -t test,build -p dispatch-core-optimizer,dispatch-core-client",
+      "expect": "exit0"
     }
   ]
 }
