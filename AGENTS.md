@@ -1,54 +1,271 @@
-## Package Scaffolding — Use `@adhd/workspace-codegen-nx` Generator
+# 🤖 Agent Instructions: Universal Monorepo Architecture
 
-**ALWAYS use `@adhd/workspace-codegen-nx` generators to scaffold new packages.** Never use `@nx/js:library`, `@nx/vite:lib`, or any other generic Nx generator — they produce incorrect project.json, tags, and Nx configuration for this monorepo.
+You are an expert full-stack engineer operating within a high-scale **Nx Monorepo**. You must strictly adhere to the architectural hierarchy, platform isolation, and testing protocols defined below.
 
-### Generator types (from `packages/workspace/workspace-codegen-nx/`)
+> **`CLAUDE.md` is a symlink to this file.** There is exactly one agent-instruction
+> document. Edit `AGENTS.md`; never create a divergent `CLAUDE.md`. (They previously
+> diverged, and the stale copy — which was the injected one — is what stranded the
+> `agent-*` plan corpus on dead `packages/ai/*` paths. See BUG-WORKSPACE-GEN-001.)
 
-| Layer | Command | Usage |
+## Rules
+
+- You must not push without human approval
+- You always plan before acting
+- You never run destructive bash commands without evaluating failure cases
+- You always write tests for the real user use cases (the way in which a 3rd party consumes a package)
+- You do not run git stash commands ever
+- **You never run `git reset --hard` (or `git checkout -- .` / `git restore` over a whole tree).** It silently and irrecoverably destroys uncommitted work — including work belonging to other agents running concurrently in this repo. It has already cost this project real work. To discard one file: `git restore <path>`. To move HEAD without touching files: `git reset --soft`. To inspect a clean tree: use a worktree under `.worktrees/`. If you believe a hard reset is genuinely required, **stop and ask a human.**
+- You never run `git clean -fd` (or any `git clean` with `-f`) without human approval — it deletes untracked files, which is where new, unsaved work lives
+- You always reuse packages within the repository instead of rewriting code
+- You always evaluate best of class 3rd party tools before authoring
+- You always get human approval before installing external tools
+- You never create folders in the repo root without human approval
+- You never chain file removals in bash commands
+- You never write fs removals within scripts relying on variables without human approval
+- You always write bugs discovered to the repo BACKLOG.md
+- You never declare bugs as "pre-existing"
+- After merging branches or worktrees, you always clean up the branch and write to the apropriate changelogs
+- You always update relevant docs to include surface features added (add to backlog if the docs do not exist)
+
+---
+
+## 📦 1. Package Scaffolding — ALWAYS use `@adhd/workspace-codegen-nx`
+
+**ALWAYS use `@adhd/workspace-codegen-nx` generators to scaffold new packages.** Never use `@nx/js:library`, `@nx/vite:lib`, or any other generic Nx generator — they produce incorrect `project.json`, tags, and Nx configuration for this monorepo. Never hand-create a package directory.
+
+> `scripts/generate-lib.sh` is **DEPRECATED and disabled** (exits 1). It scaffolded into
+> `packages/{shared,features,design-system,ai,testing,node-tools,other}/` — **all seven of
+> those directories are gone**. Its `ai` branch is the upstream source of the dead
+> `packages/ai/*` paths in the plan corpus. If you find a doc or plan citing it, that
+> artifact is stale — fix it and log it.
+
+### The invocation
+
+```bash
+npx nx g @adhd/workspace-codegen-nx:<tier> \
+  --name=<bare-name> --group=<domain> \
+  --nxLayer=<layer> --platform=<node|browser|shared> \
+  [--access public] [--publish true] --dry-run
+```
+
+**Always `--dry-run` first**, read the CREATE list, then re-run without it.
+
+### ⚠️ Pass the BARE name — the generator composes the full name itself
+
+The generator builds `<group>-<tier>-<name>` for you:
+
+```
+--name=migration --group=agent  + tier `engine`  →  packages/agent/agent-engine-migration
+--name=agent-engine-migration   + tier `engine`  →  agent-engine-agent-engine-migration  ❌
+```
+
+### Tiers (the generator collection)
+
+| Tier | Command | Usage |
 |-------|---------|-------|
 | **types** | `nx g @adhd/workspace-codegen-nx:types --group <domain> --name <name>` | Pure type/contract packages (zero deps, `access:public`) |
 | **base** | `nx g @adhd/workspace-codegen-nx:base --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Zero internal deps, roots of dep graph |
 | **core** | `nx g @adhd/workspace-codegen-nx:core --group <domain> --name <name> --nxLayer <layer> --platform <platform> [--access public] [--publish true]` | Depends only on base packages |
 | **engine** | `nx g @adhd/workspace-codegen-nx:engine --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Orchestration/wiring (depends on base + core) |
 | **store** | `nx g @adhd/workspace-codegen-nx:store --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Persistence/storage (depends on base + core) |
-| **entrypoint** | `nx g @adhd/workspace-codegen-nx:entrypoint --name <name> --nxLayer entrypoints --platform node [--access public] [--publish true]` | CLI/server/runner (lives under `entrypoint/`, not `packages/`) |
+| **plugin** | `nx g @adhd/workspace-codegen-nx:plugin --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Optional extension |
+| **generator** | `nx g @adhd/workspace-codegen-nx:generator --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Code generator |
+| **query** | `nx g @adhd/workspace-codegen-nx:query --group <domain> --name <name> --nxLayer <layer> --platform <platform>` | Query engine |
+| **entrypoint** | `nx g @adhd/workspace-codegen-nx:entrypoint --name <name> --nxLayer entrypoints --platform node [--access public] [--publish true]` | CLI/server/runner (lives under `entrypoint/`, **not** `packages/`) |
+
+### Domains (`--group`)
+
+The authoritative list is **`.adhd/workspace.json`** — the generator validates against it and rejects unknown groups. Current: `apigen`, `agent`, `data`, `dispatch`, `environment`, `ui-react`, `workspace`. Adding a domain means adding it there first.
 
 ### Naming convention
 
-Packages follow `<domain>-<layer>-<name>` and live at `packages/<domain>/<domain>-<layer>-<name>/`. Entrypoints live at `entrypoint/<name>/`.
+Packages follow `<domain>-<tier>-<name>` and live at `packages/<domain>/<domain>-<tier>-<name>/`. Entrypoints live at `entrypoint/<name>/`.
+
+**Full convention, tier vocabulary, and the "should this be a package at all?" checklist: [`docs/contributing/conventions/package-naming.md`](docs/contributing/conventions/package-naming.md).**
+
+### Before you scaffold: should this be a package at all?
+
+A `packages/` entry is a **library with importers**. If nothing will `import` it, it is not a package:
+
+- **One-shot migrations / ETL** → `scripts/` (precedent: `scripts/validate-dag.js`, `scripts/check-publish-hygiene.mjs`). They have zero consumers by construction.
+- **A CLI / server / runner** → `entrypoint/`, via the `entrypoint` generator.
+- **A library that must never publish** → `--publish` already defaults to `false`; leave it.
 
 ### Non-JS packages (Python, Rust)
 
-No Nx generator exists. Create manually with:
-- `project.json` using `command` targets (not `executor`)
-- `inputs` referencing `namedInputs` in `nx.json`
-- `"externalDependencies": []` in inputs to prevent pnpm-lock cross-contamination
-- `nx-release-publish` target for publishing
+The `@adhd/workspace-codegen-nx` generators emit TypeScript packages. Python and Rust packages use their own Nx plugins (`@nxlv/python`, `@monodon/rust`, both registered in `nx.json`) but **must still conform to the `<domain>-<tier>-<name>` layout and the `domain:`/`platform:` tags**.
 
-### Python-specific
-- Plugin: `@nxlv/python` — provides `@nxlv/python:build`, `@nxlv/python:publish` executors
-- Lint: `ruff`, test: `pytest`
-- Publish: `@nxlv/python:publish` executor with `versionActions: "@nxlv/python/release/version-actions"`
+#### Python-specific
 
-### Rust-specific
-- Plugin: `@monodon/rust` — provides `@monodon/rust:build`, `@monodon/rust:test`, `@monodon/rust:lint` executors
-- Publish: custom `nx-release-publish` target running `cargo publish`
-- Versioning: `useLegacyVersioning: true` in nx.json
+Use `@nxlv/python`. Keep the package under `packages/<domain>/<domain>-<tier>-<name>/`, and set tags in `project.json` by hand to match what the TS generator would emit.
 
-## Lint Responsibility
+#### Rust-specific
 
-- **MUST fix all lint warnings** in every file you modify. Run `npx nx lint <project>` after changes to verify.
-- **Pattern for bulk lint fixes:** `no-explicit-any` → replace `: any` with `: unknown`, `as any` with `as unknown`. `no-non-null-assertion` → add `if (!x) throw` guard before `!` access. `no-unused-vars` → prefix unused name with `_`.
-- **When a lint fix would change behavior** (e.g., `react-hooks/exhaustive-deps` where adding the dep causes a TS error), add `// eslint-disable-next-line <rule>` above the offending line with a comment explaining why.
-- **`package.json` deps are auto-derived — do NOT hand-maintain them.** The pre-commit hook (`.githooks/pre-commit`) runs `nx affected -t lint --fix --skip-nx-cache` on staged changes and re-stages what it rewrites. `@nx/dependency-checks` (base ESLint config, `error`-level) derives each package's `dependencies` from its actual imports, so adding/removing an `import` and committing (or running `npx nx lint <project> --fix`) updates `package.json` for you; CI blocks on any unfixable lint. `--skip-nx-cache` is load-bearing — on a cache hit nx would replay the pass without re-applying the fix. See [`.githooks/README.md`](./.githooks/README.md).
+Use `@monodon/rust`. Same layout and tagging rule as Python.
 
-## Build & Type-Checking — NEVER run `tsc` directly
+---
 
-- **BANNED: `tsc`, `tsc -b`, `tsc --build`, or any bare `tsc` invocation.** Always go through the Nx executor — `npx nx build <project>` to compile, `npx nx typecheck <project>` to check types. Same for isolating a single type error: use `npx nx typecheck <project>`, never bare `tsc`.
-- **Why it's banned:** each package's base `tsconfig.json` sets no `outDir` (only `tsconfig.lib.json` does). Raw `tsc -b` therefore emits compiled `.js` / `.d.ts` / `.js.map` / `.d.ts.map` / `tsconfig.tsbuildinfo` **directly into `src/`**, next to the real source — polluting the tree and breaking lint. One diagnostic `tsc -b` misfire produced **331 stray untracked files across 8 packages** in a single incident. The Nx executor respects the `outDir` split and emits only to `dist/`.
-- If you genuinely believe a direct `tsc` run is required, **stop and ask a human** — do not run it to "just check something."
+## 🏗️ 2. Architectural Hierarchy & Dependency Flow
 
-<!-- gitnexus:start -->
+Dependencies flow **strictly downward**. Higher layers orchestrate; lower layers provide primitives. Never allow upward or circular dependencies.
+
+### ⚠️ `domain` is the DIRECTORY. `layer` is a TAG. They are orthogonal.
+
+This is the single most misread rule in the repo. A package's **directory** is its
+`domain` (`packages/agent/`, `packages/dispatch/`). Its **`layer:` tag** is an
+independent Nx boundary attribute. Layers do **not** map to directories — an earlier
+version of this doc said they did (`layer:data → packages/shared/`), which is how
+`packages/ai/` and `packages/shared/` got scaffolded and then stranded.
+
+**Directory** = `packages/<domain>/<domain>-<tier>-<name>/`
+
+**Tier** (`pkg-kind:` tag) — position in the dep graph:
+
+| Tier | Meaning | Depends on |
+|---|---|---|
+| `base` / `types` | zero-dep types & spec | nothing |
+| `core` | pure logic | base |
+| `store` | persistence | base + core |
+| `engine` | orchestration | base + core + store |
+| `serializer` / `plugin` / `generator` / `query` | adapters & extensions | base + core |
+
+**Layer** (`layer:` tag) — the Nx module-boundary attribute, set via `--nxLayer`.
+Valid values: `shared`, `logic`, `data`, `entrypoints`, `ui-primitives`, `ui-composites`, `components`, `workflows`, `ai`, `mcp`.
+
+**Tags the generator emits** (verified): `domain:<group>`, `pkg-kind:<tier>`, `pkg-class:<class>`, `layer:<nxLayer>`, `platform:<platform>`, `access:<access>`.
+
+Use `npx nx graph` to verify dependency flow.
+
+## 🛑 3. Platform Isolation (Environment Rules)
+
+We use a "Two-Way Mirror" to prevent environment crashes and security leaks:
+
+- **`platform:node`**: Used for **CLI tools** (e.g., `decompile`).
+  - _Constraint:_ **NEVER** import Browser code (`react-hooks`, `window`, `document`, CSS).
+- **`platform:browser`**: Used for **UI** (React Apps, Storybook).
+  - _Constraint:_ **NEVER** import Node internals (`fs`, `path`, server-side resolvers).
+- **`platform:shared`**: Used for **Universal Tools**.
+  - _Constraint:_ Must be **Pure TypeScript**. It must be safe to run in both a Node CLI and a Browser window.
+
+## 🧭 4. Existing Package Context
+
+Refer to these established packages when building new features. **Verify with `npx nx list` before relying on any name here** — this section has gone stale before.
+
+- **`@adhd/decompile`** (`packages/decompile`): Node CLI entrypoint. **platform:node.**
+- **`@adhd/data-query-engine`** (`packages/data/data-query-engine`): In-browser/Node DB engine. **platform:shared.**
+- **`@adhd/data-*`** (`packages/data`): Generic data analysis utilities. **platform:shared.**
+- **`@adhd/data-base-transforms`** (`packages/data/data-base-transforms`): Basic type transforms (camelCase, deepCopy). **platform:shared.**
+- **`@adhd/ui-react-base-storybook`** (`packages/ui-react/ui-react-base-storybook`): UI testing config. **platform:browser.** (The sole `private: true` package.)
+- **`packages/agent/*`**: the agent registry/runtime family (`agent-base-types`, `agent-core-policy`, `agent-core-provider`, `agent-store-prompts`, `agent-store-tools`, `agent-store-runtime`, `agent-engine-compiler`, `agent-engine-orchestrator`, …). Host: `entrypoint/agent-mcp`.
+- **`packages/dispatch/*`**: the dispatch family (`dispatch-base-spec`, `dispatch-core-client`, `dispatch-core-optimizer`, `dispatch-orchestrator`, `dispatch-serializer-json`). Host: `entrypoint/dispatch-cli`.
+
+## 💻 5. Development & Nx Commands
+
+- **List Projects:** `npx nx list`
+- **Build Project:** `npx nx build <project-name>`
+- **Run Tests:** `npx nx test <project-name>`
+- **Linting:** `npx nx lint <project-name>`
+- **Graph Visualization:** `npx nx graph` (Use this to verify dependency flow).
+
+### Build & Type-Checking — NEVER run `tsc` directly
+
+Never invoke `tsc` by hand. Type-checking goes through the project's Nx target (`npx nx build <project>` / the project's `tsc` target) so that inputs, path aliases, and the cache are all honored. A hand-rolled `tsc` invocation reads a different tsconfig resolution than the build does and will report phantom errors — or miss real ones.
+
+### 🚫 NEVER use `--skip-nx-cache`
+
+Do not pass `--skip-nx-cache` (or set `NX_SKIP_NX_CACHE`) to any `nx` command. The nx cache is **correct** — its inputs (`production` = `{projectRoot}/**/*` minus tests) already hash `package.json` (version), `README.md`, and all source, so a version bump, a README edit, or a source change **does** invalidate the cache and reach `dist/`. Trust it.
+
+`--skip-nx-cache` is actively harmful: it runs the task **without reading or writing the cache**, so it builds fresh output to `dist/` but leaves the cache holding an **older entry**. A later normal build then sees matching inputs, **restores that stale cached output over your fresh `dist/`**, and a publish ships the wrong artifact (e.g. an old version → `cannot publish over previously published versions`). The "stale dist" symptom is *caused by* `--skip-nx-cache`, not cured by it.
+
+- Need a clean rebuild? Change an input (you already did, if you bumped a version) and run the normal cached build, or `npx nx reset` to clear the whole cache deliberately — never `--skip-nx-cache`.
+- Prove a cache hit/miss by running the build twice and reading nx's output; don't reach for the flag.
+- Releases go through `nx release publish` (clean build + test, normal cache) — it ships the right artifact when the cache is left alone.
+
+## 🧹 6. Lint Responsibility
+
+You are responsible for the lint status of every file you touch. Run `npx nx lint <project>` on the affected project before considering work complete, and fix what you introduced. Do not disable a rule to make a warning go away without stating why in the code and logging it to BACKLOG.md.
+
+## 🧪 7. Testing Protocol
+
+- **Logic/Math:** Use `layer:test-logic` (Vitest/Node). Focus on edge cases and pure functions.
+- **UI/Hooks:** Use `layer:test-ui` (JSDOM/Storybook). Focus on component states and user interactions.
+- **Verification:** Before marking a task as complete, you must run the relevant test suite and ensure 0 failures.
+
+### Proving features actually work (verification standard)
+
+Green unit tests and passing `grep` audits are **not** proof a feature works. On a recent agent-mcp roadmap every plan was "green," yet driving the features through their real components surfaced four real bugs (an off-by-one cap, a lost cancellation reason, an unreachable HITL trigger, and a broken OAuth path). Hold every feature — and every plan's Definition of Done — to this bar:
+
+1. **Verify the consumer outcome through REAL components, not mocks.** Add at least one integration test that wires the actual stores / engine / server / tools (real DB, real queue, real HTTP) and drives the feature the way a consumer does. Mock only the external boundary (the LLM/provider, a third-party API) — never the thing under test.
+2. **Assertions must have teeth.** A behavioral test must FAIL if the bug is reintroduced. Prove it: revert the fix (or run a deliberately-wrong negative-control variant) and confirm the test goes red. A test that stays green when the code is broken proves nothing.
+3. **Be deterministic without timing.** Prove concurrency with latches/barriers, await events with bounded deadlines, prove persistence by reopening the store — never `sleep`/wall-clock. A flaky proof is not a proof.
+4. **Trust exit codes, not stdout.** Never gate on `… | grep -q passed` — it ignores the process exit code and hides crashes/failures (a ~50% teardown segfault once "passed" this way). Key on the runner's exit status.
+5. **For LLM features, verify with a real model end-to-end.** A scripted/mock provider can fake a tool call the real model can't actually make — that exact gap left HITL unreachable until a live run exposed it. Add a live test that runs a real model through the real loop and asserts model-independent invariants. Gating it behind an env flag (e.g. `AGENT_MCP_LIVE=1`) is legitimate **only because a real model is a paid third-party service** — the one qualifying exception in *Live testing is mandatory* below — and only if you document the approval (named owner, in README + AGENTS.md + the test header) as that section requires.
+6. **Assert the consumer-visible outcome, not the implementation shape.** "`Promise.all` is present" is a proxy; "an agent gets N results back, faster" is the outcome. An implementation-shaped check can stay green while the guarantee regresses.
+
+When authoring a plan with the `plan-state-machine` skill, each behavioral DoD clause must name the real entrypoint + observable and be proven by an audit check that drives it. **Never mark a task complete on proxy evidence.**
+
+### Live testing is mandatory — no silent gating
+
+**Start from the principle.** A feature is proven only by exercising it the way a consumer does — through the real entrypoint or built artifact. A test that doesn't run is not a safety net; it's a comment. We learned this the expensive way: env-gated "live" suites stayed green for months while the real `apigen run`/`serve` path was broken, and they hid several real bugs (BUG-009..013) that a single default-running test would have caught on the first commit.
+
+**So the default is simple: every behavioural test runs by default, unflagged, in CI.** Spawning a local server, building the artifact first, taking a few seconds, needing `python3`/`grpcurl` on the box — none of these are reasons to gate. They are *setup*, and setup is the test's job (wire `dependsOn:["build"]`, provision the tool in CI). A feature is not "done" until a default-running test drives its real path, and the project's `demo`/`verify` target must do the same.
+
+**There is exactly one exception, and it is narrow.** You may put a test behind an env flag *only* when it calls a **paid or external third-party service** — something this system does not control, or that costs money per run (a real LLM, a billed API). That is the *only* qualifying reason. Ask yourself: *"Does skipping this test save money or avoid an outside system I can't run myself?"* If the honest answer is no, it runs by default — full stop.
+
+**If — and only if — a test qualifies, the gate must be documented in the open:** the approval, with a named owner, surfaced in **all three** of the project's `README.md`, its `AGENTS.md`, and the gated test file's own header. An undocumented gate is a broken gate.
+
+**Watch for the trap.** "It spawns child processes," "it needs a built CLI," "it's slow," "it's inconvenient in CI" — every one of these *feels* like a reason and is *not* one. They are the exact rationalizations that produce the blind spot. When a test has a hard local prerequisite, make it **fail loudly** if the prerequisite is missing (a missing `python3` should turn the suite red, never make it quietly skip). The single acceptable softening is an **optional external binary** (e.g. `grpcurl`): that one assertion may self-skip *with a visible warning*, and only so long as it never masks a failure in the code under test.
+
+### Proving an MCP server works — drive the real tools, never a bypass
+
+An MCP server's consumer seam is its **tools as loaded by a host** (`.mcp.json` → `mcp__<server>__*`). So the proof it works is to **call those loaded tools the way a host does** — against real state and real dependencies — and trust the returned **payload + exit code**, not a report. This applies to every MCP server in the repo, not just agent-mcp.
+
+The trap to avoid: **if the tool isn't available, make it available — don't go around it.** When an `mcp__<server>__*` tool is missing or stale, the fix is to load it (build the server, point `.mcp.json` at the built artifact, `/mcp` reload) and call it. It is **not** license to run a shell script that spawns or — worse — *imports* the build and calls its functions directly. That is our code calling our code; it skips the exact layer that fails in real use (host wiring, dist dependency resolution, tool registration, output-size limits), so it can pass while the shipped server is broken. A standalone script is acceptable **only** when it acts as a real MCP client (real JSON-RPC over stdio/http to the unmodified built server) — never when it reaches inside the server. Ask: *am I calling it like a host, or reaching inside it?* Only the former proves anything.
+
+## 🔄 8. Refactoring & Purity Protocol (CRITICAL)
+
+You are responsible for maintaining the health of the shared ecosystem. **Follow these rules for every code change:**
+
+1.  **Prefer Imports over Creation:** Before writing a utility (e.g., deep copy, camelCase, data filter), check the existing `@adhd/data-*` packages (`data-base-transforms`, `data-query-engine`). **Always** use existing exports.
+2.  **The "Two-Use" Refactor Rule:** If you are writing logic in an `entrypoint` or feature that is generic and likely reusable, **STOP**.
+    - Extract the logic.
+    - Place it in the appropriate `packages/<domain>/` package at the right tier.
+    - Import it back into the original file using the `@adhd/` scoped path.
+3.  **Dependency Purity:** `base`/`core` tier packages must **never** depend on higher tiers or UI. They are the bedrock.
+4.  **Hyphenated NPM Naming:** All new libraries must use hyphenated names (e.g., `network-helpers`, not `networkHelpers`) for NPM compatibility.
+
+## 📝 9. Code Style & Standards
+
+- **Naming:** Use PascalCase for Components, camelCase for functions/variables.
+- **Interfaces:** Prefix all Shared/Data interfaces with `I` (e.g., `IUserRecord`).
+- **Imports:** Always use Nx workspace paths (e.g., `@adhd/data-base-transforms`) instead of relative paths (`../../`). The import specifier must **exactly** equal the `package.json` name — a divergence builds in-repo via tsconfig paths and is broken on publish (BUG-DISPATCH-PUBLISH-001, BUG-AGENTMCP-001).
+- **Docs:** New public functions must include JSDoc comments.
+
+## 📁 10. Workspace Context
+
+- **Ignore:** Always ignore `dist/`, `.nx/`, and `tmp/` folders.
+- **Entry:** Start by reading `project.json` in the target library to confirm tags.
+
+### Test/ephemeral artifacts — one central, always-cleaned location
+
+Generated output, scratch DBs, logs, and test fixtures are **ephemeral and must never be tracked or scattered**. There is exactly **one canonical root: `tmp/`** (gitignored). Everything ephemeral writes under `tmp/<package>/…` (e.g. `tmp/apigen/generate-out`, `tmp/agent-mcp/test.db`) and is removable with `nx reset` or a project `clean` target.
+
+- **Never invent ad-hoc artifact dirs** — no per-package `data/`, `dist-temp/`, `out-dir/`, or stray repo-root scratch. If code needs a scratch path, derive it under `tmp/`.
+- **Never write a runtime/test DB to the repo root or a tracked path.** SQLite stores (`*.db`/`*.sqlite` + `-wal`/`-shm`) are gitignored globally; persistent app stores belong in the user home (e.g. agent-mcp → `~/.adhd/agent-mcp/`), never in the tree.
+- **A test must clean up after itself** — write under `tmp/`, remove on teardown (bounded, deterministic; see §7). A test that leaves artifacts behind is a defect.
+- The repo-root `data/` (created by agent-mcp's legacy `./data/agents.db` default) is gitignored; moving that default out of the tree is tracked in BACKLOG.
+
+## 📦 11. Publishing
+
+See [PUBLISHING.md](./PUBLISHING.md) for the full version-bump, build, and publish workflow, including the post-publish checklist and per-package smoke test references.
+
+## 💾 12. Commit Convention
+
+- Use **Conventional Commits**: `feat(scope):`, `fix(scope):`, `refactor(scope):`.
+- Always include the library name as the scope (e.g., `feat(ui-primitives): add segmented-control`).
+
+---
+
 # GitNexus — Code Intelligence
 
 This project is indexed by GitNexus as **adhd** (23271 symbols, 35246 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
@@ -65,9 +282,6 @@ This project is indexed by GitNexus as **adhd** (23271 symbols, 35246 relationsh
 
 ## Never Do
 
-- **NEVER run `git reset --hard`.** It silently and irrecoverably destroys uncommitted work, including work belonging to other agents running concurrently in this repo. This has already happened here: a hard reset wiped five in-flight test fixes and reverted an uncommitted compiler fix, which then resurfaced as a "new" build failure. There is no undo — the discarded changes were never in the object database.
-- NEVER run `git checkout -- .`, `git restore` over a whole directory/tree, or `git clean -f` — same failure mode, same lack of recovery.
-- NEVER run `git stash` / `git stash pop` — it corrupts the nx project graph in this repo.
 - NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
 - NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
 - NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
@@ -75,28 +289,7 @@ This project is indexed by GitNexus as **adhd** (23271 symbols, 35246 relationsh
 
 ### Never discard changes you did not author — surface them
 
-**Default: you may not discard uncommitted changes.** A dirty file you did not create this
-session belongs to someone else — another agent working concurrently, or the user. Deleting,
-reverting, resetting, or stashing it destroys their work. When uncommitted changes are in your
-way (e.g. they block a merge or a checkout), the answer is **never** to discard them — it is to
-**stop and surface them to the user for resolution**, or to preserve them (commit to a branch,
-or `git diff HEAD > /tmp/<name>.patch`) so nothing is lost. This has already cost real work here:
-a hard reset wiped five in-flight test fixes, and a bare `git stash` swept every concurrent
-agent's changes into one orphaned snapshot.
-
-You may only discard changes that are **unambiguously your own scratch, created this session** —
-and even then, preserve first if there is any doubt.
-
-| Situation | Do | Never |
-|---|---|---|
-| A dirty file you didn't author is in your way | **stop and surface it to the user**; or preserve it (branch/patch) | discard it to "get a clean tree" |
-| Drop **your own** one-file scratch edit | `git restore <path>` (single, explicit path) | `git restore .` / `git checkout -- .` over a tree |
-| Move HEAD, keep the working tree | `git reset --soft <ref>` | `git reset --hard <ref>` |
-| Need a pristine tree to build/inspect | a worktree under `.worktrees/` | resetting/cleaning the shared tree |
-| Set work aside before a risky op | commit it, or `git diff HEAD > /tmp/<name>.patch` | `git stash` |
-
-If you believe a hard reset — or discarding anyone's uncommitted work — is genuinely required,
-**stop and ask a human.** Assume another agent has unsaved work in this tree, because it usually does.
+If you encounter uncommitted changes in the working tree that you did not make, **do not revert, stash, or overwrite them**. Another agent or a human may be working concurrently. Surface them to the user and ask. See the `git reset --hard` rule in §Rules.
 
 ## Resources
 
@@ -117,5 +310,3 @@ If you believe a hard reset — or discarding anyone's uncommitted work — is g
 | Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
 | Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
-
-<!-- gitnexus:end -->

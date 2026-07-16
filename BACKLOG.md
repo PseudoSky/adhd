@@ -994,3 +994,23 @@ Baseline: **lint exit 0**, **build exit 1** (5 projects), **test exit 1** (11 pr
 - **Also found:** `AgentToolStore.grant()`'s `permission: 'full'|'read_only'|'restricted'` field is required with no shipped default (`packages/agent/agent-store-tools/src/store/agent-tool-store.ts:85-123`) — the migration's import flow has never specified what permission level an imported agent's granted tools should receive.
 - **Fix direction (either, human decision):** (a) add `BindingStore.resolveCanonical(platformToolName, platformId)` and `ModelStore.resolveCanonicalId(platformModelId, platform)` upstream to `@adhd/agent-store-tools` / `@adhd/agent-core-provider`; or (b) have `agent-registry-migration`'s own frontmatter-parser state build a local reverse map client-side via `BindingStore.listForPlatform('claude_code')` / `ModelStore.list()` + per-model `resolveModelId()` (both bounded, cheap scans — the tool/model catalogs are small) and flag unmatched tokens exactly as originally specified (never silently dropped). Also decide the default `permission` level `AgentToolStore.grant()` should receive on import.
 - **Status:** OPEN — human decision needed before `frontmatter-parser`/`import-pipeline` (or their renamed successors, `corpus-parser`/`import-script` — see BUG-REGISTRY-001) can be implemented against a real contract.
+
+
+### BUG-WORKSPACE-GEN-002 — `workspace-codegen-nx` double-prefixes the scaffolded lib filename
+- **Discovered:** 2026-07-16, dry-running the engine generator.
+- **Repro:** `npx nx g @adhd/workspace-codegen-nx:engine --name=migration --group=agent --nxLayer=logic --platform=node --dry-run`
+- **Observed:** creates `src/lib/agent-agent-engine-migration.ts` + `.spec.ts` — the `agent-` domain prefix is applied twice (once by the generator's own `${group}-${type}-${name}` composition, then again by the underlying Nx lib generator's file naming). The package dir/name itself (`packages/agent/agent-engine-migration`) is **correct**; only the inner `src/lib/` filenames are wrong.
+- **Impact:** cosmetic but every scaffolded package carries it; existing packages show the same pattern.
+- **Status:** OPEN — low priority.
+
+### BUG-WORKSPACE-GEN-003 — `decompile` is a real package directory but is not a registered group in `.adhd/workspace.json`
+- **Discovered:** 2026-07-16.
+- **Detail:** `packages/decompile/` exists on disk, but `.adhd/workspace.json` `groups` lists only `apigen, agent, data, dispatch, environment, ui-react, workspace`. `validateGroup()` (`src/generators/shared/workspace-config.ts:39`) therefore **rejects** `--group=decompile`, so no new package can be scaffolded into an existing, real domain.
+- **Fix direction:** add `decompile` to `.adhd/workspace.json` groups (or, if the domain is being retired, say so there).
+- **Status:** OPEN.
+
+### BUG-WORKSPACE-GEN-004 — root `package.json` `logs:agent` script points into a stale `dist/packages/ai/` artifact
+- **Discovered:** 2026-07-16.
+- **Detail:** `package.json:18` — `"logs:agent": "node dist/packages/ai/agent-mcp/src/scripts/agent-mcp-tail.js"`. `packages/ai/` no longer exists in source, but **`dist/packages/ai/agent-mcp/src/scripts/agent-mcp-tail.js` still exists on disk** — a `dist/` tree that survived its source deletion. So the script does not error; it **silently runs pre-restructure code**. This is the exact "stale dist masking" failure mode recorded in the module-resolution standard (§5: confirm `dist/` is absent after deleting a package's source).
+- **Fix direction:** repoint the script at the real built path (`dist/entrypoint/agent-mcp/...`, verify), and delete the orphaned `dist/packages/ai/` tree.
+- **Status:** OPEN.
