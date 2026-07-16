@@ -18,10 +18,10 @@
       "end_ref": "65d9159eaa833a2e3f0a463fcf116fd742b774c3"
     },
     "builder-snapshot-api": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-16T02:02:54.225Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "4ae7ca4d331eceefe8a2aa6e18a3090aed50ada0",
       "end_ref": null
     },
     "audit-builder": {
@@ -212,8 +212,8 @@
   ],
   "authored_with": {
     "plugin": "workflow",
-    "version": "0.8.25",
-    "hash": "961c3053dfab"
+    "version": "0.8.28",
+    "hash": "6e17cc7c7603"
   },
   "current_state": "builder-snapshot-api",
   "dod_provenance": {
