@@ -3,7 +3,8 @@
   "title": "Dispatch Completion",
   "plan_kind": "brownfield",
   "phases": [
-    "triage"
+    "triage",
+    "spec"
   ],
   "terminal": "done",
   "nodes": {},
