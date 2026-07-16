@@ -19,3 +19,11 @@ _Authored below via `plan-scaffold.js add-dod`._
 `SCOPE.md` (objective, pinned-vs-resolve), `USE_CASES.md`, `demo/DEMO.md` (DoD source, validator-passing), `TOOLS.md` (build-vs-reuse), `RECONCILIATION.md` (ship-vs-outstanding ledger), `PLAN_STATE_MACHINE_PROPOSAL.md` (topology), `APPROVAL.md` (committed sign-off), `BACKLOG.md` (plan-owned DEBT-DISPATCH items — source of truth).
 
 - `[dod.1]` **All 10 dispatch projects build+test green: nx run-many -t test,build across dispatch-base-spec,-core-client,-serializer-json,-serializer-sqlite,-core-optimizer,-orchestrator,-plugin-io,-plugin-gitnexus,-tools,-cli exits 0. (structural)** — All 10 dispatch projects build+test green: nx run-many -t test,build across dispatch-base-spec,-core-client,-serializer-json,-serializer-sqlite,-core-optimizer,-orchestrator,-plugin-io,-plugin-gitnexus,-tools,-cli exits 0..
+
+- `[dod.2]` **Every DispatchUnit from optimize() carries a non-null execution_mode discriminant. (behavioral)** — Every DispatchUnit from optimize() carries a non-null execution_mode discriminant..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `nx test dispatch-core-optimizer`
+  - observable: `each unit.execution_mode is one of generative|tool-call|guard-only`
+  - negative-control: `revert the assembleUnit derivation -> test red`
