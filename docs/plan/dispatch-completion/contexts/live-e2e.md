@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [live-e2e.1] default-running structural: real agent-mcp subprocess spawn + MCP stdio handshake (initialize + tools/list), no paid call
 
 ---
 
