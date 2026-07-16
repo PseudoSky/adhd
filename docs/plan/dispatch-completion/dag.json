@@ -147,6 +147,20 @@
       ],
       "context": "contexts/plugin-gitnexus.md",
       "notes": ""
+    },
+    "plugin-audit": {
+      "kind": "audit",
+      "phase": "plugins",
+      "depends_on": [
+        "plugin-io",
+        "plugin-gitnexus"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "scripts/audit_plugin-audit.py"
+      ],
+      "context": "contexts/plugin-audit.md",
+      "notes": ""
     }
   },
   "authored_with": {
