@@ -172,5 +172,25 @@
     "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
-  "current_state": "triage"
+  "current_state": "triage",
+  "dod_provenance": {
+    "confirmed_at": "2026-07-16T03:18:28.933Z",
+    "by": "plan-orchestrator",
+    "note": "coordinator-relayed dispatcher sign-off; DoD derived from approved demo/DEMO.md",
+    "dod_ids": [
+      "dod.1",
+      "dod.2",
+      "dod.3",
+      "dod.4",
+      "dod.5",
+      "dod.6",
+      "dod.7",
+      "dod.8",
+      "dod.9",
+      "dod.10",
+      "dod.11",
+      "dod.12",
+      "dod.13"
+    ]
+  }
 }
