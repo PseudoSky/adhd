@@ -15,13 +15,13 @@
     "tests",
     "release"
   ],
-  "terminal": "done",
+  "terminal": "audit-final",
   "nodes": {
     "triage": {
       "kind": "audit",
       "phase": "triage",
       "depends_on": [],
-      "guard": "true",
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase triage",
       "artifacts": [
         "scripts/audit_triage.py"
       ],
@@ -34,7 +34,7 @@
       "depends_on": [
         "triage"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-base-spec",
       "artifacts": [
         "packages/dispatch/dispatch-base-spec/src/lib/types.ts",
         "packages/dispatch/dispatch-base-spec/src/lib/validate.ts"
@@ -48,7 +48,7 @@
       "depends_on": [
         "spec-foundations"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase spec",
       "artifacts": [
         "scripts/audit_spec-audit.py"
       ],
@@ -61,7 +61,7 @@
       "depends_on": [
         "spec-audit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-core-optimizer,dispatch-core-client",
       "artifacts": [
         "packages/dispatch/dispatch-core-optimizer/src/lib/optimize.ts",
         "packages/dispatch/dispatch-core-optimizer/src/lib/snapshot.ts",
@@ -76,7 +76,7 @@
       "depends_on": [
         "optimizer-client"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase optimizer-client",
       "artifacts": [
         "scripts/audit_opt-audit.py"
       ],
@@ -89,7 +89,7 @@
       "depends_on": [
         "opt-audit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-orchestrator",
       "artifacts": [
         "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts"
       ],
@@ -102,7 +102,7 @@
       "depends_on": [
         "orchestrator-harden"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-orchestrator",
       "artifacts": [
         "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts"
       ],
@@ -115,7 +115,7 @@
       "depends_on": [
         "causal-replan"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase orchestrator",
       "artifacts": [
         "scripts/audit_orch-audit.py"
       ],
@@ -128,7 +128,7 @@
       "depends_on": [
         "orch-audit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-plugin-io",
       "artifacts": [
         "packages/dispatch/dispatch-plugin-io/src/index.ts"
       ],
@@ -141,7 +141,7 @@
       "depends_on": [
         "orch-audit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-plugin-gitnexus",
       "artifacts": [
         "packages/dispatch/dispatch-plugin-gitnexus/src/index.ts"
       ],
@@ -155,7 +155,7 @@
         "plugin-io",
         "plugin-gitnexus"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase plugins",
       "artifacts": [
         "scripts/audit_plugin-audit.py"
       ],
@@ -168,7 +168,7 @@
       "depends_on": [
         "orch-audit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-serializer-sqlite",
       "artifacts": [
         "packages/dispatch/dispatch-serializer-sqlite/src/index.ts"
       ],
@@ -181,7 +181,7 @@
       "depends_on": [
         "serializer-sqlite"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase storage",
       "artifacts": [
         "scripts/audit_storage-audit.py"
       ],
@@ -194,7 +194,7 @@
       "depends_on": [
         "opt-audit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-tools",
       "artifacts": [
         "packages/dispatch/dispatch-tools/src/index.ts"
       ],
@@ -207,7 +207,7 @@
       "depends_on": [
         "dispatch-tools"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase tools",
       "artifacts": [
         "scripts/audit_tools-audit.py"
       ],
@@ -220,7 +220,7 @@
       "depends_on": [
         "orch-audit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-cli",
       "artifacts": [
         "entrypoint/dispatch-cli/package.json",
         "entrypoint/dispatch-cli/project.json",
@@ -235,7 +235,7 @@
       "depends_on": [
         "cli-complete"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase cli",
       "artifacts": [
         "scripts/audit_cli-audit.py"
       ],
@@ -248,7 +248,7 @@
       "depends_on": [
         "opt-audit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-core-optimizer",
       "artifacts": [
         "packages/dispatch/dispatch-core-optimizer/src/lib/algorithms/index.ts"
       ],
@@ -261,7 +261,7 @@
       "depends_on": [
         "optimizer-algorithms"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase algorithms",
       "artifacts": [
         "scripts/audit_algo-audit.py"
       ],
@@ -277,7 +277,7 @@
         "tools-audit",
         "cli-audit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-core-optimizer",
       "artifacts": [
         "packages/dispatch/dispatch-core-optimizer/src/test/golden.spec.ts"
       ],
@@ -291,7 +291,7 @@
         "tests-hardening",
         "algo-audit"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase tests",
       "artifacts": [
         "scripts/audit_test-audit.py"
       ],
@@ -304,7 +304,7 @@
       "depends_on": [
         "test-audit"
       ],
-      "guard": "true",
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-base-spec,dispatch-core-client,dispatch-serializer-json,dispatch-serializer-sqlite,dispatch-core-optimizer,dispatch-orchestrator,dispatch-plugin-io,dispatch-plugin-gitnexus,dispatch-tools,dispatch-cli",
       "artifacts": [
         "package.json"
       ],
@@ -317,11 +317,25 @@
       "depends_on": [
         "release-ready"
       ],
-      "guard": "true",
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase dod",
       "artifacts": [
         "scripts/audit_audit-final.py"
       ],
       "context": "contexts/audit-final.md",
+      "notes": ""
+    },
+    "live-e2e": {
+      "kind": "work",
+      "phase": "tests",
+      "depends_on": [
+        "cli-audit",
+        "orch-audit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "entrypoint/dispatch-cli/src/test/integration/real-e2e.ts"
+      ],
+      "context": "contexts/live-e2e.md",
       "notes": ""
     }
   },
@@ -329,5 +343,9 @@
     "plugin": "workflow",
     "version": "0.8.29",
     "hash": "836ff34f0a74"
+  },
+  "demo": {
+    "source": "demo/DEMO.md",
+    "package_artifact": "entrypoint/dispatch-cli/src/test/cli-smoke.spec.ts"
   }
 }
