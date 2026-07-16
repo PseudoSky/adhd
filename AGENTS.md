@@ -40,6 +40,7 @@ No Nx generator exists. Create manually with:
 - **MUST fix all lint warnings** in every file you modify. Run `npx nx lint <project>` after changes to verify.
 - **Pattern for bulk lint fixes:** `no-explicit-any` → replace `: any` with `: unknown`, `as any` with `as unknown`. `no-non-null-assertion` → add `if (!x) throw` guard before `!` access. `no-unused-vars` → prefix unused name with `_`.
 - **When a lint fix would change behavior** (e.g., `react-hooks/exhaustive-deps` where adding the dep causes a TS error), add `// eslint-disable-next-line <rule>` above the offending line with a comment explaining why.
+- **`package.json` deps are auto-derived — do NOT hand-maintain them.** The pre-commit hook (`.githooks/pre-commit`) runs `nx affected -t lint --fix --skip-nx-cache` on staged changes and re-stages what it rewrites. `@nx/dependency-checks` (base ESLint config, `error`-level) derives each package's `dependencies` from its actual imports, so adding/removing an `import` and committing (or running `npx nx lint <project> --fix`) updates `package.json` for you; CI blocks on any unfixable lint. `--skip-nx-cache` is load-bearing — on a cache hit nx would replay the pass without re-applying the fix. See [`.githooks/README.md`](./.githooks/README.md).
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
