@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "triage.1",
+      "phase": "triage",
+      "tier": null,
+      "kind": "command",
+      "cmd": "bash -c '! grep -rq \"is not wired into\" packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts'",
+      "expect": "exit0"
+    }
+  ]
+}
