@@ -175,6 +175,14 @@
       "kind": "command",
       "cmd": "npx nx run-many -t test,build -p dispatch-core-optimizer",
       "expect": "exit0"
+    },
+    {
+      "id": "tests-hardening.1",
+      "phase": "tests",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx run-many -t test,build -p dispatch-core-optimizer",
+      "expect": "exit0"
     }
   ]
 }
