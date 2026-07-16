@@ -174,6 +174,19 @@
       ],
       "context": "contexts/serializer-sqlite.md",
       "notes": ""
+    },
+    "storage-audit": {
+      "kind": "audit",
+      "phase": "storage",
+      "depends_on": [
+        "serializer-sqlite"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "scripts/audit_storage-audit.py"
+      ],
+      "context": "contexts/storage-audit.md",
+      "notes": ""
     }
   },
   "authored_with": {
