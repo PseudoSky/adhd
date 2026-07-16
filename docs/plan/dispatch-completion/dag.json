@@ -200,6 +200,19 @@
       ],
       "context": "contexts/dispatch-tools.md",
       "notes": ""
+    },
+    "tools-audit": {
+      "kind": "audit",
+      "phase": "tools",
+      "depends_on": [
+        "dispatch-tools"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "scripts/audit_tools-audit.py"
+      ],
+      "context": "contexts/tools-audit.md",
+      "notes": ""
     }
   },
   "authored_with": {
