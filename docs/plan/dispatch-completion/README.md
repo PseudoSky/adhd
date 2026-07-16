@@ -130,3 +130,12 @@ Before: a `DispatchUnit` has no `execution_mode`; a complete milestone still rea
   - observable: `write-then-read via sqlite adapter equals write-then-read via json serializer on normalized form`
   - negative-control: `corrupt the sqlite read mapping in dispatch-serializer-sqlite -> parity assertion red`
   - delivered-by: `serializer-sqlite`
+
+- `[dod.7]` **IO and gitnexus enrichment plugins inject real signal; the optimizer stays pure with null deps. (behavioral)** — IO and gitnexus enrichment plugins inject real signal; the optimizer stays pure with null deps..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `nx test dispatch-plugin-io dispatch-plugin-gitnexus`
+  - observable: `pairwise_overlap non-zero for file-sharing milestones with IO plugin; blast_radius non-null with gitnexus plugin; optimize() still valid with null deps`
+  - negative-control: `null-inject the dispatch-plugin-io plugin -> overlap zero (baseline), optimizer purity test stays green`
+  - delivered-by: `plugin-io, plugin-gitnexus`
