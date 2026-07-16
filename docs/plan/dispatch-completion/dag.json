@@ -108,6 +108,19 @@
       ],
       "context": "contexts/causal-replan.md",
       "notes": ""
+    },
+    "orch-audit": {
+      "kind": "audit",
+      "phase": "orchestrator",
+      "depends_on": [
+        "causal-replan"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "scripts/audit_orch-audit.py"
+      ],
+      "context": "contexts/orch-audit.md",
+      "notes": ""
     }
   },
   "authored_with": {
