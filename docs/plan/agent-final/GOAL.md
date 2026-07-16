@@ -40,7 +40,9 @@ every plan's demo must survive.
 | D-E | **`adhd-build` is the dispatch lineage** — "that plan became exactly dispatcher*"; harvest, don't reinvent. | Demo idiom = its transcript style; the goal→questions→milestones authoring half lives in sox's `workflow:plan-builder`, not here. |
 | D-F | **Fix things, don't file debt.** Discovered defects get fixed in-flight or surfaced to the owner — the INVALIDATIONS log replaces re-litigating stale claims. | |
 
-† `agent-core-policy`'s purpose is **open** — see O-1.
+† `agent-core-policy`: intended as agent restrictions (tools/files/access modes);
+owner-assessed "may be irrelevant at this point" — on hold, unratified as a runtime
+enforcer. See Resolved questions O-1.
 
 ## The end state (what a green spine demo shows, one run)
 
@@ -53,24 +55,30 @@ every plan's demo must survive.
 6. **Plugins** load by name at runtime; their tests actually run (BUG-NXTEST-001 fixed).
 7. Host surface byte-stable throughout; every registry claim traceable to a store row.
 
-## Plan sequence
+## Structure: ONE plan (owner ruling, 2026-07-16 — O-2 resolved)
 
-| # | Slug | State | Gate it proves |
-|---|------|-------|----------------|
-| 1 | [`store-move/`](./store-move/GOAL.md) | **GOAL+DEMO written** | FK disarm · store importable · host thins |
-| 2+ | *deliberately deferred* — owner: "Lets make 1 right now then come back." Candidates from the verified gap list: client-factory · seam (dispatch-on-client) · authoring lane (consuming sox) · compile hardening · plugins/test-wiring · spine. | — | — |
+agent-final is a **single plan**. The per-subsystem GOAL+DEMO pairs below are its
+**milestone gates** — each milestone is done when its demo runs green, and the plan is
+done when the spine demo runs green. Not sibling plans; one dag, one story.
 
-## Open questions (blocking their plans, not plan 1)
+| Milestone | Demo artifact | State |
+|---|---|---|
+| store-move | [`store-move/`](./store-move/GOAL.md) GOAL+DEMO+UNRESOLVED | **written** |
+| dispatch | [`superseded/dispatch-completion/demo/DEMO.md`](./superseded/dispatch-completion/demo/DEMO.md) — **retained as-is** (owner, O-3: "I want that demo, i have not confirmed that they are invalid"); its 15 ⟦U#⟧ ledger is the acceptance frame | **exists** |
+| client-factory · seam · authoring-lane (consuming sox) · compile · plugins/test-wiring · spine | to author, same idiom | — |
 
-- **O-1 · What is `agent-core-policy` for?** SYNTHESIS says hold; the arch doc's target
-  says ENFORCED; §2E says descriptive-metadata-as-designed. Contradiction unresolved —
-  the enforcement demo beat ("the policy actually blocks the call") can only be written
-  once the owner rules. *(Asked 2026-07-16; unanswered.)*
-- **O-2 · Decomposition of plans 2+** (one-per-subsystem vs shipping-unit vs
-  target-moves). *(Asked; owner deferred.)*
-- **O-3 · The dispatch demo** — `superseded/dispatch-completion/demo/DEMO.md` is
-  owner-endorsed ("correct less some of the underlying implementation") with 15 ⟦U#⟧
-  items; keep-verbatim vs re-ground its stale claims (I-2, I-4) when its plan is cut.
+## Resolved questions (rulings on record — OBSERVATIONS.md OBS-21)
+
+- **O-1 · `agent-core-policy` — RESOLVED.** Original intent: restrict the agent — tool
+  use, file access, access modes. Owner: "it may be irrelevant at this point." No
+  enforcement demo is owed; policy stays on hold; the arch doc's "✅ ENFORCED" target is
+  **unratified** — do not build toward it without a new ruling. Disposition of the
+  package (retire vs descriptive metadata) is an open item, not a blocker.
+- **O-2 · Decomposition — RESOLVED: one plan** (structure above).
+- **O-3 · Dispatch demo — RESOLVED: retained.** The demo is the milestone's acceptance
+  document. The mechanical facts in OBSERVATIONS OBS-2 (unrun optimizer/plugin tests)
+  concern architecture-doc/BACKLOG *claims*, not demo beats, and the owner has not
+  confirmed any invalidation against the demo itself.
 
 ## Standing constraints (every plan)
 
