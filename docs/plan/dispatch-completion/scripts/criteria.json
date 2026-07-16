@@ -24,6 +24,16 @@
       "kind": "command",
       "cmd": "npx nx run-many -t test,build -p dispatch-base-spec",
       "expect": "exit0"
+    },
+    {
+      "id": "spec-foundations.2",
+      "phase": "spec",
+      "tier": null,
+      "kind": "present",
+      "pattern": "export type ExecutionMode",
+      "paths": [
+        "packages/dispatch/dispatch-base-spec/src/lib/types.ts"
+      ]
     }
   ]
 }

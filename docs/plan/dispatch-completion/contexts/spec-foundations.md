@@ -18,6 +18,7 @@
 
 - [spec-foundations.1] dispatch-base-spec builds and tests green
 
+- [spec-foundations.2] ExecutionMode is exported from the spec
 ---
 
 ## Reservations
