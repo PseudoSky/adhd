@@ -39,8 +39,10 @@ function findWorkspaceRoot(start: string): string {
  * actionable failure rather than a silent skip.
  */
 const DAG_FIXTURE_CANDIDATES = [
+  // current: agent-final consolidation (2026-07-16) quarantined the dispatch plans
+  'docs/plan/agent-final/superseded/dispatch-completion/superseded/dispatch-production/dag.json',
   'docs/plan/dispatch-completion/superseded/dispatch-production/dag.json',
-  'docs/plan/dispatch-production/dag.json', // pre-2026-07-16 location
+  'docs/plan/dispatch-production/dag.json', // original location
 ];
 
 describe('plan', () => {
