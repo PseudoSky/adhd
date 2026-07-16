@@ -283,6 +283,20 @@
       ],
       "context": "contexts/tests-hardening.md",
       "notes": ""
+    },
+    "test-audit": {
+      "kind": "audit",
+      "phase": "tests",
+      "depends_on": [
+        "tests-hardening",
+        "algo-audit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "scripts/audit_test-audit.py"
+      ],
+      "context": "contexts/test-audit.md",
+      "notes": ""
     }
   },
   "authored_with": {
