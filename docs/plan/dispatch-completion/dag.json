@@ -6,7 +6,8 @@
     "triage",
     "spec",
     "optimizer-client",
-    "orchestrator"
+    "orchestrator",
+    "plugins"
   ],
   "terminal": "done",
   "nodes": {},
