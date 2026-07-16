@@ -254,6 +254,19 @@
       ],
       "context": "contexts/optimizer-algorithms.md",
       "notes": ""
+    },
+    "algo-audit": {
+      "kind": "audit",
+      "phase": "algorithms",
+      "depends_on": [
+        "optimizer-algorithms"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "scripts/audit_algo-audit.py"
+      ],
+      "context": "contexts/algo-audit.md",
+      "notes": ""
     }
   },
   "authored_with": {
