@@ -51,3 +51,11 @@ _Authored below via `plan-scaffold.js add-dod`._
   - entrypoint: `nx test dispatch-orchestrator`
   - observable: `after a correction completes, downstream depends_on points at it and the cycle terminates all-complete not no-eligible-work`
   - negative-control: `revert the rewire -> resume ends no-eligible-work, test red`
+
+- `[dod.6]` **The SQLite serializer reload equals the JSON serializer reload of the same dag (adapter parity). (behavioral)** — The SQLite serializer reload equals the JSON serializer reload of the same dag (adapter parity)..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `nx test dispatch-serializer-sqlite`
+  - observable: `write-then-read via sqlite adapter equals write-then-read via json serializer on normalized form`
+  - negative-control: `corrupt the sqlite read mapping -> parity assertion red`
