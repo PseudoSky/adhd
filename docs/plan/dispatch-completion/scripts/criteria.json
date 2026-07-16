@@ -118,6 +118,14 @@
       "tier": null,
       "kind": "exists",
       "path": "packages/dispatch/dispatch-plugin-gitnexus/src/index.ts"
+    },
+    {
+      "id": "serializer-sqlite.1",
+      "phase": "storage",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx nx run-many -t test,build -p dispatch-serializer-sqlite",
+      "expect": "exit0"
     }
   ]
 }
