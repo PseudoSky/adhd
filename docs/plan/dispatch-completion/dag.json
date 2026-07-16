@@ -187,6 +187,19 @@
       ],
       "context": "contexts/storage-audit.md",
       "notes": ""
+    },
+    "dispatch-tools": {
+      "kind": "work",
+      "phase": "tools",
+      "depends_on": [
+        "opt-audit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/dispatch/dispatch-tools/src/index.ts"
+      ],
+      "context": "contexts/dispatch-tools.md",
+      "notes": ""
     }
   },
   "authored_with": {
