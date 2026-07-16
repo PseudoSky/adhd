@@ -121,6 +121,19 @@
       ],
       "context": "contexts/orch-audit.md",
       "notes": ""
+    },
+    "plugin-io": {
+      "kind": "work",
+      "phase": "plugins",
+      "depends_on": [
+        "orch-audit"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/dispatch/dispatch-plugin-io/src/index.ts"
+      ],
+      "context": "contexts/plugin-io.md",
+      "notes": ""
     }
   },
   "authored_with": {
