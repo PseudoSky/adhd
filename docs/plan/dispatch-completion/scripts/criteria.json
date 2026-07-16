@@ -8,6 +8,14 @@
       "kind": "command",
       "cmd": "bash -c '! grep -rq \"is not wired into\" packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts'",
       "expect": "exit0"
+    },
+    {
+      "id": "triage.2",
+      "phase": "triage",
+      "tier": null,
+      "kind": "command",
+      "cmd": "bash -c '! grep -q \"\\\"@adhd/dispatch-spec\\\"\" tsconfig.base.json'",
+      "expect": "exit0"
     }
   ]
 }
