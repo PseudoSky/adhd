@@ -27,6 +27,20 @@
       ],
       "context": "contexts/triage.md",
       "notes": ""
+    },
+    "spec-foundations": {
+      "kind": "work",
+      "phase": "spec",
+      "depends_on": [
+        "triage"
+      ],
+      "guard": "true",
+      "artifacts": [
+        "packages/dispatch/dispatch-base-spec/src/lib/types.ts",
+        "packages/dispatch/dispatch-base-spec/src/lib/validate.ts"
+      ],
+      "context": "contexts/spec-foundations.md",
+      "notes": ""
     }
   },
   "authored_with": {
