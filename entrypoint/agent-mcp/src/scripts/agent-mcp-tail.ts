@@ -76,12 +76,30 @@ interface EventRow {
   model: string | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  cacheReadTokens: number | null;
+  uncachedTokens: number | null;
+  peakContextTokens: number | null;
+  modelCalls: number | null;
 }
 
 type ToolCallEntry = { id?: string; callId?: string; server?: string; tool?: string; arguments?: Record<string, unknown> };
 type ToolResultEntry = { toolCallId?: string; id?: string; callId?: string; result?: unknown; content?: unknown; text?: unknown; isError?: boolean };
 
 interface SessionMsgs { tc: ToolCallEntry[]; tr: ToolResultEntry[]; content: string }
+
+/**
+ * Per-task usage aggregate (the single `task_usage` row per task). Attached ONLY to a
+ * task's terminal event — never fanned across every event, which made per-event token
+ * sums nonsense (a 12-call task read as 12× its real spend). See BUG-AGENTMCP-006.
+ */
+interface TaskUsage {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  uncachedInputTokens: number | null;
+  peakContextTokens: number | null;
+  modelCalls: number | null;
+}
 
 /** A single rendered event — the shared shape behind both text and JSON output. */
 interface TailRecord {
@@ -92,8 +110,8 @@ interface TailRecord {
   sessionId: string | null;
   taskId: string;
   model: string | null;
-  inputTokens: number | null;
-  outputTokens: number | null;
+  /** Task-total usage — present ONLY on TASK_COMPLETED / TASK_FAILED; null on every other event. */
+  taskUsage: TaskUsage | null;
   detail: string;
 }
 
@@ -112,7 +130,11 @@ function queryRows(db: Database.Database, sinceRowId: number): EventRow[] {
       t.session_id AS sessionId,
       u.model AS model,
       u.input_tokens AS inputTokens,
-      u.output_tokens AS outputTokens
+      u.output_tokens AS outputTokens,
+      u.cache_read_input_tokens AS cacheReadTokens,
+      u.uncached_input_tokens AS uncachedTokens,
+      u.peak_context_tokens AS peakContextTokens,
+      u.model_calls AS modelCalls
     FROM task_events e
     LEFT JOIN task_usage u ON u.task_id = e.task_id
     LEFT JOIN tasks t ON t.id = e.task_id
@@ -198,23 +220,42 @@ function buildDetail(row: EventRow, tcList: ToolCallEntry[], trList: ToolResultE
   }
 }
 
-/** Compact token annotation for the text renderer. */
-function buildTokens(row: EventRow): string {
-  if (!(row.taskId && row.inputTokens != null && row.inputTokens > 0)) return "";
-  if (row.type === "MODEL_REQUEST") {
-    const s = row.inputTokens >= 1000 ? `${(row.inputTokens / 1000).toFixed(1)}K` : `${row.inputTokens}`;
-    return `in=${s}`;
-  }
-  if (row.type === "MODEL_RESPONSE" && row.outputTokens != null && row.outputTokens > 0) {
-    const s = row.outputTokens >= 1000 ? `${(row.outputTokens / 1000).toFixed(1)}K` : `${row.outputTokens}`;
-    return `out=${s}`;
-  }
-  return "";
+function isTerminal(type: string): boolean {
+  return type === "TASK_COMPLETED" || type === "TASK_FAILED";
+}
+
+function fmtK(n: number): string {
+  return n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`;
+}
+
+/**
+ * Task-total usage annotation, shown ONLY on the terminal event of a task.
+ * Previously this rendered on every MODEL_REQUEST/RESPONSE using the joined per-task
+ * aggregate — the whole-task total repeated on every row, so summing per-event tokens
+ * looked like N× the real spend (BUG-AGENTMCP-006). Now it appears once, as a total,
+ * with the cache-hit rate so a heavily-cached task doesn't read as expensive.
+ */
+function buildUsageCol(row: EventRow): string {
+  if (!isTerminal(row.type) || row.inputTokens == null) return "";
+  const inp = row.inputTokens ?? 0;
+  const out = row.outputTokens ?? 0;
+  const cacheRead = row.cacheReadTokens ?? 0;
+  const pct = inp > 0 && cacheRead > 0 ? ` ${Math.round((100 * cacheRead) / inp)}%cache` : "";
+  const peak = row.peakContextTokens != null ? ` peak=${fmtK(row.peakContextTokens)}` : "";
+  return `Σ in=${fmtK(inp)} out=${fmtK(out)}${pct}${peak}`;
 }
 
 function toRecord(row: EventRow, cache: Record<string, SessionMsgs>): TailRecord {
   const msgData = row.sessionId ? cache[row.sessionId] : undefined;
   const detail = buildDetail(row, msgData?.tc ?? [], msgData?.tr ?? [], msgData?.content ?? "");
+  const taskUsage: TaskUsage | null = isTerminal(row.type) && row.inputTokens != null ? {
+    inputTokens: row.inputTokens,
+    outputTokens: row.outputTokens,
+    cacheReadTokens: row.cacheReadTokens,
+    uncachedInputTokens: row.uncachedTokens,
+    peakContextTokens: row.peakContextTokens,
+    modelCalls: row.modelCalls,
+  } : null;
   return {
     rowid: row.rowid,
     createdAt: row.createdAt,
@@ -223,15 +264,14 @@ function toRecord(row: EventRow, cache: Record<string, SessionMsgs>): TailRecord
     sessionId: row.sessionId,
     taskId: row.taskId,
     model: row.model,
-    inputTokens: row.inputTokens,
-    outputTokens: row.outputTokens,
+    taskUsage,
     detail,
   };
 }
 
 function renderLine(rec: TailRecord, row: EventRow): string {
   const sess = rec.sessionId ? rec.sessionId.slice(0, 8) : "ephemeral";
-  const tokenDisplay = buildTokens(row);
+  const tokenDisplay = buildUsageCol(row);
   return `${ts()} ${rec.agent.padEnd(18)} ${sess.padEnd(8)} ${rec.type.padEnd(15)} ${tokenDisplay.padStart(12)} ${rec.detail}`;
 }
 
