@@ -23,11 +23,7 @@
 
 **Conventions**
 - Shell prompt is `$`; all commands run from the repo root (`/Users/nix/dev/node/adhd`) unless noted.
-- MCP tool calls go through the demo's real stdio client — a thin JSON-RPC driver against the **unmodified built server** (never an import of server internals):
-  ```bash
-  alias mcp='node docs/plan/agent-final/demo/call-tool.mjs'   # mcp <tool_name> '<json-args>'
-  ```
-  `call-tool.mjs` is part of this demo's harness manifest (§2.2) and speaks real `initialize` → `tools/call` over stdio to `dist/entrypoint/agent-mcp/src/index.js`.
+- **The runner is a real MCP host session** (owner directive 2026-07-17: the actual mcp/clis, never a driver shim). `.mcp.json` points `agent-mcp` at the built artifact (`dist/entrypoint/agent-mcp/src/index.js`); after building, reload via `/mcp`. In ▶️ Do blocks, a line beginning `mcp__agent-mcp__<tool> {…}` is a **literal loaded-tool invocation** the host runner makes with exactly that JSON argument; the runner saves each response verbatim to the path named beside it. All other lines are shell. Dispatch beats use the real `dispatch-cli` binary path.
 - The demo database is `tmp/agent-mcp/agent-final-demo.db` via `DATABASE_PATH` — never a tracked path.
 - Values shown as ⟨like-this⟩ vary per run; the assertion next to them states what stays invariant.
 - Tokens shown as ⟦U#⟧ are interfaces this script had to guess; each is listed in `UNRESOLVED.md` beside this file — confirm them before treating the step as authoritative.
@@ -71,12 +67,12 @@ Agents (both attach `shared-grounding-rule` **unpinned** — this is what makes 
 
 The v2 bump text (climax): `Numbers MUST cite file:line or tool output — estimates are defects.`
 Dispatch fixture: `../superseded/dispatch-completion/demo/fixtures/sample-plan.dag.json` (`schema_version: 4`, scaffold→implement→verify), copied to `/tmp/agent-final-demo/` before any mutation.
-Harness manifest (files beside this script, built by the plan): `call-tool.mjs` (real stdio MCP client), `seed-registry.mjs` (60-component bulk seed for the bounded-output beat).
+No driver harness — the runner IS the host (see §0 Conventions). The only demo-support file is the committed dispatch fixture above; the 60-component bulk seed (§5.2 sweep) is 60 real `component_define` invocations made by the runner.
 
 ### 2.3 Prerequisites
 
 - Node ≥ 20, repo deps installed (`npm ci`), no network needed except the two flagged live beats.
-- `@adhd/sox-graph-store` + `@adhd/sox-hybrid-search` published and installed as dependencies of `agent-store-prompts` (the sox-side publish is in flight — a landed precondition of this plan, not its scope; same pattern as the nested dispatch demo's §2.3).
+- `@adhd/sox-graph-store@0.3.0` + `@adhd/sox-hybrid-search@0.2.0` — **published 2026-07-16, registry-verified** (`npm view` exits 0; BL-295 Option-A contract + degrade signal included). Installing them as dependencies of `agent-store-prompts` is this plan's work (⟦U3⟧); the publish itself is a landed precondition, same pattern as the nested dispatch demo's §2.3.
 - **Policy note (owner ruling O-1):** `agent-core-policy` is on hold — this demo deliberately contains **no enforcement beat** and asserts nothing about policy gating.
 
 ### 2.4 Cold Start — From Nothing to Running
@@ -87,8 +83,8 @@ Harness manifest (files beside this script, built by the plan): `call-tool.mjs` 
 ```bash
 npx nx run-many -t build -p agent-store-runtime,agent-store-prompts,agent-engine-compiler,agent-engine-orchestrator,agent-mcp
 mkdir -p tmp/agent-mcp && export DATABASE_PATH=tmp/agent-mcp/agent-final-demo.db
-alias mcp='node docs/plan/agent-final/demo/call-tool.mjs'
-mcp guide '{}' | tee /tmp/agent-final-demo/tools-before.txt
+# .mcp.json → dist/entrypoint/agent-mcp/src/index.js with env DATABASE_PATH above; /mcp reload
+mcp__agent-mcp__guide {}                    # runner saves response → /tmp/agent-final-demo/tools-before.txt
 ```
 
 👀 **Expect** — build exits 0 for all five projects; the tool listing shows the runtime surface:
@@ -121,9 +117,9 @@ Noa stops editing forty files and starts defining parts.
 
 ▶️ **Do**
 ```bash
-mcp component_define '{"name":"shared-grounding-rule","type":"rule","content":"Numbers MUST come from tool output, never estimates.","shared":true}'
-mcp component_define '{"name":"reviewer-identity","type":"identity","content":"You are a meticulous code reviewer. Verdicts default to NEEDS-WORK."}'
-mcp component_define '{"name":"crit-security","type":"rule","content":"SECURITY CRITERIA: validate all inputs at the boundary; check authz."}'
+mcp__agent-mcp__component_define {"name":"shared-grounding-rule","type":"rule","content":"Numbers MUST come from tool output, never estimates.","shared":true}
+mcp__agent-mcp__component_define {"name":"reviewer-identity","type":"identity","content":"You are a meticulous code reviewer. Verdicts default to NEEDS-WORK."}
+mcp__agent-mcp__component_define {"name":"crit-security","type":"rule","content":"SECURITY CRITERIA: validate all inputs at the boundary; check authz."}
 ```
 
 👀 **Expect** (each)
@@ -144,8 +140,8 @@ mcp component_define '{"name":"crit-security","type":"rule","content":"SECURITY 
 
 ▶️ **Do**
 ```bash
-mcp agent_define '{"name":"demo-reviewer","model":"sonnet","components":[{"name":"reviewer-identity"},{"name":"crit-security","context_condition":{"ticket_type":"security"}},{"name":"shared-grounding-rule"}],"tools":["Read","Grep"]}'
-mcp agent_define '{"name":"demo-auditor","model":"sonnet","components":[{"name":"reviewer-identity"},{"name":"shared-grounding-rule"}],"tools":["Read"]}'
+mcp__agent-mcp__agent_define {"name":"demo-reviewer","model":"sonnet","components":[{"name":"reviewer-identity"},{"name":"crit-security","context_condition":{"ticket_type":"security"}},{"name":"shared-grounding-rule"}],"tools":["Read","Grep"]}
+mcp__agent-mcp__agent_define {"name":"demo-auditor","model":"sonnet","components":[{"name":"reviewer-identity"},{"name":"shared-grounding-rule"}],"tools":["Read"]}
 ```
 
 👀 **Expect**
@@ -166,8 +162,8 @@ mcp agent_define '{"name":"demo-auditor","model":"sonnet","components":[{"name":
 
 ▶️ **Do**
 ```bash
-mcp agent_define '{"name":"demo-broken","model":"sonnet","components":[{"name":"does-not-exist"}]}'
-mcp agent_read '{"name":"demo-broken"}'
+mcp__agent-mcp__agent_define {"name":"demo-broken","model":"sonnet","components":[{"name":"does-not-exist"}]}
+mcp__agent-mcp__agent_read {"name":"demo-broken"}
 ```
 
 👀 **Expect** — first call: structured error `COMPONENT_NOT_FOUND: does-not-exist`; second call: `AGENT_NOT_FOUND`.
@@ -185,8 +181,8 @@ mcp agent_read '{"name":"demo-broken"}'
 
 ▶️ **Do**
 ```bash
-mcp agent_create '{"name":"legacy-flat","provider":{"type":"claudecli"},"systemPrompt":"You are a terse changelog writer."}'
-mcp agent_read '{"name":"legacy-flat"}'
+mcp__agent-mcp__agent_create {"name":"legacy-flat","provider":{"type":"claudecli"},"systemPrompt":"You are a terse changelog writer."}
+mcp__agent-mcp__agent_read {"name":"legacy-flat"}
 ```
 
 👀 **Expect** — create succeeds exactly as on agent-mcp 2.1.x; read returns the agent with its flat prompt intact.
@@ -208,7 +204,7 @@ The registry is only as good as its search — and the search must not be ours.
 
 ▶️ **Do**
 ```bash
-mcp component_search '{"query":"numbers must come from real tool output not guesses"}'
+mcp__agent-mcp__component_search {"query":"numbers must come from real tool output not guesses"}
 ```
 
 👀 **Expect**
@@ -256,9 +252,9 @@ node -e "const p=require('./packages/agent/agent-store-prompts/package.json'); c
 
 ▶️ **Do**
 ```bash
-mcp agent_compile '{"name":"demo-reviewer","platform":"claude_code","context":{"ticket_type":"security"}}' > /tmp/agent-final-demo/rev.code.security.txt
-mcp agent_compile '{"name":"demo-reviewer","platform":"claude_code","context":{}}'                          > /tmp/agent-final-demo/rev.code.empty.txt
-mcp agent_compile '{"name":"demo-reviewer","platform":"claude_api","context":{"ticket_type":"security"}}'   > /tmp/agent-final-demo/rev.api.security.json
+mcp__agent-mcp__agent_compile {"name":"demo-reviewer","platform":"claude_code","context":{"ticket_type":"security"}}   # → rev.code.security.txt
+mcp__agent-mcp__agent_compile {"name":"demo-reviewer","platform":"claude_code","context":{}}                            # → rev.code.empty.txt
+mcp__agent-mcp__agent_compile {"name":"demo-reviewer","platform":"claude_api","context":{"ticket_type":"security"}}     # → rev.api.security.json
 ```
 
 👀 **Expect** — first output starts `---` (frontmatter) and contains `SECURITY CRITERIA`; second contains **no** `SECURITY CRITERIA`; third is `JSON.parse`-able with `systemPrompt`/`tools`/`model` and platform tool aliases.
@@ -275,7 +271,7 @@ mcp agent_compile '{"name":"demo-reviewer","platform":"claude_api","context":{"t
 
 ▶️ **Do**
 ```bash
-mcp agent_compile '{"name":"demo-reviewer","platform":"claude_code","context":{"ticket_type":"security"}}' 
+mcp__agent-mcp__agent_compile {"name":"demo-reviewer","platform":"claude_code","context":{"ticket_type":"security"}} 
 ```
 
 👀 **Expect** — response carries `"cache":"HIT"` and the **same** `composed_prompt_id` as beat 3.1's first compile.
@@ -294,11 +290,11 @@ mcp agent_compile '{"name":"demo-reviewer","platform":"claude_code","context":{"
 
 ▶️ **Do**
 ```bash
-mcp agent '{"agent_name":"demo-reviewer"}'                      # → session ⟨s1⟩
-mcp task '{"session_id":"⟨s1⟩","input":"Review: function add(a,b){return a-b}"}'
-mcp result '{"task_id":"⟨t1⟩"}'
-# paid live variant (the one legitimate gate):
-AGENT_MCP_LIVE=1 mcp result '{"task_id":"⟨t1⟩","wait":true}'
+mcp__agent-mcp__agent {"agent_name":"demo-reviewer"}                      # → session ⟨s1⟩
+mcp__agent-mcp__task {"session_id":"⟨s1⟩","input":"Review: function add(a,b){return a-b}"}
+mcp__agent-mcp__result {"task_id":"⟨t1⟩"}
+# paid live variant (the one legitimate gate) — server started with AGENT_MCP_LIVE=1 in .mcp.json env:
+mcp__agent-mcp__result {"task_id":"⟨t1⟩","wait":true}
 ```
 
 👀 **Expect** — unflagged: session row created, task accepted, status transitions `pending→running`; flagged: `stopReason: completed`, a NEEDS-WORK verdict mentioning the subtraction bug, `usage_query` shows `tokens > 0` for the task.
@@ -316,8 +312,10 @@ AGENT_MCP_LIVE=1 mcp result '{"task_id":"⟨t1⟩","wait":true}'
 
 ▶️ **Do**
 ```bash
-ADHD_AGENT_PLUGINS='[{"module":"@adhd/agent-plugin-budget","config":{"maxModelCalls":1}}]' \
-  mcp task '{"session_id":"⟨s1⟩","input":"Now write a 10-part epic poem about linting."}'
+# restart the server with the plugin — .mcp.json env gains
+#   ADHD_AGENT_PLUGINS='[{"module":"@adhd/agent-plugin-budget","config":{"maxModelCalls":1}}]'
+# then /mcp reload (by-name loading is a DEPLOYMENT decision — this beat exercises exactly that seam)
+mcp__agent-mcp__task {"session_id":"⟨s1⟩","input":"Now write a 10-part epic poem about linting."}
 ```
 
 👀 **Expect** — the task halts after one model call with a structured budget error naming the exceeded limit; the session survives.
@@ -339,7 +337,7 @@ ADHD_AGENT_PLUGINS='[{"module":"@adhd/agent-plugin-budget","config":{"maxModelCa
 ```bash
 mkdir -p /tmp/agent-final-demo && cp docs/plan/agent-final/superseded/dispatch-completion/demo/fixtures/sample-plan.dag.json /tmp/agent-final-demo/spine.dag.json
 npx tsx --tsconfig tsconfig.base.json entrypoint/dispatch-cli/bin/cli.ts run --dag-path /tmp/agent-final-demo/spine.dag.json --runner in-process
-mcp task_list '{"limit":5}'
+mcp__agent-mcp__task_list {"limit":5}
 ```
 
 👀 **Expect** — `{ dispatched: [...], persisted: true }`; `task_list` shows the dispatched unit's task **in the same `DATABASE_PATH` store** with the plan's agent name.
@@ -393,8 +391,8 @@ Noa's agents were welded to a provider at birth. That weld comes off: one merged
 
 ▶️ **Do**
 ```bash
-mcp agent_read '{"name":"demo-reviewer"}'
-mcp agent '{"agent_name":"demo-reviewer"}'                          # → session ⟨s3⟩
+mcp__agent-mcp__agent_read {"name":"demo-reviewer"}
+mcp__agent-mcp__agent {"agent_name":"demo-reviewer"}                          # → session ⟨s3⟩
 sqlite3 tmp/agent-mcp/agent-final-demo.db "SELECT provider, model FROM sessions WHERE id='⟨s3⟩';"
 grep -rn "interface ProviderConfig" packages/dispatch/dispatch-base-spec/src/lib/types.ts | wc -l
 ```
@@ -420,10 +418,10 @@ anthropic|claude-sonnet-4-6          ← inherited onto the session row at open
 
 ▶️ **Do**
 ```bash
-mcp task '{"session_id":"⟨s3⟩","input":"Remember this codename: BLUEHERON. Now review: const x = eval(userInput)"}'
-mcp session_update '{"session_id":"⟨s3⟩","model":"openai/gpt-5.2"}'
-mcp task '{"session_id":"⟨s3⟩","input":"What was the codename I gave you?"}'
-mcp usage_query '{"session_id":"⟨s3⟩"}'
+mcp__agent-mcp__task {"session_id":"⟨s3⟩","input":"Remember this codename: BLUEHERON. Now review: const x = eval(userInput)"}
+mcp__agent-mcp__session_update {"session_id":"⟨s3⟩","model":"openai/gpt-5.2"}
+mcp__agent-mcp__task {"session_id":"⟨s3⟩","input":"What was the codename I gave you?"}
+mcp__agent-mcp__usage_query {"session_id":"⟨s3⟩"}
 ```
 
 👀 **Expect**
@@ -448,9 +446,10 @@ usage: two tasks, two DIFFERENT providerType values, one session
 
 ▶️ **Do**
 ```bash
-mcp session_update '{"session_id":"⟨s3⟩","models":["anthropic/claude-sonnet-4-6","openai/gpt-5.2","lmstudio/qwen-local"]}'
-ADHD_AGENT_ANTHROPIC_SECRET=revoked-key mcp task '{"session_id":"⟨s3⟩","input":"Summarize the review so far in one line."}'   # pragma: allowlist secret (fictional demo value — the beat exists to prove auth failure fails over)
-mcp usage_query '{"session_id":"⟨s3⟩"}'
+mcp__agent-mcp__session_update {"session_id":"⟨s3⟩","models":["anthropic/claude-sonnet-4-6","openai/gpt-5.2","lmstudio/qwen-local"]}
+# restart the server with ADHD_AGENT_ANTHROPIC_SECRET=revoked-key in .mcp.json env, /mcp reload   # pragma: allowlist secret (fictional demo value — the beat exists to prove auth failure fails over)
+mcp__agent-mcp__task {"session_id":"⟨s3⟩","input":"Summarize the review so far in one line."}
+mcp__agent-mcp__usage_query {"session_id":"⟨s3⟩"}
 ```
 
 👀 **Expect**
@@ -476,17 +475,17 @@ usage: latest task providerType = "openai"   (anthropic attempt errored, fell th
 ▶️ **Do**
 ```bash
 # ONE edit
-mcp component_define '{"name":"shared-grounding-rule","type":"rule","content":"Numbers MUST cite file:line or tool output — estimates are defects.","shared":true}'
+mcp__agent-mcp__component_define {"name":"shared-grounding-rule","type":"rule","content":"Numbers MUST cite file:line or tool output — estimates are defects.","shared":true}
 # both agents recompile — drift MISS, new text, from one write
-mcp agent_compile '{"name":"demo-reviewer","platform":"claude_code","context":{}}' > /tmp/agent-final-demo/rev.v2.txt
-mcp agent_compile '{"name":"demo-auditor","platform":"claude_code","context":{}}'  > /tmp/agent-final-demo/aud.v2.txt
+mcp__agent-mcp__agent_compile {"name":"demo-reviewer","platform":"claude_code","context":{}}   # → rev.v2.txt
+mcp__agent-mcp__agent_compile {"name":"demo-auditor","platform":"claude_code","context":{}}    # → aud.v2.txt
 # a dispatched wave carries it
 npx tsx --tsconfig tsconfig.base.json entrypoint/dispatch-cli/bin/cli.ts run --dag-path /tmp/agent-final-demo/spine.dag.json --runner in-process
 # retire an agent — the runtime must forget it completely
-mcp agent '{"agent_name":"demo-auditor"}'          # open session ⟨s2⟩ to arm the guard
-mcp agent_delete '{"name":"demo-auditor"}'          # → AGENT_HAS_ACTIVE_SESSIONS
-mcp session_close '{"session_id":"⟨s2⟩"}'
-mcp agent_delete '{"name":"demo-auditor"}'          # → deleted
+mcp__agent-mcp__agent {"agent_name":"demo-auditor"}          # open session ⟨s2⟩ to arm the guard
+mcp__agent-mcp__agent_delete {"name":"demo-auditor"}          # → AGENT_HAS_ACTIVE_SESSIONS
+mcp__agent-mcp__session_close {"session_id":"⟨s2⟩"}
+mcp__agent-mcp__agent_delete {"name":"demo-auditor"}          # → deleted
 sqlite3 tmp/agent-mcp/agent-final-demo.db "SELECT COUNT(*) FROM sessions WHERE agent_name='demo-auditor';"
 ```
 
@@ -535,7 +534,8 @@ node -e "for (const p of ['packages/dispatch/dispatch-core-optimizer','packages/
 ▶️ **Do**
 ```bash
 node docs/plan/agent-final/demo/seed-registry.mjs 60      # bulk-seed 60 components via the store API
-mcp component_search '{"query":"rule"}' | wc -c
+mcp__agent-mcp__component_search {"query":"rule"}    # runner saves response → /tmp/agent-final-demo/search-rule.json
+wc -c /tmp/agent-final-demo/search-rule.json
 ```
 
 👀 **Expect** — response size ⟨n⟩ chars where n < 20,000; results are capped summaries with a `total` count, never full bodies.
@@ -550,7 +550,7 @@ mcp component_search '{"query":"rule"}' | wc -c
 
 ▶️ **Do**
 ```bash
-mcp component_define '{"name":"bad-type","type":"vibes","content":"x"}'
+mcp__agent-mcp__component_define {"name":"bad-type","type":"vibes","content":"x"}
 ```
 
 👀 **Expect** — structured `INVALID_TYPE: vibes` naming the live `prompt_types` vocabulary; nothing written.
@@ -565,7 +565,7 @@ mcp component_define '{"name":"bad-type","type":"vibes","content":"x"}'
 
 ▶️ **Do**
 ```bash
-mcp guide '{}' | diff /tmp/agent-final-demo/tools-before.txt - && echo SURFACE-STABLE
+mcp__agent-mcp__guide {}   # then: diff /tmp/agent-final-demo/tools-before.txt - && echo SURFACE-STABLE
 ```
 
 👀 **Expect**
