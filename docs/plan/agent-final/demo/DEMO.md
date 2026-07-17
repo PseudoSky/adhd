@@ -378,9 +378,94 @@ grep -c "agent_create" packages/dispatch/dispatch-orchestrator/src/lib/agent-run
 
 ✅ **Verify**
 - [ ] Its sign-off records **PASS** (every ✅ ticked, its 15 ⟦U#⟧ items landed or explicitly risk-accepted per its own rules).
+- [ ] Every imported `DSP-*` row in §7.2b below is checked off against the nested run — the dispatcher's items are THIS demo's items (owner directive 2026-07-17), not a delegated black box.
 
-🔗 **Proves:** REQ-012 · CAP-008
-📎 **Source:** owner ruling O-3 (GOAL.md): demo retained as the dispatch milestone's acceptance frame.
+🔗 **Proves:** REQ-012 · CAP-008 · DSP-REQ-001, DSP-REQ-003, DSP-REQ-004, DSP-REQ-005, DSP-REQ-006, DSP-REQ-007, DSP-REQ-008, DSP-REQ-009, DSP-REQ-010, DSP-REQ-011, DSP-REQ-012, DSP-REQ-013, DSP-REQ-014, DSP-REQ-015, DSP-REQ-017 · DSP-CAP-001, DSP-CAP-002, DSP-CAP-003, DSP-CAP-004, DSP-CAP-005, DSP-CAP-006, DSP-CAP-007, DSP-CAP-008, DSP-CAP-009, DSP-CAP-010, DSP-CAP-011, DSP-CAP-012, DSP-CAP-013, DSP-CAP-016
+📎 **Source:** owner ruling O-3 (GOAL.md): demo retained as the dispatch milestone's acceptance frame; full-item import per owner directive 2026-07-17 ("All dispatcher demo items should be covered as well"). Beat refs in §7.2b are the nested demo's own (§8.1/§8.2 there).
+
+### Act 6 — One agent, any provider
+
+Noa's agents were welded to a provider at birth. That weld comes off: one merged registry, an inheritance chain, and a session that can change its mind mid-conversation.
+
+#### 6.1 · Three providers, one registry, an un-welded agent   (happy)
+
+🎬 **Scene.** Noa configures anthropic, openai, and a local lmstudio side by side. `demo-reviewer` names a *model hint*, not a provider — the binding resolves at session-open, down the chain.
+
+▶️ **Do**
+```bash
+mcp agent_read '{"name":"demo-reviewer"}'
+mcp agent '{"agent_name":"demo-reviewer"}'                          # → session ⟨s3⟩
+sqlite3 tmp/agent-mcp/agent-final-demo.db "SELECT provider, model FROM sessions WHERE id='⟨s3⟩';"
+grep -rn "interface ProviderConfig" packages/dispatch/dispatch-base-spec/src/lib/types.ts | wc -l
+```
+
+👀 **Expect**
+```
+agent has model_hint "anthropic/claude-sonnet-4-6" and NO required provider block
+anthropic|claude-sonnet-4-6          ← inherited onto the session row at open
+0                                    ← dispatch's private ProviderConfig is GONE (merged registry)
+```
+
+✅ **Verify**
+- [ ] The agent definition carries no welded provider (`providerConfigSchema` is no longer a required field — today it is, `validation/agent.ts:106-120`).
+- [ ] The new `sessions.provider`/`sessions.model` columns exist and hold the inherited binding (today: zero provider/model columns on sessions, `agent-store-runtime/src/db/schema.ts:12-25`).
+- [ ] The registry is ONE: dispatch's local snake_case `ProviderConfig` and the 3-literal `switch` in `factory.ts:8-26` are gone; provider resolution consults the merged registry (5+ provider rows coexisting).
+
+🔗 **Proves:** REQ-016, REQ-017 · CAP-013
+📎 **Source:** owner ruling D-G(1)(2) (GOAL.md); current welds verified in OBS-24's research brief (`agent.ts:106-120`, `factory.ts:8-26`, sessions schema) — merged-registry shape + slug format ⟦U7⟧, see UNRESOLVED.md.
+
+#### 6.2 · The mid-conversation provider swap   (happy)
+
+🎬 **Scene.** Three turns into a review on Anthropic, Noa's org shifts traffic to OpenAI. Same session, same memory — the history re-renders across the provider boundary.
+
+▶️ **Do**
+```bash
+mcp task '{"session_id":"⟨s3⟩","input":"Remember this codename: BLUEHERON. Now review: const x = eval(userInput)"}'
+mcp session_update '{"session_id":"⟨s3⟩","model":"openai/gpt-5.2"}'
+mcp task '{"session_id":"⟨s3⟩","input":"What was the codename I gave you?"}'
+mcp usage_query '{"session_id":"⟨s3⟩"}'
+```
+
+👀 **Expect**
+```
+task 1: ⟨eval flagged as dangerous⟩            provider recorded: anthropic
+session_update → {provider:"openai", model:"gpt-5.2"}
+task 2: "BLUEHERON"                             provider recorded: openai
+usage: two tasks, two DIFFERENT providerType values, one session
+```
+
+✅ **Verify**
+- [ ] Task 2 answers `BLUEHERON` — context survived the provider boundary (history re-rendered, including tool schemas, via the merged registry's tool-format layer).
+- [ ] The usage ledger shows the same session billed across two providers (`taskUsageTable.providerType` differs between the tasks).
+- [ ] **Negative control:** with the tool-format normalization stubbed out, task 2 hard-fails on the foreign tool-call shape — proving the re-render is load-bearing, not cosmetic.
+
+🔗 **Proves:** REQ-018 · CAP-014
+📎 **Source:** owner ruling D-G(3) soft-swap; the normalization layer exists built-but-unwired (`emit-tools.ts:116-174`, header comment `:11-14`); `session_update` tool + swap arg shape ⟦U8⟧ — see UNRESOLVED.md.
+
+#### 6.3 · A dead provider fails over down the list   🛟 (recovery)
+
+🎬 **Scene.** Anthropic's key gets revoked mid-shift. Noa's session carries an ordered fallback list — cheap-and-local last — and the task completes anyway, with the failover on the record.
+
+▶️ **Do**
+```bash
+mcp session_update '{"session_id":"⟨s3⟩","models":["anthropic/claude-sonnet-4-6","openai/gpt-5.2","lmstudio/qwen-local"]}'
+ADHD_AGENT_ANTHROPIC_SECRET=revoked-key mcp task '{"session_id":"⟨s3⟩","input":"Summarize the review so far in one line."}'   # pragma: allowlist secret (fictional demo value — the beat exists to prove auth failure fails over)
+mcp usage_query '{"session_id":"⟨s3⟩"}'
+```
+
+👀 **Expect**
+```
+task: ⟨one-line summary⟩ — completed
+usage: latest task providerType = "openai"   (anthropic attempt errored, fell through)
+```
+
+✅ **Verify**
+- [ ] The task completes despite provider 1 failing auth; the recorded provider is the second in the list.
+- [ ] The failed first attempt is visible (an errored attempt trace, not silently absorbed).
+- [ ] With the fallback list removed, the same revoked key fails the task outright — the list is the mechanism (negative control).
+
+🔗 **Proves:** REQ-019 · CAP-015
+📎 **Source:** owner ruling D-G(4) ordered-list-only, modeled on OpenRouter's `models[]` fallback semantics (openrouter.ai/docs/api-reference/overview — errors fall through in order); the session-level `models` field name + attempt-trace shape ⟦U9⟧ — see UNRESOLVED.md.
 
 ---
 
@@ -537,6 +622,10 @@ git status --porcelain docs/plan/agent-final/superseded/dispatch-completion/demo
 | REQ-013 | Flat `agent_create` compat unchanged | 1.4 | H/E | ☐ |
 | REQ-014 | Discovery output bounded (BUG-003 class) | 5.2(sweep) | E | ☐ |
 | REQ-015 | Teardown leaves zero residue | §6 | H | ☐ |
+| REQ-016 | ONE merged provider registry; the three representations retired | 6.1 | H | ☐ |
+| REQ-017 | Inheritance-chain binding; agent un-welded (optional hint) | 6.1 | H | ☐ |
+| REQ-018 | Soft swap: session changes provider mid-conversation, context survives | 6.2 | H/E | ☐ |
+| REQ-019 | Ordered `models[]` fallback completes a task through a live provider | 6.3 | R | ☐ |
 
 ### 7.2 Capabilities → Beats
 
@@ -554,10 +643,60 @@ git status --porcelain docs/plan/agent-final/superseded/dispatch-completion/demo
 | CAP-010 | Stable 15-tool host surface | 2.4, 5.4(sweep), §6 | ☐ |
 | CAP-011 | Test-integrity gate | 5.1(sweep) | ☐ |
 | CAP-012 | Legacy compat shim | 1.4 | ☐ |
+| CAP-013 | Multi-provider merged registry + inheritance-chain binding | 6.1 | ☐ |
+| CAP-014 | Mid-session provider/model swap (context-preserving) | 6.2 | ☐ |
+| CAP-015 | Ordered fallback routing with visible failover | 6.3 | ☐ |
+
+### 7.2b Dispatcher milestone — imported item coverage (owner directive 2026-07-17)
+
+Every requirement and capability of the nested dispatcher demo, carried here as first-class
+rows so none hides behind the single gate checkbox. IDs preserve the nested demo's own
+numbering (its table skips REQ-002/016 and CAP-014/015); "nested beat" refs are beats **in
+[`../superseded/dispatch-completion/demo/DEMO.md`](../superseded/dispatch-completion/demo/DEMO.md)**,
+all exercised via spine beat 5.3. Its 15 ⟦U#⟧ ledger items remain tracked in its own
+`UNRESOLVED.md` (indexed in this demo's UNRESOLVED.md scope section).
+
+| Imported ID | Item (short) | Nested beat(s) | Via | Status |
+|---|---|---|---|---|
+| DSP-REQ-001 | All shipped+new dispatch projects build+test green | 2.4, 1.1, 2.1–2.3, 3.1, 4.1, 6.3, 7 | 5.3 | ☐ |
+| DSP-REQ-003 | DispatchUnit carries non-null `execution_mode` | 3.1 | 5.3 | ☐ |
+| DSP-REQ-004 | Snapshot JSON round-trips without Infinity→null | 2.2 | 5.3 | ☐ |
+| DSP-REQ-005 | A complete milestone reports `eligible:false` | 4.1, 4.2 | 5.3 | ☐ |
+| DSP-REQ-006 | Runner/persist failure recorded, not thrown | 4.3 | 5.3 | ☐ |
+| DSP-REQ-007 | dispatch-tools author a valid dag; cycles rejected | 5.3 (nested) | 5.3 | ☐ |
+| DSP-REQ-008 | SQLite serializer reload == JSON serializer reload | 6.1 | 5.3 | ☐ |
+| DSP-REQ-009 | npx-invocable + consistent missing-file behavior | 5.2, 6.2 | 5.3 | ☐ |
+| DSP-REQ-010 | IO/gitnexus plugins enrich; optimizer pure w/ null deps | 3.2 | 5.3 | ☐ |
+| DSP-REQ-011 | Causal replan rewires downstream; resume hits terminal | §4 climax | 5.3 | ☐ |
+| DSP-REQ-012 | optimizer-algorithms data-gated (held unless >15%/≥3) | 6.3 | 5.3 | ☐ |
+| DSP-REQ-013 | Provider enum extended + enforced by validation | 1.2 | 5.3 | ☐ |
+| DSP-REQ-014 | Op-level guard routing executes op guards | 5.4 | 5.3 | ☐ |
+| DSP-REQ-015 | calibrate rejects bad tier before building runner | 5.1 | 5.3 | ☐ |
+| DSP-REQ-017 | LIVE — real cycle against a real model end-to-end | 4.live | 5.3 | ☐ |
+| DSP-CAP-001 | Validate a dag | 1.1, 1.2, 5.2 | 5.3 | ☐ |
+| DSP-CAP-002 | Snapshot (eligibility/status/cost) | 2.2, 4.2, 5.2 | 5.3 | ☐ |
+| DSP-CAP-003 | Optimize (pack into DispatchUnits) | 3.1 | 5.3 | ☐ |
+| DSP-CAP-004 | List eligible milestones | 2.1, 4.1 | 5.3 | ☐ |
+| DSP-CAP-005 | Per-milestone status report | 2.3, 5.2 | 5.3 | ☐ |
+| DSP-CAP-006 | Run one orchestration cycle (dispatch+persist) | 4.1, 4.3, 5.2, 5.4 | 5.3 | ☐ |
+| DSP-CAP-007 | Drive a plan to terminal through real agents | §4 climax | 5.3 | ☐ |
+| DSP-CAP-008 | Author a dag through MCP tools | 5.3 (nested) | 5.3 | ☐ |
+| DSP-CAP-009 | Enrich snapshot (file sizes / blast radius) | 3.2 | 5.3 | ☐ |
+| DSP-CAP-010 | Persist/load via storage adapter (JSON + SQLite) | 6.1 | 5.3 | ☐ |
+| DSP-CAP-011 | Calibrate per-tier base cost | 5.1 | 5.3 | ☐ |
+| DSP-CAP-012 | npx CLI distribution | 2.4, 6.2 | 5.3 | ☐ |
+| DSP-CAP-013 | Algorithm cascade selection (data-gated) | 6.3 | 5.3 | ☐ |
+| DSP-CAP-016 | Live end-to-end dispatch against a real model | 4.live | 5.3 | ☐ |
+
+**Provider-ruling interaction note:** DSP-REQ-013's "provider enum extended" and the nested
+demo's `ProviderConfig`/`ModelTier` shapes predate ruling **D-G** (one merged registry). When
+the merge lands, the nested demo's provider-shaped beats are re-grounded against the merged
+schema — the *behaviors* (validation rejects unknown providers; units carry provider config)
+stay binding; the *shapes* follow D-G. Tracked as part of ⟦U7⟧.
 
 ### 7.3 Unresolved Interfaces & Gaps
 
-- **6 unresolved interface stubs (⟦U1⟧–⟦U6⟧)** — full ledger in [`UNRESOLVED.md`](./UNRESOLVED.md). Highest impact first: **⟦U6⟧** (the in-process runner/client seam — Act 5 and the climax's dispatch leg hang on it), **⟦U1⟧/⟦U2⟧** (the authoring/discovery tool shapes — the entire authoring lane is designed-but-unbuilt), **⟦U3⟧** (sox publish + Option-A `'generic'` contract — in flight, a landed precondition before Act 2 can run), **⟦U4⟧** (compile tool + cache response fields), **⟦U5⟧** (budget plugin config keys).
+- **9 unresolved interface stubs (⟦U1⟧–⟦U9⟧)** — full ledger in [`UNRESOLVED.md`](./UNRESOLVED.md). Highest impact first: **⟦U6⟧** (the in-process runner/client seam — Act 5 and the climax's dispatch leg hang on it), **⟦U7⟧** (the merged provider registry shape + slug format — all of Act 6 hangs on it), **⟦U1⟧/⟦U2⟧** (the authoring/discovery tool shapes — the entire authoring lane is designed-but-unbuilt), **⟦U3⟧** (sox packages: published 2026-07-16 ✅, consumption still to build), **⟦U8⟧** (`session_update` swap surface), **⟦U9⟧** (fallback list + attempt trace), **⟦U4⟧** (compile tool + cache response fields), **⟦U5⟧** (budget plugin config keys).
 - **Scope gaps:** policy/enforcement deliberately absent (owner ruling O-1 — no beat asserts gating); the two nested demos carry their own ⟦U#⟧ ledgers (15 items in dispatch-completion, 5 in store-move) which remain their milestones' acceptance frames — this spine does not re-litigate them.
 
 ---
