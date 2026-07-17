@@ -142,6 +142,24 @@ Append-only. Newest additions at the bottom of each section. Started 2026-07-16.
 - Grounding already on record: provider is represented **three ways with no mapping** (SYNTHESIS §1.5 — dispatch's snake_case `ProviderConfig`, agent-mcp's camelCase `providerConfigSchema`, `agent-core-provider`'s DB registry); `ModelTier`(`Haiku|Sonnet|Opus`) has zero mapping to `provider_models.pricingTier`; `agent-core-provider` is seeded but has **zero runtime consumers** (`agent-dispatch-systems.md:113` — resolution is hardcoded env vars + a switch on 3 literal types).
 - Memory recall: no prior research on provider portability → one scoped research dispatch launched (opencode + OpenRouter reference designs vs adhd ground truth; findings/options separated). GOAL.md + demo gain a provider act **after** the brief lands and the owner confirms the design decisions — not before.
 
+### OBS-24 — provider portability: research findings + the four owner rulings `[research subagent 2026-07-16, spot-grounded] [direct: owner AskUserQuestion, 2026-07-17]`
+**Findings (grounded, file:line):**
+1. **The gap is wiring, not schema.** `agent-core-provider`'s tables already separate provider identity × canonical model × platform binding × tool-format (`src/db/schema.ts:15-100`) — structurally equivalent to OpenRouter slug resolution / opencode model inheritance. But: the live chat path is a `switch` over 3 literals (`agent-engine-orchestrator/src/providers/factory.ts:8-26`); `provider_tool_formats` ships **zero seed rows** (`seed/index.ts:1-32` seeds only providers→models→bindings); `emitTool()` is built+tested+**unwired** (`runtime/emit-tools.ts:11-14`: "wiring into the live provider is agent-mcp-refactor's job (plan 6)" — never happened; `providers/anthropic.ts:115,250` still calls local `toAnthropicTools()`).
+2. **Agents are welded**: `agentDefinitionSchema.provider` is *required* (`validation/agent.ts:106-120`) — an agent cannot exist without exactly one provider.
+3. **Sessions/tasks have no provider/model columns** (`agent-store-runtime/src/db/schema.ts:12-69`); `taskUsageTable.providerType/model` (`:139-140`) is a post-hoc ledger, not a selector. No storage seam for a swap exists.
+4. **`deepseek` is dead config**: `PROVIDER_DEFAULTS` includes it (`entrypoint/agent-mcp/src/config.ts:70-86`) but `GetProviderConfigOpts.provider` (`:10`) and the Zod union accept only `openai|anthropic|claudecli` — unreachable through the typed API.
+5. One registry consumer IS live: `agent-engine-compiler/src/resolve/model.ts:44-79` uses `ModelStore` for prompt-frontmatter model lines — but nothing in the LLM-call path consults the registry.
+6. Reference designs: opencode = `provider/model` slugs, agent `model` is an *optional override* with inheritance (agent→global; subagent→invoker), Vercel AI-SDK normalization, models.dev capability registry, mid-session `/models` reselection with **undocumented** carryover. OpenRouter = ordered `models[]` fallback (last-error-wins), `provider{order,sort,allow_fallbacks,…}` preferences, `:nitro`/`:floor` slug variants, normalized `finish_reason` + tool-schema transforms.
+**Rulings (owner, 2026-07-17) — now GOAL.md D-G:**
+- Canonical: **"we can merge all of the registries"** — ONE provider registry; the three representations retired, not mapped.
+- Binding: inheritance chain — agent optional hint → session (new columns, swap = row update) → task override; `task ?? session ?? agent ?? global`.
+- Swap: **soft** — same session, history re-rendered through the tool-format layer (the built-unwired machinery finally load-bearing); negative control = normalization stubbed → hard fail.
+- Routing: **ordered `models[]` fallback only** this pass.
+**Artifacts updated:** GOAL.md (D-G + end-state #8), demo/DEMO.md **Act 6** (3 beats: un-welded agent + merged registry · BLUEHERON soft-swap · revoked-key failover), REQ-016..019, CAP-013..015, ⟦U7⟧–⟦U9⟧ ledgered. Validator re-run: PASS, 9 stubs, 34 ids.
+
+### OBS-25 — owner directive: dispatcher demo items covered first-class `[direct: owner message, 2026-07-17]`
+- "All dispatcher demo items should be covered as well" — the nested dispatch-completion demo must not sit behind a single gate checkbox. Implemented: DEMO.md §7.2b imports its complete traceability set as 29 `DSP-*` rows (15 REQs preserving its numbering gaps, 14 CAPs), each mapped to its nested beats and exercised via spine beat 5.3; its 15 unresolved-work items indexed in the spine's UNRESOLVED.md scope section (glyph-free, so the two ledgers' stub ids can't collide). A provider-ruling interaction note marks where D-G's merged registry re-grounds the nested demo's provider-shaped beats (behaviors binding, shapes follow D-G — folded into ⟦U7⟧). Validator: PASS, 35 ids.
+
 ## 5 · Open items ledger (things observed and still unowned)
 
 | # | Item | Where observed |

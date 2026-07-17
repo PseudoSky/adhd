@@ -39,6 +39,7 @@ every plan's demo must survive.
 | D-D | **Dispatch uses the agent client — never rewrites it** (SYNTHESIS §Settled). | The mirrored wire types / provider translation / error parsing / bare-`agent_create` path in `agent-runner.ts` get deleted in a seam plan. |
 | D-E | **`adhd-build` is the dispatch lineage** — "that plan became exactly dispatcher*"; harvest, don't reinvent. | Demo idiom = its transcript style; the goal→questions→milestones authoring half lives in sox's `workflow:plan-builder`, not here. |
 | D-F | **Fix things, don't file debt.** Discovered defects get fixed in-flight or surfaced to the owner — the INVALIDATIONS log replaces re-litigating stale claims. | |
+| D-G | **Provider portability (2026-07-17).** (1) **Merge ALL provider registries into one** — dispatch's snake_case `ProviderConfig`, agent-mcp's camelCase `providerConfigSchema`, and `agent-core-provider`'s tables become a single canonical registry; the three-representations debt (SYNTHESIS §1.5) is retired, not mapped. (2) Binding is an **inheritance chain**: agent carries an *optional* model hint (the required welded `provider` field dies) → session holds the live provider/model (new columns; **swap = update the session row**) → task may override one call; resolution `task ?? session ?? agent ?? global`. (3) **Soft swap**: same session, history re-rendered into the new provider's format via the already-built-but-unwired tool-format layer (`emitTool()`, `provider_tool_formats`). (4) Routing = **ordered `models[]` fallback list only** (session + dispatch-unit), no price/latency sort this pass. Grounding: OBS-24 (opencode/OpenRouter comparison — the gap is wiring, not schema). | Demo Act 6; the registry's platform-binding layer finally consumed at runtime. |
 
 † `agent-core-policy`: intended as agent restrictions (tools/files/access modes);
 owner-assessed "may be irrelevant at this point" — on hold, unratified as a runtime
@@ -54,6 +55,9 @@ enforcer. See Resolved questions O-1.
 5. **Dispatch** a plan wave through the same client dispatch uses — no mirrored types.
 6. **Plugins** load by name at runtime; their tests actually run (BUG-NXTEST-001 fixed).
 7. Host surface byte-stable throughout; every registry claim traceable to a store row.
+8. **The same agent completes tasks through two different providers**; a session swaps
+   provider mid-conversation without losing context; a dead provider fails over down an
+   ordered `models[]` list, visibly in the usage ledger (D-G).
 
 ## Structure: ONE plan (owner ruling, 2026-07-16 — O-2 resolved)
 
