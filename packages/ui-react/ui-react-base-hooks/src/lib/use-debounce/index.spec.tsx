@@ -36,10 +36,14 @@ describe('useDebounce', () => {
     const { result } = renderHook(() => useDebounce(initialValue, 500));
     const [, setValue] = result.current;
 
-    setValue('updated');
+    act(() => {
+      setValue('updated');
+    });
 
-    // Fast-forward time by 500ms
-    await vi.advanceTimersByTimeAsync(500);
+    // Fast-forward time by 500ms; the timer's setState must flush through act
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
 
     const [value] = result.current;
 

@@ -43,6 +43,25 @@
         "build",
         "test"
       ]
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/dispatch/dispatch-base-types"
+      ],
+      "options": {
+        "vitestConfig": "packages/dispatch/dispatch-base-types/vite.config.ts"
+      }
     }
   }
 }

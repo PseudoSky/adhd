@@ -70,6 +70,25 @@
       "options": {
         "packageRoot": "dist/{projectRoot}"
       }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/data/data-base-transforms"
+      ],
+      "options": {
+        "vitestConfig": "packages/data/data-base-transforms/vite.config.ts"
+      }
     }
   }
 }

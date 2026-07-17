@@ -44,8 +44,11 @@ describe('getPackageInfo', () => {
   });
 
   it('falls back to workspace-root when no package.json exists above cwd', () => {
+    // A nonexistent dir under tmpdir has no package.json anywhere up its walk —
+    // real fs already returns false, no mock needed. (vi.spyOn(fs, 'existsSync')
+    // also throws "Cannot redefine property" on Node 24: node: builtin namespace
+    // exports are non-configurable.)
     vi.spyOn(process, 'cwd').mockReturnValue(path.join(os.tmpdir(), 'nope', 'deeper'));
-    vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
     const info = getPackageInfo();
 

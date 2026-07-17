@@ -11,23 +11,52 @@
       }
     }
   },
-  "tags": ["layer:logic", "platform:node"],
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
         "outputPath": "dist/packages/agent/agent-plugin-budget",
         "main": "packages/agent/agent-plugin-budget/src/index.ts",
         "tsConfig": "packages/agent/agent-plugin-budget/tsconfig.lib.json",
-        "assets": ["packages/agent/agent-plugin-budget/*.md"]
+        "assets": [
+          "packages/agent/agent-plugin-budget/*.md"
+        ]
       }
     },
     "nx-release-publish": {
       "options": {
         "packageRoot": "dist/{projectRoot}"
       },
-      "dependsOn": ["build", "test"]
+      "dependsOn": [
+        "build",
+        "test"
+      ]
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/agent/agent-plugin-budget"
+      ],
+      "options": {
+        "vitestConfig": "packages/agent/agent-plugin-budget/vite.config.ts"
+      }
     }
   }
 }
