@@ -11,16 +11,23 @@
       }
     }
   },
-  "tags": ["platform:browser", "layer:ui-primitives"],
+  "tags": [
+    "platform:browser",
+    "layer:ui-primitives"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
         "outputPath": "dist/packages/ui-react/ui-react-base-hooks",
         "main": "packages/ui-react/ui-react-base-hooks/src/index.ts",
         "tsConfig": "packages/ui-react/ui-react-base-hooks/tsconfig.lib.json",
-        "assets": ["packages/ui-react/ui-react-base-hooks/*.md"]
+        "assets": [
+          "packages/ui-react/ui-react-base-hooks/*.md"
+        ]
       }
     },
     "version": {
@@ -53,13 +60,34 @@
       "configurations": {
         "production": {
           "parallel": false,
-          "commands": ["npm publish dist/packages/ui-react/ui-react-base-hooks"]
+          "commands": [
+            "npm publish dist/packages/ui-react/ui-react-base-hooks"
+          ]
         }
       }
     },
     "nx-release-publish": {
       "options": {
         "packageRoot": "dist/{projectRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/ui-react/ui-react-base-hooks"
+      ],
+      "options": {
+        "vitestConfig": "packages/ui-react/ui-react-base-hooks/vite.config.ts"
       }
     }
   }

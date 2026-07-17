@@ -11,22 +11,48 @@
       }
     }
   },
-  "tags": ["platform:shared", "layer:shared"],
+  "tags": [
+    "platform:shared",
+    "layer:shared"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
         "outputPath": "dist/packages/data/data-core-structures",
         "main": "packages/data/data-core-structures/src/index.ts",
         "generatePackageJson": true,
         "tsConfig": "packages/data/data-core-structures/tsconfig.lib.json",
-        "assets": ["packages/data/data-core-structures/*.md"]
+        "assets": [
+          "packages/data/data-core-structures/*.md"
+        ]
       }
     },
     "nx-release-publish": {
       "options": {
         "packageRoot": "dist/{projectRoot}"
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/data/data-core-structures"
+      ],
+      "options": {
+        "vitestConfig": "packages/data/data-core-structures/vite.config.ts"
       }
     }
   }

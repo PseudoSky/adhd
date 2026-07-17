@@ -47,6 +47,25 @@
         "build",
         "test"
       ]
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/workspace/workspace-base-tools"
+      ],
+      "options": {
+        "vitestConfig": "packages/workspace/workspace-base-tools/vite.config.ts"
+      }
     }
   }
 }

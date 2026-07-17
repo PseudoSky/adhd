@@ -24,7 +24,15 @@
     "typecheck": {
       "executor": "nx:run-commands",
       "cache": true,
-      "inputs": ["default", "^production", { "externalDependencies": ["typescript"] }],
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
       "options": {
         "command": "tsc -p packages/apigen/apigen-base-types/tsconfig.lib.json --noEmit"
       }
@@ -51,6 +59,25 @@
         "build",
         "test"
       ]
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-base-types"
+      ],
+      "options": {
+        "vitestConfig": "packages/apigen/apigen-base-types/vite.config.ts"
+      }
     }
   }
 }

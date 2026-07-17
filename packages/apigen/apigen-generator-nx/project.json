@@ -11,11 +11,16 @@
       }
     }
   },
-  "tags": ["layer:logic", "platform:node"],
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
         "outputPath": "dist/packages/apigen/apigen-generator-nx",
         "main": "packages/apigen/apigen-generator-nx/src/index.ts",
@@ -46,7 +51,29 @@
       "options": {
         "packageRoot": "dist/{projectRoot}"
       },
-      "dependsOn": ["build", "test"]
+      "dependsOn": [
+        "build",
+        "test"
+      ]
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-generator-nx"
+      ],
+      "options": {
+        "vitestConfig": "packages/apigen/apigen-generator-nx/vite.config.ts"
+      }
     }
   }
 }
