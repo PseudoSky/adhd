@@ -123,3 +123,14 @@ adhd-environment.json.tmp
 # tool catalog committed by mistake (removed in 42fce475). Anchored with a leading
 # slash so it only matches the repo root, never the real packages/workspace project.
 /workspace/
+
+# Stray compiled output inside packages/agent/*/src/ — build artifacts belong in
+# dist/. A tsc run against the (mis-scoped) base tsconfig once littered 330 of
+# these into src trees, breaking repo-wide lint (2026-07-17). Root cause is the
+# agent-package tsconfig template defect tracked in BACKLOG (module/base-config
+# mismatch family); this keeps the litter out of git until that lands.
+packages/agent/*/src/**/*.js
+packages/agent/*/src/**/*.js.map
+packages/agent/*/src/**/*.d.ts
+packages/agent/*/src/**/*.d.ts.map
+packages/agent/*/tsconfig.tsbuildinfo

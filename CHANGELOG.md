@@ -1,5 +1,21 @@
 ## Unreleased
 
+### Fixed — test wiring: 15 projects shipped specs that could never run; nx reported silent success (2026-07-17)
+
+**BUG-NXTEST-001 — `nx run-many -t test` reports SUCCESS for projects with no `test` target, hiding every unwired suite.**
+
+Discovered at 4 projects / 75 cases (`dispatch-core-optimizer` 30, `agent-plugin-budget` 35, `agent-plugin-sanitize` 10, `dispatch-base-types` 1); the closing gate then found **11 more** (`ui-react-base-hooks` 10 files, `environment-builder` 9, `data-base-transforms` 10, `apigen-generator-nx` 4, + 7 others) — **15 projects total** whose tests had never executed while `nx run-many -t test` exited 0 for them (proven: naming two target-less projects → "Successfully ran target test", EXIT=0). Two published documents had cited these as passing (`docs/architecture/agent-dispatch-systems.md:267-268`, `BACKLOG.md` BUG-DISPATCH-PUBLISH-001 closure evidence). Every project already had a vitest-configured `vite.config.ts` — a scaffold-template defect omitted the nx target uniformly.
+
+Changes:
+- `test` targets added to all 15 `project.json`s (cached, `@nx/vite:test`, mirroring `agent-store-runtime`'s shape).
+- **`scripts/check-test-wiring.mjs`** (+ `npm run check:test-wiring`): fails if any project carries spec files without a `test` target — negative-controlled (stripping a target turns it red).
+- First-ever execution of the full set: **15/15 projects green, real exit 0** (~500 cases incl. `data-base-transforms` 104, `environment-builder` 139). Two genuine failures surfaced and fixed: `workspace-base-tools/src/get-package-info.spec.ts` (`vi.spyOn(fs,…)` on a non-configurable `node:fs` namespace export under Node 24 — spy removed, scenario real), `ui-react-base-hooks/src/lib/use-debounce/index.spec.tsx` (state update + timer advance not wrapped in `act(...)`).
+- En-route repair: `node_modules` was missing `estree-walker` (broke the whole nx graph via `@nx/vite` plugin once the new targets invalidated cached nodes); restored via `npm install --legacy-peer-deps` — required because `package.json` pins `nx@18.3.4` while declaring `@nxlv/python@^22.2.1` (ERESOLVE; pre-existing manifest inconsistency, left for its own fix). Zero manifest churn.
+
+Known residue (open, disclosed): the newly-green suites have never been proven able to fail (no red→green history); `ui-react-base-hooks` had one non-reproducible worker crash-after-green (3/3 green on rerun) and carries 11 env-conditional skips; vitest warns `cache.dir` is deprecated across the repo's vite configs; the `nx@18` vs `@nxlv/python@22` manifest conflict remains.
+
+Commit: this one. Original discovery evidence: BACKLOG entry filed at `c250c97c`, removed here per the completed-items convention.
+
 ### Fixed — workspace tooling & agent-instruction docs (2026-07-16)
 
 **BUG-WORKSPACE-GEN-001 — `scripts/generate-lib.sh` was a drift factory, and a stale `CLAUDE.md` made agents prefer it over the correct generator.**

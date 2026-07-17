@@ -3,7 +3,30 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/src",
   "projectType": "library",
-  "tags": ["platform:browser", "layer:test-ui"],
+  "tags": [
+    "platform:browser",
+    "layer:test-ui"
+  ],
   "// targets": "to see all targets run: nx show project ui-react-base-storybook --web",
-  "targets": {}
+  "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/ui-react/ui-react-base-storybook"
+      ],
+      "options": {
+        "vitestConfig": "packages/ui-react/ui-react-base-storybook/vite.config.ts"
+      }
+    }
+  }
 }

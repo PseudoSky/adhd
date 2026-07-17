@@ -77,6 +77,25 @@
       "options": {
         "packageRoot": "dist/{projectRoot}"
       }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/data/data-query-engine"
+      ],
+      "options": {
+        "vitestConfig": "packages/data/data-query-engine/vite.config.ts"
+      }
     }
   }
 }
