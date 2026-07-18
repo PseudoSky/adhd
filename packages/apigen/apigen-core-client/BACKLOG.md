@@ -127,6 +127,54 @@ these loops with concurrency.
   mitigation if the root cause turns out to be unfixable cache growth.
 - **Status:** OPEN. Filed 2026-07-18 during BUG-APIGEN-CORE-002 verification.
 
+### BUG-APIGEN-CORE-004 — `isSerializableType()`'s textual allow-list doesn't recognize `Record<K,V>` (or other generic utility-type wrappers), causing false-negative skips on legitimately serializable consts
+
+- **Where:** `src/lib/extract.ts:769-783`, `isSerializableType(typeText: string)`.
+  It's a purely textual heuristic over `type.getText()` — checks for a fixed
+  set of primitive keywords, quote/digit-prefixed literals, and `{`/`[`-
+  prefixed or `[]`-suffixed text; anything else falls through to `return
+  false`.
+- **Symptom:** discovered while reconciling BUG-APIGEN-CORE-002's "146
+  operations" number against the raw export count of
+  `~/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts` (read-only
+  reference). That file exports 12 `VariableDeclaration`-backed consts; 10
+  extract correctly (Shape 3's serializable-data path), 2 are silently
+  skipped with `console.warn('[apigen-core] Skipping non-callable,
+  non-serializable export: …')`: `SCOPE_WEIGHTS` (`recall.ts:987`, type
+  `Record<string, number>`) and `SUPPORTED_GRAPHIFY_SHAPES`
+  (`extensions.ts:413`, type `Record<string, GraphifyShapeSpec>`, where
+  `GraphifyShapeSpec` is a plain data interface at `extensions.ts:399`). Both
+  are trivially JSON-serializable — a `Record` of numbers and a `Record` of
+  plain-object literals — but `type.getText()` renders as `Record<string,
+  number>` / `Record<string, GraphifyShapeSpec>`, which matches none of
+  `isSerializableType`'s patterns (doesn't start with `{`/`[`, isn't a bare
+  primitive keyword, isn't a literal) and falls through to `false`.
+- **Not caused by, or specific to, the BUG-APIGEN-CORE-002 re-export fix** —
+  this heuristic is untouched by that fix and would misclassify a
+  `Record<…>`-typed const identically if it were declared locally in the
+  entry file rather than re-exported. It was simply never exercised against
+  a `Record`-typed const before now (this file previously only reached 2
+  operations total, neither a variable-backed one).
+- **Why it matters:** low severity, narrow scope — only affects Shape 3's
+  serializable-data-const path, and only for type-text shapes the heuristic
+  doesn't special-case (confirmed: `Record<K,V>` here; likely also `Map<K,V>`,
+  `Partial<T>`, `Readonly<T>`, and any other generic utility-type wrapper
+  around an otherwise-serializable shape, by the same textual-matching logic,
+  though only `Record<K,V>` was actually observed in this file).
+- **Fix direction (not attempted — needs its own investigation):** either (a)
+  extend the textual allow-list with a few more recognized generic-wrapper
+  prefixes (`Record<`, `Map<`, `Partial<`, `Readonly<`, `Array<`), which is
+  cheap but still an incomplete allow-list approach, or (b) replace the
+  textual heuristic with an actual `Type` object inspection (the function
+  already has `decl.getType()` available at the two call sites — no text
+  round-trip needed) checking structural properties (has index signature /
+  is a plain object type / has no call signatures) rather than pattern-
+  matching `getText()`'s rendering, which is the more robust fix.
+- **Status:** OPEN. Filed 2026-07-18 during BUG-APIGEN-CORE-002 verification
+  (export-count reconciliation, self-verified via a standalone ts-morph
+  script diffing `sf.getExportedDeclarations()` names against `extract()`'s
+  output — not from the dispatched agent's report).
+
 ### DEBT-APIGEN-LINT-001 — `@nx/dependency-checks` false-positive: `decimal.js` only used by `src/test/**` fixtures — FIXED 2026-07-18
 
 - **Where:** `packages/apigen/apigen-core-client/package.json` and
