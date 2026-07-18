@@ -32,10 +32,10 @@
       "end_ref": null
     },
     "runtime-core-node": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-18T00:02:05.254Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "c2e496db3a795bfa113084ee70a0fa7c1058efd1",
       "end_ref": null
     },
     "runtime-cli": {
@@ -227,7 +227,7 @@
     "version": "0.8.30",
     "hash": "836ff34f0a74"
   },
-  "current_state": "audit-builder",
+  "current_state": "runtime-core-node",
   "dod_provenance": {
     "confirmed_at": "2026-07-08T07:12:02.530Z",
     "by": "pseudosky",
