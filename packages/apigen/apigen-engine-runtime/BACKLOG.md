@@ -17,11 +17,16 @@ practice; only breaking for code that type-asserted the `void` return).
 
 ## Open
 
-### DEBT-APIGEN-LINT-001 — `@nx/dependency-checks` false-positive on `ajv`/`ajv-formats`
+### DEBT-APIGEN-LINT-002 — `apigen-engine-runtime` missing from `pnpm-lock.yaml` entirely
 
-See `packages/apigen/apigen-core-client/BACKLOG.md` DEBT-APIGEN-LINT-001 for
-full detail (same root cause, same fix direction — this package's
-`package.json` `ajv`/`ajv-formats` deps are only reachable from
-tsconfig-excluded test files, so `nx run apigen-engine-runtime:lint` (and
-transitively `:build`/`:test`) fails with "package is not used by project").
-Filed 2026-07-18 during BUG-APIGEN-CORE-002 verification (apigen-core-client).
+See `packages/apigen/apigen-core-client/BACKLOG.md` DEBT-APIGEN-LINT-002 for
+full detail. NOT the tsconfig-exclusion pattern (DEBT-APIGEN-LINT-001 in that
+same file) — `ajv`/`ajv-formats` ARE real, non-test dependencies
+(`src/lib/validate-layer.ts:34-36`) at the exact version installed, but this
+package has zero importer entries in `pnpm-lock.yaml`, so
+`@nx/dependency-checks` can't see the edge regardless of what `package.json`
+declares. **Do not let an ESLint `--fix` run delete `ajv`/`ajv-formats` from
+`dependencies`** — it will "fix" the lint error by deleting a genuinely-used
+runtime dependency (this happened once already, caught and reverted by hand,
+during BUG-APIGEN-CORE-002's own commit on 2026-07-18). Filed 2026-07-18
+during BUG-APIGEN-CORE-002 verification (apigen-core-client).

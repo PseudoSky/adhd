@@ -275,6 +275,130 @@ describe('extract — Shape 6: CJS source', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Shape 1b / re-exports: `export { x [as y] } from './module.js'`
+// ---------------------------------------------------------------------------
+//
+// Regression coverage for the re-export-barrel extraction gap: a source file
+// that is a pure re-export barrel (e.g. a package's `index.ts`) previously
+// extracted almost nothing, because the old walker never followed
+// `export { x } from './other.js'` for ANY export-shape kind. Each test below
+// compares a re-exported operation against the SAME operation extracted
+// directly from the declaring file (reexport-source.ts), asserting identical
+// name/kind/safe/shape — everything except `id`/`path[0]`, which correctly
+// differ because the operation's file segment is the FILE THAT EXPOSES IT
+// (the barrel), not the file that happens to declare it.
+
+describe('extract — Shape 1b: re-exported named function', () => {
+  it('[extract.reexport.1.1] a plain re-export (`export { sourceFn } from` ...) is extracted, named by the re-exported symbol', async () => {
+    const ops = await extract({ sourceFile: fixture('reexport-barrel.ts') });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'sourceFn');
+    expect(op).toBeDefined();
+    expect(op?.kind).toBe('action');
+  });
+
+  it('[extract.reexport.1.2] re-exported op input schema matches the direct-declaration op', async () => {
+    const direct = await extract({ sourceFile: fixture('reexport-source.ts') });
+    const reexported = await extract({ sourceFile: fixture('reexport-barrel.ts') });
+    const directOp = direct.find((o) => o.path.at(-1)?.raw === 'sourceFn');
+    const reexportedOp = reexported.find(
+      (o) => o.path.at(-1)?.raw === 'sourceFn'
+    );
+    expect(reexportedOp?.input).toEqual(directOp?.input);
+    expect(reexportedOp?.output).toEqual(directOp?.output);
+    expect(reexportedOp?.kind).toBe(directOp?.kind);
+    expect(reexportedOp?.safe).toBe(directOp?.safe);
+  });
+
+  it('[extract.reexport.1.NEGATIVE] the LOCAL declaration name never leaks through when only re-exported', async () => {
+    // reexport-barrel.ts never exports anything under the bare name
+    // "sourceFn_local" — this just guards against a future accidental
+    // internal-name leak; sourceFn IS the correct exported name here (no
+    // rename applied to this particular specifier).
+    const ops = await extract({ sourceFile: fixture('reexport-barrel.ts') });
+    const bad = ops.find((o) => o.path.at(-1)?.raw === 'sourceFn_local');
+    expect(bad).toBeUndefined();
+  });
+});
+
+describe('extract — Shape 1b: re-exported + renamed arrow/const function', () => {
+  it('[extract.reexport.2.1] `export { sourceConst as barrelConst } from` ... is named by the OUTER alias, never the local name', async () => {
+    const ops = await extract({ sourceFile: fixture('reexport-barrel.ts') });
+    const renamed = ops.find((o) => o.path.at(-1)?.raw === 'barrelConst');
+    const local = ops.find((o) => o.path.at(-1)?.raw === 'sourceConst');
+    expect(renamed).toBeDefined();
+    expect(local).toBeUndefined();
+  });
+
+  it('[extract.reexport.2.2] renamed re-export input schema matches the direct-declaration op (by underlying shape)', async () => {
+    const direct = await extract({ sourceFile: fixture('reexport-source.ts') });
+    const reexported = await extract({ sourceFile: fixture('reexport-barrel.ts') });
+    const directOp = direct.find((o) => o.path.at(-1)?.raw === 'sourceConst');
+    const renamedOp = reexported.find(
+      (o) => o.path.at(-1)?.raw === 'barrelConst'
+    );
+    expect(renamedOp?.input).toEqual(directOp?.input);
+    expect(renamedOp?.output).toEqual(directOp?.output);
+  });
+});
+
+describe('extract — Shape 1b: re-exported named-object export', () => {
+  it('[extract.reexport.3.1] a re-exported named-object export still expands to per-property ops', async () => {
+    const ops = await extract({ sourceFile: fixture('reexport-barrel.ts') });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'getThing');
+    expect(op).toBeDefined();
+    // Path: [file, objectName, propName]
+    expect(op?.path[1].raw).toBe('sourceApi');
+    expect(op?.path[2].raw).toBe('getThing');
+  });
+});
+
+describe('extract — Shape 1b: multi-hop re-export chains', () => {
+  it('[extract.reexport.4.1] a two-hop chain (outer → mid → source) resolves to the terminal declaration', async () => {
+    const ops = await extract({
+      sourceFile: fixture('reexport-chain-outer.ts'),
+    });
+    const names = ops.map((op) => op.path.at(-1)?.raw);
+    expect(names).toContain('outerFn');
+    expect(names).toContain('outerConst');
+  });
+
+  it('[extract.reexport.4.2] only the OUTERMOST alias is used — intermediate-hop names never leak', async () => {
+    const ops = await extract({
+      sourceFile: fixture('reexport-chain-outer.ts'),
+    });
+    const names = ops.map((op) => op.path.at(-1)?.raw);
+    // reexport-mid.ts re-exports these under their ORIGINAL (unrenamed)
+    // names; only reexport-chain-outer.ts renames them. Neither the
+    // mid-hop names nor the innermost declaration names should appear.
+    expect(names).not.toContain('sourceFn');
+    expect(names).not.toContain('sourceConst');
+  });
+
+  it('[extract.reexport.4.3] two-hop chain op shape matches the direct-declaration op', async () => {
+    const direct = await extract({ sourceFile: fixture('reexport-source.ts') });
+    const chained = await extract({
+      sourceFile: fixture('reexport-chain-outer.ts'),
+    });
+    const directOp = direct.find((o) => o.path.at(-1)?.raw === 'sourceFn');
+    const chainedOp = chained.find((o) => o.path.at(-1)?.raw === 'outerFn');
+    expect(chainedOp?.input).toEqual(directOp?.input);
+    expect(chainedOp?.output).toEqual(directOp?.output);
+  });
+});
+
+describe('extract — Shape 1b: `export * from` wildcard re-exports', () => {
+  it('[extract.reexport.5.1] a wildcard re-export surfaces all of the source module’s exports', async () => {
+    const ops = await extract({
+      sourceFile: fixture('reexport-wildcard-barrel.ts'),
+    });
+    const names = ops.map((op) => op.path.at(-1)?.raw);
+    expect(names).toContain('sourceFn');
+    expect(names).toContain('sourceConst');
+    expect(names).toContain('getThing');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Cross-shape invariants
 // ---------------------------------------------------------------------------
 
@@ -287,6 +411,10 @@ describe('extract — cross-shape invariants', () => {
       'extract-default-named.ts',
       'extract-default-anon.ts',
       'extract-cjs.ts',
+      'reexport-source.ts',
+      'reexport-barrel.ts',
+      'reexport-chain-outer.ts',
+      'reexport-wildcard-barrel.ts',
     ];
     for (const f of fixtures) {
       const ops = await extract({ sourceFile: fixture(f) });
@@ -312,6 +440,10 @@ describe('extract — cross-shape invariants', () => {
       'extract-default-named.ts',
       'extract-default-anon.ts',
       'extract-cjs.ts',
+      'reexport-source.ts',
+      'reexport-barrel.ts',
+      'reexport-chain-outer.ts',
+      'reexport-wildcard-barrel.ts',
     ];
     for (const f of allFixtures) {
       const ops = await extract({ sourceFile: fixture(f) });

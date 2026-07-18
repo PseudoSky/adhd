@@ -9,7 +9,8 @@
     "@adhd/apigen-base-logical": "^0.0.1"
   },
   "devDependencies": {
-    "zod": "*"
+    "zod": "*",
+    "decimal.js": "^10.4.3"
   },
   "main": "./index.js",
   "module": "./index.mjs",

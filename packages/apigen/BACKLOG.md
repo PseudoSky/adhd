@@ -12,12 +12,18 @@ Cross-package findings for the apigen family. Package-local backlogs (e.g.
   barrel now extracts correctly (previously near-total data loss for that
   shape), but a barrel large/dependency-heavy enough (proven case:
   ~40-file, ~140-operation) can OOM schema generation.
-- **DEBT-APIGEN-LINT-001** (`@nx/dependency-checks` false-positives on deps
-  only reachable from tsconfig-excluded `src/test/**` fixtures — OPEN) —
-  affects `apigen-core-client` (`decimal.js`), `apigen-engine-runtime`
-  (`ajv`/`ajv-formats`), and `apigen-cli` (`decimal.js`); blocks
-  `nx build`/`nx test` for those 3 projects without a workaround. Full detail
-  in `apigen-core-client/BACKLOG.md`.
+- **DEBT-APIGEN-LINT-001** (`@nx/dependency-checks` false-positive on
+  `decimal.js`, only reachable from tsconfig-excluded `src/test/**`
+  fixtures — FIXED 2026-07-18, moved to `devDependencies`) — affected
+  `apigen-core-client` and `apigen-cli`. Full detail in
+  `apigen-core-client/BACKLOG.md`.
+- **DEBT-APIGEN-LINT-002** (`apigen-engine-runtime` has zero importer
+  entries in `pnpm-lock.yaml` — OPEN, needs a deliberate lockfile resync,
+  not attempted here) — `ajv`/`ajv-formats` are genuinely used in real
+  source at the correct installed version; do not let an ESLint `--fix` run
+  delete them from `dependencies` (already happened once, reverted by hand).
+  Full detail in `apigen-core-client/BACKLOG.md` and
+  `apigen-engine-runtime/BACKLOG.md`.
 
 ## BUG-APIGEN-CLI-001 — cli-output generator emits invalid TS identifiers for hyphenated source dirs
 

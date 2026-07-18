@@ -127,34 +127,75 @@ these loops with concurrency.
   mitigation if the root cause turns out to be unfixable cache growth.
 - **Status:** OPEN. Filed 2026-07-18 during BUG-APIGEN-CORE-002 verification.
 
-### DEBT-APIGEN-LINT-001 — `@nx/dependency-checks` false-positives on deps only used by `src/test/**` fixtures
+### DEBT-APIGEN-LINT-001 — `@nx/dependency-checks` false-positive: `decimal.js` only used by `src/test/**` fixtures — FIXED 2026-07-18
 
-- **Where:** `packages/apigen/apigen-core-client/package.json` (`decimal.js`),
-  and identically `packages/apigen/apigen-engine-runtime/package.json`
-  (`ajv`, `ajv-formats`), and `entrypoint/apigen-cli/package.json`
-  (`decimal.js`) — all block `nx run <project>:lint` (and therefore
+- **Where:** `packages/apigen/apigen-core-client/package.json` and
+  `entrypoint/apigen-cli/package.json` (both declared `decimal.js`
+  in `dependencies`) — blocked `nx run <project>:lint` (and therefore
   `nx run <project>:build`/`:test`, which depend on `lint`) with "package is
-  not used by project" errors.
+  not used by project".
 - **Symptom:** `decimal.js` IS genuinely imported (`src/test/fixtures/decimal-nested.ts:18-19`,
   real `import Decimal from 'decimal.js'` / `import { Decimal as D2 }`) — but
-  `apigen-core-client/tsconfig.lib.json:9-14` excludes `src/test/**` from the
-  lib's own compiled source set, so `@nx/dependency-checks`'s static
-  import-scan (which follows the lib tsconfig's `include`) never sees the
-  fixture's import and flags the declared dependency as unused. Confirmed
-  pre-existing and unrelated to BUG-APIGEN-CORE-002/003's changes — untouched
-  package.json, decimal.js usage untouched, reproduces on a clean worktree.
-- **Why it matters:** blocks running `nx build`/`nx test` cleanly for 3
-  projects without `--skip-nx-cache`-style workarounds or bypassing nx
-  entirely (raw `vite build`/`vitest run`); currently only surfaces as
+  `apigen-core-client/tsconfig.lib.json:9-14` (and the equivalent in
+  `apigen-cli`) excludes `src/test/**` from the lib's own compiled source
+  set, so `@nx/dependency-checks`'s static import-scan (which follows the
+  lib tsconfig's `include`) never sees the fixture's import and flags the
+  declared dependency as unused. Confirmed pre-existing and unrelated to
+  BUG-APIGEN-CORE-002/003's changes — untouched package.json, decimal.js
+  usage untouched, reproduces on a clean worktree.
+- **Why it matters:** blocked running `nx build`/`nx test` cleanly for these
+  2 projects without `--skip-nx-cache`-style workarounds or bypassing nx
+  entirely (raw `vite build`/`vitest run`); surfaced only as
   `Warning: command "eslint ." exited with non-zero status code` +
   `NX Running target … failed`, easy to mistake for a real regression.
-- **Fix direction:** either move test-fixture files with REAL external
-  imports (as opposed to same-package fixtures) out of the tsconfig-excluded
-  `src/test/**` tree into a location `@nx/dependency-checks` scans, or add
-  `decimal.js`/`ajv`/`ajv-formats` to each project's ESLint override
-  `ignoredDependencies` list (matching the existing `ignoredDependencies:
-  ["zod"]` pattern already present in `apigen-core-client/.eslintrc.json`) —
-  the latter is the smaller, more consistent fix.
+- **Fix:** moved `decimal.js` from `dependencies` to `devDependencies` in
+  both `package.json`s — semantically correct (it's genuinely test-only,
+  never imported by shipped `src/lib/**` code) and `@nx/dependency-checks`
+  scans `devDependencies` against the broader (test-inclusive) tsconfig, so
+  the fixture import is now visible. `nx run apigen-core-client:lint` and
+  `nx run apigen-cli:lint` both pass clean.
+- **Status:** FIXED 2026-07-18.
+
+### DEBT-APIGEN-LINT-002 — `apigen-engine-runtime` package.json has no `pnpm-lock.yaml` importer entry at all
+
+- **Where:** `packages/apigen/apigen-engine-runtime/package.json`
+  (`ajv`, `ajv-formats` — both genuinely imported in real, non-test source:
+  `src/lib/validate-layer.ts:34-36`, `import Ajv from 'ajv'; import
+  addFormats from 'ajv-formats'; import type { ErrorObject } from 'ajv';`).
+- **Symptom:** `nx run apigen-engine-runtime:lint` fails with `@nx/dependency-checks`
+  "The 'ajv' / 'ajv-formats' package is not used by 'apigen-engine-runtime'
+  project" — despite the exact declared version (`^8.20.0` / `2.1.1`)
+  matching what's actually installed at the workspace root
+  (`node_modules/ajv/package.json` → `8.20.0`,
+  `node_modules/ajv-formats/package.json` → `2.1.1`) and the import being
+  real, unambiguous, non-test source. NOT the same root cause as
+  DEBT-APIGEN-LINT-001 (this file is not tsconfig-excluded, and the version
+  specifier matches). Root cause: `grep -n "packages/apigen/apigen-engine-runtime"
+  pnpm-lock.yaml` returns ZERO matches — this package has no importer entry
+  in `pnpm-lock.yaml` at all, so `@nx/dependency-checks` (which reads the
+  lockfile-derived dependency graph, not raw `node_modules` disk state) has
+  no edge to find between the project and `ajv`/`ajv-formats` regardless of
+  what's declared in `package.json`. **Do NOT "fix" this by removing the
+  dependency from `package.json` or adding it to `ignoredDependencies`** —
+  either would hide a genuinely-used runtime dependency and, worse, an
+  ESLint `--fix` run (`nx affected -t lint --fix`, e.g. via a pre-commit
+  hook) will silently DELETE `ajv`/`ajv-formats` from `dependencies` again
+  (reproduced: this happened once already during BUG-APIGEN-CORE-002's own
+  commit and had to be caught + reverted by hand — see git history around
+  2026-07-18 on `fix/apigen-reexport-extraction`).
+- **Why it matters:** the ESLint auto-fix for this rule is destructive and
+  wrong for this specific failure mode — it deletes a real dependency
+  declaration instead of fixing the actual gap (a missing lockfile entry),
+  which would break the package at install/runtime for anyone who trusts
+  `pnpm install` to be authoritative.
+- **Fix direction:** run `pnpm install` (or the workspace's equivalent
+  lockfile-sync command) so `pnpm-lock.yaml` gains an importer entry for
+  `packages/apigen/apigen-engine-runtime` — NOT attempted here: this repo
+  mixes `pnpm-lock.yaml` and `package-lock.json` at the root (unclear which
+  is authoritative) and a full lockfile resync of a monorepo this size is a
+  bigger, higher-risk operation than this finding's scope warrants; flagging
+  for a maintainer to run deliberately rather than as a side effect of an
+  unrelated fix.
 - **Status:** OPEN. Filed 2026-07-18.
 
 ### DEBT-APIGEN-CACHE-001 — persistent cache versions the ENTRY file only
