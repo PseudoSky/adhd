@@ -24,7 +24,6 @@
     "@adhd/apigen-plugin-py-grpc": "^0.1.0",
     "@adhd/apigen-plugin-health": "^0.1.1",
     "@adhd/apigen-plugin-logger": "^0.1.1",
-    "decimal.js": "^10.4.3",
     "@adhd/apigen-python-env": "^0.1.0",
     "@adhd/apigen-base-logical": "0.0.1",
     "@adhd/apigen-engine-runtime": "0.1.0",
