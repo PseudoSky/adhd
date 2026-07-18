@@ -175,28 +175,42 @@ these loops with concurrency.
   in `pnpm-lock.yaml` at all, so `@nx/dependency-checks` (which reads the
   lockfile-derived dependency graph, not raw `node_modules` disk state) has
   no edge to find between the project and `ajv`/`ajv-formats` regardless of
-  what's declared in `package.json`. **Do NOT "fix" this by removing the
-  dependency from `package.json` or adding it to `ignoredDependencies`** —
-  either would hide a genuinely-used runtime dependency and, worse, an
-  ESLint `--fix` run (`nx affected -t lint --fix`, e.g. via a pre-commit
-  hook) will silently DELETE `ajv`/`ajv-formats` from `dependencies` again
-  (reproduced: this happened once already during BUG-APIGEN-CORE-002's own
-  commit and had to be caught + reverted by hand — see git history around
-  2026-07-18 on `fix/apigen-reexport-extraction`).
-- **Why it matters:** the ESLint auto-fix for this rule is destructive and
-  wrong for this specific failure mode — it deletes a real dependency
-  declaration instead of fixing the actual gap (a missing lockfile entry),
-  which would break the package at install/runtime for anyone who trusts
-  `pnpm install` to be authoritative.
-- **Fix direction:** run `pnpm install` (or the workspace's equivalent
-  lockfile-sync command) so `pnpm-lock.yaml` gains an importer entry for
-  `packages/apigen/apigen-engine-runtime` — NOT attempted here: this repo
-  mixes `pnpm-lock.yaml` and `package-lock.json` at the root (unclear which
-  is authoritative) and a full lockfile resync of a monorepo this size is a
-  bigger, higher-risk operation than this finding's scope warrants; flagging
-  for a maintainer to run deliberately rather than as a side effect of an
-  unrelated fix.
-- **Status:** OPEN. Filed 2026-07-18.
+  what's declared in `package.json`.
+- **Why it matters:** this repo's pre-commit hook runs `nx affected -t lint --fix`
+  on every commit. Its auto-fix for "unused dependency" is DELETE THE
+  DEPENDENCY FROM package.json — which for this specific false-positive
+  deletes a genuinely-used runtime import, silently, on every commit that
+  touches an affected project. **Reproduced twice in one session**: once
+  during this fix's first commit attempt (`git commit`'s pre-commit hook
+  auto-fixed + re-staged the deletion into the commit without prompting),
+  and again on the very next commit after I'd manually restored it —
+  confirming this isn't a one-off, it will keep recurring on every future
+  commit until addressed.
+- **Fix applied (containment, not the real fix):** added
+  `"ignoredDependencies": ["ajv", "ajv-formats"]` to
+  `apigen-engine-runtime/.eslintrc.json`'s `@nx/dependency-checks` override
+  (matching the pre-existing `ignoredDependencies: ["zod"]` pattern in
+  `apigen-core-client/.eslintrc.json`), and restored `ajv`/`ajv-formats` to
+  `package.json` `dependencies`. Verified `nx run apigen-engine-runtime:lint`
+  passes AND `nx run apigen-engine-runtime:lint --fix` no longer touches
+  `package.json` (both checked directly, not assumed). This was the pragmatic
+  call given the deletion loop was actively reproducing in real time and
+  blocking every subsequent commit in this session — an earlier draft of
+  this entry said "do NOT fix via ignoredDependencies", which was the right
+  instinct for a first-pass diagnosis but not survivable in practice once
+  the destructive auto-fix reproduced a second time.
+- **Fix direction (the REAL fix, still not done):** run `pnpm install` (or
+  the workspace's equivalent lockfile-sync command) so `pnpm-lock.yaml`
+  gains a real importer entry for `packages/apigen/apigen-engine-runtime` —
+  NOT attempted here: this repo mixes `pnpm-lock.yaml` and `package-lock.json`
+  at the root (unclear which is authoritative) and a full lockfile resync of
+  a monorepo this size is a bigger, higher-risk operation than this
+  finding's scope warrants. Once that's done, the `ignoredDependencies`
+  entry added above should be removed again (it's a workaround for the
+  lockfile gap, not a permanent policy).
+- **Status:** OPEN (containment fix applied 2026-07-18; root cause — the
+  missing lockfile entry — still needs a deliberate `pnpm install` by a
+  maintainer).
 
 ### DEBT-APIGEN-CACHE-001 — persistent cache versions the ENTRY file only
 

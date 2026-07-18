@@ -18,11 +18,13 @@ Cross-package findings for the apigen family. Package-local backlogs (e.g.
   `apigen-core-client` and `apigen-cli`. Full detail in
   `apigen-core-client/BACKLOG.md`.
 - **DEBT-APIGEN-LINT-002** (`apigen-engine-runtime` has zero importer
-  entries in `pnpm-lock.yaml` — OPEN, needs a deliberate lockfile resync,
-  not attempted here) — `ajv`/`ajv-formats` are genuinely used in real
-  source at the correct installed version; do not let an ESLint `--fix` run
-  delete them from `dependencies` (already happened once, reverted by hand).
-  Full detail in `apigen-core-client/BACKLOG.md` and
+  entries in `pnpm-lock.yaml` — OPEN, root cause needs a deliberate lockfile
+  resync, not attempted here; a `.eslintrc.json` `ignoredDependencies`
+  containment fix IS applied so the destructive `--fix` auto-deletion can't
+  recur) — `ajv`/`ajv-formats` are genuinely used in real source at the
+  correct installed version; the pre-commit hook's ESLint `--fix` deleted
+  them from `dependencies` TWICE before the containment fix landed. Full
+  detail in `apigen-core-client/BACKLOG.md` and
   `apigen-engine-runtime/BACKLOG.md`.
 
 ## BUG-APIGEN-CLI-001 — cli-output generator emits invalid TS identifiers for hyphenated source dirs
