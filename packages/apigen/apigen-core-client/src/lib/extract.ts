@@ -97,70 +97,113 @@ async function extractWithSession(
 
   const ops: Operation[] = [];
 
-  // The set of names a binding is exported UNDER (the exported symbols), keyed
-  // by the exported symbol — NOT the declaration name. A declaration reached
-  // only via `export { local as alias }` appears here under `alias`, never
-  // `local`. We gate the Shape 1/2 walkers on this set so a declaration that is
-  // exported only under a rename is NOT emitted under its declaration name —
-  // ts-morph's `isExported()` is true for such declarations, but `getName()`
-  // returns the LOCAL name, which is the F28/F29 bug. Renamed exports are
-  // emitted (by their alias) in the Shape 1b block below.
-  const exportedNames = new Set(sf.getExportedDeclarations().keys());
+  // ── Shapes 1, 2, 3 & 1b: named exports — local, renamed, AND re-exported ──
+  //
+  // Driven by `sf.getExportedDeclarations()` — ts-morph's own re-export-chain
+  // resolver. This single declaration-driven pass replaces what used to be
+  // THREE separate walks: a physical `sf.getFunctions()` walk, a physical
+  // `sf.getVariableDeclarations()` walk, and a local-rename-only
+  // `sf.getExportDeclarations()` walk that explicitly bailed on any specifier
+  // carrying a module specifier (`if (ed.getModuleSpecifier()) continue`).
+  // None of those three ever followed `export { x [as y] } from './other.js'`:
+  // `getFunctions()`/`getVariableDeclarations()` only return declarations
+  // PHYSICALLY located in `sf`, never ones merely re-exported into it from
+  // another module — so a source file that is a pure re-export barrel (e.g. a
+  // package's `index.ts`) previously extracted almost nothing.
+  //
+  // `getExportedDeclarations()` flattens named re-export lists, aliased
+  // re-exports, multi-hop barrel chains, AND `export * from './module'`
+  // wildcards down to the terminal physical declaration — keyed by the
+  // OUTERMOST exported name. That is exactly the canonical-name invariant
+  // this extractor already enforces for local renames (closes F28/F29 for
+  // the cross-module case too): the operation is always named by the
+  // exported symbol, never the internal declaration name.
+  //
+  // 'default' is skipped here — default exports are handled by Shape 4/5
+  // below via `sf.getDefaultExportSymbol()` (which already covers both the
+  // named-function-declaration and anonymous/object forms); keying off the
+  // 'default' entry here too would double-extract it.
+  //
+  // buildSchema is deliberately called with the TOP-LEVEL entry `sf` (never
+  // the resolved declaration's own source file), matching every other shape
+  // in this file (4/5/6 below). Two reasons, not one:
+  //   1. Correctness: ts-json-schema-generator's Path 1 (`buildSchema`'s
+  //      named-type lookup) resolves a type NAME against the whole TS
+  //      *program* reachable from `config.path`, not just declarations
+  //      physically in that one file — and the program rooted at the entry
+  //      file already transitively includes every file it re-exports from
+  //      (that's how module resolution works), so a re-exported function's
+  //      param/return types remain resolvable with zero extra plumbing.
+  //   2. Performance: `buildSchema`'s generator cache is keyed by
+  //      `(sf.getFilePath(), tsconfig)` (session.generatorCache /
+  //      _generatorCache, see ts-json-schema.ts) specifically so a whole
+  //      extraction run reuses ONE built TS program (see this package's
+  //      BACKLOG.md PERF-APIGEN-001: "cold 37.4s → 7.4s"). An earlier version
+  //      of this fix threaded each resolved declaration's OWN source file
+  //      through instead — plausible-looking, but WRONG: it defeats that
+  //      cache key (a distinct declSf per re-exported symbol → a distinct,
+  //      NOT reused, full ts-json-schema-generator program per symbol) and
+  //      OOM'd (>8GB) extracting a real ~40-file re-export barrel
+  //      (sox-ecosystem's memory-core/src/index.ts) that previously (bug #1)
+  //      never got far enough to build more than one program at all.
+  for (const [exportedName, decls] of sf.getExportedDeclarations()) {
+    if (exportedName === 'default') continue;
+    if (shouldSkip(exportedName)) continue;
 
-  // ── Shape 1 & 2: Named function exports + named arrow/const exports ──────
-  // Delegate to the raw named extractor logic (inline here so we control sym).
-  for (const fn of sf.getFunctions()) {
-    if (!fn.isExported() || fn.isDefaultExport()) continue;
-    const name = fn.getName() ?? '';
-    if (!name) continue;
-    if (shouldSkip(name)) continue;
-    // Skip declarations exported only under a rename — emitted by alias below.
-    if (!exportedNames.has(name)) continue;
+    // Multiple declarations can back one exported name (e.g. overload
+    // signatures). Prefer a FunctionDeclaration WITH a body (the
+    // implementation) over signature-only overload nodes — matches the
+    // pre-existing `sf.getFunctions()` semantics, which likewise surfaced
+    // only the implementation node for an overloaded function.
+    const fnDecl = pickFunctionDeclWithBody(decls);
+    if (fnDecl) {
+      // Shape 1 / 1b: named function export (local, renamed, or re-exported).
+      const sig = fnDecl.getSignature();
+      const params = rawParams(sig);
+      const returnText = sig.getReturnType().getText();
 
-    const sig = fn.getSignature();
-    const params = rawParams(sig);
-    const returnText = sig.getReturnType().getText();
+      ops.push(
+        await buildActionOp(
+          project,
+          sf,
+          namespaceSeg,
+          fileSegment,
+          exportedName,
+          params,
+          returnText,
+          fnDecl.isAsync(),
+          tsconfig,
+          session
+        )
+      );
+      continue;
+    }
 
-    ops.push(
-      await buildActionOp(
-        project,
-        sf,
-        namespaceSeg,
-        fileSegment,
-        name,
-        params,
-        returnText,
-        fn.isAsync(),
-        tsconfig,
-        session
-      )
+    const varDecl = decls.find(
+      (d): d is import('ts-morph').VariableDeclaration =>
+        d.getKindName() === 'VariableDeclaration'
     );
-  }
+    // No FunctionDeclaration and no VariableDeclaration backs this exported
+    // name: it's either a ClassDeclaration (handled separately by
+    // extract-classes.ts, SPEC §10) or a non-callable, non-const export kind
+    // (interface / type-alias / enum / namespace / …) — never extracted,
+    // matching pre-existing behaviour.
+    if (!varDecl) continue;
 
-  for (const decl of sf.getVariableDeclarations()) {
-    const stmt = decl.getVariableStatement();
-    if (!stmt?.isExported()) continue;
+    const init = varDecl.getInitializer();
+    const initKind = init?.getKindName();
 
-    const name = decl.getName();
-    if (shouldSkip(name)) continue;
-    // Skip declarations exported only under a rename — emitted by alias below.
-    if (!exportedNames.has(name)) continue;
-
-    const init = decl.getInitializer();
-    if (!init) continue;
-    const kindName = init.getKindName();
-
-    if (['ArrowFunction', 'FunctionExpression'].includes(kindName)) {
-      // Shape 2: named const/arrow fn
-      const varType = decl.getType();
+    if (init && ['ArrowFunction', 'FunctionExpression'].includes(initKind ?? '')) {
+      // Shape 2: named const/arrow fn (local, renamed, or re-exported).
+      const varType = varDecl.getType();
       const sigs = varType.getCallSignatures();
       if (sigs.length === 0) continue;
 
       const sig = sigs[0];
-      const params = rawParamsFromSig(sig, decl);
+      const params = rawParamsFromSig(sig, varDecl);
       const returnText = sig.getReturnType().getText();
       const isAsync =
-        init.getKindName() === 'ArrowFunction'
+        initKind === 'ArrowFunction'
           ? (init as import('ts-morph').ArrowFunction).isAsync()
           : (init as import('ts-morph').FunctionExpression).isAsync();
 
@@ -170,7 +213,7 @@ async function extractWithSession(
           sf,
           namespaceSeg,
           fileSegment,
-          name,
+          exportedName,
           params,
           returnText,
           isAsync,
@@ -178,25 +221,26 @@ async function extractWithSession(
           session
         )
       );
-    } else if (['ObjectLiteralExpression'].includes(kindName)) {
+    } else if (initKind === 'ObjectLiteralExpression') {
       // Shape 3: named-object export — `export const api = { foo, bar }`
-      const objType = decl.getType();
+      // (local, renamed, or re-exported).
+      const objType = varDecl.getType();
       for (const prop of objType.getProperties()) {
         const propName = prop.getName();
         if (shouldSkip(propName)) continue;
 
-        const propType = prop.getTypeAtLocation(decl);
+        const propType = prop.getTypeAtLocation(varDecl);
         const sigs = propType.getCallSignatures();
         if (sigs.length === 0) continue; // non-function prop — skip
 
         const sig = sigs[0];
-        const params = rawParamsFromSig(sig, decl);
+        const params = rawParamsFromSig(sig, varDecl);
         const returnText = sig.getReturnType().getText();
 
         // Path: [file, objectName, propName]
         const propPath: Segment[] = [
           fileSegment,
-          makeSeg(name),
+          makeSeg(exportedName),
           makeSeg(propName),
         ];
         ops.push(
@@ -216,7 +260,7 @@ async function extractWithSession(
       }
     } else {
       // May be a serializable-data const (kind=query) — check serializability
-      const constType = decl.getType();
+      const constType = varDecl.getType();
       const typeText = constType.getText();
       if (isSerializableType(typeText)) {
         const schema = await buildSchema(
@@ -226,11 +270,13 @@ async function extractWithSession(
           tsconfig,
           session
         );
-        ops.push(buildQueryOp(namespaceSeg, fileSegment, name, schema));
+        ops.push(
+          buildQueryOp(namespaceSeg, fileSegment, exportedName, schema)
+        );
       } else {
         // Non-serializable, non-callable — skip + warn
         console.warn(
-          `[apigen-core] Skipping non-callable, non-serializable export: ${name}`
+          `[apigen-core] Skipping non-callable, non-serializable export: ${exportedName}`
         );
       }
     }
@@ -345,87 +391,8 @@ async function extractWithSession(
     }
   }
 
-  // ── Shape 1b: Renamed exports — `export { localFn as exportedName }` ─────
-  // The declaration `localFn` is NOT marked `isExported()` (it's a bare local),
-  // so the Shape 1/2 walkers above skip it. The export specifier carries the
-  // EXPORTED symbol via its alias — that is the canonical operation name
-  // (SPEC §3/§5; closes F28/F29). We resolve each renamed specifier to its local
-  // callable declaration and emit an op named by the alias, never the local name.
-  const seenExportNames = new Set(
-    ops.map((o) => o.path[o.path.length - 1].raw)
-  );
-  for (const ed of sf.getExportDeclarations()) {
-    // Skip `export … from '…'` re-exports; we only handle local renames here.
-    if (ed.getModuleSpecifier()) continue;
-    for (const spec of ed.getNamedExports()) {
-      const aliasNode = spec.getAliasNode();
-      if (!aliasNode) continue; // not a rename — `export { foo }` already covered
-      const exportedName = aliasNode.getText();
-      if (shouldSkip(exportedName)) continue;
-      if (seenExportNames.has(exportedName)) continue;
-
-      // Resolve the local symbol the specifier points at.
-      const localSym = spec.getSymbol()?.getAliasedSymbol() ?? spec.getSymbol();
-      const decls = localSym?.getDeclarations() ?? [];
-      for (const d of decls) {
-        const kind = d.getKindName();
-        if (kind === 'FunctionDeclaration') {
-          const fnDecl = d as import('ts-morph').FunctionDeclaration;
-          const sig = fnDecl.getSignature();
-          const params = rawParams(sig);
-          const returnText = sig.getReturnType().getText();
-          ops.push(
-            await buildActionOp(
-              project,
-              sf,
-              namespaceSeg,
-              fileSegment,
-              exportedName,
-              params,
-              returnText,
-              fnDecl.isAsync(),
-              tsconfig,
-              session
-            )
-          );
-          seenExportNames.add(exportedName);
-          break;
-        }
-        if (kind === 'VariableDeclaration') {
-          const varDecl = d as import('ts-morph').VariableDeclaration;
-          const varType = varDecl.getType();
-          const sigs = varType.getCallSignatures();
-          if (sigs.length === 0) break; // non-callable rename — skip
-          const sig = sigs[0];
-          const params = rawParamsFromSig(sig, varDecl);
-          const returnText = sig.getReturnType().getText();
-          const init = varDecl.getInitializer();
-          let isAsync = false;
-          if (init?.getKindName() === 'ArrowFunction') {
-            isAsync = (init as import('ts-morph').ArrowFunction).isAsync();
-          } else if (init?.getKindName() === 'FunctionExpression') {
-            isAsync = (init as import('ts-morph').FunctionExpression).isAsync();
-          }
-          ops.push(
-            await buildActionOp(
-              project,
-              sf,
-              namespaceSeg,
-              fileSegment,
-              exportedName,
-              params,
-              returnText,
-              isAsync,
-              tsconfig,
-              session
-            )
-          );
-          seenExportNames.add(exportedName);
-          break;
-        }
-      }
-    }
-  }
+  // Shape 1b (renamed exports, local or re-exported) is now folded into the
+  // unified `getExportedDeclarations()` walk above — see its header comment.
 
   // ── Shape 6: CJS — `module.exports = { foo, bar }` ───────────────────────
   // ts-morph exposes module.exports assignments via getStatements + kind matching.
@@ -666,6 +633,33 @@ function extractCjsExports(sf: SourceFile): CjsPropEntry[] {
   }
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Exported-declarations dispatch helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Given the set of physical declarations backing one exported name (as
+ * returned by `sf.getExportedDeclarations()`), pick the `FunctionDeclaration`
+ * to extract from — preferring the one WITH a body (the implementation) over
+ * signature-only overload nodes, since only the implementation node yields a
+ * meaningful merged signature. Falls back to the first `FunctionDeclaration`
+ * found if none has a body (e.g. an ambient `declare function` — rare, but
+ * safer than returning nothing). Returns `undefined` if no declaration in the
+ * set is a `FunctionDeclaration` at all.
+ */
+function pickFunctionDeclWithBody(
+  decls: readonly import('ts-morph').ExportedDeclarations[]
+): import('ts-morph').FunctionDeclaration | undefined {
+  let first: import('ts-morph').FunctionDeclaration | undefined;
+  for (const d of decls) {
+    if (d.getKindName() !== 'FunctionDeclaration') continue;
+    const fn = d as import('ts-morph').FunctionDeclaration;
+    if (!first) first = fn;
+    if (fn.getBody()) return fn;
+  }
+  return first;
 }
 
 // ---------------------------------------------------------------------------

@@ -30,6 +30,9 @@
     "@adhd/apigen-core-client": "0.1.0",
     "@adhd/apigen-engine-naming": "0.1.1"
   },
+  "devDependencies": {
+    "decimal.js": "^10.4.3"
+  },
   "main": "./index.js",
   "module": "./index.mjs",
   "typings": "./index.d.ts",
