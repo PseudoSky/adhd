@@ -60,11 +60,11 @@
       "end_ref": "51159bf1909c92f76de62fb46e2042e3085b589a"
     },
     "audit-runtime": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-07-18T00:27:42.659Z",
-      "done_at": null,
+      "done_at": "2026-07-18T00:29:12.686Z",
       "start_ref": "7d5220c547773ee097d714f36b4867deb4d03aa6",
-      "end_ref": null
+      "end_ref": "801ce4007e21429e0fc4007d27684cdafa6c4a5e"
     },
     "refactor-agent-mcp": {
       "status": "pending",
@@ -203,6 +203,18 @@
       "audit_criteria_total": 33,
       "by": "pseudosky",
       "note": "Created src/api.ts (9 apigen command functions: init, build, set, status, verify, doctor, configGet, exportSnapshot, diff), src/core.ts (shared impl with store I/O, spec loading, snapshot I/O, project derivation), src/commands/set.ts (adhd-env set command storing to .adhd-store.json); src/__tests__/api.spec.ts (11 tests verifying all 9 exports), src/__tests__/set.spec.ts (4 tests covering store write, overwrite, default namespace, message); vite.config.ts, tsconfig.spec.json; updated index.ts, package.json, project.json, .eslintrc.json. Build passes (0 lint errors), 15/15 tests pass, guard exit 0."
+    },
+    {
+      "ts": "2026-07-18T00:29:12.686Z",
+      "from": "audit-runtime",
+      "to": "audit-runtime",
+      "start_ref": "7d5220c547773ee097d714f36b4867deb4d03aa6",
+      "end_ref": "801ce4007e21429e0fc4007d27684cdafa6c4a5e",
+      "audit_exit": 40,
+      "audit_criteria_passed": 13,
+      "audit_criteria_total": 53,
+      "by": "pseudosky",
+      "note": "Fixed clippy needless_as_bytes lint (lib.rs:730,734 — key/value are &str so .len() suffices). All 33 accumulated runtime-phase criteria PASS: 4 scaffold + 4 contract + 5 builder + 6 runtime-core-node + 6 runtime-cli + 4 runtime-py + 4 runtime-rs. TS build, Python uv build+pytest (69/69), Rust cargo build+cargo test (29/29)+clippy (clean). Guard exit 0."
     }
   ],
   "amendment_log": [
@@ -263,7 +275,7 @@
     "version": "0.8.30",
     "hash": "836ff34f0a74"
   },
-  "current_state": "audit-runtime",
+  "current_state": "refactor-agent-mcp",
   "dod_provenance": {
     "confirmed_at": "2026-07-08T07:12:02.530Z",
     "by": "pseudosky",
