@@ -113,19 +113,98 @@ these loops with concurrency.
   confirm the export-name/count discovery logic in milliseconds, with zero
   OOM risk — proves BUG-APIGEN-CORE-002's fix is correct independent of this
   separate schema-generation cost.
-- **Fix direction (not attempted — needs its own investigation):** profile
-  Path 2 (`morph-walk.ts`'s `withResolvedType`) specifically for whether the
-  throwaway type-alias node it adds to the shared `SourceFile` is fully
-  cleaned up (removed + forgotten) after each call, and whether ts-morph's
-  underlying compiler host/language-service retains per-call AST/type-checker
-  state across repeated mutations of the same file instead of releasing it;
-  also check whether Path 1's `ts-json-schema-generator` `SchemaGenerator`
-  instance accumulates an unbounded internal `$ref`/definitions registry
-  across many `createSchema()` calls on structurally large types specifically
-  (as opposed to the simple synthetic names used in the isolated experiment
-  above). Consider a per-N-operations generator/session recycle as a
-  mitigation if the root cause turns out to be unfixable cache growth.
-- **Status:** OPEN. Filed 2026-07-18 during BUG-APIGEN-CORE-002 verification.
+- **UPDATE (2026-07-18, same day): root cause found, with data — supersedes
+  the "plausibly..." paragraph above.** Reproduced independently (own run,
+  not reused from the original report) with temporary instrumentation added
+  directly to `buildSchemaUncached` (call-count + heap snapshot per call,
+  Path 1 vs Path 2 marker) and `withResolvedType` (ts-morph `Program` object
+  identity before/after each call), gated behind `APIGEN_OOM_PROBE=1` so it's
+  zero-cost when unset — added, run, and **reverted** (not committed; this
+  repo's source is unchanged by the investigation itself).
+  - Real (unstubbed) `extract()` against the same fixture, `--max-old-space-size=3072`:
+    crashed with a genuine V8 `FatalProcessOutOfMemory` (SIGABRT, exit 134)
+    — **before even finishing `extract()`** (never reached `extractClasses()`,
+    let alone the 146-operation total). Died at internal `buildSchema` call
+    #1605.
+  - **Path 1 vs Path 2, measured, not assumed:** of the first 1605 internal
+    `buildSchema` calls, only **6 hit Path 1** (the cheap, LRU-cached
+    `ts-json-schema-generator` route); **1597 (99.6%) fell through to Path 2**
+    (`morph-walk`'s `addTypeAlias`/`withResolvedType`). This file's real
+    domain types are overwhelmingly NOT the "simple named interface" shape
+    Path 1 is optimized for.
+  - **Every single sampled Path-2 call rebuilds the ts-morph `Program`:**
+    instrumented `project.getProgram().compilerObject` identity before/after
+    each `withResolvedType` call — `programChanged=true` on 100% of the 44
+    sampled calls (not "plausibly," confirmed by direct object-identity
+    comparison). Each rebuild re-parses/re-typechecks the full ~40-file
+    dependency graph (better-sqlite3, onnxruntime-node, sqlite-vec native
+    binding types included), and nothing in the observed heap trend indicates
+    any of it is ever released.
+  - **Heap trend is a clean, unbroken monotonic climb — no GC recovery at
+    any point:** call#1→heap 167MB, #101→390MB, #401→774MB, #701→1410MB,
+    #1001→2028MB, #1301→2590MB, #1601→3165MB (crash at #1605, heap 3199MB
+    against the 3072MB cap). ~2MB of heap added per call, zero dips, the
+    entire way — the signature of objects that are never becoming garbage,
+    not of a large-but-bounded working set.
+  - **The single biggest, and most actionable, finding: 1552 of the 1605
+    calls (97%) are the LITERALLY IDENTICAL raw type-text string
+    `"SharedArrayBuffer"`** (Node's `Buffer`/`Uint8Array` types pull in
+    `ArrayBufferLike = ArrayBuffer | SharedArrayBuffer` — unsurprising given
+    memory-core stores embeddings/blobs pervasively). Every one of those 1552
+    calls reached `buildSchemaUncached` — i.e., every one was a `session
+    .schemaCache` **miss** on an IDENTICAL `(sfPath, tsconfig, typeText)` key,
+    despite `extract()` using exactly one shared session for the whole file
+    (confirmed by reading `extract()`'s wrapper — one `session` object is
+    created and threaded through every operation, not recreated per-op).
+  - **Likely mechanism for the miss (plausible, not yet proven with a
+    targeted repro):** `ts-json-schema.ts:802-812`'s cache only stores the
+    *resolved value*, after `await`, never an *in-flight promise* — there is
+    no request-deduplication for concurrent identical keys. Sequential loops
+    (the top-level per-operation loop in `extract.ts`, and the object-property
+    loop in `morph-walk.ts:238-267`) can't produce this on their own, but
+    `morph-walk.ts`'s union-variant branch (`~line 179`,
+    `Promise.all(members.map(m => walkType(m, recurse, depth+1)))`) launches
+    concurrent sibling resolutions — if several of those siblings each walk
+    down into a Buffer-touching property before the first `SharedArrayBuffer`
+    resolution has resolved and populated the cache, ALL of them see a miss
+    simultaneously and each pays the full (Program-rebuilding) Path-2 cost
+    independently. This is a textbook cache-stampede: the fix is to cache the
+    in-flight `Promise`, not just its resolved value, so concurrent identical
+    requests share one computation.
+  - **Compounding, not competing, causes:** the stampede (repeated *identical*
+    work) and the per-call Program-rebuild-without-release (each unit of that
+    repeated work being unboundedly expensive) multiply together — fixing
+    only one likely still leaves the other as a real, if smaller, problem.
+- **Fix direction (updated, still not attempted):**
+  1. **Highest-leverage, do first:** cache in-flight promises in
+     `session.schemaCache`, not just resolved values (`Map<string,
+     Promise<Schema>>` instead of `Map<string, Schema>`, or equivalent) — this
+     alone should collapse the 1552 redundant `"SharedArrayBuffer"` calls
+     (and any other stampede-prone type) down to 1, independent of whether
+     Path 2 itself gets cheaper.
+  2. Confirm/deny whether `Program` non-release across repeated Path-2 calls
+     is a genuine retention (something holding a strong reference to old
+     `ts.Program`/`DocumentRegistry` entries after `alias.remove()`) versus
+     "correctly collectible but GC hasn't run" — force `global.gc()` between
+     calls under `--expose-gc` and see whether heap actually drops; if it
+     does, this may already be adequately addressed by fix (1) reducing call
+     volume; if it doesn't, ts-morph's `Project`/compiler-host retention needs
+     its own fix (candidate: recycle the `Project`/`Program` every N Path-2
+     calls, or investigate whether ts-morph exposes an explicit
+     `documentRegistry.releaseDocument`-equivalent hook for the mutated
+     versions).
+  3. Consider special-casing extremely common global/lib scalar-adjacent
+     unions (`ArrayBufferLike`, and anything else that shows up with
+     `SharedArrayBuffer`-level frequency) the same way `SCALAR_SCHEMAS`
+     already special-cases `Uint8Array`/`Buffer` — if `Buffer`'s own fields
+     are already mapped to `{type:string,format:byte}` without walking their
+     structure, a stray reference to the underlying `ArrayBufferLike` union
+     inside `Buffer`'s prototype shape probably shouldn't be walked
+     structurally either.
+- **Status:** OPEN — root cause now understood and evidence-backed; fix not
+  attempted (this update is diagnosis only, per the "no code changes to
+  ts-json-schema.ts/morph-walk.ts" scope of BUG-APIGEN-CORE-002's PR). Filed
+  2026-07-18, updated same day after independent re-investigation.
 
 ### BUG-APIGEN-CORE-004 — `isSerializableType()`'s textual allow-list doesn't recognize `Record<K,V>` (or other generic utility-type wrappers), causing false-negative skips on legitimately serializable consts
 
