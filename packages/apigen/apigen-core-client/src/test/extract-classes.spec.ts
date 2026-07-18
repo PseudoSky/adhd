@@ -230,3 +230,82 @@ describe('extractClasses — instance methods (includeInstances)', () => {
     expect(disposeOp?.kind).toBe('instance-method');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Re-exported classes: `export { X [as Y] } from './module.js'`
+// ---------------------------------------------------------------------------
+//
+// Regression coverage for the extract-classes.ts half of the re-export
+// extraction gap (root cause #2): the old `for (const cls of sf.getClasses())`
+// walk only saw classes PHYSICALLY declared in the source file, so a class
+// exposed only via a re-export barrel was never extracted at all. Also
+// covers a same-file bug this extractor had independently of re-exports:
+// `cls.getName()` (the LOCAL declaration name) was used for the class path
+// segment even when the class was exported only under a rename.
+
+describe('extractClasses — re-exported class (single-hop barrel)', () => {
+  it('[cls.reexport.1.1] a plainly re-exported class (`export { SourceClass } from` ...) is extracted', async () => {
+    const ops = await extractClasses({
+      sourceFile: fixture('reexport-barrel.ts'),
+    });
+    const op = findOp(ops, 'create');
+    expect(op).toBeDefined();
+    expect(op?.path[1].raw).toBe('SourceClass');
+  });
+
+  it('[cls.reexport.1.2] re-exported static-method op shape matches the direct-declaration op', async () => {
+    const direct = await extractClasses({
+      sourceFile: fixture('reexport-source.ts'),
+    });
+    const reexported = await extractClasses({
+      sourceFile: fixture('reexport-barrel.ts'),
+    });
+    const directOp = findOp(direct, 'create');
+    const reexportedOp = findOp(reexported, 'create');
+    expect(reexportedOp?.input).toEqual(directOp?.input);
+    expect(reexportedOp?.kind).toBe(directOp?.kind);
+  });
+
+  it('[cls.reexport.1.3] instance methods are extracted for a re-exported class (includeInstances)', async () => {
+    const ops = await extractClasses({
+      sourceFile: fixture('reexport-barrel.ts'),
+      includeInstances: true,
+    });
+    const op = findOp(ops, 'increment');
+    expect(op).toBeDefined();
+    expect(op?.kind).toBe('instance-method');
+    expect(op?.path[1].raw).toBe('SourceClass');
+  });
+});
+
+describe('extractClasses — re-exported + renamed class, multi-hop chain', () => {
+  it('[cls.reexport.2.1] `export { SourceClass as OuterClass } from` ... is path-segmented by the OUTER alias, never the local name', async () => {
+    const ops = await extractClasses({
+      sourceFile: fixture('reexport-chain-outer.ts'),
+    });
+    const op = findOp(ops, 'create');
+    expect(op).toBeDefined();
+    expect(op?.path[1].raw).toBe('OuterClass');
+    const bad = ops.find((o) => o.path[1]?.raw === 'SourceClass');
+    expect(bad).toBeUndefined();
+  });
+
+  it('[cls.reexport.2.2] id reflects the renamed segment (two-hop chain resolves to the terminal declaration)', async () => {
+    const ops = await extractClasses({
+      sourceFile: fixture('reexport-chain-outer.ts'),
+    });
+    const op = findOp(ops, 'create');
+    expect(op?.id).toBe('reexport-chain-outer/outer-class/create');
+  });
+});
+
+describe('extractClasses — re-exported class via `export * from` wildcard', () => {
+  it('[cls.reexport.3.1] a wildcard-re-exported class is extracted', async () => {
+    const ops = await extractClasses({
+      sourceFile: fixture('reexport-wildcard-barrel.ts'),
+    });
+    const op = findOp(ops, 'create');
+    expect(op).toBeDefined();
+    expect(op?.path[1].raw).toBe('SourceClass');
+  });
+});

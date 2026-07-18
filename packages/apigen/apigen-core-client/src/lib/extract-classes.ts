@@ -105,11 +105,47 @@ async function extractClassesWithSession(
 
   const ops: Operation[] = [];
 
-  for (const cls of sf.getClasses()) {
-    // Only exported classes are exposed (SPEC §3).
-    if (!cls.isExported()) continue;
+  // Declaration-driven walk over `sf.getExportedDeclarations()` — same fix,
+  // and same rationale, as the extract.ts re-export-barrel fix (see that
+  // file's header comment above its unified export loop): `sf.getClasses()`
+  // only returns classes PHYSICALLY located in `sf`, never ones reached only
+  // via `export { X [as Y] } from './other.js'` (any hop depth, including
+  // `export * from` wildcards) — so a class re-exported through a barrel
+  // `index.ts` was never extracted at all. `getExportedDeclarations()`
+  // flattens all of that and keys by the OUTERMOST exported name, which also
+  // fixes a latent same-file bug this extractor had independently of
+  // re-exports: `cls.getName()` returns the LOCAL declaration name, so
+  // `export { LocalClass as PublicClass }` was previously extracted (and
+  // path-segmented / id'd) under `LocalClass`, not the exported alias
+  // `PublicClass` — the same F28/F29-family invariant violation extract.ts's
+  // Shape 1b already guards against for functions/consts.
+  //
+  // 'default' is skipped here to match extract.ts's Shape 4/5 gating,
+  // EXCEPT when the default-exported class is itself named (`export default
+  // class Foo {}`) — that was already supported (via `cls.isExported()` +
+  // `cls.getName()`) before this rewrite, so we preserve it by falling back
+  // to the class's own physical name for that one case; a fully anonymous
+  // default class export (`export default class {}`) has no stable name and
+  // is skipped, exactly as before.
+  //
+  // buildSchema below is deliberately called with the TOP-LEVEL entry `sf`,
+  // never the resolved class's own source file — same correctness +
+  // performance rationale as extract.ts's unified export loop (see its
+  // header comment): the program rooted at the entry file already
+  // transitively includes every file it re-exports a class from, and
+  // `buildSchema`'s generator cache is keyed by `(sf.getFilePath(), tsconfig)`
+  // — threading a distinct per-class source file through defeats that cache
+  // and rebuilds a full TS program per re-exported class (OOM'd on a large
+  // real-world barrel during verification of this fix; see BACKLOG.md).
+  for (const [exportedName, decls] of sf.getExportedDeclarations()) {
+    const cls = decls.find(
+      (d): d is import('ts-morph').ClassDeclaration =>
+        d.getKindName() === 'ClassDeclaration'
+    );
+    if (!cls) continue; // not a class export — handled by extract.ts instead
 
-    const className = cls.getName();
+    const className =
+      exportedName === 'default' ? cls.getName() : exportedName;
     if (!className) continue;
     if (shouldSkipName(className)) continue;
 
