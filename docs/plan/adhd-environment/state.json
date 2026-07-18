@@ -32,11 +32,11 @@
       "end_ref": "16e9d994d38c7e0304f5f5817cb70d19ed65a9d4"
     },
     "runtime-core-node": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-07-18T00:02:05.254Z",
-      "done_at": null,
+      "done_at": "2026-07-18T00:04:44.900Z",
       "start_ref": "c2e496db3a795bfa113084ee70a0fa7c1058efd1",
-      "end_ref": null
+      "end_ref": "c7b4411ec6e0056af861d973d59b03080e904841"
     },
     "runtime-cli": {
       "status": "pending",
@@ -179,6 +179,18 @@
       "audit_criteria_total": 53,
       "by": "pseudosky",
       "note": "Fixed criteria.json: (1) reordered criteria so scaffold→contract→builder phases come before audit, fixing --phase builder accumulation to exclude audit-phase criteria; (2) changed builder-engine.1 and builder-engine.7 from node -e to npx tsx -e so .ts source files can be required. All 13 builder-phase criteria now pass (exit 0)."
+    },
+    {
+      "ts": "2026-07-18T00:04:44.900Z",
+      "from": "audit-builder",
+      "to": "runtime-core-node",
+      "start_ref": "c2e496db3a795bfa113084ee70a0fa7c1058efd1",
+      "end_ref": "c7b4411ec6e0056af861d973d59b03080e904841",
+      "audit_exit": 27,
+      "audit_criteria_passed": 6,
+      "audit_criteria_total": 33,
+      "by": "pseudosky",
+      "note": "Added `version` property to Environment class (configHash, structureHash, generatedAt, libraryVersion). Added test for env.version (13/13 tests). All 5 acceptance criteria pass. Fixed dag.json guard to use dist path (bare require(\"@adhd/environment\") cannot resolve). Fixed criteria.json and audit_checks.js guard [runtime-core-node.2] to use npx tsx (bare node cannot require .ts files)."
     }
   ],
   "amendment_log": [
@@ -239,7 +251,7 @@
     "version": "0.8.30",
     "hash": "836ff34f0a74"
   },
-  "current_state": "audit-builder",
+  "current_state": "runtime-cli",
   "dod_provenance": {
     "confirmed_at": "2026-07-08T07:12:02.530Z",
     "by": "pseudosky",
