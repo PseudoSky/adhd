@@ -31,6 +31,19 @@ set by a previous `startServe` in the same process is not treated as a user over
 
 ## Open
 
+### DEBT-APIGEN-LINT-001 — `@nx/dependency-checks` false-positive on `decimal.js`
+
+`nx run apigen-cli:lint` (and transitively `:build`/`:test`) fails with
+"decimal.js package is not used by apigen-cli project" — the dependency IS
+genuinely used by test fixtures under a tsconfig-excluded `src/test/**` path,
+which `@nx/dependency-checks`'s static scan doesn't see. Same root cause,
+same fix direction, as `apigen-core-client/BACKLOG.md` DEBT-APIGEN-LINT-001
+(full detail there). Filed 2026-07-18 during BUG-APIGEN-CORE-002 verification
+(discovered while confirming `entrypoint/apigen-cli`'s test suite still
+passes after the apigen-core-client re-export fix — all 113 tests pass once
+the build-then-test workaround documented there is applied; this lint issue
+is pre-existing and unrelated to that fix).
+
 ### BUG-APIGEN-017 — MCP tool schemas don't reject unknown properties
 
 **Reported:** 2026-07-06  

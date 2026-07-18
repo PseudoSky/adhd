@@ -3,6 +3,22 @@
 Cross-package findings for the apigen family. Package-local backlogs (e.g.
 `core/BACKLOG.md`) take precedence for their own scope.
 
+## Pointers to package-local entries with cross-package impact
+
+- **BUG-APIGEN-CORE-002** (re-exports never followed — FIXED 2026-07-18) and
+  **BUG-APIGEN-CORE-003** (buildSchema OOMs on a large real-world re-export
+  barrel — OPEN) — full detail in `apigen-core-client/BACKLOG.md`. Relevant
+  to every apigen consumer/plugin: any `source:` file that is a re-export
+  barrel now extracts correctly (previously near-total data loss for that
+  shape), but a barrel large/dependency-heavy enough (proven case:
+  ~40-file, ~140-operation) can OOM schema generation.
+- **DEBT-APIGEN-LINT-001** (`@nx/dependency-checks` false-positives on deps
+  only reachable from tsconfig-excluded `src/test/**` fixtures — OPEN) —
+  affects `apigen-core-client` (`decimal.js`), `apigen-engine-runtime`
+  (`ajv`/`ajv-formats`), and `apigen-cli` (`decimal.js`); blocks
+  `nx build`/`nx test` for those 3 projects without a workaround. Full detail
+  in `apigen-core-client/BACKLOG.md`.
+
 ## BUG-APIGEN-CLI-001 — cli-output generator emits invalid TS identifiers for hyphenated source dirs
 
 - **Where:** `@adhd/apigen-plugin-cli-output` (`packages/apigen/plugins/cli`), generated `cli.ts`.
