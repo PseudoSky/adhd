@@ -67,10 +67,10 @@
       "end_ref": "801ce4007e21429e0fc4007d27684cdafa6c4a5e"
     },
     "refactor-agent-mcp": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-18T00:38:15.278Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "6e11ed3b07d4532fa0379decc0a8b079b4e0a5a1",
       "end_ref": null
     },
     "audit-final": {
