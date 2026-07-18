@@ -39,10 +39,10 @@
       "end_ref": "c7b4411ec6e0056af861d973d59b03080e904841"
     },
     "runtime-cli": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-18T00:22:25.845Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "151862d0719d382619b61a972416c3ff88dd4430",
       "end_ref": null
     },
     "runtime-py": {
