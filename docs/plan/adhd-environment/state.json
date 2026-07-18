@@ -60,10 +60,10 @@
       "end_ref": "51159bf1909c92f76de62fb46e2042e3085b589a"
     },
     "audit-runtime": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-18T00:27:42.659Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "7d5220c547773ee097d714f36b4867deb4d03aa6",
       "end_ref": null
     },
     "refactor-agent-mcp": {
