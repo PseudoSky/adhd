@@ -6,7 +6,6 @@
     "ts-json-schema-generator": "^2.3.0",
     "pino": "10.3.1",
     "typescript": "^6.0.3",
-    "decimal.js": "^10.4.3",
     "@adhd/apigen-base-logical": "^0.0.1"
   },
   "devDependencies": {
