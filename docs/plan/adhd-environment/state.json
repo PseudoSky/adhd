@@ -25,10 +25,10 @@
       "end_ref": "d39300ab7379097910a18df5f2920d293e7d43e6"
     },
     "audit-builder": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-18T00:00:11.679Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "1fe6ba8ff634b0142d2b430b131ffa08c5ea7c30",
       "end_ref": null
     },
     "runtime-core-node": {
@@ -224,8 +224,8 @@
   ],
   "authored_with": {
     "plugin": "workflow",
-    "version": "0.8.28",
-    "hash": "6e17cc7c7603"
+    "version": "0.8.30",
+    "hash": "836ff34f0a74"
   },
   "current_state": "audit-builder",
   "dod_provenance": {
