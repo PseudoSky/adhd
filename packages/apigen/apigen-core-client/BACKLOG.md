@@ -211,7 +211,7 @@ these loops with concurrency.
 
   2. **A SECOND, independent instance of the SAME re-export-blindness bug,
      found only while fixing bug 1 above** (not previously known — see
-     apigen-cli's BACKLOG.md BUG-APIGEN-CORE-005 entry for the fuller
+     apigen-cli's CHANGELOG.md BUG-APIGEN-028 entry for the fuller
      narrative of how this was caught): even when a caller DID pass `--v2`,
      `orchestrator.ts`'s `buildDescriptor()` had a "Step 5" that called v1's
      `generateSchemas()` a SECOND time, independently, from scratch, to build
