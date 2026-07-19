@@ -108,21 +108,45 @@ performed this session (out of scope; not silently worked around, filed here
 per this task's explicit instruction to file anything found broken along the
 way that isn't being fixed).
 
-### BUG-APIGEN-030 (Open, filed not fixed) — union-typed params crash EVERY call with `strict mode: unknown keyword: "x-apigen-logical"` — AJV rejects apigen's own advisory schema hint
+### BUG-APIGEN-030 (Open, filed not fixed) — any `x-apigen-logical`-tagged param (union OR nominal/branded) crashes EVERY call with `strict mode: unknown keyword: "x-apigen-logical"` — AJV rejects apigen's own advisory schema hint
 
 **Discovered:** 2026-07-19, by an agent independently re-verifying the "130
 routes" claim for BUG-APIGEN-028 (the v1-retirement fix) against the real
-`sox-ecosystem/libs/memory-core/src/index.ts` fixture. Confirmed live: 40 of
-the fixture's 130 routes have a parameter whose schema is a `union` type
-(e.g. `POST /sox-ecosystem/parseTags {"data":{"raw":"..."}}`,
+`sox-ecosystem/libs/memory-core/src/index.ts` fixture. Confirmed live: at
+least 40 of the fixture's 130 routes have a parameter whose schema is a
+`union` type (e.g. `POST /sox-ecosystem/parseTags {"data":{"raw":"..."}}`,
 `POST /sox-ecosystem/vecToJson {"data":{"vec":[...]}}`) — every one of them
 returns `500 {"code":"internal","message":"strict mode: unknown keyword:
-\"x-apigen-logical\""}` regardless of input. The other 90/130 routes
-(non-union params) dispatch correctly, including real AJV validation
+\"x-apigen-logical\""}` regardless of input.
+
+**Scope correction 2026-07-19 (api-fastify verification round):** originally
+titled/scoped as "union-typed params" only. Independent `api-fastify`
+verification of the same fixture hit the identical error on `vecToBuffer`
+(`{data:{vec:[1,2,3]}}` → `Float32Array`), whose param schema logs as
+`type:"object"`, NOT `union` — it's a **nominal/branded** type. Confirmed by
+reading source: nominal schemas carry the identical
+`"x-apigen-logical": "nominal"` hint via the same `X_APIGEN_LOGICAL`
+constant as union's `"x-apigen-logical": "union"`
+(`apigen-engine-runtime/src/lib/logical/host-ts.ts:91-93` for the nominal
+sentinel schema, `:108-110` for the union sentinel schema — both literally
+share the one `X_APIGEN_LOGICAL` key). So the true trigger is **any schema
+fragment carrying an `x-apigen-logical` key**, not specifically "union" —
+the bug title and root-cause below are corrected accordingly. **The
+"40/130" route count is therefore a floor, not the true count** — it was
+counted by filtering the route log for `type:"union"` only; the real
+affected count also includes however many of the other 90 routes take a
+nominal/branded param (e.g. `Float32Array`, `Decimal`, `Date`-as-nominal-if
+applicable) and has not yet been recounted. Whoever fixes this should
+recount using `x-apigen-logical` presence directly, not the `union` label.
+
+The other, unaffected routes (plain scalar/object params, no
+`x-apigen-logical` hint) dispatch correctly, including real AJV validation
 rejections (`400` with a genuine missing-properties error) and real
-computed results (verified independently, e.g. `hexSha256` returning the
-correct SHA-256 digest) — so this is narrowly scoped to union-typed params,
-not a general regression.
+computed results (independently oracle-verified across three separate
+verification rounds — api-express, mcp, api-fastify — e.g. `hexSha256`
+returning the correct SHA-256 digest, `mean`/`percentile` returning
+independently-computed correct values) — so this remains narrowly scoped to
+`x-apigen-logical`-tagged params, not a general regression.
 
 **Root cause, traced and confirmed by reading the actual source:**
 
@@ -164,12 +188,18 @@ correctly over MCP with no AJV error, and a repo-wide grep confirms only
 `validate-layer`/`makeValidateLayer` — `apigen-plugin-mcp` (and, by the same
 grep, `apigen-plugin-cli-output` and `apigen-plugin-jsonschema`) call
 `dispatch()` directly and never route through this Layer at all. **Confirmed
-narrow impact: HTTP-transport plugins only (`api-express`, `api-fastify`)** —
-any union-typed-param route is completely unusable there (100% failure
-rate, not input-dependent; 40/130 routes = 31% in the fixture used to
-verify BUG-APIGEN-028). MCP, cli-output, and jsonschema output are
-unaffected — schemas containing the `x-apigen-logical` hint are still
-generated correctly for those plugins, they just never get run through an
+narrow impact along one axis, transport: HTTP-transport plugins only
+(`api-express`, `api-fastify`)** — confirmed reproducing byte-for-byte
+identically on `api-fastify` in a later verification round (same fixture,
+same `parseTags`/`vecToJson` repro). Along the OTHER axis, schema kind, the
+impact is WIDER than first filed (see scope correction above): any
+`x-apigen-logical`-tagged route (union OR nominal/branded) is completely
+unusable on these two plugins — 100% failure rate, not input-dependent; at
+least 40/130 = 31% in the fixture used to verify BUG-APIGEN-028, likely
+somewhat higher once nominal-typed params are recounted. MCP, cli-output,
+and jsonschema output are unaffected on both axes — schemas containing the
+`x-apigen-logical` hint are still generated correctly for those plugins,
+they just never get run through an
 AJV instance that would choke on it.
 
 **Suggested fix (not yet attempted — filed per this session's
