@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../db/schema.js';
 import { runMigrationsOn } from '../db/migrate-runner.js';
-import { loadConfig } from '../config.js';
+import { env } from '../config.js';
 import { logger } from '../logger.js';
 import { AgentStore } from '../store/agent-store.js';
 import { SessionStore, TaskStore } from '@adhd/agent-store-runtime';
@@ -21,16 +21,11 @@ describe('agent-mcp entrypoint wiring', () => {
         sqlite.close();
     });
 
-    it('config loads and satisfies EngineConfig', () => {
-        const env = {
-            ADHD_AGENT_DATABASE_PATH: ':memory:',
-            ADHD_AGENT_LOG_LEVEL: 'silent',
-        };
-        const cfg = loadConfig(env as NodeJS.ProcessEnv);
-        expect(cfg.server.contextLimit).toBeDefined();
-        expect(typeof cfg.isEnvNameAllowed).toBe('function');
-        expect(typeof cfg.getProviderConfig).toBe('function');
-        expect(typeof cfg.subprocessEnv).toBe('function');
+    it('env satisfies EngineConfig', () => {
+        expect(typeof env.isEnvNameAllowed).toBe('function');
+        expect(typeof env.resolveEnvName).toBe('function');
+        expect(typeof env.getProviderConfig).toBe('function');
+        expect(typeof env.subprocessEnv).toBe('function');
     });
 
     it('logger creates a pino instance', () => {

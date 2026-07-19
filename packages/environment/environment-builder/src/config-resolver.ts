@@ -1,293 +1,49 @@
 /**
- * `config-resolver.ts` — Pipeline steps 5-11 (load store, infer env names,
- * resolve values, interpolate, unflatten, coerce).
+ * `config-resolver.ts` — the field-value cascade (ARCHITECTURE.md §2.2):
  *
- * NOTE on cross-package imports: this module only ever imports *types* from
- * `@adhd/environment-base-spec` (`import type { ... }`), which TypeScript's
- * (and Node's native) type-stripping erases completely — no runtime module
- * resolution is attempted for them. Any *value* this module needs from the
- * cross-language contract (`inferEnvVar`) is duplicated locally instead of
- * imported at runtime, because this package has no `node_modules/@adhd/*`
- * workspace symlinks: `@adhd/environment-base-spec` only resolves via the
- * Nx/Vite tsconfig path alias (used by `nx build`), not via plain
- * `node -e require(...)` of the raw `.ts` source (used directly by this
- * plan's acceptance criteria). The algorithm is pinned identically in both
- * places by `[def:inferEnvVar]` in `contexts/_shared.md`.
- */
-
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import type { ConfigFieldDefinition, ConfigScope, ProvenanceSource } from '@adhd/environment-base-spec';
-
-// ============================================================================
-// Step 6 — infer env var names
-// ============================================================================
-
-/**
- * `inferEnvVar("ADHD_AGENT_MCP", "db.path")` → `"ADHD_AGENT_MCP_DB_PATH"`.
- * See `[def:inferEnvVar]` in `contexts/_shared.md`.
- */
-export function inferEnvVar(prefix: string, fieldPath: string): string {
-  return `${prefix}_${fieldPath.toUpperCase().replace(/[.-]/g, '_')}`;
-}
-
-/** Reserved prefix marking a redacted secret reference. Duplicated from
- *  `@adhd/environment-base-spec`'s `SECRET_REF_PREFIX` (this module imports
- *  only *types* from the base-spec at runtime — see the file header — so the
- *  value is pinned identically here, exactly as `inferEnvVar` is). */
-export const SECRET_REF_PREFIX = 'adhd-secret-ref:';
-
-// ============================================================================
-// Secret redaction (`[inv:no-plaintext-secrets]`, ENV-CORE-009)
-// ============================================================================
-
-/**
- * Replaces every `secret: true` field's resolved value in a flat dot-path
- * map with a *reference* — `"adhd-secret-ref:<ENV_VAR>"` — so the plaintext
- * credential is NEVER persisted to `adhd-environment.json`. The runtime
- * client (`Environment.get`) resolves the live value from the environment at
- * read time. Non-secret fields pass through unchanged.
+ *   code defaults → system file → global file → project file → local file → env vars
  *
- * The env-var name used is the field's finalized effective `env` (the
- * explicit override or the inferred name), as produced by `resolveConfig`.
- * This is the canonical pre-persistence transform: build the snapshot's
- * `raw` (and, via `unflatten`, its nested `config`) from the OUTPUT of this
- * function, and compute `configHash` over the redacted `raw` so the hash is
- * stable and never depends on a secret's plaintext.
+ * Precedence, high→low: env var (remapped) > local file > project file >
+ * global file > system file > spec default. Every layer is optional; the
+ * spec default is the only layer guaranteed to be present, which is what
+ * makes the whole cascade zero-config (ARCHITECTURE.md §0/§2.1).
  *
- * Note: a `noEnv` secret (one that can only come from the `adhd-env set`
- * store / default) has no env source to resolve from at read time; its value
- * is still redacted here (never leaked) but will read back as unset. See
- * BACKLOG ENV-CORE-012.
- */
-export function redactSecrets(
-  raw: Record<string, unknown>,
-  fields: Record<string, ConfigFieldDefinition>,
-): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const key of Object.keys(raw)) {
-    const field = fields[key];
-    if (field?.secret === true) {
-      const envName = field.env && field.env !== '' ? field.env : inferEnvVar('ADHD', key);
-      out[key] = `${SECRET_REF_PREFIX}${envName}`;
-    } else {
-      out[key] = raw[key];
-    }
-  }
-  return out;
-}
-
-// ============================================================================
-// Step 5 — load stored values (`adhd-env set` store)
-// ============================================================================
-
-/** Flat dot-path field name → stored string value (see interfaces-architect.md §8). */
-export interface StoreValues {
-  [fieldPath: string]: string;
-}
-
-interface StoreFile {
-  version?: string;
-  values?: StoreValues;
-  updatedAt?: string;
-}
-
-/**
- * Reads the `adhd-env set` store for a given project + namespace. The store
- * lives at `<adhdRoot>/<orgNamespace>/<project>/<namespace>/.adhd-store.json`
- * (interfaces-architect.md §8). Missing or unreadable/corrupt store files are
- * treated as an empty store rather than an error — the store is optional
- * (fields fall through to env vars / defaults).
- */
-export function readStore(
-  adhdRoot: string,
-  orgNamespace: string,
-  project: string,
-  namespace: string,
-): StoreValues {
-  const storePath = join(adhdRoot, orgNamespace, project, namespace, '.adhd-store.json');
-  if (!existsSync(storePath)) return {};
-  try {
-    const parsed = JSON.parse(readFileSync(storePath, 'utf8')) as StoreFile;
-    return parsed.values ?? {};
-  } catch {
-    return {};
-  }
-}
-
-// ============================================================================
-// Steps 6-7 — resolve field values
-// ============================================================================
-
-/** The value + provenance metadata resolved for a single field (pre-`ProvenanceEntry` shape). */
-export interface ResolvedFieldValue {
-  value: unknown;
-  source: ProvenanceSource;
-  scope: ConfigScope;
-  /** The env var name actually consulted, when `source` ends in `.env`/`.override`. */
-  env?: string;
-}
-
-export interface ResolveConfigContext {
-  /** The project's resolved env prefix (`[def:envPrefix]`), e.g. `"ADHD_AGENT_MCP"`. */
-  prefix: string;
-  /** The `adhd-env set` store (see `readStore`). Defaults to `{}`. */
-  store?: StoreValues;
-  /** Process environment to read from. Defaults to `process.env`. Overridable for tests. */
-  processEnv?: Record<string, string | undefined>;
-  /** When set, only fields whose effective scope matches are resolved. */
-  scope?: ConfigScope;
-}
-
-export interface ResolveConfigResult {
-  /** Flat dot-path field name → resolved (pre-interpolation, pre-coercion) value. */
-  raw: Record<string, unknown>;
-  /** Flat dot-path field name → resolution metadata (value + source + scope + env). */
-  resolved: Record<string, ResolvedFieldValue>;
-  /** `fields`, but with every `env` sentinel finalized to its effective env var name. */
-  fields: Record<string, ConfigFieldDefinition>;
-}
-
-/**
- * Resolves every (optionally scope-filtered) field's effective value per
- * `[def:effectiveEnv]` (`contexts/_shared.md`):
+ * `at: 'runtime'` and `secret: true` fields are resolved into an *env-ref*
+ * sentinel string (`makeEnvRef`) here rather than a plain value — the live,
+ * per-access re-read of `process.env` happens one layer up, in
+ * `environment-core-node`'s `Environment`, which installs a getter for every
+ * env-ref leaf (see `ARCHITECTURE.md` §3.1 `FieldSpec.at`).
  *
- *   `env var (inferred or override) → adhd-env set-store value → field default`
- *
- * `system`-scope fields are resolved from `default` only — they are
- * "framework-shipped defaults, rarely changed" (SPEC_0.0.4.md) and are the
- * only scope for which `ProvenanceSource` has no `.env`/`.set` variant.
- * `global`-scope fields resolve from env (inferred/overridden name) or
- * default — no per-project store lookup (the store is project+namespace
- * scoped). `project`-scope fields resolve from env, then store, then
- * default, and distinguish `"project.env"` (inferred name) from
- * `"project.override"` (explicit `env:` override in the field definition) —
- * see `ProvenanceEntry` doc comments in `environment-base-spec`.
+ * Pure — no I/O (the already-loaded `Layers` and a caller-supplied
+ * `processEnv` snapshot are passed in).
  */
-export function resolveConfig(
-  fields: Record<string, ConfigFieldDefinition>,
-  ctx: ResolveConfigContext,
-): ResolveConfigResult {
-  const store = ctx.store ?? {};
-  const env = ctx.processEnv ?? process.env;
 
-  const raw: Record<string, unknown> = {};
-  const resolved: Record<string, ResolvedFieldValue> = {};
-  const resolvedFields: Record<string, ConfigFieldDefinition> = {};
+import type { FieldSpec, ProvenanceEntry, ProvenanceSource, Scope } from '@adhd/environment-base-spec';
+import { inferEnvVar, makeEnvRef } from '@adhd/environment-base-spec';
 
-  for (const key of Object.keys(fields)) {
-    const field = fields[key];
-    if (ctx.scope !== undefined && field.scope !== ctx.scope) continue;
+import type { Layers } from './layer-files';
+import { buildProvenanceEntry } from './provenance';
 
-    const explicitOverride = field.env !== undefined && field.env !== '';
-    const effectiveEnv = explicitOverride ? field.env : inferEnvVar(ctx.prefix, key);
-    resolvedFields[key] = { ...field, env: effectiveEnv };
-
-    let value: unknown;
-    let source: ProvenanceSource;
-    let recordedEnv: string | undefined;
-
-    if (field.scope === 'system') {
-      value = field.default;
-      source = 'system.default';
-    } else if (!field.noEnv && env[effectiveEnv] !== undefined) {
-      value = env[effectiveEnv];
-      recordedEnv = effectiveEnv;
-      if (field.scope === 'project') {
-        source = explicitOverride ? 'project.override' : 'project.env';
-      } else {
-        source = 'global.env';
-      }
-    } else if (field.scope === 'project' && Object.prototype.hasOwnProperty.call(store, key)) {
-      value = store[key];
-      source = 'project.set';
-    } else {
-      value = field.default;
-      source = field.scope === 'global' ? 'global.default' : 'project.default';
-    }
-
-    raw[key] = value;
-    resolved[key] = { value, source, scope: field.scope, env: recordedEnv };
-  }
-
-  return { raw, resolved, fields: resolvedFields };
+/** A `FieldSpec` after env-name inference + fallback resolution. */
+export interface ResolvedFieldSpec extends FieldSpec {
+  /** The effective env var name (explicit `env` or inferred). */
+  env: string;
+  /** `true` when this field is always env-sourced at read time
+   *  (`at: 'runtime'` or `secret: true`). */
+  live: boolean;
+  /** The value that would be used if the env var (live layer) were unset —
+   *  i.e. the cascade result of just the file layers + spec default. Used
+   *  by `environment-core-node` as a live-getter's fallback. */
+  fallbackValue: unknown;
 }
-
-// ============================================================================
-// Step 9 — interpolate ${VAR} references (single-level only)
-// ============================================================================
-
-const INTERPOLATION_RE = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
-
-/**
- * Single-level `${VAR}` interpolation (`[inv:...]` single-level-only
- * constraint — no recursive expansion of the substituted value). Non-string
- * values pass through unchanged. Unresolved `${VAR}` references are kept as
- * the literal `${VAR}` text.
- */
-export function interpolateValue(
-  value: unknown,
-  env: Record<string, string | undefined> = process.env,
-): unknown {
-  if (typeof value !== 'string') return value;
-  return value.replace(INTERPOLATION_RE, (match, varName: string) => {
-    const resolved = env[varName];
-    return resolved !== undefined ? resolved : match;
-  });
-}
-
-/** Applies `interpolateValue` to every value in a flat dot-path record. */
-export function interpolateConfig(
-  raw: Record<string, unknown>,
-  env: Record<string, string | undefined> = process.env,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const key of Object.keys(raw)) {
-    result[key] = interpolateValue(raw[key], env);
-  }
-  return result;
-}
-
-// ============================================================================
-// Step 10 — unflatten to nested config
-// ============================================================================
-
-/**
- * `{"db.path": "/tmp/db", "server.port": "3000"}` →
- * `{db: {path: "/tmp/db"}, server: {port: "3000"}}`.
- */
-export function unflatten(flat: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const key of Object.keys(flat)) {
-    const segments = key.split('.');
-    let node = result;
-    segments.forEach((segment, index) => {
-      if (index === segments.length - 1) {
-        node[segment] = flat[key];
-        return;
-      }
-      const existing = node[segment];
-      if (typeof existing !== 'object' || existing === null || Array.isArray(existing)) {
-        node[segment] = {};
-      }
-      node = node[segment] as Record<string, unknown>;
-    });
-  }
-  return result;
-}
-
-// ============================================================================
-// Step 11 — type-coerce values
-// ============================================================================
 
 /**
  * Coerces a single (string-or-already-typed) value according to a field's
- * declared `type`. Invalid coercions (e.g. `"abc"` as `"integer"`) return the
- * original value unchanged rather than throwing — the caller (`validation.ts`
- * via the generated `fieldSchema`) is responsible for surfacing that as a
- * validation error.
+ * declared `type`. Invalid coercions (e.g. `"abc"` as `"integer"`) return
+ * the original value unchanged — validation (via the generated JSON Schema)
+ * is responsible for surfacing that as an error.
  */
-export function coerceValue(value: unknown, type: ConfigFieldDefinition['type']): unknown {
+export function coerceValue(value: unknown, type: FieldSpec['type']): unknown {
   if (value === undefined) return value;
   switch (type) {
     case 'integer': {
@@ -321,15 +77,117 @@ export function coerceValue(value: unknown, type: ConfigFieldDefinition['type'])
   }
 }
 
-/** Applies `coerceValue` to every flat field, using each field's declared `type`. */
-export function coerceConfig(
-  raw: Record<string, unknown>,
-  fields: Record<string, ConfigFieldDefinition>,
-): Record<string, unknown> {
+/** `{"db.path": "/tmp/db", "server.port": "3000"}` → `{db: {path: "/tmp/db"}, server: {port: "3000"}}`. */
+export function unflatten(flat: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = {};
-  for (const key of Object.keys(raw)) {
-    const field = fields[key];
-    result[key] = field ? coerceValue(raw[key], field.type) : raw[key];
+  for (const key of Object.keys(flat)) {
+    const segments = key.split('.');
+    let node = result;
+    segments.forEach((segment, index) => {
+      if (index === segments.length - 1) {
+        node[segment] = flat[key];
+        return;
+      }
+      const existing = node[segment];
+      if (typeof existing !== 'object' || existing === null || Array.isArray(existing)) {
+        node[segment] = {};
+      }
+      node = node[segment] as Record<string, unknown>;
+    });
   }
   return result;
+}
+
+export interface ResolveConfigContext {
+  /** The project's resolved env prefix, e.g. `"ADHD_AGENT_MCP"`. */
+  prefix: string;
+  /** The active scope — recorded as the default provenance scope for a
+   *  field that does not declare its own `FieldSpec.scope`. */
+  activeScope: Scope;
+}
+
+export interface ResolveConfigResult {
+  /** Flat dot-path field name → resolved value. A `live` field's value here
+   *  is an env-ref sentinel (`makeEnvRef`), never the plaintext. */
+  raw: Record<string, unknown>;
+  /** `raw`, unflattened into a nested tree — the pre-live-getter shape of
+   *  `SnapshotData.config` / `Environment#config`. */
+  nested: Record<string, unknown>;
+  /** Flat dot-path field name → the REAL, typed value (never env-ref
+   *  redacted) — used only for JSON-Schema validation, so a `secret`/
+   *  `at:'runtime'` field is validated against its actual type instead of
+   *  the opaque env-ref sentinel string. Never persisted/exposed. */
+  typedRaw: Record<string, unknown>;
+  /** Flat dot-path field name → provenance entry. */
+  provenance: Record<string, ProvenanceEntry>;
+  /** Flat dot-path field name → resolved field metadata (env name, `live`,
+   *  fallback value). */
+  fields: Record<string, ResolvedFieldSpec>;
+}
+
+const FILE_LAYER_ORDER: ReadonlyArray<[keyof Layers, ProvenanceSource]> = [
+  ['system', 'system'],
+  ['global', 'global'],
+  ['project', 'project'],
+  ['local', 'local'],
+];
+
+/**
+ * Resolves every declared field's effective value per the cascade
+ * (ARCHITECTURE.md §2.2). `processEnv` is the (caller-supplied, testable)
+ * environment snapshot consulted for the top ("env var") layer — the
+ * *pure builder* only ever looks at this one static snapshot; the
+ * "re-read live between two accesses" behavior for `live` fields is layered
+ * on top by `environment-core-node`.
+ */
+export function resolveConfig(
+  configSpec: Record<string, FieldSpec>,
+  layers: Layers,
+  processEnv: Record<string, string | undefined>,
+  ctx: ResolveConfigContext,
+): ResolveConfigResult {
+  const raw: Record<string, unknown> = {};
+  const typedRaw: Record<string, unknown> = {};
+  const provenance: Record<string, ProvenanceEntry> = {};
+  const fields: Record<string, ResolvedFieldSpec> = {};
+
+  for (const key of Object.keys(configSpec)) {
+    const field = configSpec[key];
+    const envName = field.env && field.env !== '' ? field.env : inferEnvVar(ctx.prefix, key);
+    const isLive = field.at === 'runtime' || field.secret === true;
+    const fieldScope = field.scope ?? ctx.activeScope;
+
+    // File-layer cascade (system → global → project → local), lowest to highest.
+    let fallbackValue: unknown = field.default;
+    let fallbackSource: ProvenanceSource = 'default';
+    for (const [layerName, source] of FILE_LAYER_ORDER) {
+      const layer = layers[layerName];
+      if (layer && Object.prototype.hasOwnProperty.call(layer, key)) {
+        fallbackValue = coerceValue(layer[key], field.type);
+        fallbackSource = source;
+      }
+    }
+
+    const liveEnvValue = processEnv[envName];
+    let value: unknown;
+    let source: ProvenanceSource;
+    let recordedEnv: string | undefined;
+    if (liveEnvValue !== undefined) {
+      value = coerceValue(liveEnvValue, field.type);
+      source = 'env';
+      recordedEnv = envName;
+    } else {
+      value = fallbackValue;
+      source = fallbackSource;
+    }
+
+    raw[key] = isLive ? makeEnvRef(envName) : value;
+    typedRaw[key] = value;
+    provenance[key] = isLive
+      ? buildProvenanceEntry({ source: 'env', scope: fieldScope, env: envName })
+      : buildProvenanceEntry({ source, scope: fieldScope, env: recordedEnv });
+    fields[key] = { ...field, env: envName, live: isLive, fallbackValue };
+  }
+
+  return { raw, nested: unflatten(raw), typedRaw, provenance, fields };
 }

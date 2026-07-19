@@ -3,7 +3,7 @@
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
-import { config } from "./config.js";
+import { env, toEngineConfig } from "./config.js";
 import { AgentStore } from "./store/agent-store.js";
 
 import { SessionStore, TaskStore } from "@adhd/agent-store-runtime";
@@ -108,21 +108,26 @@ function verifyAgentEnvRefs(agents: AgentDefinition[]): void {
     if (names.length === 0) return;
 
     const uniqueNames = [...new Set(names)];
-    const { missing, disallowed } = config.verifyEnvRefs(uniqueNames);
+    const missing: string[] = [];
+    const disallowed: string[] = [];
+    for (const n of uniqueNames) {
+      if (!env.isEnvNameAllowed(n)) disallowed.push(n);
+      else if (!env.resolveEnvName(n)) missing.push(n);
+    }
 
     if (missing.length > 0) {
         logger.warn(
             { missingEnvVars: missing },
             "Startup warning: the following env vars are referenced in agent configs but are not set. " +
             "Tasks using those agents will fail at credential resolution. " +
-            "Set them in ~/.adhd/.env."
+            "Set them in ~/.adhd/agent-mcp/production/config.local.yaml or the environment directly."
         );
     }
     if (disallowed.length > 0) {
         logger.warn(
             { disallowedEnvVars: disallowed },
-            "Startup warning: the following env-var names in agent configs violate the ADHD_AGENT_- prefix guard. " +
-            "Add them to ADHD_AGENT_ENV_ALLOWLIST if they are intentional."
+            "Startup warning: the following env-var names in agent configs violate the ADHD_AGENT_- prefix guard " +
+            "and will never resolve — only ADHD_AGENT_*-prefixed env vars are permitted as agent env refs."
         );
     }
 }
@@ -141,14 +146,14 @@ async function main() {
     const usagePlugin = new UsagePlugin(dbAny);
     await usagePlugin.install(hooks);
 
-    await loadExternalPlugins(hooks, dbAny, undefined, config.plugins.configPath, config.plugins.entries, logger);
+    await loadExternalPlugins(hooks, dbAny, undefined, env.config.plugins.configPath, env.config.plugins.entries as string[], logger);
 
-    const queue = new BackgroundQueue(config.queue.concurrency, logger);
+    const queue = new BackgroundQueue(env.config.queue.concurrency, logger);
     const orchestrator = new Orchestrator();
     const policy = new PolicyEngine({
-        serverMaxDepth:      config.server.maxDepth,
-        serverMaxToolLoops:  config.server.maxToolLoops,
-        serverAllowedAgents: config.server.allowedAgents as string[] | undefined,
+        serverMaxDepth:      env.config.server.maxDepth,
+        serverMaxToolLoops:  env.config.server.maxToolLoops,
+        serverAllowedAgents: env.config.server.allowedAgents as string[] | undefined,
     });
 
     const taskDepsRef: { value: Parameters<typeof enqueueExistingTask>[1] | undefined } = { value: undefined };
@@ -172,7 +177,7 @@ async function main() {
     }
 
     const promptResolver = buildPromptResolver({
-        registryDbPath: config.server.registryDbPath,
+        registryDbPath: env.config.server.registryDbPath,
         agentMcpDb: dbAny,
         compileAgentFn,
     });
@@ -185,7 +190,7 @@ async function main() {
     }
 
     const gatewayDepsRef: GatewayDepsRef = { value: undefined };
-    const sseServer = startSseServer(taskStore, config.sse.port, config.sse.host, gatewayDepsRef);
+    const sseServer = startSseServer(taskStore, env.config.sse.port, env.config.sse.host, gatewayDepsRef);
 
     const { close } = await startServer({
         agentStore,
@@ -215,7 +220,7 @@ async function main() {
         },
         db: dbAny,
         dagEngine,
-        config,
+        config: toEngineConfig(),
         logger,
         emitTaskEvent: emitTaskEvent as NonNullable<Parameters<typeof enqueueExistingTask>[1]>["emitTaskEvent"],
     } as Parameters<typeof enqueueExistingTask>[1];

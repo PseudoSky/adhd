@@ -3,15 +3,15 @@ import { subscribeToTask, type TaskStreamEvent } from "./event-bus.js";
 import { handleGetModels, handleChatCompletions, type GatewayDepsRef } from "./chat-gateway.js";
 import type { TaskStore } from "@adhd/agent-store-runtime";
 import { logger } from "../logger.js";
-import { config } from "../config.js";
+import { env } from "../config.js";
 
 const KEEPALIVE_INTERVAL_MS = 15_000;
 const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
 
 export function startSseServer(
     taskStore: TaskStore,
-    port: number = config.sse.port,
-    host: string = config.sse.host,
+    port: number = env.config.sse.port,
+    host: string = env.config.sse.host,
     gatewayDepsRef?: GatewayDepsRef
 ): http.Server {
     const server = http.createServer((req, res) => {

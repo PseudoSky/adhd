@@ -15,7 +15,7 @@ const PACKAGE_VERSION: string = (
 ).version;
 
 import { logger } from './logger.js';
-import { config } from './config.js';
+import { env, toEngineConfig } from './config.js';
 import type { AgentStore } from './store/agent-store.js';
 import type {
   InProcessToolDescriptor,
@@ -389,7 +389,7 @@ export function createServer(deps: ServerDeps): Server {
             inProcessHandler,
             db: deps.db,
             dagEngine: deps.dagEngine,
-            config: config,
+            config: toEngineConfig(),
             logger: logger,
             emitTaskEvent: emitTaskEvent as (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void,
           },
@@ -545,7 +545,7 @@ export function createServer(deps: ServerDeps): Server {
         case 'agent_create': {
           const createInput = agentCreateInputSchema.parse(args);
           // Reject non-ADHD_AGENT_-prefixed env names at create time (BUG-ORCH-011).
-          assertEnvNamesAllowed(createInput.provider, config, ['provider']);
+          assertEnvNamesAllowed(createInput.provider, toEngineConfig(), ['provider']);
           return toMcpContent(
             agentCreate(createInput, {
               agentStore: deps.agentStore,
@@ -567,7 +567,7 @@ export function createServer(deps: ServerDeps): Server {
         case 'agent_update': {
           const updateInput = agentUpdateInputSchema.parse(args);
           // Reject non-ADHD_AGENT_-prefixed env names at update time (BUG-ORCH-011).
-          assertEnvNamesAllowed(updateInput.patch.provider, config, ['patch', 'provider']);
+          assertEnvNamesAllowed(updateInput.patch.provider, toEngineConfig(), ['patch', 'provider']);
           return toMcpContent(
             agentUpdate(updateInput, {
               agentStore: deps.agentStore,
@@ -650,7 +650,7 @@ export function createServer(deps: ServerDeps): Server {
               inProcessHandler,
               db: deps.db,
               dagEngine: deps.dagEngine,
-              config: config,
+              config: toEngineConfig(),
               logger: logger,
               emitTaskEvent: emitTaskEvent as (event: { type: string; taskId: string; status?: string; result?: string | null; error?: string | null; toolName?: string; toolCallId?: string; input?: unknown; content?: unknown }) => void,
             })
@@ -732,8 +732,8 @@ export async function startServer(deps: ServerDeps): Promise<{
   httpServer?: http.Server;
 }> {
   const server = createServer(deps);
-  const transport = config.transport.kind;
-  const port = config.transport.port;
+  const transport = env.config.transport.kind;
+  const port = env.config.transport.port;
 
   if (transport === 'stdio') {
     const stdioTransport = new StdioServerTransport();

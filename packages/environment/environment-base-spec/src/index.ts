@@ -1,378 +1,330 @@
 /**
  * @adhd/environment-base-spec
  *
- * The canonical, cross-language contract for the `@adhd/environment` package
- * family (TypeScript, Python, Rust). This package has ZERO internal
- * dependencies and is the root of the dependency graph — every other
- * `environment-*` package (builder, core-node, core-py, core-rs, cli) imports
- * its shared types and pure primitives from here.
+ * The canonical contract for the `@adhd/environment` package family
+ * (`environment-builder`, `environment-core-node`). This package has ZERO
+ * internal dependencies and is the root of the dependency graph — every
+ * other `environment-*` package imports its shared types and pure
+ * primitives from here.
  *
- * Everything exported from this file MUST:
- *   1. Match `spec/adhd-environment.schema.json` exactly (schema is the
- *      single source of truth for the on-disk snapshot format — see
- *      `spec/SPEC.md`).
- *   2. Produce byte-identical output, for the pure functions
- *      (`contentHash`, `projectEnvPrefix`, `inferEnvVar`,
- *      `generateFieldSchema`), across the TypeScript, Python, and Rust
- *      runtime clients. The pinned vectors in
- *      `spec/cross-language-test-vectors.json` are the gate — never change
- *      the algorithm here without updating all three language clients AND
- *      that vectors file in the same change.
+ * This is the ZERO-CONFIG REDESIGN contract — see
+ * `packages/environment/ARCHITECTURE.md` (the authoritative work order this
+ * module implements). It supersedes the prior snapshot-reader / YAML-spec
+ * contract: `Environment` now resolves its whole cascade live, in memory,
+ * at construction time, from a code-defined `EnvironmentSpec`. Defaults
+ * always apply because the spec lives in code — a downstream consumer never
+ * has to write a file or export a var just to make things run. Files and
+ * env vars are purely optional overrides that layer on top (§2 of
+ * ARCHITECTURE.md), exactly the way Claude Code's own settings cascade
+ * layers `~/.claude/…` → `.claude/…` → `.claude/*.local` over built-in
+ * defaults.
  *
- * NOTE ON FILE LAYOUT: per this package's build-order reservation
- * (docs/plan/adhd-environment/contexts/contract-base-spec.md), the entire
- * contract lives in this single `src/index.ts` module rather than being
- * split across `types.ts` / `constants.ts` / `content-hash.ts` /
- * `env-prefix.ts` / `json-schema-gen.ts`. The section banners below mirror
- * what would otherwise be separate files (see
- * docs/plan/adhd-environment/interfaces-architect.md §2 for the reference
- * module layout other packages are wired against).
+ * Per ARCHITECTURE.md §4 this package's public surface is now Node-only
+ * (no cross-language Python/Rust obligation): `generateCrossLanguageVectors`
+ * / `CrossLanguageVectors` and the dotted `DirectoryType` union have been
+ * removed. The four pure primitives that were cross-language-pinned
+ * (`contentHash`, `projectEnvPrefix`, `inferEnvVar`, `generateFieldSchema`)
+ * are KEPT — they are still useful, deterministic, dependency-free
+ * primitives for this package's own (now TS-only) callers — but this
+ * package no longer promises byte-identical behavior with any other
+ * language runtime, and the pinned vector file is no longer a build gate.
  *
- * NOTE ON HASHING: `contentHash()` uses a small hand-rolled, dependency-free
- * SHA-256 implementation (section 14 below) rather than `node:crypto`. This
- * package's Vite library build target externalizes Node builtins as browser
- * stubs (the generator-scaffolded `vite.config.ts` — not owned by this
- * package's build-order reservation — has no `rollupOptions.external` entry
- * for `node:*`), so `import { createHash } from 'node:crypto'` fails at
- * bundle time. A pure-JS implementation sidesteps that entirely, and also
- * more strongly satisfies this package's "zero runtime dependencies"
- * invariant: it needs no Node built-in and is portable to any JS runtime
- * (browser, edge, Node). It is cross-checked byte-for-byte against
- * `node:crypto`'s SHA-256 across ~15 inputs, including every block-padding
- * boundary (55/56/57/63/64/65-byte messages) and multi-megabyte inputs,
- * during development of this contract (see the executor report for
- * `contract-base-spec`).
+ * NOTE ON HASHING: `contentHash`/`structureHash` use a small hand-rolled,
+ * dependency-free SHA-256 implementation (section 8 below) rather than
+ * `node:crypto`. This package's Vite library build target externalizes Node
+ * builtins as browser stubs (the generator-scaffolded `vite.config.ts` has
+ * no `rollupOptions.external` entry for `node:*`), so
+ * `import { createHash } from 'node:crypto'` fails at bundle time. A
+ * pure-JS implementation sidesteps that entirely, and also more strongly
+ * satisfies this package's "zero runtime dependencies" invariant: it needs
+ * no Node built-in and is portable to any JS runtime (browser, edge, Node).
  */
 
 // ============================================================================
 // 1. Constants
 // ============================================================================
 
-/** Snapshot contract semver. Bump when the on-disk shape changes. */
-export const SPEC_VERSION = '0.0.5';
+/** Contract semver. Bump when the public shape changes. */
+export const SPEC_VERSION = '1.0.0-redesign.1';
 
 /** Default org-level directory segment in the data root (see `orgNamespace`). */
 export const DEFAULT_ORG_NAMESPACE = 'adhd';
 
-/** Default environment segment when `namespaces` is absent from the YAML. */
+/** Default namespace segment when `EnvironmentSpec.namespaces` is absent. */
 export const DEFAULT_NAMESPACE = 'default';
 
-/** Filename of the written snapshot inside its resolved directory. */
+/** Filename of the optional written snapshot inside its resolved directory
+ *  (`Environment#write()`). Never a read prerequisite — see ARCHITECTURE.md §2.1. */
 export const SNAPSHOT_FILENAME = 'adhd-environment.json';
+
+/** Filename of a scope-layer's config override file (project/global/system). */
+export const CONFIG_FILENAME = 'config.yaml';
+
+/** Filename of the project-local override file — the most specific,
+ *  highest-priority file layer (`ARCHITECTURE.md` §2.2), analogous to
+ *  Claude Code's `.claude/settings.local.json`. Conventionally gitignored. */
+export const LOCAL_CONFIG_FILENAME = 'config.local.yaml';
 
 // ============================================================================
 // 2. Shared scalar / union types
-//
-// Extracted as named types (rather than restating the inline unions from
-// interfaces-architect.md §2 everywhere) so every package that needs
-// "the scope enum" or "the field type enum" imports one canonical name.
 // ============================================================================
 
-/** Three-tier field/config resolution scope. `project` overrides `global`
- *  overrides `system` (see `[def:scope-cascade]` in `contexts/_shared.md`). */
-export type ConfigScope = 'system' | 'global' | 'project';
+/** Three-tier scope for directory roots and (optionally) individual fields.
+ *  `project` root lives at `<projectRoot>/.adhd/…`; `global` at `~/.adhd/…`;
+ *  `system` at the OS application-support directory. See ARCHITECTURE.md §2.4. */
+export type Scope = 'system' | 'global' | 'project';
 
 /** JSON-Schema-derived value type a config field may hold. */
 export type FieldType = 'string' | 'integer' | 'number' | 'boolean' | 'array';
 
-/** Directory catalog entry kind. */
-export type DirectoryType =
-  | 'state.data'
-  | 'runtime.log'
-  | 'runtime.cache'
-  | 'runtime.temp';
+/** Directory catalog entry kind — determines the default multi-instance
+ *  `Share` policy (see `DEFAULT_SHARE_BY_KIND` and ARCHITECTURE.md §5). */
+export type DirKind = 'data' | 'logs' | 'cache' | 'state' | 'run' | 'temp' | 'config';
 
-/**
- * The origin of a resolved config field's value, recorded per-field in
- * `SnapshotData.provenance` at build time.
- *
- *  - `"project.env"`      — from `process.env` at build time
- *  - `"project.set"`      — from an `adhd-env set` stored value
- *  - `"project.default"`  — from the field's `default`
- *  - `"project.override"` — from an explicit `env:` override in the field def
- *  - `"global.env"`       — global-scoped env
- *  - `"global.default"`   — global-scoped default
- *  - `"system.default"`   — system-scoped default
- */
-export type ProvenanceSource =
-  | 'project.env'
-  | 'project.set'
-  | 'project.default'
-  | 'project.override'
-  | 'global.env'
-  | 'global.default'
-  | 'system.default';
+/** Multi-instance collision policy for a directory or file.
+ *  - `shared` — same physical path across every instance of this process.
+ *  - `per-instance` — path suffixed with `env.instanceId`; never collides.
+ *  - `singleton` — same physical path as `shared`, but the *consumer*
+ *    enforces one writer via `Environment#lock()`.
+ *  See ARCHITECTURE.md §5. */
+export type Share = 'shared' | 'per-instance' | 'singleton';
+
+/** Default `Share` policy per `DirKind`, per ARCHITECTURE.md §5:
+ *  `logs`/`temp` default to `per-instance` (never collide); everything else
+ *  (`data`/`cache`/`state`/`config`/`run`) defaults to `shared`. A `DirSpec`
+ *  may always override this with an explicit `share`. */
+export const DEFAULT_SHARE_BY_KIND: Readonly<Record<DirKind, Share>> = {
+  data: 'shared',
+  cache: 'shared',
+  state: 'shared',
+  config: 'shared',
+  run: 'shared',
+  logs: 'per-instance',
+  temp: 'per-instance',
+};
+
+/** The origin of a resolved config field's value, recorded per-field in
+ *  `SnapshotData.provenance`. Mirrors the cascade layers of ARCHITECTURE.md
+ *  §2.2 (`code defaults → system → global → project → local → env vars`),
+ *  named identically to the layer they came from — `'default'` is the
+ *  spec-code fallback (`FieldSpec.default`), `'env'` covers both a
+ *  live-resolved env var AND an `at:'runtime'`/`secret:true` field (whose
+ *  value is *always* env-sourced at read time, regardless of whether the
+ *  var happens to be set at snapshot-build time). */
+export type ProvenanceSource = 'default' | 'system' | 'global' | 'project' | 'local' | 'env';
 
 // ============================================================================
-// 3. Project Configuration (adhd.environment.yaml shape)
+// 3. Public spec contract (EnvironmentSpec<T> — ARCHITECTURE.md §3.1)
 // ============================================================================
 
-export interface ProjectConfig {
-  /** Project name (kebab-case). Required. */
-  name: string;
-
-  /** Organization namespace. Defaults to "adhd". Feeds directory path. */
-  orgNamespace?: string;
-
-  /** Optional. When absent, env prefix is inferred from the project name:
-   *    projectName → uppercase, dashes→underscores, prepend "ADHD_"
-   *    Ex: "agent-mcp" → "ADHD_AGENT_MCP"
-   */
-  envPrefixOverride?: string;
-
-  /** Optional. Description for documentation. */
+/** A single config field definition, keyed by its dot-path in
+ *  `EnvironmentSpec.config` (e.g. `"transport.port"`). */
+export interface FieldSpec {
+  /** JSON-Schema type keyword. */
+  type: FieldType;
+  /** Fallback value used when no file layer or env var supplies one. */
+  default?: unknown;
+  /** `'build'` (default) — the value is resolved once at construction and
+   *  never changes for the life of the `Environment` instance.
+   *  `'runtime'` — the value is re-read from the live process environment
+   *  on every access (an "env-ref" — see `makeEnvRef`/`resolveEnvRef`
+   *  below), falling back to the cascade-resolved value only when the env
+   *  var is unset at access time. */
+  at?: 'build' | 'runtime';
+  /** Explicit env var name. When absent, inferred from the project's env
+   *  prefix + this field's dot-path via `inferEnvVar`. */
+  env?: string;
+  /** Optional scope annotation (provenance/documentation only — does not
+   *  gate which file layers may set this field; every layer may set every
+   *  field, per the cascade). */
+  scope?: Scope;
+  /** When `true`, this field is NEVER logged and is always treated as
+   *  `at:'runtime'` (its resolved value is only ever read live from the
+   *  env var at access time — never baked into a written snapshot). */
+  secret?: boolean;
+  /** Human-readable description (also emitted into the generated JSON Schema). */
   description?: string;
-
-  /** Optional. When absent, namespace defaults to "default".
-   *  When listed, only those namespaces are valid — no automatic "default".
-   */
-  namespaces?: string[];
-
-  /** Directory catalog. Optional — projects with no dirs declare `dirs: []`. */
-  dirs?: DirectoryEntry[];
-
-  /** Config field definitions by scope. */
-  config?: {
-    system?: Record<string, ConfigFieldDefinition>;
-    global?: Record<string, ConfigFieldDefinition>;
-    project?: Record<string, ConfigFieldDefinition>;
-  };
+  // JSON-Schema validation keywords — all optional, passed through verbatim
+  // to the generated `fieldSchema`.
+  minimum?: number;
+  maximum?: number;
+  enum?: unknown[];
+  pattern?: string;
+  minLength?: number;
+  maxLength?: number;
+  items?: { type: string };
 }
 
-/**
- * The resolved identity of a project + namespace pairing — the portion of
- * `SnapshotData` describing *who* produced the snapshot and *where* it
- * lives, independent of the resolved config values themselves.
- */
-export interface ProjectIdentity {
-  /** Project name (kebab-case). */
-  name: string;
-  /** Resolved org namespace (explicit or "adhd"). */
-  orgNamespace: string;
-  /** Resolved env prefix (from `envPrefixOverride` or inferred). */
-  envPrefix: string;
-  /** The namespace this snapshot was built for (explicit or "default"). */
-  namespace: string;
-  /** Optional. Description for documentation. */
-  description?: string;
-}
-
-// ============================================================================
-// 4. Parsed YAML Spec (parsed from adhd.environment.yaml)
-// ============================================================================
-
-export interface ParsedYamlSpec {
-  project: ProjectConfig;
-  /** Populated from YAML `namespaces:` or defaults to `["default"]`. */
-  namespaces: string[];
-  /** Populated from YAML `dirs:` or defaults to `[]`. */
-  dirs: DirectoryEntry[];
-  /** Populated from YAML `config:` scopes. */
-  config: {
-    system: Record<string, YamlFieldDefinition>;
-    global: Record<string, YamlFieldDefinition>;
-    project: Record<string, YamlFieldDefinition>;
-  };
-  /** Resolved org namespace (explicit or "adhd"). */
-  orgNamespace: string;
-  /** Resolved env prefix (from override or inferred). */
-  envPrefix: string;
-}
-
-// ============================================================================
-// 5. Directory Entry
-// ============================================================================
-
-export interface DirectoryEntry {
-  /** Type-primary key for directory lookup. */
-  type: DirectoryType;
-
-  /** Optional name for disambiguation when multiple dirs share a type.
-   *  Used in lookup: `path("state.data", "registry")` vs `path("state.data")`.
-   */
-  name?: string;
-
-  /** Optional path override. When absent, path is auto-derived from
-   *  orgNamespace/project/namespace/scope/{type}/{name?}.
-   *  Supports $HOME, ${PROJECT_ROOT}, ${NAMESPACE} interpolation.
-   */
+/** A declared directory. Keyed by name in `EnvironmentSpec.dirs` (e.g.
+ *  `dirs: { data: { kind: 'data' } }` → `env.paths.data`). */
+export interface DirSpec {
+  /** Determines the default `Share` policy (see `DEFAULT_SHARE_BY_KIND`). */
+  kind: DirKind;
+  /** Overrides the kind's default multi-instance policy. */
+  share?: Share;
+  /** Overrides the active scope for just this directory's root. */
+  scope?: Scope;
+  /** Explicit absolute-path override. Supports `${HOME}`/`$HOME`,
+   *  `${PROJECT_ROOT}`, and `${NAMESPACE}` interpolation. When absent, the
+   *  path is auto-derived from the (possibly overridden) scope's root. */
   path?: string;
-
-  /** Scope: system | global | project. Default: project. */
-  scope?: ConfigScope;
-
-  /** Optional description for documentation. */
-  description?: string;
 }
 
-/** A `DirectoryEntry` after path resolution — as written into the snapshot's
- *  `dirs` array. `path` is now fully expanded and absolute. */
-export interface ResolvedDirectoryEntry {
-  type: DirectoryType;
-  name?: string;
+/** A declared file living inside one of `EnvironmentSpec.dirs`. Keyed by
+ *  name in `EnvironmentSpec.files` (e.g. `files: { db: { in: 'data', name: 'app.sqlite' } }`
+ *  → `env.files.db`). */
+export interface FileSpec {
+  /** The `dirs` key this file resolves inside. */
+  in: string;
+  /** The file's base name (joined onto the resolved directory path). */
+  name: string;
+  /** Multi-instance policy metadata (descriptive; physical placement is
+   *  inherited from the directory named by `in`). Defaults to `'shared'` —
+   *  matching ARCHITECTURE.md §5's guidance that SQLite DBs are shared and
+   *  opened WAL + `busy_timeout` for safe concurrent access. */
+  share?: Share;
+}
+
+/** The full, code-defined specification passed to `new Environment(project, spec, options?)`.
+ *  `T` is the shape of the *resolved, nested* config object (`env.config`). */
+export interface EnvironmentSpec<T = Record<string, unknown>> {
+  /** Organization namespace segment. Defaults to `"adhd"`. */
+  orgNamespace?: string;
+  /** Explicit env var prefix. When absent, inferred from the project name
+   *  via `projectEnvPrefix` (e.g. `"agent-mcp"` → `"ADHD_AGENT_MCP"`). */
+  envPrefixOverride?: string;
+  /** Declared namespaces. Absent ⇒ `["default"]`. */
+  namespaces?: string[];
+  /** Directory catalog, keyed by name. */
+  dirs?: Record<string, DirSpec>;
+  /** File catalog, keyed by name. */
+  files?: Record<string, FileSpec>;
+  /** Config field definitions, keyed by dot-path (e.g. `"transport.port"`). */
+  config: Record<string, FieldSpec>;
+  /** Phantom marker — never read at runtime, used only so `T` participates
+   *  in this interface's structural type for inference ergonomics. */
+  readonly __configShape?: T;
+}
+
+/** Options accepted by the `Environment` constructor. Every field optional —
+ *  the whole point of zero-config. */
+export interface EnvironmentOptions {
+  /** Forces the active scope, bypassing auto-detection (ARCHITECTURE.md §2.3 step 1). */
+  scope?: Scope;
+  /** Selects a declared namespace. Defaults to the spec's first declared
+   *  namespace (or `"default"` when `namespaces` is absent). */
+  namespace?: string;
+  /** Overrides the base directory that would otherwise be
+   *  `os.homedir()/.{orgNamespace}` (the `global`-scope root) AND the
+   *  system-scope app-support base — primarily for test isolation. */
+  adhdRoot?: string;
+  /** Working directory used for project-marker auto-detection
+   *  (`.git`/`.adhd`/`adhd.environment.yaml`) and `${PROJECT_ROOT}`
+   *  interpolation. Defaults to `process.cwd()`. */
+  cwd?: string;
+  /** Explicit instance id override. When absent, a fresh id
+   *  (`pid + short random`) is generated per constructed instance. */
+  instanceId?: string;
+}
+
+// ============================================================================
+// 4. Resolved shapes (what a built snapshot/live-resolve looks like)
+// ============================================================================
+
+/** A resolved directory catalog entry — `DirSpec` after path resolution. */
+export interface ResolvedDirEntry {
+  /** The `dirs` record key this entry was declared under. */
+  name: string;
+  kind: DirKind;
   /** Fully expanded, absolute path. */
   path: string;
-  scope: string;
+  scope: Scope;
+  share: Share;
 }
 
-// ============================================================================
-// 6. YAML Field Definition (as authored in adhd.environment.yaml)
-// ============================================================================
-
-export interface YamlFieldDefinition {
-  /** JSON Schema type keyword. */
-  type: FieldType;
-
-  /** Default value. Used when no env var or stored value is present. */
-  default?: unknown;
-
-  /** Optional. Explicit env var name override. When absent, env var
-   *  is inferred from project prefix + field path.
-   */
-  env?: string;
-
-  /** Optional scope override (for field-level scope, rare). */
-  scope?: ConfigScope;
-
-  /** Optional description for documentation. */
-  description?: string;
-
-  // JSON Schema validation keywords — all optional.
-  // These are passed through to the generated fieldSchema.
-  minimum?: number;
-  maximum?: number;
-  enum?: unknown[];
-  pattern?: string;
-  minLength?: number;
-  maxLength?: number;
-  items?: { type: string };
-  /** Marks field as sensitive (not logged). */
-  secret?: boolean;
-
-  /** Optional. When true, env var inference is suppressed for this field.
-   *  The field can only be set via `adhd-env set` or `default`.
-   */
-  noEnv?: boolean;
+/** A resolved file catalog entry — `FileSpec` after path resolution. */
+export interface ResolvedFileEntry {
+  /** The `files` record key this entry was declared under. */
+  name: string;
+  /** The `dirs` key this file resolves inside. */
+  in: string;
+  /** Fully expanded, absolute path. */
+  path: string;
+  share: Share;
 }
 
-// ============================================================================
-// 7. Config Field Definition (resolved, merged, scope-aware)
-// ============================================================================
-
-export interface ConfigFieldDefinition {
-  type: FieldType;
-  default: unknown;
-  /** Effective scope after merge (project > global > system). */
-  scope: ConfigScope;
-  /** Effective env var name. If `env` is explicitly set in YAML, that value.
-   *  Otherwise, inferred from prefix + field path.
-   */
-  env: string;
-  /** The source scope from which this field originated. */
-  sourceScope: ConfigScope;
-  description?: string;
-  secret?: boolean;
-  noEnv?: boolean;
-  // Validation keywords (merged from all scopes):
-  minimum?: number;
-  maximum?: number;
-  enum?: unknown[];
-  pattern?: string;
-  minLength?: number;
-  maxLength?: number;
-  items?: { type: string };
-}
-
-// ============================================================================
-// 8. Provenance Entry
-// ============================================================================
-
+/** Per-field resolution metadata recorded in `SnapshotData.provenance`. */
 export interface ProvenanceEntry {
-  /** The source of the resolved value. */
   source: ProvenanceSource;
-  /** The effective scope of the resolved value. */
-  scope: ConfigScope;
-  /** The env var name, if resolved from an env var. */
+  scope: Scope;
+  /** The env var name consulted, when `source === 'env'`. */
   env?: string;
 }
 
-// ============================================================================
-// 9. Snapshot Shape (what gets written to disk)
-// ============================================================================
+/** Metadata needed to install a live, per-access re-reading getter for a
+ *  `secret`/`at:'runtime'` field (`SnapshotData.liveFields`,
+ *  ARCHITECTURE.md §3.1 `FieldSpec.at`/§7.5 runtime-vs-build proof). The
+ *  `Environment` runtime client (both the live-constructed path AND
+ *  `fromSnapshot`) reads this to know, for every env-ref leaf found in
+ *  `config`, which live env var to re-check on each access and what to fall
+ *  back to when that var is unset. */
+export interface LiveFieldMeta {
+  /** The env var name this field re-reads on every access. */
+  env: string;
+  type: FieldType;
+  /** The value to use when the live env var is unset — the cascade result
+   *  of just the file layers + spec default. SECURITY: for a `secret: true`
+   *  field this is ALWAYS `undefined`, never the field's (possibly
+   *  plaintext) `default`/file value — `SnapshotData` is a `.write()`-able,
+   *  on-disk artifact, and a secret must never round-trip through it even
+   *  as a "fallback". Only a non-secret `at: 'runtime'` field carries a
+   *  real fallback here. */
+  fallback: unknown;
+}
 
-export interface SnapshotData {
-  /** Snapshot format version (semver). */
+/** The full resolved snapshot shape — computed live at `Environment`
+ *  construction, and what `Environment#write()` optionally persists to disk
+ *  (never a read prerequisite — ARCHITECTURE.md §2.1). */
+export interface SnapshotData<T = Record<string, unknown>> {
+  /** Snapshot format version (this package's `SPEC_VERSION`). */
   version: string;
   /** Library version that produced this snapshot. */
   libraryVersion: string;
-  /** ISO timestamp of when the snapshot was generated. */
+  /** ISO timestamp of when this snapshot was resolved. */
   generatedAt: string;
-  /** Project metadata from the YAML. */
-  project: ProjectIdentity;
-  /** Fully resolved, nested config object. */
-  config: Record<string, unknown>;
-  /** Flat, un-nested config (dot.path → value) for hashing + lookup. */
+  project: string;
+  namespace: string;
+  orgNamespace: string;
+  envPrefix: string;
+  scope: Scope;
+  instanceId: string;
+  /** Fully resolved, nested config object. A `secret`/`at:'runtime'` leaf
+   *  holds an env-ref sentinel string (`makeEnvRef`) here — `Environment`
+   *  replaces every such leaf with a live getter at construction/load time
+   *  (see `liveFields`); a caller reading `SnapshotData.config` directly
+   *  (e.g. from a raw `.write()`d JSON file) sees the sentinel, never a
+   *  plaintext secret. */
+  config: T;
+  /** Flat, un-nested config (dot.path → value) for hashing + lookup. Same
+   *  env-ref convention as `config`. */
   raw: Record<string, unknown>;
+  /** Flat dot-path field name → live-getter metadata, for every field with
+   *  `secret: true` or `at: 'runtime'`. */
+  liveFields: Record<string, LiveFieldMeta>;
   /** Generated JSON Schema for validation of `config`. */
   fieldSchema: object | null;
   /** SHA-256 config content hash ("sha256-" + hex). */
   configHash: string;
   /** SHA-256 directory structure hash. */
   structureHash: string;
-  /** Resolved directory paths (fully expanded, absolute). */
-  dirs: ResolvedDirectoryEntry[];
-  /** Provenance map: flat field path → provenance entry. */
+  dirs: ResolvedDirEntry[];
+  files: ResolvedFileEntry[];
+  /** Provenance map: flat field dot-path → provenance entry. */
   provenance: Record<string, ProvenanceEntry>;
-  /** Env var values recorded at build time. */
-  envVars: Record<string, string>;
-}
-
-/**
- * Alias for `SnapshotData` — the *shape* of a built snapshot.
- *
- * Do not confuse with the `EnvironmentSnapshot` *class* exported by
- * `@adhd/environment-builder` (see interfaces-architect.md §3.4): that class
- * wraps this data shape with `.set()` / `.get()` / `.configPath` / `.write()`
- * builder-side behavior. This package is types-only and owns no behavior
- * beyond the pure cross-language primitives below, so it exports only the
- * data shape, under both names, for callers that reference either.
- */
-export type EnvironmentSnapshot = SnapshotData;
-
-// ============================================================================
-// 10. Build Options
-// ============================================================================
-
-export interface BuildOptions {
-  /** Target namespace. Defaults to "default". */
-  namespace?: string;
-  /** Scope filter. When set, only fields from that scope are resolved. */
-  scope?: ConfigScope;
-  /** Override the ADHD root directory. Defaults to os.homedir()/.adhd. */
-  adhdRoot?: string;
-  /** Custom snapshot output path (overrides auto-derived path). */
-  configPath?: string;
-  /** When true, skip disk writes (returns snapshot in memory only). */
-  dryRun?: boolean;
 }
 
 // ============================================================================
-// 11. Environment Constructor Params (runtime client)
-// ============================================================================
-
-export interface EnvironmentParams {
-  /** Project name (kebab-case). Required. */
-  project: string;
-  /** Optional scope filter. */
-  scope?: ConfigScope;
-  /** Optional namespace. Defaults to "default". */
-  namespace?: string;
-  /** Root directory containing org directories. Defaults to os.homedir()/.adhd. */
-  adhdRoot?: string;
-}
-
-// ============================================================================
-// 12. Deep-path type extraction (utility types)
+// 5. Deep-path type extraction (utility types)
 // ============================================================================
 
 /** Given a nested object type T, extracts the type at a dot-separated path K.
@@ -387,27 +339,18 @@ export type DeepPath<T, K extends string> = K extends `${infer Head}.${infer Tai
     : unknown;
 
 // ============================================================================
-// 13. Cross-language pure primitives
-//
-// These four functions must produce byte-identical output in TypeScript,
-// Python, and Rust. `spec/cross-language-test-vectors.json` pins the gate.
+// 6. Pure primitives
 // ============================================================================
 
 /** Content-hash serialization format version. Bumped from the original
  *  (unversioned) `key=value\n` form to `v2` when the length-prefixed,
- *  injective encoding was adopted (see `contentHash` and SPEC.md §4.1).
- *  Every pinned digest in `cross-language-test-vectors.json` is a `v2`
- *  digest. */
+ *  injective encoding was adopted. */
 export const CONTENT_HASH_FORMAT_VERSION = 2;
 
 /**
  * Raised by `contentHash` when a key or value contains a lone surrogate
  * code unit (an unpaired UTF-16 surrogate, U+D800–U+DFFF). Such strings are
- * not well-formed Unicode and have no canonical UTF-8 encoding; rather than
- * silently substituting U+FFFD (old TS behaviour) or raising a language-
- * specific encoder error (old Python behaviour), all three ports reject them
- * with this one, specified error. Rust `String`s cannot represent a lone
- * surrogate at all, so the condition is unreachable there by construction.
+ * not well-formed Unicode and have no canonical UTF-8 encoding.
  */
 export class LoneSurrogateError extends Error {
   constructor(
@@ -426,27 +369,18 @@ function hasLoneSurrogate(s: string): boolean {
   for (let i = 0; i < s.length; i++) {
     const code = s.charCodeAt(i);
     if (code >= 0xd800 && code <= 0xdbff) {
-      // High surrogate — must be followed by a low surrogate.
       const next = i + 1 < s.length ? s.charCodeAt(i + 1) : 0;
       if (next < 0xdc00 || next > 0xdfff) return true;
-      i++; // valid pair — skip the low surrogate
+      i++;
     } else if (code >= 0xdc00 && code <= 0xdfff) {
-      // Low surrogate with no preceding high surrogate.
       return true;
     }
   }
   return false;
 }
 
-/** Ordinal comparison by Unicode code point (NOT UTF-16 code unit).
- *
- * `String.prototype.sort()`'s default and `localeCompare` both order by
- * UTF-16 code unit, which places astral-plane characters (≥ U+10000, encoded
- * as a surrogate pair whose lead unit is 0xD800–0xDBFF) *before* BMP
- * characters in U+E000–U+FFFF. Python's `sorted()` and Rust's `str::cmp`
- * order by scalar value (code point / UTF-8 byte order). This comparator
- * reproduces the Python/Rust order in TS so all three agree — code-point
- * order is the canonical, portable order (see SPEC.md §4.1). */
+/** Ordinal comparison by Unicode code point (NOT UTF-16 code unit) — see
+ *  `contentHash`'s doc comment for why this matters. */
 function codePointCompare(a: string, b: string): number {
   const ca = Array.from(a);
   const cb = Array.from(b);
@@ -460,36 +394,22 @@ function codePointCompare(a: string, b: string): number {
   return ca.length < cb.length ? -1 : 1;
 }
 
-/** UTF-8 byte length of a (well-formed) string. Callers must reject lone
- *  surrogates first (see `hasLoneSurrogate`) so `TextEncoder` never has to
- *  substitute U+FFFD here. */
+/** UTF-8 byte length of a (well-formed) string. */
 function utf8ByteLength(s: string): number {
   return new TextEncoder().encode(s).length;
 }
 
 /**
  * `sha256-` hash of a flat config record, using a length-prefixed,
- * **injective** serialization (format `v2`). TS, Python, and Rust MUST all
- * produce the identical hex digest for the identical input.
+ * **injective** serialization (format `v2`).
  *
- * Algorithm (canonical, per SPEC.md §4.1 `[def:contentHash]`):
- *   1. Reject any key or value containing a lone surrogate
- *      (`LoneSurrogateError`).
- *   2. Take `Object.keys(config)`, sort ascending by **Unicode code point**
- *      (NOT UTF-16 code unit — see `codePointCompare`).
+ * Algorithm:
+ *   1. Reject any key or value containing a lone surrogate (`LoneSurrogateError`).
+ *   2. Sort `Object.keys(config)` ascending by **Unicode code point**.
  *   3. For each key `k` in that order, let `lk`/`lv` be the UTF-8 byte
- *      lengths of `k` and `config[k]`, and emit the line
- *      `` `${lk}:${k}=${lv}:${config[k]}\n` ``.
- *   4. Concatenate all lines (no extra separator — each carries its own `\n`).
- *   5. SHA-256 the resulting UTF-8 string; hex-encode; prefix `"sha256-"`.
- *
- * The byte-length prefixes make the encoding injective: a decoder reads
- * exactly `lk`/`lv` bytes for the key/value, so `=` or `\n` occurring
- * *inside* a key or value can never be mistaken for a structural delimiter.
- * The old `key=value\n` form (format v1) collided — e.g.
- * `{a:"1\nb=2"}` and `{a:"1", b:"2"}` hashed identically; under v2 they do
- * not (proven in the cross-language vectors: `value-with-newline-collision-a`
- * vs `two-entries-no-collision`).
+ *      lengths of `k` and `config[k]`, and emit `` `${lk}:${k}=${lv}:${config[k]}\n` ``.
+ *   4. Concatenate all lines. SHA-256 the resulting UTF-8 string; hex-encode;
+ *      prefix `"sha256-"`.
  *
  * @example
  * contentHash({ b: "2", a: "1" })
@@ -509,17 +429,27 @@ export function contentHash(config: Record<string, string>): string {
 }
 
 /**
+ * `sha256-` hash of a resolved directory catalog — a stable fingerprint of
+ * the declared `dirs`' identity (`name`/`kind`/`scope`), independent of the
+ * (host-specific) absolute `path` values. Used to detect structural drift
+ * between two resolutions of the same spec.
+ *
+ * @example
+ * structureHash([{ name: 'data', kind: 'data', scope: 'project' }])
+ */
+export function structureHash(entries: Array<{ name: string; kind: string; scope: string }>): string {
+  const sorted = [...entries].sort((a, b) => codePointCompare(a.name, b.name));
+  const serialized = sorted.map((e) => `${e.name}:${e.kind}:${e.scope}`).join('\n');
+  return `sha256-${sha256Hex(serialized)}`;
+}
+
+/**
  * Infers a project's env var prefix from its (kebab-case) name.
  *
  * Algorithm: uppercase the project name, replace every `-` **and** `.` with
- * `_`, prepend `"ADHD_"`. Both separators are folded so the result is always
- * a legal POSIX env-var name even for dotted project names (`"foo.bar"` →
- * `"ADHD_FOO_BAR"`, not the illegal `"ADHD_FOO.BAR"`); this matches
- * `inferEnvVar`, which already folds both. See SPEC.md §4.2.
+ * `_`, prepend `"ADHD_"`.
  *
  * @example projectEnvPrefix("agent-mcp") // → "ADHD_AGENT_MCP"
- * @example projectEnvPrefix("decompile-cli") // → "ADHD_DECOMPILE_CLI"
- * @example projectEnvPrefix("foo.bar") // → "ADHD_FOO_BAR"
  */
 export function projectEnvPrefix(projectName: string): string {
   return `ADHD_${projectName.toUpperCase().replace(/[.-]/g, '_')}`;
@@ -529,64 +459,57 @@ export function projectEnvPrefix(projectName: string): string {
  * Infers the effective env var name for a config field path, given a
  * project's (possibly overridden) prefix.
  *
- * Algorithm: uppercase `fieldPath`, replace every `.` and `-` with `_`,
- * prepend `` `${prefix}_` ``.
- *
- * A field's explicit `env:` override in the YAML replaces the inferred name
- * entirely (that substitution happens in `environment-builder`'s
- * `field-merge` step, not here — this function only computes the inferred
- * default).
- *
  * @example inferEnvVar("ADHD_AGENT_MCP", "db.path") // → "ADHD_AGENT_MCP_DB_PATH"
- * @example inferEnvVar("ADHD_AGENT_MCP", "provider-key.secret")
- *   // → "ADHD_AGENT_MCP_PROVIDER_KEY_SECRET"
  */
 export function inferEnvVar(prefix: string, fieldPath: string): string {
   return `${prefix}_${fieldPath.toUpperCase().replace(/[.-]/g, '_')}`;
 }
 
+/** The subset of `FieldSpec` that is relevant to JSON-Schema generation. */
+interface SchemaCompatibleField {
+  type: string;
+  default?: unknown;
+  description?: string;
+  minimum?: number;
+  maximum?: number;
+  enum?: unknown[];
+  pattern?: string;
+  minLength?: number;
+  maxLength?: number;
+  items?: { type: string };
+  /** Read only to decide whether `default` is safe to copy into the
+   *  generated schema (see `fieldDefinitionToJsonSchema`) — never itself
+   *  copied into the output. */
+  secret?: boolean;
+}
+
+interface SchemaObjectNode {
+  type: 'object';
+  properties: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 /**
  * Converts a flat map of dot-path field definitions into a nested JSON
  * Schema object describing the shape produced by resolving those fields.
- *
- * Each flat key is split on `.` and turned into nested `{ type: "object",
- * properties: { ... } }` levels; the terminal (leaf) segment receives a
- * JSON-Schema property built from the field definition's own JSON-Schema-
- * legal keywords (`type`, `default`, `description`, `minimum`, `maximum`,
- * `enum`, `pattern`, `minLength`, `maxLength`, `items`). adhd-specific
- * metadata keywords (`env`, `scope`, `secret`, `noEnv`) are NOT JSON Schema
- * validation keywords and are intentionally omitted from the generated
- * schema.
+ * adhd-specific metadata keywords (`env`, `scope`, `secret`, `at`) are NOT
+ * JSON Schema validation keywords and are intentionally omitted.
  *
  * @example
  * generateFieldSchema({ "server.port": { type: "integer", minimum: 1024 } })
- * // → {
- * //     type: "object",
- * //     properties: {
- * //       server: {
- * //         type: "object",
- * //         properties: { port: { type: "integer", minimum: 1024 } }
- * //       }
- * //     }
- * //   }
+ * // → { type: "object", properties: { server: { type: "object",
+ * //      properties: { port: { type: "integer", minimum: 1024 } } } } }
  */
 export function generateFieldSchema(
-  fields: Record<string, YamlFieldDefinition>,
+  fields: Record<string, FieldSpec> | Record<string, SchemaCompatibleField>,
 ): Record<string, unknown> {
-  interface SchemaNode {
-    type: 'object';
-    properties: Record<string, unknown>;
-    /** Index signature so a `SchemaNode` is itself a valid `Record<string, unknown>`
-     *  (the function's declared return/property type). */
-    [key: string]: unknown;
-  }
+  const root: SchemaObjectNode = { type: 'object', properties: {} };
+  const typedFields = fields as Record<string, SchemaCompatibleField>;
 
-  const root: SchemaNode = { type: 'object', properties: {} };
-
-  for (const fieldPath of Object.keys(fields)) {
-    const definition = fields[fieldPath];
+  for (const fieldPath of Object.keys(typedFields)) {
+    const definition = typedFields[fieldPath];
     const segments = fieldPath.split('.');
-    let node: SchemaNode = root;
+    let node: SchemaObjectNode = root;
 
     segments.forEach((segment, index) => {
       const isLeaf = index === segments.length - 1;
@@ -594,9 +517,9 @@ export function generateFieldSchema(
         node.properties[segment] = fieldDefinitionToJsonSchema(definition);
         return;
       }
-      const existing = node.properties[segment] as SchemaNode | undefined;
+      const existing = node.properties[segment] as SchemaObjectNode | undefined;
       if (existing === undefined) {
-        const child: SchemaNode = { type: 'object', properties: {} };
+        const child: SchemaObjectNode = { type: 'object', properties: {} };
         node.properties[segment] = child;
         node = child;
       } else {
@@ -608,13 +531,16 @@ export function generateFieldSchema(
   return root;
 }
 
-/** Converts a single `YamlFieldDefinition` into a JSON-Schema property,
- *  keeping only genuine JSON-Schema keywords (see `generateFieldSchema`). */
-function fieldDefinitionToJsonSchema(
-  def: YamlFieldDefinition,
-): Record<string, unknown> {
+/** Converts a single field definition into a JSON-Schema leaf property,
+ *  keeping only genuine JSON-Schema keywords (see `generateFieldSchema`).
+ *  SECURITY: a `secret: true` field's `default` is NEVER copied into the
+ *  generated schema — the schema is a shareable/loggable artifact (it is
+ *  emitted into `SnapshotData.fieldSchema`, which `Environment#write()` may
+ *  persist to disk), and a plaintext credential placed in `FieldSpec.default`
+ *  must never leak through it. */
+function fieldDefinitionToJsonSchema(def: SchemaCompatibleField): Record<string, unknown> {
   const schema: Record<string, unknown> = { type: def.type };
-  if (def.default !== undefined) schema.default = def.default;
+  if (def.default !== undefined && def.secret !== true) schema.default = def.default;
   if (def.description !== undefined) schema.description = def.description;
   if (def.minimum !== undefined) schema.minimum = def.minimum;
   if (def.maximum !== undefined) schema.maximum = def.maximum;
@@ -627,70 +553,67 @@ function fieldDefinitionToJsonSchema(
 }
 
 // ============================================================================
-// 13b. Secret references (credential redaction — see SPEC.md §7)
+// 7. Env-ref (runtime-resolved value reference) helpers
 //
 // A resolved snapshot must NEVER persist the plaintext value of a
-// `secret: true` field. Instead it stores a *reference* — a reserved-prefix
-// string carrying the env-var name the secret is read from — and the runtime
-// client resolves the actual value from the process environment at read time
-// (`Environment.get`). The reference form is a plain string (not an object)
-// so it is representable both in the nested `config` (a JSON value) and in
-// the flat `raw` map (whose values are strings in every port, including
-// Rust's `BTreeMap<String, String>`).
+// `secret: true` (or `at: 'runtime'`) field. Instead it stores a
+// *reference* — a reserved-prefix string carrying the env-var name the
+// value is read from — and the runtime client (`Environment`) resolves the
+// actual value from the process environment at read time, live, on every
+// access. See ARCHITECTURE.md §3.1 `FieldSpec.at`/`FieldSpec.secret`.
 // ============================================================================
 
-/** Reserved prefix marking a redacted secret reference. A field value of
- *  `"adhd-secret-ref:ADHD_FOO_SECRET"` means "read the secret from the env
- *  var `ADHD_FOO_SECRET` at runtime". This prefix is reserved: a genuine
- *  config value must not begin with it. */
-export const SECRET_REF_PREFIX = 'adhd-secret-ref:';
+/** Reserved prefix marking a runtime-resolved env-var reference. A field
+ *  value of `"adhd-env-ref:ADHD_FOO_SECRET"` means "read the live value
+ *  from the env var `ADHD_FOO_SECRET` at access time". This prefix is
+ *  reserved: a genuine config value must not begin with it. */
+export const ENV_REF_PREFIX = 'adhd-env-ref:';
 
-/** Builds the persisted reference for a secret field, given the env-var name
- *  its value is resolved from. */
-export function makeSecretRef(envVarName: string): string {
-  return `${SECRET_REF_PREFIX}${envVarName}`;
+/** Builds the persisted reference for a runtime-resolved field, given the
+ *  env-var name its value is resolved from. */
+export function makeEnvRef(envVarName: string): string {
+  return `${ENV_REF_PREFIX}${envVarName}`;
 }
 
-/** True if `value` is a secret reference string (see `SECRET_REF_PREFIX`). */
-export function isSecretRef(value: unknown): value is string {
-  return typeof value === 'string' && value.startsWith(SECRET_REF_PREFIX);
+/** True if `value` is an env-var reference string (starts with `ENV_REF_PREFIX`). */
+export function isEnvRef(value: unknown): value is string {
+  return typeof value === 'string' && value.startsWith(ENV_REF_PREFIX);
 }
 
-/** Extracts the env-var name from a secret reference, or `undefined` if
- *  `value` is not a secret reference. */
-export function secretRefEnvVar(value: unknown): string | undefined {
-  return isSecretRef(value) ? (value as string).slice(SECRET_REF_PREFIX.length) : undefined;
+/** Extracts the env-var name from an env-var reference, or `undefined` if
+ *  `value` is not a reference. */
+export function envRefVarName(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.startsWith(ENV_REF_PREFIX)) return undefined;
+  return value.slice(ENV_REF_PREFIX.length);
 }
 
 /**
- * Resolves a secret reference against a supplied environment map, returning
- * the live secret value (or `undefined` if the env var is unset). Non-secret
- * values are returned unchanged. This is the read-time counterpart to
- * `makeSecretRef`; every runtime client (TS/Python/Rust) applies the
- * equivalent resolution in its `Environment.get`.
+ * Resolves an env-var reference against a supplied environment map,
+ * returning the live value (or `undefined` if the env var is unset).
+ * Non-reference values are returned unchanged. This is the read-time
+ * counterpart to `makeEnvRef` — `Environment`'s live getters apply this
+ * resolution on every access of a `secret`/`at:'runtime'` field.
  */
-export function resolveSecretRef(
+export function resolveEnvRef(
   value: unknown,
-  env: Record<string, string | undefined> = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {},
+  env: Record<string, string | undefined> = (globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env ?? {},
 ): unknown {
-  const envVar = secretRefEnvVar(value);
+  const envVar = envRefVarName(value);
   if (envVar === undefined) return value;
   return env[envVar];
 }
 
 // ============================================================================
-// 14. Internal — dependency-free SHA-256
+// 8. Internal — dependency-free SHA-256
 //
-// Not exported. Public surface of this package is exactly the types above +
-// the four pure functions in section 13. Implements FIPS 180-4 SHA-256 from
-// scratch (no Node built-ins, no npm dependency) so `contentHash()` works
+// Not exported. Implements FIPS 180-4 SHA-256 from scratch (no Node
+// built-ins, no npm dependency) so `contentHash()`/`structureHash()` work
 // under this package's Vite library build (which externalizes `node:*` as
 // unresolved browser stubs) and so the algorithm is portable to any JS
-// runtime. See the file-header note above for verification methodology.
+// runtime.
 // ============================================================================
 
-/** Round constants — first 32 bits of the fractional parts of the cube
- *  roots of the first 64 primes (FIPS 180-4 §4.2.2). */
 const SHA256_ROUND_CONSTANTS: readonly number[] = [
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
   0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -702,8 +625,6 @@ const SHA256_ROUND_CONSTANTS: readonly number[] = [
   0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
-/** Initial hash values — first 32 bits of the fractional parts of the
- *  square roots of the first 8 primes (FIPS 180-4 §5.3.3). */
 const SHA256_INITIAL_HASH: readonly number[] = [
   0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
   0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
@@ -717,8 +638,6 @@ function rightRotate32(value: number, bits: number): number {
 function sha256Digest(message: Uint8Array): Uint8Array {
   const h = Uint32Array.from(SHA256_INITIAL_HASH);
 
-  // Padding: append 0x80, then zero bytes until length ≡ 56 (mod 64), then
-  // an 8-byte big-endian bit-length (FIPS 180-4 §5.1.1).
   const messageLengthBits = message.length * 8;
   let paddedLength = message.length + 1;
   while (paddedLength % 64 !== 56) paddedLength++;
@@ -728,9 +647,6 @@ function sha256Digest(message: Uint8Array): Uint8Array {
   padded.set(message);
   padded[message.length] = 0x80;
 
-  // JS numbers are safe integers up to 2^53 — ample for any realistic
-  // config string, so a 64-bit big-endian split via hi/lo 32-bit halves is
-  // exact (no precision loss) for every input this function will ever see.
   const highBits = Math.floor(messageLengthBits / 0x100000000);
   const lowBits = messageLengthBits >>> 0;
   const paddedView = new DataView(padded.buffer);
@@ -806,247 +722,4 @@ function bytesToHex(bytes: Uint8Array): string {
 function sha256Hex(input: string): string {
   const bytes = new TextEncoder().encode(input);
   return bytesToHex(sha256Digest(bytes));
-}
-
-// ============================================================================
-// 15. Cross-language conformance-vector generator (see SPEC.md §4, §8)
-//
-// This is the SINGLE SOURCE OF TRUTH for `spec/cross-language-test-vectors.json`.
-// The committed JSON file is *emitted* by `generateCrossLanguageVectors()`
-// running the real primitives above — it is never hand-authored — so a
-// pinned `expected` can never silently drift from the implementation that
-// produced it (that drift is exactly what let ENV-CORE-001/002/003 ship
-// green against a pure vector-replay suite). The Python and Rust suites load
-// the emitted file and assert their ports reproduce every vector, including
-// the adversarial cases below. Regenerate with
-// `packages/environment/environment-base-spec` build + the emit script noted
-// in SPEC.md §8; a drift guard in `environment-builder`'s test suite asserts
-// the committed file deep-equals a fresh generation.
-// ============================================================================
-
-/** A single primitive vector. `expected` is present for success cases;
- *  `error` (the thrown error's `name`) is present for specified failure
- *  cases (e.g. lone-surrogate rejection). */
-export interface CrossLanguageVector {
-  name: string;
-  description?: string;
-  /** Normal case: the input as a JSON value. Omitted for inputs that cannot
-   *  be portably serialized as JSON (see `inputKeyCodeUnits`). */
-  input?: unknown;
-  /** Error case only: a `contentHash` key expressed as raw UTF-16 code units
-   *  (integers). Used for inputs containing a lone surrogate, which cannot be
-   *  represented as a literal JSON string that every language's parser
-   *  accepts (`serde_json` rejects a `\uD800` escape outright). Consumers
-   *  reconstruct the key in-language; Rust cannot build a lone-surrogate
-   *  `String` and skips these, as documented. Paired with `inputValue`. */
-  inputKeyCodeUnits?: number[];
-  /** Error case only: the value paired with `inputKeyCodeUnits`. */
-  inputValue?: string;
-  expected?: unknown;
-  error?: string;
-}
-
-export interface CrossLanguageVectors {
-  $schema: string;
-  specVersion: string;
-  contentHashFormatVersion: number;
-  description: string;
-  contentHash: CrossLanguageVector[];
-  projectEnvPrefix: CrossLanguageVector[];
-  inferEnvVar: CrossLanguageVector[];
-  generateFieldSchema: CrossLanguageVector[];
-}
-
-/** Runs `contentHash`, capturing either the digest or the thrown error name,
- *  so error-case vectors are generated from the real behaviour rather than
- *  asserted by hand. */
-function contentHashVector(
-  name: string,
-  input: Record<string, string>,
-  description?: string,
-): CrossLanguageVector {
-  try {
-    return { name, ...(description ? { description } : {}), input, expected: contentHash(input) };
-  } catch (err) {
-    return {
-      name,
-      ...(description ? { description } : {}),
-      input,
-      error: err instanceof Error ? err.name : String(err),
-    };
-  }
-}
-
-/**
- * Emits the full, authoritative set of cross-language conformance vectors by
- * running the real primitive implementations in this module. The returned
- * object is what gets written to `spec/cross-language-test-vectors.json`.
- */
-export function generateCrossLanguageVectors(): CrossLanguageVectors {
-  const contentHashVectors: CrossLanguageVector[] = [
-    contentHashVector(
-      'spec-example-unsorted-input',
-      { b: '2', a: '1' },
-      'Canonical example given out of sorted order — proves the function sorts before hashing.',
-    ),
-    contentHashVector(
-      'spec-example-pre-sorted-input',
-      { a: '1', b: '2' },
-      'Same pairs pre-sorted — must equal spec-example-unsorted-input.',
-    ),
-    contentHashVector('empty-object', {}, 'Zero entries serialize to the empty string.'),
-    contentHashVector('single-entry', { only: 'value' }),
-    contentHashVector('three-entries-unsorted', { zeta: '26', alpha: '1', mid: '13' }),
-    contentHashVector(
-      'astral-plane-key-ordering',
-      { '\u{1F600}': 'astral', '￿': 'bmp' },
-      'ENV-CORE-002: a BMP key (U+FFFF) and an astral key (U+1F600) — canonical code-point order sorts U+FFFF BEFORE U+1F600. UTF-16 code-unit order (old TS `.sort()`) would place the astral key first (lead surrogate 0xD83D < 0xFFFF) and produce a different digest.',
-    ),
-    contentHashVector(
-      'value-with-newline-collision-a',
-      { a: '1\nb=2' },
-      'ENV-CORE-004: under the old `key=value\\n` form this collided with two-entries-no-collision; the v2 length-prefixed form makes them distinct.',
-    ),
-    contentHashVector(
-      'two-entries-no-collision',
-      { a: '1', b: '2' },
-      'ENV-CORE-004: must NOT equal value-with-newline-collision-a under the injective v2 encoding.',
-    ),
-    contentHashVector(
-      'value-with-equals-and-newline',
-      { key: 'a=b\nc=d', 'x=y': 'z' },
-      'ENV-CORE-004: `=` and `\\n` inside both a value and a key — injectivity relies on the byte-length prefixes, not on these being separator-free.',
-    ),
-    contentHashVector(
-      'dotted-keys',
-      { 'providers.openai.secret': 'x', 'db.path': '/tmp/db' },
-      'Flat dot-path keys (the real shape of `raw`).',
-    ),
-    contentHashVector(
-      'unicode-values',
-      { sharp: 'straße', micro: 'µ', turkish: 'İ' },
-      'Multi-byte UTF-8 values — byte-length prefixes count UTF-8 bytes, not code points.',
-    ),
-    (() => {
-      // ENV-CORE-005: a lone high surrogate as a key must be REJECTED with
-      // LoneSurrogateError. Represented via code units (not a literal JSON
-      // string) so the emitted file stays parseable by serde_json — see
-      // `inputKeyCodeUnits`.
-      const key = String.fromCharCode(0xd800);
-      let error = '';
-      try {
-        contentHash({ [key]: 'x' });
-      } catch (err) {
-        error = err instanceof Error ? err.name : String(err);
-      }
-      return {
-        name: 'lone-surrogate-key-rejected',
-        description:
-          'ENV-CORE-005: a lone high surrogate (U+D800) as a key must be REJECTED with LoneSurrogateError in TS and Python. Unreachable in Rust — a String cannot hold a lone surrogate — so the Rust suite skips it. Input given as UTF-16 code units because a literal lone surrogate is not portably JSON-serializable.',
-        inputKeyCodeUnits: [0xd800],
-        inputValue: 'x',
-        error,
-      } as CrossLanguageVector;
-    })(),
-  ];
-
-  const projectEnvPrefixVectors: CrossLanguageVector[] = [
-    { name: 'agent-mcp', input: 'agent-mcp', expected: projectEnvPrefix('agent-mcp') },
-    { name: 'decompile-cli', input: 'decompile-cli', expected: projectEnvPrefix('decompile-cli') },
-    {
-      name: 'dotted-project-name',
-      description:
-        'ENV-CORE-003: a dotted project name folds `.`→`_` (like `-`), yielding a legal POSIX env-var prefix. Old TS/Python folded only `-` and emitted the illegal `ADHD_FOO.BAR`.',
-      input: 'foo.bar',
-      expected: projectEnvPrefix('foo.bar'),
-    },
-    {
-      name: 'unicode-case-folding',
-      description:
-        'Unicode default case mapping under uppercasing (ß→SS, µ→Μ) must agree across TS toUpperCase / Python str.upper / Rust to_uppercase.',
-      input: 'faß-µ',
-      expected: projectEnvPrefix('faß-µ'),
-    },
-  ];
-
-  const inferEnvVarVectors: CrossLanguageVector[] = [
-    {
-      name: 'dotted-path',
-      input: { prefix: 'ADHD_AGENT_MCP', fieldPath: 'db.path' },
-      expected: inferEnvVar('ADHD_AGENT_MCP', 'db.path'),
-    },
-    {
-      name: 'dashed-and-dotted-path',
-      input: { prefix: 'ADHD_AGENT_MCP', fieldPath: 'provider-key.secret' },
-      expected: inferEnvVar('ADHD_AGENT_MCP', 'provider-key.secret'),
-    },
-    {
-      name: 'deep-nested-path',
-      input: { prefix: 'ADHD_AGENT_MCP', fieldPath: 'transport.port' },
-      expected: inferEnvVar('ADHD_AGENT_MCP', 'transport.port'),
-    },
-  ];
-
-  const generateFieldSchemaVectors: CrossLanguageVector[] = [
-    {
-      name: 'single-nested-field',
-      input: { 'server.port': { type: 'integer', minimum: 1024 } },
-      expected: generateFieldSchema({ 'server.port': { type: 'integer', minimum: 1024 } }),
-    },
-    {
-      name: 'multiple-fields-shared-and-deep-parents',
-      input: {
-        'db.path': { type: 'string', default: './data.sqlite' },
-        'db.pool.size': { type: 'integer', minimum: 1, maximum: 100, default: 10 },
-        'logging.level': { type: 'string', enum: ['debug', 'info', 'warn', 'error'], default: 'info' },
-      },
-      expected: generateFieldSchema({
-        'db.path': { type: 'string', default: './data.sqlite' },
-        'db.pool.size': { type: 'integer', minimum: 1, maximum: 100, default: 10 },
-        'logging.level': { type: 'string', enum: ['debug', 'info', 'warn', 'error'], default: 'info' },
-      }),
-    },
-    { name: 'empty-fields', input: {}, expected: generateFieldSchema({}) },
-    {
-      name: 'adhd-metadata-stripped-from-leaf',
-      description:
-        'ENV-CORE-001 (security): adhd-specific keys (env, scope, secret, noEnv) MUST be dropped from the generated schema — Python/Rust previously copied the leaf verbatim, leaking which fields are secrets and their env-var names.',
-      input: {
-        'providers.openai.secret': {
-          type: 'string',
-          default: 'x',
-          description: 'API key',
-          minLength: 1,
-          env: 'CUSTOM_OPENAI_KEY',
-          scope: 'global',
-          secret: true,
-          noEnv: true,
-        },
-      },
-      expected: generateFieldSchema({
-        'providers.openai.secret': {
-          type: 'string',
-          default: 'x',
-          description: 'API key',
-          minLength: 1,
-          env: 'CUSTOM_OPENAI_KEY',
-          scope: 'global',
-          secret: true,
-          noEnv: true,
-        } as YamlFieldDefinition,
-      }),
-    },
-  ];
-
-  return {
-    $schema: 'https://adhd.dev/schemas/environment/cross-language-test-vectors.schema.json',
-    specVersion: SPEC_VERSION,
-    contentHashFormatVersion: CONTENT_HASH_FORMAT_VERSION,
-    description:
-      'Pinned cross-language conformance vectors for the pure primitives exported by @adhd/environment-base-spec (contentHash, projectEnvPrefix, inferEnvVar, generateFieldSchema). GENERATED by generateCrossLanguageVectors() in src/index.ts — do not hand-edit; regenerate (see SPEC.md §8). The TypeScript, Python, and Rust runtime clients MUST reproduce every "expected" value from the corresponding "input". A vector with "error" instead of "expected" is a specified FAILURE case: the port must raise the named error (Rust may legitimately be unable to construct the input — e.g. a lone surrogate — and skips only those). Comparison semantics: contentHash/projectEnvPrefix/inferEnvVar expected values are exact strings; generateFieldSchema expected values compare by structural (deep) equality — key insertion order is not significant.',
-    contentHash: contentHashVectors,
-    projectEnvPrefix: projectEnvPrefixVectors,
-    inferEnvVar: inferEnvVarVectors,
-    generateFieldSchema: generateFieldSchemaVectors,
-  };
 }
