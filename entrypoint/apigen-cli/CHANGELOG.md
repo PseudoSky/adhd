@@ -2,6 +2,30 @@
 
 All notable changes to this project are documented here.
 
+## Unreleased
+
+### Fixed
+
+- **BUG-APIGEN-021** — `apigen run --source <file> --type <plugin>` crashed with
+  `Error: Cannot find module './x.js'` (`MODULE_NOT_FOUND`) against any real
+  `--source` whose package has no `"type": "module"` (the common default for
+  internal workspace libs, e.g. `@adhd/sox-memory-core`) and that internally
+  imports a sibling module via a NodeNext-style `./x.js` specifier resolving to
+  `./x.ts` on disk. `importSource()` (`src/lib/import-source.ts`) registered
+  only `tsx/esm/api`'s ESM loader hook before the dynamic `import()`; when the
+  target's format resolves to CommonJS, Node's ESM loader routes it through the
+  CJS translator, which performs a real `require()` that only `tsx/cjs/api`'s
+  hook patches — the ESM-only hook never saw it, so the `.js` → `.ts` extension
+  mapping never applied. Fixed by also registering `tsx/cjs/api` for the
+  duration of the import (mirrors what the full `tsx` CLI does — it patches
+  both loaders). Covered by
+  `src/test/e2e/import-source-cjs-format.spec.ts`, which spawns the BUILT bin
+  as a real `node` child process (the only way to reproduce this — a
+  vitest-in-process unit test never hits Node's loader) against a fixture
+  reproducing the exact shape (`src/test/fixtures/cjs-format-js-import/`);
+  verified red against the pre-fix code (same `MODULE_NOT_FOUND` as the
+  original report) and green after.
+
 ## 0.1.0 — 2026-07-02
 
 ### Added
