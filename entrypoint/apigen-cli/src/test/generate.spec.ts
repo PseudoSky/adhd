@@ -14,8 +14,11 @@ import { tsDepMap } from '@adhd/apigen-base-logical';
 import { registerGenerateRegistryCommand } from '../lib/commands/generate-registry';
 import { discoverPackages } from '../lib/registry';
 import jsonschemaPlugin from '@adhd/apigen-plugin-jsonschema';
-import { generateSchemas, composeSchemas } from '@adhd/apigen-core-client';
-import type { OutputPlugin } from '@adhd/apigen-core-client';
+import { extract, composeSchemas } from '@adhd/apigen-core-client';
+import type {
+  OutputPlugin,
+  GeneratedSchemas,
+} from '@adhd/apigen-core-client';
 
 const fixturesDir = path.join(__dirname, 'fixtures');
 const registryDir = path.join(fixturesDir, 'registry');
@@ -581,13 +584,14 @@ describe('dep-manifest: generate command — negative control', () => {
 // [dod.10 teeth] End-to-end: generate pipeline with a real default-imported
 // Decimal source produces format:decimal schemas AND decimal.js in package.json.
 //
-// This test drives the v1 generate pipeline (the same path as the probe:
-// `generate --type mcp --source decimal-real-import.ts`) against a fixture
-// that uses `import Decimal from 'decimal.js'` (the default-import form).
-// ts-morph emits `import("/path/decimal.js/decimal").default` for this form —
-// NOT the bare string `"Decimal"` — so the fix in buildSchema
-// (calling normalizeTypeText() before the SCALAR_SCHEMAS lookup) is
-// exercised end-to-end.
+// This test drives the (now sole) v2 generate pipeline — same orchestrator
+// path `apigen generate --type mcp --source decimal-real-import.ts` always
+// uses since BUG-APIGEN-CORE-005 retired v1 — against a fixture that uses
+// `import Decimal from 'decimal.js'` (the default-import form). ts-morph
+// emits `import("/path/decimal.js/decimal").default` for this form — NOT the
+// bare string `"Decimal"` — so the fix in buildSchema (calling
+// normalizeTypeText() before the SCALAR_SCHEMAS lookup) is exercised
+// end-to-end.
 //
 // Regression guarantee:
 //   - Revert the normalizeTypeText() call in buildSchema → the schemas carry
@@ -608,17 +612,23 @@ describe('[dod.10 teeth] decimal default-import: schema carries format:decimal a
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  // [dod.10.a] The v1 generate pipeline extracts format:decimal from a
+  // [dod.10.a] The v2 extract() pipeline extracts format:decimal from a
   // default-imported Decimal source — proves normalizeTypeText() fires.
-  it('v1 generate pipeline: generated package.json declares decimal.js for a default-imported Decimal source', async () => {
-    // Use the actual generateSchemas + composeSchemas to prove the
-    // schema carries format:decimal at the extraction layer — the
-    // consumer-visible outcome the dep-manifest step keys on.
-    const gen = await generateSchemas({
-      sourceFile: decimalRealFixture,
-      exportMode: { type: 'named' },
-    });
+  // BUG-APIGEN-CORE-005: ported from the deleted v1 generateSchemas() —
+  // extract()'s Operation.input/output carry the exact same JSON-Schema
+  // fragments generateSchemas()'s GeneratedSchemas.schemas[fn] used to,
+  // so this is composed the same way via the same (unchanged) composeSchemas().
+  it('v2 generate pipeline: generated package.json declares decimal.js for a default-imported Decimal source', async () => {
+    const ops = await extract({ sourceFile: decimalRealFixture });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'addAmounts');
+    expect(op, 'addAmounts operation must be extracted').toBeDefined();
 
+    const gen: GeneratedSchemas = {
+      metadata: { namespace: 'test', phase: '' },
+      schemas: op
+        ? { addAmounts: { input: op.input, output: op.output } }
+        : {},
+    };
     const schemas = composeSchemas(gen, [], {});
 
     // The composed schema for addAmounts must carry format:decimal somewhere
@@ -655,10 +665,11 @@ describe('[dod.10 teeth] decimal default-import: schema carries format:decimal a
     ).toBe('^10');
   }, 30_000);
 
-  // [dod.10.b] Full CLI generate (v1 path, no --v2) against the default-import
-  // Decimal fixture: package.json in out-dir declares decimal.js.
-  // This is the EXACT path the probe exercises.
-  it('full CLI v1 generate: package.json in output declares decimal.js for a default-imported Decimal source', async () => {
+  // [dod.10.b] Full CLI generate (the sole orchestrator path — no flag needed
+  // since BUG-APIGEN-CORE-005) against the default-import Decimal fixture:
+  // package.json in out-dir declares decimal.js. This is the EXACT path the
+  // probe exercises.
+  it('full CLI generate: package.json in output declares decimal.js for a default-imported Decimal source', async () => {
     const program = makeProgram();
     // The generate command is registered with jsonschema plugin — we need mcp
     // plugin for parity with the probe but any plugin that emits package.json

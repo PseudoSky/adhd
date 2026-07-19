@@ -396,11 +396,14 @@ describe('orchestrator: projection-override config (Tenet 1)', () => {
 // [dod.10 v2 teeth] buildDescriptor / orchestrateGenerate: default-import Decimal
 // source produces format:decimal in packageSchemas and decimal.js in package.json.
 //
-// The v2 path builds ComposedSchemas via generateSchemas + composeSchemas, the
-// SAME pipeline as v1. If normalizeTypeText() is absent from buildSchema, the
-// qualified import path emitted by ts-morph (`import("…decimal.js…").default`)
-// is NOT found in SCALAR_SCHEMAS → schema is {} → no format:decimal →
-// collectDepsFromPackageSchemas returns {} → decimal.js absent from package.json.
+// BUG-APIGEN-CORE-005 (v1 retirement): buildDescriptor's Step 5 builds
+// ComposedSchemas by grouping the ALREADY-EXTRACTED v2 `extract()` operations
+// (no second extraction pass — v1's generateSchemas() is deleted) and feeding
+// them through the same (unchanged) composeSchemas(). If normalizeTypeText()
+// is absent from buildSchema, the qualified import path emitted by ts-morph
+// (`import("…decimal.js…").default`) is NOT found in SCALAR_SCHEMAS →
+// schema is {} → no format:decimal → collectDepsFromPackageSchemas returns
+// {} → decimal.js absent from package.json.
 //
 // Regression guarantee: revert normalizeTypeText() call in buildSchema →
 // packageSchemas for the Decimal fixture carry {} outputs → format:decimal

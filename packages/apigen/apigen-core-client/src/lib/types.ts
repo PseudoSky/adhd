@@ -1,7 +1,8 @@
 import type { Logger } from 'pino';
-import type { ExtractionSession } from './extraction-session';
 
-// Output of generateSchemas() — domain schemas only, no middleware envelope
+// Output of the extraction pipeline (v2 `extract()`'s Operation[], grouped by
+// namespace and adapted — see orchestrator.ts's buildDescriptor Step 5) —
+// domain schemas only, no middleware envelope.
 export interface GeneratedSchemas {
   metadata: { namespace: string; phase: string };
   schemas: Record<
@@ -29,23 +30,16 @@ export type ComposedSchemas = Record<
   }
 >;
 
-// Three mutually exclusive extraction modes
+// v1 legacy selector — retired as a filtering mechanism (BUG-APIGEN-CORE-005,
+// v1 retirement): v2's `extract()` walks the FULL export-shape matrix (named,
+// default, named-object, CJS) unconditionally in one pass, so there is no
+// longer a "select exactly one shape" mode. Kept only as an inert CLI
+// `--export` passthrough type so existing invocations don't error — see
+// SourceEntry.exportMode's doc comment in orchestrator.ts.
 export type ExportMode =
   | { type: 'named' }
   | { type: 'default' }
   | { type: 'named-object'; name: string };
-
-// Options for generateSchemas()
-export interface GenerateSchemasOptions {
-  sourceFile: string; // absolute path to .ts source file
-  exportMode?: ExportMode; // default: { type: 'named' }
-  namespace?: string; // written to metadata (informational)
-  phase?: string; // written to metadata (informational)
-  tsconfig?: string; // absolute path to a tsconfig.json driving type resolution
-  // Optional per-run shared cache (createExtractionSession). When absent, a
-  // private session is created and disposed before returning.
-  session?: ExtractionSession;
-}
 
 // Plugin system — language-agnostic: files[] can contain any language
 export interface PluginInput {
