@@ -60,6 +60,66 @@ Citations: [self-verified 2026-07-19: `entrypoint/apigen-cli/vite.config.ts:10,3
 
 ## Open
 
+### FEAT-APIGEN-019 — CLI doesn't discoverably list available `--type` plugins (help text stale, `run` commands give no options at all) — HIGH
+
+**Requested:** 2026-07-19 by the user, directly.
+
+**Ask:** the CLI should support listing the available `--type` plugin options; `--help` text
+should show them; and the error response on an incorrect `--type` should include the list.
+
+**Current state, verified against `entrypoint/apigen-cli/src/`:**
+
+1. **No list command/flag exists at all.** There's no `apigen list-types`, no `--list`, nothing
+   — the only way to discover valid `--type` values today is to read source, hit an error, or
+   already know them.
+2. **`generate`'s `--type` help text is a hardcoded, already-stale string**
+   (`generate.ts:189-190`: `'Output target: mcp | api-fastify | api-express | cli |
+   jsonschema'`). It's missing `py-flask` and `py-grpc` — both of which ARE real keys in the
+   actual `plugins` map built in `index.ts:16-30` (`mcp`, `jsonschema`, `api-fastify`,
+   `api-express`, `cli`/`cli-output`, `py-flask`, `py-grpc` — 7 distinct targets, 8 keys
+   counting the `cli`/`cli-output` alias). It's a hand-maintained string, not derived from the
+   plugin registry, so it drifts every time a plugin is added — confirmed it already has.
+3. **`run`'s and `run-registry`'s `--type` help text is worse — zero information.**
+   `run.ts:215` and `run-registry.ts:42` both just say `'Output target'`, no options listed
+   at all.
+4. **Error behavior is inconsistent across commands, and one path is actively misleading.**
+   `generate.ts:242-248` and `generate-registry.ts:69` DO already throw `Unknown --type: X.
+   Available: ${Object.keys(plugins).join(', ')}` — this part partially exists and works
+   correctly today. But `run.ts:260-261` and `run-registry.ts:74-75` use
+   `if (!plugin?.run) throw new Error('Plugin ${opts.type} does not support run mode')` — a
+   single check that conflates two different failures with one message: a genuinely unknown/
+   misspelled `--type` gets the SAME wording as a real, valid plugin (e.g. `jsonschema`,
+   `cli` — both documented generate-only) that legitimately has no `run()`. A typo'd `--type`
+   reads as "this plugin exists but doesn't support run" instead of "this isn't a recognized
+   plugin at all — did you mean one of: …". Neither `run` path lists available options.
+
+**Why this matters beyond convenience:** two of the seven target plugins imported into
+`plugins` — `@adhd/apigen-plugin-py-flask` and `@adhd/apigen-plugin-py-grpc`
+(`index.ts:12-13`) — are NOT published on the public npm registry (confirmed via `npm view`,
+both 404). Those imports are unconditional, top-level, eager `import` statements, so for any
+consumer who actually installed `@adhd/apigen-cli` from npm, they'd never resolve and the CLI
+would fail before even reaching argument parsing — no `--help`, no error message, nothing. A
+truly registry-driven list/help/error mechanism should be built to reflect what's *actually
+loaded*, not a static ideal list — which would also surface this exact problem clearly to a
+real user instead of an opaque module-resolution crash.
+
+**Suggested fix:** derive the `--type` help text and all error-path option lists from a single
+source of truth (the `plugins` record itself, or a shared registry module `generate.ts`/
+`generate-registry.ts`/`run.ts`/`run-registry.ts` all import from) so they can never drift
+again; add an explicit `apigen list-types` (or `--list-types`) command; and split `run`'s
+`!plugin?.run` check into two distinct branches — "unknown `--type`: X. Available: …" vs.
+"plugin X exists but doesn't support run mode. Generate-only plugins: …" — each listing the
+relevant subset.
+
+**Status:** OPEN, HIGH.
+
+Citations: [self-verified 2026-07-19: `entrypoint/apigen-cli/src/index.ts:6-30` (plugins
+map + eager imports), `src/lib/commands/generate.ts:189-190,242-248` (stale help text,
+existing dynamic error listing), `src/lib/commands/run.ts:215,260-261` (bare help text,
+conflated error), `src/lib/commands/run-registry.ts:42,74-75` (same pattern),
+`src/lib/commands/generate-registry.ts:30,69` (same dynamic-listing pattern as generate.ts);
+`npm view @adhd/apigen-plugin-py-flask`/`@adhd/apigen-plugin-py-grpc` → both 404]
+
 ### BUG-APIGEN-017 — MCP tool schemas don't reject unknown properties
 
 **Reported:** 2026-07-06  
