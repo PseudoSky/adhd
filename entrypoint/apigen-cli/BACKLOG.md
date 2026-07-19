@@ -5,6 +5,167 @@ Package-scoped log. Repo-wide context lives in the root [BACKLOG.md](../../BACKL
 
 ## Fixed
 
+### BUG-APIGEN-021 — v1 extraction pipeline was still the CLI default, silently dropping re-exported operations (2 routes instead of 140+ for a real re-export barrel); v1 retired entirely — FIXED 2026-07-19
+
+**Cross-references:** BUG-APIGEN-CORE-002/003/004 (`apigen-core-client/BACKLOG.md`)
+fixed `extract()`'s re-export blindness and verified it directly, in isolation,
+against the same real fixture — but never wired it to be the CLI's default. This
+entry is that wiring + a second, independent instance of the identical bug found
+while doing the wiring (see BUG-APIGEN-CORE-005 in `apigen-core-client/BACKLOG.md`
+for the extractor-side half of the fix — both entries describe the same piece of
+work from each package's side).
+
+**Symptom (confirmed live, before this fix):** `apigen run --type api-express
+--source <re-export-heavy-file>` with NO special flags — what any real user would
+run — silently produced 2 routes/operations instead of ~140+ for a file like
+`~/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts` (read-only reference,
+never modified; a ~40-file re-export barrel). Passing `--v2` "fixed" the log line
+("extracted 140 operations") but — this was the deeper half of the bug, only
+found while implementing this fix, not previously known — did NOT fix the actual
+served routes: `orchestrator.ts`'s `buildDescriptor()` had a "Step 5" that
+independently re-ran the buggy v1 extractor a SECOND time to build the
+`ComposedSchemas` every plugin's `generate()`/`run()` actually dispatches
+against, silently discarding the correct extraction from Steps 1-4. So even
+`--v2` alone, without also fixing Step 5, would have remained broken.
+
+**Root cause (why this happened — not something to "fix", just context):** git
+archaeology: commit `556d02ee "feat(apigen): apigen v2 — 18-package TS→API
+toolchain"` built the whole v2 toolchain and integrated it into the pre-existing
+CLI via a cautious `--v2` opt-in flag for a staged rollout — reasonable at the
+time. The follow-up step of flipping the default (or retiring v1) was never done,
+and nothing in that plan's completion paperwork
+(`docs/plan/apigen-client-generation/RESUME.md`, "PLAN COMPLETE (46/46), NOT
+committed") tracked that gap as remaining work. It fell through the cracks.
+
+**Fix — retire v1 entirely, don't patch it (the user's explicit direction, to
+avoid two parallel implementations drifting again):**
+
+1. `generate.ts`/`run.ts`: removed the `if (opts.v2) { ... } / else { v1 }`
+   branching — `orchestrateGenerate`/`orchestrateRun` now run unconditionally.
+   **`--v2` flag removed entirely** (not kept as a deprecated no-op): the flag's
+   only effect was selecting between two pipelines, and now there is exactly
+   one, so a no-op flag would be pure clutter with no migration value — nobody
+   scripting `--v2` today loses functionality by dropping it (the CLI ignores
+   unrecognized... no, actually ERRORS on unrecognized commander options, so any
+   script still passing `--v2` will need to drop it; this is the one
+   user-visible breaking change, documented in CHANGELOG.md).
+2. `generate-registry.ts`/`run-registry.ts`: rewired from a per-package
+   `runPipeline()` loop to build one `SourceEntry[]` (with `namespace` pinned to
+   the nx-tag-discovered package id, `importPath` set to the package's npm
+   specifier, `file` set to the discovered physical entry file) and pass it
+   through the same `orchestrateGenerate`/`orchestrateRun` in a single call.
+   Package DISCOVERY (nx tag include/exclude filtering, entry-file resolution)
+   is byte-for-byte unchanged — only the extraction mechanism changed. This also
+   surfaced a real latent orchestrator bug fixed as part of this work:
+   `orchestrateRun` matched `packageSchemas` entries back to their `SourceEntry`
+   by comparing `s.file === p.importPath` — which only ever worked by
+   coincidence for single-source `run` (where `file === importPath` always
+   held); for the registry commands' distinct `file`/`importPath` pair this
+   silently failed to resolve. Fixed by matching on namespace instead (the
+   actual key `packageSchemas` is grouped by) via a `SourceEntry.importPath`
+   field added to the orchestrator's public `SourceEntry` type.
+3. `serve.ts`: verified needs no changes, per the task brief's prediction — it
+   spawns child `apigen run` processes without ever passing `--v2`, so once
+   `run` defaults to the orchestrator unconditionally, `serve` inherits the fix
+   automatically. Confirmed by reading the spawn call site (no `--v2` anywhere
+   in `serve.ts`) — the full serve-level live verification wasn't re-run in
+   isolation this session (`serve.spec.ts`'s live test passes as part of the
+   full suite; see Verification below), since it exercises the exact same
+   `run` code path already verified directly.
+4. **Deleted** (apigen-core-client side, see that package's BACKLOG.md for the
+   file list and public-API-consumer check performed before deleting):
+   `generateSchemas()`, the three v1 extractors, `runPipeline()`
+   (`entrypoint/apigen-cli/src/lib/pipeline.ts` — this package's own file).
+5. **Tests:** per-file breakdown —
+   - `src/test/run.spec.ts`: removed 1 test (`'v2 path: non-TS plugin bypasses
+     TS extraction with --v2 flag'`) — its entire premise was "the same
+     behavior holds whether or not `--v2` is passed"; with `--v2` gone there's
+     only one path left, and the test directly above it already covers that
+     path's behavior (non-TS plugin bypass). Nothing it protected against is
+     now uncovered.
+   - `src/test/generate.spec.ts`: `generateSchemas`/`composeSchemas` import
+     replaced with `extract`/`composeSchemas`; the "dod.10.a" test rebuilt its
+     `GeneratedSchemas` fixture from a real `extract()` call instead of the
+     deleted `generateSchemas()` (same assertions — format:decimal survives
+     to the composed schema); "dod.10.b" (full CLI generate) needed no
+     behavioral change since it never passed `--v2` to begin with — only its
+     name/comments updated (it was implicitly always going to become "the only
+     path" once this landed).
+   - `src/test/integration/schema.spec.ts`: `generateSchemas()` call replaced
+     with `extract()` + operation lookup by exported name; same
+     [inv:ctx-name-only] teeth (`not.toContain('ctx')`/`toContain('userId')`)
+     preserved verbatim per audit-final-v2.schema-teeth.
+   - `src/test/orchestrator.spec.ts`: no code changes needed (doesn't call
+     `generateSchemas`/`runPipeline` directly) — updated a stale doc comment
+     describing the old double-extraction Step 5 design.
+   - **Net:** 113 (this branch's parent commit, `908d843b`) → 112 tests, 14
+     test files (was 14 before too — no file added/removed net, just the 1
+     test removed above). 112/112 green.
+6. **Real-world verification** — see BUG-APIGEN-CORE-005 in
+   `apigen-core-client/BACKLOG.md` for the exact `generate`/`run` numbers
+   (140 operations → 130 real routes, up from 2; two previously-invisible
+   routes curled and confirmed responding correctly).
+
+**One thing NOT fixed here, filed separately below:** curling real routes during
+verification surfaced a PRE-EXISTING (confirmed identical under the OLD v1 2-route
+path too — see BUG-APIGEN-022) runtime dispatch/schema-validation failure for
+functions whose params/return types reference certain complex external types
+(`better-sqlite3`'s `Database` class; some `x-apigen-logical`-hinted type). This
+is orthogonal to extraction/routing correctness — the routes exist and dispatch
+correctly reaches the handler; the failure is inside JSON-Schema `$ref`
+resolution / ajv strict-mode validation of the request payload — but is real and
+worth fixing separately.
+
+**Status:** FIXED 2026-07-19.
+
+### BUG-APIGEN-022 (Open, filed not fixed) — `$ref` resolution / ajv strict-mode failures on complex external types (e.g. `better-sqlite3.Database`) at DISPATCH time, not extraction time — pre-existing, confirmed identical under both v1 and v2
+
+**Where:** the request-validation/dispatch layer consumed by `apigen-plugin-api-express`'s
+generated `routes.ts` (`dispatch()` in `@adhd/apigen-engine-runtime`, and/or
+whatever ajv instance validates the composed schema before invoking the
+handler — not root-caused to a specific file/line in this session, since it's
+out of scope for the v1-retirement task; filed for someone to pick up).
+
+**Symptom, reproduced during this task's required real-world verification**
+against `~/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts` (read-only
+reference): several routes 500 instead of dispatching successfully —
+`/memory/write` → `{"code":"internal","message":"can't resolve reference
+#/definitions/WriteParams from id #"}`; `/memory/memoryListProjects` /
+`/memory/memoryCurate` / `/memory/memoryListTopics` (all take a `db:
+BetterSqlite3.Database` param) → `{"code":"internal","message":"can't resolve
+reference #/definitions/BetterSqlite3.Database from id #"}`.
+
+**Confirmed NOT a regression from BUG-APIGEN-021/BUG-APIGEN-CORE-005 (this
+session's v1-retirement work):** started a server on the OLD, unfixed v1 2-route
+path (`main` before this session's changes, no flags — the exact pre-existing
+default) and curled `/memory/write` directly — it 500s with the same class of
+error (`"can't resolve reference #/definitions/WriteParams from id #"`). This
+type of function was one of v1's original 2 visible routes, so this failure mode
+predates and is unrelated to the extraction-path fix; it just went unnoticed
+because v1 never exposed the `BetterSqlite3.Database`-taking routes at all (they
+were invisible re-exports), so those specific instances of the bug were
+literally unreachable before this session's fix made them reachable.
+
+**Confirmed the wiring itself is sound:** simpler previously-invisible-under-v1
+routes with fully-resolvable schemas dispatch correctly end-to-end —
+`POST /memory/memoryAllowlistRoot` (0 params) → `200`, real string response;
+`POST /memory/isPathInMemoryAllowlist` (1 string param) → `400` with a correct,
+detailed ajv validation error when called with the wrong param name, then `200`
+with the correct boolean result once corrected. Routing, dispatch, and
+JSON-Schema request validation all demonstrably work for schemas the
+`$ref`-resolution layer CAN resolve — this bug is specifically about schemas
+referencing certain complex/external types it cannot.
+
+**Impact:** low urgency for the CLI's core purpose (route generation/dispatch
+wiring, this session's actual task) but real: any source exposing functions
+that take third-party class instances (SQLite handles, etc.) as params —
+common in re-export-barrel files pulling in "everything", exactly the kind of
+file BUG-APIGEN-021 just made fully visible for the first time — will 500 on
+those specific routes. Worth fixing, but no repro/root-cause investigation
+performed this session (out of scope; not silently worked around, filed here
+per this task's explicit instruction to file anything found broken along the
+way that isn't being fixed).
+
 ### PERF-APIGEN-001 (orchestrator side) — RESOLVED 2026-07-02
 
 `buildDescriptor()` now creates ONE `ExtractionSession` per run, threads it through

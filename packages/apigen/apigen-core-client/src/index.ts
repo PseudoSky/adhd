@@ -2,7 +2,6 @@ export type {
   GeneratedSchemas,
   ComposedSchemas,
   ExportMode,
-  GenerateSchemasOptions,
   PluginInput,
   PluginOutput,
   RunInput,
@@ -53,7 +52,6 @@ export type {
   ExtractionSession,
   ISessionStats,
 } from './lib/extraction-session';
-export { generateSchemas } from './lib/generate-schemas';
 export { composeSchemas } from './lib/compose-schemas';
 export { extract, tokenize } from './lib/extract';
 export type { ExtractOptions } from './lib/extract';

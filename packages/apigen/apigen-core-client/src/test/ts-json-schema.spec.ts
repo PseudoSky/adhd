@@ -9,21 +9,41 @@
  */
 import path from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { generateSchemas } from '../index';
+import { extract } from '../index';
 import type { GeneratedSchemas } from '../lib/types';
 
 const fixture = (name: string) => path.resolve(__dirname, 'fixtures', name);
 
-// `generateSchemas` builds a full ts-json-schema-generator program per fixture
-// (~15s). The assertions below only READ the result, so memoise per fixture path
-// instead of regenerating once per `it()` — same fixtures, same assertions, but
-// O(fixtures) generations instead of O(tests). Without this the suite runs for
-// many minutes (37 tests × ~15s) and times out CI.
+// BUG-APIGEN-CORE-005 (v1 retirement): this suite drove the deleted v1
+// `generateSchemas()` directly; every assertion below reads
+// `result.schemas['fnName'].{input,output}` — the exact same shape v2's
+// `extract()` produces per-operation (`op.input`/`op.output`), just indexed
+// differently (an Operation[] keyed by path, not a flat schemas record). To
+// avoid rewriting 36 call sites across 37 tests, `gen()` now calls `extract()`
+// and adapts its Operation[] into the same `GeneratedSchemas` shape the old
+// `generateSchemas()` returned — same fixtures, same assertions, same
+// memoization rationale (extract() builds a full ts-json-schema-generator
+// program per fixture, ~15s; memoise per fixture path so the suite runs
+// O(fixtures) extractions instead of O(tests) — otherwise 37 tests × ~15s
+// times out CI).
 const _genCache = new Map<string, Promise<GeneratedSchemas>>();
 function gen(sourceFile: string): Promise<GeneratedSchemas> {
   let p = _genCache.get(sourceFile);
   if (!p) {
-    p = generateSchemas({ sourceFile });
+    p = extract({ sourceFile }).then((ops) => {
+      const schemas: GeneratedSchemas['schemas'] = {};
+      for (const op of ops) {
+        if (op.kind !== 'action') continue;
+        const name = op.path.at(-1)?.raw;
+        if (!name) continue;
+        schemas[name] = {
+          input: op.input,
+          output: op.output,
+          ...(op.hasCtx ? { hasCtx: true } : {}),
+        };
+      }
+      return { metadata: { namespace: '', phase: '' }, schemas };
+    });
     _genCache.set(sourceFile, p);
   }
   return p;

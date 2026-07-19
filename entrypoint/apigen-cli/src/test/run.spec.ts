@@ -453,52 +453,13 @@ describe('[cli-run-cmd.non-ts] non-TS plugin bypasses TS extraction', () => {
     }
   );
 
-  it(
-    'v2 path: non-TS plugin bypasses TS extraction with --v2 flag',
-    { timeout: 10000 },
-    async () => {
-      let capturedInput: RunInput | undefined;
-
-      const fakePyPlugin: OutputPlugin = {
-        id: 'fake-py-v2',
-        description: 'fake python plugin for v2 bypass test',
-        language: 'py',
-        generate() {
-          return { files: [] };
-        },
-        async run(input: RunInput): Promise<void> {
-          capturedInput = input;
-        },
-      };
-
-      const program = makeProgram();
-      registerRunCommand(program, { 'fake-py-v2': fakePyPlugin });
-
-      const fakePySource = path.join(fixturesDir, 'fake_source.py');
-
-      await program.parseAsync([
-        'node',
-        'apigen-cli',
-        'run',
-        '--source',
-        fakePySource,
-        '--type',
-        'fake-py-v2',
-        '--namespace',
-        'testns-v2',
-        '--opt',
-        'port=9998',
-        '--v2',
-      ]);
-
-      expect(capturedInput).toBeDefined();
-      const pkg = capturedInput?.packages[0];
-      expect(pkg?.importPath).toBe(path.resolve(fakePySource));
-      expect(pkg?.id).toBe('testns-v2');
-      expect(capturedInput?.options['port']).toBe('9998');
-      expect(pkg?.schemas).toEqual({});
-    }
-  );
+  // BUG-APIGEN-CORE-005 (v1 retirement): a second copy of this test used to
+  // live here specifically to prove "the same behavior holds with --v2
+  // passed" — i.e. that the flag didn't change non-TS bypass behavior. Now
+  // that `run` unconditionally uses the orchestrator (no `--v2` flag exists
+  // at all — see run.ts), there is only one code path left to cover, and the
+  // test above this one already covers it. Removed rather than kept as a
+  // duplicate; nothing it protected against is uncovered.
 });
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -183,6 +183,137 @@ Package-scoped log. Repo-wide context lives in the root [BACKLOG.md](../../../BA
 nothing and would race morph-walk's shared-SourceFile probe aliases. Do not "optimize"
 these loops with concurrency.
 
+### BUG-APIGEN-CORE-005 — v1 extraction pipeline retired entirely (v1 was still the CLI default despite BUG-APIGEN-CORE-002 fixing v2); orchestrator's own Step 5 was ALSO still calling the buggy v1 extractor — FIXED 2026-07-19
+
+- **Where:** `src/lib/generate-schemas.ts` (`generateSchemas()`, DELETED),
+  `src/lib/extractors/{named,default-export,named-object}.ts` (DELETED),
+  `src/lib/extractors/param-defaults.ts` (moved to `src/lib/param-defaults.ts`),
+  `src/lib/extract.ts` (`Operation` gained `hasCtx`; `extract()` now also
+  extracts BUG-APIGEN-018 param defaults), `src/lib/descriptor.ts`
+  (`Operation.hasCtx` field added), `src/lib/types.ts`
+  (`GenerateSchemasOptions` deleted — dead once `generateSchemas()` is gone),
+  `src/index.ts` (public exports of both trimmed). Cross-repo:
+  `entrypoint/apigen-cli/src/lib/orchestrator.ts` (`buildDescriptor`'s Step
+  5), `entrypoint/apigen-cli/src/lib/pipeline.ts` (`runPipeline`, DELETED).
+
+- **Two distinct bugs, both root-caused and fixed in this session:**
+
+  1. **Wiring bug (apigen-cli):** BUG-APIGEN-CORE-002/003/004 (above) fixed
+     `extract()`'s re-export blindness and verified it directly, but nothing
+     ever routed the shipped CLI's default `generate`/`run` commands through
+     it — they called `runPipeline()` → v1's `generateSchemas()` →
+     `extractNamed()`/`extractDefault()`/`extractNamedObject()` UNCONDITIONALLY,
+     with the fixed v2 orchestrator (`orchestrateGenerate`/`orchestrateRun`)
+     reachable only via an opt-in `--v2` flag nobody passed by default.
+     `generate-registry`/`run-registry` had no `--v2` escape hatch at all —
+     always v1. `serve` spawns child `apigen run` processes without ever
+     passing `--v2`, inheriting the v1 default.
+
+  2. **A SECOND, independent instance of the SAME re-export-blindness bug,
+     found only while fixing bug 1 above** (not previously known — see
+     apigen-cli's BACKLOG.md BUG-APIGEN-CORE-005 entry for the fuller
+     narrative of how this was caught): even when a caller DID pass `--v2`,
+     `orchestrator.ts`'s `buildDescriptor()` had a "Step 5" that called v1's
+     `generateSchemas()` a SECOND time, independently, from scratch, to build
+     the `ComposedSchemas` every `OutputPlugin.generate()`/`run()` actually
+     dispatches against — completely discarding what Steps 1-4 (the fixed
+     `extract()`) had already correctly extracted. Empirically: `generate
+     --v2` against memory-core's 40-file re-export barrel logged "merged 140
+     total operations" (Step 3, correct) but wrote a `routes.ts` with exactly
+     2 routes (Step 5, still v1-buggy). So even a hypothetical CLI that
+     defaulted to `--v2` without also fixing Step 5 would have remained
+     broken for any real re-export-heavy source.
+
+- **Fix:**
+  1. `entrypoint/apigen-cli`'s `generate`/`run` commands now call
+     `orchestrateGenerate`/`orchestrateRun` unconditionally — the
+     `if (opts.v2)` branch is gone, and so is the `--v2` flag itself (removed
+     cleanly rather than kept as a no-op — see that BACKLOG entry for the
+     removal-vs-deprecate reasoning). `generate-registry`/`run-registry` were
+     rewired from a per-package `runPipeline()` loop to build a
+     `SourceEntry[]` and pass it through the SAME orchestrator in one call,
+     preserving their nx-tag package-discovery logic unchanged (only the
+     extraction mechanism changed).
+  2. `buildDescriptor`'s Step 5 no longer re-extracts. It groups the
+     ALREADY-EXTRACTED `operations` (from Steps 1-4) by namespace, filters to
+     `kind === 'action'` (matching what v1 ever produced — `query`/
+     `constructor`/`instance-method` operations were never dispatchable via
+     `ComposedSchemas` either way), and feeds each `{input, output, hasCtx}`
+     through the EXISTING, extractor-independent, pure `composeSchemas()` —
+     unchanged, since `middlewares=[]` was already the only value ever passed
+     here. One canonical extraction pass now backs both
+     `descriptor.operations` and `packageSchemas`; they can never disagree
+     again. This required adding `hasCtx` to the `Operation` type (v2's
+     `extract()` already excluded the `ctx` first-param by name per
+     [inv:ctx-name-only], same as v1, but never recorded the flag anywhere —
+     without it, `dispatch()`'s BUG-APIGEN-001 ctx re-injection would have
+     silently broken for every ctx-taking function once v1's `hasCtx`-setting
+     `generateSchemas()` was gone).
+  3. **BUG-APIGEN-018 (param defaults) ported, not dropped:** v1's
+     `generateSchemas()` uniquely called `extractors/param-defaults.ts`
+     (`extractParamDefault`/`applyParamDefault`) to surface a TS initializer
+     or JSDoc-bracketed default as the JSON-Schema `default` keyword; v2's
+     `extract()` had no equivalent — deleting v1 outright would have silently
+     dropped this feature. Ported: `param-defaults.ts` moved out of the
+     (now-empty, deleted) `extractors/` folder to `src/lib/` directly;
+     `extract.ts`'s three raw-param builder functions
+     (`rawParams`/`rawParamsFromSig`/`rawParamsSig`) gained an optional
+     `jsDocSource` parameter threaded from each of the 6 export-shape call
+     sites (matching v1's per-shape jsDocSource choice where a v1 equivalent
+     existed; best-effort for the 2 shapes v1 never covered — anonymous
+     default export, CJS); `buildActionOpAtPath` now shallow-clones and
+     applies the default the same way `generateSchemas()` did. **This
+     behavior had ZERO test coverage even under v1** (verified: grep for
+     `BUG-APIGEN-018`/`param-default`/`applyParamDefault`/`extractParamDefault`
+     across every `*.spec.ts` in the repo found nothing prior to this fix) —
+     added `src/test/fixtures/param-defaults.ts` +
+     `[BUG-APIGEN-018]` describe block in `extract.spec.ts` (3 new tests:
+     TS-initializer default, JSDoc-bracketed default, no-default param).
+  4. **Public API check (per this task's explicit instruction to verify
+     before deleting):** grepped the full monorepo — `generateSchemas`,
+     `extractNamed`, `extractDefault`, `extractNamedObject`, and `runPipeline`
+     had NO consumers outside `apigen-cli` and `apigen-core-client`
+     themselves. `generateSchemas` WAS re-exported from `apigen-core-client`'s
+     public `index.ts`, but nothing external imported it — deleted outright
+     rather than kept as a delegating shim; no external "public API"
+     justification found.
+- **Known, accepted behavior difference (not a regression, not fixed here —
+  see FEAT/decision note in apigen-cli's BACKLOG.md):** v1's `--export <mode>`
+  selected exactly ONE of three mutually-exclusive shapes (named XOR default
+  XOR named-object); v2's `extract()` walks the full export-shape matrix
+  unconditionally in one pass (by design — see `extract.ts`'s header
+  comment), so `--export` is now inert. Flagged, not silently dropped: kept
+  parseable (doesn't error existing scripts) with an explicit doc-comment on
+  `SourceEntry.exportMode` explaining why it no longer filters.
+- **Tests:** `apigen-core-client` 240 (main, pre-fix) → 239 (this branch):
+  deleted `generate-schemas.spec.ts` (7 v1-only tests) net against
+  `extract.spec.ts` gaining 6 (3 tests ported 1:1 from
+  `generate-schemas.spec.ts` that had no v2 equivalent yet — named-export
+  presence/non-callable-exclusion, Promise-unwrap, zero-param-with-ctx — plus
+  3 new BUG-APIGEN-018 tests). The 2 `generate-schemas.spec.ts` tests with no
+  porting equivalent (`schema-extraction.5`/`.6` — "only the default/
+  named-object shape is extracted when that `--export` mode is selected")
+  tested a v1-only concept (mode SELECTS one shape) that v2 doesn't have
+  (extracts the full matrix unconditionally); the underlying "shape extracts
+  correctly" behavior they exercised is already covered generically by
+  `extract.spec.ts`'s pre-existing Shape 3/4/5 describe blocks. 239/239
+  green.
+  `apigen-cli` 112/112 (stable; 3 flaky failures during one interim run
+  in `cross-host-response-envelope.spec.ts`/`serve.spec.ts` — both
+  live-child-process-spawning integration tests — were confirmed
+  pre-existing/environmental: reproduced identically against unmodified
+  `main` under the same full-parallel-suite load, and both pass 100% clean
+  in isolation; not a regression from this change).
+- **Real-world verification** against `~/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts`
+  (read-only reference, ~40-file re-export barrel): `generate --type
+  api-express` with NO flags (v2 is now unconditional) → 140 operations
+  extracted, 130 real routes written to `routes.ts` (up from 2 pre-fix).
+  `run --type api-express` with NO flags → live server registers the same
+  130 routes; curled two previously-invisible-under-v1 routes
+  (`/memory/memoryAllowlistRoot`, `/memory/isPathInMemoryAllowlist`) and got
+  correct real responses (200, real data), not 404s.
+- **Status:** FIXED 2026-07-19.
+
 ## Open
 
 ### BUG-APIGEN-CORE-004 — `isSerializableType()`'s textual allow-list doesn't recognize `Record<K,V>` (or other generic utility-type wrappers), causing false-negative skips on legitimately serializable consts
