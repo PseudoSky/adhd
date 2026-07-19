@@ -127,6 +127,31 @@ All notable changes to this project are documented here.
   from this fix; it was simply unreachable before because v1 never exposed
   those re-exported routes at all.
 
+- **BUG-APIGEN-036** — post-v1-retirement code review caught
+  `apigen-engine-runtime/src/test/named-type-param.spec.ts` (the real-pipeline
+  regression test authored for BUG-APIGEN-026) still calling the deleted v1
+  `generateSchemas()`, which `7c66413d` (v1 retirement) had removed along with
+  `lib/generate-schemas.ts` — every one of its 3 test cases failed with
+  `TypeError: generateSchemas is not a function`, meaning BUG-APIGEN-026's
+  dangling-`$ref` regression test had zero coverage on this branch. Fixed by
+  rewriting all 3 call sites to the v2 equivalent: `extract({ sourceFile })`
+  → `Operation[]`, adapted into `composeSchemas()`'s expected `GeneratedSchemas`
+  shape via a `toGeneratedSchemas()` helper added to the test file (`kind:
+  'action'` operations only, keyed by the terminal path segment's raw
+  spelling) — the exact same adaptation `buildDescriptor`'s Step 5 performs in
+  `entrypoint/apigen-cli/src/lib/orchestrator.ts`, reproduced locally since
+  it isn't exported as a standalone helper. The test's real-pipeline intent
+  (extract → compose → real `Ajv.compile`, not hand-built fixtures) and all
+  three original assertions (compiles without a dangling `$ref`, a valid
+  `pick('a')` call dispatches, an invalid enum value is rejected) are
+  unchanged. Confirmed the fix is semantically equivalent, not just
+  compiling: the `topRef: false` fix from BUG-APIGEN-026 is still present
+  and unchanged in `schema-builders/ts-json-schema.ts`, so this test still
+  exercises the real code path the original regression test was written
+  against. Verified green:
+  `npx nx test apigen-engine-runtime --testFile=src/test/named-type-param.spec.ts`
+  (3/3 passing).
+
 ### Changed
 
 - **v1 extraction pipeline retired — v2 orchestrator is now the ONLY

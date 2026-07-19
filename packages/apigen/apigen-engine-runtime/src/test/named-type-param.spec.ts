@@ -19,14 +19,22 @@
  * COMPILE time (`ajv.compile(schema.input)`), before any input was even
  * inspected — every call to `pick()` failed, regardless of the value sent.
  *
- * This test runs the REAL pipeline (`generateSchemas` → `composeSchemas` →
- * the REAL `validateLayer`/`Ajv` instance) against a fixture with exactly
- * that shape, so a regression here fails loudly instead of silently passing
- * hand-built fixtures that never exercised the real generator.
+ * This test runs the REAL pipeline (`extract` → `composeSchemas` → the REAL
+ * `validateLayer`/`Ajv` instance) against a fixture with exactly that shape,
+ * so a regression here fails loudly instead of silently passing hand-built
+ * fixtures that never exercised the real generator.
+ *
+ * v1 retirement (BUG-APIGEN-CORE-005): `generateSchemas()` (v1) is deleted.
+ * `toGeneratedSchemas()` below adapts v2's `extract()` → `Operation[]` into
+ * the `GeneratedSchemas` shape `composeSchemas()` expects — the exact same
+ * adaptation `buildDescriptor`'s Step 5 performs in
+ * `entrypoint/apigen-cli/src/lib/orchestrator.ts`, reproduced here since it
+ * isn't exported as a standalone helper.
  */
 import path from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
-import { generateSchemas, composeSchemas } from '@adhd/apigen-core-client';
+import { extract, composeSchemas } from '@adhd/apigen-core-client';
+import type { Operation, GeneratedSchemas } from '@adhd/apigen-core-client';
 import { createInvoker, LayerContext } from '../lib/invoke';
 import { makeValidateLayer } from '../lib/validate-layer';
 import type { Call } from '../lib/invoke';
@@ -42,10 +50,30 @@ function makeCall(domainArgs: Record<string, unknown>): Call {
   };
 }
 
+// Mirrors buildDescriptor's Step 5 adapter (orchestrator.ts): only
+// `kind: 'action'` operations are dispatchable functions; the flat schema
+// key is the terminal path segment's raw spelling.
+function toGeneratedSchemas(operations: readonly Operation[]): GeneratedSchemas {
+  const generated: GeneratedSchemas = {
+    metadata: { namespace: '', phase: '' },
+    schemas: {},
+  };
+  for (const op of operations) {
+    if (op.kind !== 'action') continue;
+    const fnName = op.path[op.path.length - 1].raw;
+    generated.schemas[fnName] = {
+      input: op.input,
+      output: op.output,
+      ...(op.hasCtx ? { hasCtx: true } : {}),
+    };
+  }
+  return generated;
+}
+
 describe('BUG-APIGEN-026: named-type parameter schema — real pipeline', () => {
   it('[apigen-core-026.1] the composed schema for a named-type param compiles in AJV without a dangling $ref', async () => {
-    const generated = await generateSchemas({ sourceFile: fixture });
-    const schemas = composeSchemas(generated, []);
+    const operations = await extract({ sourceFile: fixture });
+    const schemas = composeSchemas(toGeneratedSchemas(operations), []);
 
     // The bug threw at compile time, inside makeValidateLayer's ajv.compile()
     // call — constructing the layer over this schema must not throw.
@@ -53,8 +81,8 @@ describe('BUG-APIGEN-026: named-type parameter schema — real pipeline', () => 
   });
 
   it('[apigen-core-026.2] a valid call to pick() passes through to dispatch', async () => {
-    const generated = await generateSchemas({ sourceFile: fixture });
-    const schemas = composeSchemas(generated, []);
+    const operations = await extract({ sourceFile: fixture });
+    const schemas = composeSchemas(toGeneratedSchemas(operations), []);
     const dispatchSpy = vi.fn().mockResolvedValue('a');
 
     const invoke = createInvoker([makeValidateLayer(schemas)]);
@@ -68,8 +96,8 @@ describe('BUG-APIGEN-026: named-type parameter schema — real pipeline', () => 
   });
 
   it('[apigen-core-026.3] the literal union is a real enum constraint — an invalid choice is rejected, not silently accepted', async () => {
-    const generated = await generateSchemas({ sourceFile: fixture });
-    const schemas = composeSchemas(generated, []);
+    const operations = await extract({ sourceFile: fixture });
+    const schemas = composeSchemas(toGeneratedSchemas(operations), []);
     const dispatchSpy = vi.fn();
 
     const invoke = createInvoker([makeValidateLayer(schemas)]);
