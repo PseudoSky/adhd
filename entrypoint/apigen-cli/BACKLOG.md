@@ -108,6 +108,85 @@ performed this session (out of scope; not silently worked around, filed here
 per this task's explicit instruction to file anything found broken along the
 way that isn't being fixed).
 
+### BUG-APIGEN-030 (Open, filed not fixed) — union-typed params crash EVERY call with `strict mode: unknown keyword: "x-apigen-logical"` — AJV rejects apigen's own advisory schema hint
+
+**Discovered:** 2026-07-19, by an agent independently re-verifying the "130
+routes" claim for BUG-APIGEN-028 (the v1-retirement fix) against the real
+`sox-ecosystem/libs/memory-core/src/index.ts` fixture. Confirmed live: 40 of
+the fixture's 130 routes have a parameter whose schema is a `union` type
+(e.g. `POST /sox-ecosystem/parseTags {"data":{"raw":"..."}}`,
+`POST /sox-ecosystem/vecToJson {"data":{"vec":[...]}}`) — every one of them
+returns `500 {"code":"internal","message":"strict mode: unknown keyword:
+\"x-apigen-logical\""}` regardless of input. The other 90/130 routes
+(non-union params) dispatch correctly, including real AJV validation
+rejections (`400` with a genuine missing-properties error) and real
+computed results (verified independently, e.g. `hexSha256` returning the
+correct SHA-256 digest) — so this is narrowly scoped to union-typed params,
+not a general regression.
+
+**Root cause, traced and confirmed by reading the actual source:**
+
+1. `apigen-core-client/src/lib/schema-builders/union.ts` deliberately emits
+   an advisory hint on every union schema fragment: `oneOf` + `discriminator`
+   + `"x-apigen-logical": "union"` (`union.ts:14,76,95,101` — the constant
+   itself is `X_APIGEN_LOGICAL` from
+   `apigen-base-logical/src/lib/descriptor-ext.ts:4`). The same hint pattern
+   is used for nominal/branded types (`host-ts.ts:92,109` in
+   `apigen-engine-runtime/src/lib/logical/`), and the runtime's own
+   `union-codec.ts`/`nominal-codec.ts` read this hint back at decode time to
+   pick the right codec — it's load-bearing for the logical-type transcode
+   layer, not decorative.
+2. `apigen-engine-runtime/src/lib/validate-layer.ts:51` constructs the
+   module-level AJV singleton as `new Ajv({ allErrors: true })` — no
+   `strict: false`, and no `ajv.addKeyword('x-apigen-logical', ...)`
+   registration anywhere in the codebase (confirmed via a repo-wide grep for
+   both `addKeyword` and `x-apigen-logical` — the hint is only ever *written*
+   by the schema builders and *read* by the codecs, never declared to AJV).
+3. `ajv@8.20.0` (confirmed installed version) defaults `strict: true`, which
+   throws `strict mode: unknown keyword: "<name>"` at `ajv.compile()` time
+   for any schema-object property AJV doesn't recognize as a standard
+   JSON-Schema or registered custom keyword. `validate-layer.ts:131,212`
+   calls `ajv.compile(schema.input)` **lazily, per request** (not once at
+   server startup), which is why this surfaces as a per-route 500 at
+   dispatch time rather than a startup crash — routes without a union-typed
+   param never hit a schema carrying the offending keyword, so they compile
+   and validate fine.
+
+**Impact:** every route/tool (any api type — this is in the shared
+`apigen-engine-runtime` validate Layer, not an api-express-specific bug)
+with a union-typed parameter is completely unusable — 100% failure rate,
+not input-dependent. In the fixture used to verify BUG-APIGEN-028, that's
+40/130 routes (31%).
+
+**Suggested fix (not yet attempted — filed per this session's
+verification-only scope, not fixing):** register `x-apigen-logical` (and any
+other apigen-authored advisory keywords, e.g. `x-apigen-codec` referenced in
+`nominal.ts:8`) via `ajv.addKeyword({ keyword: 'x-apigen-logical', ... })` (a
+no-op/metadata-only keyword definition is sufficient — AJV only needs to know
+the keyword exists, it doesn't need to validate against it) at the same
+module-level singleton construction site in `validate-layer.ts:51-52`, right
+alongside the existing `addFormats(ajv)` call. Needs a real
+`generateSchemas → composeSchemas → Ajv.compile` regression test with an
+actual union-typed fixture (the existing `validate-layer.spec.ts` uses
+hand-built schema fixtures, per the same class of gap `BUG-APIGEN-026`'s
+regression test was written to close — hand-built fixtures never carried the
+real hint and wouldn't have caught this).
+
+**Cross-references:** distinct from `BUG-APIGEN-029` (dangling-`$ref`
+failures on complex external types like `BetterSqlite3.Database` — different
+error message, different root cause: `$ref` resolution vs. an unregistered
+AJV keyword). Also distinct from `BUG-APIGEN-019` (line 230 below — weak/
+permissive MCP schemas for union *return* types, a schema-quality issue, not
+a hard crash on union *param* types). Citations: [session 2026-07-19,
+sub-agent `verify-api-express-routes`, self-verified against source by this
+session: `apigen-core-client/src/lib/schema-builders/union.ts:14,76,95,101`;
+`apigen-base-logical/src/lib/descriptor-ext.ts:4`;
+`apigen-engine-runtime/src/lib/logical/host-ts.ts:92,109`;
+`apigen-engine-runtime/src/lib/validate-layer.ts:51-52,131,212`; installed
+`ajv` version `8.20.0` (`node_modules/ajv/package.json`); live curl repro
+against `/Users/nix/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts` via
+the branch's own built `dist/entrypoint/apigen-cli/index.js`]
+
 ### FEAT-APIGEN-019 — CLI doesn't discoverably list available `--type` plugins (help text stale, `run` commands give no options at all) — HIGH
 
 **Requested:** 2026-07-19 by the user, directly.
