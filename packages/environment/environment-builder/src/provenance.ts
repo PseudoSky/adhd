@@ -1,56 +1,43 @@
 /**
- * `provenance.ts` — provenance extraction, decoupled from resolution.
- *
- * `config-resolver.ts`'s `resolveConfig()` produces, per field, a
- * `ResolvedFieldValue` (`{ value, source, scope, env? }`) — resolution and
- * provenance metadata bundled together, because computing one requires the
- * other. `trackProvenance()` is the pure, independently-testable projection
- * from that bundle down to the `SnapshotData.provenance` shape
- * (`Record<string, ProvenanceEntry>`): it drops `value` (which belongs in
- * `SnapshotData.raw`, not `SnapshotData.provenance`) and defensively strips
- * `env` for any source that isn't itself env-derived, so a caller can never
- * accidentally read a stale/irrelevant env var name off a `.default`/`.set`
- * provenance entry.
+ * `provenance.ts` — provenance-entry construction, decoupled from
+ * resolution (salvaged from the pre-redesign builder; see
+ * `ARCHITECTURE.md` §4). `config-resolver.ts#resolveConfig` computes,
+ * per field, the value + the layer it came from — this module is the pure,
+ * independently-testable projection of that pair down to the
+ * `SnapshotData.provenance` shape (`ProvenanceEntry`).
  *
  * Pure — no I/O, no shared mutable state.
  */
 
-import type { ConfigScope, ProvenanceEntry, ProvenanceSource } from '@adhd/environment-base-spec';
+import type { ProvenanceEntry, ProvenanceSource, Scope } from '@adhd/environment-base-spec';
 
-/** The subset of `config-resolver.ts`'s `ResolvedFieldValue` that provenance is derived from. */
-export interface ResolvedProvenanceInput {
+export interface ProvenanceInput {
   source: ProvenanceSource;
-  scope: ConfigScope;
+  scope: Scope;
+  /** The env var name consulted, when `source === 'env'`. */
   env?: string;
 }
 
-/** Sources for which recording an `env` var name is meaningful. */
-const ENV_DERIVED_SOURCES: ReadonlySet<ProvenanceSource> = new Set([
-  'project.env',
-  'project.override',
-  'global.env',
-]);
-
 /**
- * Projects a flat map of per-field resolution metadata down to
- * `SnapshotData.provenance`'s shape: `Record<string, ProvenanceEntry>`.
+ * Builds a single `ProvenanceEntry`, defensively stripping `env` for any
+ * source that isn't `'env'` — a caller can never accidentally read a
+ * stale/irrelevant env var name off a `'default'`/file-layer provenance
+ * entry.
  */
-export function trackProvenance(
-  resolved: Record<string, ResolvedProvenanceInput>,
-): Record<string, ProvenanceEntry> {
-  const provenance: Record<string, ProvenanceEntry> = {};
-
-  for (const key of Object.keys(resolved)) {
-    const entry = resolved[key];
-    const provenanceEntry: ProvenanceEntry = {
-      source: entry.source,
-      scope: entry.scope,
-    };
-    if (entry.env !== undefined && ENV_DERIVED_SOURCES.has(entry.source)) {
-      provenanceEntry.env = entry.env;
-    }
-    provenance[key] = provenanceEntry;
+export function buildProvenanceEntry(input: ProvenanceInput): ProvenanceEntry {
+  const entry: ProvenanceEntry = { source: input.source, scope: input.scope };
+  if (input.source === 'env' && input.env !== undefined) {
+    entry.env = input.env;
   }
+  return entry;
+}
 
+/** Projects a flat map of per-field resolution metadata down to
+ *  `SnapshotData.provenance`'s shape: `Record<string, ProvenanceEntry>`. */
+export function trackProvenance(resolved: Record<string, ProvenanceInput>): Record<string, ProvenanceEntry> {
+  const provenance: Record<string, ProvenanceEntry> = {};
+  for (const key of Object.keys(resolved)) {
+    provenance[key] = buildProvenanceEntry(resolved[key]);
+  }
   return provenance;
 }

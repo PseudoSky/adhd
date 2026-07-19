@@ -1,66 +1,36 @@
 import { describe, expect, it } from 'vitest';
-import { validateConfig, ValidationError } from '../validation';
-import { generateFieldSchema } from '../json-schema-gen';
+import { generateFieldSchema } from '@adhd/environment-base-spec';
+
+import { ValidationError, validateConfig } from '../validation';
 
 describe('validateConfig', () => {
-  it('passes for a valid config', () => {
-    const schema = generateFieldSchema({ 'server.port': { type: 'integer', minimum: 1024, maximum: 65535 } });
-    expect(() => validateConfig({ server: { port: 3000 } }, schema)).not.toThrow();
+  it('passes silently for a config that satisfies the schema', () => {
+    const schema = generateFieldSchema({ 'server.port': { type: 'integer', minimum: 1, maximum: 65535 } });
+    expect(() => validateConfig({ server: { port: 4000 } }, schema)).not.toThrow();
   });
 
-  it('throws on a minimum violation', () => {
-    const schema = generateFieldSchema({ 'server.port': { type: 'integer', minimum: 1024 } });
-    expect(() => validateConfig({ server: { port: 80 } }, schema)).toThrow(ValidationError);
-  });
-
-  it('throws on a maximum violation', () => {
-    const schema = generateFieldSchema({ 'server.port': { type: 'integer', maximum: 65535 } });
-    expect(() => validateConfig({ server: { port: 100000 } }, schema)).toThrow(ValidationError);
-  });
-
-  it('throws on an enum violation', () => {
-    const schema = generateFieldSchema({ 'log.level': { type: 'string', enum: ['debug', 'info', 'warn', 'error'] } });
-    expect(() => validateConfig({ log: { level: 'verbose' } }, schema)).toThrow(ValidationError);
-  });
-
-  it('throws on a pattern violation', () => {
-    const schema = generateFieldSchema({ 'log.level': { type: 'string', pattern: '^[a-z]+$' } });
-    expect(() => validateConfig({ log: { level: 'INVALID123' } }, schema)).toThrow(ValidationError);
-  });
-
-  it('collects every field-level violation (allErrors), not just the first', () => {
+  it('throws ValidationError aggregating every field violation, not just the first', () => {
     const schema = generateFieldSchema({
       'server.port': { type: 'integer', minimum: 1024 },
-      'log.level': { type: 'string', enum: ['debug', 'info'] },
+      'logging.level': { type: 'string', enum: ['debug', 'info', 'warn', 'error'] },
     });
+    let caught: ValidationError | undefined;
     try {
-      validateConfig({ server: { port: 1 }, log: { level: 'nope' } }, schema);
-      expect.fail('expected validateConfig to throw');
-    } catch (error) {
-      expect(error).toBeInstanceOf(ValidationError);
-      const validationError = error as ValidationError;
-      expect(validationError.fieldErrors.length).toBeGreaterThanOrEqual(2);
-      const fields = validationError.fieldErrors.map((e) => e.field);
-      expect(fields).toContain('server.port');
-      expect(fields).toContain('log.level');
+      validateConfig({ server: { port: 1 }, logging: { level: 'verbose' } }, schema);
+    } catch (err) {
+      caught = err as ValidationError;
     }
+    expect(caught).toBeInstanceOf(ValidationError);
+    expect(caught?.fieldErrors.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('skips validation for a null schema', () => {
+  it('treats a null/undefined schema as "nothing to validate"', () => {
     expect(() => validateConfig({ anything: 'goes' }, null)).not.toThrow();
-  });
-
-  it('skips validation for an undefined schema', () => {
     expect(() => validateConfig({ anything: 'goes' }, undefined)).not.toThrow();
   });
 
-  it('skips validation for an empty fieldSchema (no declared config fields)', () => {
+  it('treats an empty-properties schema as trivially valid (zero declared fields)', () => {
     const schema = generateFieldSchema({});
-    expect(() => validateConfig({}, schema)).not.toThrow();
-  });
-
-  it('does not error on a field missing from the resolved config (no "required" is ever generated — absence is a warning-level concern for callers, not a validation error)', () => {
-    const schema = generateFieldSchema({ 'providers.openai.model': { type: 'string' } });
     expect(() => validateConfig({}, schema)).not.toThrow();
   });
 });

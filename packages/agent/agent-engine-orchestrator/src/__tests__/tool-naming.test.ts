@@ -22,6 +22,7 @@ const stubConfig: EngineConfig = {
     plugins: { entries: [] },
     getProviderConfig: (opts) => ({ baseURL: opts.inlineBaseURL, model: opts.inlineModel }),
     subprocessEnv: () => ({}),
+    resolveEnvName: () => undefined,
     isEnvNameAllowed: () => true,
 };
 

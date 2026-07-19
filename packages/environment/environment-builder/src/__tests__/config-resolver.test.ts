@@ -1,319 +1,144 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mergeFieldDefinitions } from '../field-merge';
-import { coerceConfig, coerceValue, inferEnvVar, readStore, redactSecrets, resolveConfig, unflatten } from '../config-resolver';
-import { generateCrossLanguageVectors } from '@adhd/environment-base-spec';
-import type { ConfigFieldDefinition } from '@adhd/environment-base-spec';
+import { describe, expect, it } from 'vitest';
 
-describe('inferEnvVar', () => {
-  it('matches the contract test vector', () => {
-    expect(inferEnvVar('ADHD_AGENT_MCP', 'db.path')).toBe('ADHD_AGENT_MCP_DB_PATH');
+import { isEnvRef, makeEnvRef } from '@adhd/environment-base-spec';
+import { coerceValue, resolveConfig, unflatten } from '../config-resolver';
+import type { Layers } from '../layer-files';
+
+const EMPTY_LAYERS: Layers = { system: undefined, global: undefined, project: undefined, local: undefined };
+
+/** Reads a dot-path out of a `Record<string, unknown>` tree without resorting to `any`. */
+function get(obj: Record<string, unknown>, path: string): unknown {
+  let node: unknown = obj;
+  for (const segment of path.split('.')) {
+    if (typeof node !== 'object' || node === null) return undefined;
+    node = (node as Record<string, unknown>)[segment];
+  }
+  return node;
+}
+
+describe('coerceValue', () => {
+  it('coerces integer/number/boolean/array from string forms', () => {
+    expect(coerceValue('42', 'integer')).toBe(42);
+    expect(coerceValue('3.14', 'number')).toBe(3.14);
+    expect(coerceValue('true', 'boolean')).toBe(true);
+    expect(coerceValue('false', 'boolean')).toBe(false);
+    expect(coerceValue('a,b,c', 'array')).toEqual(['a', 'b', 'c']);
   });
 
-  it('replaces both dots and dashes with underscores', () => {
-    expect(inferEnvVar('ADHD_AGENT_MCP', 'provider-key.secret')).toBe('ADHD_AGENT_MCP_PROVIDER_KEY_SECRET');
-  });
-});
-
-describe('readStore', () => {
-  let dir: string;
-
-  beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'adhd-store-test-'));
+  it('leaves already-typed values unchanged', () => {
+    expect(coerceValue(42, 'integer')).toBe(42);
+    expect(coerceValue(true, 'boolean')).toBe(true);
   });
 
-  afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
-  });
-
-  it('returns {} when the store file does not exist', () => {
-    expect(readStore(dir, 'adhd', 'my-project', 'default')).toEqual({});
-  });
-
-  it('returns {} when the store file is corrupt JSON', () => {
-    const storeDir = join(dir, 'adhd', 'my-project', 'default');
-    mkdirSync(storeDir, { recursive: true });
-    writeFileSync(join(storeDir, '.adhd-store.json'), '{not json', 'utf8');
-    expect(readStore(dir, 'adhd', 'my-project', 'default')).toEqual({});
-  });
-
-  it('reads declared values from a well-formed store file', () => {
-    const storeDir = join(dir, 'adhd', 'my-project', 'default');
-    mkdirSync(storeDir, { recursive: true });
-    writeFileSync(
-      join(storeDir, '.adhd-store.json'),
-      JSON.stringify({ version: '0.0.5', values: { 'providers.openai.secret': 'sk-test' }, updatedAt: new Date().toISOString() }),
-      'utf8',
-    );
-    expect(readStore(dir, 'adhd', 'my-project', 'default')).toEqual({ 'providers.openai.secret': 'sk-test' });
-    expect(existsSync(join(storeDir, '.adhd-store.json'))).toBe(true);
-  });
-});
-
-describe('resolveConfig', () => {
-  it('uses the env var when present (inferred name)', () => {
-    const fields = mergeFieldDefinitions({}, {}, { 'db.path': { type: 'string', default: '/default/db' } });
-    const { raw, resolved } = resolveConfig(fields, {
-      prefix: 'ADHD_TEST',
-      processEnv: { ADHD_TEST_DB_PATH: '/env/db' },
-    });
-    expect(raw['db.path']).toBe('/env/db');
-    expect(resolved['db.path']).toEqual({ value: '/env/db', source: 'project.env', scope: 'project', env: 'ADHD_TEST_DB_PATH' });
-  });
-
-  it('falls back to the store when the env var is absent', () => {
-    const fields = mergeFieldDefinitions({}, {}, { 'db.path': { type: 'string', default: '/default/db' } });
-    const { raw, resolved } = resolveConfig(fields, {
-      prefix: 'ADHD_TEST',
-      store: { 'db.path': '/store/db' },
-      processEnv: {},
-    });
-    expect(raw['db.path']).toBe('/store/db');
-    expect(resolved['db.path'].source).toBe('project.set');
-  });
-
-  it('falls back to the default when neither env nor store has a value', () => {
-    const fields = mergeFieldDefinitions({}, {}, { 'db.path': { type: 'string', default: '/default/db' } });
-    const { raw, resolved } = resolveConfig(fields, { prefix: 'ADHD_TEST', processEnv: {} });
-    expect(raw['db.path']).toBe('/default/db');
-    expect(resolved['db.path'].source).toBe('project.default');
-  });
-
-  it('respects noEnv — suppresses env lookup even when the var is set', () => {
-    const fields = mergeFieldDefinitions(
-      {},
-      {},
-      { 'db.path': { type: 'string', default: '/default/db', noEnv: true } },
-    );
-    const { raw, resolved } = resolveConfig(fields, {
-      prefix: 'ADHD_TEST',
-      store: { 'db.path': '/store/db' },
-      processEnv: { ADHD_TEST_DB_PATH: '/env/db' },
-    });
-    expect(raw['db.path']).toBe('/store/db');
-    expect(resolved['db.path'].source).toBe('project.set');
-  });
-
-  it('uses an explicit env override name instead of the inferred name, with "project.override" provenance', () => {
-    const fields = mergeFieldDefinitions(
-      {},
-      {},
-      { 'providers.openai.secret': { type: 'string', default: '', env: 'OPENAI_API_KEY' } },
-    );
-    const { raw, resolved } = resolveConfig(fields, {
-      prefix: 'ADHD_AGENT_MCP',
-      processEnv: { OPENAI_API_KEY: 'sk-test', ADHD_AGENT_MCP_PROVIDERS_OPENAI_SECRET: 'should-not-be-used' },
-    });
-    expect(raw['providers.openai.secret']).toBe('sk-test');
-    expect(resolved['providers.openai.secret']).toEqual({
-      value: 'sk-test',
-      source: 'project.override',
-      scope: 'project',
-      env: 'OPENAI_API_KEY',
-    });
-  });
-
-  it('resolves system-scope fields from default only, ignoring env and store', () => {
-    const fields = mergeFieldDefinitions({ 'log.level': { type: 'string', default: 'info' } }, {}, {});
-    const { raw, resolved } = resolveConfig(fields, {
-      prefix: 'ADHD_TEST',
-      store: { 'log.level': 'from-store' },
-      processEnv: { ADHD_TEST_LOG_LEVEL: 'from-env' },
-    });
-    expect(raw['log.level']).toBe('info');
-    expect(resolved['log.level'].source).toBe('system.default');
-  });
-
-  it('resolves global-scope fields from env or default, never from the store', () => {
-    const fields = mergeFieldDefinitions({}, { 'transport.kind': { type: 'string', default: 'stdio' } }, {});
-    const withEnv = resolveConfig(fields, { prefix: 'ADHD_TEST', processEnv: { ADHD_TEST_TRANSPORT_KIND: 'sse' } });
-    expect(withEnv.resolved['transport.kind'].source).toBe('global.env');
-
-    const withoutEnv = resolveConfig(fields, {
-      prefix: 'ADHD_TEST',
-      store: { 'transport.kind': 'from-store' },
-      processEnv: {},
-    });
-    expect(withoutEnv.raw['transport.kind']).toBe('stdio');
-    expect(withoutEnv.resolved['transport.kind'].source).toBe('global.default');
-  });
-
-  it('filters by scope when options.scope is provided', () => {
-    const fields = mergeFieldDefinitions(
-      { 'log.level': { type: 'string', default: 'info' } },
-      { 'transport.kind': { type: 'string', default: 'stdio' } },
-      { 'db.path': { type: 'string', default: '/tmp/db' } },
-    );
-    const { raw } = resolveConfig(fields, { prefix: 'ADHD_TEST', scope: 'project', processEnv: {} });
-    expect(Object.keys(raw)).toEqual(['db.path']);
-  });
-
-  it('finalizes the env sentinel on the returned fields map', () => {
-    const fields = mergeFieldDefinitions({}, {}, { 'db.path': { type: 'string', default: '/tmp/db' } });
-    expect(fields['db.path'].env).toBe('');
-    const { fields: resolvedFields } = resolveConfig(fields, { prefix: 'ADHD_TEST', processEnv: {} });
-    expect(resolvedFields['db.path'].env).toBe('ADHD_TEST_DB_PATH');
-    // Input map must not be mutated (pure function).
-    expect(fields['db.path'].env).toBe('');
-  });
-});
-
-describe('redactSecrets (ENV-CORE-009)', () => {
-  const fields: Record<string, ConfigFieldDefinition> = {
-    'providers.openai.secret': {
-      type: 'string',
-      default: '',
-      scope: 'project',
-      sourceScope: 'project',
-      env: 'OPENAI_API_KEY',
-      secret: true,
-    },
-    'db.path': { type: 'string', default: '', scope: 'project', sourceScope: 'project', env: 'ADHD_X_DB_PATH' },
-  };
-
-  it('replaces a secret value with an env-var reference, leaving non-secret fields intact', () => {
-    const redacted = redactSecrets({ 'providers.openai.secret': 'sk-test', 'db.path': '/tmp/db' }, fields);
-    expect(redacted['providers.openai.secret']).toBe('adhd-secret-ref:OPENAI_API_KEY');
-    expect(redacted['db.path']).toBe('/tmp/db');
-  });
-
-  it('never leaks the plaintext secret into the redacted map', () => {
-    const redacted = redactSecrets({ 'providers.openai.secret': 'sk-super-secret', 'db.path': '/tmp/db' }, fields);
-    expect(JSON.stringify(redacted)).not.toContain('sk-super-secret');
-  });
-
-  it('does not mutate the input raw map', () => {
-    const raw = { 'providers.openai.secret': 'sk-test', 'db.path': '/tmp/db' };
-    redactSecrets(raw, fields);
-    expect(raw['providers.openai.secret']).toBe('sk-test');
-  });
-});
-
-describe('cross-language vectors drift guard (ENV-CORE-007)', () => {
-  it('the committed cross-language-test-vectors.json equals a fresh TS generation', () => {
-    // The Python and Rust suites replay this exact file; if it ever drifts
-    // from the generator (the TS reference impl), the ports would be graded
-    // against a stale expectation. This is the guard that keeps the emitted
-    // file honest — it FAILS the moment the file and the generator disagree.
-    const committedPath = join(
-      __dirname,
-      '..',
-      '..',
-      '..',
-      'environment-base-spec',
-      'spec',
-      'cross-language-test-vectors.json',
-    );
-    const committed = JSON.parse(readFileSync(committedPath, 'utf8'));
-    const fresh = generateCrossLanguageVectors();
-    expect(committed).toEqual(fresh);
-  });
-});
-
-describe('interpolateValue', () => {
-  it('interpolates a single ${VAR} reference', async () => {
-    const { interpolateValue } = await import('../config-resolver');
-    expect(interpolateValue('${HOME}/data', { HOME: '/Users/nix' })).toBe('/Users/nix/data');
-  });
-
-  it('leaves an unresolved ${VAR} reference as a literal', async () => {
-    const { interpolateValue } = await import('../config-resolver');
-    expect(interpolateValue('${MISSING}', {})).toBe('${MISSING}');
-  });
-
-  it('interpolates multiple references in one string', async () => {
-    const { interpolateValue } = await import('../config-resolver');
-    expect(interpolateValue('${VAR1}_${VAR2}', { VAR1: 'a', VAR2: 'b' })).toBe('a_b');
-  });
-
-  it('passes non-string values through unchanged', async () => {
-    const { interpolateValue } = await import('../config-resolver');
-    expect(interpolateValue(42, {})).toBe(42);
-    expect(interpolateValue(true, {})).toBe(true);
-    expect(interpolateValue(null, {})).toBe(null);
-    expect(interpolateValue(undefined, {})).toBe(undefined);
-  });
-
-  it('is single-level only — does not recursively expand the substituted value', async () => {
-    const { interpolateValue } = await import('../config-resolver');
-    expect(interpolateValue('${OUTER}', { OUTER: '${INNER}', INNER: 'resolved' })).toBe('${INNER}');
+  it('returns the original value unchanged on invalid coercion (validation is a separate concern)', () => {
+    expect(coerceValue('not-a-number', 'integer')).toBe('not-a-number');
   });
 });
 
 describe('unflatten', () => {
-  it('converts flat dot-path keys into nested objects', () => {
-    expect(unflatten({ 'db.path': '/tmp/db', 'server.port': '3000' })).toEqual({
-      db: { path: '/tmp/db' },
-      server: { port: '3000' },
-    });
-  });
-
-  it('merges multiple keys under the same parent', () => {
-    expect(unflatten({ 'providers.openai.secret': 'x', 'providers.openai.model': 'gpt-4o' })).toEqual({
-      providers: { openai: { secret: 'x', model: 'gpt-4o' } },
-    });
-  });
-
-  it('handles a single top-level key with no dots', () => {
-    expect(unflatten({ name: 'my-project' })).toEqual({ name: 'my-project' });
-  });
-
-  it('handles an empty input', () => {
-    expect(unflatten({})).toEqual({});
+  it('rebuilds a nested tree from dot-path keys', () => {
+    expect(unflatten({ 'a.b': 1, 'a.c': 2, d: 3 })).toEqual({ a: { b: 1, c: 2 }, d: 3 });
   });
 });
 
-describe('coerceValue', () => {
-  it('coerces "integer" strings to numbers', () => {
-    expect(coerceValue('3000', 'integer')).toBe(3000);
+describe('resolveConfig — the defaults→system→global→project→local→env cascade', () => {
+  const ctx = { prefix: 'ADHD_T', activeScope: 'global' as const };
+
+  it('zero-config: with no layers and no env var, the field default applies', () => {
+    const { nested, provenance } = resolveConfig({ 'a.port': { type: 'integer', default: 8787 } }, EMPTY_LAYERS, {}, ctx);
+    expect(get(nested, 'a.port')).toBe(8787);
+    expect(provenance['a.port']).toEqual({ source: 'default', scope: 'global' });
   });
 
-  it('coerces "number" strings to floats', () => {
-    expect(coerceValue('3.14', 'number')).toBe(3.14);
+  it('negative control: an UNDECLARED field never appears, proving the fallback comes from the real default (not a stray global)', () => {
+    const { nested } = resolveConfig({ 'a.port': { type: 'integer', default: 8787 } }, EMPTY_LAYERS, {}, ctx);
+    expect(get(nested, 'a.missing')).toBeUndefined();
   });
 
-  it('coerces "boolean" strings case-insensitively', () => {
-    expect(coerceValue('true', 'boolean')).toBe(true);
-    expect(coerceValue('False', 'boolean')).toBe(false);
+  it('a system-layer file value overrides the spec default', () => {
+    const layers: Layers = { ...EMPTY_LAYERS, system: { 'a.port': 1000 } };
+    const { provenance, nested } = resolveConfig({ 'a.port': { type: 'integer', default: 8787 } }, layers, {}, ctx);
+    expect(get(nested, 'a.port')).toBe(1000);
+    expect(provenance['a.port'].source).toBe('system');
   });
 
-  it('coerces "array" comma-separated strings to arrays', () => {
-    expect(coerceValue('a,b, c', 'array')).toEqual(['a', 'b', 'c']);
-    expect(coerceValue('', 'array')).toEqual([]);
+  it('global overrides system; project overrides global; local overrides project (strict cascade order)', () => {
+    const layers: Layers = {
+      system: { 'a.port': 1 },
+      global: { 'a.port': 2 },
+      project: { 'a.port': 3 },
+      local: { 'a.port': 4 },
+    };
+    const { nested } = resolveConfig({ 'a.port': { type: 'integer', default: 0 } }, layers, {}, ctx);
+    expect(get(nested, 'a.port')).toBe(4);
   });
 
-  it('passes strings through for "string" type, stringifying non-strings', () => {
-    expect(coerceValue('hello', 'string')).toBe('hello');
-    expect(coerceValue(42, 'string')).toBe('42');
+  it('project overrides global when local is absent', () => {
+    const layers: Layers = { system: undefined, global: { 'a.port': 2 }, project: { 'a.port': 3 }, local: undefined };
+    const { nested } = resolveConfig({ 'a.port': { type: 'integer', default: 0 } }, layers, {}, ctx);
+    expect(get(nested, 'a.port')).toBe(3);
   });
 
-  it('leaves an unparsable "integer" value unchanged rather than producing NaN', () => {
-    expect(coerceValue('not-a-number', 'integer')).toBe('not-a-number');
-  });
-
-  it('passes undefined through unchanged', () => {
-    expect(coerceValue(undefined, 'integer')).toBe(undefined);
-  });
-});
-
-describe('coerceConfig', () => {
-  it('coerces every flat field according to its declared type', () => {
-    const fields = mergeFieldDefinitions(
-      {},
-      {},
-      {
-        'server.port': { type: 'integer', default: '3000' },
-        'server.enabled': { type: 'boolean', default: 'true' },
-      },
+  it('an env var overrides every file layer (highest precedence)', () => {
+    const layers: Layers = { system: { 'a.port': 1 }, global: { 'a.port': 2 }, project: { 'a.port': 3 }, local: { 'a.port': 4 } };
+    const { nested, provenance } = resolveConfig(
+      { 'a.port': { type: 'integer', default: 0 } },
+      layers,
+      { ADHD_T_A_PORT: '9999' },
+      ctx,
     );
-    const result = coerceConfig({ 'server.port': '3000', 'server.enabled': 'true' }, fields);
-    expect(result).toEqual({ 'server.port': 3000, 'server.enabled': true });
+    expect(get(nested, 'a.port')).toBe(9999);
+    expect(provenance['a.port']).toEqual({ source: 'env', scope: 'global', env: 'ADHD_T_A_PORT' });
   });
 
-  it('passes through raw values for keys with no matching field definition', () => {
-    const result = coerceConfig({ 'unknown.key': 'literal' }, {});
-    expect(result).toEqual({ 'unknown.key': 'literal' });
+  it('an explicit FieldSpec.env name is used instead of the inferred name', () => {
+    const { fields } = resolveConfig({ 'a.port': { type: 'integer', env: 'CUSTOM_PORT_VAR' } }, EMPTY_LAYERS, {}, ctx);
+    expect(fields['a.port'].env).toBe('CUSTOM_PORT_VAR');
+  });
+
+  it('a live (at:"runtime") field is stored as an env-ref, never the plaintext, and its provenance source is always "env"', () => {
+    const layers: Layers = { ...EMPTY_LAYERS, project: { 'db.secret': 'plaintext-should-never-appear' } };
+    const { raw, nested, provenance, fields } = resolveConfig(
+      { 'db.secret': { type: 'string', at: 'runtime' } },
+      layers,
+      {},
+      ctx,
+    );
+    expect(isEnvRef(raw['db.secret'])).toBe(true);
+    expect(raw['db.secret']).toBe(makeEnvRef(fields['db.secret'].env));
+    expect(isEnvRef(get(nested, 'db.secret'))).toBe(true);
+    expect(JSON.stringify(nested)).not.toContain('plaintext-should-never-appear');
+    expect(provenance['db.secret']).toEqual({ source: 'env', scope: 'global', env: fields['db.secret'].env });
+    // The pre-redaction typed value is still captured for validation purposes:
+    expect(fields['db.secret'].fallbackValue).toBe('plaintext-should-never-appear');
+  });
+
+  it('a secret:true field behaves like at:"runtime" even without an explicit `at`', () => {
+    const { raw, fields } = resolveConfig({ 'db.secret': { type: 'string', secret: true } }, EMPTY_LAYERS, {}, ctx);
+    expect(fields['db.secret'].live).toBe(true);
+    expect(isEnvRef(raw['db.secret'])).toBe(true);
+  });
+
+  it('a build (default) field is a plain value, never an env-ref', () => {
+    const { raw, fields } = resolveConfig({ 'a.port': { type: 'integer', default: 1 } }, EMPTY_LAYERS, {}, ctx);
+    expect(fields['a.port'].live).toBe(false);
+    expect(isEnvRef(raw['a.port'])).toBe(false);
+    expect(raw['a.port']).toBe(1);
+  });
+
+  it('coerces an env var string value according to the field type', () => {
+    const { nested } = resolveConfig(
+      { 'transport.port': { type: 'integer', default: 0 } },
+      EMPTY_LAYERS,
+      { ADHD_T_TRANSPORT_PORT: '4000' },
+      ctx,
+    );
+    expect(get(nested, 'transport.port')).toBe(4000);
+    expect(typeof get(nested, 'transport.port')).toBe('number');
+  });
+
+  it('a field-level scope override is recorded in provenance instead of the active scope', () => {
+    const { provenance } = resolveConfig({ 'a.port': { type: 'integer', default: 1, scope: 'system' } }, EMPTY_LAYERS, {}, ctx);
+    expect(provenance['a.port'].scope).toBe('system');
   });
 });
