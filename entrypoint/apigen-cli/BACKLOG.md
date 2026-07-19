@@ -93,6 +93,16 @@ should show them; and the error response on an incorrect `--type` should include
    reads as "this plugin exists but doesn't support run" instead of "this isn't a recognized
    plugin at all — did you mean one of: …". Neither `run` path lists available options.
 
+   **Live field confirmation, 2026-07-19:** the user ran `apigen run --type express ...`
+   (a natural guess — the real key is `api-express`, no bare `express` alias exists) and hit
+   exactly this: `Error: Plugin express does not support run mode` at
+   `dist/entrypoint/apigen-cli/index.js:14:9868`. Reproduced independently, byte-for-byte
+   identical, via `node dist/entrypoint/apigen-cli/index.js run --type express --source
+   packages/apigen/apigen-core-client/src/index.ts --namespace test`. This is the concrete
+   case the fix needs to handle: a plausible near-miss of a real plugin id (`express` vs.
+   `api-express`) getting a misleading "doesn't support run mode" instead of "unknown --type,
+   did you mean api-express? Available: …".
+
 **Why this matters beyond convenience:** two of the seven target plugins imported into
 `plugins` — `@adhd/apigen-plugin-py-flask` and `@adhd/apigen-plugin-py-grpc`
 (`index.ts:12-13`) — are NOT published on the public npm registry (confirmed via `npm view`,
