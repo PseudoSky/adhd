@@ -62,9 +62,27 @@ function paramSchemaNode(
 /**
  * Decode a single wire value against its schema node using the module-level
  * transcoder. When no node is present the value passes through unchanged.
+ *
+ * BUG-APIGEN-027: an ABSENT optional param (`wire === undefined` — the caller
+ * simply omitted it, which is valid whenever the param isn't in the schema's
+ * `required` array) must also pass through unchanged, exactly like the
+ * `node === undefined` case above it. Before this guard, `_transcoder.decode`
+ * was called with `undefined` for every declared param the caller omitted,
+ * regardless of the node's type. For a bare `{type:'number'}` node this
+ * resolves to `numberSpecialCodec`, whose `decode()` correctly rejects
+ * `undefined` in strict mode (it's not a valid number OR one of the
+ * NaN/Infinity/-Infinity sentinels) — so ANY optional numeric param a caller
+ * omitted crashed dispatch with "[number-special] unrecognized wire value at
+ * \"\": undefined", even though the AJV schema had already correctly allowed
+ * the omission (the param isn't `required`). This mirrors the guard
+ * `encodeNode`/`decodeNode`'s own OBJECT-property walk already applies
+ * internally in `runmode.ts` (`if (v !== undefined)`) — this was the one
+ * top-level per-parameter call site that lacked it, because dispatch calls
+ * the transcoder once per declared param name rather than walking a nested
+ * object schema.
  */
 function decodeArg(wire: unknown, node: SchemaNode | undefined): unknown {
-  if (node === undefined) return wire;
+  if (node === undefined || wire === undefined) return wire;
   return _transcoder.decode(wire as import('@adhd/apigen-base-logical').Wire, node);
 }
 
