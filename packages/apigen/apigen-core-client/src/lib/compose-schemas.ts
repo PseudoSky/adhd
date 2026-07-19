@@ -1,8 +1,47 @@
+import type { SchemaNode } from '@adhd/apigen-base-logical';
+import { validateSchemaRefs } from '@adhd/apigen-base-logical';
 import type { GeneratedSchemas, ComposedSchemas } from './types';
 
 interface SlimMiddleware {
   id: string;
   envelope?: Record<string, unknown>;
+}
+
+/**
+ * BUG-APIGEN-CORE-001 (v1 retirement): v1's deleted `generate-schemas.ts`
+ * validated every function's `input`/`output` schema's `$ref`s against a
+ * `$defs` dictionary pooled across ALL functions in the source file, so an
+ * unresolvable `$ref` (e.g. the BUG-APIGEN-026 class of bug) threw a clear,
+ * function-scoped error at generate time instead of a confusing AJV crash on
+ * first invocation. That safety net was silently dropped when v1 was deleted
+ * — `composeSchemas()` is where all of a namespace's functions are present
+ * together in one pass, the same shape v1 had them in, so it's re-wired here.
+ */
+function validateComposedRefs(domainSchemas: GeneratedSchemas): void {
+  const allDefs: Record<string, SchemaNode> = {};
+  const collectDefs = (node: Record<string, unknown>): void => {
+    const defs = node['$defs'] as Record<string, SchemaNode> | undefined;
+    if (defs) Object.assign(allDefs, defs);
+  };
+  for (const fnSchema of Object.values(domainSchemas.schemas)) {
+    collectDefs(fnSchema.input);
+    collectDefs(fnSchema.output);
+  }
+  // Only run validation when there are $defs to resolve against; a schema
+  // with $ref but no $defs at all is a structural problem the composed
+  // output / downstream AJV compile will catch.
+  if (Object.keys(allDefs).length === 0) return;
+
+  for (const [fnName, fnSchema] of Object.entries(domainSchemas.schemas)) {
+    try {
+      validateSchemaRefs(fnSchema.input, allDefs);
+      validateSchemaRefs(fnSchema.output, allDefs);
+    } catch (err) {
+      throw new Error(
+        `[apigen-core-client] Schema validation failed for function "${fnName}": ${(err as Error).message}`
+      );
+    }
+  }
 }
 
 /**
@@ -61,6 +100,8 @@ export function composeSchemas(
   middlewares: ReadonlyArray<SlimMiddleware>,
   overrides?: Record<string, Record<string, boolean>>
 ): ComposedSchemas {
+  validateComposedRefs(domainSchemas);
+
   const result: ComposedSchemas = {};
 
   for (const [fnName, fnSchema] of Object.entries(domainSchemas.schemas)) {

@@ -230,3 +230,82 @@ describe('composeSchemas — BUG-APIGEN-020: envelope calling-convention documen
     expect(getUserInput.description).not.toMatch(/NOT domain data/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-CORE-001 (v1 retirement) — composeSchemas() re-validates $ref
+// resolvability at compose/generate time, the same safety net v1's deleted
+// generate-schemas.ts had (pooling $defs across every function, throwing a
+// clear function-scoped error). This is the exact class of bug BUG-APIGEN-026
+// hit at runtime instead — this test proves it is now caught earlier, at
+// composeSchemas() time, not just downstream in AJV.
+// ---------------------------------------------------------------------------
+
+describe('composeSchemas — BUG-APIGEN-CORE-001: dangling $ref caught at compose time', () => {
+  it('throws a function-scoped error when a schema $refs a $def that is never pooled from any function', () => {
+    const withDanglingRef: GeneratedSchemas = {
+      metadata: { namespace: 'test', phase: '' },
+      schemas: {
+        // Some $defs pool exists (from another function in the same source
+        // file) — but it never defines "Choice", so `pick`'s $ref dangles.
+        // (An empty $defs pool is a different, deliberately-unvalidated case
+        // — see the "no $defs at all" test below — so this fixture must
+        // carry at least one *other* $def to exercise the real dangling path.)
+        unrelated: {
+          input: { type: 'object', properties: {}, required: [] },
+          output: {
+            $defs: { '#/$defs/Other': { type: 'number' } },
+            type: 'number',
+          },
+        },
+        pick: {
+          input: {
+            type: 'object',
+            properties: {
+              choice: { $ref: '#/$defs/Choice' },
+            },
+            required: ['choice'],
+          },
+          output: { type: 'string' },
+        },
+      },
+    };
+
+    expect(() => composeSchemas(withDanglingRef, [])).toThrow(
+      /Schema validation failed for function "pick"/
+    );
+  });
+
+  it('a $ref that resolves against the pooled cross-function $defs does not throw', () => {
+    const withResolvableRef: GeneratedSchemas = {
+      metadata: { namespace: 'test', phase: '' },
+      schemas: {
+        // $defs is pooled ACROSS functions — declared once here...
+        declareChoice: {
+          input: { type: 'object', properties: {}, required: [] },
+          output: {
+            $defs: {
+              '#/$defs/Choice': { type: 'string', enum: ['a', 'b', 'c'] },
+            },
+            type: 'string',
+          },
+        },
+        // ...and resolved here, on a different function's input.
+        pick: {
+          input: {
+            type: 'object',
+            properties: { choice: { $ref: '#/$defs/Choice' } },
+            required: ['choice'],
+          },
+          output: { type: 'string' },
+        },
+      },
+    };
+
+    expect(() => composeSchemas(withResolvableRef, [])).not.toThrow();
+  });
+
+  it('a schema with no $defs at all is not flagged (structural $ref problems are left to downstream AJV compile)', () => {
+    const composed = composeSchemas(domainSchemas, []);
+    expect(composed).toBeDefined();
+  });
+});
