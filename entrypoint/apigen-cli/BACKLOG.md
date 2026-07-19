@@ -616,3 +616,84 @@ index.js generate --source .../memory-core/src/index.ts --type cli --out-dir <sc
 `mean` real signatures); `diff` of `dispatch.ts` and `generate.ts` between `main` and the
 `fix/apigen-v1-retirement` worktree → byte-identical, confirming pre-existing on `main`]
 
+### BUG-APIGEN-032 — `generate --type api-express`/`api-fastify` `-registry` output emits invalid TypeScript for any hyphenated package name (unsanitized identifier splice)
+
+**Discovered:** 2026-07-19, by an agent independently verifying `generate-registry`/
+`run-registry` (multi-package discovery/serving) against the `entrypoint/apigen-cli/src/test/
+fixtures/registry/{pkg-a,pkg-b}` fixture — both real Nx-style package ids, both hyphenated
+(`pkg-a`, `pkg-b`), which is the overwhelmingly common naming convention in this monorepo (and
+most Nx workspaces generally).
+
+**Observed:** `node dist/entrypoint/apigen-cli/index.js generate-registry --type api-express
+--packages-dir <fixtureDir> --out-dir <dir> --tag api` exits `0` and writes a `routes.ts` file
+whose *data* (routes, schemas) is correct — but whose *code* is not valid TypeScript/JavaScript:
+
+```ts
+import * as pkg-a_ns from '@test/pkg-a'
+const pkg-a_fns = buildFnTable(pkg-a_ns as Record<string, unknown>)
+```
+
+`pkg-a_ns` / `pkg-a_fns` are not legal identifiers (a bare `-` is the subtraction operator, not
+a valid identifier character). Confirmed a genuine syntax error via `esbuild` (not just a
+`node --check` quirk — `node --check` silently accepts this file, and even a 1-line repro
+`import * as pkg-a_ns from 'foo'`, because `--check`'s parser is more permissive than the real
+ESM/CJS toolchains consumers actually build with; `esbuild` correctly rejects both with
+`Expected "from" but found "-"`). Reproduces identically in `api-fastify`'s equivalent output.
+
+**Root cause, confirmed by reading the source directly (not guessed):**
+
+- `apigen-plugin-api-express/src/lib/generate.ts:55,57,106,127` and
+  `apigen-plugin-api-fastify/src/lib/generate.ts:66,68,121,144` splice the discovered package id
+  straight into identifier positions — `` `import * as ${pkg.id}_ns from ...` ``,
+  `` `const ${pkg.id}_fns = ...` `` — with **no sanitization** of `pkg.id` before it lands in
+  code (as opposed to a string literal — `pkg.id` is also used correctly as a plain string
+  namespace key elsewhere in the same files, e.g. `schemas['${pkg.id}:${fnName}']`, which is
+  fine; only the *identifier* splices are the problem).
+- `apigen-plugin-cli-output/src/lib/generate.ts:66-70` already has the fix, and has clearly
+  known about this exact hazard for a while — it defines a local `sanitizeIdentifier(id)`
+  helper (`` id.replace(/[^a-zA-Z0-9_$]/g, '_')``, plus a leading-digit guard) with a doc
+  comment explicitly calling out "an invalid identifier, a hard TS parse error" as the failure
+  mode being avoided, and calls it (`const varName = sanitizeIdentifier(pkg.id)`, `:96,122`)
+  before ever using the id in an identifier position. Confirmed via `--type cli` against the
+  SAME fixture: it correctly emits `pkg_a_ns`/`pkg_a_fns` (underscore, valid JS) — the resulting
+  `cli.ts` only fails `esbuild` on unresolved external deps (expected, not installed in the
+  scratch dir), not on syntax. `--type jsonschema` is unaffected entirely (no identifiers in its
+  output at all).
+- `sanitizeIdentifier` is currently a **private, unexported** function local to
+  `apigen-plugin-cli-output/src/lib/generate.ts` — not a shared utility — so api-express/
+  api-fastify never had access to reuse it even if their authors had thought to.
+
+**Impact:** `generate-registry --type api-express` / `--type api-fastify` produces genuinely
+broken, unbuildable output for any discovered package whose id/name contains a character that
+isn't a valid JS identifier character — hyphens being the overwhelmingly common case in any
+kebab-case-named package (which is most Nx packages, including this very monorepo's `pkg-a`/
+`pkg-b` test fixtures and virtually every real `@scope/some-package-name`). Single-source
+`generate --type api-express`/`api-fastify` (non-registry) is unaffected — this only reproduces
+in the `-registry` variants, where a real discovered package id (as opposed to a user-supplied
+`--namespace` string, which the CLI can require to already be identifier-safe) drives the
+per-package identifier. `run-registry` (the live-server path) is unaffected — it imports source
+modules directly at runtime via `importSource`/`buildFnTable` rather than emitting generated
+code with derived identifiers, so it never constructs an identifier from `pkg.id` at all.
+
+**Suggested fix:** extract `apigen-plugin-cli-output/src/lib/generate.ts`'s
+`sanitizeIdentifier()` to a shared location (e.g. `apigen-core-client` or a small shared
+codegen-utils package, since three plugins now need it) and call it at the equivalent identifier
+construction sites in `apigen-plugin-api-express/src/lib/generate.ts:55,57` and
+`apigen-plugin-api-fastify/src/lib/generate.ts:66,68` (and their dispatch-call-site reuses at
+`:106,127` / `:121,144`) exactly as `cli-output` already does — this is a narrow, mechanical fix
+once the helper is shared, not a design problem.
+
+**Status:** OPEN. Confirmed unrelated to the `fix/apigen-v1-retirement` branch — that branch
+never touches `apigen-plugin-api-express`/`apigen-plugin-api-fastify` at all (absent from its
+`git diff main...HEAD --stat`), so this is pre-existing on `main` itself, not a regression from
+that work.
+
+Citations: [session 2026-07-19, sub-agent `verify-registry-commands`, self-verified against
+source by this session: `apigen-plugin-api-express/src/lib/generate.ts:55,57,106,127`;
+`apigen-plugin-api-fastify/src/lib/generate.ts:66,68,121,144`;
+`apigen-plugin-cli-output/src/lib/generate.ts:59-70,96,122` (existing `sanitizeIdentifier` +
+its doc comment); repro via `node dist/entrypoint/apigen-cli/index.js generate-registry --type
+api-express --packages-dir entrypoint/apigen-cli/src/test/fixtures/registry --out-dir <scratch>
+--tag api` against `fix/apigen-v1-retirement`@`80e1df8d`, `esbuild` syntax-check on the emitted
+`routes.ts` and on a minimal 1-line repro]
+
