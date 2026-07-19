@@ -7,7 +7,7 @@ import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { copyReadme } from '../../tools/vite-copy-readme.mjs';
 import { builtinModules } from 'node:module';
 
-const OUT_DIR = path.resolve(__dirname, '../../dist/apigen-cli');
+const OUT_DIR = path.resolve(__dirname, '../../dist/entrypoint/apigen-cli');
 
 /** Ships the builtin default tsconfig beside the bundled entry so resolve-tsconfig can find it. */
 function copyDefaultTsconfig(): Plugin {
@@ -36,7 +36,7 @@ export default defineConfig({
   ],
 
   build: {
-    outDir: '../../dist/apigen-cli',
+    outDir: '../../dist/entrypoint/apigen-cli',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {
