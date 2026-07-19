@@ -33,6 +33,14 @@
   "devDependencies": {
     "decimal.js": "^10.4.3"
   },
+  "peerDependencies": {
+    "decimal.js": "^10.4.3"
+  },
+  "peerDependenciesMeta": {
+    "decimal.js": {
+      "optional": true
+    }
+  },
   "main": "./index.js",
   "module": "./index.mjs",
   "typings": "./index.d.ts",
