@@ -8,7 +8,6 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { extract } from '../lib/extract';
-import { generateSchemas } from '../lib/generate-schemas';
 import {
   createExtractionSession,
   internalSession,
@@ -52,21 +51,32 @@ beforeEach(() => {
 });
 
 describe('shared ExtractionSession eliminates redundant program builds', () => {
-  it('extract + generateSchemas of the same file build ONE Project and ONE generator', async () => {
+  // BUG-APIGEN-CORE-005 (v1 retirement): this test originally proved that a
+  // shared session made the orchestrator's extract() + generateSchemas()
+  // DOUBLE PASS over the same file cheap (pure cache hits on the second
+  // pass). That double pass is gone — buildDescriptor's Step 5 no longer
+  // re-extracts (see orchestrator.ts) — so there is no longer a real
+  // two-different-functions scenario to prove cache-cheap. The underlying
+  // session guarantee this protected (repeat extraction of the same file
+  // within one session is a cache hit, not a rebuild) still matters for
+  // other real multi-pass callers — e.g. `generate-registry`/`run-registry`
+  // extracting many packages that share a tsconfig — so it's ported here as
+  // two `extract()` passes over the same file instead.
+  it('two extract() passes of the same file build ONE Project and ONE generator', async () => {
     const session = createExtractionSession();
     const internal = internalSession(session);
 
-    const ops = await extract({ sourceFile: fileA, session });
-    expect(ops.length).toBeGreaterThan(0);
-    const afterExtract = { ...internal.stats };
+    const ops1 = await extract({ sourceFile: fileA, session });
+    expect(ops1.length).toBeGreaterThan(0);
+    const afterFirst = { ...internal.stats };
 
-    // The orchestrator's second pass over the same file: with the shared
-    // session this must build NOTHING new — pure cache hits.
-    const generated = await generateSchemas({ sourceFile: fileA, session });
-    expect(Object.keys(generated.schemas).length).toBeGreaterThan(0);
+    // A second extract() pass over the SAME file with the shared session
+    // must build NOTHING new — pure cache hits.
+    const ops2 = await extract({ sourceFile: fileA, session });
+    expect(ops2.length).toBeGreaterThan(0);
 
-    expect(internal.stats.projectsBuilt).toBe(afterExtract.projectsBuilt);
-    expect(internal.stats.generatorsBuilt).toBe(afterExtract.generatorsBuilt);
+    expect(internal.stats.projectsBuilt).toBe(afterFirst.projectsBuilt);
+    expect(internal.stats.generatorsBuilt).toBe(afterFirst.generatorsBuilt);
     expect(internal.stats.schemaCacheHits).toBeGreaterThan(0);
 
     // One Project for the whole session (no tsconfig → one key).
@@ -173,11 +183,12 @@ describe('DEBT-APIGEN-CACHE-001: cross-file type changes invalidate the persiste
     );
 
     const s1 = createExtractionSession();
-    const before = await generateSchemas({ sourceFile: entryPath, session: s1 });
+    const before = await extract({ sourceFile: entryPath, session: s1 });
     s1.dispose();
-    const beforeProps = (before.schemas['getShared'].output as {
-      properties: Record<string, unknown>;
-    }).properties;
+    const beforeOp = before.find((o) => o.path.at(-1)?.raw === 'getShared');
+    const beforeProps = (
+      beforeOp?.output as { properties: Record<string, unknown> }
+    ).properties;
     expect(beforeProps).toHaveProperty('a');
     expect(beforeProps).not.toHaveProperty('bExtra');
 
@@ -190,11 +201,12 @@ describe('DEBT-APIGEN-CACHE-001: cross-file type changes invalidate the persiste
     );
 
     const s2 = createExtractionSession();
-    const after = await generateSchemas({ sourceFile: entryPath, session: s2 });
+    const after = await extract({ sourceFile: entryPath, session: s2 });
     s2.dispose();
-    const afterProps = (after.schemas['getShared'].output as {
-      properties: Record<string, unknown>;
-    }).properties;
+    const afterOp = after.find((o) => o.path.at(-1)?.raw === 'getShared');
+    const afterProps = (
+      afterOp?.output as { properties: Record<string, unknown> }
+    ).properties;
 
     // Before DEBT-APIGEN-CACHE-001's fix, `persistentSchemasFor` versioned
     // ONLY the entry file — since `entryPath` never changed, this would
@@ -214,12 +226,12 @@ describe('DEBT-APIGEN-CACHE-001: cross-file type changes invalidate the persiste
     );
 
     const s1 = createExtractionSession();
-    await generateSchemas({ sourceFile: entryPath, session: s1 });
+    await extract({ sourceFile: entryPath, session: s1 });
     s1.dispose();
 
     const s2 = createExtractionSession();
     const i2 = internalSession(s2);
-    await generateSchemas({ sourceFile: entryPath, session: s2 });
+    await extract({ sourceFile: entryPath, session: s2 });
     s2.dispose();
 
     // Nothing changed on disk — must be a pure cache hit, not a rebuild.

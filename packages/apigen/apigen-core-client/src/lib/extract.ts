@@ -37,6 +37,7 @@ import {
   type ExtractionSession,
   type InternalExtractionSession,
 } from './extraction-session';
+import { extractParamDefault, applyParamDefault } from './param-defaults';
 
 // ---------------------------------------------------------------------------
 // Public entry-point
@@ -159,7 +160,8 @@ async function extractWithSession(
     if (fnDecl) {
       // Shape 1 / 1b: named function export (local, renamed, or re-exported).
       const sig = fnDecl.getSignature();
-      const params = rawParams(sig);
+      // BUG-APIGEN-018: jsDocSource = fnDecl itself (matches v1 named.ts).
+      const params = rawParams(sig, fnDecl);
       const returnText = sig.getReturnType().getText();
 
       ops.push(
@@ -200,7 +202,13 @@ async function extractWithSession(
       if (sigs.length === 0) continue;
 
       const sig = sigs[0];
-      const params = rawParamsFromSig(sig, varDecl);
+      // BUG-APIGEN-018: jsDocSource = the enclosing VariableStatement
+      // (matches v1 named.ts's const/arrow branch).
+      const params = rawParamsFromSig(
+        sig,
+        varDecl,
+        varDecl.getVariableStatement()
+      );
       const returnText = sig.getReturnType().getText();
       const isAsync =
         initKind === 'ArrowFunction'
@@ -234,7 +242,13 @@ async function extractWithSession(
         if (sigs.length === 0) continue; // non-function prop — skip
 
         const sig = sigs[0];
-        const params = rawParamsFromSig(sig, varDecl);
+        // BUG-APIGEN-018: jsDocSource = the enclosing VariableStatement
+        // (matches v1 named-object.ts).
+        const params = rawParamsFromSig(
+          sig,
+          varDecl,
+          varDecl.getVariableStatement()
+        );
         const returnText = sig.getReturnType().getText();
 
         // Path: [file, objectName, propName]
@@ -299,7 +313,11 @@ async function extractWithSession(
         const sigs = fnType.getCallSignatures();
         if (sigs.length > 0) {
           const sig = sigs[0];
-          const params = rawParamsSig(sig);
+          // BUG-APIGEN-018: jsDocSource = the export assignment statement
+          // (closest carrier of a leading JSDoc block; v1 had no equivalent
+          // shape — anonymous default export params were never covered by
+          // v1's object-literal-only `extractDefault`).
+          const params = rawParamsSig(sig, exportAssign);
           const returnText = sig.getReturnType().getText();
           const isAsync =
             exprKind === 'ArrowFunction'
@@ -334,7 +352,9 @@ async function extractWithSession(
           const sigs = propType.getCallSignatures();
           if (sigs.length === 0) continue;
           const sig = sigs[0];
-          const params = rawParamsSig(sig);
+          // BUG-APIGEN-018: jsDocSource = exportAssign (matches v1
+          // default-export.ts's object-property branch).
+          const params = rawParamsSig(sig, exportAssign);
           const returnText = sig.getReturnType().getText();
           // SPEC §5: default object → path=[file,"default",…keys]
           const propPath: Segment[] = [
@@ -371,7 +391,10 @@ async function extractWithSession(
             ? sym
             : normalizeFileName(fileName).replace(/-/g, '_') + '_default';
         const sig = fnDecl.getSignature();
-        const params = rawParams(sig);
+        // BUG-APIGEN-018: jsDocSource = fnDecl itself (analogous to Shape 1;
+        // v1's extractDefault covered only the object-literal default-export
+        // form, not a bare `export default function foo(…)`).
+        const params = rawParams(sig, fnDecl);
         const returnText = sig.getReturnType().getText();
         ops.push(
           await buildActionOp(
@@ -428,7 +451,13 @@ async function extractWithSession(
 // Operation builders
 // ---------------------------------------------------------------------------
 
-type RawParam = { name: string; type: string; optional: boolean };
+type RawParam = {
+  name: string;
+  type: string;
+  optional: boolean;
+  /** BUG-APIGEN-018: raw source text of the param's default value, if any. */
+  defaultValue?: string;
+};
 
 async function buildActionOp(
   project: Project,
@@ -470,19 +499,28 @@ async function buildActionOpAtPath(
   tsconfig?: string,
   session?: InternalExtractionSession
 ): Promise<Operation> {
-  // [inv:ctx-name-only] — exclude ctx by name, no type checking
+  // [inv:ctx-name-only] — exclude ctx by name, no type checking. Recorded via
+  // `hasCtx` (BUG-APIGEN-001) so a runtime dispatcher can re-inject it as the
+  // first call arg — matches the v1 generateSchemas() invariant this replaces.
+  const hasCtx = params.length > 0 && params[0].name === 'ctx';
   const domainParams = params.filter((p) => p.name !== 'ctx');
   const required = domainParams.filter((p) => !p.optional).map((p) => p.name);
 
   const properties: Record<string, unknown> = {};
   for (const p of domainParams) {
-    properties[p.name] = await buildSchema(
-      project,
-      sf,
-      p.type,
-      tsconfig,
-      session
-    );
+    const built = await buildSchema(project, sf, p.type, tsconfig, session);
+    // buildSchema's results are memoized by reference (session/persistent
+    // caches) and MUST be treated as immutable by callers — shallow-clone
+    // before mutating so per-param `default`/`description` never leaks
+    // across other params or operations sharing the same type text.
+    const propSchema: Record<string, unknown> = { ...built };
+    // BUG-APIGEN-018: surface the TS initializer / JSDoc @default as both
+    // the native JSON-Schema `default` keyword and a human-readable note
+    // in `description`.
+    if (p.defaultValue !== undefined) {
+      applyParamDefault(propSchema, p.defaultValue);
+    }
+    properties[p.name] = propSchema;
   }
 
   // Unwrap Promise<T> → T for output schema
@@ -520,6 +558,7 @@ async function buildActionOpAtPath(
       input: paramsToTypeText(params),
       output: resolvedReturn,
     },
+    ...(hasCtx ? { hasCtx: true } : {}),
   };
 }
 
@@ -666,7 +705,10 @@ function pickFunctionDeclWithBody(
 // Parameter extraction helpers (from ts-morph Signature / FunctionDeclaration)
 // ---------------------------------------------------------------------------
 
-function rawParams(sig: import('ts-morph').Signature): RawParam[] {
+function rawParams(
+  sig: import('ts-morph').Signature,
+  jsDocSource?: import('ts-morph').Node | null
+): RawParam[] {
   return sig.getParameters().map((p) => {
     const decls = p.getDeclarations();
     const paramDecl =
@@ -681,13 +723,15 @@ function rawParams(sig: import('ts-morph').Signature): RawParam[] {
       name: p.getName(),
       type: p.getTypeAtLocation(sig.getDeclaration()).getText(),
       optional,
+      defaultValue: extractParamDefault(paramDecl, p.getName(), jsDocSource),
     };
   });
 }
 
 function rawParamsFromSig(
   sig: import('ts-morph').Signature,
-  locationNode: import('ts-morph').Node
+  locationNode: import('ts-morph').Node,
+  jsDocSource?: import('ts-morph').Node | null
 ): RawParam[] {
   return sig.getParameters().map((p) => {
     const decls = p.getDeclarations();
@@ -703,11 +747,19 @@ function rawParamsFromSig(
       name: p.getName(),
       type: p.getTypeAtLocation(locationNode).getText(),
       optional,
+      defaultValue: extractParamDefault(
+        paramDecl,
+        p.getName(),
+        jsDocSource ?? locationNode
+      ),
     };
   });
 }
 
-function rawParamsSig(sig: import('ts-morph').Signature): RawParam[] {
+function rawParamsSig(
+  sig: import('ts-morph').Signature,
+  jsDocSource?: import('ts-morph').Node | null
+): RawParam[] {
   return sig.getParameters().map((p) => {
     const decls = p.getDeclarations();
     const paramDecl =
@@ -724,6 +776,7 @@ function rawParamsSig(sig: import('ts-morph').Signature): RawParam[] {
         ? paramDecl.getType().getText()
         : p.getValueDeclaration()?.getType()?.getText() ?? 'unknown',
       optional,
+      defaultValue: extractParamDefault(paramDecl, p.getName(), jsDocSource),
     };
   });
 }

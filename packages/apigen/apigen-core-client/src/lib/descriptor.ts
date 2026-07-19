@@ -230,4 +230,15 @@ export interface Operation {
    * when unavailable; non-host targets ignore it. See {@link TypeText}.
    */
   typeText: TypeText | null;
+
+  /**
+   * True when the underlying export's first parameter is named `ctx`
+   * ([inv:ctx-name-only] — matched by name only, never by type). `ctx` is
+   * excluded from `input` like every other framework param, but this flag
+   * lets a runtime dispatcher re-inject it as the first call argument
+   * (BUG-APIGEN-001) — without it a caller with no session middleware would
+   * have its first REAL domain arg land in the `ctx` slot. Only meaningful
+   * for `kind: 'action'`; absent (`undefined`) for `query` and other kinds.
+   */
+  hasCtx?: boolean;
 }

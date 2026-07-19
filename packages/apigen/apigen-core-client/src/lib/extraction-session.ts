@@ -2,19 +2,27 @@
 //
 // WHY THIS EXISTS (the redundant-program problem):
 //
-// Before this module, every `extract()` / `generateSchemas()` / `extractClasses()`
-// call built its own ts-morph `Project` (parse lib.d.ts + the user's imports,
-// ~1–2s each), and the orchestrator calls extract() AND generateSchemas() for
-// the SAME file — two full TypeScript programs per source, K sources deep. The
-// ts-json-schema-generator side kept its own module-global cache that grew a new
-// ~50–100MB entry on every file edit (mtime-keyed, never evicted), and every
-// `buildSchema` call re-ran `fs.statSync` + re-scanned the file's imports.
+// Every `extract()` / `extractClasses()` call built its own ts-morph `Project`
+// (parse lib.d.ts + the user's imports, ~1–2s each). Historically (before
+// BUG-APIGEN-CORE-005 retired v1) the orchestrator ALSO called the now-deleted
+// v1 `generateSchemas()` a second time per source — two full TypeScript
+// programs per source, K sources deep — which is the double-pass this module
+// was originally built to absorb into cache hits. That second call is gone
+// (Step 5 of `buildDescriptor` now derives `ComposedSchemas` directly from
+// `extract()`'s own `Operation[]` — one canonical extraction pass, not two),
+// but the session remains load-bearing for the OTHER redundant-program
+// sources it collapses: a multi-source run (`generate-registry`/
+// `run-registry`, `serve`) shares one ts-morph Project per tsconfig across
+// every package instead of one per package, and the ts-json-schema-generator
+// side kept its own module-global cache that grew a new ~50–100MB entry on
+// every file edit (mtime-keyed, never evicted), with every `buildSchema` call
+// re-running `fs.statSync` + re-scanning the file's imports.
 //
 // An ExtractionSession scopes ALL of that to one run:
 //   - one ts-morph Project per tsconfig (lib.d.ts parses once per run),
 //   - one ts-json-schema-generator generator per (file, tsconfig),
-//   - each (file, typeText) schema computed once (the orchestrator's
-//     extract + generateSchemas double pass becomes cache hits),
+//   - each (file, typeText) schema computed once and reused across every
+//     operation in that source that references the same type,
 //   - fs.stat and import-alias scans memoized per file,
 // and `dispose()` drops every reference so a one-shot CLI run releases the
 // whole graph. Long-running paths (serve/watch) create a session per rebuild,
@@ -47,8 +55,8 @@ export interface ISessionStats {
 }
 
 /**
- * A per-run cache shared across `extract()` / `generateSchemas()` /
- * `extractClasses()` / the orchestrator. Create one per logical run with
+ * A per-run cache shared across `extract()` / `extractClasses()` / the
+ * orchestrator. Create one per logical run with
  * {@link createExtractionSession}, pass it to every extraction call in that
  * run, and `dispose()` it when the run's outputs have been consumed.
  *
@@ -277,8 +285,8 @@ export function createExtractionSession(): ExtractionSession {
       const entry = _persistentProjects.get(tsconfig ?? '');
       const version = this.statVersion(filePath);
 
-      // extract() and generateSchemas() share one Project — and the Project
-      // persists across runs, so the file may already be loaded
+      // Every source in a run shares one Project per tsconfig — and the
+      // Project persists across runs, so the file may already be loaded
       // (addSourceFileAtPath throws on a duplicate).
       let sf = project.getSourceFile(filePath);
       if (sf === undefined) {

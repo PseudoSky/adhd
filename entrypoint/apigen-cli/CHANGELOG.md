@@ -80,6 +80,73 @@ All notable changes to this project are documented here.
   consumer: `POST /agent-browser/search` with only `{provider, query}` now completes
   (`200`, real dispatch to a live network search) instead of crashing before dispatch.
 
+- **BUG-APIGEN-028** — `apigen run`/`generate` (single-source and
+  `-registry` variants) still ran the old v1 extraction pipeline by default;
+  v1 silently dropped every re-exported operation from a source file
+  (`export { x } from './other.js'`), producing e.g. 2 routes instead of
+  140+ for a realistic re-export-barrel file (confirmed live against
+  `~/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts`, read-only
+  reference). Passing `--v2` fixed the log line ("extracted 140
+  operations") but did NOT fix the actually-served routes:
+  `orchestrator.ts`'s `buildDescriptor()` had a "Step 5" that independently
+  re-ran the buggy v1 extractor a second time to build the `ComposedSchemas`
+  every plugin's `generate()`/`run()` actually dispatches against, silently
+  discarding the correct extraction from Steps 1-4 — so `--v2` alone,
+  without also fixing Step 5, remained broken. Root cause: commit
+  `556d02ee` ("apigen v2 — 18-package TS→API toolchain") introduced the v2
+  orchestrator behind a cautious `--v2` opt-in flag for staged rollout; the
+  follow-up step of flipping the default (or retiring v1) was never done
+  and fell through the cracks. Fixed by retiring v1 entirely rather than
+  patching it (avoids two parallel implementations drifting again):
+  `generate.ts`/`run.ts` now run `orchestrateGenerate`/`orchestrateRun`
+  unconditionally (see Removed, below, for the `--v2` flag itself);
+  `generate-registry.ts`/`run-registry.ts` rewired from a per-package
+  `runPipeline()` loop to build one `SourceEntry[]` and pass it through the
+  same orchestrator in a single call, which also surfaced and fixed a real
+  latent bug where `orchestrateRun` matched `packageSchemas` entries back to
+  their `SourceEntry` by `s.file === p.importPath` (only ever worked by
+  coincidence for single-source `run`; silently failed to resolve for the
+  registry commands' distinct `file`/`importPath` pair) — fixed by matching
+  on namespace instead. Deleted (apigen-core-client side, see
+  `BUG-APIGEN-CORE-005` in that package's BACKLOG.md for the extractor-side
+  half of this fix): `generateSchemas()`, the three v1 extractors,
+  `runPipeline()` (`entrypoint/apigen-cli/src/lib/pipeline.ts`). Covered by
+  the existing `generate.spec.ts`/`run.spec.ts`/`orchestrator.spec.ts`/
+  `integration/schema.spec.ts` suites, rebuilt against the real
+  `extract()`/`composeSchemas()` path in place of the deleted
+  `generateSchemas()` (112/112 green, down from 113 — one test removed
+  whose entire premise, "behavior is the same whether or not `--v2` is
+  passed," no longer applies with only one path left; nothing it protected
+  against is now uncovered). Real-world verification: 140 operations
+  extracted → 130 real routes served (up from 2), including two
+  previously-invisible routes curled and confirmed responding correctly.
+  Surfaced, but does not fix (filed separately as **BUG-APIGEN-029**, open):
+  a pre-existing `$ref`/ajv-strict-mode dispatch failure on functions taking
+  complex external types (e.g. `better-sqlite3.Database`) as params —
+  confirmed identical under the old v1 2-route path, so not a regression
+  from this fix; it was simply unreachable before because v1 never exposed
+  those re-exported routes at all.
+
+### Changed
+
+- **v1 extraction pipeline retired — v2 orchestrator is now the ONLY
+  extraction path** (BUG-APIGEN-028 / BUG-APIGEN-CORE-005). `generate`,
+  `run`, `generate-registry`, and `run-registry` all now unconditionally run
+  the `detect → extract → merge → collision-check → gen/run` v2 pipeline.
+  See BUG-APIGEN-028 above for the full root-cause writeup and verification
+  numbers.
+
+### Removed
+
+- **`--v2` flag removed from `generate` and `run`.** It selected between the
+  (now-deleted) v1 pipeline and the v2 orchestrator; with only one pipeline
+  left, the flag has no meaning. Removed cleanly rather than kept as a
+  deprecated no-op — there's no prior flag-removal precedent in this
+  changelog to follow a softer convention, and a silently-ignored flag would
+  be more confusing than an explicit "unknown option" error for the rare
+  script still passing it. **Migration:** delete `--v2` from any existing
+  invocation; behavior is unchanged (it's what `--v2` already did).
+
 ## 0.1.0 — 2026-07-02
 
 ### Added
