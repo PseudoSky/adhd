@@ -50,6 +50,12 @@ export interface EngineConfig {
    */
   subprocessEnv(): Record<string, string>;
   /**
+   * Resolve a single env var name against the runtime environment, applying the
+   * structural naming allowlist. Returns `undefined` if the name is disallowed
+   * or the env var is unset.
+   */
+  resolveEnvName(name: string): string | undefined;
+  /**
    * Validate that an env var name (referenced by agent definitions as an env.secret
    * etc. pointer) is allowed. Only ADHD_AGENT_-prefixed names pass by default;
    * the allowlist (ADHD_AGENT_ENV_ALLOWLIST) extends this set.

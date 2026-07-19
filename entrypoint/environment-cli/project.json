@@ -25,6 +25,21 @@
         "assets": ["entrypoint/environment-cli/*.md"],
         "createLockFile": false
       }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": ["vitest"]
+        }
+      ],
+      "outputs": ["{workspaceRoot}/coverage/entrypoint/environment-cli"],
+      "options": {
+        "vitestConfig": "entrypoint/environment-cli/vite.config.ts"
+      }
     }
   }
 }

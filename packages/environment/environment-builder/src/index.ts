@@ -1,16 +1,20 @@
 /**
  * `@adhd/environment-builder` — public API surface.
  *
- * Re-exports the full builder-engine pipeline (`yaml-parser`, `field-merge`,
- * `config-resolver`, `json-schema-gen`, `provenance`, `validation`,
- * `snapshot-writer`) plus the builder-facing `EnvironmentSnapshot<T>` class
- * and its `build()` factory (`environment-snapshot.ts`, `builder-snapshot-api`).
+ * The pure, zero-config-first live-resolve engine (ARCHITECTURE.md §4):
+ * `scope` (active-scope resolution) → `roots` (directory-root resolution)
+ * → `layer-files` (optional YAML overrides) → `config-resolver` (the
+ * defaults→system→global→project→local→env cascade) → `dirs` (dir/file
+ * catalog resolution) → `snapshot` (the top-level `buildSnapshot`/
+ * `writeSnapshot` orchestrator). `validation`/`provenance`/`snapshot-writer`
+ * are the salvaged supporting pipeline pieces.
  */
-export * from './yaml-parser';
-export * from './field-merge';
+export * from './scope';
+export * from './roots';
+export * from './layer-files';
 export * from './config-resolver';
-export * from './json-schema-gen';
+export * from './dirs';
 export * from './provenance';
 export * from './validation';
 export * from './snapshot-writer';
-export * from './environment-snapshot';
+export * from './snapshot';

@@ -83,7 +83,7 @@
 | Feature | Status | Tested | Substance | Notes |
 |---------|--------|--------|-----------|-------|
 | Persistent Storage (SQLite) | ✅ shipped | ✓ wiring.test | moderate | agents, sessions, tasks, task_events, task_usage; WAL mode; BUG-ORCH-012: FK cascade missing |
-| Environment Config (Hierarchical .env) | ✅ shipped | ✓ config.test | moderate | .adhd/.env, .env, system; ADHD_AGENT_* prefixed |
+| Environment Config (Zero-Config `Environment<T>` cascade) | ✅ shipped | ✓ config.zero-config.test | moderate | Code-first `agentMcpEnvironmentSpec` (`@adhd/environment`) resolved live at construction — spec defaults → `~/.adhd/agent-mcp/production/config.yaml`/`config.local.yaml` layer files (optional) → `ADHD_AGENT_*` env vars; runs with zero files/env vars on disk. No dotenv `.env` files (the `.adhd/.env`/`.env` hierarchy was removed — see `packages/environment/ARCHITECTURE.md` §6) |
 | Structured Logging (Pino) | ✅ shipped | ✓ config.test | trivial | Configurable via ADHD_AGENT_LOG_LEVEL |
 | SSE Task Streaming | ✅ shipped | ❌ no test | substantial | Real-time task/completed notifications on separate port |
 

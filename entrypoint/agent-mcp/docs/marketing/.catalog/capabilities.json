@@ -509,20 +509,20 @@
   },
   {
     "id": "config-env-hierarchy",
-    "name": "Environment Configuration (Hierarchical .env loading)",
-    "description": "Loads environment variables from .adhd/.env (project), .env (repo root), and system environment in priority order, with ADHD_AGENT_* prefixed keys.",
+    "name": "Environment Configuration (Zero-Config Environment<T> Cascade)",
+    "description": "Builds env from @adhd/environment's code-first Environment<AgentMcpConfig> cascade (agentMcpEnvironmentSpec): spec defaults resolved live at construction, layered by optional config.yaml/config.local.yaml files under ~/.adhd/agent-mcp/production/, then ADHD_AGENT_* prefixed env vars (highest precedence). Zero-config by default — the server runs correctly with no files on disk and no env vars set. No dotenv .env files (the pre-redesign .adhd/.env / .env / load-env.js cascade was removed; see packages/environment/ARCHITECTURE.md §6).",
     "status": "shipped",
     "substance": "moderate",
-    "signature_note": "Supports override precedence; logs injection counts; full env schema validation via Zod.",
+    "signature_note": "envPrefixOverride:'ADHD_AGENT' preserves the pre-redesign ADHD_AGENT_* env var surface (including provider-credential vars not declared as config fields) via env.isEnvNameAllowed; provenance tracked per field (default/system/global/project/local/env).",
     "receipts": [
-      "src/config.ts:99-145 (rawFromEnv + normalizeBaseUrl + isLocalhostUrl helpers)",
-      "src/utils/load-env.js (loadEnvHierarchy implementation)",
+      "src/config.ts (agentMcpEnvironmentSpec + exported `env = new Environment<AgentMcpConfig>('agent-mcp', agentMcpEnvironmentSpec, {...})`)",
+      "src/__tests__/config.zero-config.test.ts (zero-config proof: env.config.transport.port === 3000 with zero files/env vars; ADHD_AGENT_PORT override; env-prefix guard)",
       "src/__tests__/wiring.test.ts:24-34 (config load + validation test)"
     ],
-    "verify": "npx nx test agent-mcp -- --run src/__tests__/wiring.test.ts -t 'config'",
-    "verified_output": "✓ src/__tests__/wiring.test.ts — config loads and satisfies EngineConfig",
-    "last_verified_sha": "7c400a73a5e7d747856f522271cd189b688675f9",
-    "last_verified_at": "2026-07-12T02:44:08.702Z"
+    "verify": "npx nx test agent-mcp -- --run src/__tests__/config.zero-config.test.ts",
+    "verified_output": "✓ src/__tests__/config.zero-config.test.ts (5 tests passed)",
+    "last_verified_sha": "8b462c1489125f7b5cc103565152abc51314f234",
+    "last_verified_at": "2026-07-18T22:34:38.000Z"
   },
   {
     "id": "registry-compiler-integration",

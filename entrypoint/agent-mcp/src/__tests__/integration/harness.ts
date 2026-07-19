@@ -46,7 +46,6 @@ import {
 import { AgentStore } from "../../store/agent-store.js";
 import { runMigrationsOn, MIGRATIONS_FOLDER } from "../../db/migrate-runner.js";
 import { startSseServer } from "../../streaming/sse-server.js";
-import { loadConfig } from "../../config.js";
 import { emitTaskEvent } from "../../streaming/event-bus.js";
 import { eq } from "drizzle-orm";
 import type { EngineConfig, EngineLogger } from "@adhd/agent-engine-orchestrator";
@@ -130,28 +129,34 @@ function testLogger(level: "silent" | "warn" = "silent"): EngineLogger {
   };
 }
 
-/** Build a test EngineConfig with defaults suitable for integration tests */
+/**
+ * Build a test EngineConfig with defaults suitable for integration tests.
+ *
+ * Deliberately self-contained (does NOT import the real `env` singleton
+ * from `../../config.js`, which resolves against the real machine's
+ * `~/.adhd` / `process.env` cascade) — mirrors `agentMcpEnvironmentSpec`'s
+ * `server.defaultMaxTokens` (8192) and `sse.port` (3001) spec defaults as
+ * plain literals so this harness never touches real host state.
+ */
 function testConfig(_opts: {
   serverMaxToolLoops?: number;
 } = {}): EngineConfig {
-  const env = {
-    ADHD_AGENT_DATABASE_PATH: ":memory:",
-    ADHD_AGENT_LOG_LEVEL: "silent",
-  };
-  const cfg = loadConfig(env as NodeJS.ProcessEnv);
   return {
     server: {
       contextLimit: 0,
-      defaultMaxTokens: cfg.server.defaultMaxTokens,
+      defaultMaxTokens: 8192,
     },
     queue: { concurrency: 5 },
-    sse: { baseUrl: `http://localhost:${cfg.sse.port}` },
+    sse: { baseUrl: `http://localhost:3001` },
     plugins: { entries: [] },
     getProviderConfig(opts) {
       return { secret: opts.secret ? process.env[opts.secret] : undefined, baseURL: opts.inlineBaseURL, model: opts.inlineModel };
     },
     subprocessEnv() {
       return {};
+    },
+    resolveEnvName(name: string) {
+      return this.isEnvNameAllowed(name) ? process.env[name] : undefined;
     },
     isEnvNameAllowed(name: string) {
       return name.startsWith("ADHD_AGENT_") || name.startsWith("LMSTUDIO_");

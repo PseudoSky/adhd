@@ -1,63 +1,42 @@
 /**
- * `environment.ts` — the TypeScript (`@adhd/environment`) runtime client.
+ * `environment.ts` — the `Environment<T>` runtime client
+ * (`@adhd/environment`), per `ARCHITECTURE.md` §3.
  *
- * Thin runtime client (`[inv:thin-runtime]`): reads a pre-built
- * `adhd-environment.json` snapshot from disk and exposes typed accessors for
- * config values, resolved directory paths, recorded env vars, and field
- * provenance. It performs **no** builder logic: no YAML parsing, no field
- * merging, no fieldSchema generation, no validation, no directory creation,
- * and no `.env` file loading. The snapshot is produced by the (TypeScript)
- * `@adhd/environment-builder` pipeline; this module only ever reads it.
+ * PRIMARY mode — code-first, live resolve: `new Environment(project, spec,
+ * options?)` wraps `@adhd/environment-builder#buildSnapshot`, which resolves
+ * the WHOLE cascade (code defaults → system/global/project/local files →
+ * env vars) synchronously, in memory, at construction — no disk read is
+ * ever a prerequisite (`ARCHITECTURE.md` §2.1). A `secret`/`at:'runtime'`
+ * field's leaf in `config` is replaced, here, with a live getter that
+ * re-reads `process.env` on every access (see `installLiveGetters`).
  *
- * Mirrors the Python (`environment-core-py/src/adhd_environment/environment.py`)
- * and Rust (`environment-core-rs/src/lib.rs`) runtime clients field-for-field
- * and behavior-for-behavior, per `docs/plan/adhd-environment/interfaces-architect.md`
- * §4.2 (authoritative interface contract for this package).
- *
- * NOTE on cross-package imports: as with `@adhd/environment-builder` (see the
- * header note in its `config-resolver.ts`), only **types** are imported from
- * `@adhd/environment-base-spec` at runtime — the handful of small pure
- * primitives/constants this module needs from that contract are duplicated
- * locally (matching the Python/Rust ports, which have no base-spec
- * counterpart to import from at all) so this package resolves identically
- * whether loaded via the Nx/Vite path-aliased workspace build or a bare
- * `node -e require(...)` of the published `dist` package (no workspace
- * `node_modules/@adhd/*` symlinks exist for the latter).
+ * SECONDARY mode — snapshot-only: `Environment.fromSnapshot(path)` reads a
+ * previously-`.write()`-persisted JSON snapshot (cross-process handoff /
+ * inspection) and exposes the identical accessor surface, without running
+ * the builder pipeline at all.
  */
 
-import { homedir } from 'node:os';
-import { readFileSync } from 'node:fs';
-import { join, isAbsolute } from 'node:path';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+
 import type {
-  ConfigScope,
   DeepPath,
-  EnvironmentParams,
+  EnvironmentOptions,
+  EnvironmentSpec,
+  LiveFieldMeta,
   ProvenanceEntry,
-  ResolvedDirectoryEntry,
+  ResolvedDirEntry,
+  Scope,
   SnapshotData,
 } from '@adhd/environment-base-spec';
-
-// ============================================================================
-// Constants — duplicated from `@adhd/environment-base-spec` (see header note).
-// ============================================================================
-
-/** Mirrors `DEFAULT_ORG_NAMESPACE` in `environment-base-spec/src/index.ts`. */
-const DEFAULT_ORG_NAMESPACE = 'adhd';
-
-/** Mirrors `DEFAULT_NAMESPACE` in `environment-base-spec/src/index.ts`. */
-const DEFAULT_NAMESPACE = 'default';
-
-/** Mirrors `SNAPSHOT_FILENAME` in `environment-base-spec/src/index.ts`. */
-const SNAPSHOT_FILENAME = 'adhd-environment.json';
-
-/**
- * Reserved prefix marking a redacted secret reference (mirrors
- * `SECRET_REF_PREFIX` in `@adhd/environment-base-spec`). A resolved config
- * value of `"adhd-secret-ref:ADHD_FOO_SECRET"` means "read the secret from
- * env var `ADHD_FOO_SECRET` at runtime"; the plaintext is never persisted
- * (ENV-CORE-009).
- */
-const SECRET_REF_PREFIX = 'adhd-secret-ref:';
+import {
+  ValidationError,
+  atomicWrite,
+  buildSnapshot,
+  coerceValue,
+  resolveEnvironmentContext,
+  resolveSnapshotPath,
+} from '@adhd/environment-builder';
 
 // ============================================================================
 // Errors
@@ -71,11 +50,9 @@ export class EnvironmentError extends Error {
   }
 }
 
-/**
- * Raised when the snapshot JSON file does not exist on disk. Mirrors
- * `SnapshotNotFoundError` in the Python port and
- * `EnvironmentError::SnapshotNotFound` in the Rust port.
- */
+/** Raised by `Environment.fromSnapshot` when the snapshot JSON file does
+ *  not exist on disk. Never raised by the primary (spec-driven)
+ *  constructor — that path has no disk-read prerequisite. */
 export class SnapshotNotFoundError extends EnvironmentError {
   constructor(readonly snapshotPath: string) {
     super(`adhd-environment snapshot not found: ${snapshotPath}`);
@@ -83,69 +60,20 @@ export class SnapshotNotFoundError extends EnvironmentError {
   }
 }
 
-// ============================================================================
-// Secret-reference resolution (ENV-CORE-009 / ENV-CORE-014)
-//
-// Mirrors `isSecretRef` / `resolveSecretRef` in `@adhd/environment-base-spec`
-// (duplicated locally — see the module header note) and the equivalent
-// inline resolution in the Python port's `_get_config_value` and the Rust
-// port's `get_config`.
-// ============================================================================
-
-/** True if `value` is a secret reference string (see `SECRET_REF_PREFIX`). */
-function isSecretRef(value: unknown): value is string {
-  return typeof value === 'string' && value.startsWith(SECRET_REF_PREFIX);
-}
-
-/**
- * Resolves a secret reference against a supplied environment map, returning
- * the live secret value (or `undefined` if the env var is unset). Non-secret
- * values are returned unchanged. This is the read-time counterpart to
- * `@adhd/environment-builder`'s `redactSecrets` (write side) — every runtime
- * client (TS/Python/Rust) applies the equivalent resolution in its
- * `Environment.get`.
- */
-function resolveSecretRef(
-  value: unknown,
-  env: Record<string, string | undefined> = process.env,
-): unknown {
-  if (!isSecretRef(value)) return value;
-  return env[value.slice(SECRET_REF_PREFIX.length)];
+/** Raised by `Environment#lock()` when the named lock is already held. */
+export class LockHeldError extends EnvironmentError {
+  constructor(
+    readonly lockName: string,
+    readonly lockPath: string,
+  ) {
+    super(`lock "${lockName}" is already held (${lockPath})`);
+    this.name = 'LockHeldError';
+  }
 }
 
 // ============================================================================
 // Small local helpers
 // ============================================================================
-
-/**
- * Fallback env-var prefix inference, used only when a snapshot's
- * `project.envPrefix` is somehow absent. Mirrors `projectEnvPrefix` in
- * `@adhd/environment-base-spec` (duplicated locally — see header note).
- */
-function projectEnvPrefix(projectName: string): string {
-  return `ADHD_${projectName.toUpperCase().replace(/[.-]/g, '_')}`;
-}
-
-/**
- * Rejects a `project`/`namespace` segment that could escape `adhdRoot` when
- * interpolated into a filesystem path (ENV-CORE-006). Mirrors
- * `_validate_path_segment` (Python) / `validate_path_segment` (Rust).
- */
-function validatePathSegment(segment: string, label: string): void {
-  if (
-    !segment ||
-    segment === '.' ||
-    segment === '..' ||
-    segment.includes('/') ||
-    segment.includes('\\') ||
-    segment.includes('\0') ||
-    isAbsolute(segment)
-  ) {
-    throw new EnvironmentError(
-      `${label} must be a non-empty path segment with no '.', '..', path separators, or NUL: ${JSON.stringify(segment)}`,
-    );
-  }
-}
 
 /** Resolves `dottedPath` against a nested object tree. `undefined` if any segment is missing. */
 function getAtPath(node: unknown, dottedPath: string): unknown {
@@ -160,129 +88,192 @@ function getAtPath(node: unknown, dottedPath: string): unknown {
   return current;
 }
 
+/** Deep-clones a JSON-safe value (every leaf `Environment#config` can ever
+ *  hold is a `FieldType` value or a plain nested object of them — never a
+ *  function/class instance), so `installLiveGetters` can freely
+ *  `Object.defineProperty` on the clone without mutating the builder's
+ *  original `SnapshotData.config`. */
+function deepCloneJson<V>(value: V): V {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map((v) => deepCloneJson(v)) as unknown as V;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] = deepCloneJson(v);
+  }
+  return out as V;
+}
+
+/**
+ * Clones `config` and replaces every declared `liveFields` leaf with a
+ * getter that re-reads `process.env[meta.env]` on EVERY access — never
+ * baking in a value at construction time (ARCHITECTURE.md §7.5
+ * runtime-vs-build proof). Falls back to `meta.fallback` (already
+ * secret-redacted to `undefined` by the builder — see
+ * `LiveFieldMeta.fallback`'s doc comment) when the live env var is unset.
+ */
+function installLiveGetters<T>(config: T, liveFields: Record<string, LiveFieldMeta>): T {
+  const cloned = deepCloneJson(config) as unknown as Record<string, unknown>;
+  for (const key of Object.keys(liveFields)) {
+    const meta = liveFields[key];
+    const segments = key.split('.');
+    let node: Record<string, unknown> = cloned;
+    for (let i = 0; i < segments.length - 1; i++) {
+      const segment = segments[i];
+      const existing = node[segment];
+      if (typeof existing !== 'object' || existing === null || Array.isArray(existing)) {
+        node[segment] = {};
+      }
+      node = node[segment] as Record<string, unknown>;
+    }
+    const leaf = segments[segments.length - 1];
+    Object.defineProperty(node, leaf, {
+      enumerable: true,
+      configurable: true,
+      get(): unknown {
+        const liveValue = process.env[meta.env];
+        return liveValue !== undefined ? coerceValue(liveValue, meta.type) : meta.fallback;
+      },
+    });
+  }
+  return cloned as unknown as T;
+}
+
+/** Rejects a lock `name` that could escape the run directory when joined
+ *  into a filesystem path. */
+function validateLockName(name: string): void {
+  if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\') || name.includes('\0')) {
+    throw new EnvironmentError(`lock name must be a non-empty path segment with no path separators: ${JSON.stringify(name)}`);
+  }
+}
+
 // ============================================================================
 // Environment<T> — the runtime client
 // ============================================================================
 
 /**
- * Thin runtime client. Reads a pre-built snapshot JSON file and exposes
- * typed accessors. Does **not** do: YAML parsing, env var resolution
- * (beyond secret-reference lookup at read time), field merge, fieldSchema
- * generation, validation, or directory creation.
+ * The `@adhd/environment` runtime client. See `ARCHITECTURE.md` §3 for the
+ * full public contract.
  *
  * @example
  * ```ts
- * const env = new Environment<AgentMcpConfig>({ project: "agent-mcp", namespace: "production" });
- * const port: number = env.get("config.transport.port");
+ * const env = new Environment<AgentMcpConfig>('agent-mcp', spec);
+ * const port: number = env.config.transport.port; // zero-config default, unless overridden
  * ```
- *
- * @typeParam T — The config shape type. Defines what `get()` returns for a
- *   `"config.*"` path. When omitted, `get()` returns `unknown`.
  */
 export class Environment<T = Record<string, unknown>> {
-  /** The full snapshot data as read from disk. */
-  private readonly _data: SnapshotData;
+  /** Project name (kebab-case). */
+  declare readonly project: string;
+  /** Effective namespace. */
+  declare readonly namespace: string;
+  /** Effective org namespace. */
+  declare readonly orgNamespace: string;
+  /** The resolved active scope (ARCHITECTURE.md §2.3). */
+  declare readonly scope: Scope;
+  /** Effective env var prefix (explicit or inferred from `project`). */
+  declare readonly prefix: string;
+  /** Unique per constructed instance (`pid + short random`, or an explicit
+   *  `EnvironmentOptions.instanceId` override). */
+  declare readonly instanceId: string;
+  /** Content hash of the resolved config (`SnapshotData.configHash`). */
+  declare readonly hash: string;
+  /** Snapshot metadata: config hash, structure hash, generation timestamp,
+   *  and library version — computed live. */
+  declare readonly version: {
+    configHash: string;
+    structureHash: string;
+    generatedAt: string;
+    libraryVersion: string;
+  };
+  /** Field-level provenance records. */
+  declare readonly provenance: Record<string, ProvenanceEntry>;
+  /** Resolved directory catalog entries (see also `paths`, the name→path convenience map). */
+  declare readonly dirs: ResolvedDirEntry[];
+  /** Where `.write()` persists (or `Environment.fromSnapshot` read from). */
+  declare readonly snapshotPath: string;
 
-  /** Project name (kebab-case), as supplied to the constructor. */
-  readonly project: string;
+  /**
+   * Typed, fully-resolved nested config object — the PRIMARY accessor.
+   * A `secret`/`at:'runtime'` field is a live getter here: it re-reads
+   * `process.env` on every access (ARCHITECTURE.md §7.5). Every other field
+   * is resolved once, at construction.
+   *
+   * @example env.config.transport.port   // number
+   * @example env.config.db.path          // string
+   */
+  declare readonly config: T;
 
-  /** Effective namespace (defaults to `"default"`). */
-  readonly namespace: string;
+  /** Resolved absolute directory path per declared `dirs` key. Directories
+   *  are NOT created eagerly — call `ensureDirs()` to create them on disk. */
+  declare readonly paths: Record<string, string>;
 
-  /** Effective org namespace, read from the snapshot's `project.orgNamespace`. */
-  readonly orgNamespace: string;
+  /** Resolved absolute file path per declared `files` key. */
+  declare readonly files: Record<string, string>;
 
-  /** Scope filter (`undefined` = no filter). */
-  readonly scope: ConfigScope | undefined;
-
-  /** Absolute path to the snapshot JSON file that was read. */
-  readonly snapshotPath: string;
-
-  /** Effective env var prefix, read from the snapshot's `project.envPrefix`. */
-  readonly prefix: string;
-
-  /** Content hash from the snapshot (`configHash`). */
-  readonly hash: string;
+  /** The full resolved snapshot (private — internal representation). */
+  declare private readonly _data: SnapshotData<T>;
 
   /** Bracket-access shorthand: `env["config.x"]` === `env.get("config.x")`. */
   [key: string]: unknown;
 
   /**
-   * @param params.project — Required. Project name (kebab-case).
-   * @param params.scope — Optional. Filters returned config/dir values by scope.
-   * @param params.namespace — Optional. Defaults to `"default"`.
-   * @param params.adhdRoot — Optional. Defaults to `os.homedir() + "/.adhd"`.
+   * @param project — Required. Project name (kebab-case).
+   * @param spec — Required. The code-defined `EnvironmentSpec<T>`.
+   * @param options — Optional. See `EnvironmentOptions`.
    *
-   * @throws {EnvironmentError} If `project` is empty, or `project`/`namespace`
-   *   would escape `adhdRoot` when interpolated into a path (ENV-CORE-006).
-   * @throws {SnapshotNotFoundError} If the snapshot file does not exist.
+   * Resolves the ENTIRE cascade synchronously, in memory, right here — no
+   * disk read is ever a prerequisite (ARCHITECTURE.md §2.1). Throws
+   * `ValidationError` (from `@adhd/environment-builder`) if the resolved
+   * config violates the generated JSON Schema.
    */
-  constructor(params: EnvironmentParams) {
-    if (!params?.project) {
-      throw new EnvironmentError("Environment requires a non-empty 'project' name");
-    }
-
-    this.project = params.project;
-    this.namespace = params.namespace || DEFAULT_NAMESPACE;
-    this.scope = params.scope;
-
-    // ENV-CORE-006: guard against path traversal before interpolating
-    // project/namespace into the snapshot path.
-    validatePathSegment(this.project, 'project');
-    validatePathSegment(this.namespace, 'namespace');
-
-    const root = params.adhdRoot ?? join(homedir(), `.${DEFAULT_ORG_NAMESPACE}`);
-    this.snapshotPath = join(root, this.project, this.namespace, SNAPSHOT_FILENAME);
-
-    let raw: string;
+  constructor(project: string, spec: EnvironmentSpec<T>, options: EnvironmentOptions = {}) {
+    let data: SnapshotData<T>;
+    let snapshotPath: string;
     try {
-      raw = readFileSync(this.snapshotPath, 'utf8');
+      data = buildSnapshot<T>(project, spec, options);
+      const ctx = resolveEnvironmentContext(project, spec, options);
+      snapshotPath = resolveSnapshotPath(ctx.roots, data.scope);
     } catch (err) {
-      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
-        throw new SnapshotNotFoundError(this.snapshotPath);
-      }
-      throw err;
+      // `ValidationError` (schema violation) is a distinct, documented public
+      // error type — propagate it verbatim. Everything else raised by the
+      // builder (bad project/namespace name, undeclared namespace, ...) is
+      // wrapped into `EnvironmentError`, this package's single error base,
+      // so a consumer of `@adhd/environment` never needs to import
+      // `@adhd/environment-builder` just to catch its errors.
+      if (err instanceof ValidationError || err instanceof EnvironmentError) throw err;
+      throw new EnvironmentError(err instanceof Error ? err.message : String(err));
     }
-    this._data = JSON.parse(raw) as SnapshotData;
-
-    const projectMeta = this._data.project;
-    this.orgNamespace = projectMeta?.orgNamespace ?? DEFAULT_ORG_NAMESPACE;
-    this.prefix = projectMeta?.envPrefix ?? projectEnvPrefix(this.project);
-    this.hash = this._data.configHash ?? '';
-
-    // Enables native bracket-access (`env["config.x"]`) to dispatch through
-    // `.get()` for any string key that isn't already a real member of this
-    // instance (`project`, `namespace`, `get`, `toJSON`, ...).
-    return new Proxy(this, {
-      get(target, prop, receiver) {
-        if (typeof prop === 'string' && !(prop in target)) {
-          return target.get(prop);
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    });
+    return populateEnvironment(this, data, snapshotPath);
   }
 
   /**
-   * Typed config/dir/provenance/env accessor.
+   * SECONDARY mode: reads a previously-`.write()`-persisted snapshot JSON
+   * file and exposes the identical accessor surface, WITHOUT running the
+   * builder pipeline (no spec required) — for cross-process handoff or
+   * inspection by another consumer. Throws `SnapshotNotFoundError` if the
+   * file does not exist.
+   */
+  static fromSnapshot<T = Record<string, unknown>>(snapshotPath: string): Environment<T> {
+    if (!existsSync(snapshotPath)) {
+      throw new SnapshotNotFoundError(snapshotPath);
+    }
+    const data = JSON.parse(readFileSync(snapshotPath, 'utf8')) as SnapshotData<T>;
+    const instance = Object.create(Environment.prototype) as Environment<T>;
+    return populateEnvironment(instance, data, snapshotPath);
+  }
+
+  /**
+   * Dynamic dot-path accessor.
    *
    * Path prefixes:
-   *   - `"config.*"` — reads from the snapshot's `config` (nested,
-   *     dot-separated path). A value redacted at build time into an
-   *     `"adhd-secret-ref:<ENV_VAR>"` reference (see `redactSecrets` in
-   *     `@adhd/environment-builder`) is resolved from `process.env` here
-   *     (ENV-CORE-009 / ENV-CORE-014) — never returned literally.
-   *   - `"path.*"` — reads from the snapshot's `dirs` (by directory type, or
-   *     `type.name`).
-   *   - `"env.*"` — reads from the snapshot's `envVars`.
-   *   - `"provenance.*"` — reads from the snapshot's `provenance`.
-   *
-   * Scope filtering: when `this.scope` is set, `"config.*"`/`"path.*"`
-   * values whose provenance/directory scope does not match return
-   * `undefined`.
+   *   - `"config.*"` — reads from `config` (live getters apply).
+   *   - `"path.*"` — reads from `paths` by declared `dirs` key.
+   *   - `"env.*"` — reads a live env var THROUGH `resolveEnvName` (the
+   *     project-prefix allowlist always applies — this can never be used to
+   *     bypass it).
+   *   - `"provenance.*"` — reads from `provenance`.
    *
    * @example env.get("config.transport.port") // number
-   * @example env.get("path.state.data") // string (first matching dir path)
+   * @example env.get("path.data")             // string
    */
   get<K extends string>(key: K): DeepPath<T, K>;
   /** Untyped accessor — returns `unknown`. */
@@ -296,61 +287,159 @@ export class Environment<T = Record<string, unknown>> {
 
     switch (head) {
       case 'config':
-        return this.getConfigValue(rest);
+        return getAtPath(this.config, rest);
       case 'path':
-        return this.getPathValue(rest);
+        return this.paths[rest];
       case 'env':
-        return this._data.envVars?.[rest];
+        return this.resolveEnvName(rest);
       case 'provenance':
-        return this._data.provenance?.[rest];
+        return this._data.provenance[rest];
       default:
         return undefined;
     }
   }
 
-  /** Returns a deep-frozen copy of the full snapshot. Used for debugging. */
-  toJSON(): Readonly<SnapshotData> {
-    return Object.freeze(JSON.parse(JSON.stringify(this._data))) as Readonly<SnapshotData>;
-  }
-
-  // -- internal helpers ------------------------------------------------------
-
   /**
-   * Resolves `dottedPath` against the nested `config` tree, applies scope
-   * filtering via the matching provenance entry, then resolves any secret
-   * reference (ENV-CORE-009 / ENV-CORE-014) before returning.
+   * True iff `name` is within this project's env-prefix scope (security
+   * guard) — e.g. `"ADHD_AGENT_MCP_DB_PATH"` when `prefix === "ADHD_AGENT_MCP"`.
    */
-  private getConfigValue(dottedPath: string): unknown {
-    const node = getAtPath(this._data.config, dottedPath);
-
-    if (this.scope !== undefined) {
-      const provenance: ProvenanceEntry | undefined = this._data.provenance?.[dottedPath];
-      if (!provenance || provenance.scope !== this.scope) return undefined;
-    }
-
-    return resolveSecretRef(node);
+  isEnvNameAllowed(name: string): boolean {
+    return name.startsWith(this.prefix);
   }
 
   /**
-   * Resolves a `path.*` lookup against `dirs` entries. Directory types
-   * themselves contain a literal dot (e.g. `"state.data"`), so a bare
-   * type-only lookup (`"path.state.data"`) is disambiguated from a
-   * type+name lookup (`"path.state.data.registry"`) by first trying an
-   * exact `"{type}.{name}"` match, then falling back to a bare `type` match.
+   * Resolves a live env-var value from `process.env`, applying the
+   * `isEnvNameAllowed` guard. Returns `undefined` if the name is disallowed
+   * or the env var is unset. This is the single sanctioned way for
+   * consumers to read from `process.env` (e.g. agent-mcp's
+   * `getProviderConfig`).
    */
-  private getPathValue(rest: string): string | undefined {
-    const dirs: ResolvedDirectoryEntry[] = this._data.dirs ?? [];
-    const matchesScope = (entry: ResolvedDirectoryEntry): boolean =>
-      this.scope === undefined || entry.scope === this.scope;
-
-    for (const entry of dirs) {
-      if (!matchesScope(entry)) continue;
-      if (entry.name && `${entry.type}.${entry.name}` === rest) return entry.path;
-    }
-    for (const entry of dirs) {
-      if (!matchesScope(entry)) continue;
-      if (entry.type === rest) return entry.path;
-    }
-    return undefined;
+  resolveEnvName(name: string): string | undefined {
+    if (!this.isEnvNameAllowed(name)) return undefined;
+    return process.env[name];
   }
+
+  /**
+   * Acquires an advisory, exclusive, filesystem-based lock under a declared
+   * `kind: 'run'` directory (or, absent one, `<dirname(snapshotPath)>/run` —
+   * zero-config: locking never requires declaring a `run` dir). Returns a
+   * release function. Throws `LockHeldError` (deterministically — no
+   * polling/timing) if the lock is already held by another instance.
+   */
+  lock(name = 'singleton'): () => void {
+    validateLockName(name);
+    const runDir = this.paths.run ?? this._runDirFallback();
+    mkdirSync(runDir, { recursive: true });
+    const lockPath = join(runDir, `${name}.lock`);
+
+    let fd: number;
+    try {
+      // 'wx': exclusive create — atomically fails with EEXIST if the file
+      // already exists. No polling/timing required for a deterministic proof.
+      fd = openSync(lockPath, 'wx');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code === 'EEXIST') {
+        throw new LockHeldError(name, lockPath);
+      }
+      throw err;
+    }
+    writeSync(fd, `${process.pid}\n${this.instanceId}\n`);
+    closeSync(fd);
+
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        /* best-effort — already gone is fine */
+      }
+    };
+  }
+
+  private _runDirFallback(): string {
+    return join(dirname(this.snapshotPath), 'run');
+  }
+
+  /** Creates every declared directory in `paths` on disk (recursive
+   *  `mkdir`), if it does not already exist. `paths` are resolved lazily as
+   *  strings at construction; this is the opt-in step that actually touches
+   *  the filesystem. */
+  ensureDirs(): void {
+    for (const path of Object.values(this.paths)) {
+      mkdirSync(path, { recursive: true });
+    }
+  }
+
+  /**
+   * Atomically persists the resolved snapshot to `snapshotPath`. Optional —
+   * never a prerequisite for any other `Environment` instance
+   * (ARCHITECTURE.md §2.1). Returns the path written to.
+   */
+  write(): string {
+    atomicWrite(this.snapshotPath, this._data);
+    return this.snapshotPath;
+  }
+
+  /** Returns a deep-frozen copy of the full resolved snapshot. Debugging/inspection only. */
+  toJSON(): Readonly<SnapshotData<T>> {
+    return Object.freeze(JSON.parse(JSON.stringify(this._data))) as Readonly<SnapshotData<T>>;
+  }
+}
+
+/**
+ * Shared population step for both construction paths (live-resolve and
+ * `fromSnapshot`): assigns every public member from `data`, installs live
+ * getters for `secret`/`at:'runtime'` fields, and wraps the result in a
+ * `Proxy` so bracket-access (`env["config.x"]`) dispatches through `get()`
+ * for any string key that isn't already a real member.
+ */
+function populateEnvironment<T>(
+  target: Environment<T>,
+  data: SnapshotData<T>,
+  snapshotPath: string,
+): Environment<T> {
+  const paths: Record<string, string> = {};
+  for (const dir of data.dirs) paths[dir.name] = dir.path;
+
+  const files: Record<string, string> = {};
+  for (const file of data.files) files[file.name] = file.path;
+
+  const config = installLiveGetters(data.config, data.liveFields ?? {});
+
+  Object.defineProperties(target, {
+    project: { value: data.project, enumerable: true },
+    namespace: { value: data.namespace, enumerable: true },
+    orgNamespace: { value: data.orgNamespace, enumerable: true },
+    scope: { value: data.scope, enumerable: true },
+    prefix: { value: data.envPrefix, enumerable: true },
+    instanceId: { value: data.instanceId, enumerable: true },
+    hash: { value: data.configHash, enumerable: true },
+    version: {
+      value: {
+        configHash: data.configHash,
+        structureHash: data.structureHash,
+        generatedAt: data.generatedAt,
+        libraryVersion: data.libraryVersion,
+      },
+      enumerable: true,
+    },
+    provenance: { value: data.provenance, enumerable: true },
+    dirs: { value: data.dirs, enumerable: true },
+    snapshotPath: { value: snapshotPath, enumerable: true },
+    config: { value: config, enumerable: true },
+    paths: { value: paths, enumerable: true },
+    files: { value: files, enumerable: true },
+    _data: { value: data, enumerable: false },
+  });
+
+  return new Proxy(target, {
+    get(t, prop, receiver) {
+      if (typeof prop === 'string' && !(prop in t)) {
+        return (t as Environment<T>).get(prop);
+      }
+      return Reflect.get(t, prop, receiver);
+    },
+  });
 }
