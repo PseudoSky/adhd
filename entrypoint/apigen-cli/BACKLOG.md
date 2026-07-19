@@ -524,3 +524,95 @@ run.ts:26-34`; `apigen-core-client/src/lib/compose-schemas.ts:59-119` (full read
 + 2 `*.spec.ts` fixtures, zero real writers; `apigen-core-client/src/lib/extract.ts:526-549`
 (`buildQueryOp`, the only `safe: true` source today)]
 
+---
+
+### BUG-APIGEN-031 — `generate --type cli` output silently mishandles array-typed params: crashes or returns a wrong value instead of the real result
+
+**Discovered:** 2026-07-19, during `generate`-mode output verification of `apigen-cli` (`cli` and
+`jsonschema` plugins) against `/Users/nix/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts`
+(140 extracted / 130 composed operations — both plugin outputs correctly reflect all 130, so
+this is unrelated to the v1-extraction-dropped-reexports class of bug).
+
+**Observed:** the generated `cli.ts`'s `mean` and `percentile` commands (both take a plain
+`number[]` param — `latency-stats.ts:17,27`) do not work correctly when actually invoked with
+real array input, despite `--help` and static inspection looking correct:
+
+```
+$ tsx cli.ts mean --arr '[2,4,6]'
+TypeError: arr.reduce is not a function
+    at Object.mean (.../latency-stats.ts:29:14)
+    at dispatch (apigen-engine-runtime/src/lib/dispatch.ts:157:31)
+
+$ tsx cli.ts percentile --sorted '[10,20,30,40,50]' --p 0.5
+"3"                          # WRONG — percentile([10,20,30,40,50], 0.5) is 30
+```
+
+The `percentile` case is the dangerous one: it does not crash, it silently returns a
+plausible-looking but wrong answer. `sorted` never gets parsed into an array — the raw
+argv string `"[10,20,30,40,50]"` (16 chars) is passed straight through, so
+`idx = Math.ceil(16 * 0.5) - 1 = 7` and `"[10,20,30,40,50]"[7]` happens to be the character
+`'3'` — coincidence, not correctness. (Confirmed by first testing with `[1,2,3,4,5]` →
+`p50=3`, which is *also* the correct answer for the real array, i.e. a false-positive trap;
+re-running with an array whose string-index-7 doesn't match its true p50 exposed the bug.)
+
+**Root cause, traced end to end:**
+1. `apigen-plugin-cli-output/src/lib/generate.ts:181-197` emits one Commander `.option`/
+   `.requiredOption` per domain param with no type-aware parsing — every flag value Commander
+   captures is the bare argv string.
+2. `generate.ts:199-203` builds `domainArgs` directly from `opts[paramName]` — no
+   `JSON.parse` (or any parse) is ever applied to array/object-typed param values before they
+   reach dispatch.
+3. `apigen-engine-runtime/src/lib/dispatch.ts:84-87` (`decodeArg`) hands the still-a-string
+   wire value to `_transcoder.decode(wire, node)` unconditionally.
+4. `apigen-base-logical/src/lib/runmode.ts:190-193` — the transcoder's own array branch:
+   ```ts
+   if (schemaType === 'array') {
+     if (!Array.isArray(wire)) {
+       return wire;          // ← silent passthrough, no parse/coerce, no error
+     }
+   ```
+   A non-array `wire` (the CLI's raw string) is returned unchanged instead of being parsed or
+   rejected. This line is correct/necessary for `run`-mode HTTP transports (Express/Fastify
+   already deliver a real parsed array from a JSON body — `Array.isArray(wire)` is true there),
+   but it means the `cli` plugin — the one caller whose "wire" value is *always* a raw argv
+   string — gets no array coercion anywhere in the pipeline. `object`-typed domain params
+   share the identical code path (`runmode.ts`'s object branch has no coercion path either)
+   and are very likely equally broken, though not independently re-verified with a live
+   object-typed param this session (scalar `string`/`number`/`boolean` params ARE handled
+   correctly — Commander's own string capture plus the transcoder's scalar codecs round-trip
+   fine, confirmed via `percentile --p 0.5` correctly reaching `Math.ceil(sorted.length * 0.5)`
+   with `p` as a real number).
+
+**Impact:** every generated-`cli`-output command whose schema has an `array`- or (likely)
+`object`-typed domain param is broken for real use — either a hard crash (arrays walked with
+`.map`/`.reduce`/etc.) or a silently wrong answer (arrays consumed via indexing, e.g.
+`sorted[idx]`, since JS strings support numeric indexing). Scalar-only commands are unaffected.
+Not the same bug as BUG-APIGEN-030 (AJV `x-apigen-logical` strict-mode crash, HTTP dispatch
+transport only) — this reproduces in `generate --type cli`'s own standalone output with no
+HTTP/AJV layer involved at all, and no `x-apigen-logical` hint on either affected param.
+
+**Suggested fix:** `apigen-plugin-cli-output/src/lib/generate.ts` should `JSON.parse` (or emit
+code that does so at runtime) any argv value destined for an `array`- or `object`-typed domain
+param before constructing `domainArgs`, OR `runmode.ts:190-193`'s passthrough should be
+tightened so a non-array `wire` for an `array`-typed node is treated as a decode error (or is
+itself JSON.parsed when it's a string) rather than silently passed through — whichever fix is
+chosen must not regress the `run`-mode HTTP transports, which correctly rely on the current
+passthrough when `wire` is already a real array.
+
+**Status:** OPEN. Verified identical on `main` (`packages/apigen/apigen-engine-runtime/src/lib/
+dispatch.ts` and `packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts` are byte-
+identical between `main` and the `fix/apigen-v1-retirement` worktree at `80e1df8d`) — this is
+pre-existing, not introduced by the v1-retirement change. Scope: `apigen-plugin-cli-output`
+(`generate.ts`), `apigen-base-logical` (`runmode.ts` array/object decode branches).
+
+Citations: [session 2026-07-19, self-verified: repro run via `node dist/entrypoint/apigen-cli/
+index.js generate --source .../memory-core/src/index.ts --type cli --out-dir <scratch>` then
+`tsx cli.ts mean --arr '[2,4,6]'` and `tsx cli.ts percentile --sorted '[10,20,30,40,50]' --p
+0.5`, both against `fix/apigen-v1-retirement`@`80e1df8d`;
+`packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts:181-197,199-231` (full read);
+`packages/apigen/apigen-engine-runtime/src/lib/dispatch.ts:62-87,120-159` (full read);
+`packages/apigen/apigen-base-logical/src/lib/runmode.ts:162-220` (full read);
+`/Users/nix/dev/ai/sox-ecosystem/libs/memory-core/src/latency-stats.ts:17,27` (`percentile`/
+`mean` real signatures); `diff` of `dispatch.ts` and `generate.ts` between `main` and the
+`fix/apigen-v1-retirement` worktree → byte-identical, confirming pre-existing on `main`]
+
