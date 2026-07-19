@@ -402,3 +402,124 @@ Citations: [session 2026-07-19, self-verified by direct file read:
 `apigen-plugin-api-express/src/lib/run.ts:254,267`;
 `apigen-plugin-mcp/src/lib/run.ts:93,105`;
 `apigen-engine-runtime/src/lib/validate-layer.ts:122-125`]
+
+---
+
+### BUG-APIGEN-024 — `--use openapi` mount produces an empty OpenAPI doc (`paths: {}`) on live `run`
+
+**Discovered:** 2026-07-19, while answering whether exposing an OpenAPI schema would be
+simple — it turns out `@adhd/apigen-plugin-openapi` already exists and is a real,
+spec-conformant implementation (`toOpenApi()` in `packages/apigen/codegen/openapi/src/lib/
+to-openapi.ts`, wired as a `mount` capability at `apigen-plugin-openapi/src/lib/
+plugin.ts:72-105`), but it's non-functional through `run` today.
+
+**Reproduced live:** built `apigen-plugin-openapi`, ran
+`node dist/entrypoint/apigen-cli/index.js run --source
+entrypoint/apigen-cli/src/test/fixtures/api.ts --type api-express --use
+./dist/packages/apigen/apigen-plugin-openapi/index.mjs --opt port=3902` (2 real functions,
+`getUser`/`sendEmail`), then `curl http://localhost:3902/_meta/openapi` →
+`{"openapi":"3.1.0","info":{"title":"API","version":"0.0.0"},"paths":{}}` — the route
+mounts and returns a well-formed document shell, but `paths` is empty; neither real
+operation appears.
+
+**Root cause:** `collectMountRoutes()` — identical in both HTTP transports
+(`apigen-plugin-api-express/src/lib/run.ts:180`, `apigen-plugin-api-fastify/src/lib/
+run.ts:186`) — constructs a synthetic descriptor with operations hardcoded empty before
+calling the mount plugin:
+```ts
+const descriptor = { host, operations: [] as unknown[] };
+const ops = cap.operations(descriptor, useOptions[plugin.id]);
+```
+The openapi plugin's handler correctly calls `toOpenApi(descriptor.operations, ...)`
+(`apigen-plugin-openapi/src/lib/plugin.ts:99`) — but `descriptor.operations` is always
+`[]` by construction, regardless of what the real package actually extracted. This
+appears to be a generic helper originally sized for plugins like `health` that don't need
+real operations at all, never extended for a mount plugin (openapi) that does.
+
+**Compounding gap:** `PluginInput.packages[]` (`apigen-core-client/src/lib/types.ts:52-58`)
+doesn't carry the raw `Operation[]` descriptor at all today — only `id`, the already-
+composed `ComposedSchemas`, `importPath`, `fns`, `createClient`. The real descriptor is
+consumed and discarded earlier in the pipeline (`composeSchemas()` call sites:
+`apigen-engine-runtime/src/lib/api-package.ts:61`, `entrypoint/apigen-cli/src/lib/
+pipeline.ts:42`, `entrypoint/apigen-cli/src/lib/orchestrator.ts:355`). So the fix isn't
+just "stop passing `[]`" — the real `Operation[]` needs a path from extraction through to
+`RunInput` (e.g. a new `packages[].descriptor` field threaded alongside `schemas`), or
+`toOpenApi` needs an alternate entry point that can work from `ComposedSchemas` +
+`pkg.id` instead of the raw descriptor.
+
+**Also:** `generate.ts` (static codegen, both `apigen-plugin-api-express` and
+`apigen-plugin-api-fastify`) never calls `collectMountRoutes` at all — `--use openapi`
+only has any effect on `run` (live server), not `generate` (static output). Worth deciding
+if that's intentional (mount plugins as a live-server-only concept) or a gap.
+
+**Status:** OPEN. Scope: `apigen-core-client` (thread real descriptor into `PluginInput`),
+`apigen-plugin-api-express`/`apigen-plugin-api-fastify` (`collectMountRoutes` in both
+`run.ts`), possibly `apigen-plugin-openapi` (alternate `ComposedSchemas`-based entry point
+if full descriptor-threading is deferred).
+
+Citations: [session 2026-07-19, self-verified: live repro via built
+`dist/entrypoint/apigen-cli/index.js` + built `apigen-plugin-openapi`, curl output above;
+`apigen-plugin-openapi/src/lib/plugin.ts:72-105`;
+`packages/apigen/codegen/openapi/src/lib/to-openapi.ts:1-20`;
+`apigen-plugin-api-express/src/lib/run.ts:180`;
+`apigen-plugin-api-fastify/src/lib/run.ts:186`;
+`apigen-core-client/src/lib/types.ts:51-68`;
+`apigen-engine-runtime/src/lib/api-package.ts:61`;
+`entrypoint/apigen-cli/src/lib/pipeline.ts:42`;
+`entrypoint/apigen-cli/src/lib/orchestrator.ts:355`]
+
+---
+
+### BUG-APIGEN-025 — `x-apigen-safe` is read by `httpVerb()` but never written anywhere in the real pipeline
+
+**Discovered:** 2026-07-19, while investigating BUG-APIGEN-024 above.
+
+**Observed:** both HTTP transports derive the default verb like this
+(`apigen-plugin-api-express/src/lib/run.ts:26-34`, fastify identical):
+```ts
+function httpVerb(fnId, schema, config): 'GET' | 'POST' {
+  const override = config.http?.verb?.[fnId];
+  if (override === 'GET' || override === 'POST') return override;
+  return (schema['x-apigen-safe'] as boolean | undefined) ? 'GET' : 'POST';
+}
+```
+i.e. absent a manual override, the verb should fall back to whether the composed schema
+carries `x-apigen-safe: true`. But `composeSchemas()` — the one function that builds every
+schema this reads (`apigen-core-client/src/lib/compose-schemas.ts:59-119`, read in full) —
+never sets an `x-apigen-safe` key anywhere in its output, on either the nested `data`
+schema or the outer envelope schema. Repo-wide, `x-apigen-safe` is only ever *written* in
+hand-constructed test fixtures (`apigen-plugin-api-express/src/test/plugin.spec.ts:63-76`,
+fastify's spec mirrors it) that manually stamp `'x-apigen-safe': true` on a synthetic
+schema object to unit-test `httpVerb()` in isolation — never by the real extraction →
+compose pipeline. Confirmed via `grep -rln "x-apigen-safe"` across `packages/apigen` +
+`entrypoint/apigen-cli`: only the two `run.ts` readers and the two `*.spec.ts` fixtures
+reference it; zero writers outside test fixtures.
+
+**Impact:** currently masked because every function export is `kind: 'action'`/`safe:
+false` (see FEAT-APIGEN-022/023's analysis of `extract.ts`) — the only source of a real
+`safe: true` operation today is `kind: 'query'` (a plain serializable `const` export, via
+`buildQueryOp`, `extract.ts:526-549`), and it's unclear any such const is currently routed
+through a live HTTP transport in a way that would surface this. But it's a real latent
+correctness gap: the moment a `safe: true` operation IS exposed over `run --type
+api-express`/`api-fastify` without an explicit `--opt http.verb.<id>=GET` override, it will
+incorrectly default to `POST` instead of `GET`, because the signal `httpVerb()` needs was
+never wired from `extract.ts`'s `op.safe` through `composeSchemas()`'s output. (Not a
+factor for `apigen-plugin-openapi`'s `toOpenApi()` — that path reads `op.safe` directly off
+the real `Operation` via `project()`, bypassing `ComposedSchemas`/`x-apigen-safe`
+entirely, so the OpenAPI doc's verb derivation is correct even though the live server's
+isn't.)
+
+**Suggested fix:** `composeSchemas()` should accept (or `GeneratedSchemas` should already
+carry) the operation's `safe` flag and stamp `'x-apigen-safe': op.safe` onto the outer
+composed schema, so `httpVerb()`'s fallback actually reflects the real descriptor instead
+of always reading `undefined` → always `POST`.
+
+**Status:** OPEN. Scope: `apigen-core-client/src/lib/compose-schemas.ts` (write the field),
+whatever upstream call site has `op.safe` available at compose time.
+
+Citations: [session 2026-07-19, self-verified: `apigen-plugin-api-express/src/lib/
+run.ts:26-34`; `apigen-core-client/src/lib/compose-schemas.ts:59-119` (full read, no
+`x-apigen-safe` write); `apigen-plugin-api-express/src/test/plugin.spec.ts:63-76,172-192`;
+`grep -rln "x-apigen-safe" packages/apigen entrypoint/apigen-cli` → only 2 `run.ts` readers
++ 2 `*.spec.ts` fixtures, zero real writers; `apigen-core-client/src/lib/extract.ts:526-549`
+(`buildQueryOp`, the only `safe: true` source today)]
