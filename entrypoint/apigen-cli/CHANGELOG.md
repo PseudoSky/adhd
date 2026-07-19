@@ -152,6 +152,38 @@ All notable changes to this project are documented here.
   `npx nx test apigen-engine-runtime --testFile=src/test/named-type-param.spec.ts`
   (3/3 passing).
 
+- **BUG-APIGEN-CORE-001 re-wired (v1 retirement)** — post-v1-retirement code
+  review found that v1's deleted `generate-schemas.ts` called
+  `validateSchemaRefs()` (`@adhd/apigen-base-logical`) on every function's
+  built `input`/`output` schema, pooling `$defs` across all functions in a
+  source file, and threw a clear `Schema validation failed for function "X"`
+  error at generate time if any `$ref` was unresolvable — an early,
+  well-scoped catch for the exact dangling-`$ref` bug class BUG-APIGEN-026
+  hit at runtime instead. This safety net was silently dropped when v1 was
+  deleted: `validateSchemaRefs` was never called anywhere in the v2 path
+  (`extract.ts`, `extraction-session.ts`, `orchestrator.ts`,
+  `compose-schemas.ts`) — the only remaining reference was a local
+  re-implementation inside `apigen-core-client/src/test/ts-json-schema.spec.ts`,
+  which gave false confidence since it never touched the real pipeline.
+  Fixed by importing the real `validateSchemaRefs` from
+  `@adhd/apigen-base-logical` and wiring it into `composeSchemas()`
+  (`apigen-core-client/src/lib/compose-schemas.ts`) — the v2 equivalent
+  insertion point to v1's `generate-schemas.ts`, since that's where all of a
+  namespace's functions are present together in one pass. Pools `$defs`
+  across every function in the `GeneratedSchemas` passed in and validates
+  each function's `input`/`output` against the pooled dictionary before
+  composing, throwing the same function-scoped error v1 did. Covered by
+  three new cases in `apigen-core-client/src/test/compose-schemas.spec.ts`:
+  a dangling `$ref` (referencing a `$def` never defined by any function)
+  throws `Schema validation failed for function "pick"`; a `$ref` that
+  resolves against a `$def` pooled from a *different* function does not
+  throw (proves cross-function pooling, not per-function-only validation);
+  a schema with no `$defs` at all is left unvalidated (matches v1's
+  behavior — a bare `$ref` with no `$defs` anywhere is a structural problem
+  left to the downstream AJV compile, not this check). Verified red (test
+  fails with the `validateComposedRefs()` call temporarily removed) and
+  green (restored) by hand before landing.
+
 ### Changed
 
 - **v1 extraction pipeline retired — v2 orchestrator is now the ONLY
