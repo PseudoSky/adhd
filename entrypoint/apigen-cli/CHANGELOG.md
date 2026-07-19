@@ -26,6 +26,60 @@ All notable changes to this project are documented here.
   verified red against the pre-fix code (same `MODULE_NOT_FOUND` as the
   original report) and green after.
 
+- **BUG-APIGEN-026** — `apigen run --type api-express/api-fastify` crashed EVERY call to
+  any function with a plain named-type parameter (interface, type alias — not a scalar
+  apigen special-cases, not inline/anonymous) with
+  `{"code":"internal","message":"can't resolve reference #/definitions/<Name> from id #"}`,
+  a compile-time AJV failure that fired regardless of the actual input sent. Root cause:
+  `ts-json-schema-generator`'s own default (`topRef: true`, confirmed in the installed
+  package's `Config.js`) wraps every named-type schema as `{ $ref: "#/definitions/X",
+  definitions: { X: {...} } }`; `apigen-core-client`'s `runScalarAwareGenerator()`
+  (`schema-builders/ts-json-schema.ts`) never overrode it, and nothing dereferenced the
+  result before `extract.ts` spliced it into a nested property position inside the
+  composed function schema — where `$ref`'s root-relative resolution permanently dangled
+  once AJV compiled the full schema (one schema per function, no shared registry).
+  Reported live against a real consumer (`agent-browser`'s `search(provider:
+  ProviderName, ...)`); reproduced exactly via `apigen generate --type jsonschema`
+  against the unmodified source. Fixed by passing `topRef: false` in Path 1's
+  `Config`, which inlines the entry type directly instead of wrapping it — verified via a
+  standalone `createGenerator()` call before applying, then end-to-end against the real
+  file (`POST /agent-browser/search` now returns `200` instead of crashing). Does **not**
+  fully solve genuinely self-referential/cyclic named types, which still need an internal
+  `$ref` and would carry the identical class of bug if ever embedded nested — tracked as
+  a known residual gap, not yet filed as a separate item (no reproducing case found).
+  Covered by `apigen-engine-runtime/src/test/named-type-param.spec.ts` (a real
+  `generateSchemas` → `composeSchemas` → `Ajv.compile` pipeline test, not hand-built
+  schema fixtures — the existing `ts-json-schema.spec.ts` dangling-ref checks only walk
+  a schema fragment in isolation and would not have caught this); verified red against
+  the pre-fix code (identical `"can't resolve reference"` error) and green after.
+
+- **BUG-APIGEN-027** — even after BUG-APIGEN-026's fix, any call that legitimately
+  omitted an optional `number`-typed parameter (e.g. `search()`'s `maxContentSize`,
+  `timeoutMs`, `maxAttempts`, `challengeWaitMs` — all valid to omit per the AJV schema,
+  none in `required`) crashed dispatch with `{"code":"internal","message":"[number-
+  special] unrecognized wire value at \"\": undefined. Expected a number or one of NaN,
+  Infinity, -Infinity."}`, before the target function was ever called. Root cause:
+  `apigen-engine-runtime/src/lib/dispatch.ts`'s `decodeArg()` only guarded on whether the
+  parameter's *schema node* was defined, not whether the caller actually *sent* a value
+  for it — so every declared optional param the caller omitted was still passed through
+  `_transcoder.decode(undefined, node)`, which for a bare `{type:'number'}` node resolves
+  to `numberSpecialCodec` and correctly rejects `undefined` in strict mode. The object-
+  property walk in `runmode.ts`'s `encodeNode`/`decodeNode` already guards `v !==
+  undefined` internally; `dispatch.ts`'s per-parameter call site was the one place that
+  lacked the equivalent guard, because it calls the transcoder once per declared param
+  name rather than walking a nested object schema. Fixed by adding `wire === undefined`
+  to `decodeArg()`'s existing early-return guard — an omitted optional value now passes
+  through as `undefined` (so TS default parameters apply normally at the function
+  boundary), matching how the AJV validation layer already treated it as valid. Covered
+  by three new cases in `apigen-engine-runtime/src/test/dispatch.spec.ts` (omitted
+  optional param doesn't throw; omitted param arrives as `undefined` at the fn boundary;
+  an explicitly-provided optional param still decodes normally); verified red against the
+  pre-fix code (identical `number-special` error — including on the "explicitly
+  provided" case, since a *different* still-omitted optional param in the same call
+  tripped it too) and green after. Verified end-to-end against the real `search()`
+  consumer: `POST /agent-browser/search` with only `{provider, query}` now completes
+  (`200`, real dispatch to a live network search) instead of crashing before dispatch.
+
 ## 0.1.0 — 2026-07-02
 
 ### Added

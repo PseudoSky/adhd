@@ -967,6 +967,28 @@ async function buildSchemaUncached(
         type: normalizedTypeText,
         skipTypeCheck: true,
         tsconfig,
+        // BUG-APIGEN-026: ts-json-schema-generator's own default (topRef:
+        // true) wraps EVERY named-type schema as `{ $ref: "#/definitions/X",
+        // definitions: { X: {...} } }` instead of inlining it. This function
+        // returns that whole fragment, which `extract.ts` then splices into
+        // an arbitrarily nested property position inside a much larger
+        // composed function schema (see `compose-schemas.ts`'s `data`
+        // wrapper). JSON-Schema `$ref` resolution is root-relative to the
+        // document being compiled, NOT fragment-relative -- so a `$ref`
+        // sitting several levels deep, whose matching `definitions` sibling
+        // landed at that SAME nested depth (not the true document root),
+        // permanently dangles once AJV compiles the full composed schema
+        // (`validate-layer.ts`'s `ajv.compile(schema.input)`, one schema per
+        // function, no shared multi-schema registry to resolve against).
+        // `topRef: false` inlines the entry type directly instead, which
+        // eliminates the dangling ref for the common (non-recursive)
+        // named-type case. It does NOT fully solve genuinely self-
+        // referential/cyclic named types, which still need an internal
+        // `$ref` to model the cycle and would carry the identical class of
+        // bug if ever embedded nested -- that needs a proper
+        // dereference/hoist pass and is tracked separately, unresolved, in
+        // BUG-APIGEN-026's BACKLOG entry.
+        topRef: false,
       };
       // Path 1 keys off the stable real source file \xe2\x86\x92 cache the built program.
       const schema = runScalarAwareGenerator(config, true, session);
