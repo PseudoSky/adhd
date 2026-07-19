@@ -523,3 +523,108 @@ run.ts:26-34`; `apigen-core-client/src/lib/compose-schemas.ts:59-119` (full read
 `grep -rln "x-apigen-safe" packages/apigen entrypoint/apigen-cli` → only 2 `run.ts` readers
 + 2 `*.spec.ts` fixtures, zero real writers; `apigen-core-client/src/lib/extract.ts:526-549`
 (`buildQueryOp`, the only `safe: true` source today)]
+
+---
+
+### BUG-APIGEN-026 — named-type params generate a dangling `$ref`/`definitions`, crashing every call at AJV compile time — HIGH, live-broken
+
+**Reported:** 2026-07-19, live user report against `@adhd/sox-memory-core`-adjacent
+consumer `scratch-agent-search` (agent-browser project): `POST
+/agent-browser/search` with a valid body returned
+`{"code":"internal","message":"can't resolve reference #/definitions/ProviderName from id #"}`.
+
+**Root cause, fully traced and empirically confirmed:**
+
+1. `search(provider: ProviderName, ...)` — `ProviderName` is a plain named type alias
+   (`export type ProviderName = keyof typeof PROVIDERS`, `search-providers.ts:417` in the
+   agent-browser project). apigen's extractor resolves this via **Path 1**
+   (`apigen-core-client/src/lib/schema-builders/ts-json-schema.ts:963-984`) — any named
+   type ts-json-schema-generator "can look up by name" goes through
+   `runScalarAwareGenerator()` → `gen.createSchema('ProviderName')`.
+2. **`ts-json-schema-generator`'s `Config` is built with no `topRef` override**
+   (`ts-json-schema.ts:965-970`: `{ path, type, skipTypeCheck: true, tsconfig }`), so it
+   uses the library's own default, confirmed by reading the installed package directly
+   (`node_modules/ts-json-schema-generator/dist/src/Config.js`:
+   `exports.DEFAULT_CONFIG = { ..., topRef: true, ... }`). With `topRef: true`, ANY named
+   type — not just this one — comes back wrapped as `{ $ref: "#/definitions/<Name>",
+   definitions: { <Name>: {...} } }` instead of inlined.
+3. **Reproduced exactly** via `apigen generate --type jsonschema --source
+   search-mcp-source.ts` against the real, unmodified file — the emitted
+   `search.json`'s `input.properties.data.properties.provider` is verbatim:
+   ```json
+   {
+     "$schema": "http://json-schema.org/draft-07/schema#",
+     "$ref": "#/definitions/ProviderName",
+     "definitions": { "ProviderName": { "type": ["string"] } },
+     "default": "", "description": "(default: )"
+   }
+   ```
+4. **Nothing dereferences or hoists this before it's embedded as a nested property.**
+   `runScalarAwareGenerator`'s only post-processing is `filterZodDefinitions` +
+   `validateSchemaRefs` (BUG-APIGEN-CORE-001) — both operate on `rawSchema` **in
+   isolation**, where the `$ref` and its sibling `definitions` genuinely do resolve
+   against each other, so they pass clean. `normalizeTopLevelUnion` only rewrites a
+   top-level `anyOf`→`oneOf`; it's a no-op here (this shape is `$ref`, not `anyOf`). The
+   result is returned as-is and `extract.ts` splices it straight into
+   `properties[paramName]` (`extract.ts:479`) several levels deep inside the composed
+   function schema (`compose-schemas.ts`'s `data` wrapper).
+5. **JSON-Schema `$ref` resolution is root-relative, not fragment-relative** — a `$ref:
+   "#/definitions/ProviderName"` nested at
+   `input.properties.data.properties.provider.$ref` means "look up `definitions` at the
+   root of whatever document AJV is compiling" (`input`), not at
+   `...provider.definitions` where the sibling actually landed. `composeSchemas()`'s
+   outer `input` object never has a top-level `definitions` key. `validate-layer.ts`
+   compiles exactly `schema.input` per function (`ajv.compile(schema.input)`,
+   `validate-layer.ts:132`) with no shared multi-schema registry — so the ref is
+   permanently dangling in the compiled document, and this is a **compile-time** AJV
+   error, not a data-validation error: it fails for **every** call to `search()`
+   regardless of what `provider` value is sent, not just this one request.
+
+**Blast radius:** any function parameter (or, less urgently since it's not
+runtime-validated, any return type) whose TS type is a plain named alias/interface that
+Path 1 resolves — not limited to `keyof typeof` unions. `search-mcp-source.ts` happens to
+have exactly one such parameter today (`provider: ProviderName`); any other apigen
+consumer with a named-type parameter is equally exposed. Scalar named types (`Date`,
+`Decimal`, etc.) are unaffected — they're intercepted by `SCALAR_SCHEMAS` before ever
+reaching Path 1 (`ts-json-schema.ts:930-931`).
+
+**Suggested fix, verified empirically:** pass `topRef: false` in the `Config` at
+`ts-json-schema.ts:965-970`. Confirmed via a standalone `createGenerator()` call against
+the same real file/type: with `topRef: false`, the identical request returns
+`{ "$schema": "...", "type": ["string"], "definitions": {} }` — no `$ref`, nothing
+dangling. Two caveats to design around, not just apply blindly:
+- This is the minimal fix for the *reported crash*, but embedding a schema fragment that
+  assumes it owns the document root will always be structurally fragile wherever apigen
+  splices raw generator output into a larger composed document. The robust fix is to
+  fully dereference/inline `rawSchema` inside `buildSchema()` itself (or hoist &
+  rewrite any surviving internal `$ref`s to the actual eventual root) so no fragment
+  returned by this function ever depends on its position in the final document — matters
+  most for genuinely self-referential/cyclic named types, where `topRef: false` alone may
+  not be sufficient (ts-json-schema-generator may still need internal `$ref`s to model a
+  cycle; those need root-relative rewriting, not just suppression).
+- Secondary, lower-severity fidelity loss noticed in passing: even with `topRef: false`,
+  `ProviderName` resolves to bare `type: ["string"]`, not `type: "string", enum: [...]`
+  with the actual provider names — `skipTypeCheck: true` (already set,
+  `ts-json-schema.ts:968`) apparently loses the literal-union enumeration for a `keyof
+  typeof` expression. Separate from the crash; worth a follow-up but not blocking.
+
+**Status:** OPEN, HIGH — this is a live, currently-broken endpoint for at least one real
+consumer, not a latent/theoretical gap like BUG-APIGEN-025. Scope:
+`apigen-core-client/src/lib/schema-builders/ts-json-schema.ts` (`runScalarAwareGenerator`'s
+`Config`, `ts-json-schema.ts:965-970`, plus ideally a general dereference/hoist step
+before `buildSchemaUncached` returns Path 1's result).
+
+Citations: [session 2026-07-19, self-verified: live user repro (`POST
+/agent-browser/search` → `"can't resolve reference #/definitions/ProviderName from id #"`);
+`search-providers.ts:417` (`ProviderName` definition, agent-browser project);
+`apigen-core-client/src/lib/schema-builders/ts-json-schema.ts:963-984` (Path 1 dispatch),
+`:539-620` (`runScalarAwareGenerator`, zod-only post-processing), `:930-931` (SCALAR_SCHEMAS
+short-circuit), `:522-537` (`normalizeTopLevelUnion`, no-op for this shape);
+`node_modules/ts-json-schema-generator/dist/src/Config.js` (`DEFAULT_CONFIG.topRef: true`,
+read directly from the installed package); `apigen-core-client/src/lib/extract.ts:479`
+(where the raw fragment is spliced into `properties[name]`);
+`apigen-engine-runtime/src/lib/validate-layer.ts:122-132` (`ajv.compile(schema.input)`,
+no shared registry); reproduced via `node dist/entrypoint/apigen-cli/index.js generate
+--type jsonschema --source search-mcp-source.ts` → `search.json` (exact structure quoted
+above); `topRef:false` fix verified via a standalone `createGenerator()` call against the
+same file/type]
