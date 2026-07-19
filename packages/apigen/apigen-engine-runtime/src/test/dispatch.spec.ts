@@ -235,3 +235,92 @@ describe('dispatch — logical-type decode/encode', () => {
     expect(received).not.toBeInstanceOf(Date);
   });
 });
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-027 regression: absent OPTIONAL params must pass through, not
+// crash the decode transcoder.
+// ---------------------------------------------------------------------------
+
+// A function with two optional (not `required`) numeric params, and one
+// required string param — mirrors search()'s real shape (provider/query
+// required-ish domain fields alongside several optional numeric knobs like
+// maxContentSize/timeoutMs/maxAttempts/challengeWaitMs).
+const optionalNumberSchema = {
+  input: {
+    type: 'object',
+    properties: {
+      data: {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+          maxContentSize: { type: 'number' },
+          timeoutMs: { type: 'number' },
+        },
+        required: ['query'],
+      },
+    },
+    required: ['data'],
+  },
+  output: {},
+};
+
+describe('dispatch — BUG-APIGEN-027: omitted optional numeric params', () => {
+  it('does not throw when an optional {type:"number"} param is omitted entirely', async () => {
+    const fn = vi.fn().mockResolvedValue('ok');
+
+    // Caller sends only the required `query` — exactly what a real client
+    // does when it has nothing to say about the optional numeric knobs.
+    // Before the fix this threw:
+    //   "[number-special] unrecognized wire value at \"\": undefined."
+    await expect(
+      dispatch(
+        { search: fn },
+        undefined,
+        optionalNumberSchema,
+        'search',
+        {},
+        { query: 'testing' }
+      )
+    ).resolves.toBe('ok');
+  });
+
+  it('the omitted param arrives as `undefined` at the function boundary (so TS default params apply)', async () => {
+    let received: unknown[] = [];
+    const fn = vi.fn((...args: unknown[]) => {
+      received = args;
+      return Promise.resolve('ok');
+    });
+
+    await dispatch(
+      { search: fn },
+      undefined,
+      optionalNumberSchema,
+      'search',
+      {},
+      { query: 'testing' }
+    );
+
+    // paramNames order is Object.keys(...properties.data.properties) —
+    // query, maxContentSize, timeoutMs.
+    expect(received).toEqual(['testing', undefined, undefined]);
+  });
+
+  it('an EXPLICITLY provided optional numeric param still decodes normally', async () => {
+    let received: unknown[] = [];
+    const fn = vi.fn((...args: unknown[]) => {
+      received = args;
+      return Promise.resolve('ok');
+    });
+
+    await dispatch(
+      { search: fn },
+      undefined,
+      optionalNumberSchema,
+      'search',
+      {},
+      { query: 'testing', maxContentSize: 500 }
+    );
+
+    expect(received).toEqual(['testing', 500, undefined]);
+  });
+});
