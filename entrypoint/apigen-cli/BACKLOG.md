@@ -152,11 +152,25 @@ not a general regression.
    param never hit a schema carrying the offending keyword, so they compile
    and validate fine.
 
-**Impact:** every route/tool (any api type — this is in the shared
-`apigen-engine-runtime` validate Layer, not an api-express-specific bug)
-with a union-typed parameter is completely unusable — 100% failure rate,
-not input-dependent. In the fixture used to verify BUG-APIGEN-028, that's
-40/130 routes (31%).
+**Impact — CORRECTED 2026-07-19, narrower than first filed:** originally
+written as "every route/tool (any api type)" on the assumption that
+`validate-layer.ts` sits in shared `apigen-engine-runtime` code every
+plugin routes through. That assumption was wrong, caught during independent
+`mcp`-plugin verification of the same fixture: the two exact routes cited
+above as the reported repro (`parseTags`, `vecToJson`) both dispatch
+correctly over MCP with no AJV error, and a repo-wide grep confirms only
+`apigen-plugin-api-express/src/lib/run.ts` and
+`apigen-plugin-api-fastify/src/lib/run.ts` ever import
+`validate-layer`/`makeValidateLayer` — `apigen-plugin-mcp` (and, by the same
+grep, `apigen-plugin-cli-output` and `apigen-plugin-jsonschema`) call
+`dispatch()` directly and never route through this Layer at all. **Confirmed
+narrow impact: HTTP-transport plugins only (`api-express`, `api-fastify`)** —
+any union-typed-param route is completely unusable there (100% failure
+rate, not input-dependent; 40/130 routes = 31% in the fixture used to
+verify BUG-APIGEN-028). MCP, cli-output, and jsonschema output are
+unaffected — schemas containing the `x-apigen-logical` hint are still
+generated correctly for those plugins, they just never get run through an
+AJV instance that would choke on it.
 
 **Suggested fix (not yet attempted — filed per this session's
 verification-only scope, not fixing):** register `x-apigen-logical` (and any
