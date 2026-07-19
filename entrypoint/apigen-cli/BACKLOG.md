@@ -602,11 +602,26 @@ dangling. Two caveats to design around, not just apply blindly:
   most for genuinely self-referential/cyclic named types, where `topRef: false` alone may
   not be sufficient (ts-json-schema-generator may still need internal `$ref`s to model a
   cycle; those need root-relative rewriting, not just suppression).
-- Secondary, lower-severity fidelity loss noticed in passing: even with `topRef: false`,
-  `ProviderName` resolves to bare `type: ["string"]`, not `type: "string", enum: [...]`
-  with the actual provider names — `skipTypeCheck: true` (already set,
-  `ts-json-schema.ts:968`) apparently loses the literal-union enumeration for a `keyof
-  typeof` expression. Separate from the crash; worth a follow-up but not blocking.
+- **Correction to an earlier version of this entry:** it previously claimed the missing
+  `enum` (bare `type: ["string"]` instead of `type: "string", enum: [...]`) was an apigen-
+  side fidelity loss attributed to `skipTypeCheck: true`. That was wrong, and disproved by
+  direct testing (`skipTypeCheck: false` against the same file/type produces the identical
+  bare-`type` result — no enum either way). **Root cause is on the consumer's side, not
+  apigen's:** `search-providers.ts:16` declares `export const PROVIDERS: Record<string,
+  ProviderConfig> = {...}` — the explicit `Record<string, ProviderConfig>` type annotation
+  makes TypeScript's own type for `PROVIDERS` exactly `Record<string, ProviderConfig>`,
+  discarding the literal-key inference the object literal would otherwise get. `keyof
+  typeof PROVIDERS` is therefore genuinely, correctly `string` from TypeScript's own
+  perspective — not a finite union — so `type: ["string"]` with no `enum` is the CORRECT
+  schema for that (annotated) type; apigen isn't losing information that was ever present
+  in the type it's given. Confirmed by isolating the variable: a `keyof typeof` over an
+  object annotated with an explicit `Record<...>` type loses the union in
+  `ts-json-schema-generator` regardless of `skipTypeCheck`; the identical object declared
+  either with `as const` or `satisfies Record<string, ProviderConfig>` (no explicit type
+  annotation) correctly yields `enum: [...]` in both `skipTypeCheck` modes. Filed
+  separately as `agent-browser/BACKLOG.md` B-027 (consumer-side fix, verified) rather than
+  here — this apigen-cli entry stays scoped to the actual apigen bug (the dangling `$ref`
+  crash above), not this misattributed fidelity claim.
 
 **Status:** OPEN, HIGH — this is a live, currently-broken endpoint for at least one real
 consumer, not a latent/theoretical gap like BUG-APIGEN-025. Scope:
@@ -616,7 +631,12 @@ before `buildSchemaUncached` returns Path 1's result).
 
 Citations: [session 2026-07-19, self-verified: live user repro (`POST
 /agent-browser/search` → `"can't resolve reference #/definitions/ProviderName from id #"`);
-`search-providers.ts:417` (`ProviderName` definition, agent-browser project);
+`search-providers.ts:16,417` (`PROVIDERS: Record<string, ProviderConfig>` annotation +
+`ProviderName` definition, agent-browser project); standalone `createGenerator()` calls
+isolating the `Record<...>`-annotation variable (`skipTypeCheck` true/false both lose the
+enum when `Record<...>` is explicitly annotated; `as const`/`satisfies Record<...>` both
+preserve it in either `skipTypeCheck` mode) — correcting this entry's earlier, wrong
+`skipTypeCheck` attribution;
 `apigen-core-client/src/lib/schema-builders/ts-json-schema.ts:963-984` (Path 1 dispatch),
 `:539-620` (`runScalarAwareGenerator`, zod-only post-processing), `:930-931` (SCALAR_SCHEMAS
 short-circuit), `:522-537` (`normalizeTopLevelUnion`, no-op for this shape);
