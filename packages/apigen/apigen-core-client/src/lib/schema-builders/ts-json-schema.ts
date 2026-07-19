@@ -765,19 +765,70 @@ function applyAliasesToTypeText(
  * orchestrator's extract + generateSchemas double pass over the same file, and
  * repeated parameter types across functions, all become Map hits. Cached
  * fragments are shared by reference; callers treat schemas as immutable.
+ *
+ * BUG-APIGEN-CORE-003 (cache-stampede fix): `session.schemaCache` stores the
+ * in-flight/resolved `Promise<Schema>` itself — not just the resolved value
+ * — and stores it SYNCHRONOUSLY before anything is awaited, so concurrent
+ * identical requests (e.g. `morph-walk.ts`'s `Promise.all` over union
+ * variants) join ONE computation instead of each redundantly recomputing.
+ * See the in-function comments below for the mechanism.
  */
 export async function buildSchema(
   _project: Project,
   sf: SourceFile,
   typeText: string,
   tsconfig?: string,
-  session?: InternalExtractionSession
+  session?: InternalExtractionSession,
+  _ancestors?: ReadonlySet<string>
 ): Promise<Record<string, unknown>> {
-  if (!session)
-    return buildSchemaUncached(_project, sf, typeText, tsconfig, undefined);
-
   const sfPath = sf.getFilePath();
   const key = `${sfPath} ${tsconfig ?? ''} ${typeText}`;
+
+  // BUG-APIGEN-CORE-003 (deadlock guard for self-referential / recursive
+  // types): `_ancestors` is the chain of `(sourceFile, tsconfig, typeText)`
+  // keys currently being resolved as DIRECT CALLERS of this invocation --
+  // e.g. `interface Node { value: string; children: Node[] }`, or a
+  // JSON-like `type JSONValue = ... | { [k: string]: JSONValue }`, both of
+  // which recurse, via Path 2's property/element walk below, back into the
+  // IDENTICAL key that is still in the middle of being resolved higher up
+  // THIS SAME call chain. Without this guard, that recursive call would hit
+  // the in-flight-promise cache the stampede fix below deliberately
+  // populates SYNCHRONOUSLY, and would `await` that exact promise --
+  // deadlocking, since the promise can only resolve once THIS call
+  // (currently blocked awaiting it) returns. Verified live: the real-world
+  // repro (memory-core's index.ts) hung indefinitely (flat CPU, flat heap,
+  // event loop idle -- not an OOM, a genuine deadlock) before this guard was
+  // added.
+  //
+  // This is NOT the same thing as "any in-flight key anywhere in the
+  // session" -- concurrent, unrelated SIBLING calls for the same key (the
+  // whole point of the stampede fix) must still join the cache normally;
+  // `_ancestors` only tracks this call's own lineage, threaded explicitly
+  // through the two recursive entry points in `buildSchemaUncached`
+  // (`buildMapSetTupleSchema`'s element recursion and Path 2's
+  // `withResolvedType`/`walkType` recursion), not through the session-wide
+  // cache. When `key` is its own ancestor, bypass the cache for this ONE
+  // cyclic occurrence and return a permissive empty schema -- the same
+  // "can't fully frame it, fall back to `{}`" convention `walkType`'s own
+  // `MAX_DEPTH` guard already uses for runaway recursion -- so the ancestor
+  // call is free to finish normally and populate the cache correctly for
+  // every other (non-cyclic) caller of `key`.
+  const ancestors = _ancestors ?? new Set<string>();
+  if (ancestors.has(key)) return {};
+
+  if (!session) {
+    const childAncestors = new Set(ancestors);
+    childAncestors.add(key);
+    return buildSchemaUncached(
+      _project,
+      sf,
+      typeText,
+      tsconfig,
+      undefined,
+      childAncestors
+    );
+  }
+
   const hit = session.schemaCache.get(key);
   if (hit !== undefined) {
     session.stats.schemaCacheHits++;
@@ -786,7 +837,10 @@ export async function buildSchema(
 
   // Persistent tier: survives the session so repeated runs in one process
   // (watch/serve rebuilds, test loops) skip recomputation while the file is
-  // unchanged (version-checked; an edit replaces the file's whole map).
+  // unchanged (version-checked; an edit replaces the file's whole map). This
+  // tier is read/written synchronously (no await), so it carries no
+  // stampede risk of its own -- only the buildSchemaUncached() path below
+  // does (see the BUG-APIGEN-CORE-003 fix below).
   const persistent = persistentSchemasFor(
     sfPath,
     tsconfig,
@@ -795,21 +849,48 @@ export async function buildSchema(
   const persisted = persistent.get(typeText);
   if (persisted !== undefined) {
     session.stats.schemaCacheHits++;
-    session.schemaCache.set(key, persisted);
+    session.schemaCache.set(key, Promise.resolve(persisted));
     return persisted;
   }
 
+  // BUG-APIGEN-CORE-003 (cache-stampede fix): populate schemaCache with the
+  // PENDING promise SYNCHRONOUSLY -- before anything here is awaited -- so a
+  // sibling call for the identical key (e.g. morph-walk.ts's
+  // `Promise.all(members.map(m => walkType(...)))` over union variants that
+  // independently reach a shared nested type such as `SharedArrayBuffer`)
+  // sees this entry and awaits the SAME in-flight computation instead of
+  // each independently missing the cache and redundantly recomputing.
+  // There is no `await` between the cache-miss check above and the
+  // `schemaCache.set` below, so the race window is closed entirely (JS is
+  // single-threaded; nothing else can run between them). Measured impact on
+  // the real-world repro (memory-core's index.ts): 1552 duplicate
+  // buildSchemaUncached calls for the identical "SharedArrayBuffer" key
+  // collapsed to 1.
   session.stats.schemaCacheMisses++;
-  const schema = await buildSchemaUncached(
+  const childAncestors = new Set(ancestors);
+  childAncestors.add(key);
+  const pending: Promise<Record<string, unknown>> = buildSchemaUncached(
     _project,
     sf,
     typeText,
     tsconfig,
-    session
-  );
-  session.schemaCache.set(key, schema);
-  persistent.set(typeText, schema);
-  return schema;
+    session,
+    childAncestors
+  )
+    .then((schema) => {
+      persistent.set(typeText, schema);
+      return schema;
+    })
+    .catch((err: unknown) => {
+      // Don't cache a permanent failure -- concurrent siblings that already
+      // joined `pending` still (correctly) observe this same rejection, but
+      // a LATER, independent call for the same key gets a fresh attempt
+      // rather than replaying a stale error forever.
+      session.schemaCache.delete(key);
+      throw err;
+    });
+  session.schemaCache.set(key, pending);
+  return pending;
 }
 
 async function buildSchemaUncached(
@@ -817,7 +898,8 @@ async function buildSchemaUncached(
   sf: SourceFile,
   typeText: string,
   tsconfig: string | undefined,
-  session: InternalExtractionSession | undefined
+  session: InternalExtractionSession | undefined,
+  ancestors: ReadonlySet<string>
 ): Promise<Record<string, unknown>> {
   if (['void', 'undefined', 'null', 'Promise<void>'].includes(typeText))
     return { type: 'null' };
@@ -838,13 +920,13 @@ async function buildSchemaUncached(
   // Normalise the type text before the SCALAR_SCHEMAS lookup so that
   // default-imported external types (e.g. `import Decimal from 'decimal.js'`
   // which ts-morph emits as `import("...decimal.js/decimal").default`) are
-  // mapped to their canonical key first, and import aliases (e.g. D2 → Decimal)
+  // mapped to their canonical key first, and import aliases (e.g. D2 \xe2\x86\x92 Decimal)
   // are resolved via the alias map.
   const normalizedTypeText = normalizeTypeText(typeText, aliases);
 
   // Resolve well-known built-in TS scalar types to their canonical logical-type schemas
   // BEFORE delegating to ts-json-schema-generator (which emits {} for most of these).
-  // Per §4.1 [inv:hints-advisory]: structure (format) is authoritative; no x-apigen-* needed here.
+  // Per \xc2\xa74.1 [inv:hints-advisory]: structure (format) is authoritative; no x-apigen-* needed here.
   const scalarSchema = SCALAR_SCHEMAS[normalizedTypeText];
   if (scalarSchema !== undefined) return scalarSchema;
 
@@ -859,10 +941,11 @@ async function buildSchemaUncached(
   // array-compatible schema directly, recursing through buildSchema so nested
   // logical types inside them (e.g. `Map<string, Date>`, `Set<Decimal>`,
   // `[Date, number]`) still get their canonical `format`.
-  // Element types are resolved against the SAME source file / tsconfig.
+  // Element types are resolved against the SAME source file / tsconfig, and
+  // carry the SAME `ancestors` chain forward (BUG-APIGEN-CORE-003 deadlock guard).
   const mapSetTuple = await buildMapSetTupleSchema(
     normalizedTypeText,
-    (elemType) => buildSchema(_project, sf, elemType, tsconfig, session)
+    (elemType) => buildSchema(_project, sf, elemType, tsconfig, session, ancestors)
   );
   if (mapSetTuple !== undefined) return mapSetTuple;
 
@@ -871,7 +954,7 @@ async function buildSchemaUncached(
   // BUG-APIGEN-CORE-001: ts-json-schema-generator's skipTypeCheck AST-based
   // resolution confuses zod types with user types when the source file imports
   // zod, producing corrupted schemas that crash at runtime. Skip Path 1 for
-  // zod-importing files — fall directly to morph-walk (Path 2) which uses
+  // zod-importing files \xe2\x80\x94 fall directly to morph-walk (Path 2) which uses
   // ts-morph's type-checked resolution and correctly resolves primitives.
   const hasZodImport =
     session?.zodImportCache.get(sf) ?? sourceFileHasZodImport(sf);
@@ -885,14 +968,19 @@ async function buildSchemaUncached(
         skipTypeCheck: true,
         tsconfig,
       };
-      // Path 1 keys off the stable real source file → cache the built program.
+      // Path 1 keys off the stable real source file \xe2\x86\x92 cache the built program.
       const schema = runScalarAwareGenerator(config, true, session);
       // BUG-APIGEN-019: ts-json-schema-generator resolves a NAMED union type
       // alias (e.g. `type Foo = A | B`) directly here (Path 1 never falls
       // through to morph-walk for named types) and emits `anyOf` in its own
-      // schema — normalize the top-level union the same way Path 2/3 do, so
+      // schema \xe2\x80\x94 normalize the top-level union the same way Path 2/3 do, so
       // named and inline union return types get the same `oneOf` +
       // discriminator treatment.
+      //
+      // Path 1 never recurses back through our own `buildSchema` (it's a
+      // self-contained call into the external ts-json-schema-generator
+      // library, which does its own internal expansion) -- so it cannot
+      // participate in the `ancestors` deadlock guard and doesn't need to.
       return normalizeTopLevelUnion(schema as Record<string, unknown>);
     } catch {
       // Fall through to alias-injection path for anonymous / inline types.
@@ -904,21 +992,22 @@ async function buildSchemaUncached(
   //
   // PERFORMANCE: the original BUG-013 implementation of this path wrote a scratch
   // `.ts` file and built a BRAND-NEW `ts-json-schema-generator` program (parse
-  // lib.d.ts + the scratch file, run the checker) for EVERY anonymous type —
-  // O(types) full program builds, ~0.35–1.0s each (the 23-fn showcase summed to
+  // lib.d.ts + the scratch file, run the checker) for EVERY anonymous type \xe2\x80\x94
+  // O(types) full program builds, ~0.35\xe2\x80\x931.0s each (the 23-fn showcase summed to
   // ~17.8s; the test suite to ~494s). The named-type Path 1 was cached but this
   // path could not be (a unique temp path per call).
   //
   // Instead we resolve the inline type through the ALREADY-LOADED ts-morph
-  // program (`_project` / `sf` — lib.d.ts + the user's imports are already parsed
+  // program (`_project` / `sf` \xe2\x80\x94 lib.d.ts + the user's imports are already parsed
   // and type-checked) by adding a throwaway in-memory type alias to `sf`, then
   // walking the resolved `Type` structurally. Each resolution is ~10ms and
   // builds NO temp file and NO new generator program. See `morph-walk.ts`.
   //
   // The walk delegates every nested node back through `buildSchema` (this same
-  // entrypoint), so scalar formats (Date/bigint/Uint8Array/Buffer/Decimal),
+  // entrypoint, carrying `ancestors` forward -- BUG-APIGEN-CORE-003 deadlock
+  // guard), so scalar formats (Date/bigint/Uint8Array/Buffer/Decimal),
   // Map/Set/tuple wire, import aliases (`D2`), and readonly arrays all keep
-  // flowing through their existing handlers — correctness is unchanged.
+  // flowing through their existing handlers \xe2\x80\x94 correctness is unchanged.
   try {
     const walked = await withResolvedType(
       _project,
@@ -927,7 +1016,8 @@ async function buildSchemaUncached(
       (resolved) =>
         walkType(
           resolved,
-          (elemType) => buildSchema(_project, sf, elemType, tsconfig, session),
+          (elemType) =>
+            buildSchema(_project, sf, elemType, tsconfig, session, ancestors),
           0
         )
     );
@@ -937,7 +1027,7 @@ async function buildSchemaUncached(
   }
 
   // Final safety net: structural text-based fallback for any type the ts-morph
-  // walk could not resolve. We rewrite aliases (D2 → Decimal) and qualified
+  // walk could not resolve. We rewrite aliases (D2 \xe2\x86\x92 Decimal) and qualified
   // imports to canonical SCALAR_SCHEMAS keys first so morphFallback can resolve
   // them at nested positions too.
   const canonicalTypeText = applyAliasesToTypeText(normalizedTypeText, aliases);

@@ -54,6 +54,115 @@ Package-scoped log. Repo-wide context lives in the root [BACKLOG.md](../../../BA
   exported alias.
 - **Status:** FIXED 2026-07-18.
 
+### BUG-APIGEN-CORE-003 — buildSchema OOMs on a large real-world re-export barrel (>20GB, never completes) — FIXED 2026-07-18
+
+- **Where:** `src/lib/schema-builders/ts-json-schema.ts` (`buildSchema` /
+  `buildSchemaUncached`) and `src/lib/extraction-session.ts`
+  (`InternalExtractionSession.schemaCache`), exercised via
+  `extract()`/`extractClasses()` over
+  `~/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts` (read-only reference).
+- **Root cause (confirmed with real profiling data, not guessed — see the
+  full investigation trail this entry replaces, preserved in git history):
+  a cache stampede.** `buildSchema()`'s session-cache wrapper checked
+  `session.schemaCache.get(key)` and, on a miss, `await`ed
+  `buildSchemaUncached(...)` and only THEN called `schemaCache.set(key,
+  schema)` — there was no in-flight-request deduplication. `morph-walk.ts`'s
+  union-variant handling (`walkType`, `Promise.all(members.map(m =>
+  walkType(m, recurse, depth + 1)))`) launches concurrent sibling type
+  resolutions; when several siblings independently needed the SAME type
+  (measured: 1552 of the first 1605 internal `buildSchema` calls during a
+  real run were the literally identical string `"SharedArrayBuffer"`,
+  pulled in via `Buffer`/`Uint8Array`'s `ArrayBufferLike = ArrayBuffer |
+  SharedArrayBuffer`), they could all miss the not-yet-populated cache
+  simultaneously and each redundantly recompute the same expensive result.
+  99.6% of `buildSchemaUncached` calls fell through to Path 2
+  (`morph-walk.ts`'s `withResolvedType`, which does `sf.addTypeAlias(...)` →
+  `.getType()` → `alias.remove()` on the shared entry `SourceFile`), and
+  each Path-2 call forced a full reparse/retypecheck of the ~40-file
+  dependency graph (better-sqlite3, onnxruntime-node, sqlite-vec
+  native-binding types) — a perfectly monotonic heap climb with zero GC
+  recovery (167MB → 3199MB over 1605 calls), consistent with the stampede
+  (repeated *identical*, expensive work), not a leak in any single
+  computation.
+- **Fix 1 (primary — cache-stampede fix):** `session.schemaCache`
+  (`extraction-session.ts`) now stores `Promise<Schema>`, not `Schema`.
+  `buildSchema()` (`ts-json-schema.ts`) populates the cache with the
+  **pending** promise SYNCHRONOUSLY — before anything is awaited — so a
+  concurrent sibling call for the identical `(sourceFile, tsconfig,
+  typeText)` key joins the SAME in-flight computation instead of missing
+  the cache and redundantly recomputing. There is no `await` between the
+  cache-miss check and `schemaCache.set`, so the race window is closed
+  entirely (JS is single-threaded). A rejected computation evicts its own
+  cache entry (`.catch` deletes the key before rethrowing) so a later,
+  independent call gets a fresh attempt rather than replaying a stale
+  failure forever. The persistent (cross-run) tier and the `session ===
+  undefined` uncached path are unaffected (no concurrent session sharing in
+  either case, so no dedup was needed there).
+- **Fix 2 (discovered DURING verification of Fix 1 — a NEW deadlock,
+  introduced by Fix 1 itself, not present before it): self-referential /
+  recursive types.** A type like `interface Node { children: Node[] }` (or
+  any `JSONValue`-shaped recursive alias) walks, via Path 2's
+  property/element recursion, back into the IDENTICAL `(sourceFile,
+  tsconfig, typeText)` key that is still being resolved higher up the SAME
+  call chain. Under Fix 1 alone, that recursive call would find its own
+  ancestor's PENDING promise already cached and `await` it — a genuine
+  deadlock, since that promise can only resolve once the very call that's
+  blocked on it returns. **Caught by live verification, not by inspection:**
+  running the real repro after Fix 1 alone produced no crash and no OOM,
+  but the process hung indefinitely (flat CPU time, flat heap, `kevent`/
+  `__psynch_cvwait`-only sampled stacks — event loop genuinely idle, not
+  slow). Fixed by threading an explicit `_ancestors: ReadonlySet<string>`
+  parameter through `buildSchema()`'s two recursive re-entry points inside
+  `buildSchemaUncached` (`buildMapSetTupleSchema`'s element recursion and
+  Path 2's `withResolvedType`/`walkType` recursion): when a key is found to
+  be its own ancestor (a genuine cycle, NOT the same thing as "any in-flight
+  key anywhere in the session" — concurrent unrelated siblings for the same
+  key still dedupe normally), the cache is bypassed for that one cyclic
+  occurrence and a permissive `{}` fallback is returned — the same
+  "can't fully frame it" convention `walkType`'s own `MAX_DEPTH` guard
+  already uses for runaway recursion — so the ancestor call is free to
+  finish and populate the cache correctly for every other caller.
+- **Verification (real, unstubbed `extract()` + `extractClasses()` against
+  the sox-ecosystem fixture, `--max-old-space-size=4096`, run twice for
+  reproducibility):**
+  - **Before (Fix 1 alone, no Fix 2):** did not OOM, did not crash — hung
+    indefinitely instead (confirmed via `sample`: all threads parked in
+    `kevent`/`__psynch_cvwait`, CPU time flat across a 30s+ window). Killed
+    manually; this state would never self-resolve.
+  - **Before either fix (original bug):** crashed with a genuine V8
+    `FatalProcessOutOfMemory` at `--max-old-space-size=3072` (from the prior
+    diagnosis pass, reproduced independently — see superseded investigation
+    detail in git history for this entry).
+  - **After both fixes:** completes successfully, twice in a row —
+    `extract()`: 140 operations; `extractClasses()`: 6 operations; **146
+    total**, matching the expected count exactly. Run 1: wall clock 10.60s,
+    peak RSS 1293.1MB, peak heapUsed 976.9MB. Run 2 (fresh process): wall
+    clock 10.93s, peak RSS 1265.7MB, peak heapUsed 983.5MB. Both comfortably
+    under the 4096MB cap that previously either OOM'd or hung.
+  - Fix 2 was **necessary**, not optional caution: Fix 1 alone was verified
+    live to hang (not just theorized) on the real fixture, which is why both
+    fixes are required together — see the negative-control note below.
+- **Tests:** `src/test/schema-cache-stampede.spec.ts` (4 new tests, all
+  independently negative-controlled by temporarily reverting each fix and
+  confirming the corresponding test goes red for the RIGHT reason, then
+  restoring): (1) N=12 concurrent `buildSchema()` calls for an identical
+  cold key trigger the real underlying Path-2 resolution (`withResolvedType`,
+  spied independently of the session's own hit/miss counters) exactly the
+  cold baseline number of times, not multiplied by N — reverting Fix 1
+  reproduces the exact 2×N stampede (24 calls instead of 2) this test is
+  named for; (2) a sequential second call for the same key adds zero further
+  resolution calls; (3) a genuinely rejected computation (forced via a
+  mocked `buildMapSetTupleSchema` throw — the one call in
+  `buildSchemaUncached` not already self-healing via its own try/catch) is
+  evicted from the cache rather than cached as a permanent failure; (4) a
+  self-referential interface (forced through Path 2 by importing `zod`, the
+  same BUG-APIGEN-CORE-001 mechanism the real file itself exercises) resolves
+  within a hard timeout instead of hanging — reverting Fix 2's ancestor guard
+  reproduces the exact hang this test is named for. Full existing suite
+  stays green: `apigen-core-client` 240/240 (236 pre-existing + 4 new),
+  `apigen-cli` 113/113.
+- **Status:** FIXED 2026-07-18.
+
 ### PERF-APIGEN-001 — redundant TypeScript program builds — RESOLVED 2026-07-02
 
 - `extract()` / `generateSchemas()` / `extractClasses()` each built a fresh ts-morph
@@ -75,136 +184,6 @@ nothing and would race morph-walk's shared-SourceFile probe aliases. Do not "opt
 these loops with concurrency.
 
 ## Open
-
-### BUG-APIGEN-CORE-003 — buildSchema OOMs on a large real-world re-export barrel (>20GB, never completes)
-
-- **Where:** `src/lib/schema-builders/ts-json-schema.ts` (`buildSchemaUncached` /
-  `runScalarAwareGenerator`, both Path 1 `ts-json-schema-generator` and Path 2
-  `morph-walk`), exercised via `extract()`/`extractClasses()` over
-  `~/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts` (read-only reference).
-- **Symptom:** discovered while verifying BUG-APIGEN-CORE-002's fix. Once the
-  re-export walk correctly finds all 146 operations in that file (up from 2),
-  running the REAL (unstubbed) `buildSchema` for all of them — a ~40-file
-  transitive dependency graph including better-sqlite3, onnxruntime-node, and
-  sqlite-vec native-binding types — exhausts the V8 heap. Reproduced at
-  `--max-old-space-size=4096`, `8192`, and `20000` (the last just never
-  finished within a 280s cap; machine has 32GB). Isolated experiments rule out
-  the obvious suspects: `sf.getExportedDeclarations()` alone is cheap (~250MB,
-  <1s for 274 keys); building ONE `ts-json-schema-generator` program for the
-  file is cheap (~205MB); calling `SchemaGenerator.createSchema()` ~40 times
-  on ONE cached generator instance is cheap (~310MB). So the growth is
-  specifically in the PER-OPERATION schema-building work across ~140 distinct,
-  often deeply-nested domain types (`WriteParams`, `RecallResult`,
-  `ClusterResult`, etc.) — plausibly Path 2 (morph-walk)'s repeated
-  "add-a-throwaway-type-alias-then-resolve" mutation of the shared ts-morph
-  `SourceFile` across hundreds of recursive nested-property calls, forcing the
-  underlying TS language service to reparse/retype-check a large graph on each
-  call, with no apparent release between calls. NOT caused by, or specific to,
-  the re-export fix itself — `buildSchema`'s internals are untouched by that
-  fix; this file simply never exercised more than 2 `buildSchema` calls before
-  (the pre-fix extractor found only `write`/`recall`), so this cost was latent
-  and never triggered.
-- **Why it matters:** any real-world consumer with a re-export barrel this
-  large and this dependency-heavy will hit the same wall now that extraction
-  actually reaches all of it — the correctness fix (BUG-APIGEN-CORE-002)
-  exposes a pre-existing scalability ceiling in schema generation.
-- **Verification workaround used (not a fix):** stubbed `buildSchema` via
-  `vi.mock('../lib/schema-builders/ts-json-schema', ...)` to isolate and
-  confirm the export-name/count discovery logic in milliseconds, with zero
-  OOM risk — proves BUG-APIGEN-CORE-002's fix is correct independent of this
-  separate schema-generation cost.
-- **UPDATE (2026-07-18, same day): root cause found, with data — supersedes
-  the "plausibly..." paragraph above.** Reproduced independently (own run,
-  not reused from the original report) with temporary instrumentation added
-  directly to `buildSchemaUncached` (call-count + heap snapshot per call,
-  Path 1 vs Path 2 marker) and `withResolvedType` (ts-morph `Program` object
-  identity before/after each call), gated behind `APIGEN_OOM_PROBE=1` so it's
-  zero-cost when unset — added, run, and **reverted** (not committed; this
-  repo's source is unchanged by the investigation itself).
-  - Real (unstubbed) `extract()` against the same fixture, `--max-old-space-size=3072`:
-    crashed with a genuine V8 `FatalProcessOutOfMemory` (SIGABRT, exit 134)
-    — **before even finishing `extract()`** (never reached `extractClasses()`,
-    let alone the 146-operation total). Died at internal `buildSchema` call
-    #1605.
-  - **Path 1 vs Path 2, measured, not assumed:** of the first 1605 internal
-    `buildSchema` calls, only **6 hit Path 1** (the cheap, LRU-cached
-    `ts-json-schema-generator` route); **1597 (99.6%) fell through to Path 2**
-    (`morph-walk`'s `addTypeAlias`/`withResolvedType`). This file's real
-    domain types are overwhelmingly NOT the "simple named interface" shape
-    Path 1 is optimized for.
-  - **Every single sampled Path-2 call rebuilds the ts-morph `Program`:**
-    instrumented `project.getProgram().compilerObject` identity before/after
-    each `withResolvedType` call — `programChanged=true` on 100% of the 44
-    sampled calls (not "plausibly," confirmed by direct object-identity
-    comparison). Each rebuild re-parses/re-typechecks the full ~40-file
-    dependency graph (better-sqlite3, onnxruntime-node, sqlite-vec native
-    binding types included), and nothing in the observed heap trend indicates
-    any of it is ever released.
-  - **Heap trend is a clean, unbroken monotonic climb — no GC recovery at
-    any point:** call#1→heap 167MB, #101→390MB, #401→774MB, #701→1410MB,
-    #1001→2028MB, #1301→2590MB, #1601→3165MB (crash at #1605, heap 3199MB
-    against the 3072MB cap). ~2MB of heap added per call, zero dips, the
-    entire way — the signature of objects that are never becoming garbage,
-    not of a large-but-bounded working set.
-  - **The single biggest, and most actionable, finding: 1552 of the 1605
-    calls (97%) are the LITERALLY IDENTICAL raw type-text string
-    `"SharedArrayBuffer"`** (Node's `Buffer`/`Uint8Array` types pull in
-    `ArrayBufferLike = ArrayBuffer | SharedArrayBuffer` — unsurprising given
-    memory-core stores embeddings/blobs pervasively). Every one of those 1552
-    calls reached `buildSchemaUncached` — i.e., every one was a `session
-    .schemaCache` **miss** on an IDENTICAL `(sfPath, tsconfig, typeText)` key,
-    despite `extract()` using exactly one shared session for the whole file
-    (confirmed by reading `extract()`'s wrapper — one `session` object is
-    created and threaded through every operation, not recreated per-op).
-  - **Likely mechanism for the miss (plausible, not yet proven with a
-    targeted repro):** `ts-json-schema.ts:802-812`'s cache only stores the
-    *resolved value*, after `await`, never an *in-flight promise* — there is
-    no request-deduplication for concurrent identical keys. Sequential loops
-    (the top-level per-operation loop in `extract.ts`, and the object-property
-    loop in `morph-walk.ts:238-267`) can't produce this on their own, but
-    `morph-walk.ts`'s union-variant branch (`~line 179`,
-    `Promise.all(members.map(m => walkType(m, recurse, depth+1)))`) launches
-    concurrent sibling resolutions — if several of those siblings each walk
-    down into a Buffer-touching property before the first `SharedArrayBuffer`
-    resolution has resolved and populated the cache, ALL of them see a miss
-    simultaneously and each pays the full (Program-rebuilding) Path-2 cost
-    independently. This is a textbook cache-stampede: the fix is to cache the
-    in-flight `Promise`, not just its resolved value, so concurrent identical
-    requests share one computation.
-  - **Compounding, not competing, causes:** the stampede (repeated *identical*
-    work) and the per-call Program-rebuild-without-release (each unit of that
-    repeated work being unboundedly expensive) multiply together — fixing
-    only one likely still leaves the other as a real, if smaller, problem.
-- **Fix direction (updated, still not attempted):**
-  1. **Highest-leverage, do first:** cache in-flight promises in
-     `session.schemaCache`, not just resolved values (`Map<string,
-     Promise<Schema>>` instead of `Map<string, Schema>`, or equivalent) — this
-     alone should collapse the 1552 redundant `"SharedArrayBuffer"` calls
-     (and any other stampede-prone type) down to 1, independent of whether
-     Path 2 itself gets cheaper.
-  2. Confirm/deny whether `Program` non-release across repeated Path-2 calls
-     is a genuine retention (something holding a strong reference to old
-     `ts.Program`/`DocumentRegistry` entries after `alias.remove()`) versus
-     "correctly collectible but GC hasn't run" — force `global.gc()` between
-     calls under `--expose-gc` and see whether heap actually drops; if it
-     does, this may already be adequately addressed by fix (1) reducing call
-     volume; if it doesn't, ts-morph's `Project`/compiler-host retention needs
-     its own fix (candidate: recycle the `Project`/`Program` every N Path-2
-     calls, or investigate whether ts-morph exposes an explicit
-     `documentRegistry.releaseDocument`-equivalent hook for the mutated
-     versions).
-  3. Consider special-casing extremely common global/lib scalar-adjacent
-     unions (`ArrayBufferLike`, and anything else that shows up with
-     `SharedArrayBuffer`-level frequency) the same way `SCALAR_SCHEMAS`
-     already special-cases `Uint8Array`/`Buffer` — if `Buffer`'s own fields
-     are already mapped to `{type:string,format:byte}` without walking their
-     structure, a stray reference to the underlying `ArrayBufferLike` union
-     inside `Buffer`'s prototype shape probably shouldn't be walked
-     structurally either.
-- **Status:** OPEN — root cause now understood and evidence-backed; fix not
-  attempted (this update is diagnosis only, per the "no code changes to
-  ts-json-schema.ts/morph-walk.ts" scope of BUG-APIGEN-CORE-002's PR). Filed
-  2026-07-18, updated same day after independent re-investigation.
 
 ### BUG-APIGEN-CORE-004 — `isSerializableType()`'s textual allow-list doesn't recognize `Record<K,V>` (or other generic utility-type wrappers), causing false-negative skips on legitimately serializable consts
 
