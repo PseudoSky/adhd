@@ -231,6 +231,135 @@ session: `apigen-core-client/src/lib/schema-builders/union.ts:14,76,95,101`;
 against `/Users/nix/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts` via
 the branch's own built `dist/entrypoint/apigen-cli/index.js`]
 
+### BUG-APIGEN-033 — anonymous default-export functions (`export default (n) => ...`) are advertised as routes/tools but crash at dispatch time ("function not found") — regression introduced by the v1-retirement (v2-orchestrator) rewrite
+
+**Discovered:** 2026-07-19, by an independent code-review agent reading `orchestrator.ts`
+alongside `extract.ts` and `fn-table.ts` for the `fix/apigen-v1-retirement` (BUG-APIGEN-028)
+diff. Confirmed by this session directly reading the same three files.
+
+**Root cause:** `extract.ts` (Shape 5, anonymous default export — a real fn expression/arrow
+with no name, e.g. `export default (n: number) => n * 2;`) synthesizes a stable operation name
+from the source filename: `` normalizeFileName(fileName).replace(/-/g, '_') + '_default' ``
+(e.g. `foo_default`) — this becomes the route/tool/schema key. But
+`apigen-engine-runtime/src/lib/fn-table.ts`'s `buildFnTable()`, which builds the `name → fn`
+table dispatch actually indexes into, keys every function by its **JS-inferred `.name`
+property**, not by any apigen-synthesized name. For `export default (n) => n*2`, ECMAScript's
+NamedEvaluation rule (`export default AssignmentExpression`) gives the function itself a
+real `.name` of `"default"` (this is the language's own runtime behavior, not a apigen bug) —
+`buildFnTable` therefore ends up with `fns['default'] = fn`, never `fns['foo_default']`. At
+dispatch time, `fns[operationName]` (`operationName = 'foo_default'`) is `undefined`, and the
+call fails ("function not found" or equivalent), even though the operation is correctly listed
+in the served schema/route/tool listing.
+
+**Why this is a genuine NEW regression, not pre-existing:** before this branch, Step 5 called
+v1's `generateSchemas()`, whose `extractDefault()` never covered a bare anonymous-function
+default export at all (only the default-*object* form, `export default { a, b }`) — so this
+shape was silently *absent* from `ComposedSchemas` entirely. It is now *present but broken* —
+worse for a caller, since it looks like a real, callable operation until invoked.
+
+**Impact:** any TypeScript source using this export shape (uncommon but valid, real-world
+idiom — a single-purpose module exporting one anonymous function) gets a listed-but-dead
+route/tool for every apigen output plugin (this is upstream of plugin choice — the bug is in
+`extract.ts`/`fn-table.ts`, shared by all of them).
+
+**Suggested fix:** either (a) have `extract.ts` name the operation using the SAME rule
+`buildFnTable` will resolve at runtime (i.e. detect that the runtime key will be `"default"`
+and use that, or a normalized form of it) instead of a filename-derived synthetic name that
+`buildFnTable` has no way to produce, or (b) teach `buildFnTable` to ALSO key by the
+apigen-synthesized name when unwrapping a `WRAPPER_KEYS`-nested anonymous function (it already
+has the export's file/module context available at the unwrap site) so both sides agree. Needs
+an end-to-end `run`-mode dispatch test (not just the existing `extract()`-only unit coverage in
+`entrypoint/apigen-cli/src/test/integration/export-shape-matrix.spec.ts:103-114`) proving a
+real invocation of this shape actually returns a result, not just that it's present in the
+schema.
+
+**Status:** OPEN, filed not fixed (out of scope for the blocking-findings fix pass this
+session prioritized). Should be fixed before this branch merges, alongside BUG-APIGEN-028.
+
+Citations: [session 2026-07-19, sub-agent `review-cli-orchestrator-diff`, self-verified against
+source by this session: `packages/apigen/apigen-core-client/src/lib/extract.ts:300-336`
+(Shape 5 anonymous-default-export naming); `packages/apigen/apigen-engine-runtime/src/lib/
+fn-table.ts` (full read — `buildFnTable`'s `.name`-keying + `WRAPPER_KEYS` unwrap logic);
+ECMAScript `export default AssignmentExpression` NamedEvaluation behavior (language spec, not
+apigen code) confirmed as the source of `fn.name === "default"` for this shape]
+
+### BUG-APIGEN-034 (Open, filed not fixed, design question) — `--export <mode>` no longer scopes the served/generated route surface post-v1-retirement — a real behavior change, needs an explicit decision
+
+**Discovered:** 2026-07-19, by the same code-review pass as BUG-APIGEN-033.
+
+**Observed:** `orchestrator.ts:59-71` documents `SourceEntry.exportMode` as inert, since v2's
+`extract()` always walks the full export-shape matrix regardless of `--export`. That part was
+already true pre-diff (under the old `--v2` flag, collision-checking already ignored
+`exportMode`). **What's new in this branch:** pre-diff, Step 5 still called v1's
+`generateSchemas({ exportMode })`, so the actual schema/route surface SERVED or GENERATED was
+correctly scoped to the requested export shape, even though the earlier collision-check step
+wasn't. Post-diff, Step 5 derives directly from the same unscoped `operations` array used for
+collision-checking, so the FULL export matrix is now published as routes/schemas regardless of
+`--export` — a real, observable behavior change for any caller relying on `--export` to exclude
+private/internal named exports from the served surface.
+
+**Concrete scenario:** a source file with private named-export helpers alongside an
+intentionally `--export default`-scoped public object — those named helpers are now extracted,
+collision-checked, AND served as routes, where before this branch they were correctly excluded
+from what got served (even though the underlying `descriptor.operations` already included them
+internally for collision-checking purposes).
+
+**Process note:** `orchestrator.ts`'s own comment says "See BACKLOG.md for the follow-up
+decision" — grepped this file for exportMode/scoping terms before writing this entry; found no
+prior matching entry, so that comment's reference was dangling until now. This entry is that
+follow-up.
+
+**Needs a decision, not just a fix:** either (a) restore scoping by filtering `operations` by
+`exportMode` before composing schemas in Step 5 (recovers old behavior, but v2's own docstring
+suggests this scoping was already considered obsolete/soft-deprecated even before this branch),
+or (b) explicitly declare `--export` fully retired/inert going forward and update its `--help`
+text + deprecation-warn callers who pass it, rather than silently changing behavior underneath
+an existing flag that still appears to do something.
+
+**Status:** OPEN, filed not fixed. Should be resolved (either direction) before this branch
+merges — a silent, undocumented behavior change on an existing public flag is not acceptable to
+ship as-is.
+
+Citations: [session 2026-07-19, sub-agent `review-cli-orchestrator-diff`:
+`entrypoint/apigen-cli/src/lib/orchestrator.ts:59-71` (exportMode doc comment + dangling
+BACKLOG reference); repo-wide grep of `entrypoint/apigen-cli/BACKLOG.md` for exportMode/
+scoping terms prior to this entry, zero matches found]
+
+### BUG-APIGEN-035 (Open, filed not fixed, latent/low-severity) — orchestrator's namespace-keyed `groups` map silently last-source-wins on a duplicate namespace, with no guard or documented caller obligation
+
+**Discovered:** 2026-07-19, by the same code-review pass as BUG-APIGEN-033/034.
+
+**Observed:** `orchestrator.ts:399-411`'s `buildDescriptor` groups operations by namespace into
+a `Map`, using plain `Map.set()` — a second source resolving to the same namespace as an
+earlier one silently overwrites it, no error, no warning. **Not currently reachable**: registry
+namespaces come from `fs.readdirSync` directory names within a single `discoverPackages()` call
+(`registry.ts:39`), which are inherently unique by construction, and `generate`/`run` only ever
+pass exactly one source. But nothing in the `SourceEntry`/`OrchestratorOptions` type
+definitions documents namespace-uniqueness as a caller obligation — this is a latent trap for
+any future caller (e.g. the SPEC §13 polyglot-host `serve` extension mentioned in
+`orchestrator.ts`'s own file header, if it or anything else is ever changed to accept an
+externally-supplied multi-source list rather than one derived from a single directory scan).
+
+**Suggested fix:** either throw a clear "duplicate namespace: X (sources: A, B)" error in
+`buildDescriptor` when a collision is detected, or add an explicit doc comment on
+`OrchestratorOptions`/`SourceEntry` declaring namespace-uniqueness a caller-enforced invariant
+this function does not itself check.
+
+**Related, separate nitpick (same review pass, not worth its own entry):**
+`entrypoint/apigen-cli/src/lib/commands/run-registry.ts:106-114` registers SIGINT/SIGTERM
+handlers BEFORE the `sources.length === 0` early-return, so on the "nothing to run" path
+they're registered for a run that never starts (harmless — process exits normally right after
+anyway). `generate-registry.ts`'s equivalent check is ordered before any such setup; purely a
+cosmetic ordering inconsistency between the two files worth aligning if either is touched again.
+
+**Status:** OPEN, filed not fixed, low priority — does not block merge (currently unreachable).
+
+Citations: [session 2026-07-19, sub-agent `review-cli-orchestrator-diff`:
+`entrypoint/apigen-cli/src/lib/orchestrator.ts:399-411` (groups Map, silent overwrite);
+`entrypoint/apigen-cli/src/lib/registry.ts:39` (namespace uniqueness source, single
+`readdirSync`); `entrypoint/apigen-cli/src/lib/commands/run-registry.ts:106-114` vs
+`generate-registry.ts` (signal-handler ordering nitpick)]
+
 ### FEAT-APIGEN-019 — CLI doesn't discoverably list available `--type` plugins (help text stale, `run` commands give no options at all) — HIGH
 
 **Requested:** 2026-07-19 by the user, directly.
