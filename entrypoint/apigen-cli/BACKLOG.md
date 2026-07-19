@@ -321,3 +321,84 @@ Citations: [session 2026-07-19, self-verified by direct file read:
 `apigen-plugin-api-fastify/src/lib/generate.ts:11-26,95-121`;
 `apigen-engine-runtime/src/lib/validate-layer.ts:51`;
 `entrypoint/apigen-cli/src/lib/orchestrator.ts:149-170` (override parsing)]
+
+---
+
+### FEAT-APIGEN-023 — Zero-parameter, zero-envelope operations still require an empty `data: {}` (or full envelope) in the published schema
+
+**Requested:** 2026-07-19 by the user, directly.
+
+**Ask:** a route/tool/command with no parameters shouldn't require a caller to send
+`data`, a body, an envelope, etc. — calling it should need nothing beyond the
+name/path.
+
+**Current state, verified:** this is not an oversight — it is a **named, deliberate
+invariant** in the code, and the request conflicts with it directly.
+`apigen-core-client/src/lib/compose-schemas.ts:89` states:
+`// data: {} wrapper — always present, even for zero-param fns
+[inv:data-wrapper-always-present]`, and the outer composed schema unconditionally
+includes `'data'` in its `required` array regardless of whether the function has
+any parameters (`compose-schemas.ts:101-102`:
+`required: [...envelopeRequired, 'data']`). The *nested* `data` object's own
+`required` is correctly omitted when the function has no domain params
+(`compose-schemas.ts:95`: `...(domainRequired.length > 0 ? { required:
+domainRequired } : {})`), but the wrapper key itself is never optional — so the
+published `inputSchema` for a truly zero-arg function (e.g. `listProviders`,
+`tripwireStatus` — see BUG-APIGEN-017) still tells every consumer `data` is a
+required top-level property, just one that happens to validate against `{}`.
+`composeSchemas()` is the single point that feeds every transport
+(`apigen-engine-runtime/src/lib/api-package.ts:61`,
+`entrypoint/apigen-cli/src/lib/pipeline.ts:42`,
+`entrypoint/apigen-cli/src/lib/orchestrator.ts:355`), so this affects the
+generated/published schema for MCP, api-express, and api-fastify uniformly (and
+by extension anything else that reads `ComposedSchemas`).
+
+**Important distinction — this is a *schema/documentation* issue, not (yet) a
+runtime one.** At every transport actually inspected this session, an omitted
+body/args/data already defaults to `{}` at runtime and nothing crashes:
+- HTTP POST: `const { data = {} } = req.body ?? {}`
+  (`apigen-plugin-api-express/src/lib/run.ts:267`, fastify mirrors).
+- HTTP GET: `domainArgs: req.query as Record<string, unknown>` — an empty query
+  string is already `{}` (`apigen-plugin-api-express/src/lib/run.ts:254`).
+- MCP: `const { name, arguments: args = {} } = req.params;` then
+  `const domainData = (args['data'] ?? {})`
+  (`apigen-plugin-mcp/src/lib/run.ts:93,105`).
+- The validate-Layer itself always *synthesizes* `{ data: call.domainArgs,
+  ...call.envelope }` server-side before validating
+  (`apigen-engine-runtime/src/lib/validate-layer.ts:122-125`) — so `data` is
+  present in the object being validated regardless of what the wire caller sent.
+
+So the friction is specifically that the **published schema** (what an MCP host,
+an LLM tool-caller, or any strict schema-driven client reads to decide how to
+call the tool) asserts `data` is mandatory even for an operation with nothing to
+put in it — adding unnecessary ceremony/tokens for callers and, for any client
+that validates arguments against `inputSchema` before sending (unlike apigen's
+own permissive server-side defaults), a real hard requirement to send `{"data":
+{}}` for something that conceptually takes no input at all.
+
+**Suggested fix:** in `composeSchemas()`, only include `'data'` in the outer
+`required` array when there's something that actually makes it non-optional —
+i.e. `domainRequired.length > 0` (the function has ≥1 required param) — mirroring
+the exact same condition already used for the nested schema's own `required`
+(`compose-schemas.ts:95`). Keep the `data` *property* declared either way (so
+`{"data": {}}` still validates, for callers who send it out of habit or
+symmetry) — only the top-level `required` entry becomes conditional. Same
+treatment for `envelopeRequired` if a specific envelope field is itself
+optional. This directly relaxes `[inv:data-wrapper-always-present]` for the
+no-required-anything case; the invariant's uniform-shape rationale (stated in
+`buildEnvelopeDescription`'s JSDoc, `compose-schemas.ts:8-17`) still holds for
+every function that has at least one required param or envelope field, so this
+is a narrow carve-out, not a wholesale removal of the convention.
+
+**Status:** OPEN. Scope: `apigen-core-client/src/lib/compose-schemas.ts` (the
+single fix point — propagates to MCP, api-express, api-fastify automatically
+since they all consume `ComposedSchemas`).
+
+Citations: [session 2026-07-19, self-verified by direct file read:
+`apigen-core-client/src/lib/compose-schemas.ts:8-17,42-58,89-116`;
+`apigen-engine-runtime/src/lib/api-package.ts:61`;
+`entrypoint/apigen-cli/src/lib/pipeline.ts:42`;
+`entrypoint/apigen-cli/src/lib/orchestrator.ts:355`;
+`apigen-plugin-api-express/src/lib/run.ts:254,267`;
+`apigen-plugin-mcp/src/lib/run.ts:93,105`;
+`apigen-engine-runtime/src/lib/validate-layer.ts:122-125`]
