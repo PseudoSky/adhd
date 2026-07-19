@@ -221,3 +221,103 @@ conventions that differ from standard MCP tool usage.
 **Suggested fix:** Add the tool naming convention and data-envelope structure
 to either (a) the generated server metadata, (b) each tool's description
 string, or (c) a standard response from a meta-tool.
+
+---
+
+### FEAT-APIGEN-022 — Auto-hoist actions with properly-typed primitive params to GET, across all HTTP api types
+
+**Requested:** 2026-07-19 by the user, directly.
+
+**Ask:** apigen should be able to project a function to `GET` automatically when its
+parameters are "properly typed" primitives, instead of requiring the manual
+`--opt http.verb.<id>=GET` override for every such function — and it should apply
+uniformly across every HTTP-emitting api type, not per-plugin.
+
+**Current state, verified:**
+
+1. **Verb is never derived from parameter types anywhere in the pipeline today** — only
+   from the categorical `kind` field, which is `'action'` for *every* function export
+   regardless of its signature. `kind: 'action'` hardcodes `safe: false`
+   (`apigen-core-client/src/lib/extract.ts:511-514`, comment `// action → false per §4` —
+   a fixed default, not an inference). `kind: 'query'` (→ `safe: true`, `extract.ts:540-543`)
+   is reserved for non-function serializable *data constants* — the extractor only reaches
+   it in the `else` branch after ruling out `ArrowFunction`/`FunctionExpression`/
+   `ObjectLiteralExpression` initializers (`extract.ts:261-275`); a function is never routed
+   there. `apigen-engine-naming`'s `project()` — the single source of truth for HTTP verb —
+   then derives the verb purely from `op.safe`: `op.safe ? 'GET' : 'POST'`
+   (`apigen-engine-naming/src/lib/naming.ts:140`). No parameter types are inspected by any
+   of this.
+2. **The only way to get `GET` today is the manual per-operation override**
+   (`--opt http.verb.<id>=GET` or an equivalent `--config` file entry, i.e.
+   `ProjectionConfig.http.verb`), consumed by an identical `httpVerb()` helper duplicated at
+   all four HTTP-transport call sites: `apigen-plugin-api-express/src/lib/run.ts:26-34` +
+   `apigen-plugin-api-express/src/lib/generate.ts:14-17`, and the fastify equivalents,
+   `apigen-plugin-api-fastify/src/lib/run.ts:25-34` (approx.) +
+   `apigen-plugin-api-fastify/src/lib/generate.ts:11-26`.
+3. **Even the manual override is unsafe for non-string params today.** The `GET` branch in
+   both `run.ts`s (`apigen-plugin-api-express/src/lib/run.ts:234-262`, fastify mirrors) and
+   both `generate.ts`s (`apigen-plugin-api-express/src/lib/generate.ts:92-106`,
+   `apigen-plugin-api-fastify/src/lib/generate.ts:103-121`) sources domain args straight
+   from `req.query`/`request.query` with a bare `as Record<string, unknown>` cast — no
+   parsing or coercion. The shared validate-Layer's Ajv instance is constructed with no
+   `coerceTypes` (`apigen-engine-runtime/src/lib/validate-layer.ts:51`:
+   `new Ajv({ allErrors: true })`), so any param typed `number`/`boolean`/`integer` arrives
+   as a raw query-string and fails its `type` check, hard-rejecting the call with
+   `ApiError{invalid_argument}` before the target function is ever dispatched. Confirmed by
+   code inspection this session, not yet reproduced against a live route — needs a spawned-
+   bin e2e regression fixture (same pattern as BUG-APIGEN-021's fix) before any of this
+   ships, both to prove the current break and to guard the eventual coercion fix.
+4. **"Properly typed primitives" needs a hard, explicit boundary** — query-string
+   serialization isn't reliable for anything else. `string`/`number`/`boolean`/`integer` are
+   safe; `array`/`object`/union/logical types (e.g. `decimal` as a wire string) are not
+   reliably round-trippable without a serialization convention apigen doesn't currently
+   define anywhere in this pipeline. Express's default `qs` query parser supports
+   bracket-notation nesting (`?a[x]=1`), but nothing here emits or documents that encoding,
+   and Fastify's default query parser doesn't support nested objects at all — so even if one
+   plugin were made to cope, behavior would diverge across "all api types" unless the
+   primitive-only boundary is enforced centrally.
+
+**Design risk to flag before implementing:** auto-hoisting by param shape alone conflates
+"GET-representable" with "safe/idempotent" — two different questions. apigen currently has
+**no signal anywhere** for whether a function has side effects; `kind: 'action'` is assigned
+to every function indiscriminately (point 1 above). A zero/primitive-arg function like
+`resetCounter(): Promise<void>` or `deleteUser(id: string)` is trivially "primitive-typed"
+by this proposal's own criterion, yet very much unsafe to expose as a cacheable,
+prefetchable, browser-history-and-proxy-logged `GET`. Hoisting purely on parameter shape,
+without *also* requiring an explicit safety signal, would silently make destructive actions
+GET-cacheable. This needs a design decision (e.g.: primitive-typing only relaxes the
+*param-shape precondition* for hoisting; the actual safe/unsafe decision still requires an
+explicit opt-in — a `kind: 'query'` extension once purity is inferable, or an explicit
+per-function marker — never an automatic default from typing alone).
+
+**Suggested fix (staged):**
+
+1. Add param-shape validation to the *existing* manual-override path first (reject or warn
+   when `--opt http.verb.<id>=GET` targets an operation with a non-primitive-typed param) —
+   closes the currently-broken manual path with the least risk, independent of auto-hoist.
+2. Add query-value coercion to the validate-Layer (Ajv `coerceTypes: true`, scoped to the
+   query-args validation pass only — must not affect body/POST validation) so primitive
+   params actually round-trip once `GET` is chosen, manually or automatically.
+3. Only then implement auto-hoisting, gated behind an explicit safety signal rather than
+   parameter shape alone (see design risk above) — never silently promote every
+   all-primitive-param function to `GET` by default.
+4. Implement the derivation once in `apigen-engine-naming`'s `project()` (already the single
+   source of truth for verb derivation) so all four call sites (express/fastify × run/
+   generate) inherit it automatically instead of needing four separate patches.
+
+**Status:** OPEN. Scope: `apigen-core-client` (extract.ts `kind`/`safe` derivation),
+`apigen-engine-naming` (`project()` verb default), `apigen-engine-runtime` (validate-Layer
+coercion), `apigen-plugin-api-express` (`run.ts`, `generate.ts`), `apigen-plugin-api-fastify`
+(`run.ts`, `generate.ts`).
+
+Citations: [session 2026-07-19, self-verified by direct file read:
+`apigen-core-client/src/lib/extract.ts:261-275,511-514,540-543`;
+`apigen-engine-naming/src/lib/naming.ts:10,140`;
+`apigen-core-client/src/lib/descriptor.ts:195-200`;
+`apigen-core-client/src/lib/descriptor.schema.json:54-56`;
+`apigen-plugin-api-express/src/lib/run.ts:26-34,234-286`;
+`apigen-plugin-api-express/src/lib/generate.ts:7-17,84-106`;
+`apigen-plugin-api-fastify/src/lib/run.ts:25-34(approx),271-313`;
+`apigen-plugin-api-fastify/src/lib/generate.ts:11-26,95-121`;
+`apigen-engine-runtime/src/lib/validate-layer.ts:51`;
+`entrypoint/apigen-cli/src/lib/orchestrator.ts:149-170` (override parsing)]
