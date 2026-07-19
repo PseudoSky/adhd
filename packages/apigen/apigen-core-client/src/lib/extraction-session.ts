@@ -35,9 +35,14 @@ export interface ISessionStats {
   projectsBuilt: number;
   /** ts-json-schema-generator generators (full TS programs) constructed. */
   generatorsBuilt: number;
-  /** buildSchema calls answered from the session schema cache. */
+  /**
+   * buildSchema calls answered from the session schema cache — includes both
+   * a call that found an already-RESOLVED entry and a call that joined an
+   * already-IN-FLIGHT promise for the same key (BUG-APIGEN-CORE-003:
+   * in-flight dedup — see `schemaCache`'s doc comment below).
+   */
   schemaCacheHits: number;
-  /** buildSchema calls that had to compute. */
+  /** buildSchema calls that had to start a new computation (cache miss). */
   schemaCacheMisses: number;
 }
 
@@ -71,8 +76,18 @@ export interface InternalExtractionSession extends ExtractionSession {
   projectFor(tsconfig?: string): Project;
   /** Add-or-reuse the SourceFile for `filePath` in the session's Project. */
   sourceFileFor(filePath: string, tsconfig?: string): SourceFile;
-  /** Memoized buildSchema results, key = `${sfPath}\0${tsconfig ?? ''}\0${typeText}`. */
-  readonly schemaCache: Map<string, Record<string, unknown>>;
+  /**
+   * Memoized buildSchema results, key = `${sfPath}\0${tsconfig ?? ''}\0${typeText}`.
+   *
+   * BUG-APIGEN-CORE-003: values are the in-flight/resolved `Promise`, not the
+   * resolved value itself, and are stored SYNCHRONOUSLY (before the underlying
+   * computation is awaited) — this is what makes concurrent identical requests
+   * (e.g. `morph-walk.ts`'s `Promise.all(members.map(...))` over union variants
+   * that share a nested type like `SharedArrayBuffer`) share one computation
+   * instead of each independently missing the cache and recomputing. See
+   * `buildSchema()` in `schema-builders/ts-json-schema.ts` for the write side.
+   */
+  readonly schemaCache: Map<string, Promise<Record<string, unknown>>>;
   /** Memoized per-SourceFile import-alias maps (extractScalarAliases). */
   readonly aliasCache: WeakMap<SourceFile, ReadonlyMap<string, string>>;
   /** Memoized per-SourceFile zod-import check (sourceFileHasZodImport). */
