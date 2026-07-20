@@ -5,6 +5,7 @@ import {
   makeValidateLayer,
   createLogger,
   describeParams,
+  coerceQueryParams,
   LayerContext,
 } from '@adhd/apigen-engine-runtime';
 import type {
@@ -12,25 +13,20 @@ import type {
   Layer,
   ParamInfo,
 } from '@adhd/apigen-engine-runtime';
-import type { RunInput, ComposedSchemas } from '@adhd/apigen-core-client';
-import { envelopeKey } from '@adhd/apigen-naming';
+import type {
+  RunInput,
+  ComposedSchemas,
+  Operation,
+} from '@adhd/apigen-core-client';
+import { envelopeKey, httpVerb } from '@adhd/apigen-naming';
 import { HTTP_STATUS, ApiError } from '@adhd/apigen-base-errors';
 import type { ProjectionConfig } from '@adhd/apigen-naming';
 import type { ApiErrorCode } from '@adhd/apigen-base-errors';
 
 // ---------------------------------------------------------------------------
-// §5 — verb from safe
+// §5 — verb from safe (BUG-APIGEN-025 / FEAT-APIGEN-022: shared `httpVerb`
+// imported from @adhd/apigen-naming — no longer duplicated per plugin)
 // ---------------------------------------------------------------------------
-
-function httpVerb(
-  fnId: string,
-  schema: Record<string, unknown>,
-  config: ProjectionConfig
-): 'GET' | 'POST' {
-  const override = config.http?.verb?.[fnId];
-  if (override === 'GET' || override === 'POST') return override;
-  return (schema['x-apigen-safe'] as boolean | undefined) ? 'GET' : 'POST';
-}
 
 // ---------------------------------------------------------------------------
 // §9.1 — envelope from HTTP headers (x-<pluginId>-<field>)
@@ -175,15 +171,23 @@ interface MountRoute {
  * Collect HTTP mount routes contributed by the `--use` mount plugins
  * (BUG-APIGEN-010).  A mounted op is exposed on HTTP unless it declares an
  * explicit `transports` filter that omits `'http'`.
+ *
+ * BUG-APIGEN-024: `operations` must be the REAL merged descriptor (threaded
+ * from `RunInput.operations` — see orchestrator.ts's `orchestrateRun`), not a
+ * hardcoded `[]` — a mount plugin like `apigen-plugin-openapi` derives its
+ * output entirely from `descriptor.operations`, so an empty stub here always
+ * produced an empty OpenAPI `paths: {}` regardless of what was actually
+ * extracted.
  */
 function collectMountRoutes(
   usePlugins: UsePlugin[],
   useOptions: UseOptions,
   host: string,
-  routePrefix: string
+  routePrefix: string,
+  operations: Operation[]
 ): MountRoute[] {
   const routes: MountRoute[] = [];
-  const descriptor = { host, operations: [] as unknown[] };
+  const descriptor = { host, operations };
   for (const plugin of usePlugins) {
     const cap = plugin.capabilities?.mount;
     if (!cap) continue;
@@ -292,7 +296,14 @@ export async function run(input: RunInput): Promise<void> {
             operation: { id: fnName },
             ctx: new LayerContext(),
             envelope,
-            domainArgs: req.query as Record<string, unknown>,
+            // FEAT-APIGEN-022: query strings are always strings — coerce to
+            // the domain schema's declared number/integer/boolean types
+            // before validation, scoped to this GET path only (never touches
+            // POST/body validation — see coerce-query.ts).
+            domainArgs: coerceQueryParams(
+              req.query as Record<string, unknown>,
+              fnSchema
+            ),
             signal: input.signal,
           };
           return sendJson(reply, await invoke(fnName, call, invokeOpts));
@@ -326,7 +337,8 @@ export async function run(input: RunInput): Promise<void> {
     usePlugins,
     useOptions,
     mountHost,
-    routePrefix
+    routePrefix,
+    input.operations ?? []
   );
   for (const m of mountRoutes) {
     routes.push({ method: 'GET', route: m.route, text: '', params: [] });

@@ -1,4 +1,5 @@
 import type { Logger } from 'pino';
+import type { Operation } from './descriptor';
 
 // Output of the extraction pipeline (v2 `extract()`'s Operation[], grouped by
 // namespace and adapted — see orchestrator.ts's buildDescriptor Step 5) —
@@ -13,6 +14,13 @@ export interface GeneratedSchemas {
       // True when the source fn's first param is named `ctx` (filtered from
       // `input.properties` by [inv:ctx-name-only], but still injected at dispatch).
       hasCtx?: boolean;
+      // BUG-APIGEN-025: the operation's `safe` flag (SPEC §4/§5), threaded
+      // through from `Operation.safe` at the call site (orchestrator.ts's
+      // buildDescriptor Step 5) so `composeSchemas()` has it available to
+      // stamp onto `x-apigen-safe` — previously computed but never carried
+      // this far, so the HTTP transports' `x-apigen-safe` read was always
+      // `undefined`. Absent (`undefined`) is treated as `false`.
+      safe?: boolean;
     }
   >;
 }
@@ -27,6 +35,13 @@ export type ComposedSchemas = Record<
     // Carried through from GeneratedSchemas — see above. dispatch() injects ctx
     // as the first arg whenever this is true, independent of session middleware.
     hasCtx?: boolean;
+    // FEAT-APIGEN-022 / BUG-APIGEN-025: `op.safe` OR "properly typed
+    // primitives only" param shape (see get-safety.ts's
+    // `isPrimitiveOnlyInputSchema`), stamped by `composeSchemas()`. Read by
+    // the shared `httpVerb()` in `@adhd/apigen-naming` (SPEC §5) — every
+    // HTTP-emitting plugin derives its verb from THIS field, never by
+    // re-deriving safety itself.
+    'x-apigen-safe'?: boolean;
   }
 >;
 
@@ -68,6 +83,15 @@ export interface PluginOutput {
 
 export interface RunInput extends PluginInput {
   signal?: AbortSignal;
+  /**
+   * BUG-APIGEN-024: the full merged `Operation[]` descriptor (the same set
+   * `buildDescriptor()` produces), threaded through so a `--use` mount plugin
+   * (e.g. `apigen-plugin-openapi`) can build its real `Descriptor` instead of
+   * the empty-`operations` stub `collectMountRoutes()` used to synthesize.
+   * Absent for non-TS-extraction run paths (e.g. py-flask), where mount
+   * plugins have nothing extracted to describe.
+   */
+  operations?: Operation[];
 }
 
 /** Source-language tags understood by apigen's routing layer. */

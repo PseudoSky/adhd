@@ -6,6 +6,36 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **BUG-APIGEN-024** — `--use openapi` mount produced an empty OpenAPI doc (`paths: {}`)
+  on live `run`, even though the underlying operations were correctly extracted and
+  served. Root cause: `collectMountRoutes()` — identical in both HTTP transports
+  (`apigen-plugin-api-express/src/lib/run.ts`, `apigen-plugin-api-fastify/src/lib/run.ts`)
+  — built the synthetic `Descriptor` handed to `--use` mount plugins with `operations`
+  hardcoded to `[]`, so `apigen-plugin-openapi`'s `toOpenApi(descriptor.operations, ...)`
+  always received an empty array regardless of what was actually extracted (confirmed
+  independently: `apigen-plugin-openapi`'s own test suite proves `toOpenApi` produces
+  correct `paths` given a real descriptor). Fixed by threading the real merged
+  `Operation[]` (already computed by `buildDescriptor()`) through `RunInput.operations`
+  (new optional field, `apigen-core-client/src/lib/types.ts`), populated by
+  `orchestrator.ts`'s `orchestrateRun()`, and consumed by `collectMountRoutes()` in both
+  transports instead of the hardcoded `[]` stub (`input.operations ?? []` — the `?? []`
+  fallback keeps non-TS-extraction run paths, e.g. py-flask, safe since they have nothing
+  extracted to describe). Scoped to the `run` (live server) path per the bug title; the
+  BACKLOG entry's separately-noted gap that `generate.ts` never calls
+  `collectMountRoutes` at all (mount plugins are a live-server-only concept today) is
+  unchanged, pre-existing behavior, not part of this fix.
+
+  9 new regression tests added per HTTP transport (`apigen-plugin-api-express` and
+  `apigen-plugin-api-fastify` `plugin.spec.ts`, `[BUG-APIGEN-024]` describe blocks): a
+  real `run()` server mounted with the REAL `@adhd/apigen-plugin-openapi` plugin (not a
+  stub) against two real multi-route operations, asserting `paths` contains both real
+  routes with the correct HTTP method/schema per path (safe→GET, unsafe→POST with
+  requestBody), plus a regression control proving `RunInput.operations` omitted still
+  safely falls back to empty `paths` rather than crashing. `nx test
+  apigen-plugin-api-express` 25/25, `nx test apigen-plugin-api-fastify` 37/37 (2 files),
+  `nx run-many -t test -p apigen-core-client apigen-plugin-openapi apigen-cli
+  apigen-engine-runtime` 114/114 — zero regressions.
+
 - **BUG-APIGEN-017/018/019/020** — MCP tool-schema hardening bundle (all four filed
   2026-07-06 from the `scratch-agent-search`/agent-browser consumer). Root-caused each
   independently before fixing (`entrypoint/apigen-cli/BACKLOG.md`'s filed entries per ID):
