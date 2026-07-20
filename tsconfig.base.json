@@ -163,16 +163,16 @@
       "@adhd/dispatch-serializer-json": [
         "./packages/dispatch/dispatch-serializer-json/src/index.ts"
       ],
-      "@adhd/environment-base-spec": [
-        "./packages/environment/environment-base-spec/src/index.ts"
-      ],
-      "@adhd/environment-cli": ["./entrypoint/environment-cli/src/index.ts"],
-      "@adhd/environment-builder": [
-        "./packages/environment/environment-builder/src/index.ts"
-      ],
       "@adhd/environment": [
         "./packages/environment/environment-core-node/src/index.ts"
       ],
+      "@adhd/environment-base-spec": [
+        "./packages/environment/environment-base-spec/src/index.ts"
+      ],
+      "@adhd/environment-builder": [
+        "./packages/environment/environment-builder/src/index.ts"
+      ],
+      "@adhd/environment-cli": ["./entrypoint/environment-cli/src/index.ts"],
       "@adhd/ui-react-base-hooks": [
         "./packages/ui-react/ui-react-base-hooks/src/index.ts"
       ],
