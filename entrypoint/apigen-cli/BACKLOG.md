@@ -58,6 +58,73 @@ by moving `decimal.js` from `dependencies` to `devDependencies` in
 
 Citations: [self-verified 2026-07-19: `entrypoint/apigen-cli/vite.config.ts:10,39`; `ls dist/apigen-cli/` (pre-fix) → only `default-tsconfig.json` present; `find dist/entrypoint/apigen-cli -iname "*tsconfig*"` (pre-fix) → no match, (post-fix) → `default-tsconfig.json` present; `entrypoint/apigen-cli/src/lib/resolve-tsconfig.ts:35-48` (three-candidate fallback + temp-file mitigation); `git log -1 --format=%ad -- entrypoint/apigen-cli/src/lib/default-tsconfig.json` → 2026-07-02]
 
+### FEAT-APIGEN-023 — Zero-parameter, zero-envelope operations no longer require an empty `data: {}` (or full envelope) in the published schema — FIXED 2026-07-20
+
+**Requested:** 2026-07-19 by the user, directly. **Ask:** a route/tool/command with
+no parameters shouldn't require a caller to send `data`, a body, an envelope, etc.
+— calling it should need nothing beyond the name/path.
+
+**Root cause, confirmed:** not an oversight — a **named, deliberate invariant**
+(`[inv:data-wrapper-always-present]`) in `apigen-core-client/src/lib/
+compose-schemas.ts`. The outer composed schema's `required` array
+unconditionally included `'data'` (`required: [...envelopeRequired, 'data']`,
+pre-fix `compose-schemas.ts:143`) regardless of whether the function had any
+domain parameters, even though the *nested* `data` object's own `required` was
+already correctly conditional on `domainRequired.length > 0`
+(`compose-schemas.ts:136`). `composeSchemas()` is the single point that feeds
+every transport (MCP, api-express, api-fastify), so every truly zero-arg
+function's published `inputSchema` told every consumer `data` was mandatory,
+just one that happened to validate against `{}`. Confirmed a **schema/
+documentation issue only, not a runtime one** — every transport's decode path
+(`apigen-plugin-api-express/src/lib/run.ts:254,267`,
+`apigen-plugin-mcp/src/lib/run.ts:93,105`,
+`apigen-engine-runtime/src/lib/validate-layer.ts:157-160,239-241`) already
+defaults an omitted `data`/body/args to `{}` and synthesizes `{ data:
+call.domainArgs, ...call.envelope }` before validating, so the decode side
+needed no change — verified by reading each site, not assumed.
+
+**Fix:** `compose-schemas.ts:143-146` — `'data'` is now only added to the
+outer `required` array when `domainRequired.length > 0` (mirrors the exact
+condition already used for the nested `data` schema's own `required`), i.e.
+`required: [...envelopeRequired, ...(domainRequired.length > 0 ? ['data'] :
+[])]`. The `data` *property* itself is still always declared (`{"data": {}}`
+still validates for callers who send it out of habit), and middleware-
+contributed envelope fields are still required on their own merits,
+independent of whether `data` is required — only zero-param, zero-required-
+envelope operations get the relaxed schema; parameterized operations are
+unaffected.
+
+**Tests:** `apigen-core-client/src/test/compose-schemas.spec.ts` — updated
+`[schema-composition.1]` and `[schema-composition.4]` (which had baked in the
+old unconditional-`data`-required behavior for zero-param functions, so they
+would have masked this exact bug) plus a new `FEAT-APIGEN-023` describe block
+(7 cases): zero-param/zero-middleware function has an empty top-level
+`required`; `{}` satisfies it; the `data` property is still declared and
+`{"data": {}}` still validates; a parameterized function's `required` still
+contains `'data'` (regression control); middleware envelope fields remain
+required independent of `data` for both parameterized and zero-param
+functions; a zero-param function with its only middleware overridden `false`
+has a fully empty `required` array. All pre-fix assertions were hand-verified
+to fail against the pre-fix code path before the fix landed.
+
+**Verified:** `nx test apigen-core-client` 252/252 passing (incl. new/updated
+cases); `nx test apigen-engine-runtime` 131/131 passing (validate-layer decode
+path unaffected, confirmed not just assumed); `nx run-many -t test -p
+apigen-plugin-api-express apigen-plugin-api-fastify apigen-plugin-mcp
+apigen-plugin-jsonschema apigen-plugin-cli-output apigen-cli` 134/134 passing
+across all 17 test files in those six downstream `ComposedSchemas` consumers —
+zero regressions.
+
+Citations: [session 2026-07-20, self-verified by direct file read:
+`apigen-core-client/src/lib/compose-schemas.ts:136-155` (fix);
+`apigen-core-client/src/test/compose-schemas.spec.ts:47-75,112-130,337-421` (tests);
+`apigen-plugin-api-express/src/lib/run.ts:254,267`;
+`apigen-plugin-mcp/src/lib/run.ts:93,105`;
+`apigen-engine-runtime/src/lib/validate-layer.ts:157-160,239-241`; original
+ask/analysis: `apigen-engine-runtime/src/lib/api-package.ts:61`,
+`entrypoint/apigen-cli/src/lib/pipeline.ts:42`,
+`entrypoint/apigen-cli/src/lib/orchestrator.ts:355`]
+
 ## Open
 
 ### BUG-APIGEN-029 (Open, filed not fixed) — `$ref` resolution / ajv strict-mode failures on complex external types (e.g. `better-sqlite3.Database`) at DISPATCH time, not extraction time — pre-existing, confirmed identical under both v1 and v2
@@ -589,87 +656,6 @@ Citations: [session 2026-07-19, self-verified by direct file read:
 `apigen-plugin-api-fastify/src/lib/generate.ts:11-26,95-121`;
 `apigen-engine-runtime/src/lib/validate-layer.ts:51`;
 `entrypoint/apigen-cli/src/lib/orchestrator.ts:149-170` (override parsing)]
-
----
-
-### FEAT-APIGEN-023 — Zero-parameter, zero-envelope operations still require an empty `data: {}` (or full envelope) in the published schema
-
-**Requested:** 2026-07-19 by the user, directly.
-
-**Ask:** a route/tool/command with no parameters shouldn't require a caller to send
-`data`, a body, an envelope, etc. — calling it should need nothing beyond the
-name/path.
-
-**Current state, verified:** this is not an oversight — it is a **named, deliberate
-invariant** in the code, and the request conflicts with it directly.
-`apigen-core-client/src/lib/compose-schemas.ts:89` states:
-`// data: {} wrapper — always present, even for zero-param fns
-[inv:data-wrapper-always-present]`, and the outer composed schema unconditionally
-includes `'data'` in its `required` array regardless of whether the function has
-any parameters (`compose-schemas.ts:101-102`:
-`required: [...envelopeRequired, 'data']`). The *nested* `data` object's own
-`required` is correctly omitted when the function has no domain params
-(`compose-schemas.ts:95`: `...(domainRequired.length > 0 ? { required:
-domainRequired } : {})`), but the wrapper key itself is never optional — so the
-published `inputSchema` for a truly zero-arg function (e.g. `listProviders`,
-`tripwireStatus` — see BUG-APIGEN-017) still tells every consumer `data` is a
-required top-level property, just one that happens to validate against `{}`.
-`composeSchemas()` is the single point that feeds every transport
-(`apigen-engine-runtime/src/lib/api-package.ts:61`,
-`entrypoint/apigen-cli/src/lib/pipeline.ts:42`,
-`entrypoint/apigen-cli/src/lib/orchestrator.ts:355`), so this affects the
-generated/published schema for MCP, api-express, and api-fastify uniformly (and
-by extension anything else that reads `ComposedSchemas`).
-
-**Important distinction — this is a *schema/documentation* issue, not (yet) a
-runtime one.** At every transport actually inspected this session, an omitted
-body/args/data already defaults to `{}` at runtime and nothing crashes:
-- HTTP POST: `const { data = {} } = req.body ?? {}`
-  (`apigen-plugin-api-express/src/lib/run.ts:267`, fastify mirrors).
-- HTTP GET: `domainArgs: req.query as Record<string, unknown>` — an empty query
-  string is already `{}` (`apigen-plugin-api-express/src/lib/run.ts:254`).
-- MCP: `const { name, arguments: args = {} } = req.params;` then
-  `const domainData = (args['data'] ?? {})`
-  (`apigen-plugin-mcp/src/lib/run.ts:93,105`).
-- The validate-Layer itself always *synthesizes* `{ data: call.domainArgs,
-  ...call.envelope }` server-side before validating
-  (`apigen-engine-runtime/src/lib/validate-layer.ts:122-125`) — so `data` is
-  present in the object being validated regardless of what the wire caller sent.
-
-So the friction is specifically that the **published schema** (what an MCP host,
-an LLM tool-caller, or any strict schema-driven client reads to decide how to
-call the tool) asserts `data` is mandatory even for an operation with nothing to
-put in it — adding unnecessary ceremony/tokens for callers and, for any client
-that validates arguments against `inputSchema` before sending (unlike apigen's
-own permissive server-side defaults), a real hard requirement to send `{"data":
-{}}` for something that conceptually takes no input at all.
-
-**Suggested fix:** in `composeSchemas()`, only include `'data'` in the outer
-`required` array when there's something that actually makes it non-optional —
-i.e. `domainRequired.length > 0` (the function has ≥1 required param) — mirroring
-the exact same condition already used for the nested schema's own `required`
-(`compose-schemas.ts:95`). Keep the `data` *property* declared either way (so
-`{"data": {}}` still validates, for callers who send it out of habit or
-symmetry) — only the top-level `required` entry becomes conditional. Same
-treatment for `envelopeRequired` if a specific envelope field is itself
-optional. This directly relaxes `[inv:data-wrapper-always-present]` for the
-no-required-anything case; the invariant's uniform-shape rationale (stated in
-`buildEnvelopeDescription`'s JSDoc, `compose-schemas.ts:8-17`) still holds for
-every function that has at least one required param or envelope field, so this
-is a narrow carve-out, not a wholesale removal of the convention.
-
-**Status:** OPEN. Scope: `apigen-core-client/src/lib/compose-schemas.ts` (the
-single fix point — propagates to MCP, api-express, api-fastify automatically
-since they all consume `ComposedSchemas`).
-
-Citations: [session 2026-07-19, self-verified by direct file read:
-`apigen-core-client/src/lib/compose-schemas.ts:8-17,42-58,89-116`;
-`apigen-engine-runtime/src/lib/api-package.ts:61`;
-`entrypoint/apigen-cli/src/lib/pipeline.ts:42`;
-`entrypoint/apigen-cli/src/lib/orchestrator.ts:355`;
-`apigen-plugin-api-express/src/lib/run.ts:254,267`;
-`apigen-plugin-mcp/src/lib/run.ts:93,105`;
-`apigen-engine-runtime/src/lib/validate-layer.ts:122-125`]
 
 ---
 
