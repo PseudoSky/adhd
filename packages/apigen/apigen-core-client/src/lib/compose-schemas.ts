@@ -19,10 +19,34 @@ interface SlimMiddleware {
  * together in one pass, the same shape v1 had them in, so it's re-wired here.
  */
 function validateComposedRefs(domainSchemas: GeneratedSchemas): void {
+  // BUG-APIGEN-029: `validateSchemaRefs` (apigen-base-logical) looks resolved
+  // definitions up by the LITERAL `$ref` string (e.g. `"#/definitions/User"`),
+  // not the bare definition name — and `ts-json-schema-generator` (the only
+  // real producer of these defs, via extract.ts's `hoistNestedDefs`) keys its
+  // `definitions` dict by BARE name (`{ User: {...} }`), never `$defs`, and
+  // never by the full ref-URI. Collecting only bare names under a `$defs` key
+  // (the pre-fix code) silently no-op'd this entire safety net for every real
+  // schema, so BUG-APIGEN-029-class dangling refs reached `ajv.compile()` at
+  // first dispatch instead of failing loudly here at generate time.
+  //
+  // Two def-dict key conventions coexist in this codebase: real generator
+  // output keys bare (`definitions: { User: {...} }`), while this file's own
+  // hand-built test fixtures (`compose-schemas.spec.ts`, matching
+  // `validateSchemaRefs`'s own doc example) key `$defs` by the full ref-URI
+  // directly (`$defs: { '#/$defs/User': {...} }`). Detect which form a given
+  // entry already is (its key already starts with `#/`) instead of blindly
+  // prefixing, so real-generator bare names get the `#/<defKey>/` prefix
+  // added while already-qualified hand-built keys aren't double-prefixed.
   const allDefs: Record<string, SchemaNode> = {};
   const collectDefs = (node: Record<string, unknown>): void => {
-    const defs = node['$defs'] as Record<string, SchemaNode> | undefined;
-    if (defs) Object.assign(allDefs, defs);
+    for (const defKey of ['definitions', '$defs'] as const) {
+      const defs = node[defKey] as Record<string, SchemaNode> | undefined;
+      if (!defs) continue;
+      for (const [name, def] of Object.entries(defs)) {
+        const refUri = name.startsWith('#/') ? name : `#/${defKey}/${name}`;
+        allDefs[refUri] = def;
+      }
+    }
   };
   for (const fnSchema of Object.values(domainSchemas.schemas)) {
     collectDefs(fnSchema.input);
@@ -160,6 +184,19 @@ export function composeSchemas(
     const safe =
       fnSchema.safe === true || isPrimitiveOnlyInputSchema(fnSchema.input);
 
+    // BUG-APIGEN-029: `fnSchema.input`'s own `definitions`/`$defs` (hoisted by
+    // extract.ts's `hoistNestedDefs` from param fragments that needed an
+    // internal `$ref`, e.g. self-referential/recursive complex types) must
+    // land on THIS object — the actual document root `ajv.compile(schema.input)`
+    // resolves `$ref`s against — not merely somewhere inside `dataSchema`,
+    // which sits one level deeper once wrapped in the `data` envelope below.
+    const inputDefinitions = fnSchema.input['definitions'] as
+      | Record<string, unknown>
+      | undefined;
+    const inputDollarDefs = fnSchema.input['$defs'] as
+      | Record<string, unknown>
+      | undefined;
+
     result[fnName] = {
       input: {
         type: 'object',
@@ -176,6 +213,8 @@ export function composeSchemas(
           Object.keys(envelopeProperties),
           Object.keys(domainProperties).length > 0
         ),
+        ...(inputDefinitions ? { definitions: inputDefinitions } : {}),
+        ...(inputDollarDefs ? { $defs: inputDollarDefs } : {}),
       },
       output: fnSchema.output,
       // Carry the ctx-param flag through to dispatch (BUG-APIGEN-001).

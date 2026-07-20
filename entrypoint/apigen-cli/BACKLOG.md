@@ -127,54 +127,6 @@ ask/analysis: `apigen-engine-runtime/src/lib/api-package.ts:61`,
 
 ## Open
 
-### BUG-APIGEN-029 (Open, filed not fixed) — `$ref` resolution / ajv strict-mode failures on complex external types (e.g. `better-sqlite3.Database`) at DISPATCH time, not extraction time — pre-existing, confirmed identical under both v1 and v2
-
-**Where:** the request-validation/dispatch layer consumed by `apigen-plugin-api-express`'s
-generated `routes.ts` (`dispatch()` in `@adhd/apigen-engine-runtime`, and/or
-whatever ajv instance validates the composed schema before invoking the
-handler — not root-caused to a specific file/line in this session, since it's
-out of scope for the v1-retirement task; filed for someone to pick up).
-
-**Symptom, reproduced during this task's required real-world verification**
-against `~/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts` (read-only
-reference): several routes 500 instead of dispatching successfully —
-`/memory/write` → `{"code":"internal","message":"can't resolve reference
-#/definitions/WriteParams from id #"}`; `/memory/memoryListProjects` /
-`/memory/memoryCurate` / `/memory/memoryListTopics` (all take a `db:
-BetterSqlite3.Database` param) → `{"code":"internal","message":"can't resolve
-reference #/definitions/BetterSqlite3.Database from id #"}`.
-
-**Confirmed NOT a regression from BUG-APIGEN-028/BUG-APIGEN-CORE-005 (this
-session's v1-retirement work):** started a server on the OLD, unfixed v1 2-route
-path (`main` before this session's changes, no flags — the exact pre-existing
-default) and curled `/memory/write` directly — it 500s with the same class of
-error (`"can't resolve reference #/definitions/WriteParams from id #"`). This
-type of function was one of v1's original 2 visible routes, so this failure mode
-predates and is unrelated to the extraction-path fix; it just went unnoticed
-because v1 never exposed the `BetterSqlite3.Database`-taking routes at all (they
-were invisible re-exports), so those specific instances of the bug were
-literally unreachable before this session's fix made them reachable.
-
-**Confirmed the wiring itself is sound:** simpler previously-invisible-under-v1
-routes with fully-resolvable schemas dispatch correctly end-to-end —
-`POST /memory/memoryAllowlistRoot` (0 params) → `200`, real string response;
-`POST /memory/isPathInMemoryAllowlist` (1 string param) → `400` with a correct,
-detailed ajv validation error when called with the wrong param name, then `200`
-with the correct boolean result once corrected. Routing, dispatch, and
-JSON-Schema request validation all demonstrably work for schemas the
-`$ref`-resolution layer CAN resolve — this bug is specifically about schemas
-referencing certain complex/external types it cannot.
-
-**Impact:** low urgency for the CLI's core purpose (route generation/dispatch
-wiring, this session's actual task) but real: any source exposing functions
-that take third-party class instances (SQLite handles, etc.) as params —
-common in re-export-barrel files pulling in "everything", exactly the kind of
-file BUG-APIGEN-028 just made fully visible for the first time — will 500 on
-those specific routes. Worth fixing, but no repro/root-cause investigation
-performed this session (out of scope; not silently worked around, filed here
-per this task's explicit instruction to file anything found broken along the
-way that isn't being fixed).
-
 ### BUG-APIGEN-038 (Open, filed not fixed) — `buildNominalSchema`/`buildUnionSchema` (class-based nominal/union schema builders) are not wired into the real `extract()`/`composeSchemas()` pipeline for any function parameter
 
 **Discovered:** 2026-07-20, while fixing BUG-APIGEN-030 (AJV strict-mode

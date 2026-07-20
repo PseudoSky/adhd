@@ -35,6 +35,14 @@
 export type JSONSchema = Record<string, unknown> & {
   /** Reusable type definitions referenced via `$ref` (`#/$defs/Name`). */
   $defs?: Record<string, JSONSchema>;
+  /**
+   * Reusable type definitions under the draft-07 spelling, referenced via
+   * `$ref` (`#/definitions/Name`). `ts-json-schema-generator` — the only
+   * `$ref`/definitions producer in this codebase today — always emits this
+   * key, never `$defs`; both are recognized structurally by extract.ts's
+   * `hoistNestedDefs` / compose-schemas.ts (BUG-APIGEN-029) and by Ajv.
+   */
+  definitions?: Record<string, JSONSchema>;
   /** Reference to a definition, e.g. `#/$defs/User` (enables recursion). */
   $ref?: string;
 } & ApigenSchemaHints;
