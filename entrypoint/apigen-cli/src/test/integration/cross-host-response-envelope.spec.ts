@@ -374,12 +374,19 @@ describe('[cross-host-response-envelope] BUG-APIGEN-015 regression guard', () =>
         const tsBase = `http://127.0.0.1:${tsServer.port}/${NS}/price`;
         const pyBase = `http://127.0.0.1:${pyServer.port}/${NS}/price`;
 
-        // POST the same Decimal input to both servers.
         const body = JSON.stringify({ data: { v: '123.456' } });
         const headers = { 'Content-Type': 'application/json' };
 
         const [tsRes, pyRes] = await Promise.all([
-          fetch(tsBase, { method: 'POST', headers, body }),
+          // FEAT-APIGEN-022: `price(v: Decimal)` — a single bare-string-typed
+          // param (`type Decimal = string` per the TS fixture above) — now
+          // auto-hoists to GET on the TS host (api-fastify), since its
+          // wire shape is exactly `{type:'string'}`, indistinguishable from
+          // any other primitive param. Python's flask_server derivation is
+          // untouched by this change and still serves this op POST-only (its
+          // own `safe` inference is separate and still `False` here), so
+          // ONLY the TS request moves to GET/query-string.
+          fetch(`${tsBase}?v=123.456`, { method: 'GET' }),
           fetch(pyBase, { method: 'POST', headers, body }),
         ]);
 
@@ -444,11 +451,13 @@ describe('[cross-host-response-envelope] BUG-APIGEN-015 regression guard', () =>
 
         // Use Decimal `0.000` input → fixture returns `0.001` (0 + 0.001).
         // The TS fixture adds 0.001, so `0.000` → `"0.001"` on the wire.
-        const res = await fetch(`http://127.0.0.1:${tsPort}/${NS2}/price`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: { v: '0.000' } }),
-        });
+        // FEAT-APIGEN-022: `price(v: Decimal)`'s single bare-string param
+        // auto-hoists to GET (see the byte-identical test above) — query
+        // string, not a JSON body.
+        const res = await fetch(
+          `http://127.0.0.1:${tsPort}/${NS2}/price?v=0.000`,
+          { method: 'GET' }
+        );
 
         expect(res.status).toBe(200);
         const ct = res.headers.get('content-type') ?? '';

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { generateSchemas } from '@adhd/apigen-core-client';
+import { extract } from '@adhd/apigen-core-client';
 import { createApiPackage } from '@adhd/apigen-engine-runtime';
 import type { GeneratedSchemas, MiddlewareDef } from '@adhd/apigen-engine-runtime';
 
@@ -8,6 +8,11 @@ import type { GeneratedSchemas, MiddlewareDef } from '@adhd/apigen-engine-runtim
 // Teeth-guarded by audit-final-v2.schema-teeth (the spec MUST contain the discriminating
 // assertions `not.toContain('ctx')`, `toContain('session')`, `not.toHaveProperty('session')`),
 // so dod.3 (ctx excluded) and dod.4 (false override suppresses field) cannot pass vacuously.
+//
+// BUG-APIGEN-CORE-005 (v1 retirement): this test drove `generateSchemas()` (v1)
+// directly; that function is deleted. Ported to the v2 `extract()` — the SAME
+// extraction pipeline now backing production `generate`/`run` — over the
+// exact same fixture and the exact same [inv:ctx-name-only] assertion.
 
 const realApi = fileURLToPath(
   new URL('../fixtures/real-api.ts', import.meta.url)
@@ -15,10 +20,11 @@ const realApi = fileURLToPath(
 
 describe('[dod.3] schema generation excludes ctx', () => {
   it('excludes ctx from every generated param schema (getUser has `ctx` first param)', async () => {
-    const { schemas } = await generateSchemas({ sourceFile: realApi });
-    const props = (
-      schemas['getUser']?.input as { properties?: Record<string, unknown> }
-    )?.properties;
+    const ops = await extract({ sourceFile: realApi });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'getUser');
+    expect(op, 'getUser operation must be extracted').toBeDefined();
+    const props = (op?.input as { properties?: Record<string, unknown> })
+      ?.properties;
     expect(props).toBeDefined();
     // ctx is a framework param, never a domain input — it must NOT appear in the schema.
     expect(Object.keys(props as Record<string, unknown>)).not.toContain('ctx');

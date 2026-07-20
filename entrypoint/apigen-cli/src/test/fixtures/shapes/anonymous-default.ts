@@ -1,15 +1,15 @@
 // Export-shape matrix fixture — Shape 5: anonymous default export.
 //
-// `export default (x) => ...` — there is NO exported symbol name. The v2
-// extractor must SYNTHESISE a stable id from the filename:
-//   normalizeFileName('anonymous-default.ts') = 'anonymous-default'
-//   → synthesized symbol 'anonymous_default_default'
-// The synthesized id must be deterministic (same file → same id) so a generated
-// client stays stable across runs.
+// `export default (x) => ...` — there is NO exported symbol name.
+// BUG-APIGEN-033: the op leaf name MUST be the literal `'default'` — that's
+// the real runtime `.name` ECMAScript's NamedEvaluation rule gives this
+// function (not a filename-derived synthetic id), since that's the only key
+// `buildFnTable()` can ever resolve it under at dispatch time. `fileSegment`
+// still disambiguates the op's `id` (`shapes/anonymous-default/default`);
+// only the dispatch key itself is `'default'`.
 
 export default (n: number): number => n * 2;
 
 export const __samples__: Record<string, Record<string, unknown>> = {
-  // The synthesized op takes one positional arg `n`.
-  anonymous_default_default: { n: 21 },
+  default: { n: 21 },
 };

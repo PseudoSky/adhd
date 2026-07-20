@@ -24,7 +24,6 @@ import * as path from 'node:path';
 import {
   extract,
   composeSchemas,
-  generateSchemas,
   createExtractionSession,
 } from '@adhd/apigen-core-client';
 import type {
@@ -32,6 +31,7 @@ import type {
   Operation,
   Descriptor,
   ComposedSchemas,
+  GeneratedSchemas,
   ExportMode,
   Logger,
   PluginInput,
@@ -57,9 +57,20 @@ export interface SourceEntry {
   /** Absolute path to the source file. */
   file: string;
   /**
-   * Export mode for this source. Defaults to `{ type: 'named' }` when omitted.
-   * Per-source because a single `run` may compose multiple differently-shaped
-   * sources.
+   * Export mode for this source — scopes which of the fully-extracted
+   * operations are actually composed into `packageSchemas` / served
+   * (BUG-APIGEN-034 fix). v2's `extract()` walks the FULL export-shape
+   * matrix (named, default, named-object, CJS — see extract.ts's header
+   * comment) unconditionally in a single pass, unlike v1's three
+   * mutually-exclusive extractors (`extractNamed`/`extractDefault`/
+   * `extractNamedObject`); `buildDescriptor()`'s Step 5 restores the same
+   * effective scoping by reclassifying each `Operation` by its `path` shape
+   * (see `opMatchesExportMode()`) rather than by re-running a separate
+   * extraction pass. Does NOT affect `descriptor.operations` (collision
+   * check, `--use` mount plugins) — only the served surface — matching v1's
+   * own behaviour where the collision-check step never respected
+   * `exportMode` either. Omitted → no scoping (all extracted operations are
+   * served); this is what `generate-registry`/`run-registry` rely on today.
    */
   exportMode?: ExportMode;
   /**
@@ -69,6 +80,16 @@ export interface SourceEntry {
   namespace?: string;
   /** Explicit tsconfig.json path.  Resolved per source file when omitted. */
   tsconfig?: string;
+  /**
+   * Import specifier written into generated code for this source, e.g. an
+   * npm package name (`'@adhd/foo'`) instead of the absolute extraction
+   * path. Defaults to `file` when omitted — true for the single-source
+   * `generate`/`run` CLI commands, where the resolved source path IS the
+   * import path. `generate-registry`/`run-registry` set this explicitly:
+   * their package discovery resolves a physical entry file for extraction
+   * (`file`) that differs from the package's published import specifier.
+   */
+  importPath?: string;
 }
 
 /**
@@ -217,10 +238,22 @@ export function loadOverrideConfig(
 // Core orchestration
 // ---------------------------------------------------------------------------
 
+/** Per-source extraction result: the resolved namespace + its operations. */
+interface SourceExtraction {
+  namespace: string;
+  ops: Operation[];
+}
+
 /**
  * Extract canonical `Operation[]` from a single source file.
  *
  * Uses `@adhd/apigen-core-client's v2 `extract()` function.
+ *
+ * Returns the resolved `namespace` alongside the operations — the ONLY
+ * place `resolveNamespace()` is called for a given source, so downstream
+ * consumers (Step 5's `packageSchemas` grouping) key off the exact same
+ * namespace `extract()` stamped onto every `Operation.namespace`, with no
+ * risk of the two computations drifting.
  *
  * @param entry  - The source entry describing the file and extraction options.
  * @param logger - Optional logger.
@@ -229,7 +262,7 @@ async function extractSource(
   entry: SourceEntry,
   logger?: Logger,
   session?: ExtractionSession
-): Promise<Operation[]> {
+): Promise<SourceExtraction> {
   const lang = detectLang(entry.file);
 
   if (lang === 'ts') {
@@ -249,7 +282,7 @@ async function extractSource(
       `extracted ${ops.length} operations from ${path.basename(entry.file)}`
     );
     logger?.debug({ ops: ops.map((o) => o.id) }, 'operation ids');
-    return ops;
+    return { namespace, ops };
   }
 
   // Future hosts: shell to apigen-<lang>-extractor subprocess → parse JSON.
@@ -272,6 +305,50 @@ export function mergeOperations(perSourceOps: Operation[][]): Operation[] {
 }
 
 /**
+ * BUG-APIGEN-034: restores v1's `--export <mode>` scoping of the SERVED
+ * surface. v1 ran exactly one of three mutually-exclusive extractors
+ * (`extractNamed`/`extractDefault`/`extractNamedObject`) per `exportMode`;
+ * v2's `extract()` walks the full export-shape matrix unconditionally (see
+ * extract.ts's header comment), so this reclassifies each already-extracted
+ * `Operation` by `path` shape and filters Step 5's schema composition only —
+ * `descriptor.operations` (collision-check, `--use` mount plugins) stays
+ * unscoped, matching pre-v1-retirement behaviour (the old collision-check
+ * step never respected `exportMode` either — only what actually got SERVED
+ * did).
+ *
+ * Path-shape correspondence (extract.ts's six-shape matrix):
+ *   - `'named'`       → `path.length === 2` (shapes 1/2: a plain named
+ *     function/const export). This shape is also produced by shape 6 (a CJS
+ *     `module.exports` property) and shape 4's bare
+ *     `export default function foo(){}` form — neither is distinguishable
+ *     from a plain named export via `path` alone, since `Operation` carries
+ *     no export-shape discriminator (that would require extending
+ *     `extract()`/`Operation` itself — out of scope here, filed as a
+ *     follow-up). v1 never supported CJS sources or a bare default-fn-decl
+ *     under ANY `--export` mode (see extract.ts's shape 4/6 comments), so
+ *     folding them into `'named'` is a strict superset of v1's true
+ *     `extractNamed` coverage, never a subset: nothing v1 used to serve
+ *     under `--export` (omitted) goes missing here.
+ *   - `'default'`     → `path.length === 3 && path[1].raw === 'default'`
+ *     (shape 4's default-OBJECT branch only, e.g. `export default { a, b }`).
+ *     v1's `extractDefault` covered EXCLUSIVELY this object-literal
+ *     default-export form — never a bare `export default function foo(){}`
+ *     (shape 4's fn-decl branch) or an anonymous default fn (shape 5), both
+ *     new in v2 with no v1 predecessor — so excluding them here matches v1's
+ *     actual historical coverage exactly.
+ *   - `'named-object'` → `path.length === 3 && path[1].raw === mode.name`
+ *     (shape 3: `export const <mode.name> = { ... }`).
+ */
+export function opMatchesExportMode(op: Operation, mode: ExportMode): boolean {
+  if (mode.type === 'named') return op.path.length === 2;
+  if (mode.type === 'default') {
+    return op.path.length === 3 && op.path[1]?.raw === 'default';
+  }
+  // 'named-object'
+  return op.path.length === 3 && op.path[1]?.raw === mode.name;
+}
+
+/**
  * Build the unified `OrchestratorDescriptor` from a set of source entries.
  *
  * Steps:
@@ -279,7 +356,11 @@ export function mergeOperations(perSourceOps: Operation[][]): Operation[] {
  *   2. Extract canonical `Operation[]` per source (v2 extract).
  *   3. Merge into one list.
  *   4. Run the collision check (SPEC §5 uniqueness invariant).
- *   5. Build per-source `ComposedSchemas` for the v1 plugin surface.
+ *   5. Derive per-source `ComposedSchemas` (the plugin-facing surface every
+ *      `OutputPlugin.generate()`/`run()` actually dispatches against) FROM
+ *      the operations already extracted in step 2 — see the note on Step 5
+ *      below for why this must not re-extract. Scoped per-source by
+ *      `SourceEntry.exportMode` (BUG-APIGEN-034) via `opMatchesExportMode()`.
  *
  * @param opts - Orchestrator options.
  */
@@ -296,19 +377,17 @@ export async function buildDescriptor(
 
   // One shared extraction session for the whole run: one ts-morph Project per
   // tsconfig (lib.d.ts parses once, not twice per source), one built schema
-  // generator per file, and every (file, typeText) schema computed once — the
-  // step-5 generateSchemas pass below re-reads the exact types extract()
-  // already resolved, so with the shared session it is nearly free.
+  // generator per file, and every (file, typeText) schema computed once.
   // Disposed in `finally` so a one-shot CLI run retains nothing.
   const session = createExtractionSession();
   try {
     // --- Step 1+2: detect + extract per source -------------------------------
-    const perSourceOps: Operation[][] = await Promise.all(
+    const perSource: SourceExtraction[] = await Promise.all(
       sources.map((entry) => extractSource(entry, logger, session))
     );
 
     // --- Step 3: merge -------------------------------------------------------
-    const operations = mergeOperations(perSourceOps);
+    const operations = mergeOperations(perSource.map((r) => r.ops));
     logger?.info(
       `merged ${operations.length} total operations from ${sources.length} source(s)`
     );
@@ -324,11 +403,35 @@ export async function buildDescriptor(
       throw err;
     }
 
-    // --- Step 5: build per-source ComposedSchemas for v1 plugin surface ------
-    // We use the existing v1 pipeline (generateSchemas → composeSchemas) because
-    // the v1 OutputPlugin interface speaks ComposedSchemas, not Operation[].
-    // The v2 Descriptor (Operation[]) is the canonical form; ComposedSchemas is a
-    // derived v1-compat projection.
+    // --- Step 5: derive per-source ComposedSchemas from `operations` ---------
+    //
+    // BUG-APIGEN-CORE-005 (v1 retirement): this step used to call the v1
+    // `generateSchemas()` a SECOND time here — an entirely independent
+    // extraction pass, still driven by the buggy re-export-blind v1
+    // extractors, that silently overwrote what steps 1-4 had already
+    // correctly extracted. Every `OutputPlugin.generate()`/`run()` dispatches
+    // against `pkg.schemas` (this step's output), not `descriptor.operations`
+    // — so a re-export-heavy source produced a correct "merged 140 total
+    // operations" log line (from step 3) while the ACTUAL generated/served
+    // routes were built from the v1 extractor's 2 physically-local functions.
+    // Verified empirically pre-fix: `generate --v2` against memory-core's
+    // 40-file re-export barrel logged "merged 140 total operations" but wrote
+    // a routes.ts with exactly 2 routes.
+    //
+    // Fix: group the ALREADY-EXTRACTED `operations` by namespace and adapt
+    // each `action`-kind Operation's `{input, output, hasCtx}` — the same
+    // shape v1's `GeneratedSchemas.schemas[fnName]` carried — into the
+    // existing (extractor-independent, pure) `composeSchemas()`. One
+    // canonical extraction pass now backs both `descriptor.operations` and
+    // `packageSchemas`; they can never again disagree.
+    //
+    // `query`/`constructor`/`instance-method` operations are intentionally
+    // excluded here (as v1 always was): `ComposedSchemas` entries are
+    // dispatched by looking up a live function in `buildFnTable(mod)`
+    // (`@adhd/apigen-engine-runtime`), which only picks up `typeof === 'function'`
+    // exports — a `query` is a serializable-data const, not callable, and
+    // `constructor`/`instance-method` come from the separate `extractClasses()`
+    // path (SPEC §10), not wired into this orchestrator.
     const packageSchemas = new Map<
       string,
       {
@@ -338,26 +441,84 @@ export async function buildDescriptor(
       }
     >();
 
-    for (const entry of sources) {
-      const namespace =
-        entry.namespace ??
-        resolveNamespace(entry.file, { tsconfig: entry.tsconfig });
-      const tsconfig = resolveTsconfig(entry.file, entry.tsconfig);
-
-      logger?.info(`composing schemas for ${path.basename(entry.file)}`);
-      const generated = await generateSchemas({
-        sourceFile: entry.file,
-        exportMode: entry.exportMode ?? { type: 'named' },
+    // Seed one group per source (in source order). See the BUG-APIGEN-035
+    // guard immediately below: a namespace collision now throws rather than
+    // silently overwriting the earlier source's group.
+    const groups = new Map<
+      string,
+      {
+        namespace: string;
+        importPath: string;
+        generated: GeneratedSchemas;
+        exportMode?: ExportMode;
+      }
+    >();
+    // BUG-APIGEN-035: a namespace collision across sources would otherwise
+    // silently last-source-wins via plain `Map.set()` — one source's
+    // operations vanish from `packageSchemas` with no error, no warning.
+    // Not currently reachable (registry namespaces come from a single
+    // `fs.readdirSync`, inherently unique; `generate`/`run` only ever pass
+    // one source — BACKLOG BUG-APIGEN-035), but undocumented as a caller
+    // invariant. Guard explicitly, mirroring `serve.ts`'s existing
+    // duplicate-namespace check (`resolveHosts()`, serve.ts:164-171) for
+    // consistency across the CLI.
+    for (let i = 0; i < sources.length; i++) {
+      const entry = sources[i];
+      const namespace = perSource[i].namespace;
+      if (groups.has(namespace)) {
+        throw new Error(
+          `apigen-orchestrator: duplicate namespace "${namespace}" — two sources ` +
+            `resolve to the same namespace; the second source's operations would ` +
+            `silently overwrite the first's in packageSchemas. Give one source an ` +
+            `explicit, distinct \`namespace\` to disambiguate.`
+        );
+      }
+      groups.set(namespace, {
         namespace,
-        tsconfig,
-        session,
+        importPath: entry.importPath ?? entry.file,
+        generated: { metadata: { namespace, phase: '' }, schemas: {} },
+        exportMode: entry.exportMode,
       });
-      const schemas = composeSchemas(generated, [], {});
+    }
 
-      packageSchemas.set(namespace, {
-        id: namespace,
+    for (const op of operations) {
+      if (op.kind !== 'action') continue;
+      const group = groups.get(op.namespace.raw);
+      if (!group) continue; // defensive — every op's namespace comes from a seeded source
+      // BUG-APIGEN-034: scope which ops actually get composed/served per the
+      // source's `--export <mode>` — see `opMatchesExportMode()` above.
+      if (group.exportMode && !opMatchesExportMode(op, group.exportMode)) {
+        continue;
+      }
+      // The flat dispatch-table key: always the terminal path segment's raw
+      // spelling — matches v1's `fn.name` for every shape (named, renamed,
+      // re-exported, named-object property, default-object property, CJS
+      // property, anonymous default) because extract.ts's `opPath` always
+      // ends in a segment built from the same name it also passes as the
+      // op's own `exportName`/`propName` argument.
+      const fnName = op.path[op.path.length - 1].raw;
+      group.generated.schemas[fnName] = {
+        input: op.input,
+        output: op.output,
+        ...(op.hasCtx ? { hasCtx: true } : {}),
+        // BUG-APIGEN-025: thread op.safe through so composeSchemas() can
+        // actually stamp a meaningful x-apigen-safe (previously never wired
+        // this far — see compose-schemas.ts).
+        safe: op.safe,
+      };
+    }
+
+    for (const group of groups.values()) {
+      logger?.info(
+        `composing schemas for namespace "${group.namespace}" (${
+          Object.keys(group.generated.schemas).length
+        } action(s))`
+      );
+      const schemas = composeSchemas(group.generated, [], {});
+      packageSchemas.set(group.namespace, {
+        id: group.namespace,
         schemas,
-        importPath: entry.file,
+        importPath: group.importPath,
       });
     }
 
@@ -418,16 +579,23 @@ export async function orchestrateGenerate(
  * @param opts          - Orchestrator options.
  * @param plugin        - The selected output plugin (`--type`).
  * @param buildFnTables - Async function that imports each source and returns
- *                        `(fns, createClient)` for that source.  Injected by
- *                        the command layer so the orchestrator stays testable
- *                        without live imports.
+ *                        `(fns, createClient)` for that source.  Receives the
+ *                        source's composed `ComposedSchemas` too, so the
+ *                        command layer can run schema-driven precondition
+ *                        guards (e.g. the `decimal.js` optional-peer-dep
+ *                        check) before importing the live module.  Injected
+ *                        by the command layer so the orchestrator stays
+ *                        testable without live imports.
  * @param signal        - Abort signal forwarded from the process SIGINT handler.
  * @param pluginOpts    - Plugin-level options.
  */
 export async function orchestrateRun(
   opts: OrchestratorOptions,
   plugin: OutputPlugin,
-  buildFnTables: (entry: SourceEntry) => Promise<{
+  buildFnTables: (
+    entry: SourceEntry,
+    schemas: ComposedSchemas
+  ) => Promise<{
     fns: Record<string, (...args: unknown[]) => unknown>;
     createClient: (envelope: Record<string, unknown>) => Promise<object>;
   }>,
@@ -440,15 +608,28 @@ export async function orchestrateRun(
 
   const descriptor = await buildDescriptor(opts);
 
+  // Map each source back to its resolved namespace — NOT its (possibly
+  // overridden, see `SourceEntry.importPath`) import specifier — since
+  // `packageSchemas` is keyed by namespace (`p.id`). Matching on `importPath`
+  // would silently fail to resolve for `generate-registry`/`run-registry`
+  // sources, whose `importPath` is a published npm specifier distinct from
+  // the physical `file` used for extraction.
+  const entryByNamespace = new Map<string, SourceEntry>();
+  for (const entry of opts.sources) {
+    const namespace =
+      entry.namespace ?? resolveNamespace(entry.file, { tsconfig: entry.tsconfig });
+    entryByNamespace.set(namespace, entry);
+  }
+
   const packages: RunInput['packages'] = await Promise.all(
     Array.from(descriptor.packageSchemas.values()).map(async (p) => {
-      const entry = opts.sources.find((s) => s.file === p.importPath);
+      const entry = entryByNamespace.get(p.id);
       if (!entry) {
         throw new Error(
-          `apigen-orchestrator: internal error — no source entry for ${p.importPath}`
+          `apigen-orchestrator: internal error — no source entry for namespace "${p.id}"`
         );
       }
-      const { fns, createClient } = await buildFnTables(entry);
+      const { fns, createClient } = await buildFnTables(entry, p.schemas);
       return {
         id: p.id,
         schemas: p.schemas,
@@ -465,6 +646,10 @@ export async function orchestrateRun(
     options: pluginOpts,
     signal,
     logger: opts.logger,
+    // BUG-APIGEN-024: thread the real merged Operation[] through so `--use`
+    // mount plugins (e.g. apigen-plugin-openapi) can build their Descriptor
+    // from actual extracted operations instead of an empty stub.
+    operations: descriptor.operations,
   };
 
   await plugin.run(input);

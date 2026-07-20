@@ -2,9 +2,11 @@ import { Command } from 'commander';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { discoverPackages } from '../registry';
-import { runPipeline } from '../pipeline';
 import { buildCliLogger } from '../logging';
-import type { OutputPlugin, PluginInput } from '@adhd/apigen-core-client';
+import { orchestrateGenerate } from '../orchestrator';
+import type { SourceEntry } from '../orchestrator';
+import type { OutputPlugin } from '@adhd/apigen-core-client';
+import { describeTypeOption, unknownTypeError } from '../plugin-registry';
 
 /** Parse --opt key=value pairs into an options record. */
 function parseOptPairs(pairs: string[]): Record<string, unknown> {
@@ -26,10 +28,7 @@ export function registerGenerateRegistryCommand(
       '--packages-dir <path>',
       'Directory containing package subdirectories'
     )
-    .requiredOption(
-      '--type <plugin-id>',
-      'Output target: mcp | api-fastify | api-express | cli | jsonschema'
-    )
+    .requiredOption('--type <plugin-id>', describeTypeOption(plugins))
     .requiredOption('--out-dir <path>', 'Output directory')
     .option(
       '--tag <tag>',
@@ -65,11 +64,7 @@ export function registerGenerateRegistryCommand(
       }) => {
         const plugin = plugins[opts.type];
         if (!plugin) {
-          throw new Error(
-            `Unknown --type: ${opts.type}. Available: ${Object.keys(
-              plugins
-            ).join(', ')}`
-          );
+          throw unknownTypeError(opts.type, plugins);
         }
 
         const logger = buildCliLogger(program);
@@ -83,39 +78,48 @@ export function registerGenerateRegistryCommand(
           excludeTags: opts.excludeTag,
         });
 
-        const pkgEntries: PluginInput['packages'] = [];
+        // Build one SourceEntry per discovered package — extraction reads the
+        // physical entry file (`file`) but the generated code imports the
+        // package's published specifier (`importPath`), which differ for a
+        // real npm package (@adhd/foo vs an absolute path to its index.ts).
+        // `namespace` is pinned to the directory-derived package id (nx tag
+        // discovery convention) rather than left to tsconfig-folder inference
+        // — this is the ONLY package-discovery behavior this command owns;
+        // everything past this point (extraction, collision-check, codegen)
+        // is the same v2 orchestrator every other command uses.
+        const sources: SourceEntry[] = [];
         for (const meta of discovered) {
-          // Find the main entry file for the package
           const entryFile = findEntryFile(meta.dir);
           if (!entryFile) continue;
-
-          const { schemas } = await runPipeline({
-            sourceFile: entryFile,
-            tsconfig: opts.tsconfig,
-            logger,
-          });
-          pkgEntries.push({
-            id: meta.id,
-            schemas,
+          sources.push({
+            file: entryFile,
+            namespace: meta.id,
             importPath: meta.importPath,
+            tsconfig: opts.tsconfig,
           });
         }
 
-        const input: PluginInput = {
-          packages: pkgEntries,
-          outputDir,
-          options,
-          logger,
-        };
+        if (sources.length === 0) {
+          logger.info(
+            `no packages with an entry file found under ${packagesDir} — nothing to generate`
+          );
+          return;
+        }
 
-        const output = await plugin.generate(input);
+        const { pluginOutput } = await orchestrateGenerate(
+          { sources, logger },
+          plugin,
+          outputDir,
+          options
+        );
+
         fs.mkdirSync(outputDir, { recursive: true });
-        for (const file of output.files) {
+        for (const file of pluginOutput.files) {
           const dest = path.join(outputDir, file.path);
           fs.mkdirSync(path.dirname(dest), { recursive: true });
           fs.writeFileSync(dest, file.content);
         }
-        logger.info(`wrote ${output.files.length} files to ${outputDir}`);
+        logger.info(`wrote ${pluginOutput.files.length} files to ${outputDir}`);
       }
     );
 }

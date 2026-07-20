@@ -58,471 +58,355 @@ by moving `decimal.js` from `dependencies` to `devDependencies` in
 
 Citations: [self-verified 2026-07-19: `entrypoint/apigen-cli/vite.config.ts:10,39`; `ls dist/apigen-cli/` (pre-fix) → only `default-tsconfig.json` present; `find dist/entrypoint/apigen-cli -iname "*tsconfig*"` (pre-fix) → no match, (post-fix) → `default-tsconfig.json` present; `entrypoint/apigen-cli/src/lib/resolve-tsconfig.ts:35-48` (three-candidate fallback + temp-file mitigation); `git log -1 --format=%ad -- entrypoint/apigen-cli/src/lib/default-tsconfig.json` → 2026-07-02]
 
-## Open
+### FEAT-APIGEN-023 — Zero-parameter, zero-envelope operations no longer require an empty `data: {}` (or full envelope) in the published schema — FIXED 2026-07-20
 
-### FEAT-APIGEN-019 — CLI doesn't discoverably list available `--type` plugins (help text stale, `run` commands give no options at all) — HIGH
+**Requested:** 2026-07-19 by the user, directly. **Ask:** a route/tool/command with
+no parameters shouldn't require a caller to send `data`, a body, an envelope, etc.
+— calling it should need nothing beyond the name/path.
 
-**Requested:** 2026-07-19 by the user, directly.
+**Root cause, confirmed:** not an oversight — a **named, deliberate invariant**
+(`[inv:data-wrapper-always-present]`) in `apigen-core-client/src/lib/
+compose-schemas.ts`. The outer composed schema's `required` array
+unconditionally included `'data'` (`required: [...envelopeRequired, 'data']`,
+pre-fix `compose-schemas.ts:143`) regardless of whether the function had any
+domain parameters, even though the *nested* `data` object's own `required` was
+already correctly conditional on `domainRequired.length > 0`
+(`compose-schemas.ts:136`). `composeSchemas()` is the single point that feeds
+every transport (MCP, api-express, api-fastify), so every truly zero-arg
+function's published `inputSchema` told every consumer `data` was mandatory,
+just one that happened to validate against `{}`. Confirmed a **schema/
+documentation issue only, not a runtime one** — every transport's decode path
+(`apigen-plugin-api-express/src/lib/run.ts:254,267`,
+`apigen-plugin-mcp/src/lib/run.ts:93,105`,
+`apigen-engine-runtime/src/lib/validate-layer.ts:157-160,239-241`) already
+defaults an omitted `data`/body/args to `{}` and synthesizes `{ data:
+call.domainArgs, ...call.envelope }` before validating, so the decode side
+needed no change — verified by reading each site, not assumed.
 
-**Ask:** the CLI should support listing the available `--type` plugin options; `--help` text
-should show them; and the error response on an incorrect `--type` should include the list.
+**Fix:** `compose-schemas.ts:143-146` — `'data'` is now only added to the
+outer `required` array when `domainRequired.length > 0` (mirrors the exact
+condition already used for the nested `data` schema's own `required`), i.e.
+`required: [...envelopeRequired, ...(domainRequired.length > 0 ? ['data'] :
+[])]`. The `data` *property* itself is still always declared (`{"data": {}}`
+still validates for callers who send it out of habit), and middleware-
+contributed envelope fields are still required on their own merits,
+independent of whether `data` is required — only zero-param, zero-required-
+envelope operations get the relaxed schema; parameterized operations are
+unaffected.
 
-**Current state, verified against `entrypoint/apigen-cli/src/`:**
+**Tests:** `apigen-core-client/src/test/compose-schemas.spec.ts` — updated
+`[schema-composition.1]` and `[schema-composition.4]` (which had baked in the
+old unconditional-`data`-required behavior for zero-param functions, so they
+would have masked this exact bug) plus a new `FEAT-APIGEN-023` describe block
+(7 cases): zero-param/zero-middleware function has an empty top-level
+`required`; `{}` satisfies it; the `data` property is still declared and
+`{"data": {}}` still validates; a parameterized function's `required` still
+contains `'data'` (regression control); middleware envelope fields remain
+required independent of `data` for both parameterized and zero-param
+functions; a zero-param function with its only middleware overridden `false`
+has a fully empty `required` array. All pre-fix assertions were hand-verified
+to fail against the pre-fix code path before the fix landed.
 
-1. **No list command/flag exists at all.** There's no `apigen list-types`, no `--list`, nothing
-   — the only way to discover valid `--type` values today is to read source, hit an error, or
-   already know them.
-2. **`generate`'s `--type` help text is a hardcoded, already-stale string**
-   (`generate.ts:189-190`: `'Output target: mcp | api-fastify | api-express | cli |
-   jsonschema'`). It's missing `py-flask` and `py-grpc` — both of which ARE real keys in the
-   actual `plugins` map built in `index.ts:16-30` (`mcp`, `jsonschema`, `api-fastify`,
-   `api-express`, `cli`/`cli-output`, `py-flask`, `py-grpc` — 7 distinct targets, 8 keys
-   counting the `cli`/`cli-output` alias). It's a hand-maintained string, not derived from the
-   plugin registry, so it drifts every time a plugin is added — confirmed it already has.
-3. **`run`'s and `run-registry`'s `--type` help text is worse — zero information.**
-   `run.ts:215` and `run-registry.ts:42` both just say `'Output target'`, no options listed
-   at all.
-4. **Error behavior is inconsistent across commands, and one path is actively misleading.**
-   `generate.ts:242-248` and `generate-registry.ts:69` DO already throw `Unknown --type: X.
-   Available: ${Object.keys(plugins).join(', ')}` — this part partially exists and works
-   correctly today. But `run.ts:260-261` and `run-registry.ts:74-75` use
-   `if (!plugin?.run) throw new Error('Plugin ${opts.type} does not support run mode')` — a
-   single check that conflates two different failures with one message: a genuinely unknown/
-   misspelled `--type` gets the SAME wording as a real, valid plugin (e.g. `jsonschema`,
-   `cli` — both documented generate-only) that legitimately has no `run()`. A typo'd `--type`
-   reads as "this plugin exists but doesn't support run" instead of "this isn't a recognized
-   plugin at all — did you mean one of: …". Neither `run` path lists available options.
+**Verified:** `nx test apigen-core-client` 252/252 passing (incl. new/updated
+cases); `nx test apigen-engine-runtime` 131/131 passing (validate-layer decode
+path unaffected, confirmed not just assumed); `nx run-many -t test -p
+apigen-plugin-api-express apigen-plugin-api-fastify apigen-plugin-mcp
+apigen-plugin-jsonschema apigen-plugin-cli-output apigen-cli` 134/134 passing
+across all 17 test files in those six downstream `ComposedSchemas` consumers —
+zero regressions.
 
-   **Live field confirmation, 2026-07-19:** the user ran `apigen run --type express ...`
-   (a natural guess — the real key is `api-express`, no bare `express` alias exists) and hit
-   exactly this: `Error: Plugin express does not support run mode` at
-   `dist/entrypoint/apigen-cli/index.js:14:9868`. Reproduced independently, byte-for-byte
-   identical, via `node dist/entrypoint/apigen-cli/index.js run --type express --source
-   packages/apigen/apigen-core-client/src/index.ts --namespace test`. This is the concrete
-   case the fix needs to handle: a plausible near-miss of a real plugin id (`express` vs.
-   `api-express`) getting a misleading "doesn't support run mode" instead of "unknown --type,
-   did you mean api-express? Available: …".
-
-**Why this matters beyond convenience:** two of the seven target plugins imported into
-`plugins` — `@adhd/apigen-plugin-py-flask` and `@adhd/apigen-plugin-py-grpc`
-(`index.ts:12-13`) — are NOT published on the public npm registry (confirmed via `npm view`,
-both 404). Those imports are unconditional, top-level, eager `import` statements, so for any
-consumer who actually installed `@adhd/apigen-cli` from npm, they'd never resolve and the CLI
-would fail before even reaching argument parsing — no `--help`, no error message, nothing. A
-truly registry-driven list/help/error mechanism should be built to reflect what's *actually
-loaded*, not a static ideal list — which would also surface this exact problem clearly to a
-real user instead of an opaque module-resolution crash.
-
-**Suggested fix:** derive the `--type` help text and all error-path option lists from a single
-source of truth (the `plugins` record itself, or a shared registry module `generate.ts`/
-`generate-registry.ts`/`run.ts`/`run-registry.ts` all import from) so they can never drift
-again; add an explicit `apigen list-types` (or `--list-types`) command; and split `run`'s
-`!plugin?.run` check into two distinct branches — "unknown `--type`: X. Available: …" vs.
-"plugin X exists but doesn't support run mode. Generate-only plugins: …" — each listing the
-relevant subset.
-
-**Status:** OPEN, HIGH.
-
-Citations: [self-verified 2026-07-19: `entrypoint/apigen-cli/src/index.ts:6-30` (plugins
-map + eager imports), `src/lib/commands/generate.ts:189-190,242-248` (stale help text,
-existing dynamic error listing), `src/lib/commands/run.ts:215,260-261` (bare help text,
-conflated error), `src/lib/commands/run-registry.ts:42,74-75` (same pattern),
-`src/lib/commands/generate-registry.ts:30,69` (same dynamic-listing pattern as generate.ts);
-`npm view @adhd/apigen-plugin-py-flask`/`@adhd/apigen-plugin-py-grpc` → both 404]
-
-### BUG-APIGEN-017 — MCP tool schemas don't reject unknown properties
-
-**Reported:** 2026-07-06  
-**Source:** `scratch-agent-search` consumer (agent-browser project)
-
-**Observed:** Calling a zero-argument MCP function like `tripwireStatus` with an extraneous
-`{ data: { provider: "duckduckgo" } }` envelope was silently accepted. The extra property
-was ignored without error, so the caller never realized the mistake.
-
-**Root cause:** apigen-cli generates MCP input schemas without `additionalProperties: false`.
-The MCP SDK (and Zod, if used) silently discards unknown properties by default.
-
-**Impact:** Consumer mistakes are invisible — agents can pass invalid parameters and get
-a successful response back, with no indication the parameter was unused.
-
-**Suggested fix:** Generate input schemas with `additionalProperties: false` in the JSON
-Schema output, or configure the MCP server to reject unknown properties. This applies
-to the `dispatch` path in the generated server template and/or the runtime MCP adapter.
-
-**Affected tools:** All zero-argument functions (`listProviders`, `chromeStatus`,
-`tripwireStatus`, `launchChrome`) plus any function where extra params could silently
-be ignored.
-
-**Workaround (consumer side):** Add guard clauses to exported functions that log warnings
-for unexpected parameters. This was applied to `search-mcp-source.ts` in agent-browser.
-
----
-
-### BUG-APIGEN-018 — Tool descriptions don't include default parameter values
-
-**Reported:** 2026-07-06
-**Source:** scratch-agent-search MCP surface (`search-mcp-source.ts`)
-
-**Observed:** Functions have parameter defaults in their TypeScript signature
-(e.g. `search(provider = '', query = '', strategy = 'auto', ...)`), but the
-generated MCP tool input schema `description` fields don't communicate these
-defaults. A consumer calling `search()` doesn't know that `strategy` defaults
-to `"auto"`, `includeContent` to `false`, or `maxContentSize` to `0`.
-
-**Impact:** Consumers either guess defaults, hardcode them unnecessarily, or
-pass `undefined` for every optional parameter.
-
-**Suggested fix:** Include the JSDoc `@default` tag (or inline default value)
-in the generated parameter description. If the function parameter has a
-TypeScript initializer, apigen-cli should extract that value and emit it as
-`description: "... (default: auto)"` in the schema.
-
----
-
-### BUG-APIGEN-019 — Union return types produce weak MCP schemas
-
-**Reported:** 2026-07-06
-**Source:** scratch-agent-search MCP surface (`search-mcp-source.ts`)
-
-**Observed:** The `search()` function has a return type of
-`SearchResponse | Record<string, unknown>`. The first arm is the real result
-shape; the second arm is the help/no-query response. apigen-cli generates a
-schema that represents this as a very permissive `object` type, which gives
-consumers no structured information about what fields to expect in either case.
-
-**Impact:** Agents can't statically determine the response shape. They have
-to infer from runtime examples rather than from the tool schema itself.
-
-**Suggested fix:** Support discriminated union return types in the generated
-schema (e.g. `oneOf` with `discriminator`), or allow the consumer to define
-multiple return types per tool and let the schema reflect which fields
-appear under which `outcome` values.
-
----
-
-### BUG-APIGEN-020 — Generated tool schemas don't document the `data` envelope
-
-**Reported:** 2026-07-06
-**Source:** scratch-agent-search consumer (agent-browser project)
-
-**Observed:** apigen-cli wraps all function parameters in a `data` envelope
-for the MCP transport. The actual call structure is:
-```typescript
-callTool({ name: "search", arguments: { data: { provider: "npm", query: "test" } } })
-```
-But the generated tool name (`search_search`) and the `data` envelope convention
-are not documented in the tool descriptions or the server metadata. Consumers
-have to discover this from trial and error.
-
-**Impact:** Every new consumer spends a round-trip figuring out the calling
-convention. The `data` envelope and underscored tool names are apigen-specific
-conventions that differ from standard MCP tool usage.
-
-**Suggested fix:** Add the tool naming convention and data-envelope structure
-to either (a) the generated server metadata, (b) each tool's description
-string, or (c) a standard response from a meta-tool.
-
----
-
-### FEAT-APIGEN-022 — Auto-hoist actions with properly-typed primitive params to GET, across all HTTP api types
-
-**Requested:** 2026-07-19 by the user, directly.
-
-**Ask:** apigen should be able to project a function to `GET` automatically when its
-parameters are "properly typed" primitives, instead of requiring the manual
-`--opt http.verb.<id>=GET` override for every such function — and it should apply
-uniformly across every HTTP-emitting api type, not per-plugin.
-
-**Current state, verified:**
-
-1. **Verb is never derived from parameter types anywhere in the pipeline today** — only
-   from the categorical `kind` field, which is `'action'` for *every* function export
-   regardless of its signature. `kind: 'action'` hardcodes `safe: false`
-   (`apigen-core-client/src/lib/extract.ts:511-514`, comment `// action → false per §4` —
-   a fixed default, not an inference). `kind: 'query'` (→ `safe: true`, `extract.ts:540-543`)
-   is reserved for non-function serializable *data constants* — the extractor only reaches
-   it in the `else` branch after ruling out `ArrowFunction`/`FunctionExpression`/
-   `ObjectLiteralExpression` initializers (`extract.ts:261-275`); a function is never routed
-   there. `apigen-engine-naming`'s `project()` — the single source of truth for HTTP verb —
-   then derives the verb purely from `op.safe`: `op.safe ? 'GET' : 'POST'`
-   (`apigen-engine-naming/src/lib/naming.ts:140`). No parameter types are inspected by any
-   of this.
-2. **The only way to get `GET` today is the manual per-operation override**
-   (`--opt http.verb.<id>=GET` or an equivalent `--config` file entry, i.e.
-   `ProjectionConfig.http.verb`), consumed by an identical `httpVerb()` helper duplicated at
-   all four HTTP-transport call sites: `apigen-plugin-api-express/src/lib/run.ts:26-34` +
-   `apigen-plugin-api-express/src/lib/generate.ts:14-17`, and the fastify equivalents,
-   `apigen-plugin-api-fastify/src/lib/run.ts:25-34` (approx.) +
-   `apigen-plugin-api-fastify/src/lib/generate.ts:11-26`.
-3. **Even the manual override is unsafe for non-string params today.** The `GET` branch in
-   both `run.ts`s (`apigen-plugin-api-express/src/lib/run.ts:234-262`, fastify mirrors) and
-   both `generate.ts`s (`apigen-plugin-api-express/src/lib/generate.ts:92-106`,
-   `apigen-plugin-api-fastify/src/lib/generate.ts:103-121`) sources domain args straight
-   from `req.query`/`request.query` with a bare `as Record<string, unknown>` cast — no
-   parsing or coercion. The shared validate-Layer's Ajv instance is constructed with no
-   `coerceTypes` (`apigen-engine-runtime/src/lib/validate-layer.ts:51`:
-   `new Ajv({ allErrors: true })`), so any param typed `number`/`boolean`/`integer` arrives
-   as a raw query-string and fails its `type` check, hard-rejecting the call with
-   `ApiError{invalid_argument}` before the target function is ever dispatched. Confirmed by
-   code inspection this session, not yet reproduced against a live route — needs a spawned-
-   bin e2e regression fixture (same pattern as BUG-APIGEN-021's fix) before any of this
-   ships, both to prove the current break and to guard the eventual coercion fix.
-4. **"Properly typed primitives" needs a hard, explicit boundary** — query-string
-   serialization isn't reliable for anything else. `string`/`number`/`boolean`/`integer` are
-   safe; `array`/`object`/union/logical types (e.g. `decimal` as a wire string) are not
-   reliably round-trippable without a serialization convention apigen doesn't currently
-   define anywhere in this pipeline. Express's default `qs` query parser supports
-   bracket-notation nesting (`?a[x]=1`), but nothing here emits or documents that encoding,
-   and Fastify's default query parser doesn't support nested objects at all — so even if one
-   plugin were made to cope, behavior would diverge across "all api types" unless the
-   primitive-only boundary is enforced centrally.
-
-**Design risk to flag before implementing:** auto-hoisting by param shape alone conflates
-"GET-representable" with "safe/idempotent" — two different questions. apigen currently has
-**no signal anywhere** for whether a function has side effects; `kind: 'action'` is assigned
-to every function indiscriminately (point 1 above). A zero/primitive-arg function like
-`resetCounter(): Promise<void>` or `deleteUser(id: string)` is trivially "primitive-typed"
-by this proposal's own criterion, yet very much unsafe to expose as a cacheable,
-prefetchable, browser-history-and-proxy-logged `GET`. Hoisting purely on parameter shape,
-without *also* requiring an explicit safety signal, would silently make destructive actions
-GET-cacheable. This needs a design decision (e.g.: primitive-typing only relaxes the
-*param-shape precondition* for hoisting; the actual safe/unsafe decision still requires an
-explicit opt-in — a `kind: 'query'` extension once purity is inferable, or an explicit
-per-function marker — never an automatic default from typing alone).
-
-**Suggested fix (staged):**
-
-1. Add param-shape validation to the *existing* manual-override path first (reject or warn
-   when `--opt http.verb.<id>=GET` targets an operation with a non-primitive-typed param) —
-   closes the currently-broken manual path with the least risk, independent of auto-hoist.
-2. Add query-value coercion to the validate-Layer (Ajv `coerceTypes: true`, scoped to the
-   query-args validation pass only — must not affect body/POST validation) so primitive
-   params actually round-trip once `GET` is chosen, manually or automatically.
-3. Only then implement auto-hoisting, gated behind an explicit safety signal rather than
-   parameter shape alone (see design risk above) — never silently promote every
-   all-primitive-param function to `GET` by default.
-4. Implement the derivation once in `apigen-engine-naming`'s `project()` (already the single
-   source of truth for verb derivation) so all four call sites (express/fastify × run/
-   generate) inherit it automatically instead of needing four separate patches.
-
-**Status:** OPEN. Scope: `apigen-core-client` (extract.ts `kind`/`safe` derivation),
-`apigen-engine-naming` (`project()` verb default), `apigen-engine-runtime` (validate-Layer
-coercion), `apigen-plugin-api-express` (`run.ts`, `generate.ts`), `apigen-plugin-api-fastify`
-(`run.ts`, `generate.ts`).
-
-Citations: [session 2026-07-19, self-verified by direct file read:
-`apigen-core-client/src/lib/extract.ts:261-275,511-514,540-543`;
-`apigen-engine-naming/src/lib/naming.ts:10,140`;
-`apigen-core-client/src/lib/descriptor.ts:195-200`;
-`apigen-core-client/src/lib/descriptor.schema.json:54-56`;
-`apigen-plugin-api-express/src/lib/run.ts:26-34,234-286`;
-`apigen-plugin-api-express/src/lib/generate.ts:7-17,84-106`;
-`apigen-plugin-api-fastify/src/lib/run.ts:25-34(approx),271-313`;
-`apigen-plugin-api-fastify/src/lib/generate.ts:11-26,95-121`;
-`apigen-engine-runtime/src/lib/validate-layer.ts:51`;
-`entrypoint/apigen-cli/src/lib/orchestrator.ts:149-170` (override parsing)]
-
----
-
-### FEAT-APIGEN-023 — Zero-parameter, zero-envelope operations still require an empty `data: {}` (or full envelope) in the published schema
-
-**Requested:** 2026-07-19 by the user, directly.
-
-**Ask:** a route/tool/command with no parameters shouldn't require a caller to send
-`data`, a body, an envelope, etc. — calling it should need nothing beyond the
-name/path.
-
-**Current state, verified:** this is not an oversight — it is a **named, deliberate
-invariant** in the code, and the request conflicts with it directly.
-`apigen-core-client/src/lib/compose-schemas.ts:89` states:
-`// data: {} wrapper — always present, even for zero-param fns
-[inv:data-wrapper-always-present]`, and the outer composed schema unconditionally
-includes `'data'` in its `required` array regardless of whether the function has
-any parameters (`compose-schemas.ts:101-102`:
-`required: [...envelopeRequired, 'data']`). The *nested* `data` object's own
-`required` is correctly omitted when the function has no domain params
-(`compose-schemas.ts:95`: `...(domainRequired.length > 0 ? { required:
-domainRequired } : {})`), but the wrapper key itself is never optional — so the
-published `inputSchema` for a truly zero-arg function (e.g. `listProviders`,
-`tripwireStatus` — see BUG-APIGEN-017) still tells every consumer `data` is a
-required top-level property, just one that happens to validate against `{}`.
-`composeSchemas()` is the single point that feeds every transport
-(`apigen-engine-runtime/src/lib/api-package.ts:61`,
-`entrypoint/apigen-cli/src/lib/pipeline.ts:42`,
-`entrypoint/apigen-cli/src/lib/orchestrator.ts:355`), so this affects the
-generated/published schema for MCP, api-express, and api-fastify uniformly (and
-by extension anything else that reads `ComposedSchemas`).
-
-**Important distinction — this is a *schema/documentation* issue, not (yet) a
-runtime one.** At every transport actually inspected this session, an omitted
-body/args/data already defaults to `{}` at runtime and nothing crashes:
-- HTTP POST: `const { data = {} } = req.body ?? {}`
-  (`apigen-plugin-api-express/src/lib/run.ts:267`, fastify mirrors).
-- HTTP GET: `domainArgs: req.query as Record<string, unknown>` — an empty query
-  string is already `{}` (`apigen-plugin-api-express/src/lib/run.ts:254`).
-- MCP: `const { name, arguments: args = {} } = req.params;` then
-  `const domainData = (args['data'] ?? {})`
-  (`apigen-plugin-mcp/src/lib/run.ts:93,105`).
-- The validate-Layer itself always *synthesizes* `{ data: call.domainArgs,
-  ...call.envelope }` server-side before validating
-  (`apigen-engine-runtime/src/lib/validate-layer.ts:122-125`) — so `data` is
-  present in the object being validated regardless of what the wire caller sent.
-
-So the friction is specifically that the **published schema** (what an MCP host,
-an LLM tool-caller, or any strict schema-driven client reads to decide how to
-call the tool) asserts `data` is mandatory even for an operation with nothing to
-put in it — adding unnecessary ceremony/tokens for callers and, for any client
-that validates arguments against `inputSchema` before sending (unlike apigen's
-own permissive server-side defaults), a real hard requirement to send `{"data":
-{}}` for something that conceptually takes no input at all.
-
-**Suggested fix:** in `composeSchemas()`, only include `'data'` in the outer
-`required` array when there's something that actually makes it non-optional —
-i.e. `domainRequired.length > 0` (the function has ≥1 required param) — mirroring
-the exact same condition already used for the nested schema's own `required`
-(`compose-schemas.ts:95`). Keep the `data` *property* declared either way (so
-`{"data": {}}` still validates, for callers who send it out of habit or
-symmetry) — only the top-level `required` entry becomes conditional. Same
-treatment for `envelopeRequired` if a specific envelope field is itself
-optional. This directly relaxes `[inv:data-wrapper-always-present]` for the
-no-required-anything case; the invariant's uniform-shape rationale (stated in
-`buildEnvelopeDescription`'s JSDoc, `compose-schemas.ts:8-17`) still holds for
-every function that has at least one required param or envelope field, so this
-is a narrow carve-out, not a wholesale removal of the convention.
-
-**Status:** OPEN. Scope: `apigen-core-client/src/lib/compose-schemas.ts` (the
-single fix point — propagates to MCP, api-express, api-fastify automatically
-since they all consume `ComposedSchemas`).
-
-Citations: [session 2026-07-19, self-verified by direct file read:
-`apigen-core-client/src/lib/compose-schemas.ts:8-17,42-58,89-116`;
-`apigen-engine-runtime/src/lib/api-package.ts:61`;
-`entrypoint/apigen-cli/src/lib/pipeline.ts:42`;
-`entrypoint/apigen-cli/src/lib/orchestrator.ts:355`;
+Citations: [session 2026-07-20, self-verified by direct file read:
+`apigen-core-client/src/lib/compose-schemas.ts:136-155` (fix);
+`apigen-core-client/src/test/compose-schemas.spec.ts:47-75,112-130,337-421` (tests);
 `apigen-plugin-api-express/src/lib/run.ts:254,267`;
 `apigen-plugin-mcp/src/lib/run.ts:93,105`;
-`apigen-engine-runtime/src/lib/validate-layer.ts:122-125`]
-
----
-
-### BUG-APIGEN-024 — `--use openapi` mount produces an empty OpenAPI doc (`paths: {}`) on live `run`
-
-**Discovered:** 2026-07-19, while answering whether exposing an OpenAPI schema would be
-simple — it turns out `@adhd/apigen-plugin-openapi` already exists and is a real,
-spec-conformant implementation (`toOpenApi()` in `packages/apigen/codegen/openapi/src/lib/
-to-openapi.ts`, wired as a `mount` capability at `apigen-plugin-openapi/src/lib/
-plugin.ts:72-105`), but it's non-functional through `run` today.
-
-**Reproduced live:** built `apigen-plugin-openapi`, ran
-`node dist/entrypoint/apigen-cli/index.js run --source
-entrypoint/apigen-cli/src/test/fixtures/api.ts --type api-express --use
-./dist/packages/apigen/apigen-plugin-openapi/index.mjs --opt port=3902` (2 real functions,
-`getUser`/`sendEmail`), then `curl http://localhost:3902/_meta/openapi` →
-`{"openapi":"3.1.0","info":{"title":"API","version":"0.0.0"},"paths":{}}` — the route
-mounts and returns a well-formed document shell, but `paths` is empty; neither real
-operation appears.
-
-**Root cause:** `collectMountRoutes()` — identical in both HTTP transports
-(`apigen-plugin-api-express/src/lib/run.ts:180`, `apigen-plugin-api-fastify/src/lib/
-run.ts:186`) — constructs a synthetic descriptor with operations hardcoded empty before
-calling the mount plugin:
-```ts
-const descriptor = { host, operations: [] as unknown[] };
-const ops = cap.operations(descriptor, useOptions[plugin.id]);
-```
-The openapi plugin's handler correctly calls `toOpenApi(descriptor.operations, ...)`
-(`apigen-plugin-openapi/src/lib/plugin.ts:99`) — but `descriptor.operations` is always
-`[]` by construction, regardless of what the real package actually extracted. This
-appears to be a generic helper originally sized for plugins like `health` that don't need
-real operations at all, never extended for a mount plugin (openapi) that does.
-
-**Compounding gap:** `PluginInput.packages[]` (`apigen-core-client/src/lib/types.ts:52-58`)
-doesn't carry the raw `Operation[]` descriptor at all today — only `id`, the already-
-composed `ComposedSchemas`, `importPath`, `fns`, `createClient`. The real descriptor is
-consumed and discarded earlier in the pipeline (`composeSchemas()` call sites:
-`apigen-engine-runtime/src/lib/api-package.ts:61`, `entrypoint/apigen-cli/src/lib/
-pipeline.ts:42`, `entrypoint/apigen-cli/src/lib/orchestrator.ts:355`). So the fix isn't
-just "stop passing `[]`" — the real `Operation[]` needs a path from extraction through to
-`RunInput` (e.g. a new `packages[].descriptor` field threaded alongside `schemas`), or
-`toOpenApi` needs an alternate entry point that can work from `ComposedSchemas` +
-`pkg.id` instead of the raw descriptor.
-
-**Also:** `generate.ts` (static codegen, both `apigen-plugin-api-express` and
-`apigen-plugin-api-fastify`) never calls `collectMountRoutes` at all — `--use openapi`
-only has any effect on `run` (live server), not `generate` (static output). Worth deciding
-if that's intentional (mount plugins as a live-server-only concept) or a gap.
-
-**Status:** OPEN. Scope: `apigen-core-client` (thread real descriptor into `PluginInput`),
-`apigen-plugin-api-express`/`apigen-plugin-api-fastify` (`collectMountRoutes` in both
-`run.ts`), possibly `apigen-plugin-openapi` (alternate `ComposedSchemas`-based entry point
-if full descriptor-threading is deferred).
-
-Citations: [session 2026-07-19, self-verified: live repro via built
-`dist/entrypoint/apigen-cli/index.js` + built `apigen-plugin-openapi`, curl output above;
-`apigen-plugin-openapi/src/lib/plugin.ts:72-105`;
-`packages/apigen/codegen/openapi/src/lib/to-openapi.ts:1-20`;
-`apigen-plugin-api-express/src/lib/run.ts:180`;
-`apigen-plugin-api-fastify/src/lib/run.ts:186`;
-`apigen-core-client/src/lib/types.ts:51-68`;
-`apigen-engine-runtime/src/lib/api-package.ts:61`;
-`entrypoint/apigen-cli/src/lib/pipeline.ts:42`;
+`apigen-engine-runtime/src/lib/validate-layer.ts:157-160,239-241`; original
+ask/analysis: `apigen-engine-runtime/src/lib/api-package.ts:61`,
+`entrypoint/apigen-cli/src/lib/pipeline.ts:42`,
 `entrypoint/apigen-cli/src/lib/orchestrator.ts:355`]
 
+## Open
+
+### BUG-APIGEN-040 (Open, filed not fixed, HIGH) — `apigen-plugin-mcp`'s `run()` never validates input against the generated schema before dispatch — bad input crashes as an uncaught exception instead of a clean rejection
+
+**Discovered:** 2026-07-20, verifying (at the user's request) whether "the api
+type plugins actually validate inputs" after this session's BUG-APIGEN-
+029/030 work on the Ajv/validate-Layer stack. Confirmed live, not by
+inspection alone.
+
+**Root cause, confirmed by reading + live repro:** `api-express`/`api-fastify`'s
+`run()` both call `makeValidateLayer(schemas)` (`apigen-plugin-api-{express,
+fastify}/src/lib/run.ts`, wired via BUG-APIGEN-009/010) — every request runs
+through a real Ajv-compiled schema check BEFORE `dispatch()` is ever called,
+confirmed live: a malformed `date-time` and a missing required field both
+return HTTP 400 `invalid_argument` with the handler fn provably never
+invoked (`apigen-plugin-api-{express,fastify}/src/test/plugin.spec.ts`'s
+existing `[BUG-APIGEN-009/010]` suite, re-run and confirmed clean this
+session). `apigen-plugin-mcp/src/lib/run.ts`'s `CallToolRequestSchema`
+handler (line ~104-144) does **no such thing** — it goes straight to
+`dispatch(pkg.fns, pkg.createClient, meta.schema, name, envelope,
+domainData)` with zero Ajv involvement; `apigen-engine-runtime/src/lib/
+dispatch.ts` (confirmed by full read) contains no Ajv reference at all, only
+the well-known-scalar transcoder.
+
+**Live repro (built a throwaway in-process test using the exact harness
+pattern from `run.spec.ts`'s existing `run()`+streaming-http suite, deleted
+after confirming — not committed):** using the same `dateTimeSchema`
+fixture as the HTTP plugins' own `[009]` test (`when: string, format:
+"date-time", required`):
+- Omitting `when` entirely → fn **is called**, crashes with `Cannot read
+  properties of undefined (reading 'toUpperCase')`, surfaced to the MCP
+  client as a generic `-32603 internal error` — not a validation error.
+- `when: "2099-02-30T00:00:00.000Z"` (invalid calendar date, valid string)
+  → fn **is called**, crashes with `when.toUpperCase is not a function`
+  (the date-time codec evidently coerces/mangles the value without
+  rejecting it).
+- `when: 12345` (wrong type entirely) → this one **is** rejected, but only
+  because the date-time transcoder's own decode-time wire-type check
+  happens to catch it (`"[date-time] expected a string on the wire ... got
+  number"`) — an incidental side effect of one specific codec's own
+  precondition, not systematic schema validation. A parameter with no
+  well-known codec (e.g. a plain `string`/`number`/`object` with no format)
+  would get no such protection at all.
+
+**Impact:** any MCP consumer sending malformed or incomplete tool-call
+arguments gets an unstructured, generic internal-error crash instead of the
+clean, actionable `invalid_argument` response every HTTP-transport consumer
+already gets for the identical bad input — an inconsistency across apigen's
+own transports, and a real reliability/UX gap for the MCP surface
+specifically (arguably the primary consumer surface, given this is an
+agent-tooling framework).
+
+**Suggested fix:** wire `apigen-plugin-mcp/src/lib/run.ts`'s
+`CallToolRequestSchema` handler through the same validate-Layer mechanism
+`api-express`/`api-fastify` already use (`makeValidateLayer` from
+`@adhd/apigen-engine-runtime`, or a transport-appropriate equivalent that
+validates `{ data: domainData, ...envelope }` against `meta.schema.input`
+before calling `dispatch()`), returning a structured MCP tool-error result
+(not a thrown protocol-level exception) on validation failure — analogous
+to the `[BUG-APIGEN-009/010]` fix for the HTTP plugins.
+
+Citations: [session 2026-07-20, self-verified: `apigen-plugin-api-{express,
+fastify}/src/lib/run.ts` `makeValidateLayer` wiring;
+`apigen-plugin-mcp/src/lib/run.ts:104-144` no Ajv/validate-layer import or
+call; `apigen-engine-runtime/src/lib/dispatch.ts` full read, no Ajv
+reference; `apigen-plugin-api-express/src/test/plugin.spec.ts:538-559`
+`[009]` suite re-run clean (400/invalid_argument, fn not called) this
+session; live in-process repro via `run()` + streaming-http transport
+(same pattern as `apigen-plugin-mcp/src/test/run.spec.ts`'s existing
+suites), 3 cases as described above, not committed]
+
 ---
 
-### BUG-APIGEN-025 — `x-apigen-safe` is read by `httpVerb()` but never written anywhere in the real pipeline
+### BUG-APIGEN-038 (Open, filed not fixed) — `buildNominalSchema`/`buildUnionSchema` (class-based nominal/union schema builders) are not wired into the real `extract()`/`composeSchemas()` pipeline for any function parameter
 
-**Discovered:** 2026-07-19, while investigating BUG-APIGEN-024 above.
+**Discovered:** 2026-07-20, while fixing BUG-APIGEN-030 (AJV strict-mode
+crash on `x-apigen-logical`/`discriminator`, see CHANGELOG.md — the fix
+registers `X_APIGEN_LOGICAL`/`X_APIGEN_CODEC`/`X_APIGEN_CTOR`/
+`X_APIGEN_TOJSON`/`discriminator` as known Ajv keywords). While writing that
+fix's regression test, tried to source a real, pipeline-generated
+nominal-typed function parameter (a class like `UserId` used as a param
+type) to exercise `apigen-core-client/src/lib/schema-builders/nominal.ts`'s
+`buildNominalSchema` through the actual `extract()` call, the same way
+`named-type-param.spec.ts` (BUG-APIGEN-026) and the new BUG-APIGEN-030 union
+test do for their respective shapes.
 
-**Observed:** both HTTP transports derive the default verb like this
-(`apigen-plugin-api-express/src/lib/run.ts:26-34`, fastify identical):
-```ts
-function httpVerb(fnId, schema, config): 'GET' | 'POST' {
-  const override = config.http?.verb?.[fnId];
-  if (override === 'GET' || override === 'POST') return override;
-  return (schema['x-apigen-safe'] as boolean | undefined) ? 'GET' : 'POST';
-}
+**Root cause, traced and confirmed by reading the actual source:** a
+repo-wide grep for `buildNominalSchema(` / `buildUnionSchema(` call sites
+(not just imports) turns up exactly one caller of each — their own spec
+files (`apigen-core-client/src/test/nominal.spec.ts`,
+`.../test/union.spec.ts`). `entrypoint/apigen-cli/src/lib/orchestrator.ts`
+does call `extractClasses()` (confirmed at the file's own comment, line
+~385: "`constructor`/`instance-method` come from the separate
+`extractClasses()`"), but that usage surfaces a class's own methods as
+directly-callable operations (e.g. `UserId.fromJSON` as a route) — it does
+NOT embed the class's shape as a nominal `$def` inside some *other*
+function's parameter schema the way a real `function wrapId(id: UserId)`
+would need. Confirmed by reading `extract.ts`: no reference to
+`buildNominalSchema`, `isClass`, or `extractClasses` anywhere in it. The
+only currently-reachable `x-apigen-logical` producer is the inline-union
+branch in `schema-builders/morph-walk.ts:181` (plain TS union types like
+`A | B`), which does emit `x-apigen-logical:"union"` + `discriminator` for
+real through `extract()` — that is what BUG-APIGEN-030's regression test
+exercises. A user-defined class used as a function parameter type today
+gets ts-json-schema-generator's plain structural object schema (no
+`x-apigen-logical:"nominal"`, no `x-apigen-codec`), so `nominal-codec.ts`'s
+decode path for such a parameter is presently unreachable from real
+generated code — the nominal codec machinery in
+`apigen-engine-runtime/src/lib/logical/nominal-codec.ts` and the advisory
+hints `nominal.ts` builds exist and are tested in isolation, but have no
+live producer wiring them together end-to-end for a real user source file.
+
+**Impact:** class-typed (nominal/branded) function parameters do not
+currently get transcoded via the logical-type nominal codec at all in
+generated output — not a crash, but a silent gap: `ts-json-schema-generator`
+produces *some* structural schema for a class type (properties reflecting
+public fields), so calls likely still work for plain-data classes, but any
+class relying on nominal identity/codec-driven `fromJSON`/`toJSON` transcode
+(the whole point of `x-apigen-ctor`/`x-apigen-tojson`) gets the generic
+structural fallback instead. Not yet triaged for real-world severity (needs
+a concrete class-typed-parameter fixture run through the built CLI, e.g. a
+`Decimal`- or `Date`-like custom class, to determine if this only affects a
+narrow "arbitrary user class as param" case or something broader).
+
+**Cross-references:** distinct from BUG-APIGEN-030 (Ajv strict-mode reject
+of already-produced `x-apigen-*`/`discriminator` keys — that bug is about
+Ajv *rejecting* the hint once produced; this one is about the hint *never
+being produced* for the class/nominal case in the first place). Citations:
+[session 2026-07-20, this session, while implementing BUG-APIGEN-030's fix
+and regression test: `apigen-core-client/src/lib/schema-builders/nominal.ts`
+(defines `buildNominalSchema`, zero non-test callers, confirmed via
+repo-wide grep for `buildNominalSchema(`);
+`apigen-core-client/src/lib/extract.ts` (no `buildNominalSchema`/`isClass`/
+`extractClasses` reference, confirmed via grep);
+`entrypoint/apigen-cli/src/lib/orchestrator.ts:385` (comment documenting
+`extractClasses()`'s actual constructor/instance-method usage);
+`apigen-core-client/src/lib/schema-builders/morph-walk.ts:181` (the one
+currently-reachable `x-apigen-logical:"union"` producer, inline TS unions
+only)]
+
+### BUG-APIGEN-031 (ported from `main`, now fixed — see CHANGELOG.md) — `generate --type cli` output silently mishandles array-typed params: crashes or returns a wrong value instead of the real result
+
+**Ported:** 2026-07-20. Filed and root-caused on `main`'s `entrypoint/apigen-cli/BACKLOG.md`
+during `generate`-mode output verification of `apigen-cli` (`cli` and `jsonschema` plugins)
+against `/Users/nix/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts`. Not yet ported to
+this worktree's own BACKLOG.md as of this worktree's last rebase from `main`. Independently
+re-confirmed against this worktree's current source (commit `ac972c72`) before fixing — see
+citations below; `generate.ts`, `runmode.ts`, and `dispatch.ts` were byte-identical to `main`
+at the time of porting (`git diff main -- packages/apigen/apigen-plugin-cli-output/src/lib/
+generate.ts packages/apigen/apigen-base-logical/src/lib/runmode.ts` → empty).
+
+**Observed (pre-fix, reproduced live against this worktree):** the generated `cli.ts`'s `mean`
+and `percentile` commands (both take a plain `number[]` param — `latency-stats.ts:17,27`) do
+not work correctly when actually invoked with real array input, despite `--help` and static
+inspection looking correct:
+
 ```
-i.e. absent a manual override, the verb should fall back to whether the composed schema
-carries `x-apigen-safe: true`. But `composeSchemas()` — the one function that builds every
-schema this reads (`apigen-core-client/src/lib/compose-schemas.ts:59-119`, read in full) —
-never sets an `x-apigen-safe` key anywhere in its output, on either the nested `data`
-schema or the outer envelope schema. Repo-wide, `x-apigen-safe` is only ever *written* in
-hand-constructed test fixtures (`apigen-plugin-api-express/src/test/plugin.spec.ts:63-76`,
-fastify's spec mirrors it) that manually stamp `'x-apigen-safe': true` on a synthetic
-schema object to unit-test `httpVerb()` in isolation — never by the real extraction →
-compose pipeline. Confirmed via `grep -rln "x-apigen-safe"` across `packages/apigen` +
-`entrypoint/apigen-cli`: only the two `run.ts` readers and the two `*.spec.ts` fixtures
-reference it; zero writers outside test fixtures.
+$ tsx cli.ts mean --arr '[2,4,6]'
+TypeError: arr.reduce is not a function
+    at Object.mean (.../latency-stats.ts:29:14)
+    at dispatch (apigen-engine-runtime/src/lib/dispatch.ts:157:31)
 
-**Impact:** currently masked because every function export is `kind: 'action'`/`safe:
-false` (see FEAT-APIGEN-022/023's analysis of `extract.ts`) — the only source of a real
-`safe: true` operation today is `kind: 'query'` (a plain serializable `const` export, via
-`buildQueryOp`, `extract.ts:526-549`), and it's unclear any such const is currently routed
-through a live HTTP transport in a way that would surface this. But it's a real latent
-correctness gap: the moment a `safe: true` operation IS exposed over `run --type
-api-express`/`api-fastify` without an explicit `--opt http.verb.<id>=GET` override, it will
-incorrectly default to `POST` instead of `GET`, because the signal `httpVerb()` needs was
-never wired from `extract.ts`'s `op.safe` through `composeSchemas()`'s output. (Not a
-factor for `apigen-plugin-openapi`'s `toOpenApi()` — that path reads `op.safe` directly off
-the real `Operation` via `project()`, bypassing `ComposedSchemas`/`x-apigen-safe`
-entirely, so the OpenAPI doc's verb derivation is correct even though the live server's
-isn't.)
+$ tsx cli.ts percentile --sorted '[10,20,30,40,50]' --p 0.5
+"3"                          # WRONG — percentile([10,20,30,40,50], 0.5) is 30
+```
 
-**Suggested fix:** `composeSchemas()` should accept (or `GeneratedSchemas` should already
-carry) the operation's `safe` flag and stamp `'x-apigen-safe': op.safe` onto the outer
-composed schema, so `httpVerb()`'s fallback actually reflects the real descriptor instead
-of always reading `undefined` → always `POST`.
+`percentile` is the dangerous case: no crash, a silently plausible-looking wrong answer — the
+raw argv string `"[10,20,30,40,50]"` (16 chars) is passed straight through unparsed, so
+`idx = Math.ceil(16 * 0.5) - 1 = 7` and `"[10,20,30,40,50]"[7]` happens to be the character `'3'`.
 
-**Status:** OPEN. Scope: `apigen-core-client/src/lib/compose-schemas.ts` (write the field),
-whatever upstream call site has `op.safe` available at compose time.
+**Root cause:** `apigen-plugin-cli-output/src/lib/generate.ts` built `domainArgs` directly
+from Commander's raw parsed option strings (`opts[param]`) with no JSON-parsing for
+array/object-typed params, before handing them to `apigen-engine-runtime/src/lib/
+dispatch.ts`'s `decodeArg` → `apigen-base-logical/src/lib/runmode.ts`'s decode path, whose
+array/object branches (`if (!Array.isArray(wire)) return wire` / equivalent object check)
+correctly pass a non-array/non-object wire straight through for the HTTP transports (where
+`wire` is already real parsed JSON from the request body) — but that same passthrough silently
+defeats the CLI transport, whose wire values are *always* raw argv strings. Scalar
+(string/number/boolean) params round-trip fine; only array/object-typed params were affected.
 
-Citations: [session 2026-07-19, self-verified: `apigen-plugin-api-express/src/lib/
-run.ts:26-34`; `apigen-core-client/src/lib/compose-schemas.ts:59-119` (full read, no
-`x-apigen-safe` write); `apigen-plugin-api-express/src/test/plugin.spec.ts:63-76,172-192`;
-`grep -rln "x-apigen-safe" packages/apigen entrypoint/apigen-cli` → only 2 `run.ts` readers
-+ 2 `*.spec.ts` fixtures, zero real writers; `apigen-core-client/src/lib/extract.ts:526-549`
-(`buildQueryOp`, the only `safe: true` source today)]
+**Status:** FIXED this session — see `## Fixed` above / CHANGELOG.md for the fix and tests.
+
+Citations: [main's `entrypoint/apigen-cli/BACKLOG.md` BUG-APIGEN-031 writeup (full root-cause
+trace + original citations); session 2026-07-20, self-verified on this worktree: repro run via
+`node dist/entrypoint/apigen-cli/index.js generate --source /Users/nix/dev/ai/sox-ecosystem/
+libs/memory-core/src/latency-stats.ts --type cli --out-dir <scratch> --link-workspace` then
+`npx tsx cli.ts mean --arr '[2,4,6]'` and `npx tsx cli.ts percentile --sorted
+'[10,20,30,40,50]' --p 0.5`, both against `fix/apigen-v1-retirement`@`ac972c72` (pre-fix);
+`packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts` (pre-fix state, full read);
+`packages/apigen/apigen-base-logical/src/lib/runmode.ts:187-213` (full read);
+`packages/apigen/apigen-engine-runtime/src/lib/dispatch.ts:84-87` (full read);
+`git diff main -- packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts
+packages/apigen/apigen-base-logical/src/lib/runmode.ts` → empty, confirming pre-existing
+identical-to-main before the fix in this session]
+
+### BUG-APIGEN-037 — `py-flask`/`py-grpc` are unconditional eager imports; unpublished on npm, so an installed CLI never reaches argument parsing — MEDIUM
+
+**Discovered:** 2026-07-20, while fixing FEAT-APIGEN-019 (CLI plugin discoverability; see
+CHANGELOG). Deferred out of that fix — scope there was deriving `--type` help/error/list text
+from the live `plugins` registry, not changing how plugins are *loaded*.
+
+**Current state:** `index.ts:12-13` statically imports `@adhd/apigen-plugin-py-flask` and
+`@adhd/apigen-plugin-py-grpc` unconditionally at module top-level, alongside the other 5
+first-party plugins. Neither package is published on the public npm registry (confirmed via
+`npm view`, both 404, still true as of 2026-07-20). Inside this workspace both resolve fine
+(pnpm workspace linking), so `apigen list-types`/`--help`/every test in `apigen-cli` pass
+clean and show all 8 `--type` keys — the failure mode is invisible from inside the monorepo.
+For an external consumer who ran `npm install @adhd/apigen-cli`, though, those two `import`
+statements would throw `ERR_MODULE_NOT_FOUND` before Commander even parses `process.argv` —
+no `--help`, no error message, the process just dies. The now-registry-driven `--type`
+help/list/error text FEAT-APIGEN-019 built (`src/lib/plugin-registry.ts`) never gets a chance
+to run for that consumer, since the crash happens at import time, one line earlier.
+
+**Suggested fix:** convert the two unpublished plugins' imports to a `try`/dynamic-import
+pattern that's excluded from the `plugins` registry (and therefore from `list-types`/`--type`
+help) when the module fails to resolve, instead of crashing the whole CLI. Needs to preserve
+the standalone-bundle requirement (`vite.config.ts`'s comment on `run.ts`'s `--use` plugins:
+a literal-specifier dynamic `import('@adhd/apigen-plugin-py-flask')` is still statically
+analyzable by rollup and gets bundled/inlined the same as a static import — only a **fully
+dynamic** runtime specifier, like `--use`'s user-supplied string, can't be pre-bundled) —
+so this is very likely safe to do without breaking the standalone dist build, but needs an
+actual green `dist/entrypoint/apigen-cli` build + a simulated "package absent" test (mirroring
+the existing `LibResolver` injection pattern in `run.ts`'s `assertDecimalLibPresent`) to prove
+it before landing.
+
+**Status:** OPEN, MEDIUM.
+
+Citations: [self-verified 2026-07-20: `entrypoint/apigen-cli/src/index.ts:12-13` (unconditional
+eager imports), `entrypoint/apigen-cli/package.json:23-24` (both listed as regular deps, not
+optional), `entrypoint/apigen-cli/vite.config.ts:1-50` (standalone-bundle rollup config,
+`external` list excludes both packages so they're meant to be inlined), `src/lib/commands/run.ts:22-26`
+(comment explaining static-vs-dynamic-import bundling constraint for `--use` plugins);
+`npm view @adhd/apigen-plugin-py-flask`/`@adhd/apigen-plugin-py-grpc` → both 404]
+
+### BUG-APIGEN-039 (Open, filed not fixed, low-severity, follow-up to BUG-APIGEN-034) — `opMatchesExportMode()`'s "known residual limitation" now also covers anonymous default exports (Shape 4 anon sub-case + Shape 5), not just named default functions
+
+**Discovered:** 2026-07-20, while fixing BUG-APIGEN-033 (anonymous default-export dispatch
+crash) in the same session/branch. BUG-APIGEN-034's CHANGELOG entry already documents, as an
+explicitly-accepted "known residual limitation," that `opMatchesExportMode()`
+(`orchestrator.ts:342-349`) can't distinguish Shape 4's *named* default function
+(`export default function foo(){}`, `op.path = [file, 'foo']`) from a plain named export under
+`--export named` mode, since both produce an identical 2-segment `[file, name]` path — and
+notes this was deliberately left unresolved because "extract.ts was being concurrently edited
+by another fix in the same branch" (this fix, BUG-APIGEN-033).
+
+**What changed:** BUG-APIGEN-033's fix renames Shape 5 (anonymous arrow/FunctionExpression
+default export) and Shape 4's anonymous function-declaration sub-case from a filename-derived
+synthetic leaf name (1 path segment, e.g. `[anonymous_default_default]`) to the literal
+`'default'` under a `[fileSegment, 'default']` 2-segment path (`extract.ts`, `buildActionOp`
+call sites for both shapes) — required so the op name matches `buildFnTable()`'s runtime
+`.name`-derived key (see BUG-APIGEN-033's CHANGELOG entry for why). This moves BOTH anonymous
+shapes into the SAME 2-segment `[file, name]` bucket `opMatchesExportMode()` already can't
+disambiguate from a plain named export.
+
+**Net effect on `opMatchesExportMode()`:** before this fix, both anonymous shapes had a
+1-segment path, so they matched NEITHER `'named'` (`path.length === 2`) NOR `'default'`
+(`path.length === 3 && path[1].raw === 'default'`) — silently excluded from BOTH `--export
+named` and `--export default`. After this fix, they now match `'named'` (a false positive: an
+anonymous default export served under `--export named`) but still don't match `'default'` (a
+false negative: still not served under `--export default`, where a caller would actually expect
+it). Neither the before nor after state is correct, but this is the identical class of gap
+BUG-APIGEN-034 already accepted for Shape 4's named case — not a new kind of bug, just a wider
+blast radius for the same one.
+
+**Suggested fix:** add the explicit export-shape discriminator BUG-APIGEN-034's CHANGELOG entry
+already proposes deferring to (a field on `Operation`, e.g. `exportShape: 'named' | 'default-fn'
+| 'default-object' | 'cjs'`, set once in `extract.ts` at the same call sites already
+disambiguating these shapes) so `opMatchesExportMode()` stops inferring shape from `path.length`
+entirely. Out of scope here — this is a shared-descriptor schema change spanning `extract.ts`,
+`orchestrator.ts`, and any downstream consumer of `Operation.path`, not a one-file fix, and
+BUG-APIGEN-034 already correctly identified it as its own follow-up.
+
+**Status:** OPEN, low-severity (only reachable via explicit `--export named`/`--export default`
+against a source using either anonymous-default shape — `generate`/`run` without `--export`,
+and both `registry` commands where `exportMode` is never set, apply no scoping and are
+unaffected).
+
+Citations: [self-verified 2026-07-20: `entrypoint/apigen-cli/src/lib/orchestrator.ts:342-349`
+(`opMatchesExportMode()`); `entrypoint/apigen-cli/CHANGELOG.md` BUG-APIGEN-034 entry, "Known
+residual limitation" paragraph (pre-existing, same class of gap for Shape 4's named case);
+`packages/apigen/apigen-core-client/src/lib/extract.ts` Shape 5 + Shape 4 anonymous
+sub-case (this session's BUG-APIGEN-033 fix, `buildActionOp` calls with `'default'`)]
 
 ---
 

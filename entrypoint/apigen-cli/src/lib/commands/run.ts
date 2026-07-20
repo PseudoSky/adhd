@@ -1,10 +1,9 @@
 import { Command } from 'commander';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { runPipeline } from '../pipeline';
 import { importSource } from '../import-source';
 import { buildFnTable } from '@adhd/apigen-engine-runtime';
-import { resolveTsconfig, resolveNamespace } from '../resolve-tsconfig';
+import { resolveTsconfig } from '../resolve-tsconfig';
 import { buildCliLogger } from '../logging';
 import {
   orchestrateRun,
@@ -20,6 +19,11 @@ import type {
   Plugin,
 } from '@adhd/apigen-core-client';
 import { effectiveLanguage } from '@adhd/apigen-core-client';
+import {
+  describeRunTypeOption,
+  unknownTypeError,
+  unsupportedRunError,
+} from '../plugin-registry';
 // Built-in `--use` plugins. Statically imported so the vite-bundled CLI inlines
 // them (a runtime dynamic `import('@adhd/apigen-plugin-health')` would NOT be in
 // the standalone bundle). A bare slug (`--use health`) resolves here; an
@@ -212,7 +216,7 @@ export function registerRunCommand(
   program
     .command('run')
     .requiredOption('--source <path>', 'Path to TypeScript source file')
-    .requiredOption('--type <plugin-id>', 'Output target')
+    .requiredOption('--type <plugin-id>', describeRunTypeOption(plugins))
     .option(
       '--export <mode>',
       'Export mode: "default" | "<named-object-name>" | omit for named exports'
@@ -241,10 +245,6 @@ export function registerRunCommand(
       '--config <path>',
       'Path to apigen.config.json projection-override file (Tenet 1)'
     )
-    .option(
-      '--v2',
-      'Use the v2 unified orchestrator path (detect→extract→merge→run)'
-    )
     .action(
       async (opts: {
         source: string;
@@ -255,11 +255,10 @@ export function registerRunCommand(
         opt: string[];
         use: string[];
         config?: string;
-        v2?: boolean;
       }) => {
         const plugin = plugins[opts.type];
-        if (!plugin?.run)
-          throw new Error(`Plugin ${opts.type} does not support run mode`);
+        if (!plugin) throw unknownTypeError(opts.type, plugins);
+        if (!plugin.run) throw unsupportedRunError(opts.type, plugins);
 
         let exportMode: ExportMode;
         if (opts.export === 'default') {
@@ -289,68 +288,13 @@ export function registerRunCommand(
 
         const pluginLang = effectiveLanguage(plugin);
 
-        if (opts.v2) {
-          // --- v2 unified path: detect → extract → merge → collision-check → run ---
+        // Unified v2 orchestrator path: detect → extract → merge →
+        // collision-check → run. This is now the ONLY extraction pipeline
+        // (v1's generateSchemas()/extractNamed()/extractDefault()/
+        // extractNamedObject() were retired — BUG-APIGEN-CORE-005).
 
-          // Non-TS plugins (e.g. py-flask) do not go through the TS extraction
-          // pipeline — the plugin's run() consumes the source file directly.
-          if (pluginLang !== 'ts') {
-            const namespace =
-              opts.namespace ?? path.basename(path.dirname(sourceFile));
-            const nonTsInput: RunInput = {
-              packages: [
-                { id: namespace, schemas: {}, importPath: sourceFile },
-              ],
-              outputDir: '',
-              options,
-              signal: controller.signal,
-              logger,
-            };
-            await plugin.run(nonTsInput);
-            return;
-          }
-
-          const cliOverrides = parseOverrides(allOpts);
-          const overrides = loadOverrideConfig(opts.config, cliOverrides);
-
-          const sourceEntry: SourceEntry = {
-            file: sourceFile,
-            exportMode,
-            namespace: opts.namespace,
-            tsconfig: opts.tsconfig,
-          };
-
-          await orchestrateRun(
-            {
-              sources: [sourceEntry],
-              usePlugins: opts.use,
-              overrides,
-              logger,
-            },
-            plugin,
-            async (entry: SourceEntry) => {
-              const tsconfig = resolveTsconfig(entry.file, entry.tsconfig);
-              const mod = await importSource(entry.file, tsconfig);
-              const fns = buildFnTable(mod);
-
-              // [dod.fail-fast] Guard (a): 0 functions
-              assertFnsNonEmpty(fns, entry.file);
-
-              const createClient = async (
-                envelope: Record<string, unknown>
-              ): Promise<object> => envelope;
-              return { fns, createClient };
-            },
-            controller.signal,
-            options
-          );
-          return;
-        }
-
-        // --- v1 path (kept for backward compatibility) -----------------------
-
-        // Non-TS plugins bypass the TS pipeline entirely (e.g. py-flask spawns
-        // python3 directly; trying to tsx-import a .py file throws ERR_UNKNOWN_FILE_EXTENSION).
+        // Non-TS plugins (e.g. py-flask) do not go through the TS extraction
+        // pipeline — the plugin's run() consumes the source file directly.
         if (pluginLang !== 'ts') {
           const namespace =
             opts.namespace ?? path.basename(path.dirname(sourceFile));
@@ -365,47 +309,43 @@ export function registerRunCommand(
           return;
         }
 
-        const tsconfig = resolveTsconfig(sourceFile, opts.tsconfig);
-        const { schemas, createClient } = await runPipeline({
-          sourceFile,
+        const cliOverrides = parseOverrides(allOpts);
+        const overrides = loadOverrideConfig(opts.config, cliOverrides);
+
+        const sourceEntry: SourceEntry = {
+          file: sourceFile,
           exportMode,
-          tsconfig,
-          logger,
-        });
-
-        // [dod.fail-fast] Guard (b): decimal.js optional peer dep
-        assertDecimalLibPresent(schemas);
-
-        // Import the source module to get live function table (tsx loader handles .ts).
-        // buildFnTable keys default-exported functions by their declaration name so
-        // they match the extracted schema/route names (otherwise dispatch can't find them).
-        const mod = await importSource(sourceFile, tsconfig);
-        const fns = buildFnTable(mod);
-
-        // [dod.fail-fast] Guard (a): 0 functions
-        assertFnsNonEmpty(fns, sourceFile);
-
-        const packageId = resolveNamespace(sourceFile, {
           namespace: opts.namespace,
           tsconfig: opts.tsconfig,
-        });
-        const input: RunInput = {
-          packages: [
-            {
-              id: packageId,
-              schemas,
-              importPath: sourceFile,
-              fns,
-              createClient,
-            },
-          ],
-          outputDir: '',
-          options,
-          signal: controller.signal,
-          logger,
         };
 
-        await plugin.run(input);
+        await orchestrateRun(
+          {
+            sources: [sourceEntry],
+            usePlugins: opts.use,
+            overrides,
+            logger,
+          },
+          plugin,
+          async (entry: SourceEntry, schemas: ComposedSchemas) => {
+            // [dod.fail-fast] Guard (b): decimal.js optional peer dep
+            assertDecimalLibPresent(schemas);
+
+            const tsconfig = resolveTsconfig(entry.file, entry.tsconfig);
+            const mod = await importSource(entry.file, tsconfig);
+            const fns = buildFnTable(mod);
+
+            // [dod.fail-fast] Guard (a): 0 functions
+            assertFnsNonEmpty(fns, entry.file);
+
+            const createClient = async (
+              envelope: Record<string, unknown>
+            ): Promise<object> => envelope;
+            return { fns, createClient };
+          },
+          controller.signal,
+          options
+        );
       }
     );
 }

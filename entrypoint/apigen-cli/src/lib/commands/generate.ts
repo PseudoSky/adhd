@@ -1,8 +1,6 @@
 import { Command } from 'commander';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { runPipeline } from '../pipeline';
-import { resolveNamespace } from '../resolve-tsconfig';
 import { buildCliLogger } from '../logging';
 import {
   orchestrateGenerate,
@@ -12,10 +10,10 @@ import {
 import type {
   ExportMode,
   OutputPlugin,
-  PluginInput,
   ComposedSchemas,
 } from '@adhd/apigen-core-client';
 import { emitResolutionScaffolding } from '../scaffold';
+import { describeTypeOption, unknownTypeError } from '../plugin-registry';
 // DEBT-LT-005: replaced the inline TS_LOGICAL_TYPE_DEP_MAP duplicate with the
 // authoritative source from @adhd/apigen-base-logical. tsDepMap() derives the map
 // from the same TemplateCell.dep fields that are the single source of truth
@@ -184,10 +182,7 @@ export function registerGenerateCommand(
   program
     .command('generate')
     .requiredOption('--source <path>', 'Path to TypeScript source file')
-    .requiredOption(
-      '--type <plugin-id>',
-      'Output target: mcp | api-fastify | api-express | cli | jsonschema'
-    )
+    .requiredOption('--type <plugin-id>', describeTypeOption(plugins))
     .requiredOption('--out-dir <path>', 'Output directory')
     .option(
       '--export <mode>',
@@ -221,10 +216,6 @@ export function registerGenerateCommand(
       '--link-workspace',
       'PRE-PUBLISH ONLY: also emit a workspace-linked node_modules + tsconfig paths so the output runs in place before @adhd/apigen-* are published (a published consumer runs `npm install` instead)'
     )
-    .option(
-      '--v2',
-      'Use the v2 unified orchestrator path (detect→extract→merge→gen)'
-    )
     .action(
       async (opts: {
         source: string;
@@ -237,15 +228,10 @@ export function registerGenerateCommand(
         use: string[];
         config?: string;
         linkWorkspace?: boolean;
-        v2?: boolean;
       }) => {
         const plugin = plugins[opts.type];
         if (!plugin) {
-          throw new Error(
-            `Unknown --type: ${opts.type}. Available: ${Object.keys(
-              plugins
-            ).join(', ')}`
-          );
+          throw unknownTypeError(opts.type, plugins);
         }
 
         const logger = buildCliLogger(program);
@@ -261,72 +247,33 @@ export function registerGenerateCommand(
         const overrides = loadOverrideConfig(opts.config, cliOverrides);
         const options = parseOptPairs(allOpts);
 
-        if (opts.v2) {
-          // --- v2 unified path: detect → extract → merge → collision-check → gen ---
-          const { pluginOutput, descriptor } = await orchestrateGenerate(
-            {
-              sources: [
-                {
-                  file: sourceFile,
-                  exportMode,
-                  namespace: opts.namespace,
-                  tsconfig: opts.tsconfig,
-                },
-              ],
-              usePlugins: opts.use,
-              overrides,
-              logger,
-            },
-            plugin,
-            outputDir,
-            options
-          );
-
-          fs.mkdirSync(outputDir, { recursive: true });
-          for (const file of pluginOutput.files) {
-            const dest = path.join(outputDir, file.path);
-            fs.mkdirSync(path.dirname(dest), { recursive: true });
-            fs.writeFileSync(dest, file.content);
-          }
-          const scaffolded = emitResolutionScaffolding(outputDir, plugin.id, {
-            linkWorkspace: opts.linkWorkspace,
-          });
-          if (scaffolded.length > 0) {
-            logger.info(`scaffolded ${scaffolded.join(', ')} in ${outputDir}`);
-          }
-          // Patch package.json with per-surface logical-type deps (DESIGN §14.1).
-          patchPackageJsonDeps(
-            outputDir,
-            collectDepsFromPackageSchemas(descriptor.packageSchemas)
-          );
-          logger.info(
-            `wrote ${pluginOutput.files.length} files to ${outputDir}`
-          );
-          return;
-        }
-
-        // --- v1 path (kept for backward compatibility) -----------------------
-        const { schemas } = await runPipeline({
-          sourceFile,
-          exportMode,
-          tsconfig: opts.tsconfig,
-          logger,
-        });
-
-        const packageId = resolveNamespace(sourceFile, {
-          namespace: opts.namespace,
-          tsconfig: opts.tsconfig,
-        });
-        const input: PluginInput = {
-          packages: [{ id: packageId, schemas, importPath: sourceFile }],
+        // Unified v2 orchestrator path: detect → extract → merge →
+        // collision-check → gen. This is now the ONLY extraction pipeline
+        // (v1's generateSchemas()/extractNamed()/extractDefault()/
+        // extractNamedObject() were retired — BUG-APIGEN-CORE-005 — they had
+        // the same re-export-blind bug BUG-APIGEN-CORE-002/003/004 fixed in
+        // v2, and nothing routed through v2 by default).
+        const { pluginOutput, descriptor } = await orchestrateGenerate(
+          {
+            sources: [
+              {
+                file: sourceFile,
+                exportMode,
+                namespace: opts.namespace,
+                tsconfig: opts.tsconfig,
+              },
+            ],
+            usePlugins: opts.use,
+            overrides,
+            logger,
+          },
+          plugin,
           outputDir,
-          options,
-          logger,
-        };
+          options
+        );
 
-        const output = await plugin.generate(input);
         fs.mkdirSync(outputDir, { recursive: true });
-        for (const file of output.files) {
+        for (const file of pluginOutput.files) {
           const dest = path.join(outputDir, file.path);
           fs.mkdirSync(path.dirname(dest), { recursive: true });
           fs.writeFileSync(dest, file.content);
@@ -338,8 +285,11 @@ export function registerGenerateCommand(
           logger.info(`scaffolded ${scaffolded.join(', ')} in ${outputDir}`);
         }
         // Patch package.json with per-surface logical-type deps (DESIGN §14.1).
-        patchPackageJsonDeps(outputDir, collectLogicalTypeDeps(schemas));
-        logger.info(`wrote ${output.files.length} files to ${outputDir}`);
+        patchPackageJsonDeps(
+          outputDir,
+          collectDepsFromPackageSchemas(descriptor.packageSchemas)
+        );
+        logger.info(`wrote ${pluginOutput.files.length} files to ${outputDir}`);
       }
     );
 }

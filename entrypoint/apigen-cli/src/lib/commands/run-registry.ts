@@ -2,12 +2,18 @@ import { Command } from 'commander';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { discoverPackages } from '../registry';
-import { runPipeline } from '../pipeline';
 import { importSource } from '../import-source';
 import { buildFnTable } from '@adhd/apigen-engine-runtime';
 import { resolveTsconfig } from '../resolve-tsconfig';
 import { buildCliLogger } from '../logging';
-import type { OutputPlugin, RunInput } from '@adhd/apigen-core-client';
+import { orchestrateRun } from '../orchestrator';
+import type { SourceEntry } from '../orchestrator';
+import type { OutputPlugin } from '@adhd/apigen-core-client';
+import {
+  describeRunTypeOption,
+  unknownTypeError,
+  unsupportedRunError,
+} from '../plugin-registry';
 
 /** Parse --opt key=value pairs into an options record. */
 function parseOptPairs(pairs: string[]): Record<string, unknown> {
@@ -39,7 +45,7 @@ export function registerRunRegistryCommand(
       '--packages-dir <path>',
       'Directory containing package subdirectories'
     )
-    .requiredOption('--type <plugin-id>', 'Output target')
+    .requiredOption('--type <plugin-id>', describeRunTypeOption(plugins))
     .option(
       '--tag <tag>',
       'Include only packages with this tag (repeatable)',
@@ -72,8 +78,8 @@ export function registerRunRegistryCommand(
         opt: string[];
       }) => {
         const plugin = plugins[opts.type];
-        if (!plugin?.run)
-          throw new Error(`Plugin ${opts.type} does not support run mode`);
+        if (!plugin) throw unknownTypeError(opts.type, plugins);
+        if (!plugin.run) throw unsupportedRunError(opts.type, plugins);
 
         const logger = buildCliLogger(program);
         const options = parseOptPairs(opts.opt);
@@ -85,45 +91,51 @@ export function registerRunRegistryCommand(
           excludeTags: opts.excludeTag,
         });
 
-        const pkgEntries: RunInput['packages'] = [];
+        // Same package-discovery contract as generate-registry: `file` drives
+        // extraction, `importPath` (npm specifier) drives the generated
+        // import statement, `namespace` is pinned to the nx-tag-discovered
+        // package id.
+        const sources: SourceEntry[] = [];
         for (const meta of discovered) {
           const entryFile = findEntryFile(meta.dir);
           if (!entryFile) continue;
-
-          const tsconfig = resolveTsconfig(entryFile, opts.tsconfig);
-          const { schemas, createClient } = await runPipeline({
-            sourceFile: entryFile,
-            tsconfig,
-            logger,
-          });
-
-          // Import the source module to get live function table (tsx loader handles .ts).
-          // buildFnTable keys default-exported functions by their declaration name.
-          const mod = await importSource(entryFile, tsconfig);
-          const fns = buildFnTable(mod);
-
-          pkgEntries.push({
-            id: meta.id,
-            schemas,
+          sources.push({
+            file: entryFile,
+            namespace: meta.id,
             importPath: meta.importPath,
-            fns,
-            createClient,
+            tsconfig: opts.tsconfig,
           });
+        }
+
+        if (sources.length === 0) {
+          logger.info(
+            `no packages with an entry file found under ${packagesDir} — nothing to run`
+          );
+          return;
         }
 
         const controller = new AbortController();
         process.on('SIGINT', () => controller.abort());
         process.on('SIGTERM', () => controller.abort());
 
-        const input: RunInput = {
-          packages: pkgEntries,
-          outputDir: '',
-          options,
-          signal: controller.signal,
-          logger,
-        };
-
-        await plugin.run(input);
+        await orchestrateRun(
+          { sources, logger },
+          plugin,
+          async (entry: SourceEntry) => {
+            const tsconfig = resolveTsconfig(entry.file, entry.tsconfig);
+            // Import the source module to get live function table (tsx loader
+            // handles .ts). buildFnTable keys default-exported functions by
+            // their declaration name.
+            const mod = await importSource(entry.file, tsconfig);
+            const fns = buildFnTable(mod);
+            const createClient = async (
+              envelope: Record<string, unknown>
+            ): Promise<object> => envelope;
+            return { fns, createClient };
+          },
+          controller.signal,
+          options
+        );
       }
     );
 }

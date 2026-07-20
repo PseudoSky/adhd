@@ -12,6 +12,8 @@ import {
   createLogger,
   describeParams,
   buildToolDescription,
+  buildMcpOutputSchema,
+  wrapMcpStructuredContent,
 } from '@adhd/apigen-engine-runtime';
 import type { Logger } from '@adhd/apigen-engine-runtime';
 import type { RunInput } from '@adhd/apigen-core-client';
@@ -74,19 +76,29 @@ function buildMcpServer(
   }
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: Object.entries(toolMetas).map(([name, meta]) => ({
-      name,
-      // BUG-APIGEN-020: combine the caller-supplied override (toolDescriptions
-      // option) with the auto-generated data-envelope calling-convention note
-      // carried on the composed schema's input.description.
-      description: buildToolDescription(
+    tools: Object.entries(toolMetas).map(([name, meta]) => {
+      // BUG-APIGEN-019: publish the function's return-type schema (already
+      // strengthened to oneOf+discriminator for unions by composeSchemas) as
+      // MCP's outputSchema — wrapped under `result` when it isn't top-level
+      // type:"object", since the MCP protocol requires that shape.
+      const { outputSchema } = buildMcpOutputSchema(
+        (meta.schema as { output?: unknown }).output
+      );
+      return {
         name,
-        meta.schema as { input?: { description?: unknown } },
-        descriptions[name]
-      ),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      inputSchema: (meta.schema as any).input,
-    })),
+        // BUG-APIGEN-020: combine the caller-supplied override (toolDescriptions
+        // option) with the auto-generated data-envelope calling-convention note
+        // carried on the composed schema's input.description.
+        description: buildToolDescription(
+          name,
+          meta.schema as { input?: { description?: unknown } },
+          descriptions[name]
+        ),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        inputSchema: (meta.schema as any).input,
+        ...(outputSchema ? { outputSchema } : {}),
+      };
+    }),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
@@ -116,7 +128,16 @@ function buildMcpServer(
         domainData
       );
       logger.info({ tool: name, ms: Date.now() - start }, `→ ${name}`);
-      return { content: [{ type: 'text', text: JSON.stringify(result) }] };
+      // BUG-APIGEN-019: pair the declared outputSchema with a matching
+      // structuredContent value (wrapped under `result` iff the schema was).
+      const { wrapped } = buildMcpOutputSchema(
+        (fnSchema as { output?: unknown }).output
+      );
+      const structuredContent = wrapMcpStructuredContent(wrapped, result);
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result) }],
+        ...(structuredContent ? { structuredContent } : {}),
+      };
     } catch (err) {
       logger.error({ tool: name, ms: Date.now() - start, err }, `✗ ${name}`);
       // §9: MCP surfaces all apigen errors as the 'error' result kind.

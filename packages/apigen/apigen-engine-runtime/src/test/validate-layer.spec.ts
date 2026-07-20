@@ -16,6 +16,12 @@
  *                      validation is a shape pre-filter, not a domain correctness
  *                      guarantee.  The authoritative boundary is the host's typed
  *                      dispatch (SPEC §6, §2).
+ *
+ * See `bug-apigen-030.spec.ts` (sibling file) for the BUG-APIGEN-030
+ * regression suite: schemas produced by the real `buildNominalSchema`/
+ * `buildUnionSchema` schema builders and the real `extract()` pipeline carry
+ * advisory `x-apigen-*` keys and an OpenAPI-style `discriminator` object that
+ * Ajv 8's default `strict: true` did not recognize before the fix.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { createInvoker, LayerContext } from '../lib/invoke';

@@ -44,7 +44,7 @@ const authMiddleware = { id: 'auth', envelope: { token: { type: 'string' } } };
 // ---------------------------------------------------------------------------
 
 describe('composeSchemas', () => {
-  it('[schema-composition.1] no middleware — data wrapper present; no other keys in properties', () => {
+  it('[schema-composition.1] no middleware — data wrapper property present; no other keys in properties', () => {
     const composed = composeSchemas(domainSchemas, []);
 
     for (const [fnName, schema] of Object.entries(composed)) {
@@ -58,9 +58,20 @@ describe('composeSchemas', () => {
         `${fnName} should only have "data" in properties`
       ).toEqual(expect.objectContaining({ data: expect.any(Object) }));
       expect(Object.keys(input.properties)).toEqual(['data']);
-      expect(input.required).toContain('data');
-      expect(input.required).toHaveLength(1);
     }
+
+    // FEAT-APIGEN-023: the "data" property is always present, but it is only
+    // listed in the outer `required` array for functions that actually have
+    // ≥1 required domain param. `listAll` has none, so "data" is optional.
+    const getUserInput = composed['getUser'].input as { required: string[] };
+    const sendEmailInput = composed['sendEmail'].input as {
+      required: string[];
+    };
+    const listAllInput = composed['listAll'].input as { required: string[] };
+
+    expect(getUserInput.required).toEqual(['data']);
+    expect(sendEmailInput.required).toEqual(['data']);
+    expect(listAllInput.required).toEqual([]);
   });
 
   it('[schema-composition.2] session middleware — session and data both in required; domain params inside data', () => {
@@ -98,7 +109,7 @@ describe('composeSchemas', () => {
     expect(Object.keys(sendEmailInput.properties)).toContain('session');
   });
 
-  it('[schema-composition.4] zero-param function with session middleware — data in required; data.properties is {}', () => {
+  it('[schema-composition.4] zero-param function with session middleware — session required, data NOT required; data.properties is {}', () => {
     const composed = composeSchemas(domainSchemas, [sessionMiddleware]);
 
     const listAllInput = composed['listAll'].input as {
@@ -106,8 +117,12 @@ describe('composeSchemas', () => {
       required: string[];
     };
 
-    expect(listAllInput.required).toContain('data');
+    // FEAT-APIGEN-023: a middleware-contributed envelope field (e.g. "session")
+    // is still required on its own merits, but it does not drag "data" along
+    // with it — "data" is only required when the function itself has ≥1
+    // required domain param.
     expect(listAllInput.required).toContain('session');
+    expect(listAllInput.required).not.toContain('data');
 
     const dataSchema = listAllInput.properties['data'] as {
       properties: Record<string, unknown>;
@@ -228,5 +243,268 @@ describe('composeSchemas — BUG-APIGEN-020: envelope calling-convention documen
     const composed = composeSchemas(domainSchemas, []);
     const getUserInput = composed['getUser'].input as { description: string };
     expect(getUserInput.description).not.toMatch(/NOT domain data/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-CORE-001 (v1 retirement) — composeSchemas() re-validates $ref
+// resolvability at compose/generate time, the same safety net v1's deleted
+// generate-schemas.ts had (pooling $defs across every function, throwing a
+// clear function-scoped error). This is the exact class of bug BUG-APIGEN-026
+// hit at runtime instead — this test proves it is now caught earlier, at
+// composeSchemas() time, not just downstream in AJV.
+// ---------------------------------------------------------------------------
+
+describe('composeSchemas — BUG-APIGEN-CORE-001: dangling $ref caught at compose time', () => {
+  it('throws a function-scoped error when a schema $refs a $def that is never pooled from any function', () => {
+    const withDanglingRef: GeneratedSchemas = {
+      metadata: { namespace: 'test', phase: '' },
+      schemas: {
+        // Some $defs pool exists (from another function in the same source
+        // file) — but it never defines "Choice", so `pick`'s $ref dangles.
+        // (An empty $defs pool is a different, deliberately-unvalidated case
+        // — see the "no $defs at all" test below — so this fixture must
+        // carry at least one *other* $def to exercise the real dangling path.)
+        unrelated: {
+          input: { type: 'object', properties: {}, required: [] },
+          output: {
+            $defs: { '#/$defs/Other': { type: 'number' } },
+            type: 'number',
+          },
+        },
+        pick: {
+          input: {
+            type: 'object',
+            properties: {
+              choice: { $ref: '#/$defs/Choice' },
+            },
+            required: ['choice'],
+          },
+          output: { type: 'string' },
+        },
+      },
+    };
+
+    expect(() => composeSchemas(withDanglingRef, [])).toThrow(
+      /Schema validation failed for function "pick"/
+    );
+  });
+
+  it('a $ref that resolves against the pooled cross-function $defs does not throw', () => {
+    const withResolvableRef: GeneratedSchemas = {
+      metadata: { namespace: 'test', phase: '' },
+      schemas: {
+        // $defs is pooled ACROSS functions — declared once here...
+        declareChoice: {
+          input: { type: 'object', properties: {}, required: [] },
+          output: {
+            $defs: {
+              '#/$defs/Choice': { type: 'string', enum: ['a', 'b', 'c'] },
+            },
+            type: 'string',
+          },
+        },
+        // ...and resolved here, on a different function's input.
+        pick: {
+          input: {
+            type: 'object',
+            properties: { choice: { $ref: '#/$defs/Choice' } },
+            required: ['choice'],
+          },
+          output: { type: 'string' },
+        },
+      },
+    };
+
+    expect(() => composeSchemas(withResolvableRef, [])).not.toThrow();
+  });
+
+  it('a schema with no $defs at all is not flagged (structural $ref problems are left to downstream AJV compile)', () => {
+    const composed = composeSchemas(domainSchemas, []);
+    expect(composed).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FEAT-APIGEN-023 — a zero-param, zero-required-envelope operation does not
+// force callers to send an empty `data: {}` (or any envelope field) in the
+// published schema. Pre-fix, `required: [...envelopeRequired, 'data']` was
+// unconditional, so every one of these assertions failed. Post-fix, "data"
+// (and any given envelope field) is only required when something actually
+// makes it non-optional.
+// ---------------------------------------------------------------------------
+
+describe('composeSchemas — FEAT-APIGEN-023: zero-param/zero-envelope schema', () => {
+  it('a zero-param function with no middleware has an EMPTY top-level required array', () => {
+    const composed = composeSchemas(domainSchemas, []);
+    const listAllInput = composed['listAll'].input as { required: string[] };
+
+    expect(listAllInput.required).toEqual([]);
+    expect(listAllInput.required).not.toContain('data');
+  });
+
+  it('an empty object {} satisfies the top-level required array for a zero-param, zero-middleware function', () => {
+    const composed = composeSchemas(domainSchemas, []);
+    const listAllInput = composed['listAll'].input as {
+      required: string[];
+      additionalProperties: boolean;
+    };
+
+    // JSON Schema semantics: an empty `required` array means no top-level
+    // key is mandatory, so `{}` is a fully valid instance of this schema —
+    // "call it with nothing beyond the name" is what FEAT-APIGEN-023 asked for.
+    expect(listAllInput.required.every((k) => k in {})).toBe(true);
+    expect(listAllInput.required.length).toBe(0);
+  });
+
+  it('the "data" PROPERTY is still declared (not removed) for a zero-param function — {"data": {}} remains valid too', () => {
+    const composed = composeSchemas(domainSchemas, []);
+    const listAllInput = composed['listAll'].input as {
+      properties: Record<string, unknown>;
+    };
+
+    expect(listAllInput.properties['data']).toBeDefined();
+    const dataSchema = listAllInput.properties['data'] as {
+      type: string;
+      properties: Record<string, unknown>;
+      additionalProperties: boolean;
+    };
+    expect(dataSchema.type).toBe('object');
+    expect(dataSchema.properties).toEqual({});
+    expect(dataSchema.additionalProperties).toBe(false);
+  });
+
+  it('REGRESSION: a parameterized function (≥1 required domain param) still requires "data" — unchanged by this fix', () => {
+    const composed = composeSchemas(domainSchemas, []);
+
+    const getUserInput = composed['getUser'].input as { required: string[] };
+    const sendEmailInput = composed['sendEmail'].input as {
+      required: string[];
+    };
+
+    expect(getUserInput.required).toEqual(['data']);
+    expect(sendEmailInput.required).toEqual(['data']);
+  });
+
+  it('REGRESSION: middleware envelope fields remain required on their own merits, independent of "data"', () => {
+    const composed = composeSchemas(domainSchemas, [
+      sessionMiddleware,
+      authMiddleware,
+    ]);
+
+    const getUserInput = composed['getUser'].input as { required: string[] };
+    const listAllInput = composed['listAll'].input as { required: string[] };
+
+    // getUser: has a required domain param -> "data" required alongside envelope fields.
+    expect(getUserInput.required.sort()).toEqual(['data', 'session', 'token']);
+    // listAll: zero domain params -> envelope fields required, "data" is not.
+    expect(listAllInput.required.sort()).toEqual(['session', 'token']);
+  });
+
+  it('a zero-param function with its only middleware overridden false has a fully empty required array', () => {
+    const composed = composeSchemas(domainSchemas, [sessionMiddleware], {
+      listAll: { session: false },
+    });
+
+    const listAllInput = composed['listAll'].input as {
+      required: string[];
+      properties: Record<string, unknown>;
+    };
+
+    expect(listAllInput.required).toEqual([]);
+    expect(Object.keys(listAllInput.properties)).toEqual(['data']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FEAT-APIGEN-022 / BUG-APIGEN-025 — x-apigen-safe stamping
+//
+// composeSchemas() is the single point where `op.safe` (threaded from
+// orchestrator.ts's buildDescriptor Step 5, BUG-APIGEN-025) and the
+// FEAT-APIGEN-022 primitive-param-shape auto-hoist combine into one
+// `x-apigen-safe` value every HTTP transport's shared `httpVerb()`
+// (@adhd/apigen-naming) reads identically.
+// ---------------------------------------------------------------------------
+
+describe('composeSchemas — FEAT-APIGEN-022 / BUG-APIGEN-025: x-apigen-safe', () => {
+  const verbSchemas: GeneratedSchemas = {
+    metadata: { namespace: 'verb', phase: '' },
+    schemas: {
+      // Zero-param — vacuously primitive-only → auto-hoist.
+      noParams: {
+        input: { type: 'object', properties: {}, required: [] },
+        output: { type: 'string' },
+      },
+      // All primitive params, no explicit `safe` — auto-hoist.
+      getPrimitive: {
+        input: {
+          type: 'object',
+          properties: { id: { type: 'string' }, count: { type: 'number' } },
+          required: ['id'],
+        },
+        output: { type: 'string' },
+      },
+      // Object-typed param — must NOT auto-hoist.
+      withObject: {
+        input: {
+          type: 'object',
+          properties: {
+            payload: {
+              type: 'object',
+              properties: { x: { type: 'number' } },
+            },
+          },
+          required: ['payload'],
+        },
+        output: { type: 'string' },
+      },
+      // Array-typed param — must NOT auto-hoist.
+      withArray: {
+        input: {
+          type: 'object',
+          properties: { ids: { type: 'array', items: { type: 'string' } } },
+          required: ['ids'],
+        },
+        output: { type: 'string' },
+      },
+      // Explicit op.safe:true despite a complex param — safe wins regardless
+      // of shape (BUG-APIGEN-025: op.safe is an independent, OR'd signal).
+      explicitSafeComplexShape: {
+        input: {
+          type: 'object',
+          properties: {
+            payload: { type: 'object', properties: {} },
+          },
+          required: ['payload'],
+        },
+        output: { type: 'string' },
+        safe: true,
+      },
+    },
+  };
+
+  it('[verb-safe.1] zero-param function auto-hoists: x-apigen-safe:true with no override', () => {
+    const composed = composeSchemas(verbSchemas, []);
+    expect(composed['noParams']['x-apigen-safe']).toBe(true);
+  });
+
+  it('[verb-safe.2] all-primitive-param function auto-hoists: x-apigen-safe:true with no override', () => {
+    const composed = composeSchemas(verbSchemas, []);
+    expect(composed['getPrimitive']['x-apigen-safe']).toBe(true);
+  });
+
+  it('[verb-safe.3] object-typed param does NOT auto-hoist: x-apigen-safe:false', () => {
+    const composed = composeSchemas(verbSchemas, []);
+    expect(composed['withObject']['x-apigen-safe']).toBe(false);
+  });
+
+  it('[verb-safe.4] array-typed param does NOT auto-hoist: x-apigen-safe:false', () => {
+    const composed = composeSchemas(verbSchemas, []);
+    expect(composed['withArray']['x-apigen-safe']).toBe(false);
+  });
+
+  it('[verb-safe.5] explicit op.safe:true wins even with a complex-shaped param', () => {
+    const composed = composeSchemas(verbSchemas, []);
+    expect(composed['explicitSafeComplexShape']['x-apigen-safe']).toBe(true);
   });
 });

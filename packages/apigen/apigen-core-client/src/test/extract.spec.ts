@@ -12,7 +12,7 @@
 // produces no matching operation (verifying id/symbol correctness).
 
 import path from 'node:path';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { extract } from '../lib/extract';
 
 const fixture = (name: string) => path.resolve(__dirname, 'fixtures', name);
@@ -493,5 +493,152 @@ describe('tokenize', () => {
   it('[tokenize.4] SCREAMING_SNAKE → words', async () => {
     const { tokenize } = await import('../lib/extract');
     expect(tokenize('SOME_CONST')).toEqual(['some', 'const']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ported from generate-schemas.spec.ts (BUG-APIGEN-CORE-005, v1 retirement)
+//
+// generate-schemas.spec.ts tested the deleted v1 `generateSchemas()` directly
+// (schema-extraction.1 through .7). v1's `--export <mode>` selected exactly
+// ONE of three mutually-exclusive shapes; v2's `extract()` has no such mode —
+// it walks the full export-shape matrix unconditionally (see extract.ts's
+// header comment) — so schema-extraction.5/.6 ("only the default/named-object
+// shape is extracted when that mode is selected") have no v2 equivalent: the
+// underlying "named-object/default shapes extract correctly" behavior they
+// exercised is already covered generically by the Shape 3/4/5 describe blocks
+// above. The remaining assertions (named-export presence + non-function
+// exclusion, Promise<T> unwrapping, zero-param-with-ctx) are ported here
+// 1:1 against the same fixtures, run through `extract()` instead.
+// ---------------------------------------------------------------------------
+
+describe('[schema-extraction ported] named exports: presence + non-callable exclusion', () => {
+  it('[schema-extraction.1] includes getUser and sendEmail; excludes VERSION (non-function const)', async () => {
+    const ops = await extract({ sourceFile: fixture('named-exports.ts') });
+    const names = ops.map((op) => op.path.at(-1)?.raw);
+    expect(names).toContain('getUser');
+    expect(names).toContain('sendEmail');
+    // VERSION = '1.0.0' is a serializable const → extracted as kind:'query',
+    // never as a callable action — but it should not collide with an action
+    // name either way; assert it isn't an action.
+    const versionOp = ops.find((op) => op.path.at(-1)?.raw === 'VERSION');
+    expect(versionOp?.kind).not.toBe('action');
+  });
+
+  it('[schema-extraction.4] Promise<T> is unwrapped — output schema is not Promise<...>', async () => {
+    const ops = await extract({ sourceFile: fixture('named-exports.ts') });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'getUser');
+    expect(op?.output).toBeDefined();
+    expect(typeof op?.output).toBe('object');
+    const outputStr = JSON.stringify(op?.output);
+    expect(outputStr).not.toMatch(/Promise/);
+  });
+});
+
+describe('[schema-extraction ported] ctx filtering edge cases', () => {
+  it('[schema-extraction.7] zero-param-with-ctx: listAll input properties is empty {}', async () => {
+    const ops = await extract({ sourceFile: fixture('ctx-param.ts') });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'listAll');
+    expect(op).toBeDefined();
+    const props = (op?.input as { properties?: Record<string, unknown> })
+      ?.properties;
+    expect(props).toEqual({});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-018: parameter default values — v2 coverage.
+//
+// This behavior had ZERO test coverage even under v1 (grep for
+// "BUG-APIGEN-018"/"param-default"/"applyParamDefault"/"extractParamDefault"
+// across every *.spec.ts in the repo turns up nothing prior to this block).
+// Added here as part of porting param-defaults.ts from the deleted v1
+// extractors/ into v2's extract.ts (BUG-APIGEN-CORE-005) — real, previously
+// untested behavior should not lose its only chance at a test just because
+// its home module moved.
+// ---------------------------------------------------------------------------
+
+describe('[BUG-APIGEN-018] parameter default values', () => {
+  it('a TS initializer default (`strategy = "auto"`) becomes the JSON-Schema `default` keyword', async () => {
+    const ops = await extract({ sourceFile: fixture('param-defaults.ts') });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'search');
+    expect(op).toBeDefined();
+    const props = (op?.input as { properties?: Record<string, unknown> })
+      ?.properties as Record<string, Record<string, unknown>> | undefined;
+    expect(props?.['strategy']?.['default']).toBe('auto');
+    // Human-readable note appended to description too.
+    expect(props?.['strategy']?.['description']).toContain(
+      '(default: auto)'
+    );
+  });
+
+  it('a JSDoc bracketed default (`[limit=10]`) becomes the JSON-Schema `default` keyword when there is no TS initializer', async () => {
+    const ops = await extract({ sourceFile: fixture('param-defaults.ts') });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'search');
+    const props = (op?.input as { properties?: Record<string, unknown> })
+      ?.properties as Record<string, Record<string, unknown>> | undefined;
+    expect(props?.['limit']?.['default']).toBe(10);
+  });
+
+  it('a param with no default carries no `default` keyword', async () => {
+    const ops = await extract({ sourceFile: fixture('param-defaults.ts') });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'search');
+    const props = (op?.input as { properties?: Record<string, unknown> })
+      ?.properties as Record<string, Record<string, unknown>> | undefined;
+    expect(props?.['query']).not.toHaveProperty('default');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-CORE-004: isSerializableType()'s textual allow-list didn't
+// recognise `Record<K, V>` (or other generic utility-type wrappers), so a
+// legitimately serialisable const like `Record<string, number>` was silently
+// skipped ('[apigen-core] Skipping non-callable, non-serializable export: …')
+// instead of being extracted as kind:'query'. Fixed by replacing the
+// text-pattern heuristic with structural `Type` inspection (index signatures,
+// properties, call signatures) in extract.ts's isSerializableType().
+// ---------------------------------------------------------------------------
+
+describe('[BUG-APIGEN-CORE-004] Record<K,V> and other generic-wrapper serializable consts', () => {
+  it('Record<string, number> extracts as kind:"query" instead of being skipped', async () => {
+    const ops = await extract({
+      sourceFile: fixture('extract-serializable-generics.ts'),
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'SCOPE_WEIGHTS');
+    expect(op).toBeDefined();
+    expect(op?.kind).toBe('query');
+  });
+
+  it('Record<string, Interface> (index value is a plain data interface) extracts as kind:"query"', async () => {
+    const ops = await extract({
+      sourceFile: fixture('extract-serializable-generics.ts'),
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'SUPPORTED_SHAPES');
+    expect(op).toBeDefined();
+    expect(op?.kind).toBe('query');
+  });
+
+  it('Partial<T> around a serialisable shape extracts as kind:"query"', async () => {
+    const ops = await extract({
+      sourceFile: fixture('extract-serializable-generics.ts'),
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'PARTIAL_SHAPE');
+    expect(op).toBeDefined();
+    expect(op?.kind).toBe('query');
+  });
+
+  it('[negative control] Map<K,V> is still correctly excluded — it is a generic wrapper but genuinely not JSON-serialisable', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(vi.fn());
+    const ops = await extract({
+      sourceFile: fixture('extract-serializable-generics.ts'),
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'NOT_SERIALIZABLE_MAP');
+    expect(op).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Skipping non-callable, non-serializable export: NOT_SERIALIZABLE_MAP'
+      )
+    );
+    warnSpy.mockRestore();
   });
 });
