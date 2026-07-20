@@ -53,6 +53,7 @@ export type {
   ISessionStats,
 } from './lib/extraction-session';
 export { composeSchemas } from './lib/compose-schemas';
+export { isPrimitiveOnlyInputSchema } from './lib/get-safety';
 export { extract, tokenize } from './lib/extract';
 export type { ExtractOptions } from './lib/extract';
 export { extractClasses } from './lib/extract-classes';

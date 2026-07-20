@@ -36,6 +36,71 @@ All notable changes to this project are documented here.
   `nx run-many -t test -p apigen-core-client apigen-plugin-openapi apigen-cli
   apigen-engine-runtime` 114/114 — zero regressions.
 
+- **FEAT-APIGEN-022 / BUG-APIGEN-025** — apigen now auto-hoists a function to `GET`
+  when its domain params are ALL "properly typed primitives" (`string`/`number`/
+  `boolean`/`integer`, or zero params) — no `--opt http.verb.<id>=GET` override
+  needed — and `x-apigen-safe` (which `httpVerb()` already read but nothing ever
+  wrote) is now actually stamped by `composeSchemas()`, so the mechanism it
+  partially relied on is live end-to-end.
+
+  **Design:** a new shared helper, `isPrimitiveOnlyInputSchema()`
+  (`apigen-core-client/src/lib/get-safety.ts`), inspects a bare domain-input JSON
+  Schema (`{type:'object', properties, required}` — the exact shape of both
+  `Operation.input` and `GeneratedSchemas.schemas[fn].input`) and returns `true`
+  iff every property is `string`/`number`/`boolean`/`integer` (optionally unioned
+  with `null`), a primitive-literal `enum`, or there are zero properties at all
+  (vacuously true — covers zero-arg functions). `$ref`, `oneOf`/`anyOf`/`allOf`,
+  `array`, and `object` properties are excluded. `composeSchemas()`
+  (`apigen-core-client/src/lib/compose-schemas.ts`) computes `op.safe ===
+  true || isPrimitiveOnlyInputSchema(fnSchema.input)` per function and stamps it
+  as `'x-apigen-safe'` on the `ComposedSchemas` entry (BUG-APIGEN-025's fix:
+  `op.safe` is threaded from `Operation.safe` through a new `safe?: boolean`
+  field on `GeneratedSchemas.schemas[fn]`, populated by
+  `orchestrator.ts`'s `buildDescriptor()` Step 5 — previously computed but never
+  carried this far, so the field `httpVerb()` read was always `undefined`).
+  `apigen-engine-naming`'s `project()` applies the identical OR-condition
+  directly against `op.input` for non-`ComposedSchemas` consumers (gRPC/openapi/
+  MCP paths). The four previously-duplicated `httpVerb()` definitions
+  (`apigen-plugin-api-express`'s `run.ts`/`generate.ts`, `apigen-plugin-api-
+  fastify`'s `run.ts`/`generate.ts`) are now ONE definition, exported from
+  `apigen-engine-naming`, imported by all four call sites — the manual
+  `--opt http.verb.<id>=GET`/`POST` override is checked first there and always
+  wins over the auto-detected value, in both directions.
+
+  **Also fixed as a direct consequence:** GET requests were previously broken
+  for any non-`string` primitive param (backlog point 3 — Ajv's validate-Layer
+  has no `coerceTypes`, so a query-string `"42"` failed a `number` schema check).
+  A new `coerceQueryParams()` helper (`apigen-engine-runtime/src/lib/coerce-
+  query.ts`) coerces `number`/`integer`/`boolean` query values to their real JS
+  types at the TRANSPORT layer (both `run.ts`s and both `generate.ts`s' emitted
+  code), strictly scoped to the GET/query-string path — the shared Ajv instance
+  used for POST/body validation is untouched, so this cannot silently coerce a
+  malformed POST body. An unparseable value (e.g. `?count=abc`) is left as-is so
+  validation still rejects it with a clear `invalid_argument` error.
+
+  Several existing tests hardcoded `POST`/JSON-body requests for functions whose
+  params are now correctly auto-hoisted to `GET` (a zero-param op in
+  `orchestrator.spec.ts`'s override test, `price(v: Decimal)` — literally
+  `type Decimal = string` — in `cross-host-response-envelope.spec.ts`,
+  `upperFirst`/etc. in `real-consumer.spec.ts`, `addNumbers(a: number, b:
+  number)` in `serve.spec.ts`) — updated to GET/query-string calls (or, for the
+  one test whose actual point was proving the override mechanism itself, to a
+  non-primitive-shaped fixture) since the old assertions encoded pre-feature
+  default behavior, not the tests' real intent.
+
+  New regression tests: `apigen-core-client` (`get-safety.spec.ts`, 10 tests;
+  `compose-schemas.spec.ts` +5 `x-apigen-safe` tests), `apigen-engine-naming`
+  (`naming.spec.ts` +11 auto-hoist/`httpVerb` tests), `apigen-engine-runtime`
+  (`coerce-query.spec.ts`, 11 tests incl. a validate-Layer integration proof),
+  `entrypoint/apigen-cli` (`orchestrator.spec.ts` +5 real-pipeline
+  extract→compose→generate tests covering auto-hoist, non-hoist, override
+  precedence, and `x-apigen-safe` presence in the real generated schema). Full
+  suites green: `apigen-core-client` 267/267, `apigen-engine-naming` 51/51,
+  `apigen-engine-runtime` 151/151, `apigen-plugin-api-express` 36/36,
+  `apigen-plugin-api-fastify` 48/48, `apigen-cli` 139/139 — zero regressions.
+  `nx run-many -t build` clean for all six + their 32 dependents; `nx run-many -t
+  lint` clean.
+
 - **BUG-APIGEN-017/018/019/020** — MCP tool-schema hardening bundle (all four filed
   2026-07-06 from the `scratch-agent-search`/agent-browser consumer). Root-caused each
   independently before fixing (`entrypoint/apigen-cli/BACKLOG.md`'s filed entries per ID):

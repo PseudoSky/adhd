@@ -415,3 +415,96 @@ describe('composeSchemas — FEAT-APIGEN-023: zero-param/zero-envelope schema', 
     expect(Object.keys(listAllInput.properties)).toEqual(['data']);
   });
 });
+
+// ---------------------------------------------------------------------------
+// FEAT-APIGEN-022 / BUG-APIGEN-025 — x-apigen-safe stamping
+//
+// composeSchemas() is the single point where `op.safe` (threaded from
+// orchestrator.ts's buildDescriptor Step 5, BUG-APIGEN-025) and the
+// FEAT-APIGEN-022 primitive-param-shape auto-hoist combine into one
+// `x-apigen-safe` value every HTTP transport's shared `httpVerb()`
+// (@adhd/apigen-naming) reads identically.
+// ---------------------------------------------------------------------------
+
+describe('composeSchemas — FEAT-APIGEN-022 / BUG-APIGEN-025: x-apigen-safe', () => {
+  const verbSchemas: GeneratedSchemas = {
+    metadata: { namespace: 'verb', phase: '' },
+    schemas: {
+      // Zero-param — vacuously primitive-only → auto-hoist.
+      noParams: {
+        input: { type: 'object', properties: {}, required: [] },
+        output: { type: 'string' },
+      },
+      // All primitive params, no explicit `safe` — auto-hoist.
+      getPrimitive: {
+        input: {
+          type: 'object',
+          properties: { id: { type: 'string' }, count: { type: 'number' } },
+          required: ['id'],
+        },
+        output: { type: 'string' },
+      },
+      // Object-typed param — must NOT auto-hoist.
+      withObject: {
+        input: {
+          type: 'object',
+          properties: {
+            payload: {
+              type: 'object',
+              properties: { x: { type: 'number' } },
+            },
+          },
+          required: ['payload'],
+        },
+        output: { type: 'string' },
+      },
+      // Array-typed param — must NOT auto-hoist.
+      withArray: {
+        input: {
+          type: 'object',
+          properties: { ids: { type: 'array', items: { type: 'string' } } },
+          required: ['ids'],
+        },
+        output: { type: 'string' },
+      },
+      // Explicit op.safe:true despite a complex param — safe wins regardless
+      // of shape (BUG-APIGEN-025: op.safe is an independent, OR'd signal).
+      explicitSafeComplexShape: {
+        input: {
+          type: 'object',
+          properties: {
+            payload: { type: 'object', properties: {} },
+          },
+          required: ['payload'],
+        },
+        output: { type: 'string' },
+        safe: true,
+      },
+    },
+  };
+
+  it('[verb-safe.1] zero-param function auto-hoists: x-apigen-safe:true with no override', () => {
+    const composed = composeSchemas(verbSchemas, []);
+    expect(composed['noParams']['x-apigen-safe']).toBe(true);
+  });
+
+  it('[verb-safe.2] all-primitive-param function auto-hoists: x-apigen-safe:true with no override', () => {
+    const composed = composeSchemas(verbSchemas, []);
+    expect(composed['getPrimitive']['x-apigen-safe']).toBe(true);
+  });
+
+  it('[verb-safe.3] object-typed param does NOT auto-hoist: x-apigen-safe:false', () => {
+    const composed = composeSchemas(verbSchemas, []);
+    expect(composed['withObject']['x-apigen-safe']).toBe(false);
+  });
+
+  it('[verb-safe.4] array-typed param does NOT auto-hoist: x-apigen-safe:false', () => {
+    const composed = composeSchemas(verbSchemas, []);
+    expect(composed['withArray']['x-apigen-safe']).toBe(false);
+  });
+
+  it('[verb-safe.5] explicit op.safe:true wins even with a complex-shaped param', () => {
+    const composed = composeSchemas(verbSchemas, []);
+    expect(composed['explicitSafeComplexShape']['x-apigen-safe']).toBe(true);
+  });
+});
