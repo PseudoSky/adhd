@@ -17,7 +17,7 @@ import { createServer } from 'node:http'
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 ${transportImport}
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { dispatch } from '@adhd/apigen-engine-runtime'
+import { dispatch, buildMcpOutputSchema, wrapMcpStructuredContent } from '@adhd/apigen-engine-runtime'
 import { toolMetas, groupFns, groupCreateClient } from './index.js'
 
 // §9.1 — extract envelope from MCP _meta["x-<pluginId>-<field>"].
@@ -38,14 +38,21 @@ function extractEnvelope(schema: Record<string, unknown>, meta: Record<string, u
 const mcpServer = new Server({ name: 'apigen-mcp', version: '1.0.0' }, { capabilities: { tools: {} } })
 
 mcpServer.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: Object.entries(toolMetas).map(([name, meta]) => ({
-    name,
-    // BUG-APIGEN-020: description baked at generate time by generate.ts —
-    // documents the "data" envelope calling convention (+ any envelope
-    // fields) so consumers don't have to discover it by trial and error.
-    description: (meta as any).description ?? name,
-    inputSchema: (meta.schema as any).input,
-  })),
+  tools: Object.entries(toolMetas).map(([name, meta]) => {
+    // BUG-APIGEN-019: publish the function's return-type schema (oneOf+discriminator
+    // for unions) as MCP's outputSchema — wrapped under \`result\` when it isn't
+    // top-level type:"object", since the MCP protocol requires that shape.
+    const { outputSchema } = buildMcpOutputSchema((meta.schema as any).output)
+    return {
+      name,
+      // BUG-APIGEN-020: description baked at generate time by generate.ts —
+      // documents the "data" envelope calling convention (+ any envelope
+      // fields) so consumers don't have to discover it by trial and error.
+      description: (meta as any).description ?? name,
+      inputSchema: (meta.schema as any).input,
+      ...(outputSchema ? { outputSchema } : {}),
+    }
+  }),
 }))
 
 mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
@@ -63,7 +70,13 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
     envelope,
     ((args as any)['data'] ?? {}) as Record<string, unknown>,
   )
-  return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+  // BUG-APIGEN-019: pair outputSchema with a matching structuredContent value.
+  const { wrapped } = buildMcpOutputSchema((meta.schema as any).output)
+  const structuredContent = wrapMcpStructuredContent(wrapped, result)
+  return {
+    content: [{ type: 'text', text: JSON.stringify(result) }],
+    ...(structuredContent ? { structuredContent } : {}),
+  }
 })
 
 const mcpTransport = new ${TransportClass}({ sessionIdGenerator: undefined } as any)

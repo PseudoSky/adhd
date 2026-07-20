@@ -10,7 +10,9 @@
 //   - Sets `safe` from `kind` default (query→true, action→false) per §4.
 //   - Populates `input`/`output` JSON-Schema via the existing `buildSchema`.
 //   - Attaches `typeText` (language-tagged, same-host sugar) where available.
-//   - Synthesises stable `id`s for anonymous-default and CJS shapes (R13).
+//   - Synthesises stable `id`s for CJS shapes (R13); anonymous-default
+//     (Shape 5) is named by the literal `'default'` — its real runtime
+//     `.name` (BUG-APIGEN-033) — not a synthesized filename-derived id.
 //
 // Export-shape matrix handled:
 //   1. Named function export          `export function foo(…)`
@@ -37,6 +39,7 @@ import {
   type ExtractionSession,
   type InternalExtractionSession,
 } from './extraction-session';
+import { extractParamDefault, applyParamDefault } from './param-defaults';
 
 // ---------------------------------------------------------------------------
 // Public entry-point
@@ -159,7 +162,8 @@ async function extractWithSession(
     if (fnDecl) {
       // Shape 1 / 1b: named function export (local, renamed, or re-exported).
       const sig = fnDecl.getSignature();
-      const params = rawParams(sig);
+      // BUG-APIGEN-018: jsDocSource = fnDecl itself (matches v1 named.ts).
+      const params = rawParams(sig, fnDecl);
       const returnText = sig.getReturnType().getText();
 
       ops.push(
@@ -200,7 +204,13 @@ async function extractWithSession(
       if (sigs.length === 0) continue;
 
       const sig = sigs[0];
-      const params = rawParamsFromSig(sig, varDecl);
+      // BUG-APIGEN-018: jsDocSource = the enclosing VariableStatement
+      // (matches v1 named.ts's const/arrow branch).
+      const params = rawParamsFromSig(
+        sig,
+        varDecl,
+        varDecl.getVariableStatement()
+      );
       const returnText = sig.getReturnType().getText();
       const isAsync =
         initKind === 'ArrowFunction'
@@ -234,7 +244,13 @@ async function extractWithSession(
         if (sigs.length === 0) continue; // non-function prop — skip
 
         const sig = sigs[0];
-        const params = rawParamsFromSig(sig, varDecl);
+        // BUG-APIGEN-018: jsDocSource = the enclosing VariableStatement
+        // (matches v1 named-object.ts).
+        const params = rawParamsFromSig(
+          sig,
+          varDecl,
+          varDecl.getVariableStatement()
+        );
         const returnText = sig.getReturnType().getText();
 
         // Path: [file, objectName, propName]
@@ -262,7 +278,7 @@ async function extractWithSession(
       // May be a serializable-data const (kind=query) — check serializability
       const constType = varDecl.getType();
       const typeText = constType.getText();
-      if (isSerializableType(typeText)) {
+      if (isSerializableType(constType, varDecl)) {
         const schema = await buildSchema(
           project,
           sf,
@@ -292,30 +308,41 @@ async function extractWithSession(
       const exprKind = expr.getKindName();
 
       if (['ArrowFunction', 'FunctionExpression'].includes(exprKind)) {
-        // Shape 5: anonymous default export  — synthesise stable id from filename
-        const anonName =
-          normalizeFileName(fileName).replace(/-/g, '_') + '_default';
+        // Shape 5: anonymous default export — BUG-APIGEN-033: the op MUST be
+        // named `'default'`, not a filename-derived synthetic id. ECMAScript's
+        // `export default AssignmentExpression` NamedEvaluation rule gives an
+        // anonymous default-exported fn/arrow a real runtime `.name` of
+        // `"default"` — that's the only key `buildFnTable()`
+        // (`@adhd/apigen-engine-runtime`) can ever resolve for this shape
+        // (it keys every function by its live `.name`, which it cannot
+        // override). Naming the op anything else here is guaranteed to be
+        // unresolvable at dispatch time no matter what `buildFnTable` does.
+        // `fileSegment` (via `buildActionOp`) still carries the per-file
+        // disambiguation in `op.path`/`id` — only the LEAF segment (the
+        // actual dispatch key, `op.path[op.path.length-1].raw`) must be
+        // `'default'` to match the runtime name exactly.
         const fnType = expr.getType();
         const sigs = fnType.getCallSignatures();
         if (sigs.length > 0) {
           const sig = sigs[0];
-          const params = rawParamsSig(sig);
+          // BUG-APIGEN-018: jsDocSource = the export assignment statement
+          // (closest carrier of a leading JSDoc block; v1 had no equivalent
+          // shape — anonymous default export params were never covered by
+          // v1's object-literal-only `extractDefault`).
+          const params = rawParamsSig(sig, exportAssign);
           const returnText = sig.getReturnType().getText();
           const isAsync =
             exprKind === 'ArrowFunction'
               ? (expr as import('ts-morph').ArrowFunction).isAsync()
               : (expr as import('ts-morph').FunctionExpression).isAsync();
 
-          // Path = [file] per SPEC §5 "single default fn → path=[file]"
-          // But symbol is anonymous — we use the synthesized name as raw
-          const anonSeg: Segment = { raw: anonName, words: tokenize(anonName) };
           ops.push(
-            await buildActionOpAtPath(
+            await buildActionOp(
               project,
               sf,
               namespaceSeg,
-              [anonSeg],
-              anonName,
+              fileSegment,
+              'default',
               params,
               returnText,
               isAsync,
@@ -334,7 +361,9 @@ async function extractWithSession(
           const sigs = propType.getCallSignatures();
           if (sigs.length === 0) continue;
           const sig = sigs[0];
-          const params = rawParamsSig(sig);
+          // BUG-APIGEN-018: jsDocSource = exportAssign (matches v1
+          // default-export.ts's object-property branch).
+          const params = rawParamsSig(sig, exportAssign);
           const returnText = sig.getReturnType().getText();
           // SPEC §5: default object → path=[file,"default",…keys]
           const propPath: Segment[] = [
@@ -365,13 +394,17 @@ async function extractWithSession(
         if (d.getKindName() !== 'FunctionDeclaration') continue;
         const fnDecl = d as import('ts-morph').FunctionDeclaration;
         const sym = fnDecl.getName();
-        // If named, use the name; if anonymous, synthesise from filename
-        const symName =
-          sym && sym.length > 0
-            ? sym
-            : normalizeFileName(fileName).replace(/-/g, '_') + '_default';
+        // If named, use the name. If anonymous (`export default function(x){}`),
+        // BUG-APIGEN-033: use the literal `'default'` — same NamedEvaluation
+        // rule as the arrow/FunctionExpression Shape-5 case above gives this
+        // form a real runtime `.name` of `"default"` too, and that's the only
+        // key `buildFnTable()` can ever resolve it under.
+        const symName = sym && sym.length > 0 ? sym : 'default';
         const sig = fnDecl.getSignature();
-        const params = rawParams(sig);
+        // BUG-APIGEN-018: jsDocSource = fnDecl itself (analogous to Shape 1;
+        // v1's extractDefault covered only the object-literal default-export
+        // form, not a bare `export default function foo(…)`).
+        const params = rawParams(sig, fnDecl);
         const returnText = sig.getReturnType().getText();
         ops.push(
           await buildActionOp(
@@ -428,7 +461,146 @@ async function extractWithSession(
 // Operation builders
 // ---------------------------------------------------------------------------
 
-type RawParam = { name: string; type: string; optional: boolean };
+type RawParam = {
+  name: string;
+  type: string;
+  optional: boolean;
+  /** BUG-APIGEN-018: raw source text of the param's default value, if any. */
+  defaultValue?: string;
+};
+
+/**
+ * BUG-APIGEN-029: `buildSchema()`'s Path 1 (ts-json-schema-generator) can
+ * legitimately produce a `definitions`/`$defs` sibling for a self-referential
+ * / recursive named type — `topRef: false` (BUG-APIGEN-026) only controls
+ * whether the ENTRY type itself is `$ref`-wrapped, not a type it recursively
+ * contains, which MUST stay a `$ref` + `definitions` entry (there is no other
+ * way to represent a cycle in JSON Schema).
+ *
+ * Confirmed empirically (not merely by reading the generator's source): that
+ * `definitions` sibling does NOT reliably land at the TOP of the fragment
+ * `buildSchema()` hands back for the param's own type. `extract.ts`'s param
+ * type-text (from the signature) and a property's type-text (from
+ * `morph-walk.ts`'s `safeTypeText`, resolved relative to the property's own
+ * declaration node) are frequently DIFFERENT strings for the exact same
+ * TypeScript type — e.g. a fully-qualified `import("path").Foo` for the
+ * top-level param vs the bare `Foo` for the same type reached again via one
+ * of its own properties. Because `buildSchema`'s ancestors/deadlock guard
+ * (BUG-APIGEN-CORE-003) keys purely on that literal type-text string, this
+ * mismatch means the SAME type resolved through a nested property is treated
+ * as an unrelated, fresh call — Path 1 can then succeed independently at that
+ * NESTED position and produce its own self-contained `$ref` + `definitions`
+ * pair several levels deep inside the outer fragment (verified: for a
+ * self-referential `interface Foo { f?: Foo }`, `definitions` landed at
+ * `<parentFragment>.properties.f.definitions`, not at the fragment's own
+ * top level).
+ *
+ * Splicing that fragment (at whatever depth its `definitions` actually
+ * landed) directly into `properties[p.name]` buries it inside the composed
+ * function schema. JSON-Schema `$ref` resolution is always root-relative
+ * (`#/definitions/X` resolves against the *document's own* top level, not
+ * wherever `definitions` happens to be nested) — so once `composeSchemas()` /
+ * `ajv.compile()` treat the whole function input as the document root, that
+ * nested `definitions` sibling is invisible and the `$ref` permanently
+ * dangles: `"can't resolve reference #/definitions/X from id #"` at first
+ * dispatch (BUG-APIGEN-029).
+ *
+ * The fix walks the ENTIRE per-param fragment tree (properties, items,
+ * oneOf/anyOf/allOf, additionalProperties, propertyNames, and generically any
+ * other object-valued key — the same generic walk style `findDanglingRefs`
+ * uses above), hoisting every `definitions`/`$defs` dict found at ANY depth
+ * up to the function-level `input` schema's own root — which
+ * `compose-schemas.ts` now also carries forward onto the final composed
+ * document — so every `$ref` resolves no matter how deep in the fragment (or
+ * the final composed schema) it originated.
+ *
+ * Mutates `fragment` in place (strips every hoisted `definitions`/`$defs` key
+ * wherever found) and merges into `hoisted`, keyed by definitions-dict name.
+ * Throws if two params in the same function contribute a same-named
+ * definition with different content — that can only mean two structurally
+ * different types collided under one generated name, which apigen cannot
+ * safely merge.
+ */
+function hoistNestedDefs(
+  fragment: Record<string, unknown>,
+  hoisted: { definitions: Record<string, unknown>; $defs: Record<string, unknown> },
+  fnName: string,
+  paramName: string
+): Record<string, unknown> {
+  // CRITICAL: `fragment` (and every object nested inside it) may be a
+  // reference SHARED with `buildSchema()`'s session/persistent cache (see
+  // `buildSchema`'s own doc comment: results are memoized by reference and
+  // "MUST be treated as immutable by callers"). The top-level per-param
+  // fragment is already shallow-cloned by the caller (`{...built}`), but a
+  // NESTED object reached via `properties`/`items`/etc. is NOT — it's the
+  // exact cached object. An earlier version of this function deleted
+  // `definitions`/`$defs` from nodes in place, which silently corrupted the
+  // shared cache: the FIRST extraction correctly hoisted and stripped the
+  // nested `definitions`, but that mutation permanently removed it from the
+  // cached object too, so every SUBSEQUENT `extract()` call in the same
+  // process (any later test in the same file, or a real watch/serve rebuild)
+  // got back the now-definitions-less cached fragment and reintroduced the
+  // exact dangling-`$ref` bug this function exists to fix — verified: running
+  // two BUG-APIGEN-029 regression tests back-to-back in the same process
+  // reproduced "can't resolve reference #/definitions/SelfRefParams from id
+  // #" on the SECOND test only, while the first alone always passed.
+  //
+  // Fixed by never mutating input: this returns a freshly-cloned fragment
+  // with every `definitions`/`$defs` key removed from wherever it was found,
+  // and mutates only `hoisted` (the caller-owned accumulator) and its own
+  // freshly-built output tree — the cache's objects are never touched.
+  const stack = new Set<object>();
+
+  const clone = (node: unknown): unknown => {
+    if (Array.isArray(node)) return node.map(clone);
+    if (!node || typeof node !== 'object') return node;
+    // Defensive cycle guard: ts-json-schema-generator's output models
+    // recursion via `$ref` STRINGS, never live circular JS object references,
+    // so this should never actually trigger — but if it ever did, cloning
+    // would otherwise stack-overflow instead of failing loudly/gracefully.
+    if (stack.has(node as object)) return node;
+    stack.add(node as object);
+    try {
+      const rec = node as Record<string, unknown>;
+      const out: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(rec)) {
+        if (key === 'definitions' || key === '$defs') {
+          const defKey = key as 'definitions' | '$defs';
+          const bucket = hoisted[defKey];
+          for (const [defName, defValue] of Object.entries(
+            value as Record<string, unknown>
+          )) {
+            // Recurse into the definition's OWN body too (mutually-recursive
+            // types can carry a further-nested `definitions`/`$defs`) — this
+            // also clones it, so the bucket never holds a cache-shared object.
+            const clonedDefValue = clone(defValue);
+            const existing = bucket[defName];
+            if (
+              existing !== undefined &&
+              JSON.stringify(existing) !== JSON.stringify(clonedDefValue)
+            ) {
+              throw new Error(
+                `[apigen-core-client] Function "${fnName}": param "${paramName}" contributes a ` +
+                  `"${defKey}.${defName}" definition that conflicts with an identically-named ` +
+                  `definition already hoisted from another param/output in the same function. ` +
+                  `Two structurally different types share the same generated definition key, ` +
+                  `so apigen cannot safely merge them into one function-level schema.`
+              );
+            }
+            bucket[defName] = clonedDefValue;
+          }
+          continue; // hoisted — do not leave a copy behind in `out`
+        }
+        out[key] = clone(value);
+      }
+      return out;
+    } finally {
+      stack.delete(node as object);
+    }
+  };
+
+  return clone(fragment) as Record<string, unknown>;
+}
 
 async function buildActionOp(
   project: Project,
@@ -470,19 +642,36 @@ async function buildActionOpAtPath(
   tsconfig?: string,
   session?: InternalExtractionSession
 ): Promise<Operation> {
-  // [inv:ctx-name-only] — exclude ctx by name, no type checking
+  // [inv:ctx-name-only] — exclude ctx by name, no type checking. Recorded via
+  // `hasCtx` (BUG-APIGEN-001) so a runtime dispatcher can re-inject it as the
+  // first call arg — matches the v1 generateSchemas() invariant this replaces.
+  const hasCtx = params.length > 0 && params[0].name === 'ctx';
   const domainParams = params.filter((p) => p.name !== 'ctx');
   const required = domainParams.filter((p) => !p.optional).map((p) => p.name);
 
   const properties: Record<string, unknown> = {};
+  // BUG-APIGEN-029: pooled across all domain params of this one function —
+  // see hoistNestedDefs's doc comment for why this must happen.
+  const hoistedDefs = {
+    definitions: {} as Record<string, unknown>,
+    $defs: {} as Record<string, unknown>,
+  };
   for (const p of domainParams) {
-    properties[p.name] = await buildSchema(
-      project,
-      sf,
-      p.type,
-      tsconfig,
-      session
-    );
+    const built = await buildSchema(project, sf, p.type, tsconfig, session);
+    // buildSchema's results are memoized by reference (session/persistent
+    // caches) and MUST be treated as immutable by callers. `hoistNestedDefs`
+    // returns a fully-cloned fragment (recursively — not just a top-level
+    // shallow clone) precisely so hoisting/stripping `definitions`/`$defs`
+    // and the `default`/`description` mutation below can never leak into,
+    // or corrupt, the cached object shared with other params/operations.
+    const propSchema = hoistNestedDefs(built, hoistedDefs, exportName, p.name);
+    // BUG-APIGEN-018: surface the TS initializer / JSDoc @default as both
+    // the native JSON-Schema `default` keyword and a human-readable note
+    // in `description`.
+    if (p.defaultValue !== undefined) {
+      applyParamDefault(propSchema, p.defaultValue);
+    }
+    properties[p.name] = propSchema;
   }
 
   // Unwrap Promise<T> → T for output schema
@@ -499,6 +688,15 @@ async function buildActionOpAtPath(
     type: 'object',
     properties,
     required,
+    // BUG-APIGEN-029: hoisted definitions from param fragments — see
+    // hoistNestedDefs. Only attached when non-empty so the common
+    // (no-recursive-type) case's schema shape is unchanged.
+    ...(Object.keys(hoistedDefs.definitions).length > 0
+      ? { definitions: hoistedDefs.definitions }
+      : {}),
+    ...(Object.keys(hoistedDefs.$defs).length > 0
+      ? { $defs: hoistedDefs.$defs }
+      : {}),
   };
 
   const id = buildId(ns, opPath);
@@ -520,6 +718,7 @@ async function buildActionOpAtPath(
       input: paramsToTypeText(params),
       output: resolvedReturn,
     },
+    ...(hasCtx ? { hasCtx: true } : {}),
   };
 }
 
@@ -666,7 +865,10 @@ function pickFunctionDeclWithBody(
 // Parameter extraction helpers (from ts-morph Signature / FunctionDeclaration)
 // ---------------------------------------------------------------------------
 
-function rawParams(sig: import('ts-morph').Signature): RawParam[] {
+function rawParams(
+  sig: import('ts-morph').Signature,
+  jsDocSource?: import('ts-morph').Node | null
+): RawParam[] {
   return sig.getParameters().map((p) => {
     const decls = p.getDeclarations();
     const paramDecl =
@@ -681,13 +883,15 @@ function rawParams(sig: import('ts-morph').Signature): RawParam[] {
       name: p.getName(),
       type: p.getTypeAtLocation(sig.getDeclaration()).getText(),
       optional,
+      defaultValue: extractParamDefault(paramDecl, p.getName(), jsDocSource),
     };
   });
 }
 
 function rawParamsFromSig(
   sig: import('ts-morph').Signature,
-  locationNode: import('ts-morph').Node
+  locationNode: import('ts-morph').Node,
+  jsDocSource?: import('ts-morph').Node | null
 ): RawParam[] {
   return sig.getParameters().map((p) => {
     const decls = p.getDeclarations();
@@ -703,11 +907,19 @@ function rawParamsFromSig(
       name: p.getName(),
       type: p.getTypeAtLocation(locationNode).getText(),
       optional,
+      defaultValue: extractParamDefault(
+        paramDecl,
+        p.getName(),
+        jsDocSource ?? locationNode
+      ),
     };
   });
 }
 
-function rawParamsSig(sig: import('ts-morph').Signature): RawParam[] {
+function rawParamsSig(
+  sig: import('ts-morph').Signature,
+  jsDocSource?: import('ts-morph').Node | null
+): RawParam[] {
   return sig.getParameters().map((p) => {
     const decls = p.getDeclarations();
     const paramDecl =
@@ -724,6 +936,7 @@ function rawParamsSig(sig: import('ts-morph').Signature): RawParam[] {
         ? paramDecl.getType().getText()
         : p.getValueDeclaration()?.getType()?.getText() ?? 'unknown',
       optional,
+      defaultValue: extractParamDefault(paramDecl, p.getName(), jsDocSource),
     };
   });
 }
@@ -758,27 +971,101 @@ function shouldSkip(name: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Serialisability heuristic for query consts
+// Serialisability check for query consts
 // ---------------------------------------------------------------------------
 
 /**
- * Rough heuristic: is a type text plausibly a serialisable JSON value?
- * Primitive scalars, string literals, arrays of them, and inline object types
- * are considered serialisable. Functions, classes, and complex generics are not.
+ * Structural check: is this compiler `Type` a plain JSON-serialisable value?
+ * Inspects the actual `Type` object (properties, index signatures, call
+ * signatures) rather than pattern-matching `type.getText()`'s rendering, so
+ * generic wrappers around serialisable shapes -- `Record<K, V>`, `Partial<T>`,
+ * `Readonly<T>`, `Array<T>` -- are recognised regardless of how the compiler
+ * prints them (BUG-APIGEN-CORE-004).
+ *
+ * Functions, classes, and any type exposing call/construct signatures --
+ * including via a nested property, e.g. `Map`/`Set`'s methods -- are rejected
+ * structurally rather than by name, so `Map<K, V>` (genuinely not
+ * JSON-serialisable) is correctly excluded without a deny-list entry.
+ *
+ * `seen` guards against infinite recursion on self-referential types (e.g. a
+ * JSON-like recursive type alias); a type re-encountered mid-traversal is
+ * assumed serialisable, since nothing in the traversal so far disproved it.
  */
-function isSerializableType(typeText: string): boolean {
-  const t = typeText.trim();
-  // Exclude obvious non-serialisable patterns
-  if (t.includes('=>')) return false;
-  if (t.startsWith('typeof ')) return false;
-  if (t.toLowerCase().includes('function')) return false;
-  // Primitives + common literal patterns
-  if (['string', 'number', 'boolean', 'null', 'undefined'].includes(t))
+function isSerializableType(
+  type: import('ts-morph').Type,
+  locationNode: import('ts-morph').Node,
+  seen: Set<string> = new Set()
+): boolean {
+  // Functions, constructors, and class references are never serialisable.
+  if (type.getCallSignatures().length > 0) return false;
+  if (type.getConstructSignatures().length > 0) return false;
+
+  if (
+    type.isString() ||
+    type.isNumber() ||
+    type.isBoolean() ||
+    type.isNull() ||
+    type.isUndefined() ||
+    type.isStringLiteral() ||
+    type.isNumberLiteral() ||
+    type.isBooleanLiteral() ||
+    type.isEnumLiteral()
+  ) {
     return true;
-  if (t.startsWith("'") || t.startsWith('"')) return true; // string literal
-  if (/^\d/.test(t)) return true; // numeric literal
-  // Plain object or array
-  if (t.startsWith('{') || t.startsWith('[')) return true;
-  if (t.endsWith('[]')) return true;
+  }
+
+  if (type.isArray() || type.isReadonlyArray()) {
+    const elementType = type.getArrayElementType();
+    return elementType
+      ? isSerializableType(elementType, locationNode, seen)
+      : false;
+  }
+
+  if (type.isTuple()) {
+    return type
+      .getTupleElements()
+      .every((t) => isSerializableType(t, locationNode, seen));
+  }
+
+  if (type.isUnion()) {
+    return type
+      .getUnionTypes()
+      .every((t) => isSerializableType(t, locationNode, seen));
+  }
+
+  if (type.isIntersection()) {
+    return type
+      .getIntersectionTypes()
+      .every((t) => isSerializableType(t, locationNode, seen));
+  }
+
+  if (type.isObject()) {
+    // Cycle guard: a recursive type re-entering itself is assumed
+    // serialisable (nothing in the traversal so far disproved it).
+    const key = type.getText(locationNode);
+    if (seen.has(key)) return true;
+    seen.add(key);
+
+    // Record<K, V> / index-signature interfaces: the value type(s) must be
+    // serialisable. An indexed type has no *own* properties beyond the index
+    // signature, so checking it here (short-circuiting getProperties()) is
+    // sufficient.
+    const stringIndexType = type.getStringIndexType();
+    const numberIndexType = type.getNumberIndexType();
+    if (stringIndexType || numberIndexType) {
+      return [stringIndexType, numberIndexType].every(
+        (t) => !t || isSerializableType(t, locationNode, seen)
+      );
+    }
+
+    const properties = type.getProperties();
+    if (properties.length === 0) return true; // `{}` — vacuously serialisable
+
+    return properties.every((prop) => {
+      const propType = prop.getTypeAtLocation(locationNode);
+      return isSerializableType(propType, locationNode, seen);
+    });
+  }
+
   return false;
 }

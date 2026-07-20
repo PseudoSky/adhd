@@ -21,10 +21,12 @@ import {
   mergeOperations,
   buildDescriptor,
   orchestrateGenerate,
+  opMatchesExportMode,
 } from '../lib/orchestrator';
 import { collectFormats } from '../lib/commands/generate';
 import { checkCollisions, CollisionDetectedError } from '@adhd/apigen-naming';
 import { project as projectOp } from '@adhd/apigen-naming';
+import { httpVerb as httpVerbShared } from '@adhd/apigen-naming';
 import type {
   Operation,
   Segment,
@@ -328,7 +330,17 @@ describe('orchestrator: projection-override config (Tenet 1)', () => {
       async: true,
       streaming: false,
       safe: false, // action default → POST; override will force GET
-      input: { type: 'object', properties: {}, required: [] },
+      // FEAT-APIGEN-022: an object-typed param, not the earlier placeholder
+      // `properties: {}` — a REAL zero-param shape now auto-hoists to GET
+      // (see naming.spec.ts's dedicated auto-hoist suite), which would make
+      // this fixture default to GET even without the override below and
+      // defeat the point of this test (proving the OVERRIDE mechanism, not
+      // the default-verb derivation).
+      input: {
+        type: 'object',
+        properties: { payload: { type: 'object', properties: {} } },
+        required: ['payload'],
+      },
       output: { type: 'object' },
       envelope: {},
       typeText: null,
@@ -396,11 +408,14 @@ describe('orchestrator: projection-override config (Tenet 1)', () => {
 // [dod.10 v2 teeth] buildDescriptor / orchestrateGenerate: default-import Decimal
 // source produces format:decimal in packageSchemas and decimal.js in package.json.
 //
-// The v2 path builds ComposedSchemas via generateSchemas + composeSchemas, the
-// SAME pipeline as v1. If normalizeTypeText() is absent from buildSchema, the
-// qualified import path emitted by ts-morph (`import("…decimal.js…").default`)
-// is NOT found in SCALAR_SCHEMAS → schema is {} → no format:decimal →
-// collectDepsFromPackageSchemas returns {} → decimal.js absent from package.json.
+// BUG-APIGEN-CORE-005 (v1 retirement): buildDescriptor's Step 5 builds
+// ComposedSchemas by grouping the ALREADY-EXTRACTED v2 `extract()` operations
+// (no second extraction pass — v1's generateSchemas() is deleted) and feeding
+// them through the same (unchanged) composeSchemas(). If normalizeTypeText()
+// is absent from buildSchema, the qualified import path emitted by ts-morph
+// (`import("…decimal.js…").default`) is NOT found in SCALAR_SCHEMAS →
+// schema is {} → no format:decimal → collectDepsFromPackageSchemas returns
+// {} → decimal.js absent from package.json.
 //
 // Regression guarantee: revert normalizeTypeText() call in buildSchema →
 // packageSchemas for the Decimal fixture carry {} outputs → format:decimal
@@ -487,6 +502,255 @@ describe('[dod.10 v2 teeth] buildDescriptor: default-import Decimal source carri
           schemas
         )}. Regression: normalizeTypeText() not called in buildSchema.`
     ).toBe(true);
+  }, 30_000);
+});
+
+// ---------------------------------------------------------------------------
+// FEAT-APIGEN-022 / BUG-APIGEN-025 — full real pipeline: extract() (real
+// TS source) → buildDescriptor()'s Step 5 (op.safe threading) →
+// composeSchemas() (x-apigen-safe stamping) → the shared httpVerb()
+// (@adhd/apigen-naming), proving the whole chain end-to-end rather than any
+// single stage in isolation.
+// ---------------------------------------------------------------------------
+
+describe('orchestrator: FEAT-APIGEN-022 auto-hoist + BUG-APIGEN-025 x-apigen-safe (real pipeline)', () => {
+  const verbHoistFixture = path.join(fixturesDir, 'verb-hoist.ts');
+
+  it('[verb-hoist.1] zero-param and all-primitive-param functions auto-hoist: x-apigen-safe:true, no override needed', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [{ file: verbHoistFixture, namespace: 'vh' }],
+    });
+    const pkg = descriptor.packageSchemas.get('vh');
+    expect(pkg).toBeDefined();
+    if (!pkg) throw new Error('vh package not found');
+
+    expect(pkg.schemas['noParams']['x-apigen-safe']).toBe(true);
+    expect(pkg.schemas['getPrimitive']['x-apigen-safe']).toBe(true);
+  });
+
+  it('[verb-hoist.2] object- and array-typed params do NOT auto-hoist: x-apigen-safe:false', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [{ file: verbHoistFixture, namespace: 'vh' }],
+    });
+    const pkg = descriptor.packageSchemas.get('vh');
+    if (!pkg) throw new Error('vh package not found');
+
+    expect(pkg.schemas['withObject']['x-apigen-safe']).toBe(false);
+    expect(pkg.schemas['withArray']['x-apigen-safe']).toBe(false);
+  });
+
+  it('[verb-hoist.3] the shared httpVerb() resolves GET for auto-hoisted fns and POST for complex-param fns, with no override', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [{ file: verbHoistFixture, namespace: 'vh' }],
+    });
+    const pkg = descriptor.packageSchemas.get('vh');
+    if (!pkg) throw new Error('vh package not found');
+
+    expect(httpVerbShared('vh:noParams', pkg.schemas['noParams'], {})).toBe(
+      'GET'
+    );
+    expect(
+      httpVerbShared('vh:getPrimitive', pkg.schemas['getPrimitive'], {})
+    ).toBe('GET');
+    expect(
+      httpVerbShared('vh:withObject', pkg.schemas['withObject'], {})
+    ).toBe('POST');
+    expect(httpVerbShared('vh:withArray', pkg.schemas['withArray'], {})).toBe(
+      'POST'
+    );
+  });
+
+  it('[verb-hoist.4] a manual --opt http.verb.<id>=POST override still wins over the auto-hoisted x-apigen-safe:true', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [{ file: verbHoistFixture, namespace: 'vh' }],
+    });
+    const pkg = descriptor.packageSchemas.get('vh');
+    if (!pkg) throw new Error('vh package not found');
+
+    // Confirm it WOULD auto-hoist absent the override (negative control).
+    expect(
+      httpVerbShared('vh:getPrimitive', pkg.schemas['getPrimitive'], {})
+    ).toBe('GET');
+
+    const overrides = parseOverrides(['http.verb.vh:getPrimitive=POST']);
+    expect(
+      httpVerbShared(
+        'vh:getPrimitive',
+        pkg.schemas['getPrimitive'],
+        overrides
+      )
+    ).toBe('POST');
+  });
+
+  it('[verb-hoist.5] end-to-end: orchestrateGenerate against a real HTTP-shaped fake plugin sees x-apigen-safe:true in the packageSchemas it receives for the auto-hoisted fn', async () => {
+    let capturedSchemas: Record<string, unknown> | undefined;
+    const capturingPlugin: OutputPlugin = {
+      id: 'capturing-verb',
+      description: 'captures packageSchemas for x-apigen-safe inspection',
+      generate(genInput: PluginInput) {
+        capturedSchemas = genInput.packages[0]?.schemas as Record<
+          string,
+          unknown
+        >;
+        return { files: [] };
+      },
+    };
+
+    await orchestrateGenerate(
+      { sources: [{ file: verbHoistFixture, namespace: 'vh' }] },
+      capturingPlugin,
+      os.tmpdir()
+    );
+
+    expect(capturedSchemas).toBeDefined();
+    const getPrimitive = (capturedSchemas as Record<string, unknown>)[
+      'getPrimitive'
+    ] as Record<string, unknown>;
+    expect(getPrimitive['x-apigen-safe']).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-034 — `--export <mode>` scopes the served surface again
+// ---------------------------------------------------------------------------
+
+describe('orchestrator: BUG-APIGEN-034 --export <mode> scoping', () => {
+  const exportModeFixture = path.join(fixturesDir, 'export-mode-scoping.ts');
+
+  // Unit-level: opMatchesExportMode's path-shape classification directly.
+  it('opMatchesExportMode: "named" matches a plain [file, name] path, not a default-object path', () => {
+    const seg = (raw: string): Segment => ({ raw, words: [raw.toLowerCase()] });
+    const namedOp = makeOp('ns/file/helper', 'ns', 'file', 'helper');
+    const defaultObjOp: Operation = {
+      ...namedOp,
+      path: [seg('file'), seg('default'), seg('ping')],
+    };
+    expect(opMatchesExportMode(namedOp, { type: 'named' })).toBe(true);
+    expect(opMatchesExportMode(defaultObjOp, { type: 'named' })).toBe(false);
+  });
+
+  it('opMatchesExportMode: "default" matches only path=[file,"default",key], not a plain named path', () => {
+    const seg = (raw: string): Segment => ({ raw, words: [raw.toLowerCase()] });
+    const namedOp = makeOp('ns/file/helper', 'ns', 'file', 'helper');
+    const defaultObjOp: Operation = {
+      ...namedOp,
+      path: [seg('file'), seg('default'), seg('ping')],
+    };
+    expect(opMatchesExportMode(defaultObjOp, { type: 'default' })).toBe(true);
+    expect(opMatchesExportMode(namedOp, { type: 'default' })).toBe(false);
+  });
+
+  it('opMatchesExportMode: "named-object" matches only the requested object name', () => {
+    const seg = (raw: string): Segment => ({ raw, words: [raw.toLowerCase()] });
+    const apiObjOp: Operation = {
+      ...makeOp('ns/file/ping', 'ns', 'file', 'ping'),
+      path: [seg('file'), seg('api'), seg('ping')],
+    };
+    const otherObjOp: Operation = { ...apiObjOp, path: [seg('file'), seg('other'), seg('ping')] };
+    expect(
+      opMatchesExportMode(apiObjOp, { type: 'named-object', name: 'api' })
+    ).toBe(true);
+    expect(
+      opMatchesExportMode(otherObjOp, { type: 'named-object', name: 'api' })
+    ).toBe(false);
+  });
+
+  // Integration: a REAL source with a named helper alongside a default object
+  // (the exact BACKLOG scenario) — `--export default` must include ONLY the
+  // default object's properties.
+  it('buildDescriptor: --export default scopes packageSchemas to ONLY the default object, excluding the named helper', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [
+        {
+          file: exportModeFixture,
+          namespace: 'ems',
+          exportMode: { type: 'default' },
+        },
+      ],
+    });
+    const pkg = descriptor.packageSchemas.get('ems');
+    expect(pkg).toBeDefined();
+    if (!pkg) throw new Error('ems package not found');
+
+    // Included: the default object's own properties.
+    expect(pkg.schemas['ping']).toBeDefined();
+    expect(pkg.schemas['echo']).toBeDefined();
+    // Excluded: the private named-export helper.
+    expect(pkg.schemas['internalHelper']).toBeUndefined();
+
+    // The full unscoped descriptor.operations still carries ALL operations —
+    // scoping only affects what's SERVED, matching v1's own behaviour where
+    // the collision-check step never respected exportMode either.
+    const allIds = descriptor.operations.map((o) => o.id);
+    expect(allIds.some((id) => id.includes('internal-helper'))).toBe(true);
+  }, 30_000);
+
+  // Integration: the reverse mode — omitting --export (named, the default
+  // resolveExportMode()) must include ONLY the named helper, excluding the
+  // default object's properties.
+  it('buildDescriptor: omitted --export (named mode) scopes packageSchemas to ONLY the named helper, excluding the default object', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [
+        {
+          file: exportModeFixture,
+          namespace: 'ems2',
+          exportMode: { type: 'named' },
+        },
+      ],
+    });
+    const pkg = descriptor.packageSchemas.get('ems2');
+    expect(pkg).toBeDefined();
+    if (!pkg) throw new Error('ems2 package not found');
+
+    // Included: the plain named export.
+    expect(pkg.schemas['internalHelper']).toBeDefined();
+    // Excluded: the default object's properties.
+    expect(pkg.schemas['ping']).toBeUndefined();
+    expect(pkg.schemas['echo']).toBeUndefined();
+  }, 30_000);
+
+  // Regression control: an ABSENT exportMode (generate-registry/run-registry
+  // today) applies NO scoping — every extracted action is served, matching
+  // current (pre-fix) behaviour for those callers.
+  it('buildDescriptor: an absent exportMode applies no scoping (registry callers unaffected)', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [{ file: exportModeFixture, namespace: 'ems3' }],
+    });
+    const pkg = descriptor.packageSchemas.get('ems3');
+    expect(pkg).toBeDefined();
+    if (!pkg) throw new Error('ems3 package not found');
+
+    expect(pkg.schemas['internalHelper']).toBeDefined();
+    expect(pkg.schemas['ping']).toBeDefined();
+    expect(pkg.schemas['echo']).toBeDefined();
+  }, 30_000);
+});
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-035 — duplicate namespace across sources throws, no silent drop
+// ---------------------------------------------------------------------------
+
+describe('orchestrator: BUG-APIGEN-035 duplicate-namespace guard', () => {
+  it('buildDescriptor throws a clear error when two sources resolve to the same namespace, instead of silently dropping one', async () => {
+    await expect(
+      buildDescriptor({
+        sources: [
+          { file: alphaFixture, namespace: 'dup' },
+          { file: betaFixture, namespace: 'dup' },
+        ],
+      })
+    ).rejects.toThrow(/duplicate namespace "dup"/);
+  }, 30_000);
+
+  it('buildDescriptor succeeds and merges both sources when namespaces are distinct (negative control)', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [
+        { file: alphaFixture, namespace: 'dist-a' },
+        { file: betaFixture, namespace: 'dist-b' },
+      ],
+    });
+    expect(descriptor.packageSchemas.has('dist-a')).toBe(true);
+    expect(descriptor.packageSchemas.has('dist-b')).toBe(true);
   }, 30_000);
 });
 

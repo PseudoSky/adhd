@@ -5,6 +5,12 @@ All notable changes to `@adhd/apigen-core-client` will be documented in this fil
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- BUG-APIGEN-CORE-004: `isSerializableType()` used a purely textual allow-list over `type.getText()`, so a serializable const typed as a generic-utility-type wrapper — e.g. `Record<K, V>` — was rendered as text matching none of the allow-list's patterns and silently skipped instead of extracted as `kind:'query'`. Replaced with structural inspection of the ts-morph `Type` object (index signatures, properties, call/construct signatures, recursing through arrays/tuples/unions/intersections), which recognizes `Record<K, V>` and other generic wrappers (`Partial<T>`, `Readonly<T>`, `Array<T>`) around serializable shapes while still correctly excluding genuinely non-serializable generics like `Map<K, V>`. See `packages/apigen/apigen-core-client/BACKLOG.md`'s `## Fixed` section for full root-cause and fix detail.
+
 ## [0.1.0] — 2026-07-02
 
 ### Added

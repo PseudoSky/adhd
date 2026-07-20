@@ -1,6 +1,6 @@
 import type { PluginInput, PluginOutput } from '@adhd/apigen-core-client';
 import { needsEnvelopeField, dataParamNames } from '@adhd/apigen-engine-runtime';
-import { envelopeCliFlag, envelopeEnvVar } from '@adhd/apigen-naming';
+import { envelopeCliFlag, envelopeEnvVar, sanitizeIdentifier } from '@adhd/apigen-naming';
 import { CLI_EXIT_CODE } from '@adhd/apigen-base-errors';
 import * as path from 'node:path';
 
@@ -52,24 +52,6 @@ function envelopeBindings(
 }
 
 /**
- * Sanitizes a package id into a valid TypeScript identifier for use as a
- * generated import-namespace / fn-table variable name (e.g. `dispatch-cli` →
- * `dispatch_cli`). BUG-APIGEN-CLI-001: `pkg.id` is derived verbatim from a
- * source directory name (resolveNamespace in apigen-cli), so a hyphenated
- * (repo-convention) package dir produced `import * as dispatch-cli_ns from …`
- * — an invalid identifier, a hard TS parse error.
- *
- * Only the emitted *identifier* positions need sanitizing — `pkg.id` still
- * appears verbatim as the schema-key namespace (`'dispatch-cli:validate'`)
- * and anywhere else it's a string literal, not code.
- */
-function sanitizeIdentifier(id: string): string {
-  let s = id.replace(/[^a-zA-Z0-9_$]/g, '_')
-  if (s === '' || /^[0-9]/.test(s)) s = `_${s}`
-  return s
-}
-
-/**
  * Converts an absolute (or package-name) import path to one relative to
  * {@link outDir}, ensuring the result is suitable for a JS import statement
  * (starts with `'./'` or `'../'`).  Package names (non-absolute) are
@@ -82,9 +64,70 @@ function relativeImportPath(outDir: string, importPath: string): string {
   return rel
 }
 
+/**
+ * BUG-APIGEN-031: the CLI transport's "wire" values are always raw argv
+ * strings — unlike the HTTP transports (Express/Fastify), which already
+ * deliver a real parsed array/object from a JSON request body.
+ * `apigen-base-logical`'s shared decode path (`runmode.ts`'s array/object
+ * branches) intentionally passes a non-array/non-object wire value straight
+ * through unchanged, since that's correct for HTTP. For the CLI it means an
+ * `array`- or `object`-typed domain param's raw `"[10,20,30]"` string reaches
+ * the target function un-parsed — either a hard crash (`.reduce is not a
+ * function`) or, worse, a silently wrong answer (string-indexing coincidence,
+ * e.g. `sorted[idx]` on a 16-char stringified array). Only the CLI plugin
+ * knows its wire values are string-only, so the JSON.parse belongs here
+ * (transport-specific), not in the shared decode path.
+ */
+function isJsonTypedProp(
+  prop: { type?: string; anyOf?: Array<{ type?: string }> } | undefined
+): boolean {
+  if (!prop) return false
+  if (prop.type === 'array' || prop.type === 'object') return true
+  if (prop.anyOf) {
+    const nonNull = prop.anyOf.filter((m) => m.type !== 'null')
+    return (
+      nonNull.length > 0 &&
+      nonNull.every((m) => m.type === 'array' || m.type === 'object')
+    )
+  }
+  return false
+}
+
+/** Runtime helper embedded in generated CLI output — see {@link isJsonTypedProp}. */
+const JSON_PARSE_ARG_HELPER = [
+  `function __apigenParseJsonArg(flag: string, raw: unknown): unknown {`,
+  `  if (raw === undefined) return undefined`,
+  `  if (typeof raw !== 'string') return raw`,
+  `  try {`,
+  `    return JSON.parse(raw)`,
+  `  } catch (err) {`,
+  `    throw new Error(\`Invalid JSON for --\${flag}: \${(err as Error).message}\`)`,
+  `  }`,
+  `}`,
+].join('\n')
+
 export function generate(input: PluginInput): PluginOutput {
   const cliName = (input.options['name'] as string) ?? 'cli';
   const version = (input.options['version'] as string) ?? '0.1.0';
+
+  const usesJsonParseHelper = input.packages.some((pkg) =>
+    Object.values(pkg.schemas).some((fnSchema) => {
+      const dataSchema = (
+        (fnSchema.input as Record<string, unknown>)?.['properties'] as Record<
+          string,
+          unknown
+        >
+      )?.['data'] as Record<string, unknown> | undefined;
+      const schemaProps =
+        (dataSchema?.['properties'] as Record<
+          string,
+          { type?: string; anyOf?: Array<{ type?: string }> }
+        >) ?? {};
+      return dataParamNames(fnSchema).some((p) =>
+        isJsonTypedProp(schemaProps[p])
+      );
+    })
+  );
 
   const lines: string[] = [
     `#!/usr/bin/env node`,
@@ -101,6 +144,10 @@ export function generate(input: PluginInput): PluginOutput {
     );
   }
   lines.push(``);
+  if (usesJsonParseHelper) {
+    lines.push(JSON_PARSE_ARG_HELPER);
+    lines.push(``);
+  }
   lines.push(
     `const schemas: Record<string, unknown> = ${JSON.stringify(
       Object.fromEntries(
@@ -199,7 +246,11 @@ export function generate(input: PluginInput): PluginOutput {
       lines.push(`  .action(async (opts: Record<string, unknown>) => {`);
       lines.push(
         `    const domainArgs: Record<string, unknown> = { ${paramNames
-          .map((p) => `'${p}': opts['${p}']`)
+          .map((p) =>
+            isJsonTypedProp(schemaProps[p])
+              ? `'${p}': __apigenParseJsonArg('${kebab(p)}', opts['${p}'])`
+              : `'${p}': opts['${p}']`
+          )
           .join(', ')} }`
       );
 

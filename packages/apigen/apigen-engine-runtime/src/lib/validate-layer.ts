@@ -35,6 +35,12 @@ import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
 import type { ErrorObject } from 'ajv';
 import { ApiError } from '@adhd/apigen-base-errors';
+import {
+  X_APIGEN_LOGICAL,
+  X_APIGEN_CODEC,
+  X_APIGEN_CTOR,
+  X_APIGEN_TOJSON,
+} from '@adhd/apigen-base-logical';
 import type { Layer, Call, Next } from './invoke';
 import type { LayerResult } from './invoke';
 
@@ -46,10 +52,35 @@ import type { LayerResult } from './invoke';
 // date, time, uuid, email, uri, etc.) so that a schema like
 // `{ type: 'string', format: 'date-time' }` actively rejects non-conforming
 // strings instead of treating the format keyword as advisory.
+//
+// apigen's schema builders (`schema-builders/nominal.ts`, `schema-builders/
+// union.ts`) tag nominal/branded and union `$def`s with advisory
+// `x-apigen-*` keys (`X_APIGEN_LOGICAL`/`X_APIGEN_CODEC`/`X_APIGEN_CTOR`/
+// `X_APIGEN_TOJSON` from `@adhd/apigen-base-logical`) plus an OpenAPI-style
+// `discriminator` object on union fragments — read back by `union-codec.ts`/
+// `nominal-codec.ts` at decode time, never by Ajv itself. Per DESIGN §4.1
+// `[inv:hints-advisory]` these keys are optional annotations layered on top
+// of an already-authoritative structural schema (`$ref`/`oneOf`/`properties`),
+// so they're registered here as no-op `valid: true` keywords rather than via
+// Ajv's built-in `discriminator: true` option — that option enforces its own
+// OpenAPI discriminator semantics and explicitly rejects the `mapping` object
+// apigen's `discriminator` fragment carries ("discriminator: mapping is not
+// supported"), so it cannot compile these schemas either. `strict: true`
+// (Ajv 8's default) throws `strict mode: unknown keyword` at compile time for
+// any of these five keys unless declared, which crashed BUG-APIGEN-030.
 // ---------------------------------------------------------------------------
 
 const ajv = new Ajv({ allErrors: true });
 addFormats(ajv);
+for (const keyword of [
+  X_APIGEN_LOGICAL,
+  X_APIGEN_CODEC,
+  X_APIGEN_CTOR,
+  X_APIGEN_TOJSON,
+  'discriminator',
+]) {
+  ajv.addKeyword({ keyword, valid: true });
+}
 // apigen logical-type `format`s that ajv-formats does not ship. The canonical wire
 // for `decimal` is a decimal string (DESIGN §3); register it so a `{type:'string',
 // format:'decimal'}` param validates instead of throwing "unknown format" once the

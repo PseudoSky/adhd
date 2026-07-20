@@ -1,4 +1,9 @@
-// extractors/param-defaults.ts — BUG-APIGEN-018 support.
+// param-defaults.ts — BUG-APIGEN-018 support.
+//
+// Moved here from extractors/param-defaults.ts (BUG-APIGEN-CORE-005, v1
+// retirement) — this module was always pure ts-morph text extraction with no
+// dependency on the deleted v1 extractors, and is now consumed by v2's
+// extract.ts instead of v1's generate-schemas.ts.
 //
 // Extracts a function parameter's default value so the generated MCP/JSON
 // schema can surface it (as both the native JSON-Schema `default` keyword and

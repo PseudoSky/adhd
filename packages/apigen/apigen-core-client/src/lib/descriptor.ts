@@ -35,6 +35,14 @@
 export type JSONSchema = Record<string, unknown> & {
   /** Reusable type definitions referenced via `$ref` (`#/$defs/Name`). */
   $defs?: Record<string, JSONSchema>;
+  /**
+   * Reusable type definitions under the draft-07 spelling, referenced via
+   * `$ref` (`#/definitions/Name`). `ts-json-schema-generator` — the only
+   * `$ref`/definitions producer in this codebase today — always emits this
+   * key, never `$defs`; both are recognized structurally by extract.ts's
+   * `hoistNestedDefs` / compose-schemas.ts (BUG-APIGEN-029) and by Ajv.
+   */
+  definitions?: Record<string, JSONSchema>;
   /** Reference to a definition, e.g. `#/$defs/User` (enables recursion). */
   $ref?: string;
 } & ApigenSchemaHints;
@@ -230,4 +238,15 @@ export interface Operation {
    * when unavailable; non-host targets ignore it. See {@link TypeText}.
    */
   typeText: TypeText | null;
+
+  /**
+   * True when the underlying export's first parameter is named `ctx`
+   * ([inv:ctx-name-only] — matched by name only, never by type). `ctx` is
+   * excluded from `input` like every other framework param, but this flag
+   * lets a runtime dispatcher re-inject it as the first call argument
+   * (BUG-APIGEN-001) — without it a caller with no session middleware would
+   * have its first REAL domain arg land in the `ctx` slot. Only meaningful
+   * for `kind: 'action'`; absent (`undefined`) for `query` and other kinds.
+   */
+  hasCtx?: boolean;
 }

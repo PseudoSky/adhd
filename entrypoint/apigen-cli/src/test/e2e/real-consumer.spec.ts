@@ -230,7 +230,7 @@ function fnParamNames(fn: (...a: unknown[]) => unknown): string[] {
 // ---------------------------------------------------------------------------
 
 describe('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transform', () => {
-  it('POST /<id>/<fn> deep-equals in-process ground truth over real HTTP', async () => {
+  it('GET /<id>/<fn> deep-equals in-process ground truth over real HTTP', async () => {
     const port = await freePort();
     httpChild = spawn(
       'node',
@@ -250,14 +250,19 @@ describe('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transf
     // Bounded readiness poll — no fixed sleep.
     const namespace = await waitForHttpReady(port);
 
+    // FEAT-APIGEN-022: every SAMPLE_ARGS fn here (upperFirst/lowerFirst/
+    // capitalize/toUpper/toLower/trim/hyphenCase) takes only string-typed
+    // params, so all of them now auto-hoist to GET (query-string), not POST.
     for (const [name, args] of Object.entries(SAMPLE_ARGS)) {
       const dataArg = buildDataArg(name, args);
-      const res = await fetch(`http://127.0.0.1:${port}/${namespace}/${name}`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ data: dataArg }),
-      });
-      expect(res.status, `POST ${name} status`).toBe(200);
+      const query = new URLSearchParams(
+        Object.entries(dataArg).map(([k, v]) => [k, String(v)])
+      );
+      const res = await fetch(
+        `http://127.0.0.1:${port}/${namespace}/${name}?${query.toString()}`,
+        { method: 'GET' }
+      );
+      expect(res.status, `GET ${name} status`).toBe(200);
       const got = await readBody(res);
       expect(got, `HTTP ${name} must equal in-process ground truth`).toEqual(
         ground.values[name]
@@ -278,11 +283,12 @@ describe('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transf
     while (Date.now() < deadline) {
       for (const ns of candidates) {
         try {
-          const res = await fetch(`http://127.0.0.1:${p}/${ns}/upperFirst`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ data: { str: 'probe' } }),
-          });
+          // FEAT-APIGEN-022: upperFirst(str?: string) is a single-string-param
+          // fn — auto-hoisted to GET, so the readiness probe must match.
+          const res = await fetch(
+            `http://127.0.0.1:${p}/${ns}/upperFirst?str=probe`,
+            { method: 'GET' }
+          );
           if (res.status === 200) {
             // Drain body to free the socket.
             await res.text().catch(() => undefined);

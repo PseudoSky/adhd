@@ -416,6 +416,192 @@ describe('generate()', () => {
   });
 });
 
+  // ---------------------------------------------------------------------------
+  // BUG-APIGEN-031: array/object domain params must be JSON.parse'd before
+  // reaching dispatch — the CLI transport's wire values are always raw argv
+  // strings, unlike HTTP transports which already deliver a real parsed value.
+  // ---------------------------------------------------------------------------
+
+  describe('BUG-APIGEN-031: array/object domain param JSON parsing', () => {
+    /** Extracts the generated `__apigenParseJsonArg` helper as a callable fn. */
+    function extractJsonParseHelper(
+      content: string
+    ): (flag: string, raw: unknown) => unknown {
+      const match = content.match(/function __apigenParseJsonArg[\s\S]*?\n}/);
+      if (!match) throw new Error('helper not found in generated output');
+      // Strip the TS parameter/return type annotations (generated cli.ts is
+      // TypeScript; `new Function` only accepts plain JS) so the extracted
+      // source can be evaluated directly — proves the actual shipped runtime
+      // behavior rather than a hand-copied reimplementation of it.
+      const jsSource = match[0]
+        .replace('(flag: string, raw: unknown): unknown', '(flag, raw)')
+        .replace('(err as Error).message', 'err.message');
+      // eslint-disable-next-line no-new-func
+      return new Function(`return (${jsSource})`)();
+    }
+
+    it('wraps an array-typed required param in __apigenParseJsonArg, keyed by its kebab flag', () => {
+      const input = makeInput({
+        packages: [
+          {
+            id: 'svc',
+            importPath: '@acme/svc',
+            schemas: { mean: makeNoSessionSchema('arr', 'array', true) },
+          },
+        ],
+      });
+      const { content } = generate(input).files[0];
+      expect(content).toContain(
+        `'arr': __apigenParseJsonArg('arr', opts['arr'])`
+      );
+    });
+
+    it('wraps an object-typed param in __apigenParseJsonArg', () => {
+      const input = makeInput({
+        packages: [
+          {
+            id: 'svc',
+            importPath: '@acme/svc',
+            schemas: {
+              configure: makeNoSessionSchema('options', 'object', false),
+            },
+          },
+        ],
+      });
+      const { content } = generate(input).files[0];
+      expect(content).toContain(
+        `'options': __apigenParseJsonArg('options', opts['options'])`
+      );
+    });
+
+    it('does NOT wrap scalar-typed params (string/number/boolean)', () => {
+      const input = makeInput({
+        packages: [
+          {
+            id: 'svc',
+            importPath: '@acme/svc',
+            schemas: {
+              act: makeNoSessionSchema('name', 'string', true),
+            },
+          },
+        ],
+      });
+      const { content } = generate(input).files[0];
+      expect(content).toContain(`'name': opts['name']`);
+      expect(content).not.toContain('__apigenParseJsonArg');
+    });
+
+    it('omits the helper function entirely when no command has an array/object param', () => {
+      const input = makeInput({
+        packages: [
+          {
+            id: 'svc',
+            importPath: '@acme/svc',
+            schemas: { act: makeNoSessionSchema('name', 'string', true) },
+          },
+        ],
+      });
+      const { content } = generate(input).files[0];
+      expect(content).not.toContain('function __apigenParseJsonArg');
+    });
+
+    it('wraps a nullable array param (anyOf: [array, null])', () => {
+      const input = makeInput({
+        packages: [
+          {
+            id: 'svc',
+            importPath: '@acme/svc',
+            schemas: {
+              search: {
+                input: {
+                  type: 'object',
+                  properties: {
+                    data: {
+                      type: 'object',
+                      properties: {
+                        tags: { anyOf: [{ type: 'array' }, { type: 'null' }] },
+                      },
+                    },
+                  },
+                  required: ['data'],
+                },
+                output: { type: 'object' },
+              },
+            },
+          },
+        ],
+      });
+      const { content } = generate(input).files[0];
+      expect(content).toContain(
+        `'tags': __apigenParseJsonArg('tags', opts['tags'])`
+      );
+    });
+
+    it('the generated helper correctly parses a real array-typed argv string (regression: mean --arr crashed with "arr.reduce is not a function")', () => {
+      const input = makeInput({
+        packages: [
+          {
+            id: 'svc',
+            importPath: '@acme/svc',
+            schemas: { mean: makeNoSessionSchema('arr', 'array', true) },
+          },
+        ],
+      });
+      const { content } = generate(input).files[0];
+      const parse = extractJsonParseHelper(content);
+      expect(parse('arr', '[2,4,6]')).toEqual([2, 4, 6]);
+    });
+
+    it('the generated helper correctly parses a real object-typed argv string', () => {
+      const input = makeInput({
+        packages: [
+          {
+            id: 'svc',
+            importPath: '@acme/svc',
+            schemas: {
+              configure: makeNoSessionSchema('options', 'object', false),
+            },
+          },
+        ],
+      });
+      const { content } = generate(input).files[0];
+      const parse = extractJsonParseHelper(content);
+      expect(parse('options', '{"verbose":true}')).toEqual({ verbose: true });
+    });
+
+    it('the generated helper passes an omitted (undefined) optional param through unchanged', () => {
+      const input = makeInput({
+        packages: [
+          {
+            id: 'svc',
+            importPath: '@acme/svc',
+            schemas: { mean: makeNoSessionSchema('arr', 'array', false) },
+          },
+        ],
+      });
+      const { content } = generate(input).files[0];
+      const parse = extractJsonParseHelper(content);
+      expect(parse('arr', undefined)).toBeUndefined();
+    });
+
+    it('the generated helper throws a clear, flag-named error for malformed JSON instead of silently passing the raw string through (regression: percentile --sorted returned a coincidentally-plausible wrong answer via string indexing)', () => {
+      const input = makeInput({
+        packages: [
+          {
+            id: 'svc',
+            importPath: '@acme/svc',
+            schemas: { mean: makeNoSessionSchema('arr', 'array', true) },
+          },
+        ],
+      });
+      const { content } = generate(input).files[0];
+      const parse = extractJsonParseHelper(content);
+      expect(() => parse('arr', '[10,20,30,40,50]not-json')).toThrow(
+        /Invalid JSON for --arr/
+      );
+    });
+  });
+
 describe('cli plugin — language declaration', () => {
   it('explicitly declares language: "ts" (FAILS if declaration is dropped)', () => {
     expect(cliPlugin.language).toBe('ts');
