@@ -3,7 +3,12 @@ import { apiExpressPlugin } from '../lib/plugin';
 import { generate } from '../lib/generate';
 import { run } from '../lib/run';
 import healthPlugin from '@adhd/apigen-plugin-health';
-import type { PluginInput, RunInput } from '@adhd/apigen-core-client';
+import openapiPlugin from '@adhd/apigen-plugin-openapi';
+import type {
+  PluginInput,
+  RunInput,
+  Operation,
+} from '@adhd/apigen-core-client';
 import * as net from 'node:net';
 
 /** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */
@@ -574,6 +579,167 @@ describe('[BUG-APIGEN-009/010] run() — validate-Layer + health mount (Express)
     const body = await res.json();
     expect(body.status).toBe('ok');
   });
+});
+
+// ---------- BUG-APIGEN-024 — `--use openapi` mount over real HTTP ----------
+// Drive a REAL Express server through `run()`, mounted with the REAL
+// `@adhd/apigen-plugin-openapi` plugin (not a stub), and assert the served
+// `GET /_meta/openapi` doc's `paths` reflects the real extracted operations —
+// not an empty object. `collectMountRoutes()` used to hand the mount plugin a
+// synthetic descriptor with `operations` hardcoded to `[]`, so `toOpenApi()`
+// always produced `paths: {}` regardless of what was actually extracted.
+
+/** Two real multi-route operations mirroring `testSchema`/`testFns` above. */
+const openapiTestOperations: Operation[] = [
+  {
+    id: 'test-pkg/getUser',
+    host: 'ts',
+    namespace: { raw: 'test-pkg', words: ['test', 'pkg'] },
+    path: [{ raw: 'getUser', words: ['get', 'user'] }],
+    kind: 'action',
+    async: false,
+    streaming: false,
+    safe: false,
+    input: testSchema.getUser.input,
+    output: testSchema.getUser.output,
+    envelope: {},
+    typeText: null,
+  },
+  {
+    id: 'test-pkg/listUsers',
+    host: 'ts',
+    namespace: { raw: 'test-pkg', words: ['test', 'pkg'] },
+    path: [{ raw: 'listUsers', words: ['list', 'users'] }],
+    kind: 'query',
+    async: false,
+    streaming: false,
+    safe: true,
+    input: testSchema.listUsers.input,
+    output: testSchema.listUsers.output,
+    envelope: {},
+    typeText: null,
+  },
+];
+
+describe('[BUG-APIGEN-024] run() — --use openapi mount serves real paths (Express)', () => {
+  let controller: AbortController;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    controller = new AbortController();
+    const port = await freePort();
+    const runInput: RunInput = {
+      packages: [
+        {
+          id: 'test-pkg',
+          schemas: testSchema,
+          importPath: '@test/test-pkg',
+          fns: testFns,
+        },
+      ],
+      operations: openapiTestOperations,
+      outputDir: '/tmp/out',
+      options: { port, usePlugins: [openapiPlugin] },
+      signal: controller.signal,
+    };
+
+    run(runInput).catch(() => {
+      /* swallowed after abort */
+    });
+
+    baseUrl = `http://127.0.0.1:${port}`;
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      try {
+        const r = await fetch(`${baseUrl}/_meta/openapi`, { method: 'GET' });
+        if (r.status < 500) break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+  }, 15000);
+
+  afterAll(() => {
+    controller.abort();
+  });
+
+  it('[024] GET /_meta/openapi returns 200 with a well-formed doc shell', async () => {
+    const res = await fetch(`${baseUrl}/_meta/openapi`, { method: 'GET' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.openapi).toBe('3.1.0');
+    expect(typeof body.paths).toBe('object');
+  });
+
+  // Teeth: this is the exact bug — pre-fix, `paths` was always `{}` even
+  // though 2 real operations were extracted and served.
+  it('[024] paths is NOT empty — contains both real extracted routes', async () => {
+    const res = await fetch(`${baseUrl}/_meta/openapi`, { method: 'GET' });
+    const body = await res.json();
+    expect(Object.keys(body.paths).length).toBeGreaterThan(0);
+    expect(body.paths['/test-pkg/get-user']).toBeDefined();
+    expect(body.paths['/test-pkg/list-users']).toBeDefined();
+  });
+
+  it('[024] getUser (safe:false) → POST /test-pkg/get-user with requestBody', async () => {
+    const res = await fetch(`${baseUrl}/_meta/openapi`, { method: 'GET' });
+    const body = await res.json();
+    const pathItem = body.paths['/test-pkg/get-user'];
+    expect(pathItem.post).toBeDefined();
+    expect(pathItem.get).toBeUndefined();
+    expect(pathItem.post.requestBody).toBeDefined();
+  });
+
+  it('[024] listUsers (safe:true) → GET /test-pkg/list-users with no requestBody', async () => {
+    const res = await fetch(`${baseUrl}/_meta/openapi`, { method: 'GET' });
+    const body = await res.json();
+    const pathItem = body.paths['/test-pkg/list-users'];
+    expect(pathItem.get).toBeDefined();
+    expect(pathItem.post).toBeUndefined();
+    expect(pathItem.get.requestBody).toBeUndefined();
+  });
+
+  it('[024] (regression control) omitting RunInput.operations falls back to empty paths, not a crash', async () => {
+    // Proves the `input.operations ?? []` fallback in collectMountRoutes is
+    // intentional/safe (e.g. non-TS run paths that never populate
+    // `operations`) rather than accidentally still-broken.
+    const port2 = await freePort();
+    const controller2 = new AbortController();
+    const noOpsInput: RunInput = {
+      packages: [
+        {
+          id: 'test-pkg',
+          schemas: testSchema,
+          importPath: '@test/test-pkg',
+          fns: testFns,
+        },
+      ],
+      // operations intentionally omitted
+      outputDir: '/tmp/out',
+      options: { port: port2, usePlugins: [openapiPlugin] },
+      signal: controller2.signal,
+    };
+    run(noOpsInput).catch(() => {
+      /* swallowed after abort */
+    });
+    const url2 = `http://127.0.0.1:${port2}`;
+    const deadline = Date.now() + 10000;
+    let body: { paths: Record<string, unknown> } | undefined;
+    while (Date.now() < deadline) {
+      try {
+        const r = await fetch(`${url2}/_meta/openapi`, { method: 'GET' });
+        if (r.status < 500) {
+          body = await r.json();
+          break;
+        }
+      } catch {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+    expect(body).toBeDefined();
+    expect(Object.keys(body!.paths).length).toBe(0);
+    controller2.abort();
+  }, 15000);
 });
 
 describe('api-express plugin — language declaration', () => {
