@@ -6,6 +6,57 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **BUG-APIGEN-032** — `generate --type api-express`/`api-fastify` (including their
+  `-registry` variants) emitted genuinely invalid TypeScript/JavaScript for any
+  hyphenated discovered package id — the repo-convention, overwhelmingly common case
+  (`pkg-a`, any real `@scope/some-package-name`) — because both generators spliced
+  `pkg.id` straight into JS identifier positions with no sanitization:
+  `` `import * as ${pkg.id}_ns from '${pkg.importPath}'` ``,
+  `` `const ${pkg.id}_fns = buildFnTable(...)` ``, and the `dispatch(${pkg.id}_fns …)`
+  call sites reusing that same unsanitized name — producing `import * as pkg-a_ns from
+  …`, a hard parse error (`Expected "from" but found "-"`; a bare `-` is the
+  subtraction operator in an identifier position, not a valid character). Ported from
+  `main`'s `entrypoint/apigen-cli/BACKLOG.md` (filed there 2026-07-19 by
+  `verify-registry-commands`) and independently reproduced on this worktree's current
+  source before fixing — confirmed the plugin files were untouched by the
+  v1-retirement diff, so the bug carried over unchanged.
+  `apigen-plugin-cli-output/src/lib/generate.ts` already had the correct fix for the
+  same bug class (`BUG-APIGEN-CLI-001`, `packages/apigen/BACKLOG.md`, fixed
+  2026-07-06) as a private, unexported `sanitizeIdentifier()` helper — never shared,
+  so `api-express`/`api-fastify` never had access to it. Fixed by extracting
+  `sanitizeIdentifier()` into `@adhd/apigen-naming`
+  (`packages/apigen/apigen-engine-naming/src/lib/naming.ts:383-407`, exported via
+  `src/index.ts`) — the one shared naming/projection-helper package all three plugins
+  already depended on (zero new dependency edges needed) and whose own doc comment
+  states "No transport may inline its own casing logic; it must call one of the
+  helpers exported here." All three plugins now import the single shared
+  implementation: `apigen-plugin-api-express/src/lib/generate.ts:2,55,58,83,108,129`,
+  `apigen-plugin-api-fastify/src/lib/generate.ts:2,66,69,94,123,146`, and
+  `apigen-plugin-cli-output/src/lib/generate.ts:3,139,169` (its former private
+  duplicate deleted). Regression tests added:
+  `apigen-plugin-api-express/src/test/hyphenated-identifier.spec.ts` and
+  `apigen-plugin-api-fastify/src/test/hyphenated-identifier.spec.ts` (6 cases each) —
+  unit-verify the sanitized identifier is emitted at every import/fn-table/dispatch
+  splice site (GET and POST) while the raw hyphenated id stays verbatim in the
+  schema-key string, plus a real `esbuild` syntax check proving the pre-fix splice
+  pattern is a genuine parse error and the current `generate()` output parses cleanly.
+  `apigen-engine-naming`'s existing `naming.spec.ts` suite is untouched (40/40 still
+  pass); `apigen-plugin-cli-output`'s existing `hyphenated-namespace.spec.ts` (proving
+  `BUG-APIGEN-CLI-001` stays fixed) also still passes unchanged, now exercising the
+  shared implementation instead of the deleted local copy. Verified via direct
+  `vitest run` in each of the four affected packages (`apigen-engine-naming`:
+  40/40, `apigen-plugin-api-express`: 31/31, `apigen-plugin-api-fastify`: 43/43,
+  `apigen-plugin-cli-output`: 34/34) and `tsc --noEmit` on each package's
+  `tsconfig.spec.json` (clean, modulo a pre-existing `vite.config.ts`/`defineConfig`
+  raw-`tsc`-invocation artifact confirmed to reproduce identically on the untouched
+  `apigen-plugin-health` package — not a real type error, an artifact of invoking
+  `tsc` outside the Vite-aware toolchain). `nx test` for these projects was not used
+  directly for final verification because it transitively gates on `apigen-core-client:
+  lint`, which had an unrelated, concurrent in-flight failure from a different
+  teammate's uncommitted WIP at verification time (`apigen-core-client/src/test/
+  extract.spec.ts`, BUG-APIGEN-CORE-004 in progress) — confirmed via `git status`/`git
+  diff` to be outside this fix's diff entirely.
+
 - **FEAT-APIGEN-019** — CLI's `--type` plugin discovery was undiscoverable: `generate`'s
   `--type` help text was a hardcoded, already-stale string (missing `py-flask`/`py-grpc`,
   two of the 7 real targets); `run`'s and `run-registry`'s `--type` help text said nothing
@@ -264,7 +315,7 @@ All notable changes to this project are documented here.
   `X_APIGEN_LOGICAL`/`X_APIGEN_CODEC`/`X_APIGEN_CTOR`/`X_APIGEN_TOJSON`
   constants (not string literals) to cover the two keys the current
   extraction pipeline doesn't yet reach for class-typed nominal params (see
-  BUG-APIGEN-036 below) and the `discriminator.mapping` shape Ajv's built-in
+  BUG-APIGEN-038 below) and the `discriminator.mapping` shape Ajv's built-in
   option rejects. Verified red pre-fix (all three previously-failing cases
   reproduced the exact BACKLOG error strings —
   `strict mode: unknown keyword: "x-apigen-logical"` and
@@ -285,7 +336,7 @@ All notable changes to this project are documented here.
   parameter — confirmed no call site outside their own spec files, and
   `orchestrator.ts`'s `extractClasses()` usage is for constructor/
   instance-method operations, not embedding nominal `$def`s into other
-  functions' input schemas. Filed as BUG-APIGEN-036 in the Open section
+  functions' input schemas. Filed as BUG-APIGEN-038 in the Open section
   below.
 
 ### Changed

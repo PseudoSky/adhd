@@ -1,6 +1,6 @@
 import type { PluginInput, PluginOutput } from '@adhd/apigen-core-client';
 import { needsEnvelopeField, dataParamNames } from '@adhd/apigen-engine-runtime';
-import { envelopeCliFlag, envelopeEnvVar } from '@adhd/apigen-naming';
+import { envelopeCliFlag, envelopeEnvVar, sanitizeIdentifier } from '@adhd/apigen-naming';
 import { CLI_EXIT_CODE } from '@adhd/apigen-base-errors';
 import * as path from 'node:path';
 
@@ -49,24 +49,6 @@ function envelopeBindings(
     });
   }
   return bindings;
-}
-
-/**
- * Sanitizes a package id into a valid TypeScript identifier for use as a
- * generated import-namespace / fn-table variable name (e.g. `dispatch-cli` →
- * `dispatch_cli`). BUG-APIGEN-CLI-001: `pkg.id` is derived verbatim from a
- * source directory name (resolveNamespace in apigen-cli), so a hyphenated
- * (repo-convention) package dir produced `import * as dispatch-cli_ns from …`
- * — an invalid identifier, a hard TS parse error.
- *
- * Only the emitted *identifier* positions need sanitizing — `pkg.id` still
- * appears verbatim as the schema-key namespace (`'dispatch-cli:validate'`)
- * and anywhere else it's a string literal, not code.
- */
-function sanitizeIdentifier(id: string): string {
-  let s = id.replace(/[^a-zA-Z0-9_$]/g, '_')
-  if (s === '' || /^[0-9]/.test(s)) s = `_${s}`
-  return s
 }
 
 /**

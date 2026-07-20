@@ -20,6 +20,9 @@ export {
   envelopeCliFlag,
   envelopeEnvVar,
   envelopeMetaKey,
+
+  // Identifier sanitisation
+  sanitizeIdentifier,
 } from './lib/naming';
 
 export type {

@@ -1,5 +1,5 @@
 import type { PluginInput, PluginOutput } from '@adhd/apigen-core-client';
-import { envelopeKey } from '@adhd/apigen-naming';
+import { envelopeKey, sanitizeIdentifier } from '@adhd/apigen-naming';
 import { HTTP_STATUS } from '@adhd/apigen-base-errors';
 import type { ProjectionConfig } from '@adhd/apigen-naming';
 
@@ -63,9 +63,10 @@ export function generate(input: PluginInput): PluginOutput {
     `import { dispatch, buildFnTable } from '@adhd/apigen-engine-runtime'`,
   ];
   for (const pkg of input.packages) {
-    lines.push(`import * as ${pkg.id}_ns from '${pkg.importPath}'`);
+    const varName = sanitizeIdentifier(pkg.id);
+    lines.push(`import * as ${varName}_ns from '${pkg.importPath}'`);
     lines.push(
-      `const ${pkg.id}_fns = buildFnTable(${pkg.id}_ns as Record<string, unknown>)`
+      `const ${varName}_fns = buildFnTable(${varName}_ns as Record<string, unknown>)`
     );
   }
   lines.push(``);
@@ -90,6 +91,7 @@ export function generate(input: PluginInput): PluginOutput {
   lines.push(``);
 
   for (const pkg of input.packages) {
+    const varName = sanitizeIdentifier(pkg.id);
     for (const [fnName, fnSchema] of Object.entries(pkg.schemas)) {
       const route = `${routePrefix}/${pkg.id}/${fnName}`;
       const verb = httpVerb(
@@ -118,7 +120,7 @@ export function generate(input: PluginInput): PluginOutput {
           lines.push(`  const envelope: Record<string, unknown> = {}`);
         }
         lines.push(
-          `  return dispatch(${pkg.id}_fns as any, undefined, schemas['${pkg.id}:${fnName}']['schema'] as any, '${fnName}', envelope, query as any)`
+          `  return dispatch(${varName}_fns as any, undefined, schemas['${pkg.id}:${fnName}']['schema'] as any, '${fnName}', envelope, query as any)`
         );
         lines.push(`})`);
       } else {
@@ -141,7 +143,7 @@ export function generate(input: PluginInput): PluginOutput {
           lines.push(`  const envelope: Record<string, unknown> = {}`);
         }
         lines.push(
-          `  return dispatch(${pkg.id}_fns as any, undefined, schemas['${pkg.id}:${fnName}']['schema'] as any, '${fnName}', envelope, data as any)`
+          `  return dispatch(${varName}_fns as any, undefined, schemas['${pkg.id}:${fnName}']['schema'] as any, '${fnName}', envelope, data as any)`
         );
         lines.push(`})`);
       }

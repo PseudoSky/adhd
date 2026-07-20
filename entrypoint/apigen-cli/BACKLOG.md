@@ -108,128 +108,127 @@ performed this session (out of scope; not silently worked around, filed here
 per this task's explicit instruction to file anything found broken along the
 way that isn't being fixed).
 
-### BUG-APIGEN-030 (Open, filed not fixed) — any `x-apigen-logical`-tagged param (union OR nominal/branded) crashes EVERY call with `strict mode: unknown keyword: "x-apigen-logical"` — AJV rejects apigen's own advisory schema hint
+### BUG-APIGEN-038 (Open, filed not fixed) — `buildNominalSchema`/`buildUnionSchema` (class-based nominal/union schema builders) are not wired into the real `extract()`/`composeSchemas()` pipeline for any function parameter
 
-**Discovered:** 2026-07-19, by an agent independently re-verifying the "130
-routes" claim for BUG-APIGEN-028 (the v1-retirement fix) against the real
-`sox-ecosystem/libs/memory-core/src/index.ts` fixture. Confirmed live: at
-least 40 of the fixture's 130 routes have a parameter whose schema is a
-`union` type (e.g. `POST /sox-ecosystem/parseTags {"data":{"raw":"..."}}`,
-`POST /sox-ecosystem/vecToJson {"data":{"vec":[...]}}`) — every one of them
-returns `500 {"code":"internal","message":"strict mode: unknown keyword:
-\"x-apigen-logical\""}` regardless of input.
+**Discovered:** 2026-07-20, while fixing BUG-APIGEN-030 (AJV strict-mode
+crash on `x-apigen-logical`/`discriminator`, see CHANGELOG.md — the fix
+registers `X_APIGEN_LOGICAL`/`X_APIGEN_CODEC`/`X_APIGEN_CTOR`/
+`X_APIGEN_TOJSON`/`discriminator` as known Ajv keywords). While writing that
+fix's regression test, tried to source a real, pipeline-generated
+nominal-typed function parameter (a class like `UserId` used as a param
+type) to exercise `apigen-core-client/src/lib/schema-builders/nominal.ts`'s
+`buildNominalSchema` through the actual `extract()` call, the same way
+`named-type-param.spec.ts` (BUG-APIGEN-026) and the new BUG-APIGEN-030 union
+test do for their respective shapes.
 
-**Scope correction 2026-07-19 (api-fastify verification round):** originally
-titled/scoped as "union-typed params" only. Independent `api-fastify`
-verification of the same fixture hit the identical error on `vecToBuffer`
-(`{data:{vec:[1,2,3]}}` → `Float32Array`), whose param schema logs as
-`type:"object"`, NOT `union` — it's a **nominal/branded** type. Confirmed by
-reading source: nominal schemas carry the identical
-`"x-apigen-logical": "nominal"` hint via the same `X_APIGEN_LOGICAL`
-constant as union's `"x-apigen-logical": "union"`
-(`apigen-engine-runtime/src/lib/logical/host-ts.ts:91-93` for the nominal
-sentinel schema, `:108-110` for the union sentinel schema — both literally
-share the one `X_APIGEN_LOGICAL` key). So the true trigger is **any schema
-fragment carrying an `x-apigen-logical` key**, not specifically "union" —
-the bug title and root-cause below are corrected accordingly. **The
-"40/130" route count is therefore a floor, not the true count** — it was
-counted by filtering the route log for `type:"union"` only; the real
-affected count also includes however many of the other 90 routes take a
-nominal/branded param (e.g. `Float32Array`, `Decimal`, `Date`-as-nominal-if
-applicable) and has not yet been recounted. Whoever fixes this should
-recount using `x-apigen-logical` presence directly, not the `union` label.
+**Root cause, traced and confirmed by reading the actual source:** a
+repo-wide grep for `buildNominalSchema(` / `buildUnionSchema(` call sites
+(not just imports) turns up exactly one caller of each — their own spec
+files (`apigen-core-client/src/test/nominal.spec.ts`,
+`.../test/union.spec.ts`). `entrypoint/apigen-cli/src/lib/orchestrator.ts`
+does call `extractClasses()` (confirmed at the file's own comment, line
+~385: "`constructor`/`instance-method` come from the separate
+`extractClasses()`"), but that usage surfaces a class's own methods as
+directly-callable operations (e.g. `UserId.fromJSON` as a route) — it does
+NOT embed the class's shape as a nominal `$def` inside some *other*
+function's parameter schema the way a real `function wrapId(id: UserId)`
+would need. Confirmed by reading `extract.ts`: no reference to
+`buildNominalSchema`, `isClass`, or `extractClasses` anywhere in it. The
+only currently-reachable `x-apigen-logical` producer is the inline-union
+branch in `schema-builders/morph-walk.ts:181` (plain TS union types like
+`A | B`), which does emit `x-apigen-logical:"union"` + `discriminator` for
+real through `extract()` — that is what BUG-APIGEN-030's regression test
+exercises. A user-defined class used as a function parameter type today
+gets ts-json-schema-generator's plain structural object schema (no
+`x-apigen-logical:"nominal"`, no `x-apigen-codec`), so `nominal-codec.ts`'s
+decode path for such a parameter is presently unreachable from real
+generated code — the nominal codec machinery in
+`apigen-engine-runtime/src/lib/logical/nominal-codec.ts` and the advisory
+hints `nominal.ts` builds exist and are tested in isolation, but have no
+live producer wiring them together end-to-end for a real user source file.
 
-The other, unaffected routes (plain scalar/object params, no
-`x-apigen-logical` hint) dispatch correctly, including real AJV validation
-rejections (`400` with a genuine missing-properties error) and real
-computed results (independently oracle-verified across three separate
-verification rounds — api-express, mcp, api-fastify — e.g. `hexSha256`
-returning the correct SHA-256 digest, `mean`/`percentile` returning
-independently-computed correct values) — so this remains narrowly scoped to
-`x-apigen-logical`-tagged params, not a general regression.
+**Impact:** class-typed (nominal/branded) function parameters do not
+currently get transcoded via the logical-type nominal codec at all in
+generated output — not a crash, but a silent gap: `ts-json-schema-generator`
+produces *some* structural schema for a class type (properties reflecting
+public fields), so calls likely still work for plain-data classes, but any
+class relying on nominal identity/codec-driven `fromJSON`/`toJSON` transcode
+(the whole point of `x-apigen-ctor`/`x-apigen-tojson`) gets the generic
+structural fallback instead. Not yet triaged for real-world severity (needs
+a concrete class-typed-parameter fixture run through the built CLI, e.g. a
+`Decimal`- or `Date`-like custom class, to determine if this only affects a
+narrow "arbitrary user class as param" case or something broader).
 
-**Root cause, traced and confirmed by reading the actual source:**
+**Cross-references:** distinct from BUG-APIGEN-030 (Ajv strict-mode reject
+of already-produced `x-apigen-*`/`discriminator` keys — that bug is about
+Ajv *rejecting* the hint once produced; this one is about the hint *never
+being produced* for the class/nominal case in the first place). Citations:
+[session 2026-07-20, this session, while implementing BUG-APIGEN-030's fix
+and regression test: `apigen-core-client/src/lib/schema-builders/nominal.ts`
+(defines `buildNominalSchema`, zero non-test callers, confirmed via
+repo-wide grep for `buildNominalSchema(`);
+`apigen-core-client/src/lib/extract.ts` (no `buildNominalSchema`/`isClass`/
+`extractClasses` reference, confirmed via grep);
+`entrypoint/apigen-cli/src/lib/orchestrator.ts:385` (comment documenting
+`extractClasses()`'s actual constructor/instance-method usage);
+`apigen-core-client/src/lib/schema-builders/morph-walk.ts:181` (the one
+currently-reachable `x-apigen-logical:"union"` producer, inline TS unions
+only)]
 
-1. `apigen-core-client/src/lib/schema-builders/union.ts` deliberately emits
-   an advisory hint on every union schema fragment: `oneOf` + `discriminator`
-   + `"x-apigen-logical": "union"` (`union.ts:14,76,95,101` — the constant
-   itself is `X_APIGEN_LOGICAL` from
-   `apigen-base-logical/src/lib/descriptor-ext.ts:4`). The same hint pattern
-   is used for nominal/branded types (`host-ts.ts:92,109` in
-   `apigen-engine-runtime/src/lib/logical/`), and the runtime's own
-   `union-codec.ts`/`nominal-codec.ts` read this hint back at decode time to
-   pick the right codec — it's load-bearing for the logical-type transcode
-   layer, not decorative.
-2. `apigen-engine-runtime/src/lib/validate-layer.ts:51` constructs the
-   module-level AJV singleton as `new Ajv({ allErrors: true })` — no
-   `strict: false`, and no `ajv.addKeyword('x-apigen-logical', ...)`
-   registration anywhere in the codebase (confirmed via a repo-wide grep for
-   both `addKeyword` and `x-apigen-logical` — the hint is only ever *written*
-   by the schema builders and *read* by the codecs, never declared to AJV).
-3. `ajv@8.20.0` (confirmed installed version) defaults `strict: true`, which
-   throws `strict mode: unknown keyword: "<name>"` at `ajv.compile()` time
-   for any schema-object property AJV doesn't recognize as a standard
-   JSON-Schema or registered custom keyword. `validate-layer.ts:131,212`
-   calls `ajv.compile(schema.input)` **lazily, per request** (not once at
-   server startup), which is why this surfaces as a per-route 500 at
-   dispatch time rather than a startup crash — routes without a union-typed
-   param never hit a schema carrying the offending keyword, so they compile
-   and validate fine.
+### BUG-APIGEN-031 (ported from `main`, now fixed — see CHANGELOG.md) — `generate --type cli` output silently mishandles array-typed params: crashes or returns a wrong value instead of the real result
 
-**Impact — CORRECTED 2026-07-19, narrower than first filed:** originally
-written as "every route/tool (any api type)" on the assumption that
-`validate-layer.ts` sits in shared `apigen-engine-runtime` code every
-plugin routes through. That assumption was wrong, caught during independent
-`mcp`-plugin verification of the same fixture: the two exact routes cited
-above as the reported repro (`parseTags`, `vecToJson`) both dispatch
-correctly over MCP with no AJV error, and a repo-wide grep confirms only
-`apigen-plugin-api-express/src/lib/run.ts` and
-`apigen-plugin-api-fastify/src/lib/run.ts` ever import
-`validate-layer`/`makeValidateLayer` — `apigen-plugin-mcp` (and, by the same
-grep, `apigen-plugin-cli-output` and `apigen-plugin-jsonschema`) call
-`dispatch()` directly and never route through this Layer at all. **Confirmed
-narrow impact along one axis, transport: HTTP-transport plugins only
-(`api-express`, `api-fastify`)** — confirmed reproducing byte-for-byte
-identically on `api-fastify` in a later verification round (same fixture,
-same `parseTags`/`vecToJson` repro). Along the OTHER axis, schema kind, the
-impact is WIDER than first filed (see scope correction above): any
-`x-apigen-logical`-tagged route (union OR nominal/branded) is completely
-unusable on these two plugins — 100% failure rate, not input-dependent; at
-least 40/130 = 31% in the fixture used to verify BUG-APIGEN-028, likely
-somewhat higher once nominal-typed params are recounted. MCP, cli-output,
-and jsonschema output are unaffected on both axes — schemas containing the
-`x-apigen-logical` hint are still generated correctly for those plugins,
-they just never get run through an
-AJV instance that would choke on it.
+**Ported:** 2026-07-20. Filed and root-caused on `main`'s `entrypoint/apigen-cli/BACKLOG.md`
+during `generate`-mode output verification of `apigen-cli` (`cli` and `jsonschema` plugins)
+against `/Users/nix/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts`. Not yet ported to
+this worktree's own BACKLOG.md as of this worktree's last rebase from `main`. Independently
+re-confirmed against this worktree's current source (commit `ac972c72`) before fixing — see
+citations below; `generate.ts`, `runmode.ts`, and `dispatch.ts` were byte-identical to `main`
+at the time of porting (`git diff main -- packages/apigen/apigen-plugin-cli-output/src/lib/
+generate.ts packages/apigen/apigen-base-logical/src/lib/runmode.ts` → empty).
 
-**Suggested fix (not yet attempted — filed per this session's
-verification-only scope, not fixing):** register `x-apigen-logical` (and any
-other apigen-authored advisory keywords, e.g. `x-apigen-codec` referenced in
-`nominal.ts:8`) via `ajv.addKeyword({ keyword: 'x-apigen-logical', ... })` (a
-no-op/metadata-only keyword definition is sufficient — AJV only needs to know
-the keyword exists, it doesn't need to validate against it) at the same
-module-level singleton construction site in `validate-layer.ts:51-52`, right
-alongside the existing `addFormats(ajv)` call. Needs a real
-`generateSchemas → composeSchemas → Ajv.compile` regression test with an
-actual union-typed fixture (the existing `validate-layer.spec.ts` uses
-hand-built schema fixtures, per the same class of gap `BUG-APIGEN-026`'s
-regression test was written to close — hand-built fixtures never carried the
-real hint and wouldn't have caught this).
+**Observed (pre-fix, reproduced live against this worktree):** the generated `cli.ts`'s `mean`
+and `percentile` commands (both take a plain `number[]` param — `latency-stats.ts:17,27`) do
+not work correctly when actually invoked with real array input, despite `--help` and static
+inspection looking correct:
 
-**Cross-references:** distinct from `BUG-APIGEN-029` (dangling-`$ref`
-failures on complex external types like `BetterSqlite3.Database` — different
-error message, different root cause: `$ref` resolution vs. an unregistered
-AJV keyword). Also distinct from `BUG-APIGEN-019` (line 230 below — weak/
-permissive MCP schemas for union *return* types, a schema-quality issue, not
-a hard crash on union *param* types). Citations: [session 2026-07-19,
-sub-agent `verify-api-express-routes`, self-verified against source by this
-session: `apigen-core-client/src/lib/schema-builders/union.ts:14,76,95,101`;
-`apigen-base-logical/src/lib/descriptor-ext.ts:4`;
-`apigen-engine-runtime/src/lib/logical/host-ts.ts:92,109`;
-`apigen-engine-runtime/src/lib/validate-layer.ts:51-52,131,212`; installed
-`ajv` version `8.20.0` (`node_modules/ajv/package.json`); live curl repro
-against `/Users/nix/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts` via
-the branch's own built `dist/entrypoint/apigen-cli/index.js`]
+```
+$ tsx cli.ts mean --arr '[2,4,6]'
+TypeError: arr.reduce is not a function
+    at Object.mean (.../latency-stats.ts:29:14)
+    at dispatch (apigen-engine-runtime/src/lib/dispatch.ts:157:31)
+
+$ tsx cli.ts percentile --sorted '[10,20,30,40,50]' --p 0.5
+"3"                          # WRONG — percentile([10,20,30,40,50], 0.5) is 30
+```
+
+`percentile` is the dangerous case: no crash, a silently plausible-looking wrong answer — the
+raw argv string `"[10,20,30,40,50]"` (16 chars) is passed straight through unparsed, so
+`idx = Math.ceil(16 * 0.5) - 1 = 7` and `"[10,20,30,40,50]"[7]` happens to be the character `'3'`.
+
+**Root cause:** `apigen-plugin-cli-output/src/lib/generate.ts` built `domainArgs` directly
+from Commander's raw parsed option strings (`opts[param]`) with no JSON-parsing for
+array/object-typed params, before handing them to `apigen-engine-runtime/src/lib/
+dispatch.ts`'s `decodeArg` → `apigen-base-logical/src/lib/runmode.ts`'s decode path, whose
+array/object branches (`if (!Array.isArray(wire)) return wire` / equivalent object check)
+correctly pass a non-array/non-object wire straight through for the HTTP transports (where
+`wire` is already real parsed JSON from the request body) — but that same passthrough silently
+defeats the CLI transport, whose wire values are *always* raw argv strings. Scalar
+(string/number/boolean) params round-trip fine; only array/object-typed params were affected.
+
+**Status:** FIXED this session — see `## Fixed` above / CHANGELOG.md for the fix and tests.
+
+Citations: [main's `entrypoint/apigen-cli/BACKLOG.md` BUG-APIGEN-031 writeup (full root-cause
+trace + original citations); session 2026-07-20, self-verified on this worktree: repro run via
+`node dist/entrypoint/apigen-cli/index.js generate --source /Users/nix/dev/ai/sox-ecosystem/
+libs/memory-core/src/latency-stats.ts --type cli --out-dir <scratch> --link-workspace` then
+`npx tsx cli.ts mean --arr '[2,4,6]'` and `npx tsx cli.ts percentile --sorted
+'[10,20,30,40,50]' --p 0.5`, both against `fix/apigen-v1-retirement`@`ac972c72` (pre-fix);
+`packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts` (pre-fix state, full read);
+`packages/apigen/apigen-base-logical/src/lib/runmode.ts:187-213` (full read);
+`packages/apigen/apigen-engine-runtime/src/lib/dispatch.ts:84-87` (full read);
+`git diff main -- packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts
+packages/apigen/apigen-base-logical/src/lib/runmode.ts` → empty, confirming pre-existing
+identical-to-main before the fix in this session]
 
 ### BUG-APIGEN-033 — anonymous default-export functions (`export default (n) => ...`) are advertised as routes/tools but crash at dispatch time ("function not found") — regression introduced by the v1-retirement (v2-orchestrator) rewrite
 
