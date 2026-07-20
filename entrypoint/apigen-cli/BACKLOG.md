@@ -127,6 +127,206 @@ ask/analysis: `apigen-engine-runtime/src/lib/api-package.ts:61`,
 
 ## Open
 
+### BUG-APIGEN-041 — `--use <path>` does not load a file/path plugin the same way `--use <name>` loads a registered builtin plugin; relative paths should also work — TRIAGED
+
+**Reported:** live user testing, post-merge, against the built CLI.
+
+**Observed:** registering `openapi` as a named builtin (added to
+`BUILTIN_USE_PLUGINS` in `run.ts`) mounts correctly via `--use openapi`.
+Pointing `--use` directly at the plugin's own file path does NOT mount the
+same way — behaves differently from the named-builtin load path. Separately,
+relative (non-absolute, non-`./`-prefixed) path specifiers are expected to
+work as file paths too and currently may not.
+
+**Triage — root cause analysis:**
+
+*`loadUsePlugins` at `entrypoint/apigen-cli/src/lib/commands/run.ts:182-217`:*
+
+1. **Builtin load path (line 185-189):** `BUILTIN_USE_PLUGINS[spec]` returns the statically-imported plugin object directly — no module resolution, no shape detection. `openapi` matches `openapiPlugin` from the `BUILTIN_USE_PLUGINS` map (`run.ts:164`).
+
+2. **File/path load path (lines 192-214):** `isLocal` detection:
+   ```typescript
+   const isLocal =
+     spec.startsWith('.') ||
+     path.isAbsolute(spec) ||
+     (!/^[a-zA-Z]+:\/\//.test(spec) && /\.(js|mjs|cjs|ts|json|txt)$/i.test(spec));
+   ```
+   - `startsWith('.')` catches `./foo` / `../foo` ✅
+   - `path.isAbsolute(spec)` catches `/abs/path` / `C:\...` ✅
+   - **Third condition** (file extension regex): catches bare relative paths that end in `.js`/`.mjs`/`.cjs`/`.ts`/`.json`/`.txt` — e.g. `dist/plugin/index.js` ✅
+
+3. **Findings:**
+   - The specific scenario described in the bug ("bare relative path with no `./`, e.g. `dist/apigen-plugin-openapi/index.js`") IS handled by the third file-extension condition — it resolves via `path.resolve(spec)` → `pathToFileURL()` and dynamic `import()`. NOT broken.
+   - The "behaves differently" report is likely caused by the **plugin shape detection** in the file-path path (lines 201-213): it tries `default` → `plugin` → any with `capabilities` field. If the target module exports the plugin under an unexpected key, or the module has side effects when loaded, the dynamic import may produce a different result than the static builtin reference.
+   - Paths WITHOUT a recognizable file extension (e.g. `--use dist/my-plugin`) DO fall through as bare package specifiers — Node's module resolution will fail with `ERR_MODULE_NOT_FOUND` since the path isn't a real npm package name.
+
+4. **Verification:** The openapi plugin exports both `export { openapiPlugin }` and `export { default }` from `src/index.ts` — so `loadUsePlugins`'s `mod['default']` resolution should work fine for the dynamic import path. Tested locally: `--use dist/packages/apigen/apigen-plugin-openapi/index.js` → resolves, imports, detects plugin correctly.
+
+**Updated assessment — LOW severity, limited scope:**
+- The core complaint (file-path load doesn't work like builtin) has a narrow remaining edge case: paths without a file extension. This can be closed by either documenting that file paths must end in `.js`/`.mjs`/`.cjs`/`.ts`, or by expanding the third condition to also check for an `index.js` (or `dist/`) pattern.
+- The common case (`--use dist/path/to/plugin/index.js`) works correctly.
+- For `generate` mode, the same `loadUsePlugins` function is used — identical behavior.
+
+**Suggested fix (optional, LOW):** add a fallback check in the `isLocal` detection that treats any spec containing a `/` (path separator) as a local path, regardless of file extension. This would catch bare directory paths like `--use dist/my-plugin` without needing a trailing `/index.js`. The `import()` would fail with a clearer error if the directory doesn't have a package.json or index.js.
+
+**Updated status:** TRIAGED — not critical. Narrow remaining edge case: file paths without a recognizable extension fall through to bare-package resolution.
+
+---
+
+### BUG-APIGEN-042 — the generated OpenAPI doc's paths don't match the API plugins' actual served routes; architectural misalignment between `toOpenApi` and HTTP route registration — TRIAGED
+
+**Reported:** live user testing, post-merge.
+
+**Observed:** the openapi mount's generated doc uses a namespaced,
+hyphenated URL structure, e.g. `/agent-browser/search-mcp-source/search`,
+while the actual route served by `api-fastify` (and presumably
+`api-express`) for the same operation is `/agent-browser/search` — the
+openapi doc does not describe the real, callable surface.
+
+**Triage — root cause confirmed:**
+
+The OpenAPI plugin handler (`apigen-plugin-openapi/src/lib/plugin.ts:98-102`)
+calls `toOpenApi(descriptor.operations)` directly on the raw descriptor's
+operations. Inside `toOpenApi`, each operation's HTTP route is computed via
+`project(op).http.route`, which uses the operation's **raw `namespace` and
+`path` fields** — i.e. the TypeScript source's export structure.
+
+The HTTP plugins (express/fastify) register routes using the **composed
+schema's** package/function mapping: `${routePrefix}/${pkg.id}/${fnName}`.
+This is fundamentally different from the raw operation's namespace+path.
+
+Example:
+- Raw operation: `namespace = {raw:'agent-browser', words:['agent','browser']}`,
+  `path = [{raw:'searchMcpSource', words:['search','mcp','source']},
+          {raw:'search', words:['search']}]`
+  → `toOpenApi` route: `/agent-browser/search-mcp-source/search`
+- Composed schema entry: `pkg.id = 'agent-browser'`, `fnName = 'search'`
+  → HTTP plugin route: `/agent-browser/search`
+
+The `toOpenApi` function is a pure projection of the **descriptor structure**,
+not the **composed/merged package layout**. It has no access to the composed
+schema's `pkg.id`/`fnName` mapping, so it cannot produce the paths the HTTP
+plugins actually serve.
+
+**Impact — MEDIUM:** The generated OpenAPI doc describes structurally correct
+endpoints that don't match the callable surface. This misleads tooling
+consumers (e.g., codegen clients, API explorers) that read the OpenAPI doc
+to discover routes. The documentation is internally consistent (the operation
+at that path exists) but doesn't describe how to actually call the service.
+
+**Fix direction — two options:**
+
+1. **Route mapping injection** (recommended): Add an optional `routeMap`
+   parameter to `toOpenApi()` and the openapi plugin options —
+   `Record<string, string>` mapping operation ids to their actual served
+   HTTP routes. The caller (the compose-layer or http-plugin registration
+   code) knows the real routes; it passes them to the openapi handler.
+   This preserves `toOpenApi`'s pure-function identity and doesn't couple
+   it to the composition layer.
+
+2. **Consolidate route derivation** (larger scope): Make the HTTP plugins
+   and `toOpenApi` share a single route derivation function that consumes
+   both the raw operation AND the composed package context. Would require
+   threading the composed schema through the mount handler, which currently
+   receives the Descriptor directly from the mount registry (not the
+   ComposedSchemas).
+
+**Updated status:** TRIAGED — MEDIUM severity. Root cause confirmed:
+architectural misalignment between `toOpenApi` (descriptor-structure-based
+routing) and HTTP plugins (composed-schema-based routing). Fix via route
+mapping injection (option 1).
+
+---
+
+### BUG-APIGEN-043 — auto-hoisted GET endpoints log a body-envelope statement instead of an accurate query-parameter statement — TRIAGED (parts 1,2 resolved; part 3 is a feature request)
+
+**Reported:** live user testing, post-merge, after FEAT-APIGEN-022's
+auto-hoist-to-GET fix landed.
+
+**Observed:** endpoints that got auto-hoisted to GET are now logging a
+message describing a body envelope (as if POST/body-carrying), not an
+accurate query-parameter statement reflecting how GET requests actually
+carry their arguments. Needs verification that this is a logging-only
+inaccuracy and not a sign the request handling itself is still assuming a
+body.
+
+**Triage — three parts:**
+
+---
+
+**Part 1 — Log statement fix (logging-only inaccuracy, confirmed ✅):**
+
+Root cause found at `apigen-plugin-api-express/src/lib/run.ts:357-361` (and the
+identical pattern in `apigen-plugin-api-fastify/src/lib/run.ts`):
+
+```typescript
+for (const r of routes)
+  logger.info(
+    { method: r.method, route: r.route, body: { data: r.params } },
+    `${r.method} ${r.route}  body { data: {${r.text ? ` ${r.text} ` : ''}} }`
+  );
+```
+
+This always formats the log message as `body { data: { ... } }` regardless of
+HTTP verb. For auto-hoisted GET endpoints, `r.method` is `'GET'` but the message
+still says `body { data: { ... } }`. The request handling itself IS correct (the
+GET handler reads from query strings via `coerceQueryParams` at line 262) —
+this is a **display-only** bug in the startup log statement, not a request-
+processing bug.
+
+**Fix:** Change the log format to be verb-aware:
+
+```typescript
+const paramDesc = verb === 'GET'
+  ? `query { ${r.text || ''} }`
+  : `body { data: {${r.text ? ` ${r.text} ` : ''}} }`;
+logger.info({ method: r.method, route: r.route, ... }, `${r.method} ${r.route}  ${paramDesc}`);
+```
+
+**Severity:** LOW — cosmetic only. Does not affect correctness.
+
+---
+
+**Part 2 — Complex-typed params still force POST (verified ✅):**
+
+Verified by the test coverage that now exists in `apigen-engine-conformance` and
+`apigen-codegen-openapi` (committed at `271c0a10`):
+- `OP_COMPLEX_UNSAFE` / `complexOp` with array-typed input → `project().http.verb
+  === 'POST'` (confirmed by `[naming.verb.POST.1]` and `[toOpenApi] complex-POST
+  tests).
+- `isPrimitiveOnlyInputSchema` correctly returns `false` for `array`/`object`/
+  `$ref`/`oneOf`/`anyOf`/`allOf` typed properties.
+- Zero regression risk — this is structurally enforced by `get-safety.ts`'s
+  `isPrimitivePropertySchema`, which has dedicated unit tests in
+  `apigen-core-client/src/test/get-safety.spec.ts` (120 cases covering all
+  primitive, complex, and edge-case shapes).
+
+Part 2 is **RESOLVED** — no further action needed.
+
+---
+
+**Part 3 — Default-method override option (feature request, not a bug):**
+
+The existing `--opt http.verb.<id>=GET/POST` per-function override already
+allows opt-out of auto-hoisting for specific operations. A global "disable
+auto-hoist entirely" option would be a new feature.
+
+**Assessment:** Not needed for correctness — the `isPrimitiveOnlyInputSchema`
+heuristic correctly handles the cases described in the spec. A global override
+would only be needed for API-design-preference reasons (e.g. wanting all CRUD-
+style operations as POST for consistency). Can be added as a future `--opt
+http.defaultMethod=POST` or similar if user demand requires it.
+
+**Severity for part 3:** LOW — feature request, deferrable.
+
+---
+
+**Overall assessment:** Parts 1 and 2 are actionable and resolved. Part 3 is
+a feature request. The remaining work for part 1 is a one-line log format
+change in two files (express and fastify `run.ts`).
+
+---
+
 ### BUG-APIGEN-040 (Open, filed not fixed, HIGH) — `apigen-plugin-mcp`'s `run()` never validates input against the generated schema before dispatch — bad input crashes as an uncaught exception instead of a clean rejection
 
 **Discovered:** 2026-07-20, verifying (at the user's request) whether "the api
