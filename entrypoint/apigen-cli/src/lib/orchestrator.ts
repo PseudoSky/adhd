@@ -425,6 +425,10 @@ export async function buildDescriptor(
         input: op.input,
         output: op.output,
         ...(op.hasCtx ? { hasCtx: true } : {}),
+        // BUG-APIGEN-025: thread op.safe through so composeSchemas() can
+        // actually stamp a meaningful x-apigen-safe (previously never wired
+        // this far — see compose-schemas.ts).
+        safe: op.safe,
       };
     }
 
@@ -566,6 +570,10 @@ export async function orchestrateRun(
     options: pluginOpts,
     signal,
     logger: opts.logger,
+    // BUG-APIGEN-024: thread the real merged Operation[] through so `--use`
+    // mount plugins (e.g. apigen-plugin-openapi) can build their Descriptor
+    // from actual extracted operations instead of an empty stub.
+    operations: descriptor.operations,
   };
 
   await plugin.run(input);
