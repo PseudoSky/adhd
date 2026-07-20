@@ -276,7 +276,7 @@ async function extractWithSession(
       // May be a serializable-data const (kind=query) — check serializability
       const constType = varDecl.getType();
       const typeText = constType.getText();
-      if (isSerializableType(typeText)) {
+      if (isSerializableType(constType, varDecl)) {
         const schema = await buildSchema(
           project,
           sf,
@@ -811,27 +811,101 @@ function shouldSkip(name: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Serialisability heuristic for query consts
+// Serialisability check for query consts
 // ---------------------------------------------------------------------------
 
 /**
- * Rough heuristic: is a type text plausibly a serialisable JSON value?
- * Primitive scalars, string literals, arrays of them, and inline object types
- * are considered serialisable. Functions, classes, and complex generics are not.
+ * Structural check: is this compiler `Type` a plain JSON-serialisable value?
+ * Inspects the actual `Type` object (properties, index signatures, call
+ * signatures) rather than pattern-matching `type.getText()`'s rendering, so
+ * generic wrappers around serialisable shapes -- `Record<K, V>`, `Partial<T>`,
+ * `Readonly<T>`, `Array<T>` -- are recognised regardless of how the compiler
+ * prints them (BUG-APIGEN-CORE-004).
+ *
+ * Functions, classes, and any type exposing call/construct signatures --
+ * including via a nested property, e.g. `Map`/`Set`'s methods -- are rejected
+ * structurally rather than by name, so `Map<K, V>` (genuinely not
+ * JSON-serialisable) is correctly excluded without a deny-list entry.
+ *
+ * `seen` guards against infinite recursion on self-referential types (e.g. a
+ * JSON-like recursive type alias); a type re-encountered mid-traversal is
+ * assumed serialisable, since nothing in the traversal so far disproved it.
  */
-function isSerializableType(typeText: string): boolean {
-  const t = typeText.trim();
-  // Exclude obvious non-serialisable patterns
-  if (t.includes('=>')) return false;
-  if (t.startsWith('typeof ')) return false;
-  if (t.toLowerCase().includes('function')) return false;
-  // Primitives + common literal patterns
-  if (['string', 'number', 'boolean', 'null', 'undefined'].includes(t))
+function isSerializableType(
+  type: import('ts-morph').Type,
+  locationNode: import('ts-morph').Node,
+  seen: Set<string> = new Set()
+): boolean {
+  // Functions, constructors, and class references are never serialisable.
+  if (type.getCallSignatures().length > 0) return false;
+  if (type.getConstructSignatures().length > 0) return false;
+
+  if (
+    type.isString() ||
+    type.isNumber() ||
+    type.isBoolean() ||
+    type.isNull() ||
+    type.isUndefined() ||
+    type.isStringLiteral() ||
+    type.isNumberLiteral() ||
+    type.isBooleanLiteral() ||
+    type.isEnumLiteral()
+  ) {
     return true;
-  if (t.startsWith("'") || t.startsWith('"')) return true; // string literal
-  if (/^\d/.test(t)) return true; // numeric literal
-  // Plain object or array
-  if (t.startsWith('{') || t.startsWith('[')) return true;
-  if (t.endsWith('[]')) return true;
+  }
+
+  if (type.isArray() || type.isReadonlyArray()) {
+    const elementType = type.getArrayElementType();
+    return elementType
+      ? isSerializableType(elementType, locationNode, seen)
+      : false;
+  }
+
+  if (type.isTuple()) {
+    return type
+      .getTupleElements()
+      .every((t) => isSerializableType(t, locationNode, seen));
+  }
+
+  if (type.isUnion()) {
+    return type
+      .getUnionTypes()
+      .every((t) => isSerializableType(t, locationNode, seen));
+  }
+
+  if (type.isIntersection()) {
+    return type
+      .getIntersectionTypes()
+      .every((t) => isSerializableType(t, locationNode, seen));
+  }
+
+  if (type.isObject()) {
+    // Cycle guard: a recursive type re-entering itself is assumed
+    // serialisable (nothing in the traversal so far disproved it).
+    const key = type.getText(locationNode);
+    if (seen.has(key)) return true;
+    seen.add(key);
+
+    // Record<K, V> / index-signature interfaces: the value type(s) must be
+    // serialisable. An indexed type has no *own* properties beyond the index
+    // signature, so checking it here (short-circuiting getProperties()) is
+    // sufficient.
+    const stringIndexType = type.getStringIndexType();
+    const numberIndexType = type.getNumberIndexType();
+    if (stringIndexType || numberIndexType) {
+      return [stringIndexType, numberIndexType].every(
+        (t) => !t || isSerializableType(t, locationNode, seen)
+      );
+    }
+
+    const properties = type.getProperties();
+    if (properties.length === 0) return true; // `{}` — vacuously serialisable
+
+    return properties.every((prop) => {
+      const propType = prop.getTypeAtLocation(locationNode);
+      return isSerializableType(propType, locationNode, seen);
+    });
+  }
+
   return false;
 }

@@ -314,55 +314,74 @@ these loops with concurrency.
   correct real responses (200, real data), not 404s.
 - **Status:** FIXED 2026-07-19.
 
+### BUG-APIGEN-CORE-004 — `isSerializableType()`'s textual allow-list doesn't recognize `Record<K,V>` (or other generic utility-type wrappers), causing false-negative skips on legitimately serializable consts — FIXED 2026-07-20
+
+- **Where (was):** `src/lib/extract.ts:822-837` (line numbers as of the
+  filing commit; `isSerializableType(typeText: string)`), a purely textual
+  heuristic over `type.getText()` — checked a fixed set of primitive
+  keywords, quote/digit-prefixed literals, and `{`/`[`-prefixed or `[]`-
+  suffixed text; anything else fell through to `return false`.
+- **Root cause confirmed:** yes, exactly as filed. `SCOPE_WEIGHTS`
+  (`Record<string, number>`) and `SUPPORTED_GRAPHIFY_SHAPES`
+  (`Record<string, GraphifyShapeSpec>`) render via `type.getText()` as
+  `Record<string, number>` / `Record<string, GraphifyShapeSpec>`, which
+  matches none of the old heuristic's textual patterns and falls through to
+  `false`, causing `console.warn('[apigen-core] Skipping non-callable,
+  non-serializable export: …')` on two legitimately JSON-serializable
+  consts.
+- **Fix applied (direction (b) from the original filing — the more robust
+  structural fix, not the incomplete allow-list-extension option (a)):**
+  `isSerializableType` (`src/lib/extract.ts:822-908`) now takes the actual
+  ts-morph `Type` object (already available at the call site via
+  `varDecl.getType()`, `src/lib/extract.ts:277`) plus a `locationNode` for
+  `Symbol.getTypeAtLocation`, and inspects it structurally instead of
+  pattern-matching rendered text:
+  - Rejects any type exposing call/construct signatures (functions, classes,
+    constructors) — checked first, and re-checked implicitly on every nested
+    property via recursion.
+  - Accepts primitives, literals (string/number/boolean/enum), `null`/
+    `undefined`.
+  - Recurses into array/readonly-array element types, tuple element types,
+    union/intersection member types.
+  - For object types: recurses into `getStringIndexType()`/
+    `getNumberIndexType()` when present (this is what makes `Record<K, V>`
+    work — `Record` is implemented as an index signature, so no
+    `Record<`-specific special-casing was needed), otherwise recurses into
+    `getProperties()`.
+  - A `seen: Set<string>` (keyed by `type.getText()`) guards against
+    infinite recursion on self-referential types (e.g. a JSON-like recursive
+    type alias): a type re-encountered mid-traversal is assumed serialisable
+    rather than looping forever.
+  - This also correctly rejects `Map<K, V>`/`Set<K, V>` (the filing's "likely
+    also `Map<K,V>`" guess for a *future* allow-list-prefix fix would have
+    been WRONG — `Map`/`Set` are NOT JSON-serialisable;
+    `JSON.stringify(new Map())` is `'{}'`) without any deny-list entry: their
+    methods (`get`/`set`/`has`/…) are themselves function-typed properties,
+    which the structural per-property recursion rejects. This is the
+    correctness win structural inspection gives over the allow-list
+    approach.
+  - `typeText` (still needed for `buildSchema`) is unchanged — only the
+    serializability *check* now consumes the `Type` object instead of its
+    text rendering.
+- **Tests:** `src/test/extract.spec.ts`
+  ('[BUG-APIGEN-CORE-004] Record<K,V> and other generic-wrapper serializable
+  consts', 4 new tests) + new fixture
+  `src/test/fixtures/extract-serializable-generics.ts`: (1)
+  `Record<string, number>` extracts as `kind:'query'`; (2)
+  `Record<string, Interface>` (index value is a plain data interface)
+  extracts as `kind:'query'`; (3) `Partial<T>` around a serialisable shape
+  extracts as `kind:'query'`; (4) negative control — `Map<string, number>`
+  is still correctly skipped (`console.warn` called, no operation emitted),
+  proving the fix doesn't regress into a naive "generic-looking →
+  serialisable" false positive. Red/green-verified by hand: reverted
+  `extract.ts` to the pre-fix version, confirmed exactly tests (1)-(3) fail
+  (`expected undefined not to be undefined`) while (4) still passes, then
+  restored the fix — all 4 pass green.
+  `npx nx test apigen-core-client`: 246/246 passing (242 pre-existing + 4
+  new), zero regressions.
+- **Status:** FIXED 2026-07-20.
+
 ## Open
-
-### BUG-APIGEN-CORE-004 — `isSerializableType()`'s textual allow-list doesn't recognize `Record<K,V>` (or other generic utility-type wrappers), causing false-negative skips on legitimately serializable consts
-
-- **Where:** `src/lib/extract.ts:769-783`, `isSerializableType(typeText: string)`.
-  It's a purely textual heuristic over `type.getText()` — checks for a fixed
-  set of primitive keywords, quote/digit-prefixed literals, and `{`/`[`-
-  prefixed or `[]`-suffixed text; anything else falls through to `return
-  false`.
-- **Symptom:** discovered while reconciling BUG-APIGEN-CORE-002's "146
-  operations" number against the raw export count of
-  `~/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts` (read-only
-  reference). That file exports 12 `VariableDeclaration`-backed consts; 10
-  extract correctly (Shape 3's serializable-data path), 2 are silently
-  skipped with `console.warn('[apigen-core] Skipping non-callable,
-  non-serializable export: …')`: `SCOPE_WEIGHTS` (`recall.ts:987`, type
-  `Record<string, number>`) and `SUPPORTED_GRAPHIFY_SHAPES`
-  (`extensions.ts:413`, type `Record<string, GraphifyShapeSpec>`, where
-  `GraphifyShapeSpec` is a plain data interface at `extensions.ts:399`). Both
-  are trivially JSON-serializable — a `Record` of numbers and a `Record` of
-  plain-object literals — but `type.getText()` renders as `Record<string,
-  number>` / `Record<string, GraphifyShapeSpec>`, which matches none of
-  `isSerializableType`'s patterns (doesn't start with `{`/`[`, isn't a bare
-  primitive keyword, isn't a literal) and falls through to `false`.
-- **Not caused by, or specific to, the BUG-APIGEN-CORE-002 re-export fix** —
-  this heuristic is untouched by that fix and would misclassify a
-  `Record<…>`-typed const identically if it were declared locally in the
-  entry file rather than re-exported. It was simply never exercised against
-  a `Record`-typed const before now (this file previously only reached 2
-  operations total, neither a variable-backed one).
-- **Why it matters:** low severity, narrow scope — only affects Shape 3's
-  serializable-data-const path, and only for type-text shapes the heuristic
-  doesn't special-case (confirmed: `Record<K,V>` here; likely also `Map<K,V>`,
-  `Partial<T>`, `Readonly<T>`, and any other generic utility-type wrapper
-  around an otherwise-serializable shape, by the same textual-matching logic,
-  though only `Record<K,V>` was actually observed in this file).
-- **Fix direction (not attempted — needs its own investigation):** either (a)
-  extend the textual allow-list with a few more recognized generic-wrapper
-  prefixes (`Record<`, `Map<`, `Partial<`, `Readonly<`, `Array<`), which is
-  cheap but still an incomplete allow-list approach, or (b) replace the
-  textual heuristic with an actual `Type` object inspection (the function
-  already has `decl.getType()` available at the two call sites — no text
-  round-trip needed) checking structural properties (has index signature /
-  is a plain object type / has no call signatures) rather than pattern-
-  matching `getText()`'s rendering, which is the more robust fix.
-- **Status:** OPEN. Filed 2026-07-18 during BUG-APIGEN-CORE-002 verification
-  (export-count reconciliation, self-verified via a standalone ts-morph
-  script diffing `sf.getExportedDeclarations()` names against `extract()`'s
-  output — not from the dispatched agent's report).
 
 ### DEBT-APIGEN-LINT-001 — `@nx/dependency-checks` false-positive: `decimal.js` only used by `src/test/**` fixtures — FIXED 2026-07-18
 
