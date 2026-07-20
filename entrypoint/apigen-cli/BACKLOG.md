@@ -138,34 +138,60 @@ same way — behaves differently from the named-builtin load path. Separately,
 relative (non-absolute, non-`./`-prefixed) path specifiers are expected to
 work as file paths too and currently may not.
 
-**Triage — root cause analysis:**
+**Triage — root cause confirmed by live test:**
 
-*`loadUsePlugins` at `entrypoint/apigen-cli/src/lib/commands/run.ts:182-217`:*
+Running `node dist/entrypoint/apigen-cli/index.js run --use dist/packages/apigen/apigen-plugin-openapi/index.js …`
+produces:
 
-1. **Builtin load path (line 185-189):** `BUILTIN_USE_PLUGINS[spec]` returns the statically-imported plugin object directly — no module resolution, no shape detection. `openapi` matches `openapiPlugin` from the `BUILTIN_USE_PLUGINS` map (`run.ts:164`).
+```
+TypeError: Cannot read properties of undefined (reading 'timeOrigin')
+    at zj (.../dist/packages/apigen/apigen-plugin-openapi/index.js:24)
+```
 
-2. **File/path load path (lines 192-214):** `isLocal` detection:
-   ```typescript
-   const isLocal =
-     spec.startsWith('.') ||
-     path.isAbsolute(spec) ||
-     (!/^[a-zA-Z]+:\/\//.test(spec) && /\.(js|mjs|cjs|ts|json|txt)$/i.test(spec));
-   ```
-   - `startsWith('.')` catches `./foo` / `../foo` ✅
-   - `path.isAbsolute(spec)` catches `/abs/path` / `C:\...` ✅
-   - **Third condition** (file extension regex): catches bare relative paths that end in `.js`/`.mjs`/`.cjs`/`.ts`/`.json`/`.txt` — e.g. `dist/plugin/index.js` ✅
+The `isLocal` path detection in `loadUsePlugins` IS correct — it resolves the path, creates a file URL,
+and calls `import()`. The file IS loaded. But the **plugin's Vite/Rollup dist bundle itself crashes at module
+evaluation time** before any plugin code runs.
 
-3. **Findings:**
-   - The specific scenario described in the bug ("bare relative path with no `./`, e.g. `dist/apigen-plugin-openapi/index.js`") IS handled by the third file-extension condition — it resolves via `path.resolve(spec)` → `pathToFileURL()` and dynamic `import()`. NOT broken.
-   - The "behaves differently" report is likely caused by the **plugin shape detection** in the file-path path (lines 201-213): it tries `default` → `plugin` → any with `capabilities` field. If the target module exports the plugin under an unexpected key, or the module has side effects when loaded, the dynamic import may produce a different result than the static builtin reference.
-   - Paths WITHOUT a recognizable file extension (e.g. `--use dist/my-plugin`) DO fall through as bare package specifiers — Node's module resolution will fail with `ERR_MODULE_NOT_FOUND` since the path isn't a real npm package name.
+**Root cause of the crash — broken `@rollup/plugin-commonjs` dynamic-require stub:**
 
-4. **Verification:** The openapi plugin exports both `export { openapiPlugin }` and `export { default }` from `src/index.ts` — so `loadUsePlugins`'s `mod['default']` resolution should work fine for the dynamic import path. Tested locally: `--use dist/packages/apigen/apigen-plugin-openapi/index.js` → resolves, imports, detects plugin correctly.
+The bundle inlines TypeScript's compiler-perf module, which at initialization does:
 
-**Updated assessment — LOW severity, limited scope:**
-- The core complaint (file-path load doesn't work like builtin) has a narrow remaining edge case: paths without a file extension. This can be closed by either documenting that file paths must end in `.js`/`.mjs`/`.cjs`/`.ts`, or by expanding the third condition to also check for an `index.js` (or `dist/`) pattern.
-- The common case (`--use dist/path/to/plugin/index.js`) works correctly.
-- For `generate` mode, the same `loadUsePlugins` function is used — identical behavior.
+```
+const {performance} = require('perf_hooks') || globalThis.performance
+```
+
+Rollup's `@rollup/plugin-commonjs` cannot handle this pattern. It generates a `cUe()` placeholder
+that always throws (`"Could not dynamically require..."`), and sets `gE` to an **empty frozen
+module object `{}`** instead of a working `require` or `globalThis` reference. The initialization
+chain then proceeds:
+
+1. `cUe` is defined (a thrown, but defined) → `fZ()` returns `true`
+2. `B2()` destructures `{performance: undefined}` from the empty `gE` → returns `{performance: undefined}`
+3. `zj()` accesses `s.timeOrigin` where `s` is `undefined` → **TypeError: Cannot read properties of undefined**
+
+The builtin path (`--use openapi`) works because the plugin is **statically imported** in `run.ts`
+and shares the CLI's own bundle's TypeScript runtime — no second copy of the broken initialization logic runs.
+
+**Impact — HIGH for file-path usage, but workaround exists:**
+- Dynamically loading ANY apigen plugin's dist bundle that transitively depends on `typescript` (or any
+  package using `@rollup/plugin-commonjs`-unfriendly patterns) will crash at module evaluation time.
+- This is not fixable by changing `loadUsePlugins` — the crash is in the **target module itself**.
+- The `loadUsePlugins` detection logic (extension check, path resolution) is actually correct.
+- The fix is in the **build configuration** of the plugin packages: `@rollup/plugin-commonjs` needs
+  either `ignoreDynamicRequires: true` or explicit `dynamicRequireTargets` entries for `perf_hooks`
+  and other Node builtins that TypeScript imports, so the bundle doesn't produce a broken stub.
+
+**Suggested fix:** Add `ignoreDynamicRequires: true` to the `@rollup/plugin-commonjs` configuration
+in the Vite configs of ALL apigen plugin packages (or globally in `nx.json`'s vite build defaults).
+This tells Rollup to leave `require('perf_hooks')` calls as runtime `require()` expressions (which
+Node resolves natively) rather than generating broken stubs. Verify that the resulting bundle
+evaluates cleanly when dynamically imported.
+
+**Updated assessment — HIGH severity for `--use <path>` functionality:**
+- The `isLocal` detection logic is fine; the bug is in the plugin's build output.
+- All `--use <path>` invocations against Vite-bundled apigen plugin dist files fail at load time.
+- The builtin slug path (`--use openapi`) is unaffected.
+- Fix requires a build configuration change, not a runtime code change.
 
 **Suggested fix (optional, LOW):** add a fallback check in the `isLocal` detection that treats any spec containing a `/` (path separator) as a local path, regardless of file extension. This would catch bare directory paths like `--use dist/my-plugin` without needing a trailing `/index.js`. The `import()` would fail with a clearer error if the directory doesn't have a package.json or index.js.
 
