@@ -181,17 +181,42 @@ and shares the CLI's own bundle's TypeScript runtime — no second copy of the b
   either `ignoreDynamicRequires: true` or explicit `dynamicRequireTargets` entries for `perf_hooks`
   and other Node builtins that TypeScript imports, so the bundle doesn't produce a broken stub.
 
-**Suggested fix:** Add `ignoreDynamicRequires: true` to the `@rollup/plugin-commonjs` configuration
-in the Vite configs of ALL apigen plugin packages (or globally in `nx.json`'s vite build defaults).
-This tells Rollup to leave `require('perf_hooks')` calls as runtime `require()` expressions (which
-Node resolves natively) rather than generating broken stubs. Verify that the resulting bundle
-evaluates cleanly when dynamically imported.
+**Fix attempted — dist bundle approach is not viable:**
 
-**Updated assessment — HIGH severity for `--use <path>` functionality:**
-- The `isLocal` detection logic is fine; the bug is in the plugin's build output.
-- All `--use <path>` invocations against Vite-bundled apigen plugin dist files fail at load time.
-- The builtin slug path (`--use openapi`) is unaffected.
-- Fix requires a build configuration change, not a runtime code change.
+Tried three approaches to make the Vite-bundled plugin dist dynamically importable:
+1. `commonjsOptions.ignoreDynamicRequires: true` — ignored by `@nx/vite:build`'s config merge.
+2. Externalizing `typescript`, `ts-morph`, `/^node:.*/` — removed TypeScript from bundle
+   but `@adhd/apigen-core-client`'s transitive deps (`ts-json-schema-generator`, `glob`,
+   etc.) still crash when bundled (`Cannot read properties of undefined (reading 'native')`).
+3. Externalizing all bare-specifier deps — `@adhd/*` packages aren't hoisted to root
+   `node_modules` by pnpm, so Node's `require()` can't resolve them at runtime.
+
+**Root cause (confirmed):** The dist produced by `@nx/vite:build` for any apigen plugin
+that transitively depends on `@adhd/apigen-core-client` (which bundles ts-morph →
+typescript → perf_hooks, glob, etc.) cannot be dynamically imported as a standalone
+module. The CJS interop stubs produced by `@rollup/plugin-commonjs` for TypeScript's
+internal Node-builtin requires crash at module evaluation time. This is a fundamental
+limitation of Rollup's CJS→ESM conversion for packages with complex init-time
+dependency graphs — not fixable by config changes in the plugin's Vite config.
+
+**Updated assessment — HIGH severity, but different fix direction needed:**
+- The `isLocal` path detection in `loadUsePlugins` is correct (it resolves and imports).
+- The crash is in the TARGET module (the plugin's dist), not in the loader.
+- The builtin slug path (`--use openapi`) is unaffected (statically imported in CLI bundle).
+- Fixing the dist build to be standalone is not practical — the transitive dep graph is
+  too complex for Rollup's CJS handling.
+
+**Correct fix direction:** Change `loadUsePlugins` to support loading `.ts` source files
+directly (e.g. `--use packages/apigen/apigen-plugin-openapi/src/index.ts`) via tsx or
+equivalent transpiler, rather than requiring a pre-built dist. The source file has no
+bundling artifacts — Node imports it fresh each time through the transpiler, and TypeScript
+is resolved from the repo's `node_modules` normally. This also makes the "relative paths
+should work" part of the bug trivially true (any Node-resolvable path works).
+
+For pre-built dist files published as npm packages (the third-party plugin use case),
+the plugin author must ensure their dist doesn't bundle packages with problematic
+CJS init code. Document this constraint rather than trying to fix it in apigen's
+bundler config.
 
 **Suggested fix (optional, LOW):** add a fallback check in the `isLocal` detection that treats any spec containing a `/` (path separator) as a local path, regardless of file extension. This would catch bare directory paths like `--use dist/my-plugin` without needing a trailing `/index.js`. The `import()` would fail with a clearer error if the directory doesn't have a package.json or index.js.
 
