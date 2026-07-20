@@ -12,6 +12,7 @@
 //   - All `x-<pluginId>-<field>` key conventions (§9.1) are centralised here.
 
 import type { Segment, Operation } from '@adhd/apigen-core-client';
+import { isPrimitiveOnlyInputSchema } from '@adhd/apigen-core-client';
 
 // ---------------------------------------------------------------------------
 // Casing projectors — consume Segment.words
@@ -127,6 +128,15 @@ export interface ProjectionConfig {
  * Verb derivation: `safe → GET`, `!safe → POST` — then overridable via
  * {@link ProjectionConfig}. **Never** derived from `kind`.
  *
+ * FEAT-APIGEN-022: also hoists to `GET` when `op.input`'s domain params are
+ * ALL "properly typed primitives" (or zero params) per
+ * {@link isPrimitiveOnlyInputSchema}, even when `op.safe` is `false` — this
+ * is the single decision point every transport (HTTP directly here for gRPC/
+ * openapi/mcp paths that read `op` directly; HTTP express/fastify indirectly
+ * via the `x-apigen-safe` stamp {@link httpVerb} reads, computed identically
+ * in `compose-schemas.ts`) inherits from, so auto-hoist logic is never
+ * duplicated per plugin.
+ *
  * @param op     The canonical operation descriptor.
  * @param config Optional projection overrides (e.g. http.verb per id).
  */
@@ -137,7 +147,8 @@ export function project(
   const allSegs: Segment[] = [op.namespace, ...op.path];
 
   // HTTP
-  const defaultVerb: HttpVerb = op.safe ? 'GET' : 'POST';
+  const defaultVerb: HttpVerb =
+    op.safe || isPrimitiveOnlyInputSchema(op.input) ? 'GET' : 'POST';
   const verb: HttpVerb = config.http?.verb?.[op.id] ?? defaultVerb;
   const route = '/' + allSegs.map((s) => toKebab(s)).join('/');
 
@@ -163,6 +174,43 @@ export function project(
     grpc: { package: grpcPackage, service: grpcService, method: grpcMethod },
     cli: { path: cliPath },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Shared HTTP-verb resolver — BUG-APIGEN-025 / FEAT-APIGEN-022
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolves the effective HTTP verb for an already-`ComposedSchemas`-shaped
+ * function schema (`{ input, output, 'x-apigen-safe'?, … }`).
+ *
+ * This is the SINGLE definition every HTTP-emitting plugin
+ * (`apigen-plugin-api-express`'s `run.ts`/`generate.ts`, `apigen-plugin-api-
+ * fastify`'s `run.ts`/`generate.ts`) must import instead of re-declaring —
+ * previously duplicated verbatim at all four call sites (BUG-APIGEN-025's
+ * root-cause finding). Precedence:
+ *
+ *   1. `config.http.verb[fnId]` — the manual `--opt http.verb.<id>=GET`
+ *      override (Tenet 1: expressed at generate/run time, never in source).
+ *      **Always wins**, even against auto-detected `x-apigen-safe: true`.
+ *   2. `schema['x-apigen-safe']` — stamped by `composeSchemas()`
+ *      (`op.safe` OR the FEAT-APIGEN-022 primitive-param-shape auto-hoist;
+ *      see `compose-schemas.ts` / `get-safety.ts`).
+ *   3. Falls back to `'POST'` when neither is present.
+ *
+ * @param fnId   The `<pkgId>:<fnName>` key used in the override map.
+ * @param schema The composed schema entry (or any object carrying an
+ *               `x-apigen-safe` boolean at its top level).
+ * @param config Projection overrides.
+ */
+export function httpVerb(
+  fnId: string,
+  schema: Record<string, unknown>,
+  config: ProjectionConfig
+): 'GET' | 'POST' {
+  const override = config.http?.verb?.[fnId];
+  if (override === 'GET' || override === 'POST') return override;
+  return (schema['x-apigen-safe'] as boolean | undefined) ? 'GET' : 'POST';
 }
 
 // ---------------------------------------------------------------------------

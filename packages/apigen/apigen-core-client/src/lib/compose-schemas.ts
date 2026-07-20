@@ -1,6 +1,7 @@
 import type { SchemaNode } from '@adhd/apigen-base-logical';
 import { validateSchemaRefs } from '@adhd/apigen-base-logical';
 import type { GeneratedSchemas, ComposedSchemas } from './types';
+import { isPrimitiveOnlyInputSchema } from './get-safety';
 
 interface SlimMiddleware {
   id: string;
@@ -145,6 +146,20 @@ export function composeSchemas(
       ...(domainRequired.length > 0 ? { required: domainRequired } : {}),
     };
 
+    // FEAT-APIGEN-022 / BUG-APIGEN-025: the single decision point for
+    // GET-eligibility. `fnSchema.safe` is `op.safe` threaded through from the
+    // extractor (currently always `false` for every `kind: 'action'` — see
+    // extract.ts — so this term is a no-op today, but is real once `safe`
+    // becomes inferable). `isPrimitiveOnlyInputSchema` auto-hoists a function
+    // whose domain params are ALL "properly typed primitives" (or zero
+    // params) — the param-shape criterion FEAT-APIGEN-022 asked for — WITHOUT
+    // requiring the manual `--opt http.verb.<id>=GET` override. Stamped as
+    // `x-apigen-safe` so every HTTP transport's shared `httpVerb()`
+    // (`@adhd/apigen-naming`) picks it up identically; the manual override
+    // still wins there regardless of this value (checked first).
+    const safe =
+      fnSchema.safe === true || isPrimitiveOnlyInputSchema(fnSchema.input);
+
     result[fnName] = {
       input: {
         type: 'object',
@@ -165,6 +180,7 @@ export function composeSchemas(
       output: fnSchema.output,
       // Carry the ctx-param flag through to dispatch (BUG-APIGEN-001).
       ...(fnSchema.hasCtx ? { hasCtx: true } : {}),
+      'x-apigen-safe': safe,
     };
   }
 

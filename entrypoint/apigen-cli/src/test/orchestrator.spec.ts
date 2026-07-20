@@ -25,6 +25,7 @@ import {
 import { collectFormats } from '../lib/commands/generate';
 import { checkCollisions, CollisionDetectedError } from '@adhd/apigen-naming';
 import { project as projectOp } from '@adhd/apigen-naming';
+import { httpVerb as httpVerbShared } from '@adhd/apigen-naming';
 import type {
   Operation,
   Segment,
@@ -328,7 +329,17 @@ describe('orchestrator: projection-override config (Tenet 1)', () => {
       async: true,
       streaming: false,
       safe: false, // action default → POST; override will force GET
-      input: { type: 'object', properties: {}, required: [] },
+      // FEAT-APIGEN-022: an object-typed param, not the earlier placeholder
+      // `properties: {}` — a REAL zero-param shape now auto-hoists to GET
+      // (see naming.spec.ts's dedicated auto-hoist suite), which would make
+      // this fixture default to GET even without the override below and
+      // defeat the point of this test (proving the OVERRIDE mechanism, not
+      // the default-verb derivation).
+      input: {
+        type: 'object',
+        properties: { payload: { type: 'object', properties: {} } },
+        required: ['payload'],
+      },
       output: { type: 'object' },
       envelope: {},
       typeText: null,
@@ -491,6 +502,111 @@ describe('[dod.10 v2 teeth] buildDescriptor: default-import Decimal source carri
         )}. Regression: normalizeTypeText() not called in buildSchema.`
     ).toBe(true);
   }, 30_000);
+});
+
+// ---------------------------------------------------------------------------
+// FEAT-APIGEN-022 / BUG-APIGEN-025 — full real pipeline: extract() (real
+// TS source) → buildDescriptor()'s Step 5 (op.safe threading) →
+// composeSchemas() (x-apigen-safe stamping) → the shared httpVerb()
+// (@adhd/apigen-naming), proving the whole chain end-to-end rather than any
+// single stage in isolation.
+// ---------------------------------------------------------------------------
+
+describe('orchestrator: FEAT-APIGEN-022 auto-hoist + BUG-APIGEN-025 x-apigen-safe (real pipeline)', () => {
+  const verbHoistFixture = path.join(fixturesDir, 'verb-hoist.ts');
+
+  it('[verb-hoist.1] zero-param and all-primitive-param functions auto-hoist: x-apigen-safe:true, no override needed', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [{ file: verbHoistFixture, namespace: 'vh' }],
+    });
+    const pkg = descriptor.packageSchemas.get('vh');
+    expect(pkg).toBeDefined();
+    if (!pkg) throw new Error('vh package not found');
+
+    expect(pkg.schemas['noParams']['x-apigen-safe']).toBe(true);
+    expect(pkg.schemas['getPrimitive']['x-apigen-safe']).toBe(true);
+  });
+
+  it('[verb-hoist.2] object- and array-typed params do NOT auto-hoist: x-apigen-safe:false', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [{ file: verbHoistFixture, namespace: 'vh' }],
+    });
+    const pkg = descriptor.packageSchemas.get('vh');
+    if (!pkg) throw new Error('vh package not found');
+
+    expect(pkg.schemas['withObject']['x-apigen-safe']).toBe(false);
+    expect(pkg.schemas['withArray']['x-apigen-safe']).toBe(false);
+  });
+
+  it('[verb-hoist.3] the shared httpVerb() resolves GET for auto-hoisted fns and POST for complex-param fns, with no override', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [{ file: verbHoistFixture, namespace: 'vh' }],
+    });
+    const pkg = descriptor.packageSchemas.get('vh');
+    if (!pkg) throw new Error('vh package not found');
+
+    expect(httpVerbShared('vh:noParams', pkg.schemas['noParams'], {})).toBe(
+      'GET'
+    );
+    expect(
+      httpVerbShared('vh:getPrimitive', pkg.schemas['getPrimitive'], {})
+    ).toBe('GET');
+    expect(
+      httpVerbShared('vh:withObject', pkg.schemas['withObject'], {})
+    ).toBe('POST');
+    expect(httpVerbShared('vh:withArray', pkg.schemas['withArray'], {})).toBe(
+      'POST'
+    );
+  });
+
+  it('[verb-hoist.4] a manual --opt http.verb.<id>=POST override still wins over the auto-hoisted x-apigen-safe:true', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [{ file: verbHoistFixture, namespace: 'vh' }],
+    });
+    const pkg = descriptor.packageSchemas.get('vh');
+    if (!pkg) throw new Error('vh package not found');
+
+    // Confirm it WOULD auto-hoist absent the override (negative control).
+    expect(
+      httpVerbShared('vh:getPrimitive', pkg.schemas['getPrimitive'], {})
+    ).toBe('GET');
+
+    const overrides = parseOverrides(['http.verb.vh:getPrimitive=POST']);
+    expect(
+      httpVerbShared(
+        'vh:getPrimitive',
+        pkg.schemas['getPrimitive'],
+        overrides
+      )
+    ).toBe('POST');
+  });
+
+  it('[verb-hoist.5] end-to-end: orchestrateGenerate against a real HTTP-shaped fake plugin sees x-apigen-safe:true in the packageSchemas it receives for the auto-hoisted fn', async () => {
+    let capturedSchemas: Record<string, unknown> | undefined;
+    const capturingPlugin: OutputPlugin = {
+      id: 'capturing-verb',
+      description: 'captures packageSchemas for x-apigen-safe inspection',
+      generate(genInput: PluginInput) {
+        capturedSchemas = genInput.packages[0]?.schemas as Record<
+          string,
+          unknown
+        >;
+        return { files: [] };
+      },
+    };
+
+    await orchestrateGenerate(
+      { sources: [{ file: verbHoistFixture, namespace: 'vh' }] },
+      capturingPlugin,
+      os.tmpdir()
+    );
+
+    expect(capturedSchemas).toBeDefined();
+    const getPrimitive = (capturedSchemas as Record<string, unknown>)[
+      'getPrimitive'
+    ] as Record<string, unknown>;
+    expect(getPrimitive['x-apigen-safe']).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -8,6 +8,7 @@ import {
   toSnake,
   normalizeFileName,
   project,
+  httpVerb,
   checkCollisions,
   CollisionDetectedError,
   envelopeKey,
@@ -372,5 +373,112 @@ describe('envelopeEnvVar', () => {
     expect(envelopeEnvVar('my-plugin', 'api-key')).toBe(
       'APIGEN_MY_PLUGIN_API_KEY'
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FEAT-APIGEN-022 — project() auto-hoists to GET by primitive param shape,
+// independent of `safe`
+// ---------------------------------------------------------------------------
+
+describe('project — FEAT-APIGEN-022: auto-hoist to GET by primitive param shape', () => {
+  it('[naming.autohoist.1] zero declared params (properties:{}), safe=false — still GET', () => {
+    const zeroArg: Operation = {
+      ...opHumanizeBytes,
+      input: { type: 'object', properties: {}, required: [] },
+    };
+    expect(project(zeroArg).http.verb).toBe('GET');
+  });
+
+  it('[naming.autohoist.2] all-primitive params, safe=false — auto-hoists to GET without any override', () => {
+    const primitiveOp: Operation = {
+      ...opHumanizeBytes,
+      input: {
+        type: 'object',
+        properties: { id: { type: 'string' }, count: { type: 'number' } },
+        required: ['id'],
+      },
+    };
+    expect(project(primitiveOp).http.verb).toBe('GET');
+  });
+
+  it('[naming.autohoist.3] an object-typed param, safe=false — does NOT auto-hoist, stays POST', () => {
+    const objectOp: Operation = {
+      ...opHumanizeBytes,
+      input: {
+        type: 'object',
+        properties: {
+          payload: { type: 'object', properties: { x: { type: 'number' } } },
+        },
+        required: ['payload'],
+      },
+    };
+    expect(project(objectOp).http.verb).toBe('POST');
+  });
+
+  it('[naming.autohoist.4] an array-typed param, safe=false — does NOT auto-hoist, stays POST', () => {
+    const arrayOp: Operation = {
+      ...opHumanizeBytes,
+      input: {
+        type: 'object',
+        properties: { ids: { type: 'array', items: { type: 'string' } } },
+        required: ['ids'],
+      },
+    };
+    expect(project(arrayOp).http.verb).toBe('POST');
+  });
+
+  it('[naming.autohoist.5] manual override still wins even against shape-based auto-hoist', () => {
+    const primitiveOp: Operation = {
+      ...opHumanizeBytes,
+      input: {
+        type: 'object',
+        properties: { id: { type: 'string' } },
+        required: ['id'],
+      },
+    };
+    const p = project(primitiveOp, {
+      http: { verb: { [primitiveOp.id]: 'POST' } },
+    });
+    expect(p.http.verb).toBe('POST');
+  });
+
+  it('[naming.autohoist.6] existing fixtures with bare input:{} (no "properties" key) are unaffected — regression', () => {
+    // opHumanizeBytes (safe=false, input:{}) must still project to POST —
+    // proves isPrimitiveOnlyInputSchema does not treat "no properties key"
+    // the same as "zero properties".
+    expect(project(opHumanizeBytes).http.verb).toBe('POST');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-025 / FEAT-APIGEN-022 — shared httpVerb() (the single definition
+// every HTTP-emitting plugin imports instead of re-declaring)
+// ---------------------------------------------------------------------------
+
+describe('httpVerb — shared ComposedSchemas-based verb resolver', () => {
+  it('[naming.httpVerb.1] no x-apigen-safe, no override — POST', () => {
+    expect(httpVerb('pkg:fn', {}, {})).toBe('POST');
+  });
+
+  it('[naming.httpVerb.2] x-apigen-safe:true, no override — GET', () => {
+    expect(httpVerb('pkg:fn', { 'x-apigen-safe': true }, {})).toBe('GET');
+  });
+
+  it('[naming.httpVerb.3] override wins over x-apigen-safe:true', () => {
+    const config = { http: { verb: { 'pkg:fn': 'POST' as const } } };
+    expect(httpVerb('pkg:fn', { 'x-apigen-safe': true }, config)).toBe(
+      'POST'
+    );
+  });
+
+  it('[naming.httpVerb.4] override wins over x-apigen-safe:false/absent', () => {
+    const config = { http: { verb: { 'pkg:fn': 'GET' as const } } };
+    expect(httpVerb('pkg:fn', {}, config)).toBe('GET');
+  });
+
+  it('[naming.httpVerb.5] override only affects the specified fnId', () => {
+    const config = { http: { verb: { 'pkg:other': 'GET' as const } } };
+    expect(httpVerb('pkg:fn', {}, config)).toBe('POST');
   });
 });

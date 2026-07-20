@@ -11,6 +11,9 @@ export {
   // Per-transport projection
   project,
 
+  // Shared HTTP-verb resolver (BUG-APIGEN-025 / FEAT-APIGEN-022)
+  httpVerb,
+
   // Uniqueness / collision check
   checkCollisions,
   CollisionDetectedError,
