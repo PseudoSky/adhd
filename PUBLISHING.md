@@ -2,6 +2,8 @@
 
 How to version, build, and publish packages in this monorepo to npm.
 
+**This workflow uses `nx release` for independent per-package versioning.** Each package is versioned independently based on commits since its last `{projectName}@{version}` git tag. Only packages with changes since their last publish are selected for release.
+
 ---
 
 ## Prerequisites
@@ -11,86 +13,109 @@ How to version, build, and publish packages in this monorepo to npm.
 
 ---
 
-## Steps
+## Workflow: Independent per-package versioning
 
-### 1. Build
-
-```bash
-npx nx build <project-name>          # single package
-npx nx run-many -t build --all       # everything
-```
-
-### 2. Bump version
+### 1. Version (compute what changed, bump versions, generate changelogs)
 
 ```bash
-cd packages/<path>/<name>
-npm version patch   # or minor / major
+# Patch bumps (patch) on all packages with changes since last tag
+npx nx release patch --dry-run   # preview
+npx nx release patch             # execute (no --dry-run)
+
+# Minor/major bumps (specify if needed)
+npx nx release minor --dry-run
+npx nx release major --dry-run
 ```
 
-Then rebuild so `dist/` picks up the new version:
+**What happens:** `nx release version` does the following:
+- Scans git history from each project's **last git tag** (`{projectName}@{version}`) forward
+- Projects with zero commits since last tag are **skipped** (not re-released)
+- Projects with commits use **conventional commit analysis** to determine bump: `fix()` → patch, `feat()` → minor, `BREAKING CHANGE` → major
+- Bumps `package.json` version in each affected project
+- Generates per-project `CHANGELOG.md` and workspace `CHANGELOG.md` from commit messages
+- Tags each project with its new tag: `@adhd/agent-mcp@1.2.3`, `@adhd/apigen-cli@2.0.0`, etc.
+- Updates internal cross-project dependencies (`updateDependents: "auto"`)
+
+### 2. Publish (build, test, verify-dist-load, push to npm)
 
 ```bash
-cd <repo-root>
-npx nx build <project-name>
+npx nx release publish --dry-run   # preview
+npx nx release publish             # execute (no --dry-run)
 ```
 
-### 3. Publish
+**What happens:** For each versioned project:
+- Runs `build` target (clean rebuild from source)
+- Runs `test` target
+- Runs `verify-dist-load` gate (custom build artifact validation)
+- Publishes to npm with metadata from CHANGELOG.md
+- Git push of tags (if commit flag is enabled; currently set to `false` — manual push required)
 
-**Preferred — `nx release publish` (enforces a clean build + tests first).**
+#### Selective publishing
+
+To version/publish only changed packages in a specific domain:
 
 ```bash
-npx nx release publish --projects=<name>          # add --dry-run to preview
+npx nx release patch --projects='agent-*' --dry-run
+npx nx release patch --projects='agent-*'
+npx nx release publish --projects='agent-*' --dry-run
 ```
 
-The `nx-release-publish` target has `dependsOn: ["build", "test"]` (see each
-publishable project's `project.json`, plus the `nx.json` `targetDefaults`
-baseline). Because the `build` target runs with `clean: true` (it wipes `dist/`
-and recompiles from source), **publishing always rebuilds from source and runs
-the test suite first** — a stray manual edit in `dist/` can never be published,
-and a red test suite blocks the release. This is the required path.
+### 3. Single-package workflow (for leaf packages with no dependents)
 
-#### Publishing dependents (cascade)
-
-`nx.json` sets `release.version.updateDependents: "auto"`, so a version bump to a
-**base** package (e.g. `@adhd/agent-mcp-types`) automatically bumps every package that
-depends on it **and** rewrites their dependency range — keeping the ecosystem consistent.
-To get the cascade you must version through nx (not a bare `npm version`):
+To release one package without cascading:
 
 ```bash
-# versions the named project AND its dependents, writes changelogs, then publishes all of them
-npx nx release version --projects=<base-pkg> <patch|minor|major>   # cascades to dependents
-npx nx release publish                                              # publishes everything just versioned
-# add --dry-run to either to preview
+npx nx release patch --projects=<exact-project-name> --dry-run
+npx nx release patch --projects=<exact-project-name>
+npx nx release publish --dry-run
 ```
 
-A bare `npm version` in a single package does **not** trigger the cascade — use it only
-for a leaf package with no dependents. When in doubt, prefer `nx release` so dependents
-are never left behind on a stale dep.
+For packages that depend on the one you just released, they are **not** automatically versioned. 
+Use `updateDependents: "auto"` (already configured) to cascade when needed — re-run version for 
+the base package to bump all consumers.
 
-**Manual fallback** (only if `nx release` is unavailable — does NOT enforce the
-clean-build/test gate, so run the build + tests yourself first):
+### 4. Manual versioning fallback (only if `nx release` is unavailable)
+
+Do **not** use this unless absolutely necessary. It bypasses the build/test gates:
 
 ```bash
 npx nx build <name> && npx nx test <name>
-npm publish dist/packages/<path>/<name> --access public
+npm publish dist/<path>/<name> --access public
 # If prompted for OTP: add --otp=<code>
 ```
 
-### 4. Commit version bump
+---
 
-```bash
-git add packages/<path>/<name>/package.json
-git commit -m "chore(<name>): bump to <version>"
-git push origin main
-```
+## How "only what changed" is determined
+
+**Git tags are the source of truth.** When you run `nx release version`, it:
+
+1. **Finds each project's last release tag:** Looks for the most recent tag matching `{projectName}@*` (e.g., `agent-mcp@1.2.3`)
+2. **Scans commits since that tag:** Uses git log from that tag to HEAD
+3. **Skips projects with zero commits:** If a project has no commits since its tag, it's not included in the release
+4. **Analyzes commit type:** Uses the scope and type in conventional commits to determine version bump
+
+**Example:**
+- `agent-mcp@1.2.0` tag exists from 2 weeks ago
+- Since then: 5 new commits to agent-mcp (2 `fix(...)`, 3 `feat(...)`)
+- Result: agent-mcp is bumped to 1.3.0 (minor)
+
+- `apigen-core-client@2.1.5` tag exists from 2 weeks ago
+- Since then: zero commits to apigen-core-client
+- Result: apigen-core-client is **skipped** in this release (no new version, no publish)
 
 ---
 
 ## CI publish (automated)
 
-Merging a PR to `main` triggers `.github/workflows/pull-request.yml`, which runs
-`npx nx affected -t publish` on affected libraries. This requires `NPM_TOKEN` to
-be set as a GitHub Actions secret using an **automation token** (no OTP required).
+The CI workflow (`.github/workflows/pull-request.yml`) runs:
+
+```bash
+npx nx release version --dry-run
+npx nx release publish --dry-run  # if version succeeded
+```
+
+This requires `NPM_TOKEN` to be set as a GitHub Actions secret using an **automation token** (no OTP required).
 
 To create an automation token: npmjs.com → Avatar → Access Tokens → Generate New Token → **Automation**.
 
@@ -102,6 +127,7 @@ After publishing any package, verify it works end-to-end:
 
 - [ ] `npm view @adhd/<name>` shows the new version as `latest`
 - [ ] `npx @adhd/<name>@latest --version` (for CLI packages) prints the correct version
+- [ ] Verify git tags were created: `git tag | grep @adhd/<name>@` should show `{projectName}@{version}`
 - [ ] Check the package's own publishing doc for integration smoke tests:
 
 Each published package maintains a `PUBLISHING.md` in its source directory with
@@ -109,9 +135,8 @@ package-specific verification steps. Check there for the full smoke-test procedu
 
 | Package | Publishing doc |
 |---|---|
-| `@adhd/agent-mcp` | [`packages/ai/agent-mcp/PUBLISHING.md`](packages/ai/agent-mcp/PUBLISHING.md) |
-| `@adhd/agent-mcp-types` | Smoke test: `node -e "import('@adhd/agent-mcp-types').then(m => console.log(typeof m.HookRegistry))"` should print `function` |
-| `@adhd/agent-mcp-budget` | Smoke test: `node -e "import('@adhd/agent-mcp-budget').then(m => console.log(typeof m.createPlugin))"` should print `function` |
+| `@adhd/agent-mcp` | [`entrypoint/agent-mcp/PUBLISHING.md`](entrypoint/agent-mcp/PUBLISHING.md) |
+| `@adhd/apigen-cli` | [`entrypoint/apigen-cli/PUBLISHING.md`](entrypoint/apigen-cli/PUBLISHING.md) |
 
 ---
 
@@ -119,7 +144,10 @@ package-specific verification steps. Check there for the full smoke-test procedu
 
 | Error | Fix |
 |---|---|
-| `You cannot publish over the previously published versions` | Forgot to rebuild after `npm version` — run `npx nx build <name>` then republish |
-| `EOTP` | Need OTP from authenticator app, or switch to an automation token |
-| `E401 Unauthorized` | Run `npm login` first |
-| `dist/` has wrong version | Always rebuild after bumping `package.json` |
+| `You cannot publish over the previously published versions` | Package was already published at that version. Check `npm view @adhd/<name> versions` to confirm. Delete the tag locally with `git tag -d <tag>` and re-run release, or bump to a higher version. |
+| `EOTP` | Need OTP from authenticator app, or switch to an automation token. |
+| `E401 Unauthorized` | Run `npm login` first. |
+| `dist/` missing package.json or has wrong version | `nx release publish` always rebuilds. If you edited `dist/` manually, delete it and re-run `npx nx release publish`. |
+| `No projects to release` | All projects are up-to-date (no commits since last tag). Create a test commit (`chore:` prefix won't trigger a bump, but `fix:` will) or force a specific version with `--force-publish`. |
+| `The project X does not have a package.json at dist/...` | Project needs to be built first. The `nx-release-publish` target includes `dependsOn: ["build"]`, so if build fails, publish will fail. Run `npx nx build <project>` to see the real error. |
+| `updateDependents did not bump dependent packages` | `updateDependents: "auto"` only triggers when versioning a base package. If you bump a leaf package manually and its consumers don't change, consumers stay at their old versions. This is intentional — base packages (e.g., `-base-types`, `-core-policy`) are candidates for auto-cascade. |
