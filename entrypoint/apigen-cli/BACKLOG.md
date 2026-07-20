@@ -535,7 +535,7 @@ appear under which `outcome` values.
 
 ---
 
-### BUG-APIGEN-037 — Generated tool schemas don't document the `data` envelope
+### BUG-APIGEN-020 — Generated tool schemas don't document the `data` envelope
 
 **Reported:** 2026-07-06
 **Source:** scratch-agent-search consumer (agent-browser project)
