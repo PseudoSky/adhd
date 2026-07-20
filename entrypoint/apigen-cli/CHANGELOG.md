@@ -6,6 +6,52 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **BUG-APIGEN-031** — `generate --type cli` output silently mishandled array/object-typed
+  domain params: Commander's raw argv string for a flag like `--arr '[2,4,6]'` was passed
+  straight through to `dispatch()` with no JSON-parsing, since only the CLI transport's wire
+  values are plain strings (HTTP transports already deliver a real parsed value from the
+  request body, and the shared `apigen-base-logical` decode path's array/object branches
+  correctly pass a non-array/non-object wire through unchanged for that case). Result: an
+  array-typed param either crashed downstream (`arr.reduce is not a function`) or, worse,
+  silently returned a wrong-but-plausible-looking answer via string-indexing coincidence
+  (`percentile --sorted '[10,20,30,40,50]' --p 0.5` returned `"3"` — the character at index 7
+  of the 16-char argv string — instead of the real answer, `30`). Ported from `main`'s
+  `entrypoint/apigen-cli/BACKLOG.md` (filed there 2026-07-19) and independently reproduced on
+  this worktree's current source before fixing — `generate.ts`, `runmode.ts`, and `dispatch.ts`
+  were byte-identical to `main`, confirmed via `git diff main`. Fixed in
+  `apigen-plugin-cli-output/src/lib/generate.ts` (transport-specific, not the shared decode
+  path, to avoid touching HTTP transports' already-correct behavior): a new `isJsonTypedProp()`
+  helper flags any domain param whose schema (or `anyOf` with all non-null members) is
+  `array`/`object`-typed; `generate()` now pre-scans every command for such a param and, only
+  when at least one exists, embeds a small `__apigenParseJsonArg(flag, raw)` runtime helper in
+  the generated `cli.ts` (undefined passthrough for omitted optional params, `JSON.parse` for
+  strings, a clear `Invalid JSON for --<flag>: <message>` thrown error on malformed input
+  instead of a silent wrong value) and routes each json-typed param's `domainArgs` entry
+  through it. Regression tests added to `apigen-plugin-cli-output/src/test/plugin.spec.ts`
+  (`BUG-APIGEN-031` describe block, 9 cases): static codegen assertions (array param wrapped,
+  object param wrapped, scalar params NOT wrapped, helper omitted entirely when unused,
+  nullable `anyOf:[array,null]` param wrapped) plus behavioral assertions that extract the
+  actual generated helper source from `content` and evaluate it directly — proving the real
+  shipped runtime code parses `'[2,4,6]'` → `[2,4,6]` and `'{"verbose":true}'` →
+  `{verbose:true}`, passes `undefined` through for an omitted optional param, and throws
+  `Invalid JSON for --arr: ...` (not a silent passthrough) on malformed input. Live end-to-end
+  verification against `/Users/nix/dev/ai/sox-ecosystem/libs/memory-core/src/latency-stats.ts`
+  (`generate --type cli --link-workspace` then real `tsx cli.ts` invocations): `mean --arr
+  '[2,4,6]'` now returns `4` (was a crash), `percentile --sorted '[10,20,30,40,50]' --p 0.5` now
+  returns `30` (was the silently-wrong `"3"`), and `mean --arr 'not-json'` now throws
+  `Invalid JSON for --arr: Unexpected token 'o', "not-json" is not valid JSON` instead of
+  reaching dispatch at all. `apigen-plugin-cli-output` suite: 34/34 (was 25/25 pre-fix,
+  9 new). `apigen-base-logical` suite (untouched, verified no regression): 186/186.
+  `eslint` on both touched files: clean. `nx test`/`tsc --noEmit` for these projects not used
+  directly for final verification — `nx test` transitively gates on `apigen-core-client:lint`,
+  which had an unrelated, concurrent in-flight failure from a different teammate's uncommitted
+  WIP at verification time (`apigen-core-client/src/test/extract.spec.ts`, BUG-APIGEN-CORE-004
+  in progress, confirmed via `git status`/`git diff` to be outside this fix's diff entirely);
+  raw `tsc --noEmit -p tsconfig.spec.json` hits a pre-existing `vite.config.ts`/`defineConfig`
+  raw-`tsc`-invocation artifact (untouched file, not a real type error, an artifact of invoking
+  `tsc` outside the Vite-aware toolchain — the project's actual CI-relevant check, `vitest run`,
+  passed cleanly).
+
 - **BUG-APIGEN-032** — `generate --type api-express`/`api-fastify` (including their
   `-registry` variants) emitted genuinely invalid TypeScript/JavaScript for any
   hyphenated discovered package id — the repo-convention, overwhelmingly common case
