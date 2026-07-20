@@ -127,6 +127,77 @@ ask/analysis: `apigen-engine-runtime/src/lib/api-package.ts:61`,
 
 ## Open
 
+### BUG-APIGEN-040 (Open, filed not fixed, HIGH) — `apigen-plugin-mcp`'s `run()` never validates input against the generated schema before dispatch — bad input crashes as an uncaught exception instead of a clean rejection
+
+**Discovered:** 2026-07-20, verifying (at the user's request) whether "the api
+type plugins actually validate inputs" after this session's BUG-APIGEN-
+029/030 work on the Ajv/validate-Layer stack. Confirmed live, not by
+inspection alone.
+
+**Root cause, confirmed by reading + live repro:** `api-express`/`api-fastify`'s
+`run()` both call `makeValidateLayer(schemas)` (`apigen-plugin-api-{express,
+fastify}/src/lib/run.ts`, wired via BUG-APIGEN-009/010) — every request runs
+through a real Ajv-compiled schema check BEFORE `dispatch()` is ever called,
+confirmed live: a malformed `date-time` and a missing required field both
+return HTTP 400 `invalid_argument` with the handler fn provably never
+invoked (`apigen-plugin-api-{express,fastify}/src/test/plugin.spec.ts`'s
+existing `[BUG-APIGEN-009/010]` suite, re-run and confirmed clean this
+session). `apigen-plugin-mcp/src/lib/run.ts`'s `CallToolRequestSchema`
+handler (line ~104-144) does **no such thing** — it goes straight to
+`dispatch(pkg.fns, pkg.createClient, meta.schema, name, envelope,
+domainData)` with zero Ajv involvement; `apigen-engine-runtime/src/lib/
+dispatch.ts` (confirmed by full read) contains no Ajv reference at all, only
+the well-known-scalar transcoder.
+
+**Live repro (built a throwaway in-process test using the exact harness
+pattern from `run.spec.ts`'s existing `run()`+streaming-http suite, deleted
+after confirming — not committed):** using the same `dateTimeSchema`
+fixture as the HTTP plugins' own `[009]` test (`when: string, format:
+"date-time", required`):
+- Omitting `when` entirely → fn **is called**, crashes with `Cannot read
+  properties of undefined (reading 'toUpperCase')`, surfaced to the MCP
+  client as a generic `-32603 internal error` — not a validation error.
+- `when: "2099-02-30T00:00:00.000Z"` (invalid calendar date, valid string)
+  → fn **is called**, crashes with `when.toUpperCase is not a function`
+  (the date-time codec evidently coerces/mangles the value without
+  rejecting it).
+- `when: 12345` (wrong type entirely) → this one **is** rejected, but only
+  because the date-time transcoder's own decode-time wire-type check
+  happens to catch it (`"[date-time] expected a string on the wire ... got
+  number"`) — an incidental side effect of one specific codec's own
+  precondition, not systematic schema validation. A parameter with no
+  well-known codec (e.g. a plain `string`/`number`/`object` with no format)
+  would get no such protection at all.
+
+**Impact:** any MCP consumer sending malformed or incomplete tool-call
+arguments gets an unstructured, generic internal-error crash instead of the
+clean, actionable `invalid_argument` response every HTTP-transport consumer
+already gets for the identical bad input — an inconsistency across apigen's
+own transports, and a real reliability/UX gap for the MCP surface
+specifically (arguably the primary consumer surface, given this is an
+agent-tooling framework).
+
+**Suggested fix:** wire `apigen-plugin-mcp/src/lib/run.ts`'s
+`CallToolRequestSchema` handler through the same validate-Layer mechanism
+`api-express`/`api-fastify` already use (`makeValidateLayer` from
+`@adhd/apigen-engine-runtime`, or a transport-appropriate equivalent that
+validates `{ data: domainData, ...envelope }` against `meta.schema.input`
+before calling `dispatch()`), returning a structured MCP tool-error result
+(not a thrown protocol-level exception) on validation failure — analogous
+to the `[BUG-APIGEN-009/010]` fix for the HTTP plugins.
+
+Citations: [session 2026-07-20, self-verified: `apigen-plugin-api-{express,
+fastify}/src/lib/run.ts` `makeValidateLayer` wiring;
+`apigen-plugin-mcp/src/lib/run.ts:104-144` no Ajv/validate-layer import or
+call; `apigen-engine-runtime/src/lib/dispatch.ts` full read, no Ajv
+reference; `apigen-plugin-api-express/src/test/plugin.spec.ts:538-559`
+`[009]` suite re-run clean (400/invalid_argument, fn not called) this
+session; live in-process repro via `run()` + streaming-http transport
+(same pattern as `apigen-plugin-mcp/src/test/run.spec.ts`'s existing
+suites), 3 cases as described above, not committed]
+
+---
+
 ### BUG-APIGEN-038 (Open, filed not fixed) — `buildNominalSchema`/`buildUnionSchema` (class-based nominal/union schema builders) are not wired into the real `extract()`/`composeSchemas()` pipeline for any function parameter
 
 **Discovered:** 2026-07-20, while fixing BUG-APIGEN-030 (AJV strict-mode
