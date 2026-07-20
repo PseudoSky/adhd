@@ -19,6 +19,11 @@ import type {
   Plugin,
 } from '@adhd/apigen-core-client';
 import { effectiveLanguage } from '@adhd/apigen-core-client';
+import {
+  describeRunTypeOption,
+  unknownTypeError,
+  unsupportedRunError,
+} from '../plugin-registry';
 // Built-in `--use` plugins. Statically imported so the vite-bundled CLI inlines
 // them (a runtime dynamic `import('@adhd/apigen-plugin-health')` would NOT be in
 // the standalone bundle). A bare slug (`--use health`) resolves here; an
@@ -211,7 +216,7 @@ export function registerRunCommand(
   program
     .command('run')
     .requiredOption('--source <path>', 'Path to TypeScript source file')
-    .requiredOption('--type <plugin-id>', 'Output target')
+    .requiredOption('--type <plugin-id>', describeRunTypeOption(plugins))
     .option(
       '--export <mode>',
       'Export mode: "default" | "<named-object-name>" | omit for named exports'
@@ -252,8 +257,8 @@ export function registerRunCommand(
         config?: string;
       }) => {
         const plugin = plugins[opts.type];
-        if (!plugin?.run)
-          throw new Error(`Plugin ${opts.type} does not support run mode`);
+        if (!plugin) throw unknownTypeError(opts.type, plugins);
+        if (!plugin.run) throw unsupportedRunError(opts.type, plugins);
 
         let exportMode: ExportMode;
         if (opts.export === 'default') {

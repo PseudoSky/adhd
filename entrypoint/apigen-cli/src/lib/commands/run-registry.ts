@@ -9,6 +9,11 @@ import { buildCliLogger } from '../logging';
 import { orchestrateRun } from '../orchestrator';
 import type { SourceEntry } from '../orchestrator';
 import type { OutputPlugin } from '@adhd/apigen-core-client';
+import {
+  describeRunTypeOption,
+  unknownTypeError,
+  unsupportedRunError,
+} from '../plugin-registry';
 
 /** Parse --opt key=value pairs into an options record. */
 function parseOptPairs(pairs: string[]): Record<string, unknown> {
@@ -40,7 +45,7 @@ export function registerRunRegistryCommand(
       '--packages-dir <path>',
       'Directory containing package subdirectories'
     )
-    .requiredOption('--type <plugin-id>', 'Output target')
+    .requiredOption('--type <plugin-id>', describeRunTypeOption(plugins))
     .option(
       '--tag <tag>',
       'Include only packages with this tag (repeatable)',
@@ -73,8 +78,8 @@ export function registerRunRegistryCommand(
         opt: string[];
       }) => {
         const plugin = plugins[opts.type];
-        if (!plugin?.run)
-          throw new Error(`Plugin ${opts.type} does not support run mode`);
+        if (!plugin) throw unknownTypeError(opts.type, plugins);
+        if (!plugin.run) throw unsupportedRunError(opts.type, plugins);
 
         const logger = buildCliLogger(program);
         const options = parseOptPairs(opts.opt);

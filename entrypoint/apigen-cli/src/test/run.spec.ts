@@ -69,6 +69,123 @@ describe('[cli-run-cmd.3] run command — plugin without run() throws', () => {
       ])
     ).rejects.toThrow(/does not support run mode/);
   });
+
+  it('lists the generate-only and run-capable subsets separately in the error', async () => {
+    const generateOnlyPlugin: OutputPlugin = {
+      id: 'gen-only',
+      description: 'no run method',
+      generate() {
+        return { files: [] };
+      },
+    };
+    const runCapablePlugin: OutputPlugin = {
+      id: 'run-capable',
+      description: 'has a run method',
+      generate() {
+        return { files: [] };
+      },
+      async run() {
+        return undefined;
+      },
+    };
+
+    const program = makeProgram();
+    registerRunCommand(program, {
+      'gen-only': generateOnlyPlugin,
+      'run-capable': runCapablePlugin,
+    });
+
+    await expect(
+      program.parseAsync([
+        'node',
+        'apigen-cli',
+        'run',
+        '--source',
+        apiFixture,
+        '--type',
+        'gen-only',
+      ])
+    ).rejects.toThrow(
+      /Generate-only plugins: gen-only\. Run-capable plugins: run-capable/
+    );
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// FEAT-APIGEN-019 — a genuinely unrecognized --type (e.g. a near-miss like
+// `express` instead of the real `api-express` key) must be reported as
+// "Unknown --type", never conflated with "exists but doesn't support run
+// mode" (the exact confusion the user hit in the field per the BACKLOG entry).
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('[FEAT-APIGEN-019] run command — unknown --type vs unsupported run mode', () => {
+  const apiExpressPlugin: OutputPlugin = {
+    id: 'api-express',
+    description: 'Express HTTP API server',
+    generate() {
+      return { files: [] };
+    },
+    async run() {
+      return undefined;
+    },
+  };
+
+  it('reports a near-miss/typo\'d --type as "Unknown --type", not "does not support run mode"', async () => {
+    const program = makeProgram();
+    registerRunCommand(program, { 'api-express': apiExpressPlugin });
+
+    await expect(
+      program.parseAsync([
+        'node',
+        'apigen-cli',
+        'run',
+        '--source',
+        apiFixture,
+        '--type',
+        'express',
+      ])
+    ).rejects.toThrow(/Unknown --type: express\. Available: api-express/);
+  });
+
+  it('does not throw "does not support run mode" for an unregistered --type', async () => {
+    const program = makeProgram();
+    registerRunCommand(program, { 'api-express': apiExpressPlugin });
+
+    await expect(
+      program.parseAsync([
+        'node',
+        'apigen-cli',
+        'run',
+        '--source',
+        apiFixture,
+        '--type',
+        'express',
+      ])
+    ).rejects.not.toThrow(/does not support run mode/);
+  });
+
+  it("run command's --help lists only run-capable plugin ids, derived from the live registry", () => {
+    const generateOnlyPlugin: OutputPlugin = {
+      id: 'gen-only',
+      description: 'no run method',
+      generate() {
+        return { files: [] };
+      },
+    };
+
+    const program = makeProgram();
+    registerRunCommand(program, {
+      'api-express': apiExpressPlugin,
+      'gen-only': generateOnlyPlugin,
+    });
+
+    const helpText = program.commands
+      .find((c) => c.name() === 'run')
+      ?.helpInformation();
+
+    expect(helpText).toContain('api-express');
+    expect(helpText).not.toContain('gen-only');
+  });
 });
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -6,6 +6,44 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **FEAT-APIGEN-019** — CLI's `--type` plugin discovery was undiscoverable: `generate`'s
+  `--type` help text was a hardcoded, already-stale string (missing `py-flask`/`py-grpc`,
+  two of the 7 real targets); `run`'s and `run-registry`'s `--type` help text said nothing
+  but `'Output target'`; there was no `list-types`/`--list` command at all; and `run`'s
+  `!plugin?.run` check conflated two distinct failures into one message — a genuinely
+  unrecognized `--type` (e.g. `express`, a plausible near-miss of the real key `api-express`)
+  was reported identically to a real, registered generate-only plugin (`jsonschema`, `cli`)
+  that legitimately has no `run()` — "Plugin express does not support run mode" instead of
+  "Unknown --type: express". Reported live: the user hit exactly this typo case against the
+  built CLI. Root cause: every one of these surfaces (`generate.ts`, `generate-registry.ts`,
+  `run.ts`, `run-registry.ts`) read/derived its `--type` text independently instead of from
+  one source of truth, so they drifted from the real `plugins` map (`index.ts:17-30`) and
+  from each other. Fixed by adding `src/lib/plugin-registry.ts` as the single source of truth
+  — `describeTypeOption()`/`describeRunTypeOption()` for Commander `--type` help text (the
+  latter scoped to only run-capable ids), `unknownTypeError()`/`unsupportedRunError()` for the
+  two now-distinct error branches, and `formatTypesList()` for the new `apigen list-types`
+  command (`src/lib/commands/list-types.ts`, registered in `index.ts`) — every one reading
+  `Object.keys(plugins)` / `plugin.run` live, so they can never drift from the registry or
+  from each other again. `run.ts`/`run-registry.ts`'s single `if (!plugin?.run) throw …` is
+  now two checks: `if (!plugin) throw unknownTypeError(...)` then
+  `if (!plugin.run) throw unsupportedRunError(...)` — the latter lists the generate-only and
+  run-capable subsets separately. Verified end-to-end against the real registry (all 8 keys):
+  `apigen list-types` prints every id with its `plugin.description` and generate/run
+  capability; `apigen run --type express ...` now throws `Unknown --type: express. Available:
+  mcp, jsonschema, api-fastify, api-express, cli, cli-output, py-flask, py-grpc` (previously
+  the misleading "does not support run mode"); `apigen run --type jsonschema ...` throws
+  `Plugin jsonschema does not support run mode. Generate-only plugins: jsonschema, cli,
+  cli-output. Run-capable plugins: mcp, api-fastify, api-express, py-flask, py-grpc.`; `apigen
+  generate --help`/`apigen run --help` show live, correctly-scoped `--type` option text.
+  Covered by `src/test/plugin-registry.spec.ts` (registry-derivation unit tests — proves
+  every helper's output changes when a fixture registry gains/loses a plugin, not just that
+  it matches a fixed string), `src/test/list-types.spec.ts` (the new command, same
+  derivation proof), and new cases in `src/test/run.spec.ts`/`src/test/generate.spec.ts`
+  (the unknown-vs-unsupported-run-mode split, and `--help` text scoping for `run` vs
+  `generate`). Deferred out of scope: `py-flask`/`py-grpc`'s unconditional eager imports
+  (unpublished on npm — filed as BUG-APIGEN-037, since it's a plugin-*loading* concern, not
+  a `--type` text/list-derivation concern).
+
 - **BUG-APIGEN-021** — `apigen run --source <file> --type <plugin>` crashed with
   `Error: Cannot find module './x.js'` (`MODULE_NOT_FOUND`) against any real
   `--source` whose package has no `"type": "module"` (the common default for
@@ -183,6 +221,72 @@ All notable changes to this project are documented here.
   left to the downstream AJV compile, not this check). Verified red (test
   fails with the `validateComposedRefs()` call temporarily removed) and
   green (restored) by hand before landing.
+
+- **BUG-APIGEN-030** — any `x-apigen-logical`-tagged param (union OR
+  nominal/branded) crashed EVERY call on `api-express`/`api-fastify` with
+  `strict mode: unknown keyword: "x-apigen-logical"` — a 500 regardless of
+  input, not a validation rejection. Root cause: apigen's own schema builders
+  (`apigen-core-client/src/lib/schema-builders/union.ts`,
+  `.../schema-builders/nominal.ts`, and the inline-union path in
+  `.../schema-builders/morph-walk.ts:181`) tag union/nominal schema fragments
+  with advisory `x-apigen-logical`/`x-apigen-codec`/`x-apigen-ctor`/
+  `x-apigen-tojson` keys (`X_APIGEN_LOGICAL` etc. from
+  `@adhd/apigen-base-logical/src/lib/descriptor-ext.ts`) plus an
+  OpenAPI-style `discriminator` object on union fragments
+  (`morph-walk.ts:172-182`) — read back by `union-codec.ts`/`nominal-codec.ts`
+  at decode time, never declared to Ajv. `apigen-engine-runtime/src/lib/
+  validate-layer.ts`'s single module-level `Ajv({ allErrors: true })`
+  singleton (line 51; both `validateLayer` and `makeValidateLayer` share it —
+  there is only one construction site, not two as originally suspected) never
+  registered any of these five keywords, and Ajv 8's default `strict: true`
+  throws `strict mode: unknown keyword` the first time `ajv.compile()` runs
+  on any schema carrying one. Confirmed the impact is wider than
+  `x-apigen-logical` alone: `discriminator` itself is also rejected by
+  default Ajv (`strict mode: unknown keyword: "discriminator"`), and Ajv's
+  own built-in `discriminator: true` option is NOT a fix — it enforces its
+  own OpenAPI discriminator semantics and explicitly throws
+  `discriminator: mapping is not supported` against the `mapping` object
+  apigen's `discriminator` fragment carries (verified by direct reproduction
+  with `ajv@8.20.0`, the installed version). Fixed by registering all five
+  keys (`X_APIGEN_LOGICAL`, `X_APIGEN_CODEC`, `X_APIGEN_CTOR`,
+  `X_APIGEN_TOJSON`, `'discriminator'`) as no-op `ajv.addKeyword({ keyword,
+  valid: true })` annotations at the singleton's construction site
+  (`validate-layer.ts:73-82`), preserving `strict: true`'s other protections
+  rather than disabling strict mode wholesale. Covered by a new
+  `apigen-engine-runtime/src/test/bug-apigen-030.spec.ts` (5 cases):
+  `[apigen-030.1]`-`[apigen-030.3]` run the REAL `extract()` →
+  `composeSchemas()` pipeline against a new fixture
+  (`test/fixtures/bug-apigen-030.ts`, an inline `Dog | Cat` discriminated
+  union param) proving the real `oneOf`+`discriminator`+
+  `x-apigen-logical:"union"` shape `morph-walk.ts` actually emits today
+  compiles and a real call reaches dispatch instead of crashing;
+  `[apigen-030.4]`/`[apigen-030.5]` hand-build schemas using the real
+  `X_APIGEN_LOGICAL`/`X_APIGEN_CODEC`/`X_APIGEN_CTOR`/`X_APIGEN_TOJSON`
+  constants (not string literals) to cover the two keys the current
+  extraction pipeline doesn't yet reach for class-typed nominal params (see
+  BUG-APIGEN-036 below) and the `discriminator.mapping` shape Ajv's built-in
+  option rejects. Verified red pre-fix (all three previously-failing cases
+  reproduced the exact BACKLOG error strings —
+  `strict mode: unknown keyword: "x-apigen-logical"` and
+  `strict mode: unknown keyword: "discriminator"` — by temporarily reverting
+  the `addKeyword` registration) and green post-fix by hand before landing.
+  Full suite verified clean: `apigen-engine-runtime` 131/131,
+  `apigen-plugin-api-express` 31/31, `apigen-plugin-api-fastify` 43/43 (run
+  directly via `vitest run --config <project>/vite.config.ts`, bypassing
+  `nx test`'s cross-project lint-dependency chain, which was independently
+  broken by an unrelated, concurrently in-flight edit to
+  `apigen-core-client/src/test/extract.spec.ts` from another session sharing
+  this worktree — not touched by this fix).
+
+  **Also discovered, filed separately (not fixed by this change):**
+  `buildNominalSchema`/`buildUnionSchema` (the class-based nominal/union
+  schema builders in `schema-builders/nominal.ts`/`union.ts`) are not wired
+  into the real `extract()`/`composeSchemas()` pipeline for any function
+  parameter — confirmed no call site outside their own spec files, and
+  `orchestrator.ts`'s `extractClasses()` usage is for constructor/
+  instance-method operations, not embedding nominal `$def`s into other
+  functions' input schemas. Filed as BUG-APIGEN-036 in the Open section
+  below.
 
 ### Changed
 

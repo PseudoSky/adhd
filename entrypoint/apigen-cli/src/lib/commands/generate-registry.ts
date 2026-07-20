@@ -6,6 +6,7 @@ import { buildCliLogger } from '../logging';
 import { orchestrateGenerate } from '../orchestrator';
 import type { SourceEntry } from '../orchestrator';
 import type { OutputPlugin } from '@adhd/apigen-core-client';
+import { describeTypeOption, unknownTypeError } from '../plugin-registry';
 
 /** Parse --opt key=value pairs into an options record. */
 function parseOptPairs(pairs: string[]): Record<string, unknown> {
@@ -27,10 +28,7 @@ export function registerGenerateRegistryCommand(
       '--packages-dir <path>',
       'Directory containing package subdirectories'
     )
-    .requiredOption(
-      '--type <plugin-id>',
-      'Output target: mcp | api-fastify | api-express | cli | jsonschema'
-    )
+    .requiredOption('--type <plugin-id>', describeTypeOption(plugins))
     .requiredOption('--out-dir <path>', 'Output directory')
     .option(
       '--tag <tag>',
@@ -66,11 +64,7 @@ export function registerGenerateRegistryCommand(
       }) => {
         const plugin = plugins[opts.type];
         if (!plugin) {
-          throw new Error(
-            `Unknown --type: ${opts.type}. Available: ${Object.keys(
-              plugins
-            ).join(', ')}`
-          );
+          throw unknownTypeError(opts.type, plugins);
         }
 
         const logger = buildCliLogger(program);

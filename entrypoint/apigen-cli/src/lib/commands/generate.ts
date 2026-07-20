@@ -13,6 +13,7 @@ import type {
   ComposedSchemas,
 } from '@adhd/apigen-core-client';
 import { emitResolutionScaffolding } from '../scaffold';
+import { describeTypeOption, unknownTypeError } from '../plugin-registry';
 // DEBT-LT-005: replaced the inline TS_LOGICAL_TYPE_DEP_MAP duplicate with the
 // authoritative source from @adhd/apigen-base-logical. tsDepMap() derives the map
 // from the same TemplateCell.dep fields that are the single source of truth
@@ -181,10 +182,7 @@ export function registerGenerateCommand(
   program
     .command('generate')
     .requiredOption('--source <path>', 'Path to TypeScript source file')
-    .requiredOption(
-      '--type <plugin-id>',
-      'Output target: mcp | api-fastify | api-express | cli | jsonschema'
-    )
+    .requiredOption('--type <plugin-id>', describeTypeOption(plugins))
     .requiredOption('--out-dir <path>', 'Output directory')
     .option(
       '--export <mode>',
@@ -233,11 +231,7 @@ export function registerGenerateCommand(
       }) => {
         const plugin = plugins[opts.type];
         if (!plugin) {
-          throw new Error(
-            `Unknown --type: ${opts.type}. Available: ${Object.keys(
-              plugins
-            ).join(', ')}`
-          );
+          throw unknownTypeError(opts.type, plugins);
         }
 
         const logger = buildCliLogger(program);
