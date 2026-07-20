@@ -109,7 +109,7 @@ Use `@monodon/rust`. Same layout and tagging rule as Python.
 
 Dependencies flow **strictly downward**. Higher layers orchestrate; lower layers provide primitives. Never allow upward or circular dependencies.
 
-### ⚠️ `domain` is the DIRECTORY. `layer` is a TAG. They are orthogonal.
+### ⚠️ `domain` is the DIRECTORY. `layer` is a TAG. They are orthogonal
 
 This is the single most misread rule in the repo. A package's **directory** is its
 `domain` (`packages/agent/`, `packages/dispatch/`). Its **`layer:` tag** is an
@@ -175,7 +175,7 @@ Never invoke `tsc` by hand. Type-checking goes through the project's Nx target (
 
 Do not pass `--skip-nx-cache` (or set `NX_SKIP_NX_CACHE`) to any `nx` command. The nx cache is **correct** — its inputs (`production` = `{projectRoot}/**/*` minus tests) already hash `package.json` (version), `README.md`, and all source, so a version bump, a README edit, or a source change **does** invalidate the cache and reach `dist/`. Trust it.
 
-`--skip-nx-cache` is actively harmful: it runs the task **without reading or writing the cache**, so it builds fresh output to `dist/` but leaves the cache holding an **older entry**. A later normal build then sees matching inputs, **restores that stale cached output over your fresh `dist/`**, and a publish ships the wrong artifact (e.g. an old version → `cannot publish over previously published versions`). The "stale dist" symptom is *caused by* `--skip-nx-cache`, not cured by it.
+`--skip-nx-cache` is actively harmful: it runs the task **without reading or writing the cache**, so it builds fresh output to `dist/` but leaves the cache holding an **older entry**. A later normal build then sees matching inputs, **restores that stale cached output over your fresh `dist/`**, and a publish ships the wrong artifact (e.g. an old version → `cannot publish over previously published versions`). The "stale dist" symptom is _caused by_ `--skip-nx-cache`, not cured by it.
 
 - Need a clean rebuild? Change an input (you already did, if you bumped a version) and run the normal cached build, or `npx nx reset` to clear the whole cache deliberately — never `--skip-nx-cache`.
 - Prove a cache hit/miss by running the build twice and reading nx's output; don't reach for the flag.
@@ -199,7 +199,7 @@ Green unit tests and passing `grep` audits are **not** proof a feature works. On
 2. **Assertions must have teeth.** A behavioral test must FAIL if the bug is reintroduced. Prove it: revert the fix (or run a deliberately-wrong negative-control variant) and confirm the test goes red. A test that stays green when the code is broken proves nothing.
 3. **Be deterministic without timing.** Prove concurrency with latches/barriers, await events with bounded deadlines, prove persistence by reopening the store — never `sleep`/wall-clock. A flaky proof is not a proof.
 4. **Trust exit codes, not stdout.** Never gate on `… | grep -q passed` — it ignores the process exit code and hides crashes/failures (a ~50% teardown segfault once "passed" this way). Key on the runner's exit status.
-5. **For LLM features, verify with a real model end-to-end.** A scripted/mock provider can fake a tool call the real model can't actually make — that exact gap left HITL unreachable until a live run exposed it. Add a live test that runs a real model through the real loop and asserts model-independent invariants. Gating it behind an env flag (e.g. `AGENT_MCP_LIVE=1`) is legitimate **only because a real model is a paid third-party service** — the one qualifying exception in *Live testing is mandatory* below — and only if you document the approval (named owner, in README + AGENTS.md + the test header) as that section requires.
+5. **For LLM features, verify with a real model end-to-end.** A scripted/mock provider can fake a tool call the real model can't actually make — that exact gap left HITL unreachable until a live run exposed it. Add a live test that runs a real model through the real loop and asserts model-independent invariants. Gating it behind an env flag (e.g. `AGENT_MCP_LIVE=1`) is legitimate **only because a real model is a paid third-party service** — the one qualifying exception in _Live testing is mandatory_ below — and only if you document the approval (named owner, in README + AGENTS.md + the test header) as that section requires.
 6. **Assert the consumer-visible outcome, not the implementation shape.** "`Promise.all` is present" is a proxy; "an agent gets N results back, faster" is the outcome. An implementation-shaped check can stay green while the guarantee regresses.
 
 When authoring a plan with the `plan-state-machine` skill, each behavioral DoD clause must name the real entrypoint + observable and be proven by an audit check that drives it. **Never mark a task complete on proxy evidence.**
@@ -208,31 +208,31 @@ When authoring a plan with the `plan-state-machine` skill, each behavioral DoD c
 
 **Start from the principle.** A feature is proven only by exercising it the way a consumer does — through the real entrypoint or built artifact. A test that doesn't run is not a safety net; it's a comment. We learned this the expensive way: env-gated "live" suites stayed green for months while the real `apigen run`/`serve` path was broken, and they hid several real bugs (BUG-009..013) that a single default-running test would have caught on the first commit.
 
-**So the default is simple: every behavioural test runs by default, unflagged, in CI.** Spawning a local server, building the artifact first, taking a few seconds, needing `python3`/`grpcurl` on the box — none of these are reasons to gate. They are *setup*, and setup is the test's job (wire `dependsOn:["build"]`, provision the tool in CI). A feature is not "done" until a default-running test drives its real path, and the project's `demo`/`verify` target must do the same.
+**So the default is simple: every behavioural test runs by default, unflagged, in CI.** Spawning a local server, building the artifact first, taking a few seconds, needing `python3`/`grpcurl` on the box — none of these are reasons to gate. They are _setup_, and setup is the test's job (wire `dependsOn:["build"]`, provision the tool in CI). A feature is not "done" until a default-running test drives its real path, and the project's `demo`/`verify` target must do the same.
 
-**There is exactly one exception, and it is narrow.** You may put a test behind an env flag *only* when it calls a **paid or external third-party service** — something this system does not control, or that costs money per run (a real LLM, a billed API). That is the *only* qualifying reason. Ask yourself: *"Does skipping this test save money or avoid an outside system I can't run myself?"* If the honest answer is no, it runs by default — full stop.
+**There is exactly one exception, and it is narrow.** You may put a test behind an env flag _only_ when it calls a **paid or external third-party service** — something this system does not control, or that costs money per run (a real LLM, a billed API). That is the _only_ qualifying reason. Ask yourself: _"Does skipping this test save money or avoid an outside system I can't run myself?"_ If the honest answer is no, it runs by default — full stop.
 
 **If — and only if — a test qualifies, the gate must be documented in the open:** the approval, with a named owner, surfaced in **all three** of the project's `README.md`, its `AGENTS.md`, and the gated test file's own header. An undocumented gate is a broken gate.
 
-**Watch for the trap.** "It spawns child processes," "it needs a built CLI," "it's slow," "it's inconvenient in CI" — every one of these *feels* like a reason and is *not* one. They are the exact rationalizations that produce the blind spot. When a test has a hard local prerequisite, make it **fail loudly** if the prerequisite is missing (a missing `python3` should turn the suite red, never make it quietly skip). The single acceptable softening is an **optional external binary** (e.g. `grpcurl`): that one assertion may self-skip *with a visible warning*, and only so long as it never masks a failure in the code under test.
+**Watch for the trap.** "It spawns child processes," "it needs a built CLI," "it's slow," "it's inconvenient in CI" — every one of these _feels_ like a reason and is _not_ one. They are the exact rationalizations that produce the blind spot. When a test has a hard local prerequisite, make it **fail loudly** if the prerequisite is missing (a missing `python3` should turn the suite red, never make it quietly skip). The single acceptable softening is an **optional external binary** (e.g. `grpcurl`): that one assertion may self-skip _with a visible warning_, and only so long as it never masks a failure in the code under test.
 
 ### Proving an MCP server works — drive the real tools, never a bypass
 
 An MCP server's consumer seam is its **tools as loaded by a host** (`.mcp.json` → `mcp__<server>__*`). So the proof it works is to **call those loaded tools the way a host does** — against real state and real dependencies — and trust the returned **payload + exit code**, not a report. This applies to every MCP server in the repo, not just agent-mcp.
 
-The trap to avoid: **if the tool isn't available, make it available — don't go around it.** When an `mcp__<server>__*` tool is missing or stale, the fix is to load it (build the server, point `.mcp.json` at the built artifact, `/mcp` reload) and call it. It is **not** license to run a shell script that spawns or — worse — *imports* the build and calls its functions directly. That is our code calling our code; it skips the exact layer that fails in real use (host wiring, dist dependency resolution, tool registration, output-size limits), so it can pass while the shipped server is broken. A standalone script is acceptable **only** when it acts as a real MCP client (real JSON-RPC over stdio/http to the unmodified built server) — never when it reaches inside the server. Ask: *am I calling it like a host, or reaching inside it?* Only the former proves anything.
+The trap to avoid: **if the tool isn't available, make it available — don't go around it.** When an `mcp__<server>__*` tool is missing or stale, the fix is to load it (build the server, point `.mcp.json` at the built artifact, `/mcp` reload) and call it. It is **not** license to run a shell script that spawns or — worse — _imports_ the build and calls its functions directly. That is our code calling our code; it skips the exact layer that fails in real use (host wiring, dist dependency resolution, tool registration, output-size limits), so it can pass while the shipped server is broken. A standalone script is acceptable **only** when it acts as a real MCP client (real JSON-RPC over stdio/http to the unmodified built server) — never when it reaches inside the server. Ask: _am I calling it like a host, or reaching inside it?_ Only the former proves anything.
 
 ## 🔄 8. Refactoring & Purity Protocol (CRITICAL)
 
 You are responsible for maintaining the health of the shared ecosystem. **Follow these rules for every code change:**
 
-1.  **Prefer Imports over Creation:** Before writing a utility (e.g., deep copy, camelCase, data filter), check the existing `@adhd/data-*` packages (`data-base-transforms`, `data-query-engine`). **Always** use existing exports.
-2.  **The "Two-Use" Refactor Rule:** If you are writing logic in an `entrypoint` or feature that is generic and likely reusable, **STOP**.
+1. **Prefer Imports over Creation:** Before writing a utility (e.g., deep copy, camelCase, data filter), check the existing `@adhd/data-*` packages (`data-base-transforms`, `data-query-engine`). **Always** use existing exports.
+2. **The "Two-Use" Refactor Rule:** If you are writing logic in an `entrypoint` or feature that is generic and likely reusable, **STOP**.
     - Extract the logic.
     - Place it in the appropriate `packages/<domain>/` package at the right tier.
     - Import it back into the original file using the `@adhd/` scoped path.
-3.  **Dependency Purity:** `base`/`core` tier packages must **never** depend on higher tiers or UI. They are the bedrock.
-4.  **Hyphenated NPM Naming:** All new libraries must use hyphenated names (e.g., `network-helpers`, not `networkHelpers`) for NPM compatibility.
+3. **Dependency Purity:** `base`/`core` tier packages must **never** depend on higher tiers or UI. They are the bedrock.
+4. **Hyphenated NPM Naming:** All new libraries must use hyphenated names (e.g., `network-helpers`, not `networkHelpers`) for NPM compatibility.
 
 ## 📝 9. Code Style & Standards
 
@@ -274,6 +274,7 @@ This project is indexed by GitNexus as **adhd** (23271 symbols, 35246 relationsh
 
 ## Always Do
 
+- You may use the gitnexus cli or the mcp if available.
 - **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
 - **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
 - **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.

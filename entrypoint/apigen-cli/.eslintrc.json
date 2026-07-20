@@ -6,7 +6,7 @@
     "vite.config.ts",
     "vite.config.mjs",
     "vite.config.mts",
-    "src/test/fixtures/registry/**"
+    "src/test/fixtures/**/**"
   ],
   "overrides": [
     {
@@ -25,7 +25,8 @@
       "files": ["src/test/fixtures/**"],
       "rules": {
         "@typescript-eslint/no-empty-function": "off",
-        "@typescript-eslint/no-unused-vars": "off"
+        "@typescript-eslint/no-unused-vars": "off",
+        "@nx/dependency-checks": "off"
       }
     },
     {
@@ -37,7 +38,7 @@
           {
             "ignoredFiles": [
               "{projectRoot}/vite.config.{js,ts,mjs,mts}",
-              "{projectRoot}/src/test/fixtures/registry/**/package.json"
+              "{projectRoot}/src/test/fixtures/**"
             ],
             "ignoredDependencies": [
               "ts-morph",

@@ -34,9 +34,7 @@
   "devDependencies": {
     "decimal.js": "^10.4.3"
   },
-  "peerDependencies": {
-    "decimal.js": "^10.4.3"
-  },
+  "peerDependencies": {},
   "peerDependenciesMeta": {
     "decimal.js": {
       "optional": true
