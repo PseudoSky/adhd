@@ -44,7 +44,7 @@ const authMiddleware = { id: 'auth', envelope: { token: { type: 'string' } } };
 // ---------------------------------------------------------------------------
 
 describe('composeSchemas', () => {
-  it('[schema-composition.1] no middleware — data wrapper present; no other keys in properties', () => {
+  it('[schema-composition.1] no middleware — data wrapper property present; no other keys in properties', () => {
     const composed = composeSchemas(domainSchemas, []);
 
     for (const [fnName, schema] of Object.entries(composed)) {
@@ -58,9 +58,20 @@ describe('composeSchemas', () => {
         `${fnName} should only have "data" in properties`
       ).toEqual(expect.objectContaining({ data: expect.any(Object) }));
       expect(Object.keys(input.properties)).toEqual(['data']);
-      expect(input.required).toContain('data');
-      expect(input.required).toHaveLength(1);
     }
+
+    // FEAT-APIGEN-023: the "data" property is always present, but it is only
+    // listed in the outer `required` array for functions that actually have
+    // ≥1 required domain param. `listAll` has none, so "data" is optional.
+    const getUserInput = composed['getUser'].input as { required: string[] };
+    const sendEmailInput = composed['sendEmail'].input as {
+      required: string[];
+    };
+    const listAllInput = composed['listAll'].input as { required: string[] };
+
+    expect(getUserInput.required).toEqual(['data']);
+    expect(sendEmailInput.required).toEqual(['data']);
+    expect(listAllInput.required).toEqual([]);
   });
 
   it('[schema-composition.2] session middleware — session and data both in required; domain params inside data', () => {
@@ -98,7 +109,7 @@ describe('composeSchemas', () => {
     expect(Object.keys(sendEmailInput.properties)).toContain('session');
   });
 
-  it('[schema-composition.4] zero-param function with session middleware — data in required; data.properties is {}', () => {
+  it('[schema-composition.4] zero-param function with session middleware — session required, data NOT required; data.properties is {}', () => {
     const composed = composeSchemas(domainSchemas, [sessionMiddleware]);
 
     const listAllInput = composed['listAll'].input as {
@@ -106,8 +117,12 @@ describe('composeSchemas', () => {
       required: string[];
     };
 
-    expect(listAllInput.required).toContain('data');
+    // FEAT-APIGEN-023: a middleware-contributed envelope field (e.g. "session")
+    // is still required on its own merits, but it does not drag "data" along
+    // with it — "data" is only required when the function itself has ≥1
+    // required domain param.
     expect(listAllInput.required).toContain('session');
+    expect(listAllInput.required).not.toContain('data');
 
     const dataSchema = listAllInput.properties['data'] as {
       properties: Record<string, unknown>;
@@ -307,5 +322,96 @@ describe('composeSchemas — BUG-APIGEN-CORE-001: dangling $ref caught at compos
   it('a schema with no $defs at all is not flagged (structural $ref problems are left to downstream AJV compile)', () => {
     const composed = composeSchemas(domainSchemas, []);
     expect(composed).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// FEAT-APIGEN-023 — a zero-param, zero-required-envelope operation does not
+// force callers to send an empty `data: {}` (or any envelope field) in the
+// published schema. Pre-fix, `required: [...envelopeRequired, 'data']` was
+// unconditional, so every one of these assertions failed. Post-fix, "data"
+// (and any given envelope field) is only required when something actually
+// makes it non-optional.
+// ---------------------------------------------------------------------------
+
+describe('composeSchemas — FEAT-APIGEN-023: zero-param/zero-envelope schema', () => {
+  it('a zero-param function with no middleware has an EMPTY top-level required array', () => {
+    const composed = composeSchemas(domainSchemas, []);
+    const listAllInput = composed['listAll'].input as { required: string[] };
+
+    expect(listAllInput.required).toEqual([]);
+    expect(listAllInput.required).not.toContain('data');
+  });
+
+  it('an empty object {} satisfies the top-level required array for a zero-param, zero-middleware function', () => {
+    const composed = composeSchemas(domainSchemas, []);
+    const listAllInput = composed['listAll'].input as {
+      required: string[];
+      additionalProperties: boolean;
+    };
+
+    // JSON Schema semantics: an empty `required` array means no top-level
+    // key is mandatory, so `{}` is a fully valid instance of this schema —
+    // "call it with nothing beyond the name" is what FEAT-APIGEN-023 asked for.
+    expect(listAllInput.required.every((k) => k in {})).toBe(true);
+    expect(listAllInput.required.length).toBe(0);
+  });
+
+  it('the "data" PROPERTY is still declared (not removed) for a zero-param function — {"data": {}} remains valid too', () => {
+    const composed = composeSchemas(domainSchemas, []);
+    const listAllInput = composed['listAll'].input as {
+      properties: Record<string, unknown>;
+    };
+
+    expect(listAllInput.properties['data']).toBeDefined();
+    const dataSchema = listAllInput.properties['data'] as {
+      type: string;
+      properties: Record<string, unknown>;
+      additionalProperties: boolean;
+    };
+    expect(dataSchema.type).toBe('object');
+    expect(dataSchema.properties).toEqual({});
+    expect(dataSchema.additionalProperties).toBe(false);
+  });
+
+  it('REGRESSION: a parameterized function (≥1 required domain param) still requires "data" — unchanged by this fix', () => {
+    const composed = composeSchemas(domainSchemas, []);
+
+    const getUserInput = composed['getUser'].input as { required: string[] };
+    const sendEmailInput = composed['sendEmail'].input as {
+      required: string[];
+    };
+
+    expect(getUserInput.required).toEqual(['data']);
+    expect(sendEmailInput.required).toEqual(['data']);
+  });
+
+  it('REGRESSION: middleware envelope fields remain required on their own merits, independent of "data"', () => {
+    const composed = composeSchemas(domainSchemas, [
+      sessionMiddleware,
+      authMiddleware,
+    ]);
+
+    const getUserInput = composed['getUser'].input as { required: string[] };
+    const listAllInput = composed['listAll'].input as { required: string[] };
+
+    // getUser: has a required domain param -> "data" required alongside envelope fields.
+    expect(getUserInput.required.sort()).toEqual(['data', 'session', 'token']);
+    // listAll: zero domain params -> envelope fields required, "data" is not.
+    expect(listAllInput.required.sort()).toEqual(['session', 'token']);
+  });
+
+  it('a zero-param function with its only middleware overridden false has a fully empty required array', () => {
+    const composed = composeSchemas(domainSchemas, [sessionMiddleware], {
+      listAll: { session: false },
+    });
+
+    const listAllInput = composed['listAll'].input as {
+      required: string[];
+      properties: Record<string, unknown>;
+    };
+
+    expect(listAllInput.required).toEqual([]);
+    expect(Object.keys(listAllInput.properties)).toEqual(['data']);
   });
 });

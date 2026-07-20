@@ -6,6 +6,34 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **FEAT-APIGEN-023** — a zero-parameter, zero-required-envelope operation's published
+  `inputSchema` no longer forces callers to send an empty `data: {}` (or any envelope field).
+  `apigen-core-client/src/lib/compose-schemas.ts`'s composed outer schema unconditionally
+  listed `'data'` in its top-level `required` array even when a function took no domain
+  parameters at all (`listProviders`, `tripwireStatus`, etc.) — a deliberate, named invariant
+  (`[inv:data-wrapper-always-present]`) that made every MCP host, LLM tool-caller, or other
+  strict schema-driven client believe an empty envelope was mandatory, even though every
+  transport's decode path (`apigen-plugin-api-express`, `apigen-plugin-mcp`,
+  `apigen-engine-runtime`'s `validate-layer.ts`) already defaulted an omitted body/args/data to
+  `{}` at runtime — confirmed a schema/documentation-only issue, not a decode-side one, by
+  reading each transport's decode site rather than assuming. Fixed by making the `'data'`
+  entry in the outer `required` array conditional on `domainRequired.length > 0` — the exact
+  condition already used for the nested `data` schema's own `required` — so `{}` (no body
+  needed beyond the operation name) is now a valid call for a truly zero-arg operation, while
+  the `data` property itself is still always declared (so `{"data": {}}` remains valid for
+  callers who send it anyway) and parameterized operations are completely unaffected.
+  Regression tests in `apigen-core-client/src/test/compose-schemas.spec.ts`: two pre-existing
+  cases that had baked in the old unconditional-required behavior for a zero-param fixture
+  function were corrected, plus a new 7-case `FEAT-APIGEN-023` describe block covering an
+  empty top-level `required` for a zero-param/zero-middleware function, that `data` remains a
+  declared (not required) property, that a parameterized function's `required` still contains
+  `'data'` (regression control), that middleware envelope fields stay required independent of
+  `data`, and that overriding a zero-param function's only middleware to `false` yields a
+  fully empty `required` array. Verified clean: `nx test apigen-core-client` 252/252, `nx test
+  apigen-engine-runtime` 131/131, and `nx run-many -t test -p apigen-plugin-api-express
+  apigen-plugin-api-fastify apigen-plugin-mcp apigen-plugin-jsonschema apigen-plugin-cli-output
+  apigen-cli` 134/134 across all six downstream `ComposedSchemas` consumers — zero regressions.
+
 - **BUG-APIGEN-031** — `generate --type cli` output silently mishandled array/object-typed
   domain params: Commander's raw argv string for a flag like `--arr '[2,4,6]'` was passed
   straight through to `dispatch()` with no JSON-parsing, since only the CLI transport's wire

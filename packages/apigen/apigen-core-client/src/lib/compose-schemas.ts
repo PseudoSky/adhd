@@ -81,10 +81,16 @@ function buildEnvelopeDescription(
 /**
  * Merges domain schemas with middleware envelope fields.
  *
- * The `data: {}` wrapper is **always present** even for zero-param functions
- * [inv:data-wrapper-always-present]. Override a middleware with `false` to
- * suppress its envelope contribution for a specific function
- * [inv:false-suppresses-middleware].
+ * The `data: {}` wrapper **property** is always present, even for zero-param
+ * functions, so `{"data": {}}` still validates for callers who send it out of
+ * habit or symmetry. FEAT-APIGEN-023: the wrapper is only listed in the outer
+ * `required` array when the function actually has ≥1 required domain param
+ * (`domainRequired.length > 0`) — mirroring the exact same condition already
+ * used for the nested `data` schema's own `required`. A truly zero-parameter
+ * function's published schema therefore does not force callers to send an
+ * empty `data: {}` (or the whole envelope, if no middleware requires anything
+ * else). Override a middleware with `false` to suppress its envelope
+ * contribution for a specific function [inv:false-suppresses-middleware].
  *
  * BUG-APIGEN-017: both the top-level (envelope + data) object and the nested
  * `data` object are generated with `additionalProperties: false` so MCP hosts
@@ -127,7 +133,10 @@ export function composeSchemas(
       }
     }
 
-    // data: {} wrapper — always present, even for zero-param fns [inv:data-wrapper-always-present]
+    // data: {} wrapper property — always present, even for zero-param fns, so
+    // `{"data": {}}` still validates. FEAT-APIGEN-023: the top-level `required`
+    // entry for "data" is conditional on the function actually having ≥1
+    // required domain param, not unconditional like the property itself.
     // BUG-APIGEN-017: additionalProperties:false — unknown domain params are rejected, not ignored.
     const dataSchema: Record<string, unknown> = {
       type: 'object',
@@ -140,7 +149,10 @@ export function composeSchemas(
       input: {
         type: 'object',
         properties: { ...envelopeProperties, data: dataSchema },
-        required: [...envelopeRequired, 'data'],
+        required: [
+          ...envelopeRequired,
+          ...(domainRequired.length > 0 ? ['data'] : []),
+        ],
         // BUG-APIGEN-017: reject any property that isn't a declared envelope
         // field or the "data" wrapper — no silently-ignored junk params.
         additionalProperties: false,
