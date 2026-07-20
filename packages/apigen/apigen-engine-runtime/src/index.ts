@@ -58,3 +58,8 @@ export { tsHostBinding, WELL_KNOWN_TS_CODECS } from './lib/logical/host-ts';
 export type { HostBinding } from './lib/logical/host-ts';
 export { buildToolDescription } from './lib/tool-description';
 export type { ToolDescriptionSchema } from './lib/tool-description';
+export {
+  buildMcpOutputSchema,
+  wrapMcpStructuredContent,
+} from './lib/mcp-output-schema';
+export type { McpOutputAdapter } from './lib/mcp-output-schema';

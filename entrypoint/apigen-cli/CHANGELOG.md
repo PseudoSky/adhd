@@ -6,6 +6,77 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **BUG-APIGEN-017/018/019/020** — MCP tool-schema hardening bundle (all four filed
+  2026-07-06 from the `scratch-agent-search`/agent-browser consumer). Root-caused each
+  independently before fixing (`entrypoint/apigen-cli/BACKLOG.md`'s filed entries per ID):
+
+  - **BUG-APIGEN-017** (unknown properties silently accepted) and **BUG-APIGEN-020**
+    (the `data` envelope convention undocumented) were **already fixed** in an earlier
+    session batch (`1498dd45`, 2026-07-15) — `apigen-core-client/src/lib/compose-schemas.ts`
+    already stamps `additionalProperties: false` on both the top-level and nested `data`
+    schema objects, and a human-readable envelope-calling-convention `description` (via
+    `apigen-engine-runtime/src/lib/tool-description.ts`'s `buildToolDescription`, consumed by
+    `apigen-plugin-mcp`'s `generate.ts` and `run.ts`) — both with existing regression coverage
+    in `apigen-core-client/src/test/compose-schemas.spec.ts`. The BACKLOG entries were simply
+    never moved to this file when the fix landed; confirmed via direct read of the committed
+    (not just working-tree) source before treating this as bookkeeping-only for those two.
+    (The BACKLOG's `BUG-APIGEN-020` entry also briefly collided with an unrelated
+    `BUG-APIGEN-037` — py-flask/py-grpc eager imports — under a shared duplicate ID; both
+    were independently already using their now-current IDs in code comments, and the
+    duplicate was resolved in the BACKLOG text separately from this fix.)
+  - **BUG-APIGEN-018** (mcp) (parameter defaults not surfaced) was likewise already fixed —
+    `apigen-core-client/src/lib/extract.ts` + `param-defaults.ts`'s `applyParamDefault`
+    stamp both the native JSON-Schema `default` keyword and a `"(default: <value>)"` note
+    onto each parameter's own property schema, which flows unmodified into the MCP
+    `inputSchema` (`apigen-plugin-mcp`'s `run.ts`/templates never touch `input`). Existing
+    coverage: `apigen-core-client/src/test/extract.spec.ts`'s `[BUG-APIGEN-018]` describe
+    block.
+  - **BUG-APIGEN-019** (union return types produce weak schemas) had its *schema-building*
+    half already fixed the same way — `ts-json-schema.ts`'s `normalizeTopLevelUnion` rewrites
+    a TS union's `anyOf` to `oneOf` + an advisory `discriminator` for both inline and named
+    union return types, reaching `extract()`'s `output` fragment for real (confirmed via
+    `union.spec.ts` + the wiring trace in BUG-APIGEN-038's BACKLOG entry, which explicitly
+    scopes that gap to *parameters*, not return types). **But the MCP transport never
+    surfaced any return-type schema to clients at all** — `apigen-plugin-mcp`'s `run.ts` and
+    both generated-server templates (`server-stdio.tpl.ts`, `server-http.tpl.ts`) only ever
+    emitted `inputSchema` in `tools/list`, never `outputSchema`, for any function, union or
+    not. This is the one genuinely live gap in the bundle, and it isn't a simple pass-through
+    fix: the MCP SDK's `Tool.outputSchema` is constrained by its own Zod schema to a
+    top-level `{ type: "object", ... }` shape (`ToolSchema.outputSchema` in
+    `@modelcontextprotocol/sdk`), so naively forwarding a `oneOf`-shaped union output would
+    have failed the SDK's own runtime validation and crashed the server for exactly the
+    return-type shape this bug describes. Fixed by adding
+    `apigen-engine-runtime/src/lib/mcp-output-schema.ts` (`buildMcpOutputSchema` /
+    `wrapMcpStructuredContent`, exported from the package index): an already-`type:"object"`
+    output schema passes through unwrapped; anything else (the union case, arrays, bare
+    scalars) is wrapped as `{ type: "object", properties: { result: <output> }, required:
+    ["result"] }` for `outputSchema`, with the paired runtime value wrapped the same way
+    (`{ result: <value> }`) as MCP's `structuredContent` (also object-constrained by the
+    SDK) alongside the pre-existing `content` text field for backward compatibility. Wired
+    into all three MCP server code paths that independently duplicate the `tools/list`/
+    `tools/call` handlers: `apigen-plugin-mcp/src/lib/run.ts` (in-process server) and both
+    `src/lib/templates/server-stdio.tpl.ts` / `server-http.tpl.ts` (generated standalone
+    servers).
+
+  **Tests:** new `apigen-engine-runtime/src/test/mcp-output-schema.spec.ts` (9 cases:
+  object/union/array/scalar output shaping, empty/undefined output, structuredContent
+  wrap/passthrough, and the defensive non-object-value case). New
+  `apigen-plugin-mcp/src/test/generate.spec.ts` `[plugin-mcp.7]` describe block (4 cases:
+  all three transports' generated `server.ts` import and wire `buildMcpOutputSchema`/
+  `wrapMcpStructuredContent` into both `outputSchema` and `structuredContent`;
+  `additionalProperties:false` survives `generate()` unmodified; a per-param default note
+  survives into the generated schema; an envelope-convention description survives into the
+  generated schema). New `apigen-plugin-mcp/src/test/run.spec.ts` `[plugin-mcp.7]` describe
+  block (5 real end-to-end HTTP `tools/list`/`tools/call` cases: object-shaped output passes
+  through `outputSchema` unwrapped; a `oneOf`+`discriminator` union output is wrapped under
+  `result` with the discriminator intact; an array-return output is wrapped under `result`;
+  `tools/call` `structuredContent` mirrors `content` unwrapped for the object case; and
+  wrapped as `{ result: <value> }` for the union case). Verified clean: `nx test
+  apigen-engine-runtime` 140/140 (15 files), `nx test apigen-plugin-mcp` 47/47 (4 files) —
+  zero regressions to the pre-existing 38 apigen-plugin-mcp tests or 131 apigen-engine-runtime
+  tests. Both projects' `nx run <project>:build` (which typechecks via `vite-plugin-dts`) and
+  `nx run <project>:lint` pass clean.
+
 - **FEAT-APIGEN-023** — a zero-parameter, zero-required-envelope operation's published
   `inputSchema` no longer forces callers to send an empty `data: {}` (or any envelope field).
   `apigen-core-client/src/lib/compose-schemas.ts`'s composed outer schema unconditionally
