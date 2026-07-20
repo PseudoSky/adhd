@@ -31,7 +31,7 @@ import { resolveTsconfig } from '../resolve-tsconfig';
 import healthPlugin from '@adhd/apigen-plugin-health';
 import loggerPlugin from '@adhd/apigen-plugin-logger';
 import openapiPlugin from '@adhd/apigen-plugin-openapi';
-import fs from 'fs';
+
 
 /** Parse --opt key=value pairs into an options record. */
 function parseOptPairs(pairs: string[]): Record<string, unknown> {
@@ -189,7 +189,11 @@ export async function loadUsePlugins(specifiers: string[]): Promise<Plugin[]> {
     }
     // Package specifier or local path — resolve a local path to a file URL so
     // dynamic import works cross-platform.
-    const isLocal = spec.startsWith('.') || path.isAbsolute(spec) || fs.existsSync(path.resolve(spec));
+    const isLocal =
+      spec.startsWith('.') ||
+      path.isAbsolute(spec) ||
+      (!/^[a-zA-Z]+:\/\//.test(spec) && /\.(js|mjs|cjs|ts|json|txt)$/i.test(spec));
+
     const target = isLocal
       ? pathToFileURL(path.resolve(spec)).href
       : spec;
