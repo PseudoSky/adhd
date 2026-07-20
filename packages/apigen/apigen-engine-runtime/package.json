@@ -7,7 +7,8 @@
     "pino": "10.3.1",
     "@adhd/apigen-core-client": "0.1.0",
     "@adhd/apigen-base-logical": "0.0.1",
-    "@adhd/apigen-base-errors": "0.1.1"
+    "@adhd/apigen-base-errors": "0.1.1",
+    "better-sqlite3": "12.10.0"
   },
   "main": "./index.js",
   "module": "./index.mjs",
