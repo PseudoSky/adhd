@@ -4,6 +4,7 @@ import { registerGenerateRegistryCommand } from './lib/commands/generate-registr
 import { registerRunCommand } from './lib/commands/run';
 import { registerRunRegistryCommand } from './lib/commands/run-registry';
 import { registerServeCommand } from './lib/commands/serve';
+import { registerListTypesCommand } from './lib/commands/list-types';
 import mcpPlugin from '@adhd/apigen-plugin-mcp';
 import jsonschemaPlugin from '@adhd/apigen-plugin-jsonschema';
 import fastifyPlugin from '@adhd/apigen-plugin-api-fastify';
@@ -37,5 +38,6 @@ registerGenerateRegistryCommand(program, plugins);
 registerRunCommand(program, plugins);
 registerRunRegistryCommand(program, plugins);
 registerServeCommand(program);
+registerListTypesCommand(program, plugins);
 
 program.parseAsync();

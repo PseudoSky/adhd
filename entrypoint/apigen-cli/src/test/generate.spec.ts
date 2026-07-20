@@ -135,6 +135,37 @@ describe('generate command', () => {
       ])
     ).rejects.toThrow(/Unknown --type/);
   });
+
+  // FEAT-APIGEN-019: --type help text must be derived live from the plugins
+  // registry, not a hand-maintained string — prove it by varying the registry.
+  it("--type help text lists every registered plugin id, and changes when the registry changes", () => {
+    const extraPlugin: OutputPlugin = {
+      id: 'py-flask',
+      description: 'Python Flask HTTP API server',
+      generate() {
+        return { files: [] };
+      },
+    };
+
+    const smallProgram = makeProgram();
+    registerGenerateCommand(smallProgram, plugins);
+    const smallHelp = smallProgram.commands
+      .find((c) => c.name() === 'generate')
+      ?.helpInformation();
+    expect(smallHelp).toContain('jsonschema');
+    expect(smallHelp).not.toContain('py-flask');
+
+    const largeProgram = makeProgram();
+    registerGenerateCommand(largeProgram, {
+      ...plugins,
+      'py-flask': extraPlugin,
+    });
+    const largeHelp = largeProgram.commands
+      .find((c) => c.name() === 'generate')
+      ?.helpInformation();
+    expect(largeHelp).toContain('jsonschema');
+    expect(largeHelp).toContain('py-flask');
+  });
 });
 
 describe('generate-registry command', () => {
