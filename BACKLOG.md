@@ -368,7 +368,8 @@ author). Schema + validator in `@adhd/workspace-standard`; ties to the `/reflect
 
 ## FEAT-ENV-001 — @adhd/environment — centralized configuration management — priority: HIGH
 
-**Status:** Spec finalized (2026-07-06). See [`docs/plan/adhd-environment/SPEC.md`](docs/plan/adhd-environment/SPEC.md).
+**Status (updated 2026-07-20):** The **multi-language SDK design below is SUPERSEDED** by the zero-config redesign — `packages/environment/ARCHITECTURE.md` is now the authoritative contract, the Py/Rust cores (`environment-core-py`/`-rs`) and cross-language hashing/`${VAR}` interpolation were **deleted** (Node/TS only), and dotted directory types (`state.data`) were replaced by flat `DirKind`. The old `docs/plan/adhd-environment/SPEC.md` corpus is superseded (see its `SUPERSEDED.md`). The redesign LANDED on `main` (`b38369f3`) with agent-mcp as the reference consumer — **but that adoption is unproven end-to-end (see FEAT-ENV-ADOPT-001 Step 0).** The "Migration targets (future)" list below is now the executable adoption roadmap tracked in **FEAT-ENV-ADOPT-001** (ecosystem survey → `docs/environment/adoption-survey/SYNTHESIS.md`).
+_Original 2026-07-06 spec (historical, superseded):_ See [`docs/plan/adhd-environment/SPEC.md`](docs/plan/adhd-environment/SPEC.md).
 
 **What:** A multi-language environment SDK giving every ADHD project deterministic namespacing, typed
 configuration, directory cataloging, dual content+structure hashing, change detection, and a
@@ -396,6 +397,24 @@ resolver, atomic writes, `${VAR}` interpolation).
 `entrypoint/agent-mcp`, `agent-engine-compiler`, `agent-store-prompts`, `agent-store-tools`,
 `agent-core-policy`, `agent-core-provider` — all replacing ad-hoc `process.env` patterns with
 `Environment`.
+
+## FEAT-ENV-ADOPT-001 — @adhd/environment ecosystem adoption roadmap — priority: HIGH
+
+**Discovered:** 2026-07-19/20, ecosystem env-adoption survey across `~/dev/node/adhd`, `~/dev/ai/sox-ecosystem`, `~/dev/ai/scratch`. Full report: [`docs/environment/adoption-survey/SYNTHESIS.md`](docs/environment/adoption-survey/SYNTHESIS.md) (per-package specs + logging audits + corrected file locations under each `<root>/<pkg>.md`).
+
+**What:** Surveyed 89 config-bearing packages[1]; **31 adoption targets** (11 `adopt`, 20 `adopt-after-gap`), 35 `skip`[1]. Executable follow-through to FEAT-ENV-001's "migration targets". Open sub-items:
+
+- **ENV-ADOPT-PROOF-000 (BLOCKING, Step 0)** — **`@adhd/environment` has ZERO proven consumers.** It builds green + has unit tests, but agent-mcp adoption is unproven end-to-end: its integration harness stubs `testConfig` and the live path is `AGENT_MCP_LIVE`-gated off[2]. Per AGENTS.md §7 that is not proof. Must drive agent-mcp through its real MCP host seam (real `Environment` resolving live; writes land in `~/.adhd/agent-mcp/…` not `./data`; a set `ADHD_AGENT_*` var overrides at runtime; provider creds via `resolveEnvName`; a live-model run) gated on exit codes[3]. **No other item here is "done" while this is open.**
+- **ENV-ADOPT-F1 (G1, ~21 pkgs)** — non-`ADHD_` env vars read verbatim (`DATABASE_PATH`, `OPENAI_API_KEY`, `PORT`, `CHROME_PATH`)[1] can't pass the prefix guard `isEnvNameAllowed`. Add an env-alias / external-env allowlist on `FieldSpec` + spec-level passthrough[3].
+- **ENV-ADOPT-F2 (G2, ~21 pkgs)** — writes outside a `.adhd/<project>/` scope root (`./data/*.db`, cwd, hardcoded)[1]. Ship a migration codemod (`./data/x.db` → `env.files.x`) + a `legacyPath` escape hatch. Priority target: the shared `./data/registry.db` cluster (also AGENTS.md §10 known item)[3].
+- **ENV-ADOPT-F3..F7** — F3 open-key `record` config section (7 pkgs); F4 custom dir kinds (7); F5 non-Node (5 Python) — **do NOT rebuild full Py/Rust cores**, design the neutral-spec + snapshot interop seam instead (see cross-language item); F6 non-primitive value types (2); F7 multi-file/merged config (2)[3].
+- **ENV-ADOPT-CLUSTERS (§2c)** — packages that should share ONE config (same `Environment` project id + one exported spec module), do in order: (1) **agent-registry** — `agent-store-prompts/-tools`, `agent-core-policy/-provider`, `agent-engine-compiler` share `DATABASE_PATH` + one `registry.db` (highest value, **live coordination hazard**); (2) **sox-host** (`SOX_ECOSYSTEM_HOME`/`SOX_SANDBOX_ROOT`); (3) **sox-permissions** (`SOX_PERM_*`, config-only, cleanest); (4) **sox-memory** (`SOX_CONFIG_DB_PATH`); (5) **agent provider creds** (`ADHD_AGENT_*`)[4].
+- **ENV-ADOPT-XLANG (§2d)** — a non-Node package can't operate on the same config without re-declaring the spec (a TS *code* literal, not neutral data) AND re-implementing resolution (Node-only). Confirmed live: `apigen-plugin-py-flask`/`-py-grpc` pass raw `process.env` verbatim to the spawned Python server[5]. Fix = language-neutral spec artifact (generate from TS via `generateFieldSchema`) + thin per-language resolver + the snapshot as the resolved-value channel; immediate zero-code win = point apigen's generated Python servers at the snapshot[3].
+- **ENV-ADOPT-BUILDERS (§6)** — auto-wire the sox-ecosystem scaffolders (`sox-authoring` templates) to emit a zero-config `Environment` into new **runtime-artifact** libs/bundles/services (NOT `types`/`base`/pure-lib — tier purity), cluster-aware (new bundle member joins `sox-memory`, etc.). Prereqs: env reachable in sox-ecosystem repo (publish/link) + ≥2 clusters proven first + Node-only. **Two proofs away, not zero.**[3]
+
+**Status:** OPEN — roadmap only; **Step 0 (ENV-ADOPT-PROOF-000) blocks everything.** Survey artifacts present but UNTRACKED until committed.
+
+**Citations:** [main@b38369f3, orchestrator+env-adoption-analyst(haiku), claude, env-adoption-survey, 1: docs/environment/adoption-survey/SYNTHESIS.md §1; 2: entrypoint/agent-mcp/src/__tests__/integration/harness.ts (stubbed testConfig) + config.zero-config.test.ts; 3: docs/environment/adoption-survey/SYNTHESIS.md §3,§6,§7; 4: docs/environment/adoption-survey/SYNTHESIS.md §2c; 5: docs/environment/adoption-survey/adhd/apigen-plugin-py-flask.md, apigen-plugin-py-grpc.md]
 
 ## DEBT-AGENTMCP-ACCOUNTING-001 — usage accounting model: naming, cumulative-vs-per-turn, tool-call tokens — priority: HIGH
 **Discovered:** 2026-07-16, investigating why agent-mcp reported a single task as `inputTokens: 1,154,170` while another tool showed a whole session as `input 88 / cache read 355,712` — traced to real gaps in the usage data model.
