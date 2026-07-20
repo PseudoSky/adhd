@@ -33,7 +33,8 @@
     "nx-release-publish": {
       "dependsOn": [
         "build",
-        "test"
+        "test",
+        "verify-dist-load"
       ],
       "executor": "@nx/js:release-publish",
       "options": {

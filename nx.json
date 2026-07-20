@@ -226,18 +226,35 @@
   },
   "release": {
     "projectsRelationship": "independent",
+    "releaseTagPattern": "{projectName}@{version}",
     "version": {
       "preVersionCommand": "npx nx run-many -t build",
-      "updateDependents": "auto"
+      "updateDependents": "auto",
+      "generatorOptions": {
+        "currentVersionResolver": "git-tag",
+        "fallbackCurrentVersionResolver": "disk",
+        "specifierSource": "conventional-commits"
+      },
+      "git": {
+        "commit": false,
+        "tag": true
+      }
     },
     "projects": [
       "*",
       "!@adhd/source",
       "!adhd-e2e",
-      "!adhd"
+      "!adhd",
+      "!@adhd/ui-react-base-storybook",
+      "!@adhd/environment-cli"
     ],
     "changelog": {
+      "git": {
+        "commit": false,
+        "tag": false
+      },
       "projectChangelogs": {
+        "file": "{projectRoot}/CHANGELOG.md",
         "renderOptions": {
           "authors": true,
           "commitReferences": true,
@@ -245,6 +262,7 @@
         }
       },
       "workspaceChangelog": {
+        "file": "CHANGELOG.md",
         "renderOptions": {
           "authors": true,
           "commitReferences": true,
