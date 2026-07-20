@@ -107,16 +107,16 @@ export function registerRunRegistryCommand(
           });
         }
 
-        const controller = new AbortController();
-        process.on('SIGINT', () => controller.abort());
-        process.on('SIGTERM', () => controller.abort());
-
         if (sources.length === 0) {
           logger.info(
             `no packages with an entry file found under ${packagesDir} — nothing to run`
           );
           return;
         }
+
+        const controller = new AbortController();
+        process.on('SIGINT', () => controller.abort());
+        process.on('SIGTERM', () => controller.abort());
 
         await orchestrateRun(
           { sources, logger },

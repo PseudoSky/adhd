@@ -21,6 +21,7 @@ import {
   mergeOperations,
   buildDescriptor,
   orchestrateGenerate,
+  opMatchesExportMode,
 } from '../lib/orchestrator';
 import { collectFormats } from '../lib/commands/generate';
 import { checkCollisions, CollisionDetectedError } from '@adhd/apigen-naming';
@@ -607,6 +608,150 @@ describe('orchestrator: FEAT-APIGEN-022 auto-hoist + BUG-APIGEN-025 x-apigen-saf
     ] as Record<string, unknown>;
     expect(getPrimitive['x-apigen-safe']).toBe(true);
   });
+});
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-034 — `--export <mode>` scopes the served surface again
+// ---------------------------------------------------------------------------
+
+describe('orchestrator: BUG-APIGEN-034 --export <mode> scoping', () => {
+  const exportModeFixture = path.join(fixturesDir, 'export-mode-scoping.ts');
+
+  // Unit-level: opMatchesExportMode's path-shape classification directly.
+  it('opMatchesExportMode: "named" matches a plain [file, name] path, not a default-object path', () => {
+    const seg = (raw: string): Segment => ({ raw, words: [raw.toLowerCase()] });
+    const namedOp = makeOp('ns/file/helper', 'ns', 'file', 'helper');
+    const defaultObjOp: Operation = {
+      ...namedOp,
+      path: [seg('file'), seg('default'), seg('ping')],
+    };
+    expect(opMatchesExportMode(namedOp, { type: 'named' })).toBe(true);
+    expect(opMatchesExportMode(defaultObjOp, { type: 'named' })).toBe(false);
+  });
+
+  it('opMatchesExportMode: "default" matches only path=[file,"default",key], not a plain named path', () => {
+    const seg = (raw: string): Segment => ({ raw, words: [raw.toLowerCase()] });
+    const namedOp = makeOp('ns/file/helper', 'ns', 'file', 'helper');
+    const defaultObjOp: Operation = {
+      ...namedOp,
+      path: [seg('file'), seg('default'), seg('ping')],
+    };
+    expect(opMatchesExportMode(defaultObjOp, { type: 'default' })).toBe(true);
+    expect(opMatchesExportMode(namedOp, { type: 'default' })).toBe(false);
+  });
+
+  it('opMatchesExportMode: "named-object" matches only the requested object name', () => {
+    const seg = (raw: string): Segment => ({ raw, words: [raw.toLowerCase()] });
+    const apiObjOp: Operation = {
+      ...makeOp('ns/file/ping', 'ns', 'file', 'ping'),
+      path: [seg('file'), seg('api'), seg('ping')],
+    };
+    const otherObjOp: Operation = { ...apiObjOp, path: [seg('file'), seg('other'), seg('ping')] };
+    expect(
+      opMatchesExportMode(apiObjOp, { type: 'named-object', name: 'api' })
+    ).toBe(true);
+    expect(
+      opMatchesExportMode(otherObjOp, { type: 'named-object', name: 'api' })
+    ).toBe(false);
+  });
+
+  // Integration: a REAL source with a named helper alongside a default object
+  // (the exact BACKLOG scenario) — `--export default` must include ONLY the
+  // default object's properties.
+  it('buildDescriptor: --export default scopes packageSchemas to ONLY the default object, excluding the named helper', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [
+        {
+          file: exportModeFixture,
+          namespace: 'ems',
+          exportMode: { type: 'default' },
+        },
+      ],
+    });
+    const pkg = descriptor.packageSchemas.get('ems');
+    expect(pkg).toBeDefined();
+    if (!pkg) throw new Error('ems package not found');
+
+    // Included: the default object's own properties.
+    expect(pkg.schemas['ping']).toBeDefined();
+    expect(pkg.schemas['echo']).toBeDefined();
+    // Excluded: the private named-export helper.
+    expect(pkg.schemas['internalHelper']).toBeUndefined();
+
+    // The full unscoped descriptor.operations still carries ALL operations —
+    // scoping only affects what's SERVED, matching v1's own behaviour where
+    // the collision-check step never respected exportMode either.
+    const allIds = descriptor.operations.map((o) => o.id);
+    expect(allIds.some((id) => id.includes('internal-helper'))).toBe(true);
+  }, 30_000);
+
+  // Integration: the reverse mode — omitting --export (named, the default
+  // resolveExportMode()) must include ONLY the named helper, excluding the
+  // default object's properties.
+  it('buildDescriptor: omitted --export (named mode) scopes packageSchemas to ONLY the named helper, excluding the default object', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [
+        {
+          file: exportModeFixture,
+          namespace: 'ems2',
+          exportMode: { type: 'named' },
+        },
+      ],
+    });
+    const pkg = descriptor.packageSchemas.get('ems2');
+    expect(pkg).toBeDefined();
+    if (!pkg) throw new Error('ems2 package not found');
+
+    // Included: the plain named export.
+    expect(pkg.schemas['internalHelper']).toBeDefined();
+    // Excluded: the default object's properties.
+    expect(pkg.schemas['ping']).toBeUndefined();
+    expect(pkg.schemas['echo']).toBeUndefined();
+  }, 30_000);
+
+  // Regression control: an ABSENT exportMode (generate-registry/run-registry
+  // today) applies NO scoping — every extracted action is served, matching
+  // current (pre-fix) behaviour for those callers.
+  it('buildDescriptor: an absent exportMode applies no scoping (registry callers unaffected)', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [{ file: exportModeFixture, namespace: 'ems3' }],
+    });
+    const pkg = descriptor.packageSchemas.get('ems3');
+    expect(pkg).toBeDefined();
+    if (!pkg) throw new Error('ems3 package not found');
+
+    expect(pkg.schemas['internalHelper']).toBeDefined();
+    expect(pkg.schemas['ping']).toBeDefined();
+    expect(pkg.schemas['echo']).toBeDefined();
+  }, 30_000);
+});
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-035 — duplicate namespace across sources throws, no silent drop
+// ---------------------------------------------------------------------------
+
+describe('orchestrator: BUG-APIGEN-035 duplicate-namespace guard', () => {
+  it('buildDescriptor throws a clear error when two sources resolve to the same namespace, instead of silently dropping one', async () => {
+    await expect(
+      buildDescriptor({
+        sources: [
+          { file: alphaFixture, namespace: 'dup' },
+          { file: betaFixture, namespace: 'dup' },
+        ],
+      })
+    ).rejects.toThrow(/duplicate namespace "dup"/);
+  }, 30_000);
+
+  it('buildDescriptor succeeds and merges both sources when namespaces are distinct (negative control)', async () => {
+    const descriptor = await buildDescriptor({
+      sources: [
+        { file: alphaFixture, namespace: 'dist-a' },
+        { file: betaFixture, namespace: 'dist-b' },
+      ],
+    });
+    expect(descriptor.packageSchemas.has('dist-a')).toBe(true);
+    expect(descriptor.packageSchemas.has('dist-b')).toBe(true);
+  }, 30_000);
 });
 
 // ---------------------------------------------------------------------------
