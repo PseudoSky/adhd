@@ -6,6 +6,122 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **BUG-APIGEN-029** — `$ref` resolution / Ajv strict-mode failures on complex
+  external or self-referential types (e.g. `better-sqlite3.Database`,
+  `WriteParams`) at DISPATCH time, not extraction time. Real production
+  repro (`~/dev/ai/sox-ecosystem/libs/memory-core`, read-only reference):
+  several routes 500'd — `/memory/write` →
+  `{"code":"internal","message":"can't resolve reference
+  #/definitions/WriteParams from id #"}`; the `BetterSqlite3.Database`-taking
+  routes → the identical error class for `#/definitions/BetterSqlite3.Database`.
+  Confirmed identical under both v1 and v2 (pre-existing, not a
+  v1-retirement regression).
+
+  **Root cause, confirmed against current source (not by inference — traced
+  empirically with temporary instrumentation, reverted before landing):**
+  BUG-APIGEN-026 fixed the common case (a named type used as a top-level
+  param) via `topRef: false`, but its own doc comment flagged an unresolved
+  follow-up: `topRef` only controls whether the ENTRY type is `$ref`-wrapped,
+  not a type it recursively/self-referentially contains, which MUST stay a
+  `$ref` + `definitions` entry (JSON Schema has no other way to express a
+  cycle). `buildSchema()`'s ancestors/deadlock guard (BUG-APIGEN-CORE-003)
+  keys on the literal type-text STRING, but the same TS type is frequently
+  reported by ts-morph as a DIFFERENT string depending on calling context (a
+  fully-qualified `import("path").Foo` for the top-level param vs. bare `Foo`
+  for the same type reached again via one of its own properties) — that
+  mismatch defeats the guard, lets `ts-json-schema-generator` resolve the
+  same type a second time independently at the nested property position, and
+  produces a self-contained `$ref` + `definitions` pair several levels deep
+  inside the outer param fragment. `extract.ts`'s `buildActionOpAtPath`
+  spliced that fragment straight into `properties[p.name]` at whatever depth
+  its `definitions` actually landed; `composeSchemas()` never carried any
+  nested `definitions`/`$defs` forward onto the final composed document
+  either. Since JSON-Schema `$ref` resolution is always root-relative to the
+  document Ajv compiles, the `$ref` permanently dangled once
+  `validate-layer.ts`'s `ajv.compile(schema.input)` ran — a genuinely
+  distinct mechanism from BUG-APIGEN-030 (that one was Ajv strict-mode
+  rejecting unregistered `x-apigen-*`/`discriminator` keywords; this one is a
+  structural `$ref`/`definitions` placement gap with no keyword involved).
+
+  **Fix (`packages/apigen/apigen-core-client/src/lib/extract.ts:524-603`,
+  `hoistNestedDefs`):** recursively walks the ENTIRE per-param fragment tree
+  (not just its own top level — the same generic object/array walk style
+  `findDanglingRefs` already uses in `ts-json-schema.ts`), hoisting every
+  `definitions`/`$defs` dict found at ANY depth up to the function-level
+  `input` schema's own root (`extract.ts:667,694-696`). Throws a clear,
+  generate-time error on a genuine same-name/different-content definition
+  collision across params, rather than silently corrupting one.
+  `composeSchemas()` (`apigen-core-client/src/lib/compose-schemas.ts:193-197,
+  216-217`) now carries that root-level `definitions`/`$defs` forward onto
+  the final composed `input` document, where `ajv.compile()` actually
+  resolves `$ref`s against. `validateComposedRefs`'s pre-existing
+  BUG-APIGEN-CORE-001 generate-time safety net (`compose-schemas.ts:21-49`)
+  was ALSO silently dead code for every real schema before this fix — it
+  collected only a `$defs` key (never `definitions`, the key
+  `ts-json-schema-generator` actually emits) and keyed its lookup by bare
+  definition name where `validateSchemaRefs` (apigen-base-logical) requires
+  the full ref-URI string — fixed to collect both key spellings and to
+  detect already-qualified `#/...`-prefixed keys (an existing hand-built test
+  convention) vs. bare names needing the `#/<defKey>/` prefix, so it no
+  longer double-prefixes or silently no-ops.
+
+  **Critical follow-on bug caught by the regression tests themselves (not
+  discovered by inspection):** an earlier version of `hoistNestedDefs`
+  mutated the per-param fragment tree in place (`delete node.definitions`).
+  `buildSchema()`'s results are memoized by reference in a
+  session/process-persistent cache (BUG-APIGEN-CORE-003); a NESTED object
+  inside a per-param fragment (reached via `properties`, not the top-level
+  object the caller already shallow-clones) is the exact cached object, not a
+  copy. Deleting `definitions` from it in place permanently stripped the
+  cached entry, so the FIRST extraction in a process correctly hoisted and
+  passed, but every SUBSEQUENT `extract()` call for the same type in the same
+  process (a later test in the same file, or a real watch/serve rebuild) got
+  back the now-`definitions`-less cached fragment and reintroduced the exact
+  dangling-`$ref` bug — verified live: two BUG-APIGEN-029 regression tests
+  run back-to-back reproduced `"can't resolve reference
+  #/definitions/SelfRefParams from id #"` on the SECOND test only, while
+  either one alone always passed. Fixed by making `hoistNestedDefs` a pure
+  clone-and-hoist function that never mutates its input — it returns a
+  freshly-built fragment tree with `definitions`/`$defs` removed from
+  wherever found, touching only its own new output and the caller-owned
+  accumulator, never the cache's objects.
+
+  **Regression tests**
+  (`packages/apigen/apigen-engine-runtime/src/test/bug-apigen-029.spec.ts`,
+  fixture `src/test/fixtures/bug-apigen-029.ts`), real `extract()` →
+  `composeSchemas()` → real Ajv `validateLayer` pipeline, matching the
+  established `bug-apigen-030.spec.ts`/`named-type-param.spec.ts` pattern:
+  a self-referential local interface (`SelfRefParams`, deterministically
+  reproduces the nested-`definitions` mechanism in any environment) hoists
+  its `definitions` to the schema root and dispatches correctly; a real
+  complex external type (`better-sqlite3`'s `BetterSqlite3.Database`)
+  dispatches correctly end-to-end (the actual reported BACKLOG symptom — in
+  this no-tsconfig test environment `Database` happens to resolve to a flat,
+  cycle-free schema since `ts-json-schema-generator`'s `functions:"comment"`
+  default strips its chainable methods, so this case doesn't exercise the
+  identical internal mechanism `SelfRefParams` does, but does prove the real
+  reported route dispatches); and a negative control confirming
+  `validateComposedRefs` now actually throws on a genuinely dangling `$ref`
+  instead of silently no-op-ing. All 6 cases verified to fail pre-fix and
+  pass post-fix; also verified stable across 10 consecutive full-suite runs
+  (the in-place-mutation bug above was order-dependent and required a
+  multi-run/full-suite check to catch, not just the new spec file in
+  isolation).
+
+  Also updated `descriptor.ts`'s `JSONSchema` type
+  (`apigen-core-client/src/lib/descriptor.ts`) to document the `definitions`
+  field alongside the already-declared `$defs` — the actual key
+  `ts-json-schema-generator` emits, now load-bearing via this fix, previously
+  undocumented on the type.
+
+  **Verified:** `apigen-core-client` 267/267 (11 files); `apigen-engine-runtime`
+  157/157 (17 files, including the new spec) — stable across 10 consecutive
+  full-suite runs; downstream `ComposedSchemas` consumers
+  `apigen-plugin-api-express` 36/36, `apigen-plugin-api-fastify` 48/48,
+  `apigen-plugin-mcp` 47/47, `apigen-plugin-jsonschema` 8/8,
+  `apigen-plugin-cli-output` 34/34; `apigen-base-logical` 186/186;
+  `entrypoint/apigen-cli` 150/150 (18 files) — zero regressions anywhere.
+
 - **BUG-APIGEN-034** — `--export <mode>` silently stopped scoping the served/generated
   route surface post-v1-retirement, an undocumented behavior change on an existing
   public CLI flag. Pre-diff, Step 5 of `buildDescriptor()` called v1's
