@@ -18,6 +18,7 @@ export {
   // B. Naming / collision
   OP_UNSAFE_ACTION,
   OP_SAFE_QUERY,
+  OP_COMPLEX_UNSAFE,
   OP_COLLISION_A,
   OP_COLLISION_B,
   OP_DISTINCT_A,

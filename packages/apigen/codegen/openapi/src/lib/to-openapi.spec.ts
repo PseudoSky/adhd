@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { toOpenApi } from './to-openapi'
 import type { Operation } from '@adhd/apigen-core-client'
+import { describe, expect, it } from 'vitest'
+import { toOpenApi } from './to-openapi'
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -25,7 +25,10 @@ function makeOp(overrides: Partial<Operation>): Operation {
   }
 }
 
-/** A sample unsafe (POST) action with domain params. */
+/**
+ * A sample unsafe (safe=false) action with ALL-primitive domain params.
+ * Auto-hoisted to GET by FEAT-APIGEN-022 (number is a "properly typed primitive").
+ */
 const unsafeOp: Operation = makeOp({
   id: 'transform/humanize/humanize-bytes',
   namespace: { raw: 'transform', words: ['transform'] },
@@ -39,6 +42,27 @@ const unsafeOp: Operation = makeOp({
     type: 'object',
     properties: { value: { type: 'number' } },
     required: ['value'],
+  },
+  output: { type: 'string' },
+})
+
+/**
+ * A sample unsafe (safe=false) action with COMPLEX (non-primitive) domain params.
+ * Stays POST because array-typed params are not "properly typed primitives".
+ */
+const complexOp: Operation = makeOp({
+  id: 'transform/humanize/humanize-bytes-complex',
+  namespace: { raw: 'transform', words: ['transform'] },
+  path: [
+    { raw: 'humanize', words: ['humanize'] },
+    { raw: 'complexBytes', words: ['complex', 'bytes'] },
+  ],
+  kind: 'action',
+  safe: false,
+  input: {
+    type: 'object',
+    properties: { ids: { type: 'array', items: { type: 'string' } } },
+    required: ['ids'],
   },
   output: { type: 'string' },
 })
@@ -94,16 +118,28 @@ describe('toOpenApi — document shape', () => {
 })
 
 // ---------------------------------------------------------------------------
-// to-openapi: verb derivation (SPEC §5 — safe → GET, unsafe → POST)
+// to-openapi: verb derivation (SPEC §5 — safe → GET, unsafe → POST;
+// FEAT-APIGEN-022 auto-hoists primitive/zero-param unsafe to GET)
 // ---------------------------------------------------------------------------
 
 describe('toOpenApi — verb derivation (SPEC §5)', () => {
-  it('maps an unsafe action to a POST entry', () => {
+  it('maps a primitive-param unsafe action to a GET entry (auto-hoist)', () => {
     const doc = toOpenApi([unsafeOp])
     const route = '/transform/humanize/humanize-bytes'
     expect(doc.paths[route]).toBeDefined()
+    // All-primitive params → auto-hoisted to GET
+    expect(doc.paths[route]['get']).toBeDefined()
+    // No POST sibling for the auto-hoisted case
+    expect(doc.paths[route]['post']).toBeUndefined()
+  })
+
+  it('maps a complex-param unsafe action to a POST entry', () => {
+    const doc = toOpenApi([complexOp])
+    const route = '/transform/humanize/complex-bytes'
+    expect(doc.paths[route]).toBeDefined()
+    // Array-typed param → not primitive-only → stays POST
     expect(doc.paths[route]['post']).toBeDefined()
-    // no GET sibling
+    // No GET sibling for the non-hoisted case
     expect(doc.paths[route]['get']).toBeUndefined()
   })
 
@@ -116,8 +152,8 @@ describe('toOpenApi — verb derivation (SPEC §5)', () => {
     expect(doc.paths[route]['post']).toBeUndefined()
   })
 
-  // Negative-control: if we flip safe the verb must flip too.
-  it('negative — flipping safe on unsafeOp switches verb from POST to GET', () => {
+  // Negative-control: if we flip safe to true, verb is still GET
+  it('negative — flipping safe to true on a primitive-param op still yields GET', () => {
     const flipped = { ...unsafeOp, safe: true }
     const doc = toOpenApi([flipped])
     const route = '/transform/humanize/humanize-bytes'
@@ -125,10 +161,17 @@ describe('toOpenApi — verb derivation (SPEC §5)', () => {
     expect(doc.paths[route]['post']).toBeUndefined()
   })
 
-  // Negative-control: safe=false must yield POST, not GET.
-  it('negative — safe=false must not produce a GET entry', () => {
+  // Negative-control: safe=false + primitive params must NOT produce POST
+  it('negative — safe=false with primitive params does not produce a POST entry', () => {
     const doc = toOpenApi([unsafeOp])
     const route = '/transform/humanize/humanize-bytes'
+    expect(doc.paths[route]['post']).toBeUndefined()
+  })
+
+  // Negative-control: safe=false + complex params must NOT produce GET
+  it('negative — safe=false with complex params does not produce a GET entry', () => {
+    const doc = toOpenApi([complexOp])
+    const route = '/transform/humanize/complex-bytes'
     expect(doc.paths[route]['get']).toBeUndefined()
   })
 })
@@ -138,33 +181,51 @@ describe('toOpenApi — verb derivation (SPEC §5)', () => {
 // ---------------------------------------------------------------------------
 
 describe('toOpenApi — operationId', () => {
-  it('sets operationId to the canonical operation id', () => {
+  it('sets operationId for a primitive-param (GET) operation', () => {
     const doc = toOpenApi([unsafeOp])
     const pathItem = doc.paths['/transform/humanize/humanize-bytes']
-    expect(pathItem['post'].operationId).toBe(unsafeOp.id)
+    expect(pathItem['get'].operationId).toBe(unsafeOp.id)
+  })
+
+  it('sets operationId for a complex-param (POST) operation', () => {
+    const doc = toOpenApi([complexOp])
+    const pathItem = doc.paths['/transform/humanize/complex-bytes']
+    expect(pathItem['post'].operationId).toBe(complexOp.id)
   })
 })
 
 // ---------------------------------------------------------------------------
-// to-openapi: POST operations → requestBody with the input schema
+// to-openapi: requestBody — present for POST with params, absent for GET
 // ---------------------------------------------------------------------------
 
-describe('toOpenApi — POST: requestBody from input schema', () => {
-  it('attaches a requestBody for an unsafe (POST) operation with params', () => {
-    const doc = toOpenApi([unsafeOp])
-    const op = doc.paths['/transform/humanize/humanize-bytes']['post']
+describe('toOpenApi — requestBody semantics', () => {
+  it('attaches a requestBody for a complex-param POST operation', () => {
+    const doc = toOpenApi([complexOp])
+    const op = doc.paths['/transform/humanize/complex-bytes']['post']
     expect(op.requestBody).toBeDefined()
     expect(op.requestBody!.required).toBe(true)
     // content type
     expect(op.requestBody!.content['application/json']).toBeDefined()
     // schema passthrough
-    expect(op.requestBody!.content['application/json'].schema).toEqual(unsafeOp.input)
+    expect(op.requestBody!.content['application/json'].schema).toEqual(complexOp.input)
   })
 
-  it('omits requestBody for an unsafe operation with no input params (empty schema)', () => {
+  it('omits requestBody for a primitive-param (auto-hoisted to GET) operation', () => {
+    const doc = toOpenApi([unsafeOp])
+    const op = doc.paths['/transform/humanize/humanize-bytes']['get']
+    expect(op.requestBody).toBeUndefined()
+  })
+
+  it('omits requestBody for a POST operation with no input params (empty schema)', () => {
     const noParams = makeOp({ safe: false, input: {} })
     const doc = toOpenApi([noParams])
     const op = doc.paths['/test/op']['post']
+    expect(op.requestBody).toBeUndefined()
+  })
+
+  it('omits requestBody for a GET (safe) operation', () => {
+    const doc = toOpenApi([safeOp])
+    const op = doc.paths['/catalog/search/find-by-name']['get']
     expect(op.requestBody).toBeUndefined()
   })
 })
@@ -207,9 +268,16 @@ describe('toOpenApi — GET: query-string parameters from input schema', () => {
 // ---------------------------------------------------------------------------
 
 describe('toOpenApi — response schema passthrough', () => {
-  it('includes the output schema in the 200 response content for non-empty output', () => {
+  it('includes the output schema in the 200 response content for a GET (auto-hoisted) operation', () => {
     const doc = toOpenApi([unsafeOp])
-    const resp = doc.paths['/transform/humanize/humanize-bytes']['post'].responses['200']
+    const resp = doc.paths['/transform/humanize/humanize-bytes']['get'].responses['200']
+    expect(resp).toBeDefined()
+    expect(resp.content?.['application/json'].schema).toEqual({ type: 'string' })
+  })
+
+  it('includes the output schema in the 200 response content for a POST operation', () => {
+    const doc = toOpenApi([complexOp])
+    const resp = doc.paths['/transform/humanize/complex-bytes']['post'].responses['200']
     expect(resp).toBeDefined()
     expect(resp.content?.['application/json'].schema).toEqual({ type: 'string' })
   })
@@ -217,6 +285,7 @@ describe('toOpenApi — response schema passthrough', () => {
   it('omits content for an operation with an empty output schema', () => {
     const noOutput = makeOp({ safe: false, output: {} })
     const doc = toOpenApi([noOutput])
+    // noOutput has input:{} (no "properties" key) → NOT auto-hoisted → stays POST
     const resp = doc.paths['/test/op']['post'].responses['200']
     expect(resp.description).toBe('Success')
     expect(resp.content).toBeUndefined()
@@ -228,10 +297,11 @@ describe('toOpenApi — response schema passthrough', () => {
 // ---------------------------------------------------------------------------
 
 describe('toOpenApi — multiple operations', () => {
-  it('emits separate path entries for two operations', () => {
-    const doc = toOpenApi([unsafeOp, safeOp])
-    expect(Object.keys(doc.paths).length).toBe(2)
+  it('emits separate path entries for multiple operations', () => {
+    const doc = toOpenApi([unsafeOp, complexOp, safeOp])
+    expect(Object.keys(doc.paths).length).toBe(3)
     expect(doc.paths['/transform/humanize/humanize-bytes']).toBeDefined()
+    expect(doc.paths['/transform/humanize/complex-bytes']).toBeDefined()
     expect(doc.paths['/catalog/search/find-by-name']).toBeDefined()
   })
 })

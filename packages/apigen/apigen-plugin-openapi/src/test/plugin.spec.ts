@@ -29,6 +29,7 @@ function makeOp(overrides: Partial<Operation> = {}): Operation {
   };
 }
 
+/** Descriptor with ALL-primitive input params (auto-hoisted to GET by FEAT-APIGEN-022). */
 const sampleDescriptor: Descriptor = {
   host: 'ts',
   namespace: 'test-api',
@@ -40,6 +41,25 @@ const sampleDescriptor: Descriptor = {
         type: 'object',
         properties: { x: { type: 'number' } },
         required: ['x'],
+      },
+      output: { type: 'string' },
+    }),
+  ],
+};
+
+/** Descriptor with a COMPLEX (non-primitive) input param — stays POST. */
+const complexDescriptor: Descriptor = {
+  host: 'ts',
+  namespace: 'test-api',
+  operations: [
+    makeOp({
+      id: 'test/fn-complex',
+      safe: false,
+      path: [{ raw: 'complex-fn', words: ['complex', 'fn'] }],
+      input: {
+        type: 'object',
+        properties: { ids: { type: 'array', items: { type: 'string' } } },
+        required: ['ids'],
       },
       output: { type: 'string' },
     }),
@@ -172,7 +192,7 @@ describe('openapi plugin — handler returns OpenAPI doc', () => {
     expect(typeof result['paths']).toBe('object');
   });
 
-  it('handler result contains the descriptor operation projected to its HTTP route', () => {
+  it('handler result projects a primitive-only operation to GET (FEAT-APIGEN-022 auto-hoist)', () => {
     const mount = openapiPlugin.capabilities.mount;
     expect(mount).toBeDefined();
     if (!mount) throw new Error('Expected mount capability');
@@ -180,10 +200,25 @@ describe('openapi plugin — handler returns OpenAPI doc', () => {
     const result = op.handler(makeCall(sampleDescriptor)) as {
       paths: Record<string, unknown>;
     };
-    // The sample op (safe=false) should appear as POST /test/fn
+    // sampleDescriptor's op has all-primitive params → auto-hoisted to GET
     expect(result.paths['/test/fn']).toBeDefined();
     expect(
-      (result.paths['/test/fn'] as Record<string, unknown>)['post']
+      (result.paths['/test/fn'] as Record<string, unknown>)['get']
+    ).toBeDefined();
+  });
+
+  it('handler result projects a complex-param operation to POST', () => {
+    const mount = openapiPlugin.capabilities.mount;
+    expect(mount).toBeDefined();
+    if (!mount) throw new Error('Expected mount capability');
+    const [op] = mount.operations(complexDescriptor);
+    const result = op.handler(makeCall(complexDescriptor)) as {
+      paths: Record<string, unknown>;
+    };
+    // complexDescriptor's op has array-typed param → not primitive-only → stays POST
+    expect(result.paths['/test/complex-fn']).toBeDefined();
+    expect(
+      (result.paths['/test/complex-fn'] as Record<string, unknown>)['post']
     ).toBeDefined();
   });
 
