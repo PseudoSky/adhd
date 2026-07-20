@@ -78,6 +78,12 @@
     },
     {
       "plugin": "@nxlv/python"
+    },
+    {
+      "plugin": "./tools/nx-plugins/dependency-sync/plugin.js"
+    },
+    {
+      "plugin": "./tools/nx-plugins/verify-dist-load/plugin.js"
     }
   ],
   "generators": {
