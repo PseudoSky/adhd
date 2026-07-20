@@ -127,96 +127,37 @@ ask/analysis: `apigen-engine-runtime/src/lib/api-package.ts:61`,
 
 ## Open
 
-### BUG-APIGEN-041 — `--use <path>` does not load a file/path plugin the same way `--use <name>` loads a registered builtin plugin; relative paths should also work — TRIAGED
+### BUG-APIGEN-041 — `--use <path>` crashes for any plugin dist that transitively depends on `@adhd/apigen-core-client`; builtin slugs unaffected — NOT FIXABLE AT RUNTIME
 
-**Reported:** live user testing, post-merge, against the built CLI.
+**Reported:** live user testing, post-merge: `--use dist/packages/apigen/apigen-plugin-openapi/index.js` crashes.
 
-**Observed:** registering `openapi` as a named builtin (added to
-`BUILTIN_USE_PLUGINS` in `run.ts`) mounts correctly via `--use openapi`.
-Pointing `--use` directly at the plugin's own file path does NOT mount the
-same way — behaves differently from the named-builtin load path. Separately,
-relative (non-absolute, non-`./`-prefixed) path specifiers are expected to
-work as file paths too and currently may not.
+**Root cause:** The targeted dist is built with `@nx/vite:build` + `external: []`, which inlines the
+entire transitive dep tree — including `@adhd/apigen-core-client` → `ts-morph` → `typescript` →
+`perf_hooks`. TypeScript's module-level perf init (`performance.timeOrigin`) crashes inside
+`@rollup/plugin-commonjs`'s broken CJS stub. The crash is in module evaluation, before any plugin code runs.
 
-**Triage — root cause confirmed by live test:**
+**Impact scope:**
+- ✅ `--use openapi` / `--use health` / `--use logger` (builtin slugs) — works. Statically imported into the CLI's own bundle; no second copy of TypeScript runs.
+- ❌ `--use <path>` pointing to any dist built with `@nx/vite:build` + `external: []` — crashes. This affects any apigen plugin dist that transitively reaches `@adhd/apigen-core-client`.
+- ❌`--use ./local-plugin.ts` — also crashes today, because `loadUsePlugins` only loads JavaScript dist files (it does `import()` on the built CJS/ESM output). No `.ts`-source loading path exists yet.
 
-Running `node dist/entrypoint/apigen-cli/index.js run --use dist/packages/apigen/apigen-plugin-openapi/index.js …`
-produces:
+**Why it can't be fixed in the dist build:** The transitive dep tree (`apigen-core-client` →
+`ts-morph` → `typescript` → `perf_hooks`) is too complex for Rollup's CJS handling. Externalizing
+`typescript`/`ts-morph` just reveals the next bundled dep with the same issue. Externalizing all
+`@adhd/*` deps breaks because pnpm doesn't hoist them to root `node_modules`. This is a systemic
+build-tool-selection issue, not a runtime bug — tracked at repo root as `INVESTIGATION-BUILD-TOOL-001`.
 
-```
-TypeError: Cannot read properties of undefined (reading 'timeOrigin')
-    at zj (.../dist/packages/apigen/apigen-plugin-openapi/index.js:24)
-```
+**Fix direction:** Two separate tracks:
+1. **Systemic (INVESTIGATION-BUILD-TOOL-001):** Audit which `platform:node` packages should switch
+   from `@nx/vite:build` to `@nx/js:tsc` (preserves `require()` chains, no Rollup stubs).
+2. **Runtime (this bug):** Change `loadUsePlugins` to support loading `.ts` source files via tsx
+   when `--use` points to a source path. This sidesteps the bundling issue entirely — tsx
+   transpiles each file individually, Node resolves deps from `node_modules` normally, and
+   TypeScript's module init succeeds (no Rollup stubs involved).
 
-The `isLocal` path detection in `loadUsePlugins` IS correct — it resolves the path, creates a file URL,
-and calls `import()`. The file IS loaded. But the **plugin's Vite/Rollup dist bundle itself crashes at module
-evaluation time** before any plugin code runs.
-
-**Root cause of the crash — broken `@rollup/plugin-commonjs` dynamic-require stub:**
-
-The bundle inlines TypeScript's compiler-perf module, which at initialization does:
-
-```
-const {performance} = require('perf_hooks') || globalThis.performance
-```
-
-Rollup's `@rollup/plugin-commonjs` cannot handle this pattern. It generates a `cUe()` placeholder
-that always throws (`"Could not dynamically require..."`), and sets `gE` to an **empty frozen
-module object `{}`** instead of a working `require` or `globalThis` reference. The initialization
-chain then proceeds:
-
-1. `cUe` is defined (a thrown, but defined) → `fZ()` returns `true`
-2. `B2()` destructures `{performance: undefined}` from the empty `gE` → returns `{performance: undefined}`
-3. `zj()` accesses `s.timeOrigin` where `s` is `undefined` → **TypeError: Cannot read properties of undefined**
-
-The builtin path (`--use openapi`) works because the plugin is **statically imported** in `run.ts`
-and shares the CLI's own bundle's TypeScript runtime — no second copy of the broken initialization logic runs.
-
-**Impact — HIGH for file-path usage, but workaround exists:**
-- Dynamically loading ANY apigen plugin's dist bundle that transitively depends on `typescript` (or any
-  package using `@rollup/plugin-commonjs`-unfriendly patterns) will crash at module evaluation time.
-- This is not fixable by changing `loadUsePlugins` — the crash is in the **target module itself**.
-- The `loadUsePlugins` detection logic (extension check, path resolution) is actually correct.
-- The fix is in the **build configuration** of the plugin packages: `@rollup/plugin-commonjs` needs
-  either `ignoreDynamicRequires: true` or explicit `dynamicRequireTargets` entries for `perf_hooks`
-  and other Node builtins that TypeScript imports, so the bundle doesn't produce a broken stub.
-
-**Fix attempted — dist bundle approach is not viable:**
-
-Tried three approaches to make the Vite-bundled plugin dist dynamically importable:
-1. `commonjsOptions.ignoreDynamicRequires: true` — ignored by `@nx/vite:build`'s config merge.
-2. Externalizing `typescript`, `ts-morph`, `/^node:.*/` — removed TypeScript from bundle
-   but `@adhd/apigen-core-client`'s transitive deps (`ts-json-schema-generator`, `glob`,
-   etc.) still crash when bundled (`Cannot read properties of undefined (reading 'native')`).
-3. Externalizing all bare-specifier deps — `@adhd/*` packages aren't hoisted to root
-   `node_modules` by pnpm, so Node's `require()` can't resolve them at runtime.
-
-**Root cause (confirmed):** The dist produced by `@nx/vite:build` for any apigen plugin
-that transitively depends on `@adhd/apigen-core-client` (which bundles ts-morph →
-typescript → perf_hooks, glob, etc.) cannot be dynamically imported as a standalone
-module. The CJS interop stubs produced by `@rollup/plugin-commonjs` for TypeScript's
-internal Node-builtin requires crash at module evaluation time. This is a fundamental
-limitation of Rollup's CJS→ESM conversion for packages with complex init-time
-dependency graphs — not fixable by config changes in the plugin's Vite config.
-
-**Updated assessment — HIGH severity, but different fix direction needed:**
-- The `isLocal` path detection in `loadUsePlugins` is correct (it resolves and imports).
-- The crash is in the TARGET module (the plugin's dist), not in the loader.
-- The builtin slug path (`--use openapi`) is unaffected (statically imported in CLI bundle).
-- Fixing the dist build to be standalone is not practical — the transitive dep graph is
-  too complex for Rollup's CJS handling.
-
-**Correct fix direction:** Change `loadUsePlugins` to support loading `.ts` source files
-directly (e.g. `--use packages/apigen/apigen-plugin-openapi/src/index.ts`) via tsx or
-equivalent transpiler, rather than requiring a pre-built dist. The source file has no
-bundling artifacts — Node imports it fresh each time through the transpiler, and TypeScript
-is resolved from the repo's `node_modules` normally. This also makes the "relative paths
-should work" part of the bug trivially true (any Node-resolvable path works).
-
-For pre-built dist files published as npm packages (the third-party plugin use case),
-the plugin author must ensure their dist doesn't bundle packages with problematic
-CJS init code. Document this constraint rather than trying to fix it in apigen's
-bundler config.
+**Severity:** HIGH for `--use <path>`, but the feature is only needed for non-builtin plugins that
+haven't been registered as builtin slugs. Builtin slugs cover all first-party plugins. Workaround:
+register the plugin in `BUILTIN_USE_PLUGINS` in `run.ts` instead of using `--use <path>`.
 
 **Suggested fix (optional, LOW):** add a fallback check in the `isLocal` detection that treats any spec containing a `/` (path separator) as a local path, regardless of file extension. This would catch bare directory paths like `--use dist/my-plugin` without needing a trailing `/index.js`. The `import()` would fail with a clearer error if the directory doesn't have a package.json or index.js.
 
