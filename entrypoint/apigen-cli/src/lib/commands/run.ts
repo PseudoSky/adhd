@@ -1,35 +1,37 @@
+import type {
+  ComposedSchemas,
+  ExportMode,
+  OutputPlugin,
+  Plugin,
+  RunInput,
+} from '@adhd/apigen-core-client';
+import { effectiveLanguage } from '@adhd/apigen-core-client';
+import { buildFnTable } from '@adhd/apigen-engine-runtime';
 import { Command } from 'commander';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { importSource } from '../import-source';
-import { buildFnTable } from '@adhd/apigen-engine-runtime';
-import { resolveTsconfig } from '../resolve-tsconfig';
 import { buildCliLogger } from '../logging';
+import type { SourceEntry } from '../orchestrator';
 import {
+  loadOverrideConfig,
   orchestrateRun,
   parseOverrides,
-  loadOverrideConfig,
 } from '../orchestrator';
-import type { SourceEntry } from '../orchestrator';
-import type {
-  ExportMode,
-  OutputPlugin,
-  RunInput,
-  ComposedSchemas,
-  Plugin,
-} from '@adhd/apigen-core-client';
-import { effectiveLanguage } from '@adhd/apigen-core-client';
 import {
   describeRunTypeOption,
   unknownTypeError,
   unsupportedRunError,
 } from '../plugin-registry';
+import { resolveTsconfig } from '../resolve-tsconfig';
 // Built-in `--use` plugins. Statically imported so the vite-bundled CLI inlines
 // them (a runtime dynamic `import('@adhd/apigen-plugin-health')` would NOT be in
 // the standalone bundle). A bare slug (`--use health`) resolves here; an
 // arbitrary package specifier or local path falls through to a dynamic import.
 import healthPlugin from '@adhd/apigen-plugin-health';
 import loggerPlugin from '@adhd/apigen-plugin-logger';
+import openapiPlugin from '@adhd/apigen-plugin-openapi';
+import fs from 'fs';
 
 /** Parse --opt key=value pairs into an options record. */
 function parseOptPairs(pairs: string[]): Record<string, unknown> {
@@ -65,8 +67,8 @@ export function assertFnsNonEmpty(
   if (Object.keys(fns).length === 0) {
     throw new Error(
       `0 functions found in --source ${sourceFile} — ` +
-        `looks like generated output or the wrong source file. ` +
-        `Point --source at the original TypeScript source that exports your API functions.`
+      `looks like generated output or the wrong source file. ` +
+      `Point --source at the original TypeScript source that exports your API functions.`
     );
   }
 }
@@ -141,7 +143,7 @@ export function assertDecimalLibPresent(
     const fnList = decimalFns.join(', ');
     throw new Error(
       `function ${decimalFns[0]} takes a Decimal; install \`decimal.js\` ` +
-        `(affected functions: ${fnList})`
+      `(affected functions: ${fnList})`
     );
   }
 }
@@ -159,6 +161,7 @@ export function assertDecimalLibPresent(
 const BUILTIN_USE_PLUGINS: Record<string, Plugin> = {
   health: healthPlugin as Plugin,
   logger: loggerPlugin as Plugin,
+  openapi: openapiPlugin as Plugin,
 };
 
 /**
@@ -186,10 +189,10 @@ export async function loadUsePlugins(specifiers: string[]): Promise<Plugin[]> {
     }
     // Package specifier or local path — resolve a local path to a file URL so
     // dynamic import works cross-platform.
-    const target =
-      spec.startsWith('.') || path.isAbsolute(spec)
-        ? pathToFileURL(path.resolve(spec)).href
-        : spec;
+    const isLocal = spec.startsWith('.') || path.isAbsolute(spec) || fs.existsSync(path.resolve(spec));
+    const target = isLocal
+      ? pathToFileURL(path.resolve(spec)).href
+      : spec;
     const mod = (await import(target)) as Record<string, unknown>;
     const candidate =
       (mod['default'] as Plugin | undefined) ??
@@ -201,7 +204,7 @@ export async function loadUsePlugins(specifiers: string[]): Promise<Plugin[]> {
     if (!candidate) {
       throw new Error(
         `--use ${spec}: module exported no plugin (expected a default export, ` +
-          `a \`plugin\` export, or an object with a \`capabilities\` field)`
+        `a \`plugin\` export, or an object with a \`capabilities\` field)`
       );
     }
     loaded.push(candidate);
