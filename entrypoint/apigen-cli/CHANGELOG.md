@@ -77,6 +77,74 @@ All notable changes to this project are documented here.
   `npx vitest run --root entrypoint/apigen-cli`: 17 files, 147/147 passed — zero
   regressions.
 
+- **BUG-APIGEN-033** — anonymous default-export functions (`export default (n) => ...` /
+  `export default function(n){...}`) were advertised as routes/tools but crashed at
+  dispatch time ("function not found"), even though they were correctly listed in the
+  served schema. Root cause: `extract.ts` synthesized a filename-derived operation name
+  for both anonymous default-export shapes (Shape 5, arrow/`FunctionExpression`; and
+  Shape 4's anonymous `FunctionDeclaration` sub-case) — e.g. `foo_default` — and that
+  name became the route/tool/schema key. But `apigen-engine-runtime/src/lib/fn-table.ts`'s
+  `buildFnTable()`, which builds the `name → fn` table dispatch actually indexes into,
+  keys every function by its live JS `.name` property, never by any apigen-synthesized
+  name. ECMAScript's `export default AssignmentExpression`/`HoistableDeclaration`
+  NamedEvaluation rule gives BOTH anonymous shapes a real runtime `.name` of `"default"`
+  (the language's own behavior, not an apigen quirk) — so `buildFnTable()` always produced
+  `fns['default']`, never `fns['foo_default']`. At dispatch time `fns[operationName]` was
+  `undefined` → crash.
+
+  **Fix:** name both anonymous shapes' operations using the literal `'default'` — the
+  exact runtime `.name` `buildFnTable()` will always resolve — instead of a filename-derived
+  synthetic id (`extract.ts`'s Shape 5 arrow/`FunctionExpression` branch and Shape 4's
+  anonymous `FunctionDeclaration` branch, both now call `buildActionOp(..., fileSegment,
+  'default', ...)`, mirroring exactly how Shape 4's *named* default function is already
+  handled). `fileSegment` still carries the per-file id/route disambiguation
+  (`shapes/anonymous-default/default`) — only the dispatch key (the leaf path segment)
+  changes. No changes needed to `fn-table.ts`, `compose-schemas.ts`, `dispatch.ts`, or
+  `orchestrator.ts`'s Step 5 key derivation (`op.path[op.path.length - 1].raw`) — this was
+  a pure naming fix in `extract.ts`, matching an invariant `orchestrator.ts`'s own Step 5
+  comment already assumed held for this shape.
+
+  Regression coverage: `extract.spec.ts` (Shape 5, existing) and
+  `export-shape-matrix.spec.ts` (Shape 5, updated to assert `'default'` instead of the old
+  synthesized name) prove the static op naming. A new end-to-end test,
+  `entrypoint/apigen-cli/src/test/e2e/bug-apigen-033-anonymous-default-dispatch.spec.ts`,
+  spawns the BUILT CLI bin as a real `node` child process and drives it with a real
+  `@modelcontextprotocol/sdk` client (`tools/list` + `tools/call`) against a new fixture
+  covering the previously-uncovered anonymous-`FunctionDeclaration` sub-case
+  (`anonymous-default-fn-decl.ts`) plus the existing arrow-form fixture
+  (`anonymous-default.ts`), proving both are listed under the name `'default'` AND
+  actually dispatch to the correct result — not just present in the schema — with a
+  negative control proving a named default export (Shape 4, `default-fn.ts`) is
+  unaffected. (This must run against the built bin, not an in-process Vitest `import()` —
+  Vitest's own SSR transform resolves a dynamically-imported fixture differently than the
+  `tsx`-based loader `run.ts` actually uses at runtime, which is exactly the mechanism this
+  bug lived in; see `import-source-cjs-format.spec.ts`'s header comment for the same
+  established precedent.) All 3 cases pass against the freshly-built bin (`npx vite build
+  --config entrypoint/apigen-cli/vite.config.ts`, `npx vitest run --root
+  entrypoint/apigen-cli entrypoint/apigen-cli/src/test/e2e/bug-apigen-033-anonymous-default-dispatch.spec.ts`
+  → 3/3), confirmed by the bin's own log lines showing `tools: ["default"]` and a
+  successful `→ default` dispatch for both anonymous fixtures pre-fix would instead show
+  `fns['foo_default']`/equivalent undefined and throw at the `tools/call`. Additionally
+  independently verified via a direct `tsx`-based probe against both real fixtures
+  (mirroring `import-source.ts`'s exact loader) that `buildFnTable()` resolves
+  `fns['default']` to the correct callable, returning the correct result.
+
+  `npx vitest run --root packages/apigen/apigen-core-client`: 266/267 passed (1 failure
+  in `compose-schemas.spec.ts`, confirmed via `git diff` to be caused by concurrent,
+  not-yet-committed BUG-APIGEN-029 work touching `compose-schemas.ts`/`descriptor.ts` —
+  neither file touched by this fix). `npx vitest run --root
+  packages/apigen/apigen-engine-runtime`: 151/151 passed at the time this fix's changes
+  were verified in isolation — `dispatch.spec.ts` (14/14) unaffected; a concurrent,
+  untracked, not-yet-committed BUG-APIGEN-029 test file
+  (`src/test/bug-apigen-029.spec.ts`, not part of this commit) appeared mid-session and
+  is excluded from this count since it belongs to that other in-flight fix.
+
+  Known follow-up (filed, not fixed here — see BUG-APIGEN-039): this fix moves both
+  anonymous shapes into the same `[file, name]` 2-segment `op.path` bucket
+  `opMatchesExportMode()` (BUG-APIGEN-034) already can't fully disambiguate from a plain
+  named export — the identical class of gap BUG-APIGEN-034 already documented and
+  deferred for Shape 4's *named* default case, now with a wider blast radius.
+
 - **BUG-APIGEN-024** — `--use openapi` mount produced an empty OpenAPI doc (`paths: {}`)
   on live `run`, even though the underlying operations were correctly extracted and
   served. Root cause: `collectMountRoutes()` — identical in both HTTP transports

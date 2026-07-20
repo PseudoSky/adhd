@@ -101,16 +101,20 @@ describe('export-shape matrix — every shape names ops by EXPORTED symbol (F28/
   });
 
   // ── Shape 5: anonymous default export ──────────────────────────────────────
-  // No exported symbol name → the extractor SYNTHESISES a STABLE id from the
-  // filename. Determinism: extracting twice yields the identical id.
-  it('anonymous default: synthesizes a stable filename-derived id', async () => {
+  // No exported symbol name. BUG-APIGEN-033: the leaf name MUST be the literal
+  // `'default'` — the real runtime `.name` NamedEvaluation gives this shape,
+  // and the only key `buildFnTable()` (`@adhd/apigen-engine-runtime`) can ever
+  // resolve it under at dispatch time. The filename still disambiguates the
+  // op's `id` via the `fileSegment` path component. Determinism: extracting
+  // twice yields the identical id.
+  it('anonymous default: op leaf name == "default" (matches the runtime .name)', async () => {
     const ops1 = await extractShape('anonymous-default.ts');
     const ops2 = await extractShape('anonymous-default.ts');
     expect(ops1).toHaveLength(1);
-    expect(leafName(ops1[0])).toBe('anonymous_default_default');
+    expect(leafName(ops1[0])).toBe('default');
     // Stable across runs (same file → same id).
     expect(ops1[0].id).toBe(ops2[0].id);
-    expect(ops1[0].id).toBe('shapes/anonymous-default-default');
+    expect(ops1[0].id).toBe('shapes/anonymous-default/default');
   });
 
   // ── Shape 6: CJS `module.exports = { ... }` ────────────────────────────────
@@ -151,7 +155,7 @@ describe('export-shape matrix — every shape names ops by EXPORTED symbol (F28/
       'greet',
       'sum',
       'product',
-      'anonymous_default_default',
+      'default',
       'toUpper',
       'repeat',
     ]) {
