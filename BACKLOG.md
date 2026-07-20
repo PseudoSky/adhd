@@ -1125,7 +1125,41 @@ Baseline: **lint exit 0**, **build exit 1** (5 projects), **test exit 1** (11 pr
 - **Fix direction:** a human should `git stash show -p stash@{0}` and decide: apply, branch (`git stash branch <name> stash@{0}`), or drop. **Do not drop it automatically** — nobody knows whose it is. Left untouched deliberately.
 - **Status:** OPEN — needs a human decision.
 
-### BUG-REPO-PRECOMMIT-PARTIAL-STAGE-001 — the pre-commit hook's `nx affected -t lint --fix` re-stages a FULL file, defeating deliberate partial/cached-patch staging and sweeping in concurrent agents' unrelated uncommitted work
+### DEBT-PROCESS-AFFECTED-TEST-001 — agents must use `nx affected -t test` (not targeted `nx test <project>`) when changing shared packages; worktrees amplify the blind spot
+
+**Discovered:** 2026-07-20, triaging FEAT-APIGEN-022 test-gap (commit `a82ec947` changed `apigen-engine-naming` but the author only ran `nx test apigen-cli` + `nx test apigen-engine-naming` — three downstream test suites were missed and landed broken).
+
+**Problem:** When a change touches a package that has downstream consumers, running targeted `nx test <project>` on the changed package and the one you're actively developing misses all other consumers. The dependency graph may include consumers you don't know exist:
+- `apigen-engine-naming` → `apigen-codegen-openapi` → `apigen-plugin-openapi`
+- `apigen-engine-naming` → `apigen-engine-conformance`
+
+The author of `a82ec947` updated four test files in `apigen-cli` but never ran the `codegen-openapi`, `plugin-openapi`, or `engine-conformance` suites. All three landed broken and stayed broken until discovered by a downstream triage pass.
+
+**Rule:** Any change to a package that has dependents MUST be validated with `nx affected -t test` (not `nx test <project>`), or equivalently `nx run-many -t test -p <project>,<dep1>,<dep2>,...` listing the project AND all transitive consumers explicitly. The targeted `nx test <project>` form is only safe for leaf packages with zero dependents.
+
+**Worktree amplification:** The repo uses parallel worktrees for concurrent agent development. `nx affected -t test` within a single worktree only detects consumers in that worktree's branch and the base branch. It does NOT detect consumers being modified in other worktrees' branches. This means:
+- An agent in worktree A changes `apigen-engine-naming` and runs `nx affected -t test` — passes (consumers in worktree A's branch are covered).
+- An agent in worktree B is actively modifying `apigen-plugin-openapi` (a consumer) on a branch that hasn't merged to the shared base yet.
+- The worktree A agent's `nx affected` has no visibility into worktree B's branch.
+- When worktree B merges, they inherit the breaking change without warning.
+
+The worktree context also means Nx cache is not shared (`DEBT-NX-WORKTREE-CACHE-001`), so each worktree independently rebuilds and retests — but this is a performance issue, not a correctness one. The real correctness gap is the invisible cross-worktree consumer.
+
+**Fix direction (multiple options, pick at least one):**
+
+1. **CI gate** — The least-ambiguous mitigation. Add a CI workflow that runs `nx affected -t test` against the merge target for any PR that changes a `packages/apigen/` (or other shared-domain) package, with explicit error on failure. This catches the cross-worktree gap at PR time regardless of what the author tested locally.
+
+2. **Pre-commit hook expansion** — The existing pre-commit hook already runs `nx affected -t lint --fix`. Extending it to also run `nx affected -t test` would catch missing downstream tests at commit time within a single worktree. (Trade-off: significantly slower commits; may need a `--no-verify` escape hatch for docs-only changes.)
+
+3. **Agent instruction update** — Amend `AGENTS.md` §Development & Nx Commands to mandate `nx affected -t test` (not `nx test <project>`) when changing packages with dependents. Weakest mitigation (relies on agent compliance, no mechanical enforcement).
+
+4. **Cross-worktree awareness** — Long-term: adopt a "merge contract" pattern where each worktree publishes a lightweight dependency-change manifest on a well-known branch or shared file, and `nx affected`-like tooling can read it. This is speculative and would need a design spike.
+
+**Immediate recommendation:** Option 1 (CI gate) + Option 3 (AGENTS.md update) — mechanical enforcement at merge time plus agent-level guidance for day-to-day work. Option 2 (pre-commit expansion) is worth evaluating but likely too slow for local commit latency.
+
+**Cross-references:** `DEBT-NX-WORKTREE-CACHE-001` (Nx cache not shared between worktrees), `FEAT-APIGEN-022` (the feature whose commit triggered the gap, commit `a82ec947`), `DEBT-WORKTREE-DIRTY-MAIN-MERGE-001`, `DEBT-WORKTREE-MERGE-CHECK-001`.
+
+**Status:** OPEN.
 - **Discovered:** 2026-07-20, in `.worktrees/apigen-v1-retirement` while landing BUG-APIGEN-033, alongside a concurrent agent (BUG-APIGEN-029) mid-editing the SAME file (`packages/apigen/apigen-core-client/src/lib/extract.ts`).
 - **Detail:** to avoid sweeping another agent's in-flight, non-overlapping hunks into an unrelated commit, `git apply --cached <patch-with-only-my-hunks>` was used to stage exactly the intended 4 hunks in a 7-hunk working-tree file, leaving the other 3 hunks (a different agent's `hoistNestedDefs` WIP) correctly unstaged. `git commit -m "..." -- <exact files>` was then used per the repo's own explicit-pathspec convention. The pre-commit hook still ran `nx affected -t lint --fix` against the project containing the staged file; ESLint's `--fix` operates on the **working-tree** copy (which still had all 7 hunks, since only the index had been partially staged) and the hook's own "auto-fixed and re-staging" step then `git add`'d the file wholesale — silently re-staging the FULL working-tree content (all 7 hunks) right before the commit was created, overwriting the deliberately-partial index. The resulting commit (`56c2e118`) contained an unrelated agent's untested, in-progress code under the wrong commit message. Caught immediately by inspecting `git show --stat HEAD` / `git diff HEAD~1 HEAD` before reporting done, and corrected with a same-session follow-up commit (`851e0a9b`) that reverse-applied just the swept-in hunks and reapplied them to the working tree only (uncommitted), restoring the other agent's WIP byte-for-byte with zero data loss.
 - **Why it matters:** the repo's own explicit-pathspec / no-`git add -A` convention (this file's own guidance, repeated in multiple agent-facing docs) is specifically meant to prevent exactly this class of incident when several agents share a worktree — but a pre-commit hook that unconditionally re-stages whatever `eslint --fix` touches on disk bypasses that protection entirely, regardless of how carefully the caller staged the index beforehand. Any agent using a cached/partial patch to avoid sweeping a concurrently-edited shared file is silently defeated by this hook, with no warning at commit time (the hook reports success, not "note: this file had more staged than you asked for").
