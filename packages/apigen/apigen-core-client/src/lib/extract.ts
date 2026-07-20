@@ -469,139 +469,6 @@ type RawParam = {
   defaultValue?: string;
 };
 
-/**
- * BUG-APIGEN-029: `buildSchema()`'s Path 1 (ts-json-schema-generator) can
- * legitimately produce a `definitions`/`$defs` sibling for a self-referential
- * / recursive named type — `topRef: false` (BUG-APIGEN-026) only controls
- * whether the ENTRY type itself is `$ref`-wrapped, not a type it recursively
- * contains, which MUST stay a `$ref` + `definitions` entry (there is no other
- * way to represent a cycle in JSON Schema).
- *
- * Confirmed empirically (not merely by reading the generator's source): that
- * `definitions` sibling does NOT reliably land at the TOP of the fragment
- * `buildSchema()` hands back for the param's own type. `extract.ts`'s param
- * type-text (from the signature) and a property's type-text (from
- * `morph-walk.ts`'s `safeTypeText`, resolved relative to the property's own
- * declaration node) are frequently DIFFERENT strings for the exact same
- * TypeScript type — e.g. a fully-qualified `import("path").Foo` for the
- * top-level param vs the bare `Foo` for the same type reached again via one
- * of its own properties. Because `buildSchema`'s ancestors/deadlock guard
- * (BUG-APIGEN-CORE-003) keys purely on that literal type-text string, this
- * mismatch means the SAME type resolved through a nested property is treated
- * as an unrelated, fresh call — Path 1 can then succeed independently at that
- * NESTED position and produce its own self-contained `$ref` + `definitions`
- * pair several levels deep inside the outer fragment (verified: for a
- * self-referential `interface Foo { f?: Foo }`, `definitions` landed at
- * `<parentFragment>.properties.f.definitions`, not at the fragment's own
- * top level).
- *
- * Splicing that fragment (at whatever depth its `definitions` actually
- * landed) directly into `properties[p.name]` buries it inside the composed
- * function schema. JSON-Schema `$ref` resolution is always root-relative
- * (`#/definitions/X` resolves against the *document's own* top level, not
- * wherever `definitions` happens to be nested) — so once `composeSchemas()` /
- * `ajv.compile()` treat the whole function input as the document root, that
- * nested `definitions` sibling is invisible and the `$ref` permanently
- * dangles: `"can't resolve reference #/definitions/X from id #"` at first
- * dispatch (BUG-APIGEN-029).
- *
- * The fix walks the ENTIRE per-param fragment tree (properties, items,
- * oneOf/anyOf/allOf, additionalProperties, propertyNames, and generically any
- * other object-valued key — the same generic walk style `findDanglingRefs`
- * uses above), hoisting every `definitions`/`$defs` dict found at ANY depth
- * up to the function-level `input` schema's own root — which
- * `compose-schemas.ts` now also carries forward onto the final composed
- * document — so every `$ref` resolves no matter how deep in the fragment (or
- * the final composed schema) it originated.
- *
- * Mutates `fragment` in place (strips every hoisted `definitions`/`$defs` key
- * wherever found) and merges into `hoisted`, keyed by definitions-dict name.
- * Throws if two params in the same function contribute a same-named
- * definition with different content — that can only mean two structurally
- * different types collided under one generated name, which apigen cannot
- * safely merge.
- */
-function hoistNestedDefs(
-  fragment: Record<string, unknown>,
-  hoisted: { definitions: Record<string, unknown>; $defs: Record<string, unknown> },
-  fnName: string,
-  paramName: string
-): Record<string, unknown> {
-  // CRITICAL: `fragment` (and every object nested inside it) may be a
-  // reference SHARED with `buildSchema()`'s session/persistent cache (see
-  // `buildSchema`'s own doc comment: results are memoized by reference and
-  // "MUST be treated as immutable by callers"). The top-level per-param
-  // fragment is already shallow-cloned by the caller (`{...built}`), but a
-  // NESTED object reached via `properties`/`items`/etc. is NOT — it's the
-  // exact cached object. An earlier version of this function deleted
-  // `definitions`/`$defs` from nodes in place, which silently corrupted the
-  // shared cache: the FIRST extraction correctly hoisted and stripped the
-  // nested `definitions`, but that mutation permanently removed it from the
-  // cached object too, so every SUBSEQUENT `extract()` call in the same
-  // process (any later test in the same file, or a real watch/serve rebuild)
-  // got back the now-definitions-less cached fragment and reintroduced the
-  // exact dangling-`$ref` bug this function exists to fix — verified: running
-  // two BUG-APIGEN-029 regression tests back-to-back in the same process
-  // reproduced "can't resolve reference #/definitions/SelfRefParams from id
-  // #" on the SECOND test only, while the first alone always passed.
-  //
-  // Fixed by never mutating input: this returns a freshly-cloned fragment
-  // with every `definitions`/`$defs` key removed from wherever it was found,
-  // and mutates only `hoisted` (the caller-owned accumulator) and its own
-  // freshly-built output tree — the cache's objects are never touched.
-  const stack = new Set<object>();
-
-  const clone = (node: unknown): unknown => {
-    if (Array.isArray(node)) return node.map(clone);
-    if (!node || typeof node !== 'object') return node;
-    // Defensive cycle guard: ts-json-schema-generator's output models
-    // recursion via `$ref` STRINGS, never live circular JS object references,
-    // so this should never actually trigger — but if it ever did, cloning
-    // would otherwise stack-overflow instead of failing loudly/gracefully.
-    if (stack.has(node as object)) return node;
-    stack.add(node as object);
-    try {
-      const rec = node as Record<string, unknown>;
-      const out: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(rec)) {
-        if (key === 'definitions' || key === '$defs') {
-          const defKey = key as 'definitions' | '$defs';
-          const bucket = hoisted[defKey];
-          for (const [defName, defValue] of Object.entries(
-            value as Record<string, unknown>
-          )) {
-            // Recurse into the definition's OWN body too (mutually-recursive
-            // types can carry a further-nested `definitions`/`$defs`) — this
-            // also clones it, so the bucket never holds a cache-shared object.
-            const clonedDefValue = clone(defValue);
-            const existing = bucket[defName];
-            if (
-              existing !== undefined &&
-              JSON.stringify(existing) !== JSON.stringify(clonedDefValue)
-            ) {
-              throw new Error(
-                `[apigen-core-client] Function "${fnName}": param "${paramName}" contributes a ` +
-                  `"${defKey}.${defName}" definition that conflicts with an identically-named ` +
-                  `definition already hoisted from another param/output in the same function. ` +
-                  `Two structurally different types share the same generated definition key, ` +
-                  `so apigen cannot safely merge them into one function-level schema.`
-              );
-            }
-            bucket[defName] = clonedDefValue;
-          }
-          continue; // hoisted — do not leave a copy behind in `out`
-        }
-        out[key] = clone(value);
-      }
-      return out;
-    } finally {
-      stack.delete(node as object);
-    }
-  };
-
-  return clone(fragment) as Record<string, unknown>;
-}
-
 async function buildActionOp(
   project: Project,
   sf: SourceFile,
@@ -650,21 +517,13 @@ async function buildActionOpAtPath(
   const required = domainParams.filter((p) => !p.optional).map((p) => p.name);
 
   const properties: Record<string, unknown> = {};
-  // BUG-APIGEN-029: pooled across all domain params of this one function —
-  // see hoistNestedDefs's doc comment for why this must happen.
-  const hoistedDefs = {
-    definitions: {} as Record<string, unknown>,
-    $defs: {} as Record<string, unknown>,
-  };
   for (const p of domainParams) {
     const built = await buildSchema(project, sf, p.type, tsconfig, session);
     // buildSchema's results are memoized by reference (session/persistent
-    // caches) and MUST be treated as immutable by callers. `hoistNestedDefs`
-    // returns a fully-cloned fragment (recursively — not just a top-level
-    // shallow clone) precisely so hoisting/stripping `definitions`/`$defs`
-    // and the `default`/`description` mutation below can never leak into,
-    // or corrupt, the cached object shared with other params/operations.
-    const propSchema = hoistNestedDefs(built, hoistedDefs, exportName, p.name);
+    // caches) and MUST be treated as immutable by callers — shallow-clone
+    // before mutating so per-param `default`/`description` never leaks
+    // across other params or operations sharing the same type text.
+    const propSchema: Record<string, unknown> = { ...built };
     // BUG-APIGEN-018: surface the TS initializer / JSDoc @default as both
     // the native JSON-Schema `default` keyword and a human-readable note
     // in `description`.
@@ -688,15 +547,6 @@ async function buildActionOpAtPath(
     type: 'object',
     properties,
     required,
-    // BUG-APIGEN-029: hoisted definitions from param fragments — see
-    // hoistNestedDefs. Only attached when non-empty so the common
-    // (no-recursive-type) case's schema shape is unchanged.
-    ...(Object.keys(hoistedDefs.definitions).length > 0
-      ? { definitions: hoistedDefs.definitions }
-      : {}),
-    ...(Object.keys(hoistedDefs.$defs).length > 0
-      ? { $defs: hoistedDefs.$defs }
-      : {}),
   };
 
   const id = buildId(ns, opPath);
