@@ -189,6 +189,31 @@ The provider-credential env vars (`ADHD_AGENT_OPENAI_SECRET`, etc.) are guarded 
 
 ---
 
+## Runtime-Necessity Assessment (`at:'build'` vs `at:'runtime'`)
+
+> **Terminology, because "build" misleads:** in `@adhd/environment`, `at:'build'` means *resolved once at `Environment` construction (process start), then frozen* — **not** compile/bundle time. Deploy-time env vars ARE honored under `build` (construction runs after the process boots). `at:'runtime'` differs only by *re-reading live `process.env` on every access* (ARCHITECTURE.md §"Runtime-vs-build proof"; `environment-base-spec/src/index.ts:127`). The test for `runtime` is a real read site that (a) executes more than once per process AND (b) must observe an env change made *after* construction.
+
+The shipped `config.ts` declares **no `at:` on any field**, so all default to `at:'build'`. Independently applying the rule (not transcribing source) confirms this is **correct**, field by field:
+
+| Field | Read site | Re-read after boot? | Correct `at:` |
+|---|---|---|---|
+| `transport.kind`, `transport.port`, `sse.*` | `index.ts` server bootstrap, once | no | `build` ✓ |
+| `db.path`, `server.registryDbPath` | DB connection open, once | no | `build` ✓ |
+| `queue.concurrency`, `server.max*`, `server.defaultMaxTokens`, `server.contextLimit` | `toEngineConfig()` at startup | no | `build` ✓ |
+| `server.allowedAgents` | allowlist check, evaluated from resolved config | no | `build` ✓ |
+| `plugins.configPath`, **`plugins.entries`** | **`index.ts:149` `loadExternalPlugins(...)`, exactly once at boot** | no (plugins are not hot-reloaded) | `build` ✓ |
+| `logging.level` | `logger.ts` at logger construction | no (Pino level fixed at construction today) | `build` ✓ (see note) |
+
+**`ADHD_AGENT_PLUGINS` specifically:** correctly `build`. It is read once at `index.ts:149` to load external plugins at startup; there is no code path that re-reads it, and the loaded plugin set is not mutated live. A deploy-time value is fully honored (construction happens after boot). Marking it `at:'runtime'` would change nothing observable — no consumer re-reads it.
+
+**The one honest nuance:** `logging.level` is the only field where a *runtime* variant would be meaningful — a long-running server could want to change log verbosity without restart. Today the Pino logger fixes its level at construction (no live re-read), so `build` matches the actual code. If a future feature adds live log-level toggling, that field (and only that one) would move to `at:'runtime'`. This is a latent enhancement, not a current defect — filed as friction item 5 below.
+
+**Provider secrets are already effectively runtime, and correctly so:** `ADHD_AGENT_*_SECRET` are resolved via `env.resolveEnvName()` on **each** `getProviderConfig()` call (config.ts:205–228), i.e. live-resolved per invocation — the `secret:true` semantics — rather than frozen config fields. This is the right model for rotating credentials and is why they are deliberately outside the `config` block.
+
+**Verdict:** for agent-mcp, `at:'build'`-everything is not an unexamined default — it is the correct classification given the read sites. The only reclassification the code could ever warrant is `logging.level → at:'runtime'`, and only after live-toggle support is added.
+
+---
+
 ## Logging Audit
 
 - **Logs emitted**: Yes (via Pino)
@@ -229,5 +254,7 @@ The provider-credential env vars (`ADHD_AGENT_OPENAI_SECRET`, etc.) are guarded 
 3. **Plugin config path**: Via `ADHD_AGENT_CONFIG` env var, filesystem path is user-specified. Could be wrapped in a `files.pluginConfig` entry if a standard location is desired. Currently flexible by design.
 
 4. **Provider secrets**: Intentionally NOT FieldSpec fields — they are agent-definition references guarded by the prefix allowlist. This avoids hardcoding a provider list in the core spec. Correct design; no change needed.
+
+5. **Live log-level toggle** (`at:'runtime'` candidate): `logging.level` is fixed at logger construction. A long-running server could benefit from changing verbosity without a restart, which would move that single field to `at:'runtime'` and re-read on each log call. Latent enhancement, not a current defect. Low priority.
 
 **Conclusion**: This is the reference consumer implementation. Full adoption achieved. No migration needed. Recommend studying this package as the model for other @adhd packages adopting `@adhd/environment`.
