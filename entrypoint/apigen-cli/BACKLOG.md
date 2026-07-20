@@ -297,58 +297,6 @@ libs/memory-core/src/latency-stats.ts --type cli --out-dir <scratch> --link-work
 packages/apigen/apigen-base-logical/src/lib/runmode.ts` → empty, confirming pre-existing
 identical-to-main before the fix in this session]
 
-### BUG-APIGEN-033 — anonymous default-export functions (`export default (n) => ...`) are advertised as routes/tools but crash at dispatch time ("function not found") — regression introduced by the v1-retirement (v2-orchestrator) rewrite
-
-**Discovered:** 2026-07-19, by an independent code-review agent reading `orchestrator.ts`
-alongside `extract.ts` and `fn-table.ts` for the `fix/apigen-v1-retirement` (BUG-APIGEN-028)
-diff. Confirmed by this session directly reading the same three files.
-
-**Root cause:** `extract.ts` (Shape 5, anonymous default export — a real fn expression/arrow
-with no name, e.g. `export default (n: number) => n * 2;`) synthesizes a stable operation name
-from the source filename: `` normalizeFileName(fileName).replace(/-/g, '_') + '_default' ``
-(e.g. `foo_default`) — this becomes the route/tool/schema key. But
-`apigen-engine-runtime/src/lib/fn-table.ts`'s `buildFnTable()`, which builds the `name → fn`
-table dispatch actually indexes into, keys every function by its **JS-inferred `.name`
-property**, not by any apigen-synthesized name. For `export default (n) => n*2`, ECMAScript's
-NamedEvaluation rule (`export default AssignmentExpression`) gives the function itself a
-real `.name` of `"default"` (this is the language's own runtime behavior, not a apigen bug) —
-`buildFnTable` therefore ends up with `fns['default'] = fn`, never `fns['foo_default']`. At
-dispatch time, `fns[operationName]` (`operationName = 'foo_default'`) is `undefined`, and the
-call fails ("function not found" or equivalent), even though the operation is correctly listed
-in the served schema/route/tool listing.
-
-**Why this is a genuine NEW regression, not pre-existing:** before this branch, Step 5 called
-v1's `generateSchemas()`, whose `extractDefault()` never covered a bare anonymous-function
-default export at all (only the default-*object* form, `export default { a, b }`) — so this
-shape was silently *absent* from `ComposedSchemas` entirely. It is now *present but broken* —
-worse for a caller, since it looks like a real, callable operation until invoked.
-
-**Impact:** any TypeScript source using this export shape (uncommon but valid, real-world
-idiom — a single-purpose module exporting one anonymous function) gets a listed-but-dead
-route/tool for every apigen output plugin (this is upstream of plugin choice — the bug is in
-`extract.ts`/`fn-table.ts`, shared by all of them).
-
-**Suggested fix:** either (a) have `extract.ts` name the operation using the SAME rule
-`buildFnTable` will resolve at runtime (i.e. detect that the runtime key will be `"default"`
-and use that, or a normalized form of it) instead of a filename-derived synthetic name that
-`buildFnTable` has no way to produce, or (b) teach `buildFnTable` to ALSO key by the
-apigen-synthesized name when unwrapping a `WRAPPER_KEYS`-nested anonymous function (it already
-has the export's file/module context available at the unwrap site) so both sides agree. Needs
-an end-to-end `run`-mode dispatch test (not just the existing `extract()`-only unit coverage in
-`entrypoint/apigen-cli/src/test/integration/export-shape-matrix.spec.ts:103-114`) proving a
-real invocation of this shape actually returns a result, not just that it's present in the
-schema.
-
-**Status:** OPEN, filed not fixed (out of scope for the blocking-findings fix pass this
-session prioritized). Should be fixed before this branch merges, alongside BUG-APIGEN-028.
-
-Citations: [session 2026-07-19, sub-agent `review-cli-orchestrator-diff`, self-verified against
-source by this session: `packages/apigen/apigen-core-client/src/lib/extract.ts:300-336`
-(Shape 5 anonymous-default-export naming); `packages/apigen/apigen-engine-runtime/src/lib/
-fn-table.ts` (full read — `buildFnTable`'s `.name`-keying + `WRAPPER_KEYS` unwrap logic);
-ECMAScript `export default AssignmentExpression` NamedEvaluation behavior (language spec, not
-apigen code) confirmed as the source of `fn.name === "default"` for this shape]
-
 ### BUG-APIGEN-037 — `py-flask`/`py-grpc` are unconditional eager imports; unpublished on npm, so an installed CLI never reaches argument parsing — MEDIUM
 
 **Discovered:** 2026-07-20, while fixing FEAT-APIGEN-019 (CLI plugin discoverability; see
@@ -387,4 +335,53 @@ optional), `entrypoint/apigen-cli/vite.config.ts:1-50` (standalone-bundle rollup
 `external` list excludes both packages so they're meant to be inlined), `src/lib/commands/run.ts:22-26`
 (comment explaining static-vs-dynamic-import bundling constraint for `--use` plugins);
 `npm view @adhd/apigen-plugin-py-flask`/`@adhd/apigen-plugin-py-grpc` → both 404]
+
+### BUG-APIGEN-039 (Open, filed not fixed, low-severity, follow-up to BUG-APIGEN-034) — `opMatchesExportMode()`'s "known residual limitation" now also covers anonymous default exports (Shape 4 anon sub-case + Shape 5), not just named default functions
+
+**Discovered:** 2026-07-20, while fixing BUG-APIGEN-033 (anonymous default-export dispatch
+crash) in the same session/branch. BUG-APIGEN-034's CHANGELOG entry already documents, as an
+explicitly-accepted "known residual limitation," that `opMatchesExportMode()`
+(`orchestrator.ts:342-349`) can't distinguish Shape 4's *named* default function
+(`export default function foo(){}`, `op.path = [file, 'foo']`) from a plain named export under
+`--export named` mode, since both produce an identical 2-segment `[file, name]` path — and
+notes this was deliberately left unresolved because "extract.ts was being concurrently edited
+by another fix in the same branch" (this fix, BUG-APIGEN-033).
+
+**What changed:** BUG-APIGEN-033's fix renames Shape 5 (anonymous arrow/FunctionExpression
+default export) and Shape 4's anonymous function-declaration sub-case from a filename-derived
+synthetic leaf name (1 path segment, e.g. `[anonymous_default_default]`) to the literal
+`'default'` under a `[fileSegment, 'default']` 2-segment path (`extract.ts`, `buildActionOp`
+call sites for both shapes) — required so the op name matches `buildFnTable()`'s runtime
+`.name`-derived key (see BUG-APIGEN-033's CHANGELOG entry for why). This moves BOTH anonymous
+shapes into the SAME 2-segment `[file, name]` bucket `opMatchesExportMode()` already can't
+disambiguate from a plain named export.
+
+**Net effect on `opMatchesExportMode()`:** before this fix, both anonymous shapes had a
+1-segment path, so they matched NEITHER `'named'` (`path.length === 2`) NOR `'default'`
+(`path.length === 3 && path[1].raw === 'default'`) — silently excluded from BOTH `--export
+named` and `--export default`. After this fix, they now match `'named'` (a false positive: an
+anonymous default export served under `--export named`) but still don't match `'default'` (a
+false negative: still not served under `--export default`, where a caller would actually expect
+it). Neither the before nor after state is correct, but this is the identical class of gap
+BUG-APIGEN-034 already accepted for Shape 4's named case — not a new kind of bug, just a wider
+blast radius for the same one.
+
+**Suggested fix:** add the explicit export-shape discriminator BUG-APIGEN-034's CHANGELOG entry
+already proposes deferring to (a field on `Operation`, e.g. `exportShape: 'named' | 'default-fn'
+| 'default-object' | 'cjs'`, set once in `extract.ts` at the same call sites already
+disambiguating these shapes) so `opMatchesExportMode()` stops inferring shape from `path.length`
+entirely. Out of scope here — this is a shared-descriptor schema change spanning `extract.ts`,
+`orchestrator.ts`, and any downstream consumer of `Operation.path`, not a one-file fix, and
+BUG-APIGEN-034 already correctly identified it as its own follow-up.
+
+**Status:** OPEN, low-severity (only reachable via explicit `--export named`/`--export default`
+against a source using either anonymous-default shape — `generate`/`run` without `--export`,
+and both `registry` commands where `exportMode` is never set, apply no scoping and are
+unaffected).
+
+Citations: [self-verified 2026-07-20: `entrypoint/apigen-cli/src/lib/orchestrator.ts:342-349`
+(`opMatchesExportMode()`); `entrypoint/apigen-cli/CHANGELOG.md` BUG-APIGEN-034 entry, "Known
+residual limitation" paragraph (pre-existing, same class of gap for Shape 4's named case);
+`packages/apigen/apigen-core-client/src/lib/extract.ts` Shape 5 + Shape 4 anonymous
+sub-case (this session's BUG-APIGEN-033 fix, `buildActionOp` calls with `'default'`)]
 
