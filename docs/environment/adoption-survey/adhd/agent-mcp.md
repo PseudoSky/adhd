@@ -193,24 +193,24 @@ The provider-credential env vars (`ADHD_AGENT_OPENAI_SECRET`, etc.) are guarded 
 
 > **Terminology, because "build" misleads:** in `@adhd/environment`, `at:'build'` means *resolved once at `Environment` construction (process start), then frozen* — **not** compile/bundle time. Deploy-time env vars ARE honored under `build` (construction runs after the process boots). `at:'runtime'` differs only by *re-reading live `process.env` on every access* (ARCHITECTURE.md §"Runtime-vs-build proof"; `environment-base-spec/src/index.ts:127`). The test for `runtime` is a real read site that (a) executes more than once per process AND (b) must observe an env change made *after* construction.
 
-The shipped `config.ts` declares **no `at:` on any field**, so all default to `at:'build'`. Independently applying the rule (not transcribing source) confirms this is **correct**, field by field:
+The shipped `config.ts` declares **no `at:` on any field**, so all default to `at:'build'` (resolved once at the module-level `env` construction — config.ts:249 — which runs at *import*, well before `main()`). Applying the rule against the **actual read sites** (traced, not transcribed) shows this default is **not uniformly correct** — the `plugins.*` fields are mis-defaulted:
 
-| Field | Read site | Re-read after boot? | Correct `at:` |
+| Field | Read site(s) | Read >once / user-supplied? | Correct `at:` |
 |---|---|---|---|
 | `transport.kind`, `transport.port`, `sse.*` | `index.ts` server bootstrap, once | no | `build` ✓ |
 | `db.path`, `server.registryDbPath` | DB connection open, once | no | `build` ✓ |
-| `queue.concurrency`, `server.max*`, `server.defaultMaxTokens`, `server.contextLimit` | `toEngineConfig()` at startup | no | `build` ✓ |
-| `server.allowedAgents` | allowlist check, evaluated from resolved config | no | `build` ✓ |
-| `plugins.configPath`, **`plugins.entries`** | **`index.ts:149` `loadExternalPlugins(...)`, exactly once at boot** | no (plugins are not hot-reloaded) | `build` ✓ |
+| `queue.concurrency`, `server.max*`, `server.defaultMaxTokens`, `server.contextLimit` | `toEngineConfig()` / bootstrap | echoed per-request but fixed-by-nature | `build` ✓ |
+| `server.allowedAgents` | allowlist check from resolved config | no | `build` ✓ |
+| **`plugins.configPath`, `plugins.entries`** | **`index.ts:149` (load) + EVERY `toEngineConfig()`: index.ts:223, server.ts:392/548/570/653** | **yes — read repeatedly across the process; user-supplied extensibility knob** | **`runtime`** (shipped: unset → `build`) — **latent misclassification** |
 | `logging.level` | `logger.ts` at logger construction | no (Pino level fixed at construction today) | `build` ✓ (see note) |
 
-**`ADHD_AGENT_PLUGINS` specifically:** correctly `build`. It is read once at `index.ts:149` to load external plugins at startup; there is no code path that re-reads it, and the loaded plugin set is not mutated live. A deploy-time value is fully honored (construction happens after boot). Marking it `at:'runtime'` would change nothing observable — no consumer re-reads it.
+**`ADHD_AGENT_PLUGINS` specifically — corrected.** This is a **user-facing, run-time plugin-selection knob**, not a package-build constant. It is read at `index.ts:149` to load external plugins *and* re-read on every `toEngineConfig()` invocation (`index.ts:223`, `server.ts:392/548/570/653`) — i.e. repeatedly over the process lifetime. The shipped spec omits `at:`, so it defaults to `at:'build'`, which **freezes the value at module import** (config.ts:249) even though later reads occur throughout the run. Functionally this is currently benign (plugins are loaded once at `main()`; the per-request echoes into `EngineConfig` are inert today), so it is not a live user-visible bug — **but the classification is wrong**: a repeatedly-read, user-supplied value should be `at:'runtime'`, not frozen at import. The correct spec adds `at: 'runtime'` to both `plugins.configPath` and `plugins.entries`. (My earlier "read exactly once, `build` is harmless" claim was factually wrong — the value is read at 5+ sites; see ENV-ADOPT-QUALITY-001.)
 
-**The one honest nuance:** `logging.level` is the only field where a *runtime* variant would be meaningful — a long-running server could want to change log verbosity without restart. Today the Pino logger fixes its level at construction (no live re-read), so `build` matches the actual code. If a future feature adds live log-level toggling, that field (and only that one) would move to `at:'runtime'`. This is a latent enhancement, not a current defect — filed as friction item 5 below.
+**`logging.level` nuance:** the only *other* field where a runtime variant would matter — a long-running server changing verbosity without restart. Today Pino fixes its level at construction (no live re-read), so `build` matches the code. A future live-toggle would move it to `at:'runtime'`. Latent enhancement, friction item 5 below.
 
 **Provider secrets are already effectively runtime, and correctly so:** `ADHD_AGENT_*_SECRET` are resolved via `env.resolveEnvName()` on **each** `getProviderConfig()` call (config.ts:205–228), i.e. live-resolved per invocation — the `secret:true` semantics — rather than frozen config fields. This is the right model for rotating credentials and is why they are deliberately outside the `config` block.
 
-**Verdict:** for agent-mcp, `at:'build'`-everything is not an unexamined default — it is the correct classification given the read sites. The only reclassification the code could ever warrant is `logging.level → at:'runtime'`, and only after live-toggle support is added.
+**Verdict (corrected):** agent-mcp is *not* a clean "no gaps, full adoption" reference on the `at:` axis. Two fields (`plugins.configPath`, `plugins.entries`) are latently mis-classified as `build` (via the omitted default) despite being user-supplied and read repeatedly; they should be `at:'runtime'`. Currently benign, but it is a real spec defect in the reference consumer — tracked under ENV-ADOPT-QUALITY-001, and a candidate fix to `entrypoint/agent-mcp/src/config.ts`.
 
 ---
 

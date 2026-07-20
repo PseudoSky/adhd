@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-plugin-api-fastify",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "main": "./index.js",
   "dependencies": {
     "fastify": "^4.0.0",

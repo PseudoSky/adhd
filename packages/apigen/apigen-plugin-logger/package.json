@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-plugin-logger",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "main": "./index.js",
   "dependencies": {
     "pino": "10.3.1",
