@@ -1,9 +1,10 @@
 #!/usr/bin/env sh
 #
 # Pre-commit hook. Two gates, in order:
-#   1. secret-scan  — blocks credentials from entering the repo (gitleaks + built-in rules)
-#   2. affected lint — runs `nx affected lint --fix` on the projects touched by staged
-#      changes, then re-stages what the fix rewrote (derives deps, blocks on unfixable errors)
+#   1. secret-scan — blocks credentials from entering the repo (gitleaks + built-in rules)
+#   2. affected lint (VERIFY ONLY) — runs `nx affected -t lint` (no --fix) on the
+#      projects touched by staged changes and BLOCKS on any error. It never
+#      mutates or re-stages a file.
 #
 # Secrets are checked FIRST and are cheap: a leaked credential is unrecoverable
 # once pushed (rotation, not reversion, is the fix), whereas a lint error is not.
@@ -13,6 +14,48 @@
 # script on `npm install`, or manually: `git config core.hooksPath .githooks`).
 #
 # Bypass for an emergency commit: `git commit --no-verify`  (use sparingly).
+#
+# ── WHY GATE 2 NO LONGER RUNS --fix (history — do not reintroduce it) ──────
+# This hook used to run `nx affected -t lint --fix --skip-nx-cache` and then
+# `git add` back whatever the fix touched, on the theory that
+# @nx/dependency-checks' auto-fix (deriving package.json deps from actual
+# imports) was safe to apply silently on every commit. Two confirmed
+# incidents proved that model actively dangerous and it was removed:
+#
+#   BUG-REPO-PRECOMMIT-PARTIAL-STAGE-001 — an agent used `git apply --cached`
+#   to stage only 4 of 7 hunks in a shared file (leaving another agent's 3
+#   WIP hunks deliberately unstaged), then committed with the repo's own
+#   explicit-pathspec convention (`git commit -- <paths>`). This hook's
+#   auto-fix ran `eslint --fix` against the WORKING-TREE copy (all 7 hunks,
+#   since only the index was partial) and then blindly `git add`'d the file
+#   WHOLESALE, silently overwriting the deliberately-partial index — the
+#   resulting commit shipped another agent's untested WIP under the wrong
+#   message. `git commit -- <paths>` alone does NOT protect against this:
+#   the hook re-stages *after* the pathspec commit builds its index.
+#
+#   BUG-REPO-PRECOMMIT-DEPCHECK-STRIPS-USED-DEPS-001 — @nx/dependency-checks
+#   in this repo resolves each npm dependency via Nx's yarn-lockfile parser
+#   (`yarn.lock` shadows `pnpm-lock.yaml` — see detectPackageManager() in
+#   nx/src/utils/package-manager.js, which checks yarn.lock first), which in
+#   turn resolves the "canonical" version of every dependency NOT declared
+#   at the monorepo root by reading `<workspaceRoot>/node_modules/<pkg>/
+#   package.json` straight off disk. A freshly created git worktree (git
+#   does not copy/install node_modules) has none of that installed, so this
+#   lookup silently fails for nearly every project-level dependency — and
+#   `--fix` deleted real, fully-static, genuinely-used deps (`fs-extra`,
+#   `source-map`, `tough-cookie`, `ajv`, `yaml`) from real package.json
+#   files as a result. `git commit -- <paths>` does not protect against
+#   this either, since the corruption happens to package.json BEFORE the
+#   commit is made, not to the git index.
+#
+# Both incidents share the same shape: a step that MUTATES tracked files
+# and then STAGES what it mutated, running inside the commit path, where
+# neither pathspec commits nor careful manual staging can see it coming.
+# The fix is structural, not "run it more carefully": mutation and staging
+# no longer happen here at all. Gate 2 only ever READS and REPORTS. Fixing
+# dependency drift is now an explicit, standalone, discoverable command —
+# see below — run deliberately, outside the commit path, by a human or
+# agent who can see and review the diff before it's staged.
 
 # Staged files (Added/Copied/Modified/Renamed), NUL-safe join into a comma list.
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
@@ -34,44 +77,39 @@ fi
 echo "pre-commit: scanning staged changes for secrets…"
 node "$scanner" --staged || exit 1
 
-# ── Gate 2: lint (auto-fix + re-stage) ───────────────────────────────────────
-# Runs `nx affected -t lint --fix` so fixable issues are corrected automatically —
-# notably @nx/dependency-checks, which DERIVES each package.json's deps from its
-# actual imports (no hand-maintained dep lists). Whatever the fix rewrites is then
-# re-staged so it lands in THIS commit. Files that already had unstaged edits before
-# the hook ran are left untouched. Any unfixable lint error still blocks the commit.
-echo "pre-commit: running 'nx affected -t lint --fix' on staged changes…"
-# Snapshot worktree-dirty files BEFORE the fix. Temp files (not process
-# substitution) keep this POSIX-sh compatible — git runs hooks under `sh`.
-dirty_before=$(mktemp)
-git diff --name-only | sort -u > "$dirty_before"
+# ── Gate 2: lint (VERIFY ONLY — never --fix, never re-stages) ───────────────
+repo_root=$(cd "$hook_dir/.." && pwd)
 
-# --skip-nx-cache is REQUIRED: `eslint --fix` mutates source files as a side effect,
-# which nx does not track as a cacheable output. On a cache hit nx replays the pass/fail
-# but never re-applies the fix, so a repeated break would slip through. Force it to run.
-npx nx affected --target=lint --fix --files="$files" --skip-nx-cache
-status=$?
-
-# Re-stage files the autofix changed, excluding ones already dirty beforehand.
-dirty_after=$(mktemp)
-git diff --name-only | sort -u > "$dirty_after"
-restage=$(comm -13 "$dirty_before" "$dirty_after")
-rm -f "$dirty_before" "$dirty_after"
-if [ -n "$restage" ]; then
-  echo "pre-commit: auto-fixed and re-staging:"
-  printf '%s\n' "$restage" | while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    printf '  + %s\n' "$f"
-    git add -- "$f"
-  done
+# If this workspace root's node_modules was never really installed (e.g. a
+# fresh git worktree — git does not copy node_modules), @nx/dependency-checks
+# will misreport nearly every dependency as unused (BUG-REPO-PRECOMMIT-
+# DEPCHECK-STRIPS-USED-DEPS-001). Fail with the RIGHT message instead of
+# letting confusing false-positive lint errors surface here.
+if [ ! -f "$repo_root/node_modules/.yarn-state.yml" ] || [ ! -f "$repo_root/node_modules/nx/package.json" ]; then
+  echo "✖ pre-commit: node_modules in this workspace root is not a real"
+  echo "  package-manager install (missing node_modules/.yarn-state.yml"
+  echo "  and/or node_modules/nx). Lint would misreport dependencies."
+  echo "  Fix: run 'corepack yarn install' in this workspace root, then commit again."
+  exit 1
 fi
+
+echo "pre-commit: running 'nx affected -t lint' (check only) on staged changes…"
+npx nx affected --target=lint --files="$files"
+status=$?
 
 if [ "$status" -ne 0 ]; then
   echo ""
-  echo "✖ pre-commit: affected lint failed (unfixable errors above) — fix and re-commit."
+  echo "✖ pre-commit: affected lint failed — fix and re-commit."
+  echo "  If the errors are @nx/dependency-checks (missing/obsolete"
+  echo "  package.json dependencies), the one-command fix is:"
+  echo "    npx nx affected -t sync-deps --files=\"$files\""
+  echo "  (or for one project: npx nx run <project>:sync-deps)"
+  echo "  Review the diff it produces, stage it yourself, then commit."
+  echo "  For other lint errors: npx nx affected -t lint --fix --files=\"$files\","
+  echo "  review the diff, stage it yourself, then commit."
   echo "  (bypass in an emergency with: git commit --no-verify)"
   exit 1
 fi
 
-echo "✓ pre-commit: affected lint clean (deps auto-derived)."
+echo "✓ pre-commit: affected lint clean."
 exit 0

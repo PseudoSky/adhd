@@ -163,8 +163,9 @@ Refer to these established packages when building new features. **Verify with `n
 
 - **List Projects:** `npx nx list`
 - **Build Project:** `npx nx build <project-name>`
-- **Run Tests:** `npx nx test <project-name>`
-- **Linting:** `npx nx lint <project-name>`
+- **Run Tests:** `npx nx affected -t test` when the package has dependents — targeted `npx nx test <project>` exercises only that project and silently misses downstream consumers (`DEBT-PROCESS-AFFECTED-TEST-001`). `nx test <project>` is safe only for a leaf with zero dependents.
+- **Linting:** `npx nx lint <project-name>` — includes `@nx/dependency-checks` (check-only, never mutates). Repair dependency drift with `npx nx run <project>:sync-deps` (or `npx nx affected -t sync-deps`) — the explicit, standalone replacement for the removed pre-commit `--fix`/auto-restage. **Never run dependency-checks in a workspace root without an installed `node_modules`** (e.g. a fresh `git worktree`): it misreports used deps as unused and strips them (`BUG-REPO-PRECOMMIT-DEPCHECK-STRIPS-USED-DEPS-001`) — run `corepack yarn install` there first.
+- **Verify a build actually loads:** `npx nx run <project>:verify-dist-load` (`npx nx affected -t verify-dist-load`) builds then `require()`/`import()`s the real `dist/` entry the way a consumer does. A green `nx test` resolves to source and never loads the production bundle, so it can pass while the shipped artifact throws on load.
 - **Graph Visualization:** `npx nx graph` (Use this to verify dependency flow).
 
 ### Build & Type-Checking — NEVER run `tsc` directly
