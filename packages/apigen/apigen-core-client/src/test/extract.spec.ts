@@ -12,7 +12,7 @@
 // produces no matching operation (verifying id/symbol correctness).
 
 import path from 'node:path';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { extract } from '../lib/extract';
 
 const fixture = (name: string) => path.resolve(__dirname, 'fixtures', name);
@@ -586,5 +586,59 @@ describe('[BUG-APIGEN-018] parameter default values', () => {
     const props = (op?.input as { properties?: Record<string, unknown> })
       ?.properties as Record<string, Record<string, unknown>> | undefined;
     expect(props?.['query']).not.toHaveProperty('default');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-CORE-004: isSerializableType()'s textual allow-list didn't
+// recognise `Record<K, V>` (or other generic utility-type wrappers), so a
+// legitimately serialisable const like `Record<string, number>` was silently
+// skipped ('[apigen-core] Skipping non-callable, non-serializable export: …')
+// instead of being extracted as kind:'query'. Fixed by replacing the
+// text-pattern heuristic with structural `Type` inspection (index signatures,
+// properties, call signatures) in extract.ts's isSerializableType().
+// ---------------------------------------------------------------------------
+
+describe('[BUG-APIGEN-CORE-004] Record<K,V> and other generic-wrapper serializable consts', () => {
+  it('Record<string, number> extracts as kind:"query" instead of being skipped', async () => {
+    const ops = await extract({
+      sourceFile: fixture('extract-serializable-generics.ts'),
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'SCOPE_WEIGHTS');
+    expect(op).toBeDefined();
+    expect(op?.kind).toBe('query');
+  });
+
+  it('Record<string, Interface> (index value is a plain data interface) extracts as kind:"query"', async () => {
+    const ops = await extract({
+      sourceFile: fixture('extract-serializable-generics.ts'),
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'SUPPORTED_SHAPES');
+    expect(op).toBeDefined();
+    expect(op?.kind).toBe('query');
+  });
+
+  it('Partial<T> around a serialisable shape extracts as kind:"query"', async () => {
+    const ops = await extract({
+      sourceFile: fixture('extract-serializable-generics.ts'),
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'PARTIAL_SHAPE');
+    expect(op).toBeDefined();
+    expect(op?.kind).toBe('query');
+  });
+
+  it('[negative control] Map<K,V> is still correctly excluded — it is a generic wrapper but genuinely not JSON-serialisable', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(vi.fn());
+    const ops = await extract({
+      sourceFile: fixture('extract-serializable-generics.ts'),
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'NOT_SERIALIZABLE_MAP');
+    expect(op).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Skipping non-callable, non-serializable export: NOT_SERIALIZABLE_MAP'
+      )
+    );
+    warnSpy.mockRestore();
   });
 });
