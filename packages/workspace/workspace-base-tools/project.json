@@ -45,7 +45,8 @@
       },
       "dependsOn": [
         "build",
-        "test"
+        "test",
+        "verify-dist-load"
       ]
     },
     "test": {

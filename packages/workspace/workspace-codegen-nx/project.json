@@ -38,7 +38,8 @@
     "nx-release-publish": {
       "dependsOn": [
         "build",
-        "test"
+        "test",
+        "verify-dist-load"
       ],
       "options": {
         "packageRoot": "dist/{projectRoot}"

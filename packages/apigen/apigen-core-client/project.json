@@ -43,7 +43,7 @@
       "options": {
         "packageRoot": "dist/{projectRoot}"
       },
-      "dependsOn": ["build", "test"]
+      "dependsOn": ["build", "test", "verify-dist-load"]
     }
   }
 }
