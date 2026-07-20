@@ -197,6 +197,123 @@ describe('[plugin-mcp.5] no inline dispatch logic in generate output', () => {
   });
 });
 
+// ---------- [plugin-mcp.7] BUG-APIGEN-017/018/019/020 — generated server.ts wiring ----------
+
+describe('[plugin-mcp.7] generated server.ts — MCP schema-hardening wiring', () => {
+  it('BUG-APIGEN-019: stdio/sse/streaming-http server.ts all import and call buildMcpOutputSchema + wrapMcpStructuredContent', () => {
+    for (const transport of ['stdio', 'sse', 'streaming-http'] as const) {
+      const out = generate({ ...baseInput, options: { transport } });
+      const server = out.files.find((f) => f.path === 'server.ts');
+      expect(server).toBeDefined();
+      if (!server) throw new Error('Expected server.ts');
+      expect(server.content).toContain('buildMcpOutputSchema');
+      expect(server.content).toContain('wrapMcpStructuredContent');
+      expect(server.content).toContain("from '@adhd/apigen-engine-runtime'");
+      // Wired into both the tools/list outputSchema field and the tools/call
+      // structuredContent field, not just imported-and-unused.
+      expect(server.content).toContain('outputSchema');
+      expect(server.content).toContain('structuredContent');
+    }
+  });
+
+  it('BUG-APIGEN-017: generated index.ts preserves additionalProperties:false on a fixture schema', () => {
+    const restrictiveSchema = {
+      getUser: {
+        input: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: { userId: { type: 'string' } },
+              required: ['userId'],
+              additionalProperties: false,
+            },
+          },
+          required: ['data'],
+          additionalProperties: false,
+        },
+        output: { type: 'object' },
+      },
+    };
+    const out = generate({
+      ...baseInput,
+      packages: [
+        { id: 'test-pkg', schemas: restrictiveSchema, importPath: '@test/test-pkg' },
+      ],
+    });
+    const idx = out.files.find((f) => f.path === 'index.ts');
+    expect(idx).toBeDefined();
+    if (!idx) throw new Error('Expected index.ts');
+    // JSON.stringify(fnSchema) bakes the schema verbatim — additionalProperties:false
+    // must survive generate() unmodified (it is not stripped or overridden).
+    expect(idx.content).toContain('"additionalProperties":false');
+  });
+
+  it('BUG-APIGEN-018 (mcp): generated tool description surfaces a per-param default value note', () => {
+    const schemaWithDefault = {
+      search: {
+        input: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: {
+                strategy: {
+                  type: 'string',
+                  default: 'auto',
+                  description: '(default: auto)',
+                },
+              },
+              required: [],
+            },
+          },
+          required: ['data'],
+        },
+        output: { type: 'object' },
+      },
+    };
+    const out = generate({
+      ...baseInput,
+      packages: [
+        { id: 'test-pkg', schemas: schemaWithDefault, importPath: '@test/test-pkg' },
+      ],
+    });
+    const idx = out.files.find((f) => f.path === 'index.ts');
+    expect(idx).toBeDefined();
+    if (!idx) throw new Error('Expected index.ts');
+    // The per-param default note lives on the nested property schema and must
+    // survive generate() unmodified — it's baked into the schema JSON.
+    expect(idx.content).toContain('default: auto');
+  });
+
+  it('BUG-APIGEN-020: generated tool description includes the envelope calling-convention note', () => {
+    const schemaWithEnvelopeDoc = {
+      search: {
+        input: {
+          type: 'object',
+          properties: { data: { type: 'object', properties: {}, required: [] } },
+          required: ['data'],
+          description:
+            'apigen calling convention: all domain parameters go inside a "data" envelope.',
+        },
+        output: { type: 'object' },
+      },
+    };
+    const out = generate({
+      ...baseInput,
+      packages: [
+        { id: 'test-pkg', schemas: schemaWithEnvelopeDoc, importPath: '@test/test-pkg' },
+      ],
+    });
+    const idx = out.files.find((f) => f.path === 'index.ts');
+    expect(idx).toBeDefined();
+    if (!idx) throw new Error('Expected index.ts');
+    expect(idx.content).toContain('description:');
+    expect(idx.content).toContain('data');
+    expect(idx.content).toContain('envelope');
+  });
+});
+
 // ---------- [v2-proj-transport] MCP envelope binding in generated server.ts ----------
 
 describe('[v2-proj-transport] §9.1 MCP envelope binding in generated server.ts', () => {
