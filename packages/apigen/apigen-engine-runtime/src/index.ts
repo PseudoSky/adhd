@@ -25,6 +25,7 @@ export { createLogger } from './lib/logger';
 export type { Logger, LogFormat, CreateLoggerOptions } from './lib/logger';
 export { describeParams } from './lib/describe-params';
 export type { ParamInfo } from './lib/describe-params';
+export { coerceQueryParams } from './lib/coerce-query';
 export { buildFnTable } from './lib/fn-table';
 export type { AnyFn } from './lib/fn-table';
 export {
