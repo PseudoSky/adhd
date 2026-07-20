@@ -6,6 +6,77 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **BUG-APIGEN-034** — `--export <mode>` silently stopped scoping the served/generated
+  route surface post-v1-retirement, an undocumented behavior change on an existing
+  public CLI flag. Pre-diff, Step 5 of `buildDescriptor()` called v1's
+  `generateSchemas({ exportMode })`, so the actual schema/route surface served was
+  correctly scoped to the requested export shape. Post-diff, Step 5 derived directly
+  from the unscoped `operations` array, so the FULL export matrix was published as
+  routes/schemas regardless of `--export` — e.g. a source file with private
+  named-export helpers alongside an intentionally `--export default`-scoped public
+  object would leak the private helpers as served routes.
+
+  **Decision: restore the scoping** (`orchestrator.ts`) rather than deprecate the flag.
+  Since v2's `extract()` walks the full export-shape matrix in one unconditional pass
+  (unlike v1's three mutually-exclusive extractors), there's no way to re-run "only
+  this shape" extraction — instead, `opMatchesExportMode()` (new, `orchestrator.ts`)
+  reclassifies each already-extracted `Operation` by its `path` shape (`path.length`
+  and whether `path[1].raw === 'default'`/a named-object name) and `buildDescriptor()`'s
+  Step 5 filters on it per source, before composing `packageSchemas`
+  (`orchestrator.ts:484-492`). Scoping applies ONLY to what's served —
+  `descriptor.operations` (collision-check, `--use` mount plugins via
+  `RunInput.operations`) stays fully unscoped, matching v1's own behavior where the
+  earlier collision-check step never respected `exportMode` either.
+
+  Known residual limitation (documented in `opMatchesExportMode()`'s doc comment,
+  not silently papered over): v2 shape 4's bare `export default function foo(){}`
+  form and v2 shape 6 (CJS `module.exports` properties) produce the identical
+  `[file, name]` path shape as a plain named export, and are therefore
+  indistinguishable from one under `'named'` mode without an explicit export-shape
+  discriminator on `Operation` — a schema change to the shared, host-agnostic
+  descriptor deliberately left out of scope for this fix (extract.ts was being
+  concurrently edited by another fix in the same branch). This is a strict superset
+  of v1's true `extractNamed` coverage, never a subset: v1 never supported CJS or a
+  bare default-fn-decl under ANY `--export` mode either (see extract.ts's shape 4/6
+  header comments), so nothing v1 used to serve goes missing under the restored
+  scoping.
+
+  6 new regression tests (`orchestrator.spec.ts`, `BUG-APIGEN-034` describe block):
+  `opMatchesExportMode()` unit tests for all three modes, plus real-pipeline
+  `buildDescriptor()` integration tests against a new fixture
+  (`export-mode-scoping.ts`, a private named helper alongside a
+  `--export default`-scoped object) proving `--export default` includes only the
+  default object's properties, omitted `--export` (named mode) includes only the
+  named helper, and an absent `exportMode` (the `generate-registry`/`run-registry`
+  path) applies no scoping at all — unaffected by this fix.
+
+- **BUG-APIGEN-035** — `buildDescriptor()`'s namespace-keyed `groups` Map (Step 5)
+  used plain `Map.set()`, silently last-source-wins on a namespace collision across
+  sources — no error, no warning, and undocumented as a caller invariant on
+  `SourceEntry`/`OrchestratorOptions`. Not reachable today (registry namespaces come
+  from a single `fs.readdirSync`, inherently unique; `generate`/`run` only ever pass
+  one source), but a latent trap for any future multi-source caller (e.g. the SPEC
+  §13 polyglot-host `serve` extension). Fixed by throwing a clear
+  `duplicate namespace "<ns>" — ...` error in `buildDescriptor()`
+  (`orchestrator.ts:465-482`) the moment a second source resolves to an
+  already-seeded namespace, mirroring the pre-existing duplicate-namespace guard in
+  `serve.ts`'s `resolveHosts()` (`serve.ts:164-171`) for consistency across the CLI.
+
+  2 new regression tests (`orchestrator.spec.ts`, `BUG-APIGEN-035` describe block):
+  a synthetic two-source scenario with a deliberate namespace collision now throws
+  `/duplicate namespace "dup"/` instead of silently dropping one source's operations,
+  plus a negative control proving distinct namespaces still merge cleanly.
+
+  Related, separate ordering nitpick fixed in the same pass:
+  `run-registry.ts` registered its `SIGINT`/`SIGTERM` handlers BEFORE the
+  `sources.length === 0` early-return, so on the "nothing to run" path they were
+  registered for a run that never started (harmless, but inconsistent with
+  `generate-registry.ts`'s equivalent check, which has no such handlers to begin
+  with). Reordered so the early-return happens first.
+
+  `npx vitest run --root entrypoint/apigen-cli`: 17 files, 147/147 passed — zero
+  regressions.
+
 - **BUG-APIGEN-024** — `--use openapi` mount produced an empty OpenAPI doc (`paths: {}`)
   on live `run`, even though the underlying operations were correctly extracted and
   served. Root cause: `collectMountRoutes()` — identical in both HTTP transports

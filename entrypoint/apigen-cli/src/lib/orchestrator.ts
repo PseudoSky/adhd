@@ -57,17 +57,20 @@ export interface SourceEntry {
   /** Absolute path to the source file. */
   file: string;
   /**
-   * Export mode for this source.
-   *
-   * BUG-APIGEN-CORE-00X (v1 retirement): the v2 `extract()` walks the FULL
-   * export-shape matrix (named, default, named-object, CJS — see extract.ts's
-   * header comment) unconditionally in a single pass; unlike v1's three
+   * Export mode for this source — scopes which of the fully-extracted
+   * operations are actually composed into `packageSchemas` / served
+   * (BUG-APIGEN-034 fix). v2's `extract()` walks the FULL export-shape
+   * matrix (named, default, named-object, CJS — see extract.ts's header
+   * comment) unconditionally in a single pass, unlike v1's three
    * mutually-exclusive extractors (`extractNamed`/`extractDefault`/
-   * `extractNamedObject`), there is no v2 concept of "only extract this one
-   * shape". This field is therefore inert on the (now sole) orchestrator
-   * path — kept only so existing `--export <mode>` CLI invocations don't
-   * error. See BACKLOG.md for the follow-up decision (add v2 shape-scoping,
-   * or formally deprecate/remove `--export`).
+   * `extractNamedObject`); `buildDescriptor()`'s Step 5 restores the same
+   * effective scoping by reclassifying each `Operation` by its `path` shape
+   * (see `opMatchesExportMode()`) rather than by re-running a separate
+   * extraction pass. Does NOT affect `descriptor.operations` (collision
+   * check, `--use` mount plugins) — only the served surface — matching v1's
+   * own behaviour where the collision-check step never respected
+   * `exportMode` either. Omitted → no scoping (all extracted operations are
+   * served); this is what `generate-registry`/`run-registry` rely on today.
    */
   exportMode?: ExportMode;
   /**
@@ -302,6 +305,50 @@ export function mergeOperations(perSourceOps: Operation[][]): Operation[] {
 }
 
 /**
+ * BUG-APIGEN-034: restores v1's `--export <mode>` scoping of the SERVED
+ * surface. v1 ran exactly one of three mutually-exclusive extractors
+ * (`extractNamed`/`extractDefault`/`extractNamedObject`) per `exportMode`;
+ * v2's `extract()` walks the full export-shape matrix unconditionally (see
+ * extract.ts's header comment), so this reclassifies each already-extracted
+ * `Operation` by `path` shape and filters Step 5's schema composition only —
+ * `descriptor.operations` (collision-check, `--use` mount plugins) stays
+ * unscoped, matching pre-v1-retirement behaviour (the old collision-check
+ * step never respected `exportMode` either — only what actually got SERVED
+ * did).
+ *
+ * Path-shape correspondence (extract.ts's six-shape matrix):
+ *   - `'named'`       → `path.length === 2` (shapes 1/2: a plain named
+ *     function/const export). This shape is also produced by shape 6 (a CJS
+ *     `module.exports` property) and shape 4's bare
+ *     `export default function foo(){}` form — neither is distinguishable
+ *     from a plain named export via `path` alone, since `Operation` carries
+ *     no export-shape discriminator (that would require extending
+ *     `extract()`/`Operation` itself — out of scope here, filed as a
+ *     follow-up). v1 never supported CJS sources or a bare default-fn-decl
+ *     under ANY `--export` mode (see extract.ts's shape 4/6 comments), so
+ *     folding them into `'named'` is a strict superset of v1's true
+ *     `extractNamed` coverage, never a subset: nothing v1 used to serve
+ *     under `--export` (omitted) goes missing here.
+ *   - `'default'`     → `path.length === 3 && path[1].raw === 'default'`
+ *     (shape 4's default-OBJECT branch only, e.g. `export default { a, b }`).
+ *     v1's `extractDefault` covered EXCLUSIVELY this object-literal
+ *     default-export form — never a bare `export default function foo(){}`
+ *     (shape 4's fn-decl branch) or an anonymous default fn (shape 5), both
+ *     new in v2 with no v1 predecessor — so excluding them here matches v1's
+ *     actual historical coverage exactly.
+ *   - `'named-object'` → `path.length === 3 && path[1].raw === mode.name`
+ *     (shape 3: `export const <mode.name> = { ... }`).
+ */
+export function opMatchesExportMode(op: Operation, mode: ExportMode): boolean {
+  if (mode.type === 'named') return op.path.length === 2;
+  if (mode.type === 'default') {
+    return op.path.length === 3 && op.path[1]?.raw === 'default';
+  }
+  // 'named-object'
+  return op.path.length === 3 && op.path[1]?.raw === mode.name;
+}
+
+/**
  * Build the unified `OrchestratorDescriptor` from a set of source entries.
  *
  * Steps:
@@ -312,7 +359,8 @@ export function mergeOperations(perSourceOps: Operation[][]): Operation[] {
  *   5. Derive per-source `ComposedSchemas` (the plugin-facing surface every
  *      `OutputPlugin.generate()`/`run()` actually dispatches against) FROM
  *      the operations already extracted in step 2 — see the note on Step 5
- *      below for why this must not re-extract.
+ *      below for why this must not re-extract. Scoped per-source by
+ *      `SourceEntry.exportMode` (BUG-APIGEN-034) via `opMatchesExportMode()`.
  *
  * @param opts - Orchestrator options.
  */
@@ -393,20 +441,43 @@ export async function buildDescriptor(
       }
     >();
 
-    // Seed one group per source (in source order — later sources sharing a
-    // namespace with an earlier one win, matching the pre-fix Map.set()
-    // overwrite semantics for `importPath`).
+    // Seed one group per source (in source order). See the BUG-APIGEN-035
+    // guard immediately below: a namespace collision now throws rather than
+    // silently overwriting the earlier source's group.
     const groups = new Map<
       string,
-      { namespace: string; importPath: string; generated: GeneratedSchemas }
+      {
+        namespace: string;
+        importPath: string;
+        generated: GeneratedSchemas;
+        exportMode?: ExportMode;
+      }
     >();
+    // BUG-APIGEN-035: a namespace collision across sources would otherwise
+    // silently last-source-wins via plain `Map.set()` — one source's
+    // operations vanish from `packageSchemas` with no error, no warning.
+    // Not currently reachable (registry namespaces come from a single
+    // `fs.readdirSync`, inherently unique; `generate`/`run` only ever pass
+    // one source — BACKLOG BUG-APIGEN-035), but undocumented as a caller
+    // invariant. Guard explicitly, mirroring `serve.ts`'s existing
+    // duplicate-namespace check (`resolveHosts()`, serve.ts:164-171) for
+    // consistency across the CLI.
     for (let i = 0; i < sources.length; i++) {
       const entry = sources[i];
       const namespace = perSource[i].namespace;
+      if (groups.has(namespace)) {
+        throw new Error(
+          `apigen-orchestrator: duplicate namespace "${namespace}" — two sources ` +
+            `resolve to the same namespace; the second source's operations would ` +
+            `silently overwrite the first's in packageSchemas. Give one source an ` +
+            `explicit, distinct \`namespace\` to disambiguate.`
+        );
+      }
       groups.set(namespace, {
         namespace,
         importPath: entry.importPath ?? entry.file,
         generated: { metadata: { namespace, phase: '' }, schemas: {} },
+        exportMode: entry.exportMode,
       });
     }
 
@@ -414,6 +485,11 @@ export async function buildDescriptor(
       if (op.kind !== 'action') continue;
       const group = groups.get(op.namespace.raw);
       if (!group) continue; // defensive — every op's namespace comes from a seeded source
+      // BUG-APIGEN-034: scope which ops actually get composed/served per the
+      // source's `--export <mode>` — see `opMatchesExportMode()` above.
+      if (group.exportMode && !opMatchesExportMode(op, group.exportMode)) {
+        continue;
+      }
       // The flat dispatch-table key: always the terminal path segment's raw
       // spelling — matches v1's `fn.name` for every shape (named, renamed,
       // re-exported, named-object property, default-object property, CJS
