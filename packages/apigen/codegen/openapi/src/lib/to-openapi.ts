@@ -140,8 +140,10 @@ export function toOpenApi(
       },
     }
 
-    // Derive params or request body from the input schema.
-    if (op.safe) {
+    // Derive params or request body from the PROJECTED verb (not op.safe),
+    // because FEAT-APIGEN-022 auto-hoists primitive/zero-param unsafe ops to
+    // GET — those must emit query-string parameters, not a requestBody.
+    if (verb === 'GET') {
       // GET: domain params as query-string parameters.
       apiOp.parameters = buildQueryParams(op.input)
     } else {

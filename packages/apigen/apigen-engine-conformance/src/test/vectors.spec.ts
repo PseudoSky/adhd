@@ -7,6 +7,7 @@
 // The runner (`runAllVectors`) is integration-tested end-to-end as a smoke check.
 
 import { describe, it, expect } from 'vitest';
+import { project } from '@adhd/apigen-engine-naming';
 
 import {
   // fixtures
@@ -22,6 +23,7 @@ import {
   // B. naming / collision
   OP_UNSAFE_ACTION,
   OP_SAFE_QUERY,
+  OP_COMPLEX_UNSAFE,
   OP_COLLISION_A,
   OP_COLLISION_B,
   OP_DISTINCT_A,
@@ -141,11 +143,12 @@ describe('A — Descriptor round-trip', () => {
 // ---------------------------------------------------------------------------
 
 describe('B — Naming & collision', () => {
-  // --- verb from safe ---
+  // --- verb from safe: FEAT-APIGEN-022 auto-hoists primitive/zero-param input to GET ---
 
-  it('[naming.verb.1] safe=false → HTTP verb is POST', () => {
-    const err = assertUnsafeIsPost(OP_UNSAFE_ACTION);
-    expect(err).toBeNull();
+  it('[naming.verb.1] safe=false + zero params (primitive-only) → HTTP verb is GET (auto-hoist)', () => {
+    // OP_UNSAFE_ACTION has empty input.properties → vacuously primitive → auto-hoisted to GET
+    const p = project(OP_UNSAFE_ACTION);
+    expect(p.http.verb).toBe('GET');
   });
 
   it('[naming.verb.2] safe=true → HTTP verb is GET', () => {
@@ -153,15 +156,28 @@ describe('B — Naming & collision', () => {
     expect(err).toBeNull();
   });
 
-  it('[naming.verb.NEGATIVE.1] safe=false does NOT produce GET (negative control)', () => {
-    // If safe=false and the test helper asserts POST, assertSafeIsGet should FAIL
-    const err = assertSafeIsGet(OP_UNSAFE_ACTION);
+  it('[naming.verb.POST.1] safe=false + complex (non-primitive) param → HTTP verb is POST', () => {
+    // OP_COMPLEX_UNSAFE has an array-typed param → not primitive-only → stays POST
+    const err = assertUnsafeIsPost(OP_COMPLEX_UNSAFE);
+    expect(err).toBeNull();
+  });
+
+  it('[naming.verb.NEGATIVE.1] safe=false + zero params does NOT produce POST (negative control)', () => {
+    // OP_UNSAFE_ACTION auto-hoists to GET, so assertUnsafeIsPost must FAIL
+    const err = assertUnsafeIsPost(OP_UNSAFE_ACTION);
     expect(err).not.toBeNull();
     expect(err).toMatch(/GET/);
   });
 
   it('[naming.verb.NEGATIVE.2] safe=true does NOT produce POST (negative control)', () => {
     const err = assertUnsafeIsPost(OP_SAFE_QUERY);
+    expect(err).not.toBeNull();
+    expect(err).toMatch(/POST/);
+  });
+
+  it('[naming.verb.POST.NEGATIVE.1] safe=false + complex param does NOT produce GET (negative control)', () => {
+    // OP_COMPLEX_UNSAFE stays POST, so assertSafeIsGet must FAIL
+    const err = assertSafeIsGet(OP_COMPLEX_UNSAFE);
     expect(err).not.toBeNull();
     expect(err).toMatch(/POST/);
   });

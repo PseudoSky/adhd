@@ -198,7 +198,10 @@ const segLogin = seg('login', ['login']);
 const segHumanize = seg('humanize', ['humanize']);
 const segHumanizeBytes = seg('humanizeBytes', ['humanize', 'bytes']);
 
-/** unsafe action (safe=false): POST /transform/humanize/humanize-bytes */
+/**
+ * unsafe action (safe=false) with ZERO domain params — auto-hoisted to GET
+ * by FEAT-APIGEN-022 (empty `properties: {}` is vacuously primitive-only).
+ */
 export const OP_UNSAFE_ACTION = makeOp({
   id: 'transform/humanize/humanize-bytes',
   namespace: nsTransform,
@@ -212,6 +215,24 @@ export const OP_SAFE_QUERY = makeOp({
   namespace: nsTransform,
   path: [segHumanize, segHumanizeBytes],
   safe: true,
+});
+
+/**
+ * unsafe action (safe=false) with a COMPLEX (non-primitive) param — stays POST
+ * because `isPrimitiveOnlyInputSchema` rejects `array`-typed properties.
+ */
+export const OP_COMPLEX_UNSAFE = makeOp({
+  id: 'transform/humanize/humanize-bytes-complex',
+  namespace: nsTransform,
+  path: [segHumanize, segHumanizeBytes],
+  safe: false,
+  input: {
+    type: 'object',
+    properties: {
+      payload: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['payload'],
+  },
 });
 
 /**
@@ -1013,13 +1034,14 @@ export function runAllVectors(): VectorResult[] {
 
   // ---- B. Naming / collision ----
 
-  // verb from safe
+  // verb from safe — primitive/zero-param input auto-hoists to GET (FEAT-APIGEN-022)
   {
-    const err = assertUnsafeIsPost(OP_UNSAFE_ACTION);
+    const p = project(OP_UNSAFE_ACTION);
+    const pass = p.http.verb === 'GET';
     results.push({
       id: 'naming.verb.1',
-      pass: err === null,
-      error: err ?? undefined,
+      pass,
+      error: pass ? undefined : `safe=false with primitive/zero input expected GET, got ${p.http.verb}`,
     });
   }
   {
@@ -1030,14 +1052,31 @@ export function runAllVectors(): VectorResult[] {
       error: err ?? undefined,
     });
   }
-  // negative: safe=false must NOT be GET
+  // verb from safe — complex (non-primitive) input stays POST
   {
-    const p = project(OP_UNSAFE_ACTION);
-    const pass = p.http.verb !== 'GET';
+    const err = assertUnsafeIsPost(OP_COMPLEX_UNSAFE);
+    results.push({
+      id: 'naming.verb.POST.1',
+      pass: err === null,
+      error: err ?? undefined,
+    });
+  }
+  // negative: safe=false + primitive/zero input must NOT be POST
+  {
+    const err = assertUnsafeIsPost(OP_UNSAFE_ACTION);
     results.push({
       id: 'naming.verb.NEGATIVE',
-      pass,
-      error: pass ? undefined : 'safe=false produced GET (should be POST)',
+      pass: err !== null,
+      error: err !== null ? undefined : 'safe=false with primitive/zero input should NOT be POST',
+    });
+  }
+  // negative: safe=false + complex input must NOT be GET
+  {
+    const err = assertSafeIsGet(OP_COMPLEX_UNSAFE);
+    results.push({
+      id: 'naming.verb.POST.NEGATIVE',
+      pass: err !== null,
+      error: err !== null ? undefined : 'safe=false with complex input should NOT be GET',
     });
   }
   // collision detected
