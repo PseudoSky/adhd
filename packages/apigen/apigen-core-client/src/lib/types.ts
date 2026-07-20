@@ -1,7 +1,9 @@
 import type { Logger } from 'pino';
-import type { ExtractionSession } from './extraction-session';
+import type { Operation } from './descriptor';
 
-// Output of generateSchemas() — domain schemas only, no middleware envelope
+// Output of the extraction pipeline (v2 `extract()`'s Operation[], grouped by
+// namespace and adapted — see orchestrator.ts's buildDescriptor Step 5) —
+// domain schemas only, no middleware envelope.
 export interface GeneratedSchemas {
   metadata: { namespace: string; phase: string };
   schemas: Record<
@@ -12,6 +14,13 @@ export interface GeneratedSchemas {
       // True when the source fn's first param is named `ctx` (filtered from
       // `input.properties` by [inv:ctx-name-only], but still injected at dispatch).
       hasCtx?: boolean;
+      // BUG-APIGEN-025: the operation's `safe` flag (SPEC §4/§5), threaded
+      // through from `Operation.safe` at the call site (orchestrator.ts's
+      // buildDescriptor Step 5) so `composeSchemas()` has it available to
+      // stamp onto `x-apigen-safe` — previously computed but never carried
+      // this far, so the HTTP transports' `x-apigen-safe` read was always
+      // `undefined`. Absent (`undefined`) is treated as `false`.
+      safe?: boolean;
     }
   >;
 }
@@ -26,26 +35,26 @@ export type ComposedSchemas = Record<
     // Carried through from GeneratedSchemas — see above. dispatch() injects ctx
     // as the first arg whenever this is true, independent of session middleware.
     hasCtx?: boolean;
+    // FEAT-APIGEN-022 / BUG-APIGEN-025: `op.safe` OR "properly typed
+    // primitives only" param shape (see get-safety.ts's
+    // `isPrimitiveOnlyInputSchema`), stamped by `composeSchemas()`. Read by
+    // the shared `httpVerb()` in `@adhd/apigen-naming` (SPEC §5) — every
+    // HTTP-emitting plugin derives its verb from THIS field, never by
+    // re-deriving safety itself.
+    'x-apigen-safe'?: boolean;
   }
 >;
 
-// Three mutually exclusive extraction modes
+// v1 legacy selector — retired as a filtering mechanism (BUG-APIGEN-CORE-005,
+// v1 retirement): v2's `extract()` walks the FULL export-shape matrix (named,
+// default, named-object, CJS) unconditionally in one pass, so there is no
+// longer a "select exactly one shape" mode. Kept only as an inert CLI
+// `--export` passthrough type so existing invocations don't error — see
+// SourceEntry.exportMode's doc comment in orchestrator.ts.
 export type ExportMode =
   | { type: 'named' }
   | { type: 'default' }
   | { type: 'named-object'; name: string };
-
-// Options for generateSchemas()
-export interface GenerateSchemasOptions {
-  sourceFile: string; // absolute path to .ts source file
-  exportMode?: ExportMode; // default: { type: 'named' }
-  namespace?: string; // written to metadata (informational)
-  phase?: string; // written to metadata (informational)
-  tsconfig?: string; // absolute path to a tsconfig.json driving type resolution
-  // Optional per-run shared cache (createExtractionSession). When absent, a
-  // private session is created and disposed before returning.
-  session?: ExtractionSession;
-}
 
 // Plugin system — language-agnostic: files[] can contain any language
 export interface PluginInput {
@@ -74,6 +83,15 @@ export interface PluginOutput {
 
 export interface RunInput extends PluginInput {
   signal?: AbortSignal;
+  /**
+   * BUG-APIGEN-024: the full merged `Operation[]` descriptor (the same set
+   * `buildDescriptor()` produces), threaded through so a `--use` mount plugin
+   * (e.g. `apigen-plugin-openapi`) can build its real `Descriptor` instead of
+   * the empty-`operations` stub `collectMountRoutes()` used to synthesize.
+   * Absent for non-TS-extraction run paths (e.g. py-flask), where mount
+   * plugins have nothing extracted to describe.
+   */
+  operations?: Operation[];
 }
 
 /** Source-language tags understood by apigen's routing layer. */

@@ -257,10 +257,10 @@ describe('[serve.live] real cross-language serve front', () => {
       });
 
       // --- TS call through the front (in-process TS host) ---
-      const tsRes = await fetch(`${base}/a/addNumbers`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ data: { a: 2, b: 40 } }),
+      // FEAT-APIGEN-022: addNumbers(a: number, b: number) — all-primitive
+      // params — auto-hoists to GET (query-string), not POST.
+      const tsRes = await fetch(`${base}/a/addNumbers?a=2&b=40`, {
+        method: 'GET',
       });
       expect(tsRes.status).toBe(200);
       expect(await tsRes.json()).toBe(42);
@@ -297,10 +297,9 @@ describe('[serve.live] real cross-language serve front', () => {
       expect(downBody.details?.host).toBe('b');
 
       // The TS host keeps serving — a dead host fails ONLY its own ops.
-      const stillUp = await fetch(`${base}/a/addNumbers`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ data: { a: 1, b: 1 } }),
+      // FEAT-APIGEN-022: all-primitive params — GET, not POST.
+      const stillUp = await fetch(`${base}/a/addNumbers?a=1&b=1`, {
+        method: 'GET',
       });
       expect(stillUp.status).toBe(200);
       expect(await stillUp.json()).toBe(2);
@@ -416,10 +415,9 @@ describe('[serve.live] real cross-language serve front', () => {
       });
 
       // --- TS host serves HTTP on the same port ---
-      const tsRes = await fetch(`${base}/a/addNumbers`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ data: { a: 2, b: 40 } }),
+      // FEAT-APIGEN-022: all-primitive params — GET, not POST.
+      const tsRes = await fetch(`${base}/a/addNumbers?a=2&b=40`, {
+        method: 'GET',
       });
       expect(tsRes.status).toBe(200);
       expect(await tsRes.json()).toBe(42);
@@ -539,10 +537,9 @@ describe('[serve.live] real cross-language serve front', () => {
       }
 
       // TS still serves even after gRPC child death.
-      const stillUp = await fetch(`${base}/a/addNumbers`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ data: { a: 1, b: 1 } }),
+      // FEAT-APIGEN-022: all-primitive params — GET, not POST.
+      const stillUp = await fetch(`${base}/a/addNumbers?a=1&b=1`, {
+        method: 'GET',
       });
       expect(stillUp.status).toBe(200);
       expect(await stillUp.json()).toBe(2);

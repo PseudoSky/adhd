@@ -183,55 +183,205 @@ Package-scoped log. Repo-wide context lives in the root [BACKLOG.md](../../../BA
 nothing and would race morph-walk's shared-SourceFile probe aliases. Do not "optimize"
 these loops with concurrency.
 
+### BUG-APIGEN-CORE-005 — v1 extraction pipeline retired entirely (v1 was still the CLI default despite BUG-APIGEN-CORE-002 fixing v2); orchestrator's own Step 5 was ALSO still calling the buggy v1 extractor — FIXED 2026-07-19
+
+- **Where:** `src/lib/generate-schemas.ts` (`generateSchemas()`, DELETED),
+  `src/lib/extractors/{named,default-export,named-object}.ts` (DELETED),
+  `src/lib/extractors/param-defaults.ts` (moved to `src/lib/param-defaults.ts`),
+  `src/lib/extract.ts` (`Operation` gained `hasCtx`; `extract()` now also
+  extracts BUG-APIGEN-018 param defaults), `src/lib/descriptor.ts`
+  (`Operation.hasCtx` field added), `src/lib/types.ts`
+  (`GenerateSchemasOptions` deleted — dead once `generateSchemas()` is gone),
+  `src/index.ts` (public exports of both trimmed). Cross-repo:
+  `entrypoint/apigen-cli/src/lib/orchestrator.ts` (`buildDescriptor`'s Step
+  5), `entrypoint/apigen-cli/src/lib/pipeline.ts` (`runPipeline`, DELETED).
+
+- **Two distinct bugs, both root-caused and fixed in this session:**
+
+  1. **Wiring bug (apigen-cli):** BUG-APIGEN-CORE-002/003/004 (above) fixed
+     `extract()`'s re-export blindness and verified it directly, but nothing
+     ever routed the shipped CLI's default `generate`/`run` commands through
+     it — they called `runPipeline()` → v1's `generateSchemas()` →
+     `extractNamed()`/`extractDefault()`/`extractNamedObject()` UNCONDITIONALLY,
+     with the fixed v2 orchestrator (`orchestrateGenerate`/`orchestrateRun`)
+     reachable only via an opt-in `--v2` flag nobody passed by default.
+     `generate-registry`/`run-registry` had no `--v2` escape hatch at all —
+     always v1. `serve` spawns child `apigen run` processes without ever
+     passing `--v2`, inheriting the v1 default.
+
+  2. **A SECOND, independent instance of the SAME re-export-blindness bug,
+     found only while fixing bug 1 above** (not previously known — see
+     apigen-cli's CHANGELOG.md BUG-APIGEN-028 entry for the fuller
+     narrative of how this was caught): even when a caller DID pass `--v2`,
+     `orchestrator.ts`'s `buildDescriptor()` had a "Step 5" that called v1's
+     `generateSchemas()` a SECOND time, independently, from scratch, to build
+     the `ComposedSchemas` every `OutputPlugin.generate()`/`run()` actually
+     dispatches against — completely discarding what Steps 1-4 (the fixed
+     `extract()`) had already correctly extracted. Empirically: `generate
+     --v2` against memory-core's 40-file re-export barrel logged "merged 140
+     total operations" (Step 3, correct) but wrote a `routes.ts` with exactly
+     2 routes (Step 5, still v1-buggy). So even a hypothetical CLI that
+     defaulted to `--v2` without also fixing Step 5 would have remained
+     broken for any real re-export-heavy source.
+
+- **Fix:**
+  1. `entrypoint/apigen-cli`'s `generate`/`run` commands now call
+     `orchestrateGenerate`/`orchestrateRun` unconditionally — the
+     `if (opts.v2)` branch is gone, and so is the `--v2` flag itself (removed
+     cleanly rather than kept as a no-op — see that BACKLOG entry for the
+     removal-vs-deprecate reasoning). `generate-registry`/`run-registry` were
+     rewired from a per-package `runPipeline()` loop to build a
+     `SourceEntry[]` and pass it through the SAME orchestrator in one call,
+     preserving their nx-tag package-discovery logic unchanged (only the
+     extraction mechanism changed).
+  2. `buildDescriptor`'s Step 5 no longer re-extracts. It groups the
+     ALREADY-EXTRACTED `operations` (from Steps 1-4) by namespace, filters to
+     `kind === 'action'` (matching what v1 ever produced — `query`/
+     `constructor`/`instance-method` operations were never dispatchable via
+     `ComposedSchemas` either way), and feeds each `{input, output, hasCtx}`
+     through the EXISTING, extractor-independent, pure `composeSchemas()` —
+     unchanged, since `middlewares=[]` was already the only value ever passed
+     here. One canonical extraction pass now backs both
+     `descriptor.operations` and `packageSchemas`; they can never disagree
+     again. This required adding `hasCtx` to the `Operation` type (v2's
+     `extract()` already excluded the `ctx` first-param by name per
+     [inv:ctx-name-only], same as v1, but never recorded the flag anywhere —
+     without it, `dispatch()`'s BUG-APIGEN-001 ctx re-injection would have
+     silently broken for every ctx-taking function once v1's `hasCtx`-setting
+     `generateSchemas()` was gone).
+  3. **BUG-APIGEN-018 (param defaults) ported, not dropped:** v1's
+     `generateSchemas()` uniquely called `extractors/param-defaults.ts`
+     (`extractParamDefault`/`applyParamDefault`) to surface a TS initializer
+     or JSDoc-bracketed default as the JSON-Schema `default` keyword; v2's
+     `extract()` had no equivalent — deleting v1 outright would have silently
+     dropped this feature. Ported: `param-defaults.ts` moved out of the
+     (now-empty, deleted) `extractors/` folder to `src/lib/` directly;
+     `extract.ts`'s three raw-param builder functions
+     (`rawParams`/`rawParamsFromSig`/`rawParamsSig`) gained an optional
+     `jsDocSource` parameter threaded from each of the 6 export-shape call
+     sites (matching v1's per-shape jsDocSource choice where a v1 equivalent
+     existed; best-effort for the 2 shapes v1 never covered — anonymous
+     default export, CJS); `buildActionOpAtPath` now shallow-clones and
+     applies the default the same way `generateSchemas()` did. **This
+     behavior had ZERO test coverage even under v1** (verified: grep for
+     `BUG-APIGEN-018`/`param-default`/`applyParamDefault`/`extractParamDefault`
+     across every `*.spec.ts` in the repo found nothing prior to this fix) —
+     added `src/test/fixtures/param-defaults.ts` +
+     `[BUG-APIGEN-018]` describe block in `extract.spec.ts` (3 new tests:
+     TS-initializer default, JSDoc-bracketed default, no-default param).
+  4. **Public API check (per this task's explicit instruction to verify
+     before deleting):** grepped the full monorepo — `generateSchemas`,
+     `extractNamed`, `extractDefault`, `extractNamedObject`, and `runPipeline`
+     had NO consumers outside `apigen-cli` and `apigen-core-client`
+     themselves. `generateSchemas` WAS re-exported from `apigen-core-client`'s
+     public `index.ts`, but nothing external imported it — deleted outright
+     rather than kept as a delegating shim; no external "public API"
+     justification found.
+- **Known, accepted behavior difference (not a regression, not fixed here —
+  see FEAT/decision note in apigen-cli's BACKLOG.md):** v1's `--export <mode>`
+  selected exactly ONE of three mutually-exclusive shapes (named XOR default
+  XOR named-object); v2's `extract()` walks the full export-shape matrix
+  unconditionally in one pass (by design — see `extract.ts`'s header
+  comment), so `--export` is now inert. Flagged, not silently dropped: kept
+  parseable (doesn't error existing scripts) with an explicit doc-comment on
+  `SourceEntry.exportMode` explaining why it no longer filters.
+- **Tests:** `apigen-core-client` 240 (main, pre-fix) → 239 (this branch):
+  deleted `generate-schemas.spec.ts` (7 v1-only tests) net against
+  `extract.spec.ts` gaining 6 (3 tests ported 1:1 from
+  `generate-schemas.spec.ts` that had no v2 equivalent yet — named-export
+  presence/non-callable-exclusion, Promise-unwrap, zero-param-with-ctx — plus
+  3 new BUG-APIGEN-018 tests). The 2 `generate-schemas.spec.ts` tests with no
+  porting equivalent (`schema-extraction.5`/`.6` — "only the default/
+  named-object shape is extracted when that `--export` mode is selected")
+  tested a v1-only concept (mode SELECTS one shape) that v2 doesn't have
+  (extracts the full matrix unconditionally); the underlying "shape extracts
+  correctly" behavior they exercised is already covered generically by
+  `extract.spec.ts`'s pre-existing Shape 3/4/5 describe blocks. 239/239
+  green.
+  `apigen-cli` 112/112 (stable; 3 flaky failures during one interim run
+  in `cross-host-response-envelope.spec.ts`/`serve.spec.ts` — both
+  live-child-process-spawning integration tests — were confirmed
+  pre-existing/environmental: reproduced identically against unmodified
+  `main` under the same full-parallel-suite load, and both pass 100% clean
+  in isolation; not a regression from this change).
+- **Real-world verification** against `~/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts`
+  (read-only reference, ~40-file re-export barrel): `generate --type
+  api-express` with NO flags (v2 is now unconditional) → 140 operations
+  extracted, 130 real routes written to `routes.ts` (up from 2 pre-fix).
+  `run --type api-express` with NO flags → live server registers the same
+  130 routes; curled two previously-invisible-under-v1 routes
+  (`/memory/memoryAllowlistRoot`, `/memory/isPathInMemoryAllowlist`) and got
+  correct real responses (200, real data), not 404s.
+- **Status:** FIXED 2026-07-19.
+
+### BUG-APIGEN-CORE-004 — `isSerializableType()`'s textual allow-list doesn't recognize `Record<K,V>` (or other generic utility-type wrappers), causing false-negative skips on legitimately serializable consts — FIXED 2026-07-20
+
+- **Where (was):** `src/lib/extract.ts:822-837` (line numbers as of the
+  filing commit; `isSerializableType(typeText: string)`), a purely textual
+  heuristic over `type.getText()` — checked a fixed set of primitive
+  keywords, quote/digit-prefixed literals, and `{`/`[`-prefixed or `[]`-
+  suffixed text; anything else fell through to `return false`.
+- **Root cause confirmed:** yes, exactly as filed. `SCOPE_WEIGHTS`
+  (`Record<string, number>`) and `SUPPORTED_GRAPHIFY_SHAPES`
+  (`Record<string, GraphifyShapeSpec>`) render via `type.getText()` as
+  `Record<string, number>` / `Record<string, GraphifyShapeSpec>`, which
+  matches none of the old heuristic's textual patterns and falls through to
+  `false`, causing `console.warn('[apigen-core] Skipping non-callable,
+  non-serializable export: …')` on two legitimately JSON-serializable
+  consts.
+- **Fix applied (direction (b) from the original filing — the more robust
+  structural fix, not the incomplete allow-list-extension option (a)):**
+  `isSerializableType` (`src/lib/extract.ts:822-908`) now takes the actual
+  ts-morph `Type` object (already available at the call site via
+  `varDecl.getType()`, `src/lib/extract.ts:277`) plus a `locationNode` for
+  `Symbol.getTypeAtLocation`, and inspects it structurally instead of
+  pattern-matching rendered text:
+  - Rejects any type exposing call/construct signatures (functions, classes,
+    constructors) — checked first, and re-checked implicitly on every nested
+    property via recursion.
+  - Accepts primitives, literals (string/number/boolean/enum), `null`/
+    `undefined`.
+  - Recurses into array/readonly-array element types, tuple element types,
+    union/intersection member types.
+  - For object types: recurses into `getStringIndexType()`/
+    `getNumberIndexType()` when present (this is what makes `Record<K, V>`
+    work — `Record` is implemented as an index signature, so no
+    `Record<`-specific special-casing was needed), otherwise recurses into
+    `getProperties()`.
+  - A `seen: Set<string>` (keyed by `type.getText()`) guards against
+    infinite recursion on self-referential types (e.g. a JSON-like recursive
+    type alias): a type re-encountered mid-traversal is assumed serialisable
+    rather than looping forever.
+  - This also correctly rejects `Map<K, V>`/`Set<K, V>` (the filing's "likely
+    also `Map<K,V>`" guess for a *future* allow-list-prefix fix would have
+    been WRONG — `Map`/`Set` are NOT JSON-serialisable;
+    `JSON.stringify(new Map())` is `'{}'`) without any deny-list entry: their
+    methods (`get`/`set`/`has`/…) are themselves function-typed properties,
+    which the structural per-property recursion rejects. This is the
+    correctness win structural inspection gives over the allow-list
+    approach.
+  - `typeText` (still needed for `buildSchema`) is unchanged — only the
+    serializability *check* now consumes the `Type` object instead of its
+    text rendering.
+- **Tests:** `src/test/extract.spec.ts`
+  ('[BUG-APIGEN-CORE-004] Record<K,V> and other generic-wrapper serializable
+  consts', 4 new tests) + new fixture
+  `src/test/fixtures/extract-serializable-generics.ts`: (1)
+  `Record<string, number>` extracts as `kind:'query'`; (2)
+  `Record<string, Interface>` (index value is a plain data interface)
+  extracts as `kind:'query'`; (3) `Partial<T>` around a serialisable shape
+  extracts as `kind:'query'`; (4) negative control — `Map<string, number>`
+  is still correctly skipped (`console.warn` called, no operation emitted),
+  proving the fix doesn't regress into a naive "generic-looking →
+  serialisable" false positive. Red/green-verified by hand: reverted
+  `extract.ts` to the pre-fix version, confirmed exactly tests (1)-(3) fail
+  (`expected undefined not to be undefined`) while (4) still passes, then
+  restored the fix — all 4 pass green.
+  `npx nx test apigen-core-client`: 246/246 passing (242 pre-existing + 4
+  new), zero regressions.
+- **Status:** FIXED 2026-07-20.
+
 ## Open
-
-### BUG-APIGEN-CORE-004 — `isSerializableType()`'s textual allow-list doesn't recognize `Record<K,V>` (or other generic utility-type wrappers), causing false-negative skips on legitimately serializable consts
-
-- **Where:** `src/lib/extract.ts:769-783`, `isSerializableType(typeText: string)`.
-  It's a purely textual heuristic over `type.getText()` — checks for a fixed
-  set of primitive keywords, quote/digit-prefixed literals, and `{`/`[`-
-  prefixed or `[]`-suffixed text; anything else falls through to `return
-  false`.
-- **Symptom:** discovered while reconciling BUG-APIGEN-CORE-002's "146
-  operations" number against the raw export count of
-  `~/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts` (read-only
-  reference). That file exports 12 `VariableDeclaration`-backed consts; 10
-  extract correctly (Shape 3's serializable-data path), 2 are silently
-  skipped with `console.warn('[apigen-core] Skipping non-callable,
-  non-serializable export: …')`: `SCOPE_WEIGHTS` (`recall.ts:987`, type
-  `Record<string, number>`) and `SUPPORTED_GRAPHIFY_SHAPES`
-  (`extensions.ts:413`, type `Record<string, GraphifyShapeSpec>`, where
-  `GraphifyShapeSpec` is a plain data interface at `extensions.ts:399`). Both
-  are trivially JSON-serializable — a `Record` of numbers and a `Record` of
-  plain-object literals — but `type.getText()` renders as `Record<string,
-  number>` / `Record<string, GraphifyShapeSpec>`, which matches none of
-  `isSerializableType`'s patterns (doesn't start with `{`/`[`, isn't a bare
-  primitive keyword, isn't a literal) and falls through to `false`.
-- **Not caused by, or specific to, the BUG-APIGEN-CORE-002 re-export fix** —
-  this heuristic is untouched by that fix and would misclassify a
-  `Record<…>`-typed const identically if it were declared locally in the
-  entry file rather than re-exported. It was simply never exercised against
-  a `Record`-typed const before now (this file previously only reached 2
-  operations total, neither a variable-backed one).
-- **Why it matters:** low severity, narrow scope — only affects Shape 3's
-  serializable-data-const path, and only for type-text shapes the heuristic
-  doesn't special-case (confirmed: `Record<K,V>` here; likely also `Map<K,V>`,
-  `Partial<T>`, `Readonly<T>`, and any other generic utility-type wrapper
-  around an otherwise-serializable shape, by the same textual-matching logic,
-  though only `Record<K,V>` was actually observed in this file).
-- **Fix direction (not attempted — needs its own investigation):** either (a)
-  extend the textual allow-list with a few more recognized generic-wrapper
-  prefixes (`Record<`, `Map<`, `Partial<`, `Readonly<`, `Array<`), which is
-  cheap but still an incomplete allow-list approach, or (b) replace the
-  textual heuristic with an actual `Type` object inspection (the function
-  already has `decl.getType()` available at the two call sites — no text
-  round-trip needed) checking structural properties (has index signature /
-  is a plain object type / has no call signatures) rather than pattern-
-  matching `getText()`'s rendering, which is the more robust fix.
-- **Status:** OPEN. Filed 2026-07-18 during BUG-APIGEN-CORE-002 verification
-  (export-count reconciliation, self-verified via a standalone ts-morph
-  script diffing `sf.getExportedDeclarations()` names against `extract()`'s
-  output — not from the dispatched agent's report).
 
 ### DEBT-APIGEN-LINT-001 — `@nx/dependency-checks` false-positive: `decimal.js` only used by `src/test/**` fixtures — FIXED 2026-07-18
 

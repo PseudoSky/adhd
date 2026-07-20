@@ -379,3 +379,223 @@ describe('[v2-proj-transport] run() — MCP envelope from _meta (§9.1)', () => 
     }
   });
 });
+
+// ---------- [plugin-mcp.7] BUG-APIGEN-019 — MCP outputSchema + structuredContent ----------
+
+// A discriminated-union return type, mirroring the reported
+// `search(): SearchResponse | Record<string, unknown>` case — the schema a
+// real pipeline run would produce after BUG-APIGEN-019's `normalizeTopLevelUnion`.
+const unionOutputSchema = {
+  oneOf: [
+    {
+      type: 'object',
+      properties: { outcome: { const: 'found' }, hits: { type: 'array' } },
+      required: ['outcome', 'hits'],
+    },
+    {
+      type: 'object',
+      properties: { outcome: { const: 'empty' } },
+      required: ['outcome'],
+    },
+  ],
+  discriminator: { propertyName: 'outcome' },
+  'x-apigen-logical': 'union',
+};
+
+function search(): { outcome: 'found'; hits: string[] } | { outcome: 'empty' } {
+  return { outcome: 'found', hits: ['result-1'] };
+}
+function listUsersArray(): string[] {
+  return ['alice', 'bob'];
+}
+
+const outputSchemaTestSchema = {
+  getUser: {
+    input: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: { userId: { type: 'string' } },
+          required: ['userId'],
+        },
+      },
+      required: ['data'],
+    },
+    output: {
+      type: 'object',
+      properties: { id: { type: 'string' }, name: { type: 'string' } },
+      required: ['id', 'name'],
+    },
+  },
+  search: {
+    input: {
+      type: 'object',
+      properties: {
+        data: { type: 'object', properties: {}, required: [] },
+      },
+      required: ['data'],
+    },
+    output: unionOutputSchema,
+  },
+  listUsersArray: {
+    input: {
+      type: 'object',
+      properties: {
+        data: { type: 'object', properties: {}, required: [] },
+      },
+      required: ['data'],
+    },
+    output: { type: 'array', items: { type: 'string' } },
+  },
+};
+
+const outputSchemaTestFns: Record<string, (...args: unknown[]) => unknown> = {
+  getUser: (userId: unknown) => getUser(userId as string),
+  search: () => search(),
+  listUsersArray: () => listUsersArray(),
+};
+
+describe('[plugin-mcp.7] run() — BUG-APIGEN-019 MCP outputSchema + structuredContent', () => {
+  let port: number;
+  let controller: AbortController;
+
+  beforeAll(async () => {
+    port = await freePort();
+    controller = new AbortController();
+    const input: RunInput = {
+      packages: [
+        {
+          id: 'out-pkg',
+          schemas: outputSchemaTestSchema,
+          importPath: '@test/out-pkg',
+          fns: outputSchemaTestFns,
+        },
+      ],
+      outputDir: '/tmp/out',
+      options: { transport: 'streaming-http', port },
+      signal: controller.signal,
+    };
+    run(input).catch(() => {
+      /* swallowed after abort */
+    });
+
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      try {
+        const r = await fetch(`http://127.0.0.1:${port}/mcp`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 0,
+            method: 'tools/list',
+            params: {},
+          }),
+        });
+        if (r.ok) break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+  }, 15000);
+
+  afterAll(() => {
+    controller.abort();
+  });
+
+  async function rpc(method: string, params: unknown): Promise<unknown> {
+    const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    });
+    const text = await res.text();
+    const dataLines = text
+      .split('\n')
+      .filter((l) => l.startsWith('data: '))
+      .map((l) => l.slice(6).trim());
+    return dataLines.length > 0
+      ? JSON.parse(dataLines[dataLines.length - 1])
+      : JSON.parse(text);
+  }
+
+  it('object-shaped output: tools/list outputSchema passes through unwrapped', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const resp = (await rpc('tools/list', {})) as any;
+    const tools: Array<{ name: string; outputSchema?: unknown }> =
+      resp?.result?.tools ?? resp?.tools ?? [];
+    const getUserTool = tools.find((t) => t.name === 'getUser');
+    expect(getUserTool?.outputSchema).toEqual(outputSchemaTestSchema.getUser.output);
+  });
+
+  it('union-return output: tools/list outputSchema is wrapped under "result" with oneOf+discriminator intact', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const resp = (await rpc('tools/list', {})) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tools: Array<{ name: string; outputSchema?: any }> =
+      resp?.result?.tools ?? resp?.tools ?? [];
+    const searchTool = tools.find((t) => t.name === 'search');
+    expect(searchTool?.outputSchema?.type).toBe('object');
+    expect(searchTool?.outputSchema?.required).toEqual(['result']);
+    expect(searchTool?.outputSchema?.properties?.result).toEqual(
+      unionOutputSchema
+    );
+    expect(searchTool?.outputSchema?.properties?.result?.oneOf).toHaveLength(2);
+    expect(searchTool?.outputSchema?.properties?.result?.discriminator).toEqual(
+      { propertyName: 'outcome' }
+    );
+  });
+
+  it('array-return output: tools/list outputSchema is wrapped under "result"', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const resp = (await rpc('tools/list', {})) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tools: Array<{ name: string; outputSchema?: any }> =
+      resp?.result?.tools ?? resp?.tools ?? [];
+    const listTool = tools.find((t) => t.name === 'listUsersArray');
+    expect(listTool?.outputSchema?.type).toBe('object');
+    expect(listTool?.outputSchema?.properties?.result).toEqual({
+      type: 'array',
+      items: { type: 'string' },
+    });
+  });
+
+  it('object-shaped output: tools/call structuredContent equals the raw result (no wrapping)', async () => {
+    const resp = (await rpc('tools/call', {
+      name: 'getUser',
+      arguments: { data: { userId: 'u1' } },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    })) as any;
+    const result = resp?.result ?? resp;
+    const content: Array<{ type: string; text: string }> = result.content ?? [];
+    // Ground truth is whatever dispatch() actually returned (content), not the
+    // bare fixture call — structuredContent must mirror content unwrapped.
+    expect(result.structuredContent).toEqual(JSON.parse(content[0].text));
+    expect(result.structuredContent).toEqual(getUser('u1'));
+  });
+
+  it('union-return output: tools/call structuredContent is wrapped as { result: <value> }', async () => {
+    const resp = (await rpc('tools/call', {
+      name: 'search',
+      arguments: { data: {} },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    })) as any;
+    const result = resp?.result ?? resp;
+    // content (backward-compat text) is still emitted alongside structuredContent.
+    const content: Array<{ type: string; text: string }> = result.content ?? [];
+    const dispatched = JSON.parse(content[0].text);
+    // structuredContent must be the SAME value dispatch() produced (whatever
+    // transcoding it applied), just wrapped under "result" since the union
+    // schema isn't top-level type:"object".
+    expect(result.structuredContent).toEqual({ result: dispatched });
+    expect(dispatched.outcome).toBeDefined();
+    expect(dispatched.hits).toEqual(['result-1']);
+  });
+});
