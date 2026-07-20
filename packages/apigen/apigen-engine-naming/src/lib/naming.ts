@@ -357,6 +357,36 @@ export function envelopeEnvVar(pluginId: string, field: string): string {
 export const envelopeMetaKey = envelopeKey;
 
 // ---------------------------------------------------------------------------
+// Identifier sanitisation — codegen-safe variable/import names
+// ---------------------------------------------------------------------------
+
+/**
+ * Sanitizes an arbitrary id (e.g. a discovered package id, derived verbatim
+ * from a source directory name) into a valid TypeScript/JavaScript identifier
+ * for use in generated import-namespace / variable-name positions.
+ *
+ * Repo convention mandates hyphenated package names (`dispatch-cli`,
+ * `pkg-a`, …), so any generator that splices an id directly into an
+ * identifier position (`import * as ${id}_ns from …`) produces a hard parse
+ * error (`Expected "from" but found "-"`) the moment a hyphenated id is
+ * used. This is the single source of truth for that sanitisation — no
+ * transport-specific plugin may re-derive its own copy (BUG-APIGEN-032).
+ *
+ * Only the emitted *identifier* positions need sanitizing — the raw id
+ * should still be used verbatim anywhere it appears as a string literal
+ * (e.g. a schema-key namespace like `'dispatch-cli:validate'`).
+ *
+ * @example sanitizeIdentifier('dispatch-cli') // → 'dispatch_cli'
+ * @example sanitizeIdentifier('pkg-a')        // → 'pkg_a'
+ * @example sanitizeIdentifier('123abc')       // → '_123abc'
+ */
+export function sanitizeIdentifier(id: string): string {
+  let s = id.replace(/[^a-zA-Z0-9_$]/g, '_');
+  if (s === '' || /^[0-9]/.test(s)) s = `_${s}`;
+  return s;
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
