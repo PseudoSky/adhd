@@ -99,6 +99,20 @@ jobs:
         id: test
         run: npx nx affected -t test --parallel=5
 
+      # Green `test` is NOT proof a published package works — `nx test`
+      # resolves everything (including Node builtins, in a Rollup-library
+      # project) straight to source via Vite/Vitest, never loading the real
+      # production dist/ bundle. `verify-dist-load` closes that gap: it
+      # `require()`/`import()`s each affected project's REAL built entry
+      # point the way a real consumer would. Confirmed catching a real bug
+      # this way: apigen-plugin-api-express built clean and tested
+      # 25/25 green while its dist/index.js and dist/index.mjs both threw
+      # on load (see BACKLOG). `dependsOn:["build"]` on the target itself
+      # means this also builds anything affected-but-not-yet-built.
+      - name: Verify dist/ artifacts actually load
+        id: verify-dist-load
+        run: npx nx affected -t verify-dist-load --parallel=5
+
       - name: Publish
         id: publish
         if: success() && (contains(github.event.pull_request.labels.*.name, 'publish') || (github.event.action == 'closed' && github.event.pull_request.merged == true))
