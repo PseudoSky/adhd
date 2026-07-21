@@ -4,6 +4,7 @@ import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { copyReadme } from '../../../tools/vite-copy-readme.mjs';
+import { externalizeRealDeps } from '../../../tools/vite-external-deps.mjs';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 
@@ -34,7 +35,14 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      external: [],
+      // Bundle only @adhd/* workspace source (this repo has no workspace
+      // symlinks — see tools/vite-external-deps.mjs); every real npm
+      // dependency (ts-morph, typescript, ts-json-schema-generator, pino, …)
+      // and every Node builtin stays external. See
+      // BACKLOG.md INVESTIGATION-BUILD-TOOL-001 — bundling ts-morph/
+      // typescript here was the confirmed root cause of verify-dist-load's
+      // "__filename is not defined in ES module scope" failure.
+      external: externalizeRealDeps(__dirname),
     },
   },
 
