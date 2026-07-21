@@ -49,4 +49,24 @@ function hasBuildTarget(workspaceRoot, projectRoot) {
   );
 }
 
-module.exports = { hasBuildTarget };
+/**
+ * A package is publishable unless its package.json declares `"private": true`.
+ * The publish-related build targets (verify-dist-load, publish-hygiene,
+ * publish) exist to prove/ship a PUBLISHED artifact, so they must not attach
+ * to private packages (e.g. `ui-react-base-storybook`, the CLI-only
+ * `environment-cli`) — those have no npm entry to verify or publish.
+ * @param {string} workspaceRoot
+ * @param {string} projectRoot
+ * @returns {boolean}
+ */
+function isPublishable(workspaceRoot, projectRoot) {
+  const pkgPath = join(workspaceRoot, projectRoot, 'package.json');
+  if (!existsSync(pkgPath)) return false;
+  try {
+    return JSON.parse(readFileSync(pkgPath, 'utf-8')).private !== true;
+  } catch {
+    return false;
+  }
+}
+
+module.exports = { hasBuildTarget, isPublishable };

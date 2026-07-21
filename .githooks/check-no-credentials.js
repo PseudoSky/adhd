@@ -90,6 +90,13 @@ const FORBIDDEN_PATHS = [
   {
     name: 'credential-store',
     re: /(^|\/)(credentials|\.netrc|\.npmrc|\.pypirc)$/,
+    // The workspace-root `.npmrc` holds ONLY pnpm resolution settings
+    // (node-linker, link-workspace-packages, …) — no auth. Exempt it from this
+    // coarse PATH rule; the precise `npmrc-auth-token` CONTENT rule below still
+    // scans it (and every file) for a real `//registry/:_authToken=` leak, so
+    // an actual token committed here is still blocked. Only the vetted root
+    // `.npmrc` is exempt — nested `.npmrc`/`.netrc`/`.pypirc` still trip.
+    except: /^\.npmrc$/,
     why: 'credential store',
   },
 ];

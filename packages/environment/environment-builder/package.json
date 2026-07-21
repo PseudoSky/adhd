@@ -6,7 +6,11 @@
     "ajv": "^8.20.0",
     "yaml": "^1.10.2"
   },
-  "main": "./index.js",
-  "module": "./index.mjs",
-  "typings": "./index.d.ts"
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
 }

@@ -4,10 +4,10 @@
   "license": "MIT",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks 2>/dev/null || true",
-    "watch:test": "`yarn bin`/vitest watch --changed",
+    "watch:test": "vitest watch --changed",
     "watch": "nx run-many --targets=build --configuration=development --all --watch",
     "build": "nx run-many --targets=build --configuration=production --all",
-    "release": "yarn build && yarn nx release",
+    "release": "pnpm run build && pnpm exec nx release",
     "storybook": "nx run storybook:storybook",
     "list": "nx show projects --affected",
     "lint": "nx run-many --targets=lint --configuration=production",
@@ -58,6 +58,10 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@adhd/nx-assets": "workspace:*",
+    "@adhd/nx-build": "workspace:*",
+    "@adhd/nx-deps": "workspace:*",
+    "@adhd/nx-test": "workspace:*",
     "@babel/core": "^7.14.5",
     "@babel/preset-react": "^7.14.5",
     "@modelcontextprotocol/server-filesystem": "^2026.1.14",
@@ -134,11 +138,13 @@
     "vite-plugin-dts": "~3.8.3",
     "vitest": "^1.6.0"
   },
-  "resolutions": {
-    "estree-walker": "2.0.2"
+  "pnpm": {
+    "overrides": {
+      "estree-walker": "2.0.2"
+    }
   },
   "nx": {
     "includedScripts": []
   },
-  "packageManager": "yarn@4.5.3+sha512.3003a14012e2987072d244c720506549c1aab73ee728208f1b2580a9fd67b92d61ba6b08fe93f6dce68fd771e3af1e59a0afa28dd242dd0940d73b95fedd4e90"
+  "packageManager": "pnpm@8.15.9"
 }

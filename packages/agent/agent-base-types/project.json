@@ -6,27 +6,37 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
   },
-  "tags": ["layer:mcp", "platform:shared"],
+  "tags": [
+    "layer:mcp",
+    "platform:shared"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
-        "outputPath": "dist/packages/agent/agent-base-types",
+        "outputPath": "packages/agent/agent-base-types/dist",
         "main": "packages/agent/agent-base-types/src/index.ts",
         "tsConfig": "packages/agent/agent-base-types/tsconfig.lib.json",
-        "assets": ["packages/agent/agent-base-types/*.md"]
+        "assets": [
+          "packages/agent/agent-base-types/*.md"
+        ]
       }
     },
     "nx-release-publish": {
-      "dependsOn": ["build", "verify-dist-load"],
+      "dependsOn": [
+        "build",
+        "verify-dist-load"
+      ],
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       }
     }
   }

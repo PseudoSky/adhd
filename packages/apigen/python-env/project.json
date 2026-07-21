@@ -6,7 +6,7 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
@@ -31,7 +31,7 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/packages/apigen/python-env",
+        "outputPath": "packages/apigen/python-env/dist",
         "main": "packages/apigen/python-env/src/index.ts",
         "tsConfig": "packages/apigen/python-env/tsconfig.lib.json",
         "assets": [
@@ -41,7 +41,7 @@
     },
     "nx-release-publish": {
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       },
       "dependsOn": [
         "build",

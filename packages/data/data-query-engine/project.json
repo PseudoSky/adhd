@@ -6,7 +6,7 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
@@ -26,9 +26,8 @@
         "lint"
       ],
       "options": {
-        "outputPath": "dist/packages/data/data-query-engine",
+        "outputPath": "packages/data/data-query-engine/dist",
         "main": "packages/data/data-query-engine/src/index.ts",
-        "generatePackageJson": true,
         "tsConfig": "packages/data/data-query-engine/tsconfig.lib.json",
         "assets": [
           "packages/data/data-query-engine/*.md"
@@ -41,7 +40,7 @@
         "verify-dist-load"
       ],
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       }
     },
     "test": {

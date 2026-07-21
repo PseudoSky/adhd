@@ -72,10 +72,14 @@ function collectEntries(pkg) {
   return entries;
 }
 
-async function verifyEntry(distDir, { kind, mode, file }) {
+async function verifyEntry(distDir, { kind, mode, file }, existenceOnly) {
   const abs = resolvePath(distDir, file);
   if (!existsSync(abs)) {
     return { ok: false, kind, file: abs, error: new Error('file declared in package.json but missing from dist — build did not produce it') };
+  }
+  if (existenceOnly) {
+    // CLI/server entry: present in dist, but must not be executed here (see main()).
+    return { ok: true, kind, file: abs, existenceOnly: true };
   }
   try {
     if (mode === 'import') {
@@ -97,29 +101,55 @@ async function main() {
     process.exit(2);
   }
 
-  const distDir = join(workspaceRoot, 'dist', projectRoot);
-  const pkgJsonPath = join(distDir, 'package.json');
-  if (!existsSync(pkgJsonPath)) {
+  // Publish-from-source model: the authoritative manifest is the package-ROOT
+  // package.json (main/module/exports → ./dist/…), and its entries resolve
+  // relative to the package root. So load the REAL built artifact under
+  // {projectRoot}/dist exactly as an installed consumer would (who gets the
+  // package-root manifest + a dist/ dir alongside it).
+  const pkgRoot = join(workspaceRoot, projectRoot);
+  const builtDir = join(pkgRoot, 'dist');
+  if (!existsSync(builtDir)) {
     console.error(
-      `verify-dist-load: no built package.json at ${pkgJsonPath} — did 'build' run? (this target must dependsOn:["build"])`
+      `verify-dist-load: no built output at ${builtDir} — did 'build' run? (this target must dependsOn:["build"])`
     );
+    process.exit(2);
+  }
+  const pkgJsonPath = join(pkgRoot, 'package.json');
+  if (!existsSync(pkgJsonPath)) {
+    console.error(`verify-dist-load: no package.json at ${pkgJsonPath}.`);
     process.exit(2);
   }
 
   const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
-  const entries = collectEntries(pkg);
+  const hasBin =
+    pkg.bin != null && (typeof pkg.bin === 'string' || Object.keys(pkg.bin).length > 0);
+  const libEntries = collectEntries(pkg);
+  const binFiles = !hasBin ? [] : typeof pkg.bin === 'string' ? [pkg.bin] : Object.values(pkg.bin);
+  const entries = [...libEntries, ...binFiles.map((file) => ({ kind: 'bin', mode: 'exists', file }))];
   if (entries.length === 0) {
     console.error(
-      `verify-dist-load: ${pkgJsonPath} declares no main/module/exports entry point to verify.`
+      `verify-dist-load: ${pkgJsonPath} declares no main/module/exports/bin entry point to verify.`
     );
     process.exit(2);
   }
 
+  // A CLI/server entry executes on load (commander `.parse()`, a server
+  // bootstrap), so it can't be require()'d here — running it against verify's
+  // own argv is meaningless and can hang a long-lived server. For any package
+  // that ships a `bin`, verify every declared entry EXISTS in the built dist
+  // (a missing entry = a broken publish); its load-time behaviour is proven by
+  // the package's own default-running e2e/demo tests (repo live-testing rule).
+  // Pure LIBRARIES (no bin) are fully load-verified — that is where silent
+  // bundling breakage (e.g. a Node builtin stubbed to `undefined`) hides.
+  const existenceOnly = hasBin;
+
   let failures = 0;
   for (const entry of entries) {
-    const result = await verifyEntry(distDir, entry);
+    const result = await verifyEntry(pkgRoot, entry, existenceOnly || entry.mode === 'exists');
     if (result.ok) {
-      console.log(`✓ verify-dist-load: ${result.kind} (${result.file}) loaded cleanly`);
+      console.log(
+        `✓ verify-dist-load: ${result.kind} (${result.file}) ${result.existenceOnly ? 'present (CLI/server entry — not executed)' : 'loaded cleanly'}`
+      );
     } else {
       failures++;
       console.error(`✖ verify-dist-load: ${result.kind} (${result.file}) threw on load:`);

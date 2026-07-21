@@ -10,8 +10,12 @@
     "@nx/vite": "18.3.4",
     "tslib": "^2.3.0"
   },
-  "main": "./index.js",
-  "module": "./index.mjs",
-  "typings": "./index.d.ts",
-  "generators": "./generators.json"
+  "main": "./dist/src/index.js",
+  "typings": "./dist/src/index.d.ts",
+  "generators": "./generators.json",
+  "files": [
+    "dist",
+    "CHANGELOG.md",
+    "generators.json"
+  ]
 }

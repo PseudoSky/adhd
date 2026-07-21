@@ -1,19 +1,19 @@
 {
   "name": "@adhd/agent-store-tools",
   "version": "2.1.0",
-  "description": "Canonical tool and platform registry for agent runtimes \u2014 Drizzle-backed SQLite store",
+  "description": "Canonical tool and platform registry for agent runtimes — Drizzle-backed SQLite store",
   "type": "module",
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "src",
-    "drizzle"
+    "dist",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.js"
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
     }
   },
   "scripts": {

@@ -6,7 +6,7 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
@@ -43,7 +43,7 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/packages/apigen/apigen-base-types",
+        "outputPath": "packages/apigen/apigen-base-types/dist",
         "main": "packages/apigen/apigen-base-types/src/index.ts",
         "tsConfig": "packages/apigen/apigen-base-types/tsconfig.lib.json",
         "assets": [
@@ -53,7 +53,7 @@
     },
     "nx-release-publish": {
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       },
       "dependsOn": [
         "build",

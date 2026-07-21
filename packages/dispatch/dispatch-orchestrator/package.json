@@ -10,10 +10,14 @@
     "@adhd/dispatch-core-optimizer": "0.0.1",
     "@adhd/dispatch-serializer-json": "0.0.1"
   },
-  "main": "./index.js",
-  "module": "./index.mjs",
-  "typings": "./index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
 }

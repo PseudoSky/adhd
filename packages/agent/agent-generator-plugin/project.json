@@ -6,18 +6,23 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
   },
-  "tags": ["layer:logic", "platform:node"],
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
-        "outputPath": "dist/packages/agent/agent-generator-plugin",
+        "outputPath": "packages/agent/agent-generator-plugin/dist",
         "main": "packages/agent/agent-generator-plugin/src/index.ts",
         "tsConfig": "packages/agent/agent-generator-plugin/tsconfig.lib.json",
         "clean": true,
@@ -43,7 +48,9 @@
     },
     "test": {
       "executor": "@nx/vite:test",
-      "outputs": ["{options.reportsDirectory}"],
+      "outputs": [
+        "{options.reportsDirectory}"
+      ],
       "options": {
         "configFile": "packages/agent/agent-generator-plugin/vite.config.ts",
         "reportsDirectory": "../../../coverage/packages/agent/agent-generator-plugin"
@@ -51,9 +58,13 @@
     },
     "nx-release-publish": {
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       },
-      "dependsOn": ["build", "test", "verify-dist-load"]
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load"
+      ]
     }
   }
 }

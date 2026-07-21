@@ -173,20 +173,18 @@ describe('[serve.live] real cross-language serve front', () => {
 
   /**
    * The bundled standalone CLI — children are spawned as `node <bundle> run …`.
-   * Walk up from this test file until a `dist/entrypoint/apigen-cli/index.js`
-   * exists, so the path is robust to how vitest sets `__dirname`/`--root`.
+   * Build output is in-source ({projectRoot}/dist), so walk up from this test
+   * file until `entrypoint/apigen-cli/dist/index.js` exists, robust to how
+   * vitest sets `__dirname`/`--root`.
    */
   const cliPath = (() => {
     let dir = __dirname;
     for (let i = 0; i < 12; i++) {
-      const candidate = path.join(dir, 'dist/entrypoint/apigen-cli/index.js');
+      const candidate = path.join(dir, 'entrypoint/apigen-cli/dist/index.js');
       if (fs.existsSync(candidate)) return candidate;
       dir = path.dirname(dir);
     }
-    return path.resolve(
-      __dirname,
-      '../../../../../dist/entrypoint/apigen-cli/index.js'
-    );
+    return path.resolve(__dirname, '../../dist/index.js');
   })();
 
   /** Bounded poll of an HTTP endpoint until `predicate(status)` holds. */
