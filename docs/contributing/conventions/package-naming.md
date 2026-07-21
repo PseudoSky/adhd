@@ -67,8 +67,9 @@ Do not create a package for:
 
 - **One-shot migrations / ETL.** They have zero consumers by construction and would
   be published to npm for nobody. Put durable halves in the package that owns the
-  seam, and the one-shot half in `scripts/` (precedent: `scripts/validate-dag.js`,
-  `scripts/check-publish-hygiene.mjs`, `scripts/version-packages.sh`).
+  seam (e.g. DAG validation lives in `dispatch-cli`'s `validate`; publish-hygiene in
+  the `@adhd/nx-build` plugin) and keep the genuinely one-shot half a temporary,
+  uncommitted script.
 - **Anything with no importer.** If nothing does `import` it, it is a script or an
   `entrypoint/`, not a `packages/` library.
 

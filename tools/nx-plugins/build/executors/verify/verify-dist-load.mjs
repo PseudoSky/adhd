@@ -34,7 +34,10 @@ import { dirname, join, resolve as resolvePath } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const workspaceRoot = join(__dirname, '..');
+// Locate the workspace root by walking up to nx.json — robust to where this
+// script lives (it moved from scripts/ into tools/nx-plugins/build/executors/).
+const findRoot = (d) => { while (d !== dirname(d)) { if (existsSync(join(d, 'nx.json'))) return d; d = dirname(d); } return d; };
+const workspaceRoot = findRoot(__dirname);
 
 function collectEntries(pkg) {
   // Ordered, deduped list of { kind, mode, file } to verify. `mode`
