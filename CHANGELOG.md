@@ -1,5 +1,15 @@
 ## Unreleased
 
+### Fixed — dist `package.json` version permanently stuck ahead of source for 3 packages (2026-07-20)
+
+**BUILD-CONSIST-011 — `data-base-transforms`, `data-query-engine`, `ui-react-base-hooks` dist `package.json` reported `2.2.2` while source said `2.2.1` — and neither `npx nx reset` nor a full clean rebuild fixed it.**
+
+Root cause (corrects the root-cause guess logged earlier the same day, which blamed Nx file-cache poisoning and predicted `nx reset` + rebuild would fix it — disproven this session): `@nx/vite:build`'s executor (`node_modules/@nx/vite/src/executors/build/build.impl.js:88`) only copies `package.json` into `dist/` when `generatePackageJson` is unset **and no `dist/.../package.json` already exists** (`!existsSync(distPackageJson)`) — a one-time seed on first build, not a sync performed on every build. `npx nx reset` clears Nx's task cache/daemon but never touches files already written to `dist/` on disk, so a stale `package.json` (mtime predating the session) survived a full `nx reset` + `npx nx run-many -t build` completely untouched — proven directly by mtime: every other file in each project's `dist/` (`index.js`/`.mjs`/`.umd.js`/`.d.ts`) got a fresh timestamp from the rebuild while `package.json` alone stayed frozen at its old one. Confirmed by contrast: `data-core-structures`, the one project already setting `generatePackageJson: true`, never drifted — that branch (`createPackageJson`) regenerates `package.json` from the live project graph unconditionally on every build.
+
+Fix: added `"generatePackageJson": true` to the `build` target's `options` in all 3 projects' `project.json` (exact placement mirrored from `data-core-structures`), deleted the 3 stale `dist/.../package.json` files, and rebuilt just those 3 projects. Regression-checked the regenerated dist `package.json` against a captured before-fix baseline (`name`, `version`, `files`, `exports`, `main`, `module`, `types`, `dependencies`): every field preserved, and all `@adhd/*`/external dependency versions resolve to real pinned values (never `*` or missing) — `data-query-engine`'s dist `peerDependencies` in fact **improved**, now correctly populated with `@adhd/data-base-transforms: 2.2.1` (matching its own source `package.json`) instead of the old seed's empty `{}`. Verified: full-repo audit of all 53 buildable `package.json`s now shows `source == dist` version everywhere (the sole exception, `ui-react-base-storybook`, has no `build` target by design and was never in scope).
+
+Commits: `2d51aa47261973f4fd94c345478c04a86df8c85b` (the 3 `project.json` fixes); original discovery logged at `088266df` and corrected same-day, removed from BACKLOG.md here per the completed-items convention.
+
 ### Fixed — test wiring: 15 projects shipped specs that could never run; nx reported silent success (2026-07-17)
 
 **BUG-NXTEST-001 — `nx run-many -t test` reports SUCCESS for projects with no `test` target, hiding every unwired suite.**
