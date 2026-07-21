@@ -18,23 +18,36 @@ How to version, build, and publish packages in this monorepo to npm.
 ### 1. Version (compute what changed, bump versions, generate changelogs)
 
 ```bash
-# Patch bumps (patch) on all packages with changes since last tag
-npx nx release patch --dry-run   # preview
-npx nx release patch             # execute (no --dry-run)
-
-# Minor/major bumps (specify if needed)
-npx nx release minor --dry-run
-npx nx release major --dry-run
+# CHANGED-ONLY (the normal path): NO explicit specifier. Conventional commits
+# decide each package's bump; packages with no commits since their tag are SKIPPED.
+npx nx release version --dry-run   # preview — only changed packages bump
+npx nx release version             # execute (no --dry-run)
 ```
 
-**What happens:** `nx release version` does the following:
-- Scans git history from each project's **last git tag** (`{projectName}@{version}`) forward
-- Projects with zero commits since last tag are **skipped** (not re-released)
-- Projects with commits use **conventional commit analysis** to determine bump: `fix()` → patch, `feat()` → minor, `BREAKING CHANGE` → major
-- Bumps `package.json` version in each affected project
-- Generates per-project `CHANGELOG.md` and workspace `CHANGELOG.md` from commit messages
-- Tags each project with its new tag: `@adhd/agent-mcp@1.2.3`, `@adhd/apigen-cli@2.0.0`, etc.
-- Updates internal cross-project dependencies (`updateDependents: "auto"`)
+> ⚠️ **`nx release patch|minor|major` does NOT mean "changed-only".** An **explicit**
+> specifier (`patch`/`minor`/`major`) **force-bumps EVERY project in the release group**,
+> bypassing change-detection entirely (verified by dry-run 2026-07-20). Use it only when
+> you deliberately want to bump everything to the same level. For "only what changed since
+> last publish", run the **bare** `npx nx release version` (or the top-level `npx nx release`)
+> and let `specifierSource: conventional-commits` pick each package's bump. If you want to
+> force a level on *only the changed* packages, combine with `--projects` (see Selective).
+
+**What happens (bare `nx release version`):**
+- Scans git history from each project's **last git tag** forward. The tag pattern is
+  **`{projectName}@{version}` — the UNSCOPED nx project name**, e.g. `agent-mcp@2.1.1`,
+  `apigen-cli@0.1.0` (NOT `@adhd/agent-mcp@…`; the `@adhd/` scope is the npm name, not the tag).
+- Projects with zero commits since last tag are **skipped** (`🚫 No changes were detected … Skipping`).
+- Projects with commits use **conventional commit analysis** to determine bump: `fix()` → patch, `feat()` → minor, `BREAKING CHANGE` → major.
+- Bumps `package.json` version in each affected project; generates per-project + workspace `CHANGELOG.md`.
+- Tags each bumped project `{projectName}@{newVersion}` and updates internal cross-project dependencies (`updateDependents: "auto"`).
+
+> **Baseline requirement (one-time):** change-detection needs a `{projectName}@{version}`
+> tag per project as its diff baseline. With **no tags**, `currentVersionResolver:git-tag`
+> falls back to disk and resolves bumps from the *entire* history → the first release touches
+> everything. Baseline tags for all 52 release-group projects were established locally at their
+> current disk versions on 2026-07-20 (see `DEBT-RELEASE-BASELINE-TAGS-001`); **they are LOCAL
+> until pushed** (`git push --tags`, human-approved) — CI won't see changed-only until then.
+> Bootstrapping a fresh clone instead: `npx nx release --first-release`.
 
 ### 2. Publish (build, test, verify-dist-load, push to npm)
 
