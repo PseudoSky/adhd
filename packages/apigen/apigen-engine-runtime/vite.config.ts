@@ -4,6 +4,7 @@ import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { copyReadme } from '../../../tools/vite-copy-readme.mjs';
+import { externalizeRealDeps } from '../../../tools/vite-external-deps.mjs';
 
 export default defineConfig({
   root: __dirname,
@@ -43,7 +44,11 @@ export default defineConfig({
     },
     rollupOptions: {
       // External packages that should not be bundled into your library.
-      external: [],
+      // Bundle only @adhd/* workspace source (no workspace symlinks in
+      // this repo — see tools/vite-external-deps.mjs); externalize every
+      // real npm dependency + Node builtin. See BACKLOG.md
+      // INVESTIGATION-BUILD-TOOL-001.
+      external: externalizeRealDeps(__dirname),
     },
   },
 
