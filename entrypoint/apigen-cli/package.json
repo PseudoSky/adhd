@@ -29,7 +29,7 @@
     "@adhd/apigen-engine-runtime": "0.1.0",
     "@adhd/apigen-core-client": "0.1.0",
     "@adhd/apigen-engine-naming": "0.1.1",
-    "@adhd/apigen-plugin-openapi": "0.1.1"
+    "@adhd/apigen-plugin-openapi": "0.1.2"
   },
   "devDependencies": {
     "decimal.js": "^10.4.3"
