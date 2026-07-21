@@ -1,5 +1,19 @@
 ## Unreleased
 
+### Fixed — release publish silently skipped its build/test/verify-dist-load gate for selective (`--projects=`) publishes (2026-07-20)
+
+**BUG-RELEASE-PUBLISH-GATE-BYPASS-001 (CRITICAL) — `nx release publish --projects=<list>` bypassed the `nx-release-publish.dependsOn` gate entirely, so a broken bundle could ship.**
+
+A publish-preview dry-run surfaced this live: `npx nx release publish --projects=apigen-plugin-mcp,apigen-plugin-openapi --dry-run` ran **zero** dependency tasks (no `build`, no `test`, no `verify-dist-load`) and would have printed "Would publish" for both even with their dist bundles broken (see the paired fix below). Direct target invocation (`npx nx run apigen-plugin-mcp:nx-release-publish --dry-run`) correctly ran all 14 dependency tasks. Root-caused to a confirmed upstream Nx limitation — `nx release publish`'s internal publish orchestration does not expand the task graph through each project's `dependsOn` the way `run-many`/`affected`/a direct `nx run` invocation does ([nrwl/nx#22720](https://github.com/nrwl/nx/issues/22720), [nrwl/nx#27749](https://github.com/nrwl/nx/issues/27749), [nrwl/nx#30552](https://github.com/nrwl/nx/issues/30552)) — narrowed specifically to the `--projects=` filter path; unfiltered `nx release publish` (the full release set, no `--projects`) was verified to correctly expand and enforce the gate.
+
+Changes:
+- **`scripts/release-publish.mjs`** — the new canonical publish entry point, replacing direct calls to `npx nx release publish`. Routes `--projects=<list>` through `npx nx run-many -t nx-release-publish --projects=<list>` (proven to honor `dependsOn`); routes an unfiltered call through plain `nx release publish` (proven safe). Propagates the real exit code — non-zero means nothing published.
+- **`PUBLISHING.md`** rewritten to document `scripts/release-publish.mjs` as the required publish command everywhere it previously said `npx nx release publish`, with an explicit warning about the `--projects=` bypass and its GitHub issue citations. The "CI publish (automated)" section corrected to reflect what CI *actually* runs today (see `BUG-CI-PUBLISH-STALE-TARGETS-001`, filed not fixed — CI's `Publish` job doesn't call `nx release` at all).
+
+Verified with teeth: **negative control** — `node scripts/release-publish.mjs --dry-run --projects=apigen-plugin-mcp,apigen-plugin-openapi` while both packages' ESM bundle was still broken → exit 1, `verify-dist-load` failure printed, zero "Would publish" occurrences, nothing published. **Positive control** — identical command after the paired `INVESTIGATION-BUILD-TOOL-001` fix landed → exit 0, both projects print "Would publish … [dry-run]" with correct tarball contents. Unfiltered `node scripts/release-publish.mjs --dry-run` (full 52-project release set) also re-verified post-fix: correctly fails non-zero on the separately-filed, out-of-scope defects (`BUG-WORKSPACE-NO-LINKING-001`, `BUG-BUILD-TSC-STALE-DIST-METADATA-001`, `BUG-DATA-CORE-STRUCTURES-DIST-TYPE-MISMATCH-001`, `BUG-APIGEN-CLI-VERIFY-DIST-LOAD-ARGV-001`), proving the gate stays honest and doesn't mask unrelated problems.
+
+Residual/deferred: `BUG-CI-PUBLISH-STALE-TARGETS-001` (CI's actual publish job needs rewiring to call this script — separate, higher-risk change needing human sign-off).
+
 ### Fixed — test wiring: 15 projects shipped specs that could never run; nx reported silent success (2026-07-17)
 
 **BUG-NXTEST-001 — `nx run-many -t test` reports SUCCESS for projects with no `test` target, hiding every unwired suite.**
