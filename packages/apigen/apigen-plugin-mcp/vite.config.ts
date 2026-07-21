@@ -4,7 +4,7 @@ import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { copyReadme } from '../../../tools/vite-copy-readme.mjs';
-import { builtinModules } from 'node:module';
+import { externalizeRealDeps } from '../../../tools/vite-external-deps.mjs';
 
 export default defineConfig({
   root: __dirname,
@@ -33,14 +33,13 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      // platform:node lib — don't bundle node built-ins or the MCP SDK
-      // (the SDK's sse.js does a top-level `import { randomUUID } from 'node:crypto'`,
-      // which vite's lib build would otherwise externalize to a browser stub and fail).
-      external: [
-        /^node:/,
-        ...builtinModules,
-        /^@modelcontextprotocol\/sdk(\/|$)/,
-      ],
+      // Bundle only @adhd/* workspace source (no workspace symlinks in this
+      // repo — see tools/vite-external-deps.mjs); externalize every real npm
+      // dependency (including @modelcontextprotocol/sdk — its sse.js does a
+      // top-level `import { randomUUID } from 'node:crypto'`, which vite's
+      // lib build would otherwise externalize to a browser stub and fail)
+      // plus every Node builtin. See BACKLOG.md INVESTIGATION-BUILD-TOOL-001.
+      external: externalizeRealDeps(__dirname),
     },
   },
 

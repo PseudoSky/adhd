@@ -134,3 +134,9 @@ packages/agent/*/src/**/*.js.map
 packages/agent/*/src/**/*.d.ts
 packages/agent/*/src/**/*.d.ts.map
 packages/agent/*/tsconfig.tsbuildinfo
+
+# Vite's own transient config-loader output — written next to vite.config.ts
+# when Vite pre-bundles the config file itself, normally cleaned up on process
+# exit but left behind by an interrupted/parallel run. Regenerable, never
+# meaningful to track.
+**/vite.config.ts.timestamp-*.mjs
