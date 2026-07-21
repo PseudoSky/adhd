@@ -29,6 +29,34 @@
 - **Description:** `--all` runs `gitleaks git` over the whole commit history and finds 7 historical leaks (the backlog the `48ab824f` "add credential pre-commit gate" commit was created to stop growing). The pre-commit `--staged`/`--range` modes only scan new changes and are unaffected; only the audit/backfill `--all` mode surfaces the historical backlog.
 - **Status:** OPEN (repo-wide, out of scope for `packages/environment`) — remediate via history scrub / documented allowlist of the 7 known findings. **Explicitly left open per instruction — do not touch git history.**
 
+---
+
+## Sox-Ecosystem Adoption Gap Tasks (2026-07-21)
+
+Feature gaps discovered during the sox-ecosystem adoption survey at
+`docs/environment/adoption-survey/`. Full specifications in `GAP_SPECS.md`
+and `GAPS_TO_ARCHITECT.md` in that directory.
+
+- **SOX-ENV-G1** — Non-`ADHD_*` Env Var Allowlist. `FieldSpec.env` alias for
+  config entries backed by external env vars + spec-level `externalEnv` with
+  built-in defaults (`HOME`, `PATH`, `TZ`, etc.) for system pass-through.
+  Blocks all G1-tagged packages. **SPECIFIED** in `GAP_SPECS.md`.
+- **SOX-ENV-G2** — Write Paths Outside Scope Root. `DirSpec.location` escape
+  hatch for OS-mandated/legacy dirs, `bundleId` for monorepo path templates,
+  `scopeRoots` per-scope overrides. Blocks Phase 3 path schema finalization.
+  **SPECIFIED** in `GAP_SPECS.md`.
+- **SOX-ENV-G3** — Dynamic / Extension Config via Env Var Auto-Scaffolding.
+  Structured env var naming (`ADHD_<PROJECT>__<KEY>`) auto-maps to config tree
+  entries. Design questions in `GAPS_TO_ARCHITECT.md`.
+- **SOX-ENV-G4** — Extended Directory Kinds. Add `sockets`, `locks`, `stores`,
+  `backups` to `DirKind` union. **SPECIFIED** in `GAP_SPECS.md`.
+- **SOX-ENV-G5** — Language-Neutral Spec Artifact. `generateSpecArtifact()`
+  serializes resolved spec to JSON Schema for non-Node consumers. **SPECIFIED**
+  in `GAP_SPECS.md`.
+- **SOX-ENV-G6** — Multi-File Merged Config Sources. `sources.files` glob
+  pattern for additional config files at different cascade precedence levels.
+  **SPECIFIED** in `GAP_SPECS.md`.
+
 > **ID note:** this finding was originally filed as `ENV-SEC-002`; that id was already assigned to the
 > leaked `nxCloudAccessToken` in the repo-root `BACKLOG.md`. Renumbered to **ENV-SEC-004**. Its
 > substance is correct and has a root-`BACKLOG.md` counterpart: **ENV-SEC-001** (FontAwesome npm token)
