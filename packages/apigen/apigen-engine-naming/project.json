@@ -6,12 +6,15 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
   },
-  "tags": ["layer:logic", "platform:shared"],
+  "tags": [
+    "layer:logic",
+    "platform:shared"
+  ],
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
@@ -24,19 +27,27 @@
     },
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
-        "outputPath": "dist/packages/apigen/apigen-engine-naming",
+        "outputPath": "packages/apigen/apigen-engine-naming/dist",
         "main": "packages/apigen/apigen-engine-naming/src/index.ts",
         "tsConfig": "packages/apigen/apigen-engine-naming/tsconfig.lib.json",
-        "assets": ["packages/apigen/apigen-engine-naming/*.md"]
+        "assets": [
+          "packages/apigen/apigen-engine-naming/*.md"
+        ]
       }
     },
     "nx-release-publish": {
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       },
-      "dependsOn": ["build", "test", "verify-dist-load"]
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load"
+      ]
     }
   }
 }

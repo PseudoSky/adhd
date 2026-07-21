@@ -3,25 +3,15 @@
   "version": "2.1.1",
   "type": "module",
   "bin": {
-    "agent-mcp": "./src/index.js",
-    "agent-mcp-tail": "./src/scripts/agent-mcp-tail.js"
+    "agent-mcp": "./dist/src/index.js",
+    "agent-mcp-tail": "./dist/src/scripts/agent-mcp-tail.js"
   },
   "files": [
-    "src",
-    "drizzle",
-    "docs",
+    "dist",
+    "CHANGELOG.md",
     "llms.txt",
     "AGENTS.md",
-    "CHANGELOG.md",
-    "!src/**/__tests__/**",
-    "!src/**/*.test.*",
-    "!src/**/*.spec.*",
-    "!src/**/*.e2e.*",
-    "!docs/marketing/**",
-    "!**/vite.config.*",
-    "!**/project.json",
-    "!**/tsconfig*.json",
-    "!**/coverage/**"
+    "docs"
   ],
   "dependencies": {
     "@adhd/agent-store-runtime": "^2.1.0",
@@ -41,7 +31,7 @@
   "devDependencies": {
     "@adhd/agent-base-types": "^2.1.0"
   },
-  "main": "./src/index.js",
+  "main": "./dist/src/index.js",
   "license": "MIT",
   "repository": {
     "type": "git",

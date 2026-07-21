@@ -1,7 +1,7 @@
 {
   "name": "@adhd/apigen-plugin-logger",
   "version": "0.1.2",
-  "main": "./index.js",
+  "main": "./dist/index.js",
   "dependencies": {
     "pino": "10.3.1",
     "@adhd/apigen-core-client": "0.1.0"
@@ -9,6 +9,10 @@
   "publishConfig": {
     "access": "public"
   },
-  "module": "./index.mjs",
-  "types": "./index.d.ts"
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
 }

@@ -3,6 +3,7 @@
   "namedInputs": {
     "default": [
       "{projectRoot}/**/*",
+      "!{projectRoot}/dist/**",
       "sharedGlobals"
     ],
     "production": [
@@ -25,7 +26,8 @@
       "{workspaceRoot}/tools/vite-plugins/externalize.mjs",
       "{workspaceRoot}/tools/vite-plugins/copy-readme.mjs",
       "{workspaceRoot}/tools/nx-plugins/build/**/*",
-      "{workspaceRoot}/tools/nx-plugins/assets/**/*"
+      "{workspaceRoot}/tools/nx-plugins/lint/**/*",
+      "{workspaceRoot}/.eslintignore"
     ]
   },
   "plugins": [
@@ -45,12 +47,6 @@
         "openTargetName": "open-cypress",
         "componentTestingTargetName": "component-test",
         "ciTargetName": "e2e-ci"
-      }
-    },
-    {
-      "plugin": "@nx/eslint/plugin",
-      "options": {
-        "targetName": "lint"
       }
     },
     {
@@ -85,10 +81,10 @@
       "plugin": "@nxlv/python"
     },
     {
-      "plugin": "./tools/nx-plugins/build/plugin.js"
+      "plugin": "./tools/nx-plugins/lint/plugin.js"
     },
     {
-      "plugin": "./tools/nx-plugins/assets/plugin.js"
+      "plugin": "./tools/nx-plugins/build/plugin.js"
     },
     {
       "plugin": "./tools/nx-plugins/deps/plugin.js"
@@ -200,6 +196,7 @@
       "preVersionCommand": "npx nx run-many -t build",
       "updateDependents": "auto",
       "generatorOptions": {
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag",
         "fallbackCurrentVersionResolver": "disk",
         "specifierSource": "conventional-commits"

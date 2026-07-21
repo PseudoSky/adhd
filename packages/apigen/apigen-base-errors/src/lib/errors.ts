@@ -117,6 +117,45 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Structural (duck-typed) `ApiError` check — deliberately NOT `instanceof
+ * ApiError`.
+ *
+ * `apigen-engine-runtime` (and every other `platform:node`/`platform:shared`
+ * `@adhd/*` package built via the shared vite config, see
+ * `tools/vite-plugins/externalize.mjs`) BUNDLES its `@adhd/*` dependencies —
+ * including this package — straight into its own `dist` output instead of
+ * externalizing them, so `ApiError` gets re-compiled as a private, separately
+ * identified class inside every consumer's bundle. `err instanceof ApiError`
+ * only succeeds when the checking code and the throwing code share the exact
+ * same loaded copy of this class; the moment one side loads a *different*
+ * bundle of `@adhd/apigen-base-errors` than the other (e.g. a transport
+ * adapter importing this package directly while the error was thrown from
+ * inside another package's bundled copy of `makeValidateLayer` — this is
+ * exactly what happens once real `node_modules` linking, e.g. under pnpm,
+ * makes a package resolve to its pre-built `dist` instead of source), the
+ * classes are structurally identical but referentially distinct and
+ * `instanceof` silently returns `false`. See BACKLOG.md
+ * `BUG-APIGEN-PLUGIN-IN-PROCESS-VALIDATE-500-001` (validate-layer 500-vs-400
+ * misclassification) and `BUG-APIGEN-STREAM-ERROR-CODE-MISCLASSIFY-001`
+ * (mcp-plugin stream error code misclassification) — same root cause,
+ * independently confirmed from two different call sites.
+ *
+ * This guard is immune to that hazard: it only inspects the plain,
+ * cross-realm-safe properties every `ApiError` instance carries (`name`,
+ * `code`, `toJSON`), which survive bundling/inlining identically regardless
+ * of which physical class definition constructed the object.
+ */
+export function isApiError(err: unknown): err is ApiError {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { name?: unknown }).name === 'ApiError' &&
+    ERROR_CODES.includes((err as { code?: unknown }).code as ApiErrorCode) &&
+    typeof (err as { toJSON?: unknown }).toJSON === 'function'
+  );
+}
+
 // ---------------------------------------------------------------------------
 // §11 — Streaming error-after-first-chunk carrier
 // ---------------------------------------------------------------------------

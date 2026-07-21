@@ -1,0 +1,20 @@
+# pnpm workspace definition — replaces yarn Berry workspaces for this monorepo.
+#
+# Members:
+#   packages/*/*        — the @adhd/<domain>-<tier>-<name> libraries (48)
+#   entrypoint/*        — the CLI/server hosts (@adhd/agent-mcp, dispatch-cli, …) (5)
+#   tools/nx-plugins/*  — the local Nx executor plugins (@adhd/nx-build, -assets,
+#                         -deps, -test). Making these workspace members is what
+#                         lets `nx` resolve `@adhd/nx-build:verify` etc. natively
+#                         (node_modules/@adhd/nx-build is auto-linked), so the
+#                         executors can be declared centrally in nx.json
+#                         targetDefaults instead of written into every project.json.
+packages:
+  - 'packages/*/*'
+  - 'entrypoint/*'
+  - 'tools/nx-plugins/*'
+  # NON-CONFORMING location: @adhd/apigen-codegen-openapi lives one level too deep
+  # (packages/apigen/codegen/openapi instead of packages/apigen/apigen-codegen-openapi),
+  # so the packages/*/* glob misses it. Listed explicitly to unblock; scheduled to be
+  # relocated to the conforming path (tracked as a follow-up in this migration).
+  - 'packages/apigen/codegen/openapi'

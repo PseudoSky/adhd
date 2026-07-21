@@ -52,9 +52,9 @@ async function freePort(): Promise<number> {
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..');
 const BUILT_BIN = path.join(
   REPO_ROOT,
-  'dist',
   'entrypoint',
   'apigen-cli',
+  'dist',
   'index.js'
 );
 // An UNMODIFIED file from the real @adhd/data-base-transforms package (flat function exports).

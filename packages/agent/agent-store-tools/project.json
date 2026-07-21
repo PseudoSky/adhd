@@ -6,18 +6,23 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
   },
-  "tags": ["layer:ai", "platform:node"],
+  "tags": [
+    "layer:ai",
+    "platform:node"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
-        "outputPath": "dist/packages/agent/agent-store-tools",
+        "outputPath": "packages/agent/agent-store-tools/dist",
         "main": "packages/agent/agent-store-tools/src/index.ts",
         "tsConfig": "packages/agent/agent-store-tools/tsconfig.lib.json",
         "clean": true,
@@ -44,16 +49,22 @@
     },
     "test": {
       "executor": "@nx/vite:test",
-      "outputs": ["{workspaceRoot}/coverage/packages/agent/agent-store-tools"],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/agent/agent-store-tools"
+      ],
       "options": {
         "configFile": "packages/agent/agent-store-tools/vite.config.ts",
         "passWithNoTests": true
       }
     },
     "nx-release-publish": {
-      "dependsOn": ["build", "test", "verify-dist-load"],
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load"
+      ],
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       }
     }
   }

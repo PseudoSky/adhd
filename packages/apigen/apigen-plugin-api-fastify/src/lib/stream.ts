@@ -32,7 +32,7 @@
  */
 
 import type { FastifyRequest, FastifyReply } from 'fastify';
-import { ApiError } from '@adhd/apigen-base-errors';
+import { ApiError, isApiError } from '@adhd/apigen-base-errors';
 import type { ApiStream } from '@adhd/apigen-engine-runtime';
 
 // ---------------------------------------------------------------------------
@@ -118,13 +118,17 @@ export async function sendStreamSse(
       raw.end();
     }
   } catch (err) {
-    const apiError =
-      err instanceof ApiError
-        ? err
-        : new ApiError(
-            'internal',
-            err instanceof Error ? err.message : String(err)
-          );
+    // Duck-type, not `instanceof ApiError` (BUG-APIGEN-STREAM-ERROR-CODE-
+    // MISCLASSIFY-001) — see `isApiError`'s doc comment in apigen-base-errors.
+    // An ApiError thrown across the runtime's bundled-dist boundary is a
+    // distinct class instance, so `instanceof` collapses its real code (e.g.
+    // `not_found`) to the `internal` fallback below.
+    const apiError = isApiError(err)
+      ? err
+      : new ApiError(
+          'internal',
+          err instanceof Error ? err.message : String(err)
+        );
 
     if (!firstChunkSent) {
       // Before first chunk: normal §9 HTTP error status.

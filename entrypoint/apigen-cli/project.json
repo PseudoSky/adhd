@@ -6,37 +6,55 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
   },
-  "tags": ["layer:entrypoints", "platform:node"],
+  "tags": [
+    "layer:entrypoints",
+    "platform:node"
+  ],
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
-      "outputs": ["{workspaceRoot}/coverage/entrypoint/apigen-cli"],
-      "dependsOn": ["build"],
+      "outputs": [
+        "{workspaceRoot}/coverage/entrypoint/apigen-cli"
+      ],
+      "dependsOn": [
+        "build"
+      ],
       "options": {
         "configFile": "entrypoint/apigen-cli/vite.config.ts"
       }
     },
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
-        "outputPath": "dist/entrypoint/apigen-cli",
+        "outputPath": "entrypoint/apigen-cli/dist",
         "main": "entrypoint/apigen-cli/src/index.ts",
         "tsConfig": "entrypoint/apigen-cli/tsconfig.lib.json",
-        "assets": ["entrypoint/apigen-cli/*.md"]
+        "assets": [
+          "entrypoint/apigen-cli/*.md"
+        ]
       }
     },
     "generate-api": {
       "executor": "@adhd/apigen-nx:generate",
       "cache": true,
-      "outputs": ["{workspaceRoot}/tmp/apigen-generate-out"],
-      "inputs": ["default", "^production"],
-      "dependsOn": ["build"],
+      "outputs": [
+        "{workspaceRoot}/tmp/apigen-generate-out"
+      ],
+      "inputs": [
+        "default",
+        "^production"
+      ],
+      "dependsOn": [
+        "build"
+      ],
       "options": {
         "source": "src/test/fixtures/real-api.ts",
         "type": "mcp",
@@ -45,9 +63,13 @@
     },
     "nx-release-publish": {
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       },
-      "dependsOn": ["build", "test", "verify-dist-load"]
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load"
+      ]
     },
     "bench": {
       "executor": "nx:run-commands",
