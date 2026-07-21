@@ -21,7 +21,10 @@
       "!{projectRoot}/.storybook/**/*",
       "!{projectRoot}/tsconfig.storybook.json"
     ],
-    "sharedGlobals": []
+    "sharedGlobals": [
+      "{workspaceRoot}/tools/vite-external-deps.mjs",
+      "{workspaceRoot}/tools/vite-copy-readme.mjs"
+    ]
   },
   "plugins": [
     {
