@@ -626,12 +626,25 @@ function runScalarAwareGenerator(
  *
  * Three categories of normalisation are applied (in order):
  *
- * 1. **Decimal qualified import path** — ts-morph emits a fully-qualified import
- *    expression for default-imported external types without a tsconfig, e.g.:
- *      `import("/abs/path/to/node_modules/decimal.js/decimal").default`
- *    Normalised to `"Decimal"` so both reach the same SCALAR_SCHEMAS entry.
- *    The pattern anchors on the module path containing `decimal.js` and the
- *    exported binding being `.default`.
+ * 1. **Qualified import expressions** — whenever ts-morph resolves `Type.getText()`
+ *    WITHOUT an enclosing-node context (e.g. `elem.getText()` on an array element
+ *    type, or `paramDecl.getType().getText()` on a top-level parameter), the
+ *    TypeChecker's default printer always emits a fully-qualified import
+ *    expression for any externally-imported class — e.g.:
+ *      `import("/abs/path/to/node_modules/decimal.js/decimal").Decimal`
+ *    The exact member name after the final `.` depends on the resolver/module
+ *    layout (observed: `.Decimal` when the package is resolvable — e.g. under
+ *    pnpm's hoisted `node_modules` — historically `.default` when it was NOT
+ *    resolvable and ts-morph fell back to a synthetic default binding). BOTH
+ *    forms — and any other named-export spelling — describe the SAME
+ *    decimal.js `Decimal` class, so `rewriteQualifiedImports` (below) rewrites
+ *    ANY `import("...decimal.js...").<member>` occurrence, anywhere in the
+ *    string (not just when it IS the whole string), to the canonical
+ *    `'Decimal'` SCALAR_SCHEMAS key. This must not be anchored to `.default`
+ *    only — doing so silently stopped matching once decimal.js became
+ *    resolvable and ts-morph started emitting `.Decimal` instead, which is
+ *    exactly what let the real class structurally expand instead of
+ *    collapsing to the logical scalar (BUG-APIGEN-CORE-pnpm-decimal).
  *
  * 2. **Import alias map** — when the caller passes a non-empty alias map (built
  *    by `extractScalarAliases`), a bare local name like `D2` is remapped to its
@@ -650,10 +663,10 @@ function normalizeTypeText(
 ): string {
   let t = typeText.trim();
 
-  // 1. Decimal qualified import path  →  'Decimal'
-  if (/^import\(["'][^"']*decimal\.js[^"']*["']\)\.default$/.test(t)) {
-    return 'Decimal';
-  }
+  // 1. Qualified import expressions (decimal.js, or any future
+  //    MODULE_SCALAR_MAP module; any export-member spelling) → canonical
+  //    scalar key, anywhere in the string — see `rewriteQualifiedImports`.
+  t = rewriteQualifiedImports(t);
 
   // 2. Import alias map  →  canonical scalar key
   if (aliases?.size) {
@@ -686,39 +699,58 @@ function escapeRegExp(s: string): string {
 }
 
 /**
- * Qualified-import expressions emitted by ts-morph for default-imported
- * external scalars when the project has no tsconfig, e.g.:
- *   `import("/abs/path/to/decimal.js/decimal").default`
+ * Qualified-import expressions emitted by ts-morph's TypeChecker whenever
+ * `Type.getText()` is called WITHOUT an enclosing-node context — which is
+ * exactly what happens for array/tuple element types, index-signature value
+ * types, and top-level parameter types resolved via `getTypeAtLocation(...).getText()`
+ * with no node argument (see `morph-walk.ts` and `extract.ts`'s `rawParams*`
+ * helpers). Two spellings have been observed for the SAME decimal.js `Decimal`
+ * class, depending on module resolvability:
+ *   `import("/abs/path/to/decimal.js/decimal").default`   (module unresolvable)
+ *   `import("/abs/path/to/decimal.js/decimal").Decimal`   (module resolvable —
+ *                                                           e.g. pnpm's hoisted
+ *                                                           node_modules)
+ * The member name after the final `.` is therefore NOT anchored to `.default`
+ * — any identifier is matched (`\w+`) — so both spellings, and any other named
+ * export ts-morph might emit for a MODULE_SCALAR_MAP-registered module, are
+ * recognised uniformly.
  *
  * When these appear INSIDE composite type strings like
- *   `{ cost: import("...decimal.js/decimal").default; }`
- * the whole-string check in normalizeTypeText does not match.  This list
+ *   `{ cost: import("...decimal.js/decimal").Decimal; }`
+ * the whole-string check in normalizeTypeText's step 1 does not match on its
+ * own (it's a substring, not the whole string) — that's why
+ * `rewriteQualifiedImports` is unanchored and applied by BOTH normalizeTypeText
+ * (whole/partial strings alike, via `t = rewriteQualifiedImports(t)`) and
+ * `applyAliasesToTypeText` (the final text-based fallback path). This list
  * records, for each MODULE_SCALAR_MAP entry, a regex that matches the
  * qualified import fragment ANYWHERE inside a longer type text.
- * rewriteQualifiedImports applies them in applyAliasesToTypeText.
  */
 const QUALIFIED_IMPORT_PATTERNS: ReadonlyArray<{
   pattern: RegExp;
   key: string;
 }> = Object.entries(MODULE_SCALAR_MAP).map(([modSpec, canonicalKey]) => ({
-  // Matches: import("...{modSpec}...").default  (single or double quotes)
+  // Matches: import("...{modSpec}...").<anyMemberName>  (single or double quotes)
   // The module specifier appears inside an absolute path, so we allow any
   // characters between the quote and the specifier, and between the specifier
-  // and the closing quote / `.default`.
+  // and the closing quote. The trailing member accessor (`.default`, `.Decimal`,
+  // …) is matched generically (`\w+`) rather than anchored to one spelling —
+  // see the doc comment above for why.
   pattern: new RegExp(
-    `import\\(["'][^"']*${escapeRegExp(modSpec)}[^"']*["']\\)\\.default`,
+    `import\\(["'][^"']*${escapeRegExp(modSpec)}[^"']*["']\\)\\.\\w+`,
     'g'
   ),
   key: canonicalKey,
 }));
 
 /**
- * Replace all qualified import expressions (e.g. `import("...decimal.js/decimal").default`)
- * within a composite type text with their canonical SCALAR_SCHEMAS key (`Decimal`).
+ * Replace all qualified import expressions (e.g. `import("...decimal.js/decimal").Decimal`
+ * or `...).default`) within a composite type text with their canonical
+ * SCALAR_SCHEMAS key (`Decimal`).
  *
  * This handles the case where ts-morph emits the full qualified form inside an
- * object or array type text (vs. as the whole type text, which normalizeTypeText handles):
- *   `{ cost: import(".../decimal.js/decimal").default; }`
+ * object or array type text (vs. as the whole type text, which normalizeTypeText
+ * also handles by delegating here — see step 1 there):
+ *   `{ cost: import(".../decimal.js/decimal").Decimal; }`
  *                                                ↓
  *   `{ cost: Decimal; }`
  */

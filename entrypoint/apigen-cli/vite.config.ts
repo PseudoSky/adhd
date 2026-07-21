@@ -4,7 +4,7 @@ import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import * as fs from 'node:fs';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
-import { copyReadme } from '../../tools/vite-copy-readme.mjs';
+import { copyReadme } from '../../tools/vite-plugins/copy-readme.mjs';
 import { builtinModules } from 'node:module';
 
 const OUT_DIR = path.resolve(__dirname, '../../dist/entrypoint/apigen-cli');

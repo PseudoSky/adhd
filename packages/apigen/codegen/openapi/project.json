@@ -6,7 +6,7 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
@@ -31,7 +31,7 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/packages/apigen/codegen/openapi",
+        "outputPath": "packages/apigen/codegen/openapi/dist",
         "main": "packages/apigen/codegen/openapi/src/index.ts",
         "tsConfig": "packages/apigen/codegen/openapi/tsconfig.lib.json",
         "assets": [
@@ -41,7 +41,7 @@
     },
     "nx-release-publish": {
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       },
       "dependsOn": [
         "build",

@@ -6,12 +6,15 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
   },
-  "tags": ["layer:shared", "platform:shared"],
+  "tags": [
+    "layer:shared",
+    "platform:shared"
+  ],
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
@@ -25,16 +28,26 @@
     "typecheck": {
       "executor": "nx:run-commands",
       "cache": true,
-      "inputs": ["default", "^production", { "externalDependencies": ["typescript"] }],
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
       "options": {
         "command": "tsc -p packages/dispatch/dispatch-base-spec/tsconfig.lib.json --noEmit"
       }
     },
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
-        "outputPath": "dist/packages/dispatch/dispatch-base-spec",
+        "outputPath": "packages/dispatch/dispatch-base-spec/dist",
         "main": "packages/dispatch/dispatch-base-spec/src/index.ts",
         "tsConfig": "packages/dispatch/dispatch-base-spec/tsconfig.lib.json",
         "assets": [
@@ -49,9 +62,13 @@
     },
     "nx-release-publish": {
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       },
-      "dependsOn": ["build", "test", "verify-dist-load"]
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load"
+      ]
     }
   }
 }

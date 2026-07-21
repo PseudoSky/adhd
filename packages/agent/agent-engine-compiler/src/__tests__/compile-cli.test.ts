@@ -37,18 +37,20 @@
  *   afterAll removes those symlinks.
  */
 
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 // Upstream store + seed APIs ([inv:real-rows-not-mocks])
+import { AgentPolicyStore, seed as seedPolicy } from '@adhd/agent-core-policy';
+import { seed as seedProvider } from '@adhd/agent-core-provider';
 import {
   AgentStore,
   ComponentStore,
@@ -56,11 +58,9 @@ import {
   TaxonomyStore,
 } from '@adhd/agent-store-prompts';
 import {
-  seed as seedToolRegistry,
   AgentToolStore,
+  seed as seedToolRegistry,
 } from '@adhd/agent-store-tools';
-import { seed as seedProvider } from '@adhd/agent-core-provider';
-import { seed as seedPolicy, AgentPolicyStore } from '@adhd/agent-core-policy';
 
 // ── constants ─────────────────────────────────────────────────────────────
 
@@ -88,31 +88,38 @@ const TOOL_REGISTRY_MIGRATIONS = path.join(
 const POLICY_MIGRATIONS = path.join(AGENT_SRC, 'agent-core-policy/drizzle');
 
 /**
- * Layout:
+ * Layout (in-source dist — each package builds to `{projectRoot}/dist`):
  *   REPO_ROOT      = adhd/
- *   DIST_ROOT      = dist/packages/
- *   COMPILER_DIST  = dist/packages/agent/agent-engine-compiler/
- *   BIN            = dist/packages/agent/agent-engine-compiler/src/cli/compile.js
+ *   AGENT_SRC      = packages/agent/
+ *   COMPILER_DIST  = packages/agent/agent-engine-compiler/dist/
+ *   BIN            = packages/agent/agent-engine-compiler/dist/src/cli/compile.js
  *
  * Relative to packages/agent/agent-engine-compiler/src/__tests__/:
  *   ../../../../../  = repo root (5 levels up)
  */
 const REPO_ROOT = path.resolve(__dirname, '../../../../../');
-const DIST_ROOT = path.join(REPO_ROOT, 'dist/packages');
-const COMPILER_DIST = path.join(DIST_ROOT, 'agent/agent-engine-compiler');
+const COMPILER_DIST = path.join(AGENT_SRC, 'agent-engine-compiler/dist');
 const BIN = path.join(COMPILER_DIST, 'src/cli/compile.js');
 
 /**
- * @adhd packages that the CLI bin imports at runtime.
- * We symlink these into COMPILER_DIST/node_modules/@adhd/ so Node's ESM
- * resolution finds them when executing the bin from dist/.
+ * @adhd packages that the CLI bin imports at runtime, mapped to their PACKAGE
+ * ROOTS (not their `dist/` subdirs). We symlink these into
+ * COMPILER_DIST/node_modules/@adhd/ so Node's ESM resolution finds them when
+ * executing the bin from dist/ — exactly as pnpm's real node_modules/@adhd/*
+ * symlinks point at package roots.
+ *
+ * The target MUST be the package root: resolution keys off the root
+ * package.json's `exports` map (`.` → `./dist/src/index.js`). The generated
+ * `dist/package.json` also carries that same `exports` map, so pointing a
+ * symlink at `dist/` would re-resolve `./dist/src/index.js` relative to `dist`
+ * → a non-existent `dist/dist/src/index.js` (ERR_MODULE_NOT_FOUND).
  */
 const ADHD_DIST_DEPS: Record<string, string> = {
-  'agent-store-prompts': path.join(DIST_ROOT, 'agent/agent-store-prompts'),
-  'agent-store-tools': path.join(DIST_ROOT, 'agent/agent-store-tools'),
-  'agent-core-provider': path.join(DIST_ROOT, 'agent/agent-core-provider'),
-  'agent-core-policy': path.join(DIST_ROOT, 'agent/agent-core-policy'),
-  'agent-base-types': path.join(DIST_ROOT, 'agent/agent-base-types'),
+  'agent-store-prompts': path.join(AGENT_SRC, 'agent-store-prompts'),
+  'agent-store-tools': path.join(AGENT_SRC, 'agent-store-tools'),
+  'agent-core-provider': path.join(AGENT_SRC, 'agent-core-provider'),
+  'agent-core-policy': path.join(AGENT_SRC, 'agent-core-policy'),
+  'agent-base-types': path.join(AGENT_SRC, 'agent-base-types'),
 };
 
 /** Path where we write @adhd symlinks for the spawned bin's resolution. */

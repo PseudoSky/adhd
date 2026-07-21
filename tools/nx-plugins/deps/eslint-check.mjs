@@ -61,19 +61,22 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const workspaceRoot = join(__dirname, '..');
+// Locate the workspace root by walking up to nx.json — robust to where this
+// script lives (it moved from scripts/ into tools/nx-plugins/deps/).
+const findRoot = (d) => { while (d !== dirname(d)) { if (existsSync(join(d, 'nx.json'))) return d; d = dirname(d); } return d; };
+const workspaceRoot = findRoot(__dirname);
 
 /**
- * Yarn Berry's node-modules-linker install marker. Present only after a
- * real `yarn install` has written this workspace's node_modules; absent
- * in a freshly-created git worktree (git does not copy node_modules).
+ * pnpm's install marker. Written by pnpm into node_modules on a real install;
+ * absent in a freshly-created git worktree (git does not copy node_modules).
+ * (Was `.yarn-state.yml` under the pre-migration yarn Berry setup.)
  */
-const YARN_INSTALL_MARKER = join(workspaceRoot, 'node_modules', '.yarn-state.yml');
+const PNPM_INSTALL_MARKER = join(workspaceRoot, 'node_modules', '.modules.yaml');
 /** Cheap secondary sanity check: a real, sizeable, always-present dep. */
 const CANARY_PACKAGE = join(workspaceRoot, 'node_modules', 'nx', 'package.json');
 
 function assertNodeModulesInstalled() {
-  if (existsSync(YARN_INSTALL_MARKER) && existsSync(CANARY_PACKAGE)) {
+  if (existsSync(PNPM_INSTALL_MARKER) && existsSync(CANARY_PACKAGE)) {
     return;
   }
   process.stderr.write(
@@ -81,7 +84,7 @@ function assertNodeModulesInstalled() {
       '',
       '✖ eslint-dependency-checks: node_modules in this workspace root',
       `  (${workspaceRoot}) was not written by a real package-manager`,
-      '  install (missing node_modules/.yarn-state.yml and/or node_modules/nx).',
+      '  install (missing node_modules/.modules.yaml and/or node_modules/nx).',
       '',
       '  Running @nx/dependency-checks here would misreport EVERY',
       '  project-level dependency as unused (BUG-REPO-PRECOMMIT-DEPCHECK-',
@@ -89,7 +92,7 @@ function assertNodeModulesInstalled() {
       '  statically-imported runtime dependencies from package.json.',
       '',
       '  Fix: run a real install in this workspace root first, e.g.:',
-      '    corepack yarn install',
+      '    pnpm install',
       '  then re-run this command.',
       '',
     ].join('\n')

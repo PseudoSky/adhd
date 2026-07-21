@@ -10,6 +10,7 @@
     "vite.config.ts",
     "src/**/*.spec.ts",
     "src/**/*.test.ts",
-    "src/test/**"
+    "src/test/**",
+    "src/**/__tests__/**"
   ]
 }

@@ -1,12 +1,21 @@
 {
   "name": "@adhd/apigen-python-env",
   "version": "0.1.0",
-  "main": "./index.js",
-  "module": "./index.mjs",
-  "types": "./index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "description": "apigen python host provisioning: resolves the interpreter for py-* plugins by bootstrapping a managed venv from apigen-python's own pyproject.toml extras",
-  "keywords": ["apigen", "python", "venv", "provisioning"],
+  "keywords": [
+    "apigen",
+    "python",
+    "venv",
+    "provisioning"
+  ],
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
 }

@@ -29,7 +29,7 @@
 
 import { collectWithPhase } from '@adhd/apigen-engine-runtime';
 import type { ApiStream } from '@adhd/apigen-engine-runtime';
-import { ApiError } from '@adhd/apigen-base-errors';
+import { ApiError, isApiError } from '@adhd/apigen-base-errors';
 
 // ---------------------------------------------------------------------------
 // MCP chunk / result envelope shapes
@@ -145,13 +145,14 @@ export async function projectStreamMcpFull(
     return { content };
   } catch (err) {
     // Error-after-first-chunk: chunks already in `content`; append in-band error.
-    const apiError =
-      err instanceof ApiError
-        ? err
-        : new ApiError(
-            'internal',
-            err instanceof Error ? err.message : String(err)
-          );
+    // Duck-type, not `instanceof ApiError` (BUG-APIGEN-STREAM-ERROR-CODE-
+    // MISCLASSIFY-001) — see `isApiError`'s doc comment in apigen-base-errors.
+    const apiError = isApiError(err)
+      ? err
+      : new ApiError(
+          'internal',
+          err instanceof Error ? err.message : String(err)
+        );
 
     const errorPayload = {
       ...apiError.toJSON(),

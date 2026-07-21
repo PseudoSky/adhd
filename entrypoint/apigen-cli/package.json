@@ -2,7 +2,7 @@
   "name": "@adhd/apigen-cli",
   "version": "0.1.0",
   "bin": {
-    "apigen": "./index.js"
+    "apigen": "./dist/index.js"
   },
   "dependencies": {
     "commander": "^14.0.3",
@@ -40,10 +40,14 @@
       "optional": true
     }
   },
-  "main": "./index.js",
-  "module": "./index.mjs",
-  "typings": "./index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
 }

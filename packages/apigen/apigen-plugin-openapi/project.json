@@ -20,7 +20,7 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/packages/apigen/apigen-plugin-openapi",
+        "outputPath": "packages/apigen/apigen-plugin-openapi/dist",
         "emptyOutDir": true
       }
     },
@@ -38,7 +38,7 @@
       ],
       "executor": "@nx/js:release-publish",
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       }
     }
   }

@@ -39,7 +39,7 @@ export default async function generateExecutor(
 
   // Prefer the locally-built bin inside the monorepo (no publish/link required); fall back to
   // 'npx @adhd/apigen-cli' for standalone consumers using the published binary.
-  const localBin = path.join(context.root, 'dist/entrypoint/apigen-cli/index.js');
+  const localBin = path.join(context.root, 'entrypoint/apigen-cli/dist/index.js');
   const [cmd, args] = existsSync(localBin)
     ? ['node', [localBin, ...cliArgs]]
     : ['npx', ['@adhd/apigen-cli', ...cliArgs]];

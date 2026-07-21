@@ -6,7 +6,7 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
@@ -22,55 +22,21 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/packages/data/data-base-transforms",
+        "outputPath": "packages/data/data-base-transforms/dist",
         "main": "packages/data/data-base-transforms/src/index.ts",
-        "generatePackageJson": true,
         "tsConfig": "packages/data/data-base-transforms/tsconfig.lib.json",
         "assets": [
           "packages/data/data-base-transforms/*.md"
         ]
       }
     },
-    "version": {
-      "executor": "nx:run-commands",
-      "options": {
-        "parallel": false,
-        "commands": [
-          "scripts/version-packages.sh transform packages/data/data-base-transforms"
-        ]
-      }
-    },
-    "version-prerelease": {
-      "executor": "nx:run-commands",
-      "options": {
-        "parallel": false,
-        "commands": [
-          "scripts/version-packages.sh transform packages/data/data-base-transforms @adhd -prerelease"
-        ]
-      }
-    },
-    "publish": {
-      "executor": "nx:run-commands",
-      "options": {
-        "parallel": false,
-        "commands": [
-          "echo 'Running npm publish dry run'",
-          "npm publish --dry-run dist/packages/data/data-base-transforms"
-        ]
-      },
-      "configurations": {
-        "production": {
-          "parallel": false,
-          "commands": [
-            "npm publish dist/packages/data/data-base-transforms"
-          ]
-        }
-      }
-    },
     "nx-release-publish": {
-      "dependsOn": ["build", "verify-dist-load"],
+      "dependsOn": [
+        "build",
+        "verify-dist-load"
+      ],
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       }
     },
     "test": {
