@@ -114,7 +114,7 @@ export async function scaffoldGenerator(tree: Tree, schema: ScaffoldGeneratorSch
   }
 
   // Post-generation patches (same as generate-lib.sh v4/v5)
-  patchViteConfig(tree, projectRoot);
+  patchViteConfig(tree, projectRoot, platform);
   patchReleasePublish(tree, projectRoot);
   ensureReadme(tree, projectRoot, projectName);
   patchEslintrc(tree, projectRoot);
@@ -123,7 +123,7 @@ export async function scaffoldGenerator(tree: Tree, schema: ScaffoldGeneratorSch
   await formatFiles(tree);
 }
 
-function patchViteConfig(tree: Tree, dir: string) {
+function patchViteConfig(tree: Tree, dir: string, platform: 'node' | 'browser' | 'shared') {
   const vitePath = joinPathFragments(dir, 'vite.config.ts');
   if (!tree.exists(vitePath)) return;
   let content = tree.read(vitePath, 'utf-8');
@@ -140,6 +140,30 @@ function patchViteConfig(tree: Tree, dir: string) {
     const outDir = match ? match[1] : 'dist';
     const plugin = `    {\n      name: 'copy-readme',\n      apply: 'build',\n      closeBundle() {\n        const fs = require('node:fs'), p = require('node:path');\n        const src = p.resolve(__dirname, 'README.md');\n        if (!fs.existsSync(src)) return;\n        const out = p.resolve(__dirname, '${outDir}');\n        fs.mkdirSync(out, { recursive: true });\n        fs.copyFileSync(src, p.join(out, 'README.md'));\n      },\n    },\n`;
     content = content.replace(/(plugins:\s*\[\n)/, `$1${plugin}`);
+  }
+
+  // BUILD-CONSIST-008 / INVESTIGATION-BUILD-TOOL-001: `platform:node` and
+  // `platform:shared` libraries must externalize every real npm dependency
+  // (and Node builtins) so `@nx/vite:build` never bundles heavy CJS-only
+  // packages like ts-morph/typescript into the library's own output —
+  // bundling them was the confirmed root cause of `verify-dist-load`
+  // failures ("__filename is not defined in ES module scope" /
+  // "Cannot read properties of undefined (reading 'timeOrigin')") across 10
+  // apigen packages (devops-engineer session, 2026-07-20). `@adhd/*`
+  // workspace packages must stay BUNDLED (not externalized) — this repo has
+  // no `workspaces` linking, so an externalized `require('@adhd/x')` cannot
+  // resolve from a built `dist/` artifact at runtime (BUG-WORKSPACE-NO-LINKING-001).
+  // `platform:browser` libraries are left as `external: []` — they're
+  // consumed by an app's own bundler, not run directly under Node, so the
+  // CJS/ESM interop failure mode this fixes doesn't apply there.
+  if (platform === 'node' || platform === 'shared') {
+    if (!content.includes('externalizeRealDeps')) {
+      content = content.replace(
+        /(import \{ nxViteTsPaths \} from '@nx\/vite\/plugins\/nx-tsconfig-paths\.plugin';\n)/,
+        `$1import { externalizeRealDeps } from '../../../tools/vite-external-deps.mjs';\n`
+      );
+    }
+    content = content.replace(/external:\s*\[\]/, 'external: externalizeRealDeps(__dirname)');
   }
 
   tree.write(vitePath, content);
