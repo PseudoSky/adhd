@@ -22,8 +22,10 @@
       "!{projectRoot}/tsconfig.storybook.json"
     ],
     "sharedGlobals": [
-      "{workspaceRoot}/tools/vite-external-deps.mjs",
-      "{workspaceRoot}/tools/vite-copy-readme.mjs"
+      "{workspaceRoot}/tools/vite-plugins/externalize.mjs",
+      "{workspaceRoot}/tools/vite-plugins/copy-readme.mjs",
+      "{workspaceRoot}/tools/nx-plugins/build/**/*",
+      "{workspaceRoot}/tools/nx-plugins/assets/**/*"
     ]
   },
   "plugins": [
@@ -83,10 +85,16 @@
       "plugin": "@nxlv/python"
     },
     {
-      "plugin": "./tools/nx-plugins/dependency-sync/plugin.js"
+      "plugin": "./tools/nx-plugins/build/plugin.js"
     },
     {
-      "plugin": "./tools/nx-plugins/verify-dist-load/plugin.js"
+      "plugin": "./tools/nx-plugins/assets/plugin.js"
+    },
+    {
+      "plugin": "./tools/nx-plugins/deps/plugin.js"
+    },
+    {
+      "plugin": "./tools/nx-plugins/test/plugin.js"
     }
   ],
   "generators": {
@@ -148,48 +156,6 @@
           ]
         }
       ]
-    },
-    "version": {
-      "executor": "@nrwl/workspace:run-commands",
-      "options": {
-        "parallel": false,
-        "commands": [
-          "./scripts/version.sh"
-        ]
-      }
-    },
-    "version-prerelease": {
-      "executor": "@nrwl/workspace:run-commands",
-      "options": {
-        "parallel": false,
-        "commands": [
-          "./scripts/version-packages.sh -prerelease"
-        ]
-      }
-    },
-    "publish": {
-      "executor": "@nrwl/workspace:run-commands",
-      "outputs": [
-        "{workspaceRoot}/dist/packages"
-      ],
-      "dependsOn": [
-        "^version"
-      ],
-      "options": {
-        "parallel": false,
-        "commands": [
-          "echo 'Running npm publish dry run'",
-          "npm publish --dry-run dist/libs/core"
-        ]
-      },
-      "configurations": {
-        "production": {
-          "parallel": false,
-          "commands": [
-            "npm publish dist/libs/core"
-          ]
-        }
-      }
     },
     "@nx/js:tsc": {
       "cache": true,

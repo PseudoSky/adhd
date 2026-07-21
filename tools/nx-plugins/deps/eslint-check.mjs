@@ -61,7 +61,10 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const workspaceRoot = join(__dirname, '..');
+// Locate the workspace root by walking up to nx.json — robust to where this
+// script lives (it moved from scripts/ into tools/nx-plugins/deps/).
+const findRoot = (d) => { while (d !== dirname(d)) { if (existsSync(join(d, 'nx.json'))) return d; d = dirname(d); } return d; };
+const workspaceRoot = findRoot(__dirname);
 
 /**
  * Yarn Berry's node-modules-linker install marker. Present only after a

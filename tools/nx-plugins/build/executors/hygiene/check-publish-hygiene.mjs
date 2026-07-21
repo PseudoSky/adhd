@@ -40,7 +40,10 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const REPO_ROOT = path.resolve(__dirname, '..');
+// Locate the workspace root by walking up to nx.json — robust to where this
+// script lives (it moved from scripts/ into tools/nx-plugins/build/executors/).
+const findRoot = (d) => { while (d !== path.dirname(d)) { if (existsSync(path.join(d, 'nx.json'))) return d; d = path.dirname(d); } return d; };
+const REPO_ROOT = findRoot(__dirname);
 
 // BUG-AGENTMCP-003: the 5 packages confirmed to ship with no/loose `files`
 // allowlist. Extend this list as further packages are brought under the gate.
