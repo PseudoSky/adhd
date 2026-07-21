@@ -5,10 +5,14 @@
     "@adhd/dispatch-base-spec": "0.0.1",
     "@adhd/dispatch-core-client": "0.0.1"
   },
-  "main": "./index.js",
-  "module": "./index.mjs",
-  "typings": "./index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
 }

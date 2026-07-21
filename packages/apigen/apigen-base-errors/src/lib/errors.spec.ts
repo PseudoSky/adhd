@@ -17,6 +17,7 @@ import {
   MCP_ERROR_KIND,
   statusMaps,
   ApiError,
+  isApiError,
   toStreamingError,
   isBeforeFirstChunk,
   isAfterFirstChunk,
@@ -262,6 +263,81 @@ describe('ApiError', () => {
     const json = new ApiError('unauthenticated', 'no auth').toJSON();
     expect(json.code).toBe('unauthenticated');
     expect(json.code).not.toBe('permission_denied');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isApiError — structural guard (BUG-APIGEN-STREAM-ERROR-CODE-MISCLASSIFY-001
+// / BUG-APIGEN-PLUGIN-IN-PROCESS-VALIDATE-500-001)
+// ---------------------------------------------------------------------------
+
+describe('isApiError', () => {
+  it('recognises a real ApiError instance', () => {
+    expect(isApiError(new ApiError('not_found', 'missing'))).toBe(true);
+  });
+
+  it(
+    'recognises an ApiError-shaped object thrown from a DIFFERENT class ' +
+      'identity — the exact dual-module-instance hazard this guard exists ' +
+      'to defend against',
+    () => {
+      // Simulates a second, independently-compiled copy of the ApiError
+      // class (e.g. inlined into a consumer's bundled dist output) — same
+      // shape, but a structurally distinct class, so `instanceof` against
+      // THIS file's `ApiError` is false by construction.
+      class ShadowApiError extends Error {
+        code: string;
+        constructor(code: string, message: string) {
+          super(message);
+          this.name = 'ApiError';
+          this.code = code;
+          Object.setPrototypeOf(this, new.target.prototype);
+        }
+        toJSON() {
+          return { code: this.code, message: this.message };
+        }
+      }
+      const shadow = new ShadowApiError('not_found', 'missing resource');
+
+      // Negative control: proves the scenario is real — instanceof really
+      // does fail across the two class identities.
+      expect(shadow instanceof ApiError).toBe(false);
+
+      // The guard recognises it anyway.
+      expect(isApiError(shadow)).toBe(true);
+    }
+  );
+
+  it('rejects a plain Error (no code, no toJSON)', () => {
+    expect(isApiError(new Error('boom'))).toBe(false);
+  });
+
+  it(
+    'rejects a Node ErrnoException-shaped error whose .code is a ' +
+      'non-apigen string — negative control against false positives',
+    () => {
+      const err = Object.assign(new Error('ENOENT: no such file'), {
+        code: 'ENOENT',
+      });
+      expect(isApiError(err)).toBe(false);
+    }
+  );
+
+  it('rejects a non-Error object even if it happens to carry a valid code', () => {
+    expect(isApiError({ code: 'not_found', message: 'x' })).toBe(false);
+  });
+
+  it('rejects null/undefined/primitives', () => {
+    expect(isApiError(null)).toBe(false);
+    expect(isApiError(undefined)).toBe(false);
+    expect(isApiError('not_found')).toBe(false);
+    expect(isApiError(42)).toBe(false);
+  });
+
+  it('recognises every canonical code — no code left unrecognised', () => {
+    for (const code of ERROR_CODES) {
+      expect(isApiError(new ApiError(code, 'x'))).toBe(true);
+    }
   });
 });
 

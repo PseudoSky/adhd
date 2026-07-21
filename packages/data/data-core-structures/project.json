@@ -6,7 +6,7 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
@@ -22,9 +22,8 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/packages/data/data-core-structures",
+        "outputPath": "packages/data/data-core-structures/dist",
         "main": "packages/data/data-core-structures/src/index.ts",
-        "generatePackageJson": true,
         "tsConfig": "packages/data/data-core-structures/tsconfig.lib.json",
         "assets": [
           "packages/data/data-core-structures/*.md"
@@ -32,9 +31,12 @@
       }
     },
     "nx-release-publish": {
-      "dependsOn": ["build", "verify-dist-load"],
+      "dependsOn": [
+        "build",
+        "verify-dist-load"
+      ],
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       }
     },
     "test": {

@@ -6,32 +6,42 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
   },
-  "tags": ["platform:node", "layer:entrypoints"],
+  "tags": [
+    "platform:node",
+    "layer:entrypoints"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "generatePackageJson": true,
       "updateBuildableProjectDepsInPackageJson": true,
       "buildableProjectDepsInPackageJsonType": "dependencies",
       "options": {
-        "outputPath": "dist/entrypoint/decompile-cli",
+        "outputPath": "entrypoint/decompile-cli/dist",
         "tsConfig": "entrypoint/decompile-cli/tsconfig.lib.json",
         "packageJson": "entrypoint/decompile-cli/package.json",
         "main": "entrypoint/decompile-cli/src/index.ts",
-        "assets": ["entrypoint/decompile-cli/*.md"],
+        "assets": [
+          "entrypoint/decompile-cli/*.md"
+        ],
         "createLockFile": false
       }
     },
     "nx-release-publish": {
-      "dependsOn": ["build", "verify-dist-load"],
+      "dependsOn": [
+        "build",
+        "verify-dist-load"
+      ],
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       }
     },
     "test": {
@@ -41,10 +51,14 @@
         "default",
         "^production",
         {
-          "externalDependencies": ["vitest"]
+          "externalDependencies": [
+            "vitest"
+          ]
         }
       ],
-      "outputs": ["{workspaceRoot}/coverage/entrypoint/decompile-cli"],
+      "outputs": [
+        "{workspaceRoot}/coverage/entrypoint/decompile-cli"
+      ],
       "options": {
         "vitestConfig": "entrypoint/decompile-cli/vite.config.ts"
       }

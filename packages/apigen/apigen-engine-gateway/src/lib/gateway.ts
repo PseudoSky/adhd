@@ -26,7 +26,7 @@
 // adapter lives here; the real out-of-process Python adapter (`python-host` state) and a
 // fake/in-memory adapter (tests) implement the SAME interface and drop straight in.
 
-import { ApiError } from '@adhd/apigen-base-errors';
+import { ApiError, isApiError } from '@adhd/apigen-base-errors';
 import type { Operation, Transport } from '@adhd/apigen-core-client';
 
 // ---------------------------------------------------------------------------
@@ -130,11 +130,11 @@ export function makeDeadlineExceededError(
 export function isGatewayError(
   err: unknown
 ): err is ApiError & { details: GatewayErrorDetail } {
-  if (
-    !(err instanceof ApiError) ||
-    err.details == null ||
-    typeof err.details !== 'object'
-  )
+  // Duck-type, not `instanceof ApiError` (BUG-APIGEN-STREAM-ERROR-CODE-
+  // MISCLASSIFY-001) — see `isApiError`'s doc comment in apigen-base-errors.
+  // A gateway ApiError raised inside the runtime's bundled dist is a distinct
+  // class instance here, so `instanceof` would wrongly report it non-gateway.
+  if (!isApiError(err) || err.details == null || typeof err.details !== 'object')
     return false;
   const d = err.details as Partial<GatewayErrorDetail>;
   return (

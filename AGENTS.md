@@ -87,7 +87,7 @@ Packages follow `<domain>-<tier>-<name>` and live at `packages/<domain>/<domain>
 
 A `packages/` entry is a **library with importers**. If nothing will `import` it, it is not a package:
 
-- **One-shot migrations / ETL** → `scripts/` (precedent: `scripts/validate-dag.js`, `scripts/check-publish-hygiene.mjs`). They have zero consumers by construction.
+- **One-shot migrations / ETL** → a temporary, uncommitted throwaway script. Reusable tooling is *not* one-shot: build/publish gates belong in a `tools/nx-plugins/*` plugin (e.g. the `@adhd/nx-build` executors), and a reusable CLI belongs in the owning `entrypoint/` package (e.g. DAG validation is `dispatch-cli`'s `validate` command).
 - **A CLI / server / runner** → `entrypoint/`, via the `entrypoint` generator.
 - **A library that must never publish** → `--publish` already defaults to `false`; leave it.
 

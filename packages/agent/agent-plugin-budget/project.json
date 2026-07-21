@@ -6,7 +6,7 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
@@ -22,7 +22,7 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/packages/agent/agent-plugin-budget",
+        "outputPath": "packages/agent/agent-plugin-budget/dist",
         "main": "packages/agent/agent-plugin-budget/src/index.ts",
         "tsConfig": "packages/agent/agent-plugin-budget/tsconfig.lib.json",
         "assets": [
@@ -32,7 +32,7 @@
     },
     "nx-release-publish": {
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       },
       "dependsOn": [
         "build",

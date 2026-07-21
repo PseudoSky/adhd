@@ -1,10 +1,14 @@
 {
   "name": "@adhd/apigen-base-schema",
   "version": "0.1.1",
-  "main": "./index.js",
-  "module": "./index.mjs",
-  "typings": "./index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
 }

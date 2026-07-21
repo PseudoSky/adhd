@@ -1,7 +1,11 @@
 {
   "name": "@adhd/apigen-base-logical",
   "version": "0.0.1",
-  "main": "./index.js",
-  "module": "./index.mjs",
-  "typings": "./index.d.ts"
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
 }

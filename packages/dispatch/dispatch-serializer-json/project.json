@@ -6,7 +6,7 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
@@ -28,7 +28,15 @@
     "typecheck": {
       "executor": "nx:run-commands",
       "cache": true,
-      "inputs": ["default", "^production", { "externalDependencies": ["typescript"] }],
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
       "options": {
         "command": "tsc -p packages/dispatch/dispatch-serializer-json/tsconfig.lib.json --noEmit"
       }
@@ -39,7 +47,7 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/packages/dispatch/dispatch-serializer-json",
+        "outputPath": "packages/dispatch/dispatch-serializer-json/dist",
         "main": "packages/dispatch/dispatch-serializer-json/src/index.ts",
         "tsConfig": "packages/dispatch/dispatch-serializer-json/tsconfig.lib.json",
         "assets": [
@@ -49,11 +57,13 @@
     },
     "nx-release-publish": {
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       },
       "dependsOn": [
         "build",
-        "test", "verify-dist-load"]
+        "test",
+        "verify-dist-load"
+      ]
     }
   }
 }

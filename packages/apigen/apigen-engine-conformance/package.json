@@ -1,9 +1,9 @@
 {
   "name": "@adhd/apigen-engine-conformance",
   "version": "0.1.1",
-  "main": "./index.js",
-  "module": "./index.mjs",
-  "typings": "./index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
   "publishConfig": {
     "access": "public"
   },
@@ -13,5 +13,9 @@
     "@adhd/apigen-core-client": "0.1.0",
     "@adhd/apigen-engine-naming": "0.1.1",
     "@adhd/apigen-base-errors": "0.1.1"
-  }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
 }

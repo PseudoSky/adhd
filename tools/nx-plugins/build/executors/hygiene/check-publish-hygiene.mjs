@@ -40,7 +40,10 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const REPO_ROOT = path.resolve(__dirname, '..');
+// Locate the workspace root by walking up to nx.json — robust to where this
+// script lives (it moved from scripts/ into tools/nx-plugins/build/executors/).
+const findRoot = (d) => { while (d !== path.dirname(d)) { if (existsSync(path.join(d, 'nx.json'))) return d; d = path.dirname(d); } return d; };
+const REPO_ROOT = findRoot(__dirname);
 
 // BUG-AGENTMCP-003: the 5 packages confirmed to ship with no/loose `files`
 // allowlist. Extend this list as further packages are brought under the gate.
@@ -132,26 +135,31 @@ function checkPackage(pkg) {
     checkedTargets: [],
   };
 
-  const absDistDir = path.join(REPO_ROOT, pkg.distDir);
-  const pkgJsonPath = path.join(absDistDir, 'package.json');
+  // Publish-from-source model (packageRoot: {projectRoot}): `nx release publish`
+  // packs from the package's SOURCE root, gated by files:["dist","CHANGELOG.md"].
+  // So run `npm pack` from sourceDir — the exact directory publish packs from —
+  // and require the built dist/ to exist (a missing build must fail, never pass).
+  const absPackDir = path.join(REPO_ROOT, pkg.sourceDir);
+  const builtDistDir = path.join(absPackDir, 'dist');
+  const pkgJsonPath = path.join(absPackDir, 'package.json');
 
-  if (!existsSync(absDistDir)) {
+  if (!existsSync(builtDistDir)) {
     result.errors.push(
-      `dist dir missing: ${pkg.distDir} — package has not been built. ` +
+      `built output missing: ${pkg.sourceDir}/dist — package has not been built. ` +
         `Run \`npx nx build\` for this project before checking publish hygiene ` +
         `(a missing build must fail this gate, never pass silently).`
     );
     return result;
   }
   if (!existsSync(pkgJsonPath)) {
-    result.errors.push(`${pkg.distDir}/package.json missing — broken/incomplete build output.`);
+    result.errors.push(`${pkg.sourceDir}/package.json missing — broken package.`);
     return result;
   }
 
   const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf8'));
 
   const packResult = spawnSync('npm', ['pack', '--dry-run', '--json'], {
-    cwd: absDistDir,
+    cwd: absPackDir,
     encoding: 'utf8',
   });
 

@@ -85,11 +85,11 @@ repo_root=$(cd "$hook_dir/.." && pwd)
 # will misreport nearly every dependency as unused (BUG-REPO-PRECOMMIT-
 # DEPCHECK-STRIPS-USED-DEPS-001). Fail with the RIGHT message instead of
 # letting confusing false-positive lint errors surface here.
-if [ ! -f "$repo_root/node_modules/.yarn-state.yml" ] || [ ! -f "$repo_root/node_modules/nx/package.json" ]; then
+if [ ! -f "$repo_root/node_modules/.modules.yaml" ] || [ ! -f "$repo_root/node_modules/nx/package.json" ]; then
   echo "✖ pre-commit: node_modules in this workspace root is not a real"
-  echo "  package-manager install (missing node_modules/.yarn-state.yml"
+  echo "  package-manager install (missing node_modules/.modules.yaml"
   echo "  and/or node_modules/nx). Lint would misreport dependencies."
-  echo "  Fix: run 'corepack yarn install' in this workspace root, then commit again."
+  echo "  Fix: run 'pnpm install' in this workspace root, then commit again."
   exit 1
 fi
 

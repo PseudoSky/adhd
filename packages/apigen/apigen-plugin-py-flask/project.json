@@ -20,7 +20,7 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/packages/apigen/apigen-plugin-py-flask",
+        "outputPath": "packages/apigen/apigen-plugin-py-flask/dist",
         "emptyOutDir": true
       }
     },
@@ -41,7 +41,7 @@
       ],
       "executor": "@nx/js:release-publish",
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       }
     }
   }

@@ -1,16 +1,16 @@
 {
   "name": "@adhd/ui-react-base-hooks",
   "version": "2.2.1",
-  "main": "./index.js",
-  "types": "./index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "private": false,
   "publishConfig": {
     "access": "public"
   },
   "exports": {
     ".": {
-      "import": "./index.mjs",
-      "require": "./index.js"
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
     }
   },
   "dependencies": {
@@ -20,5 +20,9 @@
     "vite": "~5.0.13",
     "vite-plugin-dts": "~3.8.3",
     "xlsx": "^0.18.5"
-  }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
 }
