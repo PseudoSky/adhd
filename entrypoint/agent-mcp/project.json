@@ -16,7 +16,7 @@
       ],
       "options": {
         "main": "entrypoint/agent-mcp/src/index.ts",
-        "outputPath": "dist/entrypoint/agent-mcp",
+        "outputPath": "entrypoint/agent-mcp/dist",
         "tsConfig": "entrypoint/agent-mcp/tsconfig.lib.json",
         "assets": [
           "entrypoint/agent-mcp/package.json",
@@ -52,14 +52,14 @@
         "verify-dist-load"
       ],
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       }
     }
   },
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }

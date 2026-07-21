@@ -1,18 +1,19 @@
 {
   "name": "@adhd/agent-engine-orchestrator",
   "version": "2.1.0",
-  "description": "Agent engine orchestrator \u2014 providers, clients, tools, plugins, and validation extracted from agent-mcp",
+  "description": "Agent engine orchestrator — providers, clients, tools, plugins, and validation extracted from agent-mcp",
   "type": "module",
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "src"
+    "dist",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.js"
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
     }
   },
   "scripts": {
@@ -23,7 +24,7 @@
     "@adhd/agent-base-types": "^2.1.0",
     "@adhd/agent-store-prompts": "^2.1.0",
     "@adhd/agent-store-runtime": "^2.1.0",
-    "@anthropic-ai/sdk": "^0.26.0",
+    "@anthropic-ai/sdk": "^0.96.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2",

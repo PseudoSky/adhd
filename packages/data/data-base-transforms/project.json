@@ -6,7 +6,7 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
@@ -22,9 +22,8 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/packages/data/data-base-transforms",
+        "outputPath": "packages/data/data-base-transforms/dist",
         "main": "packages/data/data-base-transforms/src/index.ts",
-        "generatePackageJson": true,
         "tsConfig": "packages/data/data-base-transforms/tsconfig.lib.json",
         "assets": [
           "packages/data/data-base-transforms/*.md"
@@ -37,7 +36,7 @@
         "verify-dist-load"
       ],
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       }
     },
     "test": {

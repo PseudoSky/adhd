@@ -30,9 +30,9 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..');
 const BUILT_BIN = path.join(
   REPO_ROOT,
-  'dist',
   'entrypoint',
   'apigen-cli',
+  'dist',
   'index.js'
 );
 // A `.ts` entry, in a package with NO "type": "module", re-exporting from a

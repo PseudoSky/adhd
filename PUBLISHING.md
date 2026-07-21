@@ -4,6 +4,23 @@ How to version, build, and publish packages in this monorepo to npm.
 
 **This workflow uses `nx release` for independent per-package versioning.** Each package is versioned independently based on commits since its last `{projectName}@{version}` git tag. Only packages with changes since their last publish are selected for release.
 
+### Build & publish layout: in-source dist, publish-from-source-root
+
+Each buildable package builds **in-source** to `{projectRoot}/dist/` (not a repo-root
+`dist/{projectRoot}` tree), and its `package.json` `main`/`module`/`types`/`exports`/`bin`
+point into `./dist/…`. This is what lets pnpm resolve `@adhd/*` natively in-repo (the
+per-package `node_modules/@adhd/<name>` symlink → the package's source dir → its manifest →
+`./dist/…`), so there is no separate symlink/"link" step.
+
+Consequences for releasing:
+- **`packageRoot` is the package's own root** (`{projectRoot}`), for both `nx release version`
+  and `nx release publish`. `npm` packs from there, gated by `files: ["dist","CHANGELOG.md"]`
+  (+ npm's always-included `README`) — clean by allowlist, no test/config bloat.
+- **`nx release version` bumps the REAL source `package.json`** (and rewrites intra-repo
+  dependency ranges in source manifests). Those edits are left uncommitted (`git.commit:false`)
+  for you to review and commit — this is the intended source-of-truth (it also closes the old
+  dist>source version-drift).
+
 ---
 
 ## Prerequisites
@@ -123,7 +140,10 @@ Do **not** use this unless absolutely necessary. It bypasses the build/test gate
 
 ```bash
 npx nx build <name> && npx nx test <name>
-npm publish dist/<path>/<name> --access public
+# Packages publish FROM their source root (packageRoot: {projectRoot}), gated by
+# files:["dist","CHANGELOG.md"] + npm's always-included README — so publish the
+# project dir itself, NOT a repo-root dist path:
+npm publish <projectRoot> --access public   # e.g. packages/agent/agent-base-types
 # If prompted for OTP: add --otp=<code>
 ```
 

@@ -7,13 +7,13 @@
     "access": "public"
   },
   "files": [
-    "src",
-    "drizzle"
+    "dist",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.js"
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
     }
   },
   "scripts": {

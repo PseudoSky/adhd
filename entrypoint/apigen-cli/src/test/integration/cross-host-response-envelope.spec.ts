@@ -53,14 +53,11 @@ import * as readline from 'node:readline';
 const CLI_PATH = (() => {
   let dir = __dirname;
   for (let i = 0; i < 12; i++) {
-    const candidate = path.join(dir, 'dist/entrypoint/apigen-cli/index.js');
+    const candidate = path.join(dir, 'entrypoint/apigen-cli/dist/index.js');
     if (fs.existsSync(candidate)) return candidate;
     dir = path.dirname(dir);
   }
-  return path.resolve(
-    __dirname,
-    '../../../../../dist/entrypoint/apigen-cli/index.js'
-  );
+  return path.resolve(__dirname, '../../../dist/index.js');
 })();
 
 /** Absolute path to packages/apigen/python — used as PYTHONPATH. */

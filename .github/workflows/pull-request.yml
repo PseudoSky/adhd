@@ -80,7 +80,7 @@ jobs:
         with:
           node-version: 20
 
-      - name: Enable Corepack (Yarn 4)
+      - name: Enable Corepack (pnpm)
         run: corepack enable
 
       - name: Derive SHAs for nx affected
@@ -89,7 +89,7 @@ jobs:
           main-branch-name: main
 
       - name: Install dependencies
-        run: yarn
+        run: pnpm install
 
       - name: Lint
         id: lint

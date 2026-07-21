@@ -18,7 +18,7 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/packages/workspace/workspace-codegen-nx",
+        "outputPath": "packages/workspace/workspace-codegen-nx/dist",
         "main": "packages/workspace/workspace-codegen-nx/src/index.ts",
         "tsConfig": "packages/workspace/workspace-codegen-nx/tsconfig.lib.json",
         "assets": [
@@ -42,14 +42,14 @@
         "verify-dist-load"
       ],
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       }
     }
   },
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }

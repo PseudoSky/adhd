@@ -6,7 +6,7 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
@@ -34,7 +34,15 @@
     "typecheck": {
       "executor": "nx:run-commands",
       "cache": true,
-      "inputs": ["default", "^production", { "externalDependencies": ["typescript"] }],
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
       "options": {
         "command": "tsc -p entrypoint/dispatch-cli/tsconfig.lib.json --noEmit"
       }
@@ -45,7 +53,7 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/entrypoint/dispatch-cli",
+        "outputPath": "entrypoint/dispatch-cli/dist",
         "main": "entrypoint/dispatch-cli/src/index.ts",
         "tsConfig": "entrypoint/dispatch-cli/tsconfig.lib.json",
         "assets": [
@@ -63,11 +71,13 @@
     },
     "nx-release-publish": {
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       },
       "dependsOn": [
         "build",
-        "test", "verify-dist-load"]
+        "test",
+        "verify-dist-load"
+      ]
     }
   }
 }

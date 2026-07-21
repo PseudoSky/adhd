@@ -7,16 +7,16 @@
     "access": "public"
   },
   "files": [
-    "src",
-    "drizzle"
+    "dist",
+    "CHANGELOG.md"
   ],
   "bin": {
-    "agent-compiler": "./src/cli/compile.js"
+    "agent-compiler": "./dist/src/cli/compile.js"
   },
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.js"
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
     }
   },
   "scripts": {

@@ -10,6 +10,7 @@ export {
   statusMaps,
   // Error class
   ApiError,
+  isApiError,
   // Streaming carrier
   type StreamingPhase,
   type BeforeFirstChunkError,

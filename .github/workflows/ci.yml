@@ -25,11 +25,11 @@ jobs:
         with:
           node-version: 20
 
-      - name: Enable Corepack (Yarn 4)
+      - name: Enable Corepack (pnpm)
         run: corepack enable
 
       - name: Install dependencies
-        run: yarn
+        run: pnpm install
 
       - uses: nrwl/nx-set-shas@v4
       - run: git branch --track main origin/main

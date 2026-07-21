@@ -7,6 +7,7 @@
 // fails if the §13.1 guarantee regresses (negative controls included).
 
 import { describe, it, expect } from 'vitest';
+import { ApiError } from '@adhd/apigen-base-errors';
 import type { Operation, Transport } from '@adhd/apigen-core-client';
 import {
   createGateway,
@@ -234,6 +235,64 @@ describe('§13.1 readiness gating', () => {
     );
     expect(err).toBe('unavailable');
     await gw.stop();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §13.1 — isGatewayError guard: cross-bundle class identity (TEETH for
+// BUG-APIGEN-STREAM-ERROR-CODE-MISCLASSIFY-001 at this call site)
+// ---------------------------------------------------------------------------
+//
+// The behavioral tests above feed `isGatewayError` errors produced by the
+// gateway itself, which in vitest share one loaded `ApiError` copy — so
+// `instanceof` passed there regardless of the fix. This block reproduces the
+// real hazard: a gateway ApiError raised inside another package's bundled dist
+// is a structurally-identical but referentially-distinct class here. With the
+// old `err instanceof ApiError` guard `isGatewayError` wrongly returns false;
+// the `isApiError` duck-type recognises it. Revert gateway.ts to `instanceof`
+// and this goes red.
+describe('§13.1 isGatewayError — foreign class identity', () => {
+  class ShadowApiError extends Error {
+    code: string;
+    details: unknown;
+    constructor(code: string, message: string, details: unknown) {
+      super(message);
+      this.name = 'ApiError';
+      this.code = code;
+      this.details = details;
+      Object.setPrototypeOf(this, new.target.prototype);
+    }
+    toJSON() {
+      return { code: this.code, message: this.message, details: this.details };
+    }
+  }
+
+  it('recognises a gateway ApiError thrown from a DIFFERENT class identity', () => {
+    // Real gateway errors carry ApiErrorCode `internal` and put the gateway
+    // semantics in `details.gatewayCode` (see makeUnavailableError) — the
+    // shadow mirrors that exact shape.
+    const shadow = new ShadowApiError('internal', 'host down', {
+      gatewayCode: 'unavailable',
+      host: 'py',
+      operationId: 'py/op',
+      httpStatus: 503,
+      grpcCode: 14,
+    });
+
+    // Negative control: prove the hazard is real — instanceof genuinely fails.
+    expect(shadow instanceof ApiError).toBe(false);
+
+    expect(isGatewayError(shadow)).toBe(true);
+    if (isGatewayError(shadow)) {
+      expect(shadow.details.gatewayCode).toBe('unavailable');
+    }
+  });
+
+  it('NEGATIVE CONTROL: a foreign-identity ApiError WITHOUT a gateway detail is not a gateway error', () => {
+    const shadow = new ShadowApiError('not_found', 'missing', {
+      notAGatewayDetail: true,
+    });
+    expect(isGatewayError(shadow)).toBe(false);
   });
 });
 

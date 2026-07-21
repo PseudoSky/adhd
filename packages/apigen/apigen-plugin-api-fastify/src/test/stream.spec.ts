@@ -233,6 +233,52 @@ describe('[sse-stream.before-first-chunk] error before first chunk → normal HT
     expect(parsed['code']).toBe('internal');
     expect(parsed['message']).toBe('unexpected crash');
   });
+
+  // TEETH for BUG-APIGEN-STREAM-ERROR-CODE-MISCLASSIFY-001 at THIS call site.
+  // The `not_found → 404` test above throws THIS file's `ApiError`, which in
+  // vitest shares one loaded copy with stream.ts's `ApiError`, so `instanceof`
+  // passes there regardless of the fix — it has no teeth for the cross-bundle
+  // bug. This test reproduces the real hazard: an ApiError thrown from a
+  // DIFFERENT class identity (as happens when the runtime's bundled dist
+  // inlines its own `ApiError` copy under real node_modules linking). With the
+  // old `err instanceof ApiError` check this collapses to internal/500;
+  // `isApiError`'s duck-typing preserves the real `not_found`/404. Revert
+  // stream.ts to `instanceof` and this goes red.
+  it('preserves the real code of an ApiError thrown from a FOREIGN class identity (not internal/500)', async () => {
+    // Structurally identical to ApiError, referentially distinct — instanceof
+    // against stream.ts's `ApiError` is false by construction.
+    class ShadowApiError extends Error {
+      code: string;
+      constructor(code: string, message: string) {
+        super(message);
+        this.name = 'ApiError';
+        this.code = code;
+        Object.setPrototypeOf(this, new.target.prototype);
+      }
+      toJSON() {
+        return { code: this.code, message: this.message };
+      }
+    }
+
+    // Negative control: prove the hazard is real for this handler's ApiError.
+    expect(new ShadowApiError('not_found', 'x') instanceof ApiError).toBe(false);
+
+    const { req, reply, raw } = makeMocks();
+    const stream = createStream<number>({
+      produce: async function* () {
+        throw new ShadowApiError('not_found', 'item missing');
+        // eslint-disable-next-line no-unreachable
+        yield 0;
+      },
+    });
+
+    await sendStreamSse(stream, req, reply);
+
+    expect(raw.statusCode).toBe(404);
+    const parsed = JSON.parse(raw.body) as Record<string, unknown>;
+    expect(parsed['code']).toBe('not_found');
+    expect(parsed['message']).toBe('item missing');
+  });
 });
 
 // ---------------------------------------------------------------------------

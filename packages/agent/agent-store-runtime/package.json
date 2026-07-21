@@ -1,18 +1,19 @@
 {
   "name": "@adhd/agent-store-runtime",
   "version": "2.1.0",
-  "description": "Runtime state stores for sessions, tasks, and usage tracking \u2014 extracted from agent-mcp",
+  "description": "Runtime state stores for sessions, tasks, and usage tracking — extracted from agent-mcp",
   "type": "module",
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "src"
+    "dist",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.js"
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
     }
   },
   "scripts": {

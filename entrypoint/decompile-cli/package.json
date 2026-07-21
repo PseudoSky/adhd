@@ -2,12 +2,12 @@
   "name": "@adhd/decompile-cli",
   "version": "0.1.7",
   "type": "module",
-  "main": "src/index.js",
+  "main": "./dist/src/index.js",
   "publishConfig": {
     "access": "public"
   },
   "bin": {
-    "decompile": "./bin/decompile.js"
+    "decompile": "./dist/bin/decompile.js"
   },
   "scripts": {
     "build": "nx run decompile-cli:build",
@@ -36,5 +36,9 @@
     "@babel/register": "7.29.7",
     "react": "18.2.0",
     "@adhd/data-base-transforms": "2.2.1"
-  }
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
 }

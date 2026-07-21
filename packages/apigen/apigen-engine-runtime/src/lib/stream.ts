@@ -29,7 +29,7 @@
  * ```
  */
 
-import { ApiError, toStreamingError } from '@adhd/apigen-base-errors';
+import { ApiError, isApiError, toStreamingError } from '@adhd/apigen-base-errors';
 import type {
   AfterFirstChunkError,
   BeforeFirstChunkError,
@@ -185,13 +185,16 @@ export async function collectWithPhase<T>(
     }
     return { ok: true, chunks };
   } catch (err) {
-    const apiError =
-      err instanceof ApiError
-        ? err
-        : new ApiError(
-            'internal',
-            err instanceof Error ? err.message : String(err)
-          );
+    // Duck-type, not `instanceof ApiError` (BUG-APIGEN-STREAM-ERROR-CODE-
+    // MISCLASSIFY-001): `err` may have been thrown from a caller whose
+    // bundled `@adhd/apigen-base-errors` copy is a different loaded module
+    // instance than the one imported here — see `isApiError`'s doc comment.
+    const apiError = isApiError(err)
+      ? err
+      : new ApiError(
+          'internal',
+          err instanceof Error ? err.message : String(err)
+        );
 
     if (chunks.length === 0) {
       return {
