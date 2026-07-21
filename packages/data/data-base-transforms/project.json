@@ -24,6 +24,7 @@
       "options": {
         "outputPath": "dist/packages/data/data-base-transforms",
         "main": "packages/data/data-base-transforms/src/index.ts",
+        "generatePackageJson": true,
         "tsConfig": "packages/data/data-base-transforms/tsconfig.lib.json",
         "assets": [
           "packages/data/data-base-transforms/*.md"

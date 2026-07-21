@@ -24,6 +24,7 @@
       "options": {
         "outputPath": "dist/packages/ui-react/ui-react-base-hooks",
         "main": "packages/ui-react/ui-react-base-hooks/src/index.ts",
+        "generatePackageJson": true,
         "tsConfig": "packages/ui-react/ui-react-base-hooks/tsconfig.lib.json",
         "assets": [
           "packages/ui-react/ui-react-base-hooks/*.md"

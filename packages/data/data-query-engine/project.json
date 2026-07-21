@@ -28,6 +28,7 @@
       "options": {
         "outputPath": "dist/packages/data/data-query-engine",
         "main": "packages/data/data-query-engine/src/index.ts",
+        "generatePackageJson": true,
         "tsConfig": "packages/data/data-query-engine/tsconfig.lib.json",
         "assets": [
           "packages/data/data-query-engine/*.md"
