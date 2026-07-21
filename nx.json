@@ -245,8 +245,8 @@
       "!@adhd/source",
       "!adhd-e2e",
       "!adhd",
-      "!@adhd/ui-react-base-storybook",
-      "!@adhd/environment-cli"
+      "!ui-react-base-storybook",
+      "!environment-cli"
     ],
     "changelog": {
       "git": {
