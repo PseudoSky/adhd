@@ -35,47 +35,11 @@
         ]
       }
     },
-    "version": {
-      "executor": "nx:run-commands",
-      "options": {
-        "parallel": false,
-        "commands": [
-          "scripts/version-packages.sh query packages/data/data-query-engine"
-        ]
-      }
-    },
-    "version-prerelease": {
-      "executor": "nx:run-commands",
-      "options": {
-        "parallel": false,
-        "commands": [
-          "scripts/version-packages.sh query packages/data/data-query-engine @adhd -prerelease"
-        ]
-      }
-    },
-    "publish": {
-      "dependsOn": [
-        "^version"
-      ],
-      "executor": "nx:run-commands",
-      "options": {
-        "parallel": false,
-        "commands": [
-          "echo 'Running npm publish dry run'",
-          "npm publish --dry-run dist/packages/data/data-query-engine"
-        ]
-      },
-      "configurations": {
-        "production": {
-          "parallel": false,
-          "commands": [
-            "npm publish dist/packages/data/data-query-engine"
-          ]
-        }
-      }
-    },
     "nx-release-publish": {
-      "dependsOn": ["build", "verify-dist-load"],
+      "dependsOn": [
+        "build",
+        "verify-dist-load"
+      ],
       "options": {
         "packageRoot": "dist/{projectRoot}"
       }

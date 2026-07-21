@@ -1,0 +1,14 @@
+{
+  "executors": {
+    "sync": {
+      "implementation": "./executors/sync/impl",
+      "schema": "./executors/sync/schema.json",
+      "description": "@nx/dependency-checks --fix (guarded)."
+    },
+    "check": {
+      "implementation": "./executors/check/impl",
+      "schema": "./executors/check/schema.json",
+      "description": "@nx/dependency-checks read-only."
+    }
+  }
+}
