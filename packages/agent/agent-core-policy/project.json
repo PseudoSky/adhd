@@ -6,18 +6,23 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
   },
-  "tags": ["layer:ai", "platform:node"],
+  "tags": [
+    "layer:ai",
+    "platform:node"
+  ],
   "targets": {
     "build": {
       "executor": "@nx/js:tsc",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
-        "outputPath": "dist/packages/agent/agent-core-policy",
+        "outputPath": "packages/agent/agent-core-policy/dist",
         "main": "packages/agent/agent-core-policy/src/index.ts",
         "tsConfig": "packages/agent/agent-core-policy/tsconfig.lib.json",
         "clean": true,
@@ -38,7 +43,9 @@
     },
     "test": {
       "executor": "@nx/vite:test",
-      "outputs": ["{workspaceRoot}/coverage/packages/agent/agent-core-policy"],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/agent/agent-core-policy"
+      ],
       "options": {
         "configFile": "packages/agent/agent-core-policy/vite.config.ts"
       }
@@ -50,9 +57,13 @@
       }
     },
     "nx-release-publish": {
-      "dependsOn": ["build", "test", "verify-dist-load"],
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load"
+      ],
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       }
     }
   }

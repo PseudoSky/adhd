@@ -6,7 +6,7 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
@@ -22,55 +22,21 @@
         "{options.outputPath}"
       ],
       "options": {
-        "outputPath": "dist/packages/ui-react/ui-react-base-hooks",
+        "outputPath": "packages/ui-react/ui-react-base-hooks/dist",
         "main": "packages/ui-react/ui-react-base-hooks/src/index.ts",
-        "generatePackageJson": true,
         "tsConfig": "packages/ui-react/ui-react-base-hooks/tsconfig.lib.json",
         "assets": [
           "packages/ui-react/ui-react-base-hooks/*.md"
         ]
       }
     },
-    "version": {
-      "executor": "nx:run-commands",
-      "options": {
-        "parallel": false,
-        "commands": [
-          "scripts/version-packages.sh react-hooks packages/ui-react/ui-react-base-hooks"
-        ]
-      }
-    },
-    "version-prerelease": {
-      "executor": "nx:run-commands",
-      "options": {
-        "parallel": false,
-        "commands": [
-          "scripts/version-packages.sh react-hooks packages/ui-react/ui-react-base-hooks @adhd -prerelease"
-        ]
-      }
-    },
-    "publish": {
-      "executor": "nx:run-commands",
-      "options": {
-        "parallel": false,
-        "commands": [
-          "echo 'Running npm publish dry run'",
-          "npm publish --dry-run dist/packages/ui-react/ui-react-base-hooks"
-        ]
-      },
-      "configurations": {
-        "production": {
-          "parallel": false,
-          "commands": [
-            "npm publish dist/packages/ui-react/ui-react-base-hooks"
-          ]
-        }
-      }
-    },
     "nx-release-publish": {
-      "dependsOn": ["build", "verify-dist-load"],
+      "dependsOn": [
+        "build",
+        "verify-dist-load"
+      ],
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       }
     },
     "test": {

@@ -1,19 +1,19 @@
 {
   "name": "@adhd/agent-core-policy",
   "version": "2.1.0",
-  "description": "Policy engine for @adhd/agent-mcp \u2014 permission, safety, audit, rate, scope, compliance, and quality policies with SQLite/Drizzle persistence",
+  "description": "Policy engine for @adhd/agent-mcp — permission, safety, audit, rate, scope, compliance, and quality policies with SQLite/Drizzle persistence",
   "type": "module",
   "publishConfig": {
     "access": "public"
   },
   "files": [
-    "src",
-    "drizzle"
+    "dist",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.js"
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
     }
   },
   "scripts": {

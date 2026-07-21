@@ -6,12 +6,15 @@
   "release": {
     "version": {
       "generatorOptions": {
-        "packageRoot": "dist/{projectRoot}",
+        "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag"
       }
     }
   },
-  "tags": ["layer:data", "platform:shared"],
+  "tags": [
+    "layer:data",
+    "platform:shared"
+  ],
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
@@ -24,19 +27,27 @@
     },
     "build": {
       "executor": "@nx/vite:build",
-      "outputs": ["{options.outputPath}"],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
-        "outputPath": "dist/packages/dispatch/dispatch-core-client",
+        "outputPath": "packages/dispatch/dispatch-core-client/dist",
         "main": "packages/dispatch/dispatch-core-client/src/index.ts",
         "tsConfig": "packages/dispatch/dispatch-core-client/tsconfig.lib.json",
-        "assets": ["packages/dispatch/dispatch-core-client/*.md"]
+        "assets": [
+          "packages/dispatch/dispatch-core-client/*.md"
+        ]
       }
     },
     "nx-release-publish": {
       "options": {
-        "packageRoot": "dist/{projectRoot}"
+        "packageRoot": "{projectRoot}"
       },
-      "dependsOn": ["build", "test", "verify-dist-load"]
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load"
+      ]
     }
   }
 }

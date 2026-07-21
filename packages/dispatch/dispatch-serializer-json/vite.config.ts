@@ -5,6 +5,7 @@ import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import fs from 'node:fs';
 import pathMod from 'node:path';
+import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 const distDir = path.join(repoRoot, 'dist/packages/dispatch/dispatch-serializer-json');
@@ -45,7 +46,18 @@ export default defineConfig({
       formats: ['es', 'cjs'],
     },
     rollupOptions: {
-      external: [],
+      // Bundle only @adhd/* workspace source (no workspace symlinks resolve
+      // to source, only to each package's own dist — see
+      // tools/vite-plugins/externalize.mjs); externalize every real npm
+      // dependency + Node builtin (this package imports 'fs'/'path'
+      // directly). Previously `external: []` bundled 'fs'/'path' as if they
+      // were ordinary modules; Rollup couldn't resolve them and emitted
+      // `(void 0)` call-site placeholders in the built dist, which is what
+      // pnpm's real node_modules/@adhd/* workspace symlinks (main ->
+      // ./dist/index.js) now load transitively via dispatch-core-client,
+      // crashing dispatch-orchestrator's tests with "(void 0) is not a
+      // function". See BACKLOG.md BUG-DISPATCH-SERIALIZER-EXTERNAL-001.
+      external: externalizeRealDeps(__dirname),
     },
   },
 

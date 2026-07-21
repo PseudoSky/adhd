@@ -20,7 +20,7 @@ import type {
 } from '@adhd/apigen-core-client';
 import type { Server } from 'node:http';
 import { envelopeKey, httpVerb } from '@adhd/apigen-naming';
-import { HTTP_STATUS, ApiError } from '@adhd/apigen-base-errors';
+import { HTTP_STATUS, isApiError } from '@adhd/apigen-base-errors';
 import type { ProjectionConfig } from '@adhd/apigen-naming';
 import type { ApiErrorCode } from '@adhd/apigen-base-errors';
 
@@ -60,8 +60,11 @@ function extractEnvelopeFromHeaders(
 // ---------------------------------------------------------------------------
 
 function toHttpStatus(err: unknown): number {
-  if (err instanceof ApiError) {
-    return HTTP_STATUS[err.code as ApiErrorCode] ?? 500;
+  // BUG-APIGEN-PLUGIN-IN-PROCESS-VALIDATE-500-001: duck-typed check, not
+  // `instanceof ApiError` — see isApiError()'s doc comment for why the
+  // referential check is unsafe across bundled @adhd/* packages.
+  if (isApiError(err)) {
+    return HTTP_STATUS[err.code] ?? 500;
   }
   return 500;
 }
@@ -339,13 +342,12 @@ export async function run(input: RunInput): Promise<void> {
       _next: express.NextFunction
     ) => {
       const status = toHttpStatus(err);
-      const body =
-        err instanceof ApiError
-          ? err.toJSON()
-          : {
-              code: 'internal' as ApiErrorCode,
-              message: (err as Error).message ?? 'Internal error',
-            };
+      const body = isApiError(err)
+        ? err.toJSON()
+        : {
+            code: 'internal' as ApiErrorCode,
+            message: (err as Error).message ?? 'Internal error',
+          };
       res.status(status).json(body);
     }
   );

@@ -1,0 +1,24 @@
+{
+  "executors": {
+    "verify": {
+      "implementation": "./executors/verify/impl",
+      "schema": "./executors/verify/schema.json",
+      "description": "Load dist entry points as a consumer would."
+    },
+    "hygiene": {
+      "implementation": "./executors/hygiene/impl",
+      "schema": "./executors/hygiene/schema.json",
+      "description": "npm-pack allowlist + declared-entry gate."
+    },
+    "publish": {
+      "implementation": "./executors/publish/impl",
+      "schema": "./executors/publish/schema.json",
+      "description": "Gated per-project publish."
+    },
+    "link": {
+      "implementation": "./executors/link/impl",
+      "schema": "./executors/link/schema.json",
+      "description": "Symlink dist into node_modules/@adhd/*."
+    }
+  }
+}

@@ -6,14 +6,13 @@
     "@nx/devkit": "*",
     "tslib": "^2.6.0"
   },
-  "main": "./src/index.js",
-  "typings": "./src/index.d.ts",
+  "main": "./dist/src/index.js",
+  "typings": "./dist/src/index.d.ts",
   "generators": "./generators.json",
   "files": [
-    "src",
+    "dist",
+    "CHANGELOG.md",
     "generators.json",
-    "REGISTRY-PACKAGE-RULES.md",
-    "!**/project.json",
-    "!**/tsconfig*.json"
+    "REGISTRY-PACKAGE-RULES.md"
   ]
 }
