@@ -5,6 +5,11 @@
       "schema": "./executors/manifest/schema.json",
       "description": "Version the dist: write the resolved, dist-root publishable package.json."
     },
+    "version": {
+      "implementation": "./executors/version/impl",
+      "schema": "./executors/version/schema.json",
+      "description": "Bump source version iff the built dist differs from the published tarball."
+    },
     "verify": {
       "implementation": "./executors/verify/impl",
       "schema": "./executors/verify/schema.json",
