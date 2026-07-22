@@ -16,7 +16,8 @@
     "publish:old": "nx run-many --targets=publish --configuration=production",
     "check:publish-hygiene": "nx run @adhd/source:check-publish-hygiene",
     "logs:agent": "node dist/packages/ai/agent-mcp/src/scripts/agent-mcp-tail.js",
-    "check:test-wiring": "node scripts/check-test-wiring.mjs"
+    "check:test-wiring": "node scripts/check-test-wiring.mjs",
+  "test:build-tools": "node --test tools/nx-plugins/build/executors/manifest/generate-manifest.spec.mjs"
   },
   "private": true,
   "dependencies": {
