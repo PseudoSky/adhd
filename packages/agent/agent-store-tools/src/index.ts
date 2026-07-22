@@ -5,6 +5,7 @@ export { seed } from './seed/index.js';
 
 export { db, sqlite } from './db/client.js';
 export { runMigrations } from './db/migrate.js';
+export { runMigrationsOn, MIGRATIONS_FOLDER } from './db/migrate-runner.js';
 export {
   agentToolsTable,
   mcpServersTable,

@@ -3,6 +3,7 @@
 
 export { db, sqlite } from './db/client.js';
 export { runMigrations } from './db/migrate.js';
+export { runMigrationsOn, MIGRATIONS_FOLDER } from './db/migrate-runner.js';
 export * from './db/schema.js';
 
 export { ProviderStore, ProviderStoreError } from './store/provider-store.js';

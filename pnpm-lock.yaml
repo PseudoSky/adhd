@@ -363,6 +363,12 @@ importers:
       '@adhd/agent-base-types':
         specifier: ^2.1.0
         version: link:../../packages/agent/agent-base-types
+      '@adhd/agent-core-policy':
+        specifier: ^2.1.0
+        version: link:../../packages/agent/agent-core-policy
+      '@adhd/agent-core-provider':
+        specifier: ^2.1.0
+        version: link:../../packages/agent/agent-core-provider
       '@adhd/agent-engine-compiler':
         specifier: ^2.1.0
         version: link:../../packages/agent/agent-engine-compiler
@@ -375,6 +381,9 @@ importers:
       '@adhd/agent-store-runtime':
         specifier: ^2.1.0
         version: link:../../packages/agent/agent-store-runtime
+      '@adhd/agent-store-tools':
+        specifier: ^2.1.0
+        version: link:../../packages/agent/agent-store-tools
       '@adhd/environment':
         specifier: 0.0.1
         version: link:../../packages/environment/environment-core-node
