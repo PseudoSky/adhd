@@ -1,5 +1,9 @@
 #!/usr/bin/env node
 
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
@@ -7,7 +11,30 @@ import { env, toEngineConfig } from "./config.js";
 import { AgentStore } from "./store/agent-store.js";
 
 import { SessionStore, TaskStore } from "@adhd/agent-store-runtime";
-import { ComposedPromptStore } from "@adhd/agent-store-prompts";
+import {
+    ComposedPromptStore,
+    runMigrationsOn as runPromptsMigrationsOn,
+    MIGRATIONS_FOLDER as PROMPTS_MIGRATIONS_FOLDER,
+} from "@adhd/agent-store-prompts";
+import {
+    runMigrationsOn as runProviderMigrationsOn,
+    MIGRATIONS_FOLDER as PROVIDER_MIGRATIONS_FOLDER,
+} from "@adhd/agent-core-provider";
+import {
+    runMigrationsOn as runToolsMigrationsOn,
+    MIGRATIONS_FOLDER as TOOLS_MIGRATIONS_FOLDER,
+} from "@adhd/agent-store-tools";
+import {
+    runMigrationsOn as runPolicyMigrationsOn,
+    MIGRATIONS_FOLDER as POLICY_MIGRATIONS_FOLDER,
+} from "@adhd/agent-core-policy";
+// NOTE: @adhd/agent-engine-compiler is deliberately NOT statically imported
+// here — it is lazy-loaded (`await import(...)`) in main() below so the
+// server can still boot with flat system-prompts if the package is ever
+// absent, and @nx/enforce-module-boundaries forbids mixing a static import
+// of a lazy-loaded library in the same project. Its runMigrationsOn/
+// MIGRATIONS_FOLDER are obtained from that same dynamic import and threaded
+// through BuildPromptResolverOpts instead (see main()).
 
 import type { CompileAgentFn, PromptResolverDeps } from "@adhd/agent-engine-orchestrator";
 import {
@@ -36,21 +63,42 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 export { HookRegistry } from "@adhd/agent-engine-orchestrator";
 export { ComposedPromptStore } from "@adhd/agent-store-prompts";
 
+// Structural type for @adhd/agent-engine-compiler's runMigrationsOn — identical
+// signature to the other four registry-family packages' runMigrationsOn
+// (all generated from the same @adhd/agent-nx registry-package template), so
+// it's safe to reuse this type without a static import of agent-engine-compiler.
+type RegistryMigrationsOnFn = typeof runProviderMigrationsOn;
+
 export interface BuildPromptResolverOpts {
     registryDbPath?: string;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     agentMcpDb: any;
     compileAgentFn?: CompileAgentFn;
+    /** From the same lazy `await import("@adhd/agent-engine-compiler")` as compileAgentFn. */
+    compilerMigrationsOn?: RegistryMigrationsOnFn;
+    /** From the same lazy `await import("@adhd/agent-engine-compiler")` as compileAgentFn. */
+    compilerMigrationsFolder?: string;
 }
 
 export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolverDeps | undefined {
-    const { registryDbPath, agentMcpDb, compileAgentFn } = opts;
+    // `agentMcpDb` (opts.agentMcpDb) is intentionally NOT used below: it is the
+    // OPERATIONAL db connection, but ComposedPromptStore's schema
+    // (`registry_composed_prompts`, agent-store-prompts/src/db/schema.ts) is a
+    // registry-family table created only by that package's own migrations —
+    // which this function now runs against `registryDb`, not `agentMcpDb`.
+    // Constructing the store against `agentMcpDb` would throw "no such table:
+    // registry_composed_prompts" on first use (a second, real bug found while
+    // fixing BUG-AGENTMCP-REGISTRY-DB-CANTOPEN-001 — the crash this fixes
+    // always happened before this code path could ever be reached, so it was
+    // never exercised in production). Kept in the public opts type for
+    // backward compatibility.
+    const { registryDbPath, compileAgentFn, compilerMigrationsOn, compilerMigrationsFolder } = opts;
 
     if (!registryDbPath) {
         return undefined;
     }
 
-    if (!compileAgentFn) {
+    if (!compileAgentFn || !compilerMigrationsOn || !compilerMigrationsFolder) {
         logger.info(
             "@adhd/agent-engine-compiler not available — registry/compiler integration disabled; using flat system-prompts"
         );
@@ -59,9 +107,37 @@ export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolv
 
     let registrySqlite: Database.Database;
     try {
-        logger.info({ registryDbPath }, "Opening registry DB for compiler integration");
-        registrySqlite = new Database(registryDbPath, { fileMustExist: true });
+        // Zero-config default: `registryDbPath` (~/.adhd/agent-mcp/registry.db)
+        // has never been written by anything on a fresh machine — unlike the
+        // operational DB (db/client.ts), nothing pre-creates it. Match that
+        // pattern: mkdir the parent dir, open WITHOUT `fileMustExist`, then run
+        // the full registry-family migration set so the file is schema-current
+        // before any compiler store queries it (BUG-AGENTMCP-REGISTRY-DB-CANTOPEN-001).
+        const resolvedRegistryPath = path.resolve(registryDbPath);
+        const registryDir = path.dirname(resolvedRegistryPath);
+        if (!fs.existsSync(registryDir)) {
+            fs.mkdirSync(registryDir, { recursive: true });
+        }
+
+        logger.info({ registryDbPath: resolvedRegistryPath }, "Opening registry DB for compiler integration");
+        registrySqlite = new Database(resolvedRegistryPath);
         registrySqlite.pragma("journal_mode = WAL");
+
+        // The registry is a five-package shared-SQLite-file family (see
+        // packages/agent/agent-engine-compiler/CLAUDE.md "One shared SQLite
+        // file"): agent-core-provider (provider_*), agent-store-prompts
+        // (registry_*), agent-store-tools (tool_*), agent-core-policy
+        // (policy_*), agent-engine-compiler (compiler_*). All five migration
+        // sets must be applied, in this exact ascending-timestamp order, to
+        // this same connection before compileAgent()'s stores can query it —
+        // mirrors agent-engine-compiler/src/cli/compile.ts's proven openDb().
+        const registryMigrationDb = drizzle(registrySqlite);
+        runProviderMigrationsOn(registrySqlite, registryMigrationDb, PROVIDER_MIGRATIONS_FOLDER);
+        runPromptsMigrationsOn(registrySqlite, registryMigrationDb, PROMPTS_MIGRATIONS_FOLDER);
+        runToolsMigrationsOn(registrySqlite, registryMigrationDb, TOOLS_MIGRATIONS_FOLDER);
+        runPolicyMigrationsOn(registrySqlite, registryMigrationDb, POLICY_MIGRATIONS_FOLDER);
+        compilerMigrationsOn(registrySqlite, registryMigrationDb, compilerMigrationsFolder);
+
         registrySqlite.pragma("foreign_keys = ON");
     } catch (err) {
         logger.info(
@@ -74,7 +150,7 @@ export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolv
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const registryDb = drizzle(registrySqlite) as any;
 
-    const composedPromptStore = new ComposedPromptStore(agentMcpDb);
+    const composedPromptStore = new ComposedPromptStore(registryDb);
 
     return {
         composedPromptStore,
@@ -168,8 +244,13 @@ async function main() {
     const dagEngine = new DagEngine(dbAny as import("drizzle-orm/better-sqlite3").BetterSQLite3Database<Record<string, never>>, queue, taskStore, dispatchFn, logger);
 
     let compileAgentFn: CompileAgentFn | undefined;
+    let compilerMigrationsOn: RegistryMigrationsOnFn | undefined;
+    let compilerMigrationsFolder: string | undefined;
     try {
-        ({ compileAgent: compileAgentFn } = await import("@adhd/agent-engine-compiler"));
+        const compilerModule = await import("@adhd/agent-engine-compiler");
+        compileAgentFn = compilerModule.compileAgent;
+        compilerMigrationsOn = compilerModule.runMigrationsOn;
+        compilerMigrationsFolder = compilerModule.MIGRATIONS_FOLDER;
     } catch {
         logger.info(
             "@adhd/agent-engine-compiler not installed — registry/compiler integration disabled; using flat system-prompts"
@@ -180,6 +261,8 @@ async function main() {
         registryDbPath: env.config.server.registryDbPath,
         agentMcpDb: dbAny,
         compileAgentFn,
+        compilerMigrationsOn,
+        compilerMigrationsFolder,
     });
 
     try {
@@ -262,7 +345,21 @@ async function main() {
     process.on("SIGINT", () => void shutdown("SIGINT"));
 }
 
-main().catch(err => {
-    logger.fatal({ err }, "Fatal startup error");
-    process.exit(1);
-});
+// Only run the server when this module is the process entrypoint (`node
+// dist/src/index.js`, or the `agent-mcp` bin) — NOT when something else
+// imports it (e.g. a test importing `buildPromptResolver`). Without this
+// guard, `main()` fires as an unconditional import-time side effect: it
+// opens the REAL user's `~/.adhd/agent-mcp/*.db` files, binds the real SSE
+// port, and starts background queues/plugins — surfaced while adding the
+// teeth test for BUG-AGENTMCP-REGISTRY-DB-CANTOPEN-001 (importing `./index.js`
+// for its one exported function silently ran a full production server).
+const isMainModule =
+    process.argv[1] !== undefined &&
+    path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMainModule) {
+    main().catch(err => {
+        logger.fatal({ err }, "Fatal startup error");
+        process.exit(1);
+    });
+}

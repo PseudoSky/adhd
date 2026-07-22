@@ -5,6 +5,7 @@
 
 export { db, sqlite } from './db/client.js';
 export { runMigrations } from './db/migrate.js';
+export { runMigrationsOn, MIGRATIONS_FOLDER } from './db/migrate-runner.js';
 export * from './db/schema.js';
 
 // Policy template store + domain types
