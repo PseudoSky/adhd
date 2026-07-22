@@ -3,9 +3,11 @@
     "agent-mcp": {
       "type": "stdio",
       "command": "node",
-      "args": ["dist/entrypoint/agent-mcp/src/index.js"],
+      "args": ["entrypoint/agent-mcp/dist/src/index.js"],
       "env": {
-        "ADHD_AGENT_DATABASE_PATH": "data/agent-mcp/agents-dev.db"
+        "ADHD_ENV_SCOPE": "project",
+        "ADHD_AGENT_CONFIG": ".adhd/agent-mcp/config.json",
+        "ADHD_AGENT_REGISTRY_DB_PATH": ".adhd/agent-mcp/production/data/registry.db"
       }
     },
     "agent-mcp-published": {
@@ -13,7 +15,9 @@
       "command": "npx",
       "args": ["-y", "@adhd/agent-mcp@latest"],
       "env": {
-        "ADHD_AGENT_DATABASE_PATH": "data/agent-mcp/agents-published.db"
+        "ADHD_AGENT_DATABASE_PATH": "${HOME}/.adhd/agent-mcp/agents.db",
+        "ADHD_AGENT_REGISTRY_DB_PATH": "${HOME}/.adhd/agent-mcp/registry.db",
+        "DOTENV_CONFIG_PATH": "${HOME}/.adhd/.env"
       }
     }
   }
