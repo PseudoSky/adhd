@@ -1,5 +1,10 @@
 {
   "executors": {
+    "manifest": {
+      "implementation": "./executors/manifest/impl",
+      "schema": "./executors/manifest/schema.json",
+      "description": "Version the dist: write the resolved, dist-root publishable package.json."
+    },
     "verify": {
       "implementation": "./executors/verify/impl",
       "schema": "./executors/verify/schema.json",

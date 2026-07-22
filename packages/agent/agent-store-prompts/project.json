@@ -70,10 +70,12 @@
       "dependsOn": [
         "build",
         "test",
-        "verify-dist-load"
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
       ],
       "options": {
-        "packageRoot": "{projectRoot}"
+        "packageRoot": "{projectRoot}/dist"
       }
     }
   }

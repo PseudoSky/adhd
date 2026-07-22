@@ -177,7 +177,10 @@
     "nx-release-publish": {
       "dependsOn": [
         "build",
-        "test"
+        "test",
+        "dist-manifest",
+        "verify-dist-load",
+        "publish-hygiene"
       ]
     }
   },
@@ -192,18 +195,20 @@
   "release": {
     "projectsRelationship": "independent",
     "releaseTagPattern": "{projectName}@{version}",
+    "git": {
+      "commit": true,
+      "tag": true,
+      "commitMessage": "chore(release): publish"
+    },
     "version": {
       "preVersionCommand": "npx nx run-many -t build",
       "updateDependents": "auto",
+      "skipLockFileUpdate": true,
       "generatorOptions": {
         "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag",
         "fallbackCurrentVersionResolver": "disk",
         "specifierSource": "conventional-commits"
-      },
-      "git": {
-        "commit": false,
-        "tag": true
       }
     },
     "projects": [
@@ -215,10 +220,7 @@
       "!environment-cli"
     ],
     "changelog": {
-      "git": {
-        "commit": false,
-        "tag": false
-      },
+      "automaticFromRef": true,
       "projectChangelogs": {
         "file": "{projectRoot}/CHANGELOG.md",
         "renderOptions": {
@@ -227,14 +229,7 @@
           "versionTitleDate": true
         }
       },
-      "workspaceChangelog": {
-        "file": "CHANGELOG.md",
-        "renderOptions": {
-          "authors": true,
-          "commitReferences": true,
-          "versionTitleDate": true
-        }
-      }
+      "workspaceChangelog": false
     }
   }
 }

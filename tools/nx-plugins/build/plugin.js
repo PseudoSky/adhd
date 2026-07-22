@@ -19,5 +19,13 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) => {
   // README/CHANGELOG now ship straight from the package root via files:["dist","CHANGELOG.md"]
   // + npm's always-included README, and in-dist *.md copies (where wanted) come from each
   // build target's own `options.assets`.
-  return { projects: { [projectRoot]: { targets: {"verify-dist-load":{"executor":"@adhd/nx-build:verify","dependsOn":["build"],"cache":true},"publish-hygiene":{"executor":"@adhd/nx-build:hygiene","dependsOn":["build"],"cache":true},"publish":{"executor":"@adhd/nx-build:publish","dependsOn":["build","verify-dist-load","publish-hygiene"]}} } } };
+  // `dist-manifest` versions the dist: it (over)writes {projectRoot}/dist/package.json
+  // with the resolved, dist-root publishable manifest (see executors/manifest). It is
+  // NOT cached (its correctness depends on every sibling's version, an impractical
+  // cache key) and is authoritative over any manifest an earlier build step emitted.
+  // Publishing packs from {projectRoot}/dist, so publish-hygiene, publish, and nx's
+  // own nx-release-publish (wired in nx.json) all depend on it. verify-dist-load
+  // reads the source manifest against the same physical dist/ files, so it needs only
+  // `build` and stays independently cacheable.
+  return { projects: { [projectRoot]: { targets: {"dist-manifest":{"executor":"@adhd/nx-build:manifest","dependsOn":["build"],"cache":false},"verify-dist-load":{"executor":"@adhd/nx-build:verify","dependsOn":["build"],"cache":true},"publish-hygiene":{"executor":"@adhd/nx-build:hygiene","dependsOn":["dist-manifest"],"cache":true},"publish":{"executor":"@adhd/nx-build:publish","dependsOn":["dist-manifest","verify-dist-load","publish-hygiene"]}} } } };
 }];

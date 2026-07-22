@@ -49,12 +49,14 @@
     },
     "nx-release-publish": {
       "options": {
-        "packageRoot": "{projectRoot}"
+        "packageRoot": "{projectRoot}/dist"
       },
       "dependsOn": [
         "build",
         "test",
-        "verify-dist-load"
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
       ]
     }
   }

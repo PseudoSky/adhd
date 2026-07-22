@@ -4,22 +4,35 @@ How to version, build, and publish packages in this monorepo to npm.
 
 **This workflow uses `nx release` for independent per-package versioning.** Each package is versioned independently based on commits since its last `{projectName}@{version}` git tag. Only packages with changes since their last publish are selected for release.
 
-### Build & publish layout: in-source dist, publish-from-source-root
+### Build & publish layout: in-source dist, **publish-from-dist**
 
-Each buildable package builds **in-source** to `{projectRoot}/dist/` (not a repo-root
-`dist/{projectRoot}` tree), and its `package.json` `main`/`module`/`types`/`exports`/`bin`
-point into `./dist/…`. This is what lets pnpm resolve `@adhd/*` natively in-repo (the
-per-package `node_modules/@adhd/<name>` symlink → the package's source dir → its manifest →
-`./dist/…`), so there is no separate symlink/"link" step.
+Each buildable package builds **in-source** to `{projectRoot}/dist/`, and its *source*
+`package.json` `main`/`module`/`types`/`exports`/`bin` point into `./dist/…` (so pnpm resolves
+`@adhd/*` natively in-repo via each package's source manifest — no separate "link" step).
+
+**Publishing packs the built `dist/` directory, not the source root.** At build time the
+`dist-manifest` target (executor `@adhd/nx-build:manifest`) writes `{projectRoot}/dist/package.json`
+as a fully-resolved, dist-root manifest — entry paths rebased (`./dist/index.js` → `./index.js`),
+internal `@adhd/*` ranges resolved to concrete `^<version>` from a live workspace snapshot,
+`devDependencies`/`scripts`/`files` stripped, `CHANGELOG.md` copied in. See
+[`tools/nx-plugins/build/README.md`](tools/nx-plugins/build/README.md).
 
 Consequences for releasing:
-- **`packageRoot` is the package's own root** (`{projectRoot}`), for both `nx release version`
-  and `nx release publish`. `npm` packs from there, gated by `files: ["dist","CHANGELOG.md"]`
-  (+ npm's always-included `README`) — clean by allowlist, no test/config bloat.
-- **`nx release version` bumps the REAL source `package.json`** (and rewrites intra-repo
-  dependency ranges in source manifests). Those edits are left uncommitted (`git.commit:false`)
-  for you to review and commit — this is the intended source-of-truth (it also closes the old
-  dist>source version-drift).
+- **Two `packageRoot`s, by design:** `nx release version` targets the **source**
+  (`release.version.generatorOptions.packageRoot: {projectRoot}`) so version bumps land in the
+  committed source of truth; `nx-release-publish` packs the **artifact**
+  (`options.packageRoot: {projectRoot}/dist`).
+- **`nx release version` bumps the REAL source `package.json`.** The publish-phase build then
+  re-stamps every dist manifest from the *final* set of source versions, so internal dependency
+  ranges are correct **independent of nx's non-topological versioning order** — this is what
+  fixes the stale/unsatisfiable-range failure (`BUG-RELEASE-PIPELINE-UNFIT-FOR-FULL-PUBLISH-001`,
+  Defect C). No source-side range reconciliation is needed.
+- **One command:** `pnpm release` (= `pnpm run build && pnpm exec nx release`). Building first
+  (proper dependency order) also sidesteps the composite-tsc cold-build parallelism race
+  (`DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001`).
+- **Already-published, unchanged packages are skipped**, not republished — npm refuses to publish
+  over an existing version. Only packages bumped since their last `{projectName}@{version}` tag
+  actually publish.
 
 ---
 
