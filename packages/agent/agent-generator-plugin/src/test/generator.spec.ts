@@ -78,9 +78,7 @@ describe('registry-package generator', () => {
       'README.md',
       'CLAUDE.md',
       'src/index.ts',
-      'src/db/client.ts',
       'src/db/schema.ts',
-      'src/db/migrate.ts',
       'src/db/migrate-runner.ts',
       'src/__tests__/skeleton.test.ts',
       'drizzle/meta/_journal.json',
@@ -89,16 +87,30 @@ describe('registry-package generator', () => {
     }
   });
 
-  it('package.json declares only drizzle-orm + better-sqlite3 runtime deps (no unused zod)', async () => {
+  it('package.json declares @adhd/agent-core-env + drizzle-orm + better-sqlite3 runtime deps (no unused zod)', async () => {
     const tree = seed(createTreeWithEmptyWorkspace());
     await registryPackageGenerator(tree, { name: 'budget' });
     const pkg = readJson(tree, 'packages/ai/agent-budget/package.json');
     expect(Object.keys(pkg.dependencies).sort()).toEqual([
+      '@adhd/agent-core-env',
       'better-sqlite3',
       'drizzle-orm',
     ]);
     expect(pkg.dependencies.zod).toBeUndefined();
     expect(pkg.name).toBe('@adhd/agent-budget');
+  });
+
+  it('does NOT scaffold a module-scope db/client.ts or db/migrate.ts singleton (ENV-ADOPT-CLUSTERS(1) — every DB connection is opened via @adhd/agent-core-env, never at import time)', async () => {
+    const tree = seed(createTreeWithEmptyWorkspace());
+    await registryPackageGenerator(tree, { name: 'budget' });
+    const base = 'packages/ai/agent-budget';
+    expect(tree.exists(`${base}/src/db/client.ts`)).toBe(false);
+    expect(tree.exists(`${base}/src/db/migrate.ts`)).toBe(false);
+    const barrel = tree.read(`${base}/src/index.ts`, 'utf-8');
+    expect(barrel).not.toContain("from './db/client.js'");
+    expect(barrel).not.toContain("from './db/migrate.js'");
+    const drizzleConfig = tree.read(`${base}/drizzle.config.ts`, 'utf-8');
+    expect(drizzleConfig).toContain('resolveRegistryDbPath');
   });
 
   it('eslintrc extends the workspace base so a lint target is inferred', async () => {

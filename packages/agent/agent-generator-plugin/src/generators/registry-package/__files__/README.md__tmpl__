@@ -3,14 +3,19 @@
 <%= description %>
 
 A `platform:node` registry-family package: a Drizzle-backed store over **one
-shared SQLite file** (`REGISTRY_DATABASE_PATH` / `DATABASE_PATH`, default
-`./data/registry.db`). It owns the tables prefixed **`<%= tablePrefix %>`** and never
-ATTACHes another database or declares a cross-package SQL foreign key — those
-keys are logical and resolved at compile time.
+shared SQLite file**, resolved via `@adhd/agent-core-env`'s
+`resolveRegistryDbPath()` (precedence: `ADHD_AGENT_REGISTRY_DB_PATH` →
+`REGISTRY_DATABASE_PATH` → `DATABASE_PATH` → the `@adhd/environment`-resolved
+canonical default, `~/.adhd/agent-registry/production/data/registry.db`). It
+owns the tables prefixed **`<%= tablePrefix %>`** and never ATTACHes another
+database or declares a cross-package SQL foreign key — those keys are logical
+and resolved at compile time. Get a connection via `@adhd/agent-core-env`'s
+lazy `openRegistryDb()` — never a module-scope singleton; importing this
+package must never open/create a file as a side effect.
 
 Scaffolded by `@adhd/agent-nx` (`nx g @adhd/agent-nx:registry-package <%= baseName %>`).
 The rules every registry package must follow live in
-[`../agent-nx/REGISTRY-PACKAGE-RULES.md`](../agent-nx/REGISTRY-PACKAGE-RULES.md);
+[`../agent-generator-plugin/REGISTRY-PACKAGE-RULES.md`](../agent-generator-plugin/REGISTRY-PACKAGE-RULES.md);
 this package's local copy of the invariants is in [`./CLAUDE.md`](./CLAUDE.md).
 
 ## Layout
@@ -18,13 +23,22 @@ this package's local copy of the invariants is in [`./CLAUDE.md`](./CLAUDE.md).
 ```
 src/
   db/
-    client.ts         shared-file better-sqlite3 connection (WAL) + Drizzle db
     schema.ts         Drizzle tables — all prefixed `<%= tablePrefix %>`
-    migrate.ts        runMigrations() — applies ./drizzle migrations
-    migrate-runner.ts FK-safe migrator (reused by tests)
+    migrate-runner.ts FK-safe migrator (reused by tests + callers)
   __tests__/          real-DB, close+reopen store tests
-  index.ts            public barrel
+  index.ts            public barrel (no db/sqlite singleton export)
 drizzle/              drizzle-kit generated migrations (shipped in the package)
+```
+
+Get a connection with `@adhd/agent-core-env`:
+
+```ts
+import { openRegistryDb } from '@adhd/agent-core-env';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import * as schema from './db/schema.js';
+
+const { sqlite } = openRegistryDb();
+const db = drizzle(sqlite, { schema });
 ```
 
 ## Commands

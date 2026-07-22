@@ -23,6 +23,7 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
+    "@adhd/agent-core-env": "0.0.1",
     "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2"
   },

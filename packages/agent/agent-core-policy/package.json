@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-core-policy",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Policy engine for @adhd/agent-mcp — permission, safety, audit, rate, scope, compliance, and quality policies with SQLite/Drizzle persistence",
   "type": "module",
   "publishConfig": {
@@ -23,7 +23,6 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2",
     "zod": "4.4.3",
     "@adhd/agent-base-types": "^2.1.0"

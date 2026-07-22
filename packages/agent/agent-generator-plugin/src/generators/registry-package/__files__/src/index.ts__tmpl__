@@ -1,8 +1,22 @@
 // <%= packageName %> — public barrel.
 // Export each new store + schema table here as it is added (mirror the shipped
 // registry packages: every state that adds a table also extends this barrel).
+//
+// This package does NOT export a shared `db`/`sqlite` singleton — importing
+// it must never open a database connection as a side effect. Get a
+// connection via `@adhd/agent-core-env`'s `openRegistryDb()` (lazy — opens
+// only when called) or resolve just the path via `resolveRegistryDbPath()`,
+// then construct your OWN schema-typed Drizzle instance against it:
+//
+//   import { openRegistryDb } from '@adhd/agent-core-env';
+//   import { drizzle } from 'drizzle-orm/better-sqlite3';
+//   import * as schema from './db/schema.js';
+//
+//   const { sqlite } = openRegistryDb();
+//   const db = drizzle(sqlite, { schema });
+//
+// See REGISTRY-PACKAGE-RULES.md §2 ("the one shared SQLite file") and
+// docs/environment/agent-base-env/DESIGN.md.
 
-export { sqlite, db } from "./db/client.js";
-export { runMigrations } from "./db/migrate.js";
 export { runMigrationsOn, MIGRATIONS_FOLDER } from "./db/migrate-runner.js";
 export * from "./db/schema.js";

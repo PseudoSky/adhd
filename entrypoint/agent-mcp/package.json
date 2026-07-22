@@ -29,6 +29,7 @@
     "@adhd/agent-core-provider": "^2.1.0",
     "@adhd/agent-store-tools": "^2.1.0",
     "@adhd/agent-core-policy": "^2.1.0",
+    "@adhd/agent-core-env": "0.0.1",
     "tslib": "^2.3.0"
   },
   "devDependencies": {

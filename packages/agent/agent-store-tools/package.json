@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-store-tools",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Canonical tool and platform registry for agent runtimes — Drizzle-backed SQLite store",
   "type": "module",
   "publishConfig": {
@@ -23,7 +23,6 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
