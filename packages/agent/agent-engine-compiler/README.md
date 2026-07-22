@@ -1,22 +1,72 @@
 # @adhd/agent-engine-compiler
 
-Compilation and code-generation tooling for @adhd/agent-mcp. Generates agent prompts, tool schemas, validation, and optimizations at build time.
+Compiles agent configurations from the registry into runtime-ready manifests. Resolves component compositions, tool bindings, policy constraints, and model specifications. Part of the agent registry family.
 
-**Status:** Compiler (shipped v0.0.1)  
-**Package:** `npm install @adhd/agent-engine-compiler`  
-**Consumers:** `@adhd/agent-mcp`
+**Status:** Shipped v2.1.2  
+**Platform:** `platform:node` (runs in Node/CLI, not browser)  
+**Consumers:** `@adhd/agent-mcp`, `@adhd/dispatch-cli`
 
 ## What it does
 
-- **Agent schema generation** — derives tool schemas and agent config from type definitions
-- **Prompt optimization** — compiles system prompts with tool descriptions and error guidance
-- **Validation generation** — creates Zod schemas for runtime input validation
-- **Registry integration** — optional compilation with agent registries for metadata
+- **Body Resolution** — Assembles agent components from the registry composition store into a complete prompt body
+- **Tool Resolution** — Resolves tool aliases and platform-specific bindings (HTTP, MCP, CLI, etc.)
+- **Model Resolution** — Looks up model capabilities and configurations
+- **Policy Constraint Resolution** — Evaluates effective authorization policies
+- **Output Emission** — Compiles agent definitions into YAML frontmatter, JSON objects, or Markdown documents
+- **Database Migrations** — Runs schema setup via `runMigrationsOn(db)`
+
+## Usage
+
+First, resolve the shared registry database path:
+
+```typescript
+import { resolveRegistryDbPath } from '@adhd/agent-core-env';
+import Database from 'better-sqlite3';
+import { runMigrationsOn, compileAgent } from '@adhd/agent-engine-compiler';
+
+const dbPath = resolveRegistryDbPath(); // e.g., ~/.adhd/agent-registry/production/data/registry.db
+const db = new Database(dbPath);
+
+// Run migrations
+await runMigrationsOn(db);
+
+// Compile an agent from the registry
+const compiled = await compileAgent(db, {
+  agentId: 'my-agent',
+  platform: 'mcp', // or 'http', 'cli', 'json'
+  models: modelStore,
+  tools: toolStore,
+  policies: policyStore,
+  composition: compositionStore,
+});
+
+// Emit as YAML or JSON
+const yaml = emitYamlFrontmatter({
+  agentId: compiled.agentId,
+  tools: compiled.tools,
+  modelAlias: compiled.modelAlias,
+  policyConstraints: compiled.policyConstraints,
+});
+```
+
+## Key exports
+
+| Export | Purpose |
+|--------|---------|
+| `resolveBody(db, ...)` | Assemble component composition into prompt body |
+| `resolveTools(db, ...)` | Resolve tools and platform bindings |
+| `resolveModel(db, ...)` | Look up model and capabilities |
+| `resolvePolicyConstraints(db, ...)` | Resolve effective policies |
+| `compileAgent(db, input)` | Complete compilation orchestrator |
+| `emitYamlFrontmatter(input)` | Emit as YAML frontmatter + body |
+| `emitJsonObject(input)` | Emit as JSON (e.g., for REST API) |
+| `runMigrationsOn(db)` | Initialize database schema |
 
 ## Architecture
 
-- Part of the 6-package agent framework family
-- Depends on: `@adhd/agent-base-types`
-- Depended on by: `@adhd/agent-mcp` (optional; used for optimized builds)
+- **Tier**: `engine` (depends on base + core + stores)
+- **Consumption**: Reads from all registry family stores (prompts, tools, policy, provider)
+- **No import-time side effects** — DB path and connection are external (via `agent-core-env`)
+- **Part of agent registry family**: `agent-store-prompts` + `agent-store-tools` + `agent-core-policy` + `agent-core-provider` + `agent-engine-compiler`
 
-See `/entrypoint/agent-mcp/docs/architecture-and-security.md` for the full agent runtime architecture.
+See `/entrypoint/agent-mcp/` for the agent MCP server (primary consumer).
