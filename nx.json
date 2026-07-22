@@ -203,12 +203,12 @@
     "version": {
       "preVersionCommand": "npx nx run-many -t build",
       "updateDependents": "auto",
-      "skipLockFileUpdate": true,
       "generatorOptions": {
         "packageRoot": "{projectRoot}",
         "currentVersionResolver": "git-tag",
         "fallbackCurrentVersionResolver": "disk",
-        "specifierSource": "conventional-commits"
+        "specifierSource": "conventional-commits",
+        "skipLockFileUpdate": true
       }
     },
     "projects": [

@@ -27,5 +27,5 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) => {
   // own nx-release-publish (wired in nx.json) all depend on it. verify-dist-load
   // reads the source manifest against the same physical dist/ files, so it needs only
   // `build` and stays independently cacheable.
-  return { projects: { [projectRoot]: { targets: {"dist-manifest":{"executor":"@adhd/nx-build:manifest","dependsOn":["build"],"cache":false},"verify-dist-load":{"executor":"@adhd/nx-build:verify","dependsOn":["build"],"cache":true},"publish-hygiene":{"executor":"@adhd/nx-build:hygiene","dependsOn":["dist-manifest"],"cache":true},"publish":{"executor":"@adhd/nx-build:publish","dependsOn":["dist-manifest","verify-dist-load","publish-hygiene"]}} } } };
+  return { projects: { [projectRoot]: { targets: {"dist-manifest":{"executor":"@adhd/nx-build:manifest","dependsOn":["build"],"cache":false},"verify-dist-load":{"executor":"@adhd/nx-build:verify","dependsOn":["build"],"cache":true},"publish-hygiene":{"executor":"@adhd/nx-build:hygiene","dependsOn":["dist-manifest"],"cache":true},"publish":{"executor":"@adhd/nx-build:publish","dependsOn":["dist-manifest","verify-dist-load","publish-hygiene"],"cache":false}} } } };
 }];
