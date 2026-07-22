@@ -62,10 +62,10 @@ Each subproject has its own quick-start guide. Start here based on your goal:
 
 ## Learn more
 
-- **[Quickstart guide](docs/QUICK-START.md)** — First agent in 5 minutes
-- **[Architecture](docs/ARCHITECTURE.md)** — Deep dive into the package hierarchy and dependency flow
-- **[Contributing](CONTRIBUTING.md)** — Add packages, run tests, follow conventions
-- **[Environment configuration](docs/environment/)** — Zero-config setup for multi-instance deployments
+- **[Quick-start guide](docs/QUICK-START.md)** — First agent/API/task in 5 minutes
+- **[Architecture](docs/ARCHITECTURE.md)** — Monorepo structure, tier hierarchy, platform isolation rules
+- **[Contributing](CONTRIBUTING.md)** — Code conventions, testing, package scaffolding
+- **[Environment configuration](docs/environment/)** — Zero-config cascade: code → system → global → project → env
 
 ## Publishing & releases
 
