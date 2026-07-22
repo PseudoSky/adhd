@@ -2,16 +2,19 @@
 
 This is a **golden-path agent registry package** scaffolded by `@adhd/agent-nx`.
 The full, authoritative invariants live in
-**[`../agent-nx/REGISTRY-PACKAGE-RULES.md`](../agent-nx/REGISTRY-PACKAGE-RULES.md)** —
+**[`../agent-generator-plugin/REGISTRY-PACKAGE-RULES.md`](../agent-generator-plugin/REGISTRY-PACKAGE-RULES.md)** —
 read it before changing this package. The non-negotiables, in brief:
 
 - **`platform:node`.** Never import browser code (`react`, `window`, `document`,
   CSS). Pure Node + SQLite.
-- **One shared SQLite file.** Every registry-family package opens its own Drizzle
-  instance against the SAME file. All of this package's tables are prefixed
-  **`<%= tablePrefix %>`**. NO `ATTACH DATABASE`. NO cross-package SQL foreign
-  keys — cross-package keys are logical, resolved at compile time. Within-package
-  FKs ARE real (`.references()`).
+- **One shared SQLite file, opened via DI — never a module-scope singleton.**
+  Every registry-family package opens its own Drizzle instance against the
+  SAME file, resolved via `@adhd/agent-core-env`'s `resolveRegistryDbPath()` /
+  `openRegistryDb()` (lazy — never opens at import time; importing this
+  package must never create a file as a side effect). All of this package's
+  tables are prefixed **`<%= tablePrefix %>`**. NO `ATTACH DATABASE`. NO
+  cross-package SQL foreign keys — cross-package keys are logical, resolved
+  at compile time. Within-package FKs ARE real (`.references()`).
 - **Controlled vocabularies are lookup tables / plain text, NEVER SQL enums.**
 - **Composite PKs are real** `primaryKey({ columns: [...] })`, never a
   non-unique `index()`.

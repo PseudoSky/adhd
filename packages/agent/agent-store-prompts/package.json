@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-store-prompts",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Prompt component registry for agent composition: stores prompt types, components, agent compositions, and context rules",
   "type": "module",
   "publishConfig": {
@@ -23,7 +23,7 @@
     "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
-    "better-sqlite3": "12.10.0",
+    "@adhd/agent-core-env": "0.0.1",
     "drizzle-orm": "0.45.2"
   },
   "devDependencies": {

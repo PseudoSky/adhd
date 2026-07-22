@@ -21,9 +21,23 @@ document is the standard the package must keep meeting as it grows.
 
 ## 2. The one shared SQLite file
 
-- **All registry-family packages share ONE database file**
-  (`REGISTRY_DATABASE_PATH` → `DATABASE_PATH` → `./data/registry.db`). Each
-  package opens its **own** Drizzle instance against that same file.
+- **All registry-family packages share ONE database file**, resolved via
+  `@adhd/agent-core-env`'s `resolveRegistryDbPath()` — precedence (highest→
+  lowest): explicit function-arg override → `ADHD_AGENT_REGISTRY_DB_PATH` →
+  `REGISTRY_DATABASE_PATH` (legacy) → `DATABASE_PATH` (legacy) → the
+  `@adhd/environment`-resolved canonical default
+  (`~/.adhd/agent-registry/production/data/registry.db`). Each package opens
+  its **own** Drizzle instance against that same file, via
+  `@adhd/agent-core-env`'s lazy `openRegistryDb()` — see
+  `docs/environment/agent-base-env/DESIGN.md`.
+- **NEVER a module-scope singleton.** A package's `src/index.ts` MUST NOT
+  export a `db`/`sqlite` connection opened at import time (`new
+  Database(...)` at module top level). Importing a registry-family package
+  must never open or create a file as a side effect — the historical
+  anti-pattern this rule replaces (fixed by `ENV-ADOPT-CLUSTERS(1)`)
+  materialized `<cwd>/data/registry.db` on disk merely because
+  `entrypoint/agent-mcp` imported the package at boot. Get a connection via
+  `openRegistryDb()` where you need one (a CLI, a test, `buildPromptResolver`).
 - **NO `ATTACH DATABASE`.** Never join across attached files.
 - **NO cross-package SQL foreign keys.** A column that references another
   package's table is a **plain text logical key**, resolved/validated at compile

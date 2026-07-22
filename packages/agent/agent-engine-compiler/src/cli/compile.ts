@@ -29,7 +29,6 @@
 // ──────────────────────────────────────────────
 
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -39,6 +38,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
+import { resolveRegistryDbPath } from '@adhd/agent-core-env';
 import { AgentStore } from '@adhd/agent-store-prompts';
 import type { CompositionContext } from '@adhd/agent-store-prompts';
 
@@ -111,9 +111,14 @@ function parseArgs(argv: string[]): CliArgs {
   let outDir: string | null = null;
   let all = false;
   let category: string | null = null;
-  let dbPath =
-    process.env['AGENT_REGISTRY_DB'] ??
-    path.join(os.homedir(), '.agent-registry', 'registry.db');
+  // AGENT_REGISTRY_DB is this CLI's own pre-existing, bin-specific legacy
+  // override (kept for back-compat) — it wins over the shared resolver's
+  // canonical default but not over an explicit --db flag (applied below).
+  // resolveRegistryDbPath() itself still checks the 3 documented
+  // registry-family env vars (ADHD_AGENT_REGISTRY_DB_PATH,
+  // REGISTRY_DATABASE_PATH, DATABASE_PATH) before falling back to the
+  // @adhd/environment-resolved canonical default.
+  let dbPath = process.env['AGENT_REGISTRY_DB'] ?? resolveRegistryDbPath();
 
   const flags = args.slice(1); // everything after 'compile'
   let i = 0;

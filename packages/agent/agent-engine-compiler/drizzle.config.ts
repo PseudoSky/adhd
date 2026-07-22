@@ -1,5 +1,7 @@
 import { defineConfig } from 'drizzle-kit';
 
+import { resolveRegistryDbPath } from '@adhd/agent-core-env';
+
 export default defineConfig({
   dialect: 'sqlite',
 
@@ -8,10 +10,12 @@ export default defineConfig({
   out: './drizzle',
 
   dbCredentials: {
-    url:
-      process.env['REGISTRY_DATABASE_PATH'] ||
-      process.env['DATABASE_PATH'] ||
-      './data/registry.db',
+    // Precedence (highest→lowest): ADHD_AGENT_REGISTRY_DB_PATH →
+    // REGISTRY_DATABASE_PATH → DATABASE_PATH → the @adhd/environment-resolved
+    // canonical default (~/.adhd/agent-registry/production/data/registry.db).
+    // See @adhd/agent-core-env's resolveRegistryDbPath() — synchronous, no
+    // I/O prerequisite, safe to call from this non-async drizzle-kit config.
+    url: resolveRegistryDbPath(),
   },
 
   verbose: true,

@@ -1,0 +1,47 @@
+{
+  "name": "@adhd/agent-core-env",
+  "version": "0.0.1",
+  "description": "Shared @adhd/environment-backed resolver for the agent-registry family's one shared SQLite file (agent-store-prompts/-tools, agent-core-policy/-provider, agent-engine-compiler) — resolveRegistryDbPath() + lazy openRegistryDb(), no import-time DB open.",
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "nx build agent-core-env",
+    "typecheck": "tsc -p tsconfig.lib.json --noEmit"
+  },
+  "dependencies": {
+    "@adhd/environment": "0.0.1",
+    "better-sqlite3": "12.10.0",
+    "drizzle-orm": "0.45.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@vitest/coverage-v8": "^1.0.4",
+    "tslib": "^2.6.0",
+    "typescript": "^5.5.0",
+    "vite": "~5.0.13",
+    "vite-plugin-dts": "~3.8.3",
+    "vitest": "^1.6.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PseudoSky/adhd.git",
+    "directory": "packages/agent/agent-core-env"
+  },
+  "homepage": "https://github.com/PseudoSky/adhd/tree/main/packages/agent/agent-core-env#readme",
+  "bugs": {
+    "url": "https://github.com/PseudoSky/adhd/issues"
+  }
+}

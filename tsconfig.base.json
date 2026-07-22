@@ -29,6 +29,7 @@
       "@adhd/agent-base-types": [
         "./packages/agent/agent-base-types/src/index.ts"
       ],
+      "@adhd/agent-core-env": ["./packages/agent/agent-core-env/src/index.ts"],
       "@adhd/agent-core-policy": [
         "./packages/agent/agent-core-policy/src/index.ts"
       ],

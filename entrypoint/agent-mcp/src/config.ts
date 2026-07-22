@@ -18,9 +18,6 @@
  * `"ADHD_AGENT_MCP"` instead would silently break every provider credential
  * lookup and the agent-definition env-ref allowlist guard.
  */
-import os from "node:os";
-import path from "node:path";
-
 import { Environment } from "@adhd/environment";
 import type { EnvironmentSpec } from "@adhd/environment-base-spec";
 import type { EngineConfig } from "@adhd/agent-engine-orchestrator";
@@ -39,7 +36,9 @@ export interface AgentMcpConfig {
     readonly defaultMaxTokens: number;
     readonly contextLimit: number;
     readonly allowedAgents: readonly string[] | undefined;
-    readonly registryDbPath: string;
+    /** Unset by default — see the `"server.registryDbPath"` FieldSpec below
+     *  for why `@adhd/agent-core-env` owns the canonical fallback. */
+    readonly registryDbPath: string | undefined;
   };
   readonly transport: { readonly kind: string; readonly port: number };
   readonly sse: {
@@ -122,7 +121,13 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
     "server.registryDbPath": {
       type: "string",
       env: "ADHD_AGENT_REGISTRY_DB_PATH",
-      default: path.join(os.homedir(), ".adhd", "agent-mcp", "registry.db"),
+      description:
+        "SQLite registry-DB path shared with the agent-registry package family " +
+        "(agent-store-prompts/-tools, agent-core-policy/-provider, " +
+        "agent-engine-compiler). Unset by default — falls back to " +
+        "@adhd/agent-core-env's resolveRegistryDbPath() canonical default " +
+        "(buildPromptResolver() in index.ts), so this field and the 5 family " +
+        "packages always agree on ONE path without duplicating a default here.",
     },
     "transport.kind": {
       type: "string",
