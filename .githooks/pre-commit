@@ -2,9 +2,16 @@
 #
 # Pre-commit hook. Two gates, in order:
 #   1. secret-scan — blocks credentials from entering the repo (gitleaks + built-in rules)
-#   2. affected lint (VERIFY ONLY) — runs `nx affected -t lint` (no --fix) on the
-#      projects touched by staged changes and BLOCKS on any error. It never
-#      mutates or re-stages a file.
+#   2. affected lint (self-healing dependency ranges, otherwise VERIFY ONLY) —
+#      runs `nx affected -t lint` on the projects touched by staged changes
+#      and BLOCKS on any error. `lint` now `dependsOn: ["sync-deps"]` (nx.json
+#      targetDefaults — see BUILD-TOOLING-VERSION-SYNC-DEPS-001 /
+#      CHANGELOG.md), so it can MUTATE a project's package.json (fixing stale
+#      internal @adhd/* dependency ranges) as a side effect of running lint.
+#      This hook NEVER auto-stages that mutation (see the incident history
+#      below) — it detects it and FAILS the commit instead, so a stale,
+#      already-staged package.json can never be silently committed under a
+#      "lint passed" banner. See the "GATE 2 SELF-HEALING" block below.
 #
 # Secrets are checked FIRST and are cheap: a leaked credential is unrecoverable
 # once pushed (rotation, not reversion, is the fix), whereas a lint error is not.
@@ -51,11 +58,38 @@
 # Both incidents share the same shape: a step that MUTATES tracked files
 # and then STAGES what it mutated, running inside the commit path, where
 # neither pathspec commits nor careful manual staging can see it coming.
-# The fix is structural, not "run it more carefully": mutation and staging
-# no longer happen here at all. Gate 2 only ever READS and REPORTS. Fixing
-# dependency drift is now an explicit, standalone, discoverable command —
-# see below — run deliberately, outside the commit path, by a human or
-# agent who can see and review the diff before it's staged.
+# The fix is structural, not "run it more carefully": THIS HOOK never
+# stages anything, ever, full stop — that invariant is preserved below even
+# though Gate 2 gained a new mutating dependency (next section).
+#
+# ── GATE 2 SELF-HEALING (BUILD-TOOLING-VERSION-SYNC-DEPS-001) ──────────────
+# `lint` now `dependsOn: ["sync-deps"]` globally (nx.json targetDefaults), so
+# that @nx/dependency-checks errors from a stale/undeclared internal @adhd/*
+# range self-heal (get fixed on disk) BEFORE the check runs, instead of
+# hard-failing lint on every fixable drift. That means running
+# `nx affected -t lint` from THIS hook can now mutate a project's
+# package.json in the WORKING TREE, mid-hook, as a side effect.
+#
+# This does NOT get to reintroduce BUG-REPO-PRECOMMIT-PARTIAL-STAGE-001. The
+# hook still never runs `git add`/stages anything. Instead, Gate 2 snapshots
+# every `package.json`'s working-tree status immediately before running lint
+# and diffs it against the status immediately after. If sync-deps touched
+# ANY package.json, the commit is FAILED (even if lint itself reported
+# clean) — the fix is sitting in the working tree, unstaged, and the
+# developer must review it, `git add -- <path>/package.json` themselves, and
+# commit again. This is deliberate: without this check, the ALREADY-STAGED
+# (stale) package.json would otherwise get silently committed while lint
+# reports green, because dependency-checks now validates the just-fixed
+# DISK copy, not the index. See tools/nx-plugins/deps/README.md and
+# tools/nx-plugins/build/README.md for the full write-up, and CHANGELOG.md.
+#
+# The guard for a not-really-installed node_modules (below) is unaffected
+# and unchanged in spirit: it still hard-fails BEFORE `nx` is even invoked,
+# which remains the actual enforcement point for the commit path. (A
+# separate, softer no-op+warn guard now also lives inside sync-deps itself —
+# tools/nx-plugins/deps/eslint-check.mjs — for callers OTHER than this hook,
+# e.g. a bare `nx affected -t lint` run outside the commit path; see its
+# header for why that one may no longer be a hard fail.)
 
 # Staged files (Added/Copied/Modified/Renamed), NUL-safe join into a comma list.
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
@@ -93,15 +127,53 @@ if [ ! -f "$repo_root/node_modules/.modules.yaml" ] || [ ! -f "$repo_root/node_m
   exit 1
 fi
 
-echo "pre-commit: running 'nx affected -t lint' (check only) on staged changes…"
-npx nx affected --target=lint --files="$files"
+# Snapshot every package.json's working-tree status BEFORE lint runs, so we
+# can tell exactly what sync-deps (lint's new dependency) mutated — and only
+# that — regardless of any OTHER, unrelated dirty package.json already
+# sitting in the tree (e.g. another agent's in-flight version-bump diff).
+pkg_status_before=$(git status --porcelain | grep -E 'package\.json$' || true)
+
+echo "pre-commit: running 'nx affected -t lint' on staged changes (sync-deps runs first and self-heals fixable dependency drift)…"
+# CI=true: a git hook is never an interactive terminal. Without it, the nx
+# CLI's own interactive prompting (e.g. Nx Cloud onboarding) can fail outright
+# with a generic "NX Failed to process project graph" instead of prompting or
+# skipping — reproduced 2026-07-22 on a completely vanilla `nx show projects`
+# (nothing to do with this hook's own logic), see
+# BUG-REPO-PRECOMMIT-NX-NONINTERACTIVE-001 (BACKLOG.md). Exporting CI=true is
+# the standard, widely-recognized way to tell a CLI "there is no human here."
+CI=true npx nx affected --target=lint --files="$files"
 status=$?
+
+pkg_status_after=$(git status --porcelain | grep -E 'package\.json$' || true)
+
+if [ "$pkg_status_before" != "$pkg_status_after" ]; then
+  echo ""
+  echo "✖ pre-commit: 'lint' ran 'sync-deps' first, which reconciled stale"
+  echo "  internal @adhd/* dependency ranges by MUTATING package.json in the"
+  echo "  WORKING TREE (not the index — this hook never auto-stages, see"
+  echo "  BUG-REPO-PRECOMMIT-PARTIAL-STAGE-001)."
+  echo "  Changed since Gate 2 started:"
+  before_tmp=$(mktemp) && after_tmp=$(mktemp)
+  printf '%s\n' "$pkg_status_before" >"$before_tmp"
+  printf '%s\n' "$pkg_status_after" >"$after_tmp"
+  diff "$before_tmp" "$after_tmp" 2>/dev/null | grep '^>' | sed 's/^> */    · /'
+  rm -f "$before_tmp" "$after_tmp"
+  echo "  Review the diff (git diff -- <path>/package.json), then"
+  echo "  'git add -- <path>/package.json' the ones you want, and commit again."
+  echo "  This failure is deliberate: without it, your ALREADY-STAGED (now"
+  echo "  stale) package.json would silently ship even though lint reports"
+  echo "  clean, since dependency-checks validated the just-fixed disk copy."
+  echo "  (bypass in an emergency with: git commit --no-verify)"
+  exit 1
+fi
 
 if [ "$status" -ne 0 ]; then
   echo ""
   echo "✖ pre-commit: affected lint failed — fix and re-commit."
-  echo "  If the errors are @nx/dependency-checks (missing/obsolete"
-  echo "  package.json dependencies), the one-command fix is:"
+  echo "  @nx/dependency-checks drift is now self-healing (sync-deps runs"
+  echo "  automatically before lint) — if you're still seeing a"
+  echo "  missing/obsolete package.json dependency error here, sync-deps"
+  echo "  could not fix it automatically; inspect it directly:"
   echo "    npx nx affected -t sync-deps --files=\"$files\""
   echo "  (or for one project: npx nx run <project>:sync-deps)"
   echo "  Review the diff it produces, stage it yourself, then commit."
@@ -111,5 +183,5 @@ if [ "$status" -ne 0 ]; then
   exit 1
 fi
 
-echo "✓ pre-commit: affected lint clean."
+echo "✓ pre-commit: affected lint clean (no dependency-range drift to reconcile)."
 exit 0
