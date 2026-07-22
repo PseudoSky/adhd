@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { db } from "./db/client.js";
 import { runMigrations } from "./db/migrate.js";
 import { logger } from "./logger.js";
-import { env, toEngineConfig } from "./config.js";
+import { env, toEngineConfig, resolveInitialSsePort, setSseBoundPort } from "./config.js";
 import { AgentStore } from "./store/agent-store.js";
 
 import { SessionStore, TaskStore } from "@adhd/agent-store-runtime";
@@ -273,7 +273,36 @@ async function main() {
     }
 
     const gatewayDepsRef: GatewayDepsRef = { value: undefined };
-    const sseServer = startSseServer(taskStore, env.config.sse.port, env.config.sse.host, gatewayDepsRef);
+
+    // BUG-AGENTMCP-SSE-PORT-CONTENTION-001: agent-mcp is a stdio-transport
+    // server — every host connection is its own OS process, so N instances
+    // run concurrently and would otherwise all race for the same fixed SSE
+    // port. `sse.enabled=false` lets an operator skip the bind entirely
+    // (see config.ts); otherwise resolve a per-instance/explicit-pin
+    // candidate port and let startSseServer's EADDRINUSE→ephemeral
+    // fallback guarantee it always succeeds. Awaited here — BEFORE
+    // toEngineConfig() is ever called below — so setSseBoundPort() lands
+    // ahead of every consumer, including the one snapshot of it cached
+    // into taskDepsRef.value at startup.
+    let sseServer: Awaited<ReturnType<typeof startSseServer>>["server"] | undefined;
+    if (env.config.sse.enabled) {
+        const { port: initialPort, explicit } = resolveInitialSsePort();
+        logger.info(
+            { port: initialPort, explicit },
+            "Starting SSE/gateway HTTP server"
+        );
+        const result = await startSseServer(taskStore, initialPort, env.config.sse.host, gatewayDepsRef);
+        sseServer = result.server;
+        setSseBoundPort(result.port);
+        if (result.port === undefined) {
+            logger.warn(
+                "SSE/gateway HTTP server could not bind on this instance — stream_url links and the OpenAI-compat gateway are unavailable; the MCP server continues normally"
+            );
+        }
+    } else {
+        logger.info("SSE/gateway HTTP server disabled (ADHD_AGENT_SSE_ENABLED=false) — skipping bind");
+        setSseBoundPort(undefined);
+    }
 
     const { close } = await startServer({
         agentStore,
@@ -337,7 +366,10 @@ async function main() {
     const shutdown = async (signal: string) => {
         logger.info({ signal }, "Server shutdown");
         await close();
-        await new Promise<void>(resolve => sseServer.close(() => resolve()));
+        const activeSseServer = sseServer;
+        if (activeSseServer) {
+            await new Promise<void>(resolve => activeSseServer.close(() => resolve()));
+        }
         process.exit(0);
     };
 

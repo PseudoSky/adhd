@@ -215,19 +215,12 @@ export async function buildHarness(opts: HarnessOptions = {}): Promise<Harness> 
   let ssePort: number | undefined;
 
   if (opts.withSse) {
-    sseServer = startSseServer(taskStore, 0, "127.0.0.1");
-    await new Promise<void>((resolve) => {
-      const readPort = () => {
-        if (!sseServer) throw new Error("sseServer not started");
-        const addr = sseServer.address() as { port: number } | null;
-        ssePort = addr?.port;
-        resolve();
-      };
-      const svr = sseServer;
-      if (!svr) throw new Error('sseServer not initialized');
-      if (svr.listening) readPort();
-      else svr.once("listening", readPort);
-    });
+    const sseResult = await startSseServer(taskStore, 0, "127.0.0.1");
+    sseServer = sseResult.server;
+    ssePort = sseResult.port;
+    if (ssePort === undefined) {
+      throw new Error("Harness: SSE server failed to bind even to an ephemeral port");
+    }
   }
 
   // Build taskDeps — same shape as index.ts.
