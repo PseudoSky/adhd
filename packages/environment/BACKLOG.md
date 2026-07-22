@@ -62,3 +62,48 @@ and `GAPS_TO_ARCHITECT.md` in that directory.
 > substance is correct and has a root-`BACKLOG.md` counterpart: **ENV-SEC-001** (FontAwesome npm token)
 > and **ENV-SEC-002** (Nx Cloud token) are two of the seven, both on `origin/main` of a PUBLIC repo, both
 > **awaiting rotation**. `--all` mode's exit 1 is that history, not this working tree.
+
+---
+
+## Follow-on Feature Gap Tasks (2026-07-22)
+
+Three fully-specced feature backlog items, authored as a follow-on pass to the sox-ecosystem
+adoption survey (not part of the original G-1..G-6 batch). Full specifications — concrete
+TypeScript interfaces, migration tables, and acceptance/DoD — are in `GAP_SPECS.md` (Gap
+Tasks G-7/G-8/G-9) in `docs/environment/adoption-survey/`; Item 3 additionally has a
+longer-form rationale note at `docs/environment/BROWSER.md`.
+
+- **G-7 — Env→config auto-routing (declared fields) + runtime-override default flip +
+  provenance `explain()`.** Solves the reverse env-var→dot-path ambiguity for **declared**
+  fields by inverting the already-computed forward map (`inferEnvVar`) rather than parsing
+  the env var string — zero new ambiguity, one collision check at construction
+  (`FieldEnvCollisionError`). Flips `FieldSpec.at`'s default from `'build'` to `'runtime'` and
+  adds a new `'fixed'` tier (env never contributes, not even at construction); ships an
+  agent-mcp migration audit (7 of 17 fields need an explicit `at:'build'` pin — `db.path`,
+  `server.registryDbPath`, `transport.kind`, `transport.port`, `sse.port`, `sse.host`,
+  `plugins.configPath`). Extends (does not rebuild) `ProvenanceEntry`/`env.provenance` with a
+  new `env.explain(path)` accessor. **Overlaps and delineates scope against F1 (external-env
+  allowlist, `GAP_SPECS.md` G-1 — orthogonal, outside-prefix vs. this item's inside-prefix
+  scope) and F3/G-3 (dynamic/undeclared config, `GAPS_TO_ARCHITECT.md` item 1 — this item
+  owns declared-field routing only; contributes a `__`-delimiter recommendation to G-3's open
+  naming-convention question but does not implement undeclared-key materialization).**
+  **SPECIFIED** in `GAP_SPECS.md`.
+- **G-8 — Cluster-aware env wiring in `@adhd/workspace-codegen-nx`.** Ports `SYNTHESIS.md §6`
+  ("auto-wiring the sox-ecosystem builders") onto this repo's own generator family. Adds a
+  `.adhd/workspace.json` `clusters` registry (same validation pattern as the existing
+  `groups`/`platforms`/`layers`) and a `--cluster <name>` generator flag that imports the
+  cluster's shared spec module (first registered cluster: `agent-registry`, reusing the
+  already-shipped `packages/agent/agent-core-env`'s `agentRegistryEnvironmentSpec`/
+  `AGENT_REGISTRY_PROJECT_ID`) instead of scaffolding a divergent standalone spec. Env-wiring
+  is gated to `ENV_WIRING_ELIGIBLE` tiers (`engine`/`store`/`entrypoint`) only — tier purity
+  per `AGENTS.md` §8, never `base`/`core`/`types`. **SPECIFIED** in `GAP_SPECS.md`.
+- **G-9 — Browser-safe resolved-config reader (`environment-core-browser`).** `@adhd/environment`
+  is Node-only (`ARCHITECTURE.md` §1); a browser consumer has no way to read the same config
+  today — not even via `Environment.fromSnapshot()`, which itself calls `node:fs`. Recommends
+  build-time snapshot embed (primary) + a live `window.__ADHD_ENV__`/`localStorage` override
+  layer (secondary) over a from-scratch browser resolver (rejected — nothing to resolve from:
+  no filesystem, no `process.env`, no cwd). New `platform:browser` package depending only on
+  the already-`platform:shared` `environment-base-spec`. Secrets are a hard, non-degrading
+  boundary — `secret:true` fields throw `SecretNotAvailableInBrowserError` rather than ever
+  reaching a bundle. Full alternatives comparison in `docs/environment/BROWSER.md`.
+  **SPECIFIED** in `GAP_SPECS.md`.
