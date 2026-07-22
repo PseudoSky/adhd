@@ -2,7 +2,9 @@
 
 **apigen: code-first, polyglot API generation.**
 
-Write ordinary functions in your language of choice. Get **type-safe, production-ready servers** in any protocol — MCP, HTTP (Fastify/Express), CLI, JSON Schema, Python Flask, or Python gRPC — with **zero framework boilerplate, zero annotations, and zero changes to your source**.
+Write ordinary functions. Get **type-safe, production-ready servers** in any protocol — MCP, HTTP (Fastify/Express), CLI, JSON Schema — with **zero framework boilerplate, zero annotations, and zero changes to your source**.
+
+> **CLI or library — same engine.** This is the CLI entry point. Everything it does (extract, compose, run, generate) is also available as importable library packages. If you want to embed apigen servers directly in your own Node.js process instead of running the CLI, see the [programmatic API guide](../../packages/apigen/apigen-core-client/README.md#run-servers-programmatically).
 
 ```bash
 npx @adhd/apigen-cli --help
@@ -29,6 +31,8 @@ export async function greet(name: string): Promise<string> {
   return `hello, ${name}`;
 }
 ```
+
+> **How to structure your source files** — naming conventions, export patterns, type annotations, and what makes a good API surface: see the [Writing Source Files guide](../../packages/apigen/apigen-core-client/docs/how-to/writing-source-files.md).
 
 ```bash
 # → MCP server (AI agents consume your function as a tool)
@@ -158,6 +162,8 @@ The generated server imports `dispatch`/`buildFnTable` from `@adhd/apigen-engine
 
 Start a live server from TypeScript or Python source. Functions are imported at runtime via `tsx` and handed to the selected plugin.
 
+> **Library equivalent:** `plugin.run({ packages: [{ id, schemas, importPath, fns, createClient }], options, signal })` — see the [programmatic server guide](../../packages/apigen/apigen-core-client/docs/how-to/running-servers.md).
+
 ```bash
 apigen run --source <path> --type <plugin-id> [options]
 ```
@@ -179,6 +185,8 @@ The server handles `SIGINT`/`SIGTERM` gracefully.
 ### `apigen generate` — Generate server artifacts to disk
 
 Extract TypeScript source and write generated files to an output directory. The output includes resolution scaffolding (`package.json`, `tsconfig.json`) so it runs standalone.
+
+> **Library equivalent:** `plugin.generate({ packages: [{ id, schemas, importPath }], outputDir, options })` — see the [plugin guide](../../packages/apigen/apigen-core-client/docs/how-to/building-plugins.md).
 
 ```bash
 apigen generate --source <path> --type <plugin-id> --out-dir <path> [options]
@@ -268,15 +276,17 @@ apigen generate-registry --packages-dir <path> --type <plugin-id> --out-dir <pat
 
 ## Plugins
 
-| ID | Language | `run` | `generate` | What it builds |
-|----|----------|-------|------------|----------------|
-| `mcp` | TS | ✓ | ✓ | **MCP server** — model-context-protocol AI tool server. Transports: stdio, SSE, streaming-http |
-| `jsonschema` | TS | | ✓ | **JSON Schema** — per-operation input/output schema files |
-| `api-fastify` | TS | ✓ | ✓ | **Fastify HTTP server** — high-performance, plugin-based HTTP |
-| `api-express` | TS | ✓ | ✓ | **Express HTTP server** — familiar Node.js HTTP framework |
-| `cli` / `cli-output` | TS | ✓ | ✓ | **Interactive CLI tool** — your functions become command-line commands |
-| `py-flask` | Py | ✓ | ✓ | **Python Flask server** — Python HTTP via the Flask framework |
-| `py-grpc` | Py | ✓ | ✓ | **Python gRPC server** — HTTP/2 gRPC with protobuf wire format |
+> These same plugins are importable as library packages — see the [programmatic plugin table](../../packages/apigen/apigen-core-client/README.md#plugin-cheat-sheet).
+
+| ID | Language | `run` | `generate` | Import as | What it builds |
+|----|----------|-------|------------|-----------|----------------|
+| `mcp` | TS | ✓ | ✓ | `mcpPlugin` from `@adhd/apigen-plugin-mcp` | **MCP server** — model-context-protocol AI tool server. Transports: stdio, SSE, streaming-http |
+| `jsonschema` | TS | | ✓ | `jsonschemaPlugin` from `@adhd/apigen-plugin-jsonschema` | **JSON Schema** — per-operation input/output schema files |
+| `api-fastify` | TS | ✓ | ✓ | `apiFastifyPlugin` from `@adhd/apigen-plugin-api-fastify` | **Fastify HTTP server** — high-performance, plugin-based HTTP |
+| `api-express` | TS | ✓ | ✓ | `apiExpressPlugin` from `@adhd/apigen-plugin-api-express` | **Express HTTP server** — familiar Node.js HTTP framework |
+| `cli` / `cli-output` | TS | ✓ | ✓ | `cliPlugin` from `@adhd/apigen-plugin-cli-output` | **Interactive CLI tool** — your functions become command-line commands |
+| `py-flask` | Py | ✓ | ✓ | (Python subprocess) | **Python Flask server** — Python HTTP via the Flask framework |
+| `py-grpc` | Py | ✓ | ✓ | (Python subprocess) | **Python gRPC server** — HTTP/2 gRPC with protobuf wire format |
 
 Non-TS plugins (`py-flask`, `py-grpc`) bypass TypeScript compilation — they spawn a Python subprocess. All plugins use the same canonical wire format, so a `Decimal` is the same JSON string from Fastify, Flask, or gRPC.
 
