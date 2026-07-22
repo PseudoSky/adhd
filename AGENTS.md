@@ -149,15 +149,22 @@ We use a "Two-Way Mirror" to prevent environment crashes and security leaks:
 
 ## 🧭 4. Existing Package Context
 
-Refer to these established packages when building new features. **Verify with `npx nx list` before relying on any name here** — this section has gone stale before.
+Refer to these established packages when building new features. **Verify with `CI=true npx nx list` before relying on any name here** — this section has gone stale before.
 
 - **`@adhd/decompile`** (`packages/decompile`): Node CLI entrypoint. **platform:node.**
 - **`@adhd/data-query-engine`** (`packages/data/data-query-engine`): In-browser/Node DB engine. **platform:shared.**
 - **`@adhd/data-*`** (`packages/data`): Generic data analysis utilities. **platform:shared.**
 - **`@adhd/data-base-transforms`** (`packages/data/data-base-transforms`): Basic type transforms (camelCase, deepCopy). **platform:shared.**
 - **`@adhd/ui-react-base-storybook`** (`packages/ui-react/ui-react-base-storybook`): UI testing config. **platform:browser.** (The sole `private: true` package.)
-- **`packages/agent/*`**: the agent registry/runtime family (`agent-base-types`, `agent-core-policy`, `agent-core-provider`, `agent-store-prompts`, `agent-store-tools`, `agent-store-runtime`, `agent-engine-compiler`, `agent-engine-orchestrator`, …). Host: `entrypoint/agent-mcp`.
-- **`packages/dispatch/*`**: the dispatch family (`dispatch-base-spec`, `dispatch-core-client`, `dispatch-core-optimizer`, `dispatch-orchestrator`, `dispatch-serializer-json`). Host: `entrypoint/dispatch-cli`.
+- **Agent Registry Family** (`packages/agent/*`): 12-package ecosystem for modular agent execution. NO longer opens DBs at import; use `@adhd/agent-core-env` for shared registry DB resolution.
+  - **Core/Types**: `agent-base-types` (no deps), `agent-core-env` (lazy registry DB resolver via Environment DI, **NEW v0.0.1**), `agent-core-policy`, `agent-core-provider`
+  - **Stores**: `agent-store-prompts` (component/composition/usecase/composed-prompt stores), `agent-store-tools` (tool registry), `agent-store-runtime` (runtime state)
+  - **Orchestration**: `agent-engine-compiler`, `agent-engine-orchestrator`
+  - **Extensions**: `agent-generator-plugin`, `agent-plugin-budget`, `agent-plugin-sanitize`
+  - Host: `entrypoint/agent-mcp`
+- **Dispatch Family** (`packages/dispatch/*`): task DAG execution. Contains: `dispatch-base-spec`, `dispatch-core-client`, `dispatch-core-optimizer`, `dispatch-orchestrator`, `dispatch-serializer-json`. Host: `entrypoint/dispatch-cli`.
+- **Environment Cascade** (`packages/environment/*`, **NEW v0.0.1**): Zero-config configuration (code defaults → system → global → project → env vars). Consumers: agent-mcp (config, logging, plugins, queue, server, SSE, transport, DB paths), apigen-plugin-mcp (multi-instance port binding). Tier: core/base. Platform: node. Layers: base-spec, builder, core-node.
+- **Workspace Codegen** (`packages/workspace/workspace-codegen-nx`): **MANDATORY** generator for package scaffolding. Tier: core. Platform: shared. Usage: `npx nx g @adhd/workspace-codegen-nx:<tier> --name <name> --group <domain> --nxLayer <layer> --platform <platform>`.
 
 ## 💻 5. Development & Nx Commands
 
