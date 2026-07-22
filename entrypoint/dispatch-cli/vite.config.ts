@@ -28,7 +28,11 @@ export default defineConfig({
     dts({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),
-      exclude: ['bin/**'],
+      // src/test/** holds test-support (fixtures + the real-e2e harness) that lack a
+      // .spec/.test suffix, so tsconfig.lib.json's *.spec/*.test excludes miss them and
+      // vite-plugin-dts would ship test/*.d.ts (DEBT-DISPATCH-CLI-TEST-DECL-BLOAT-001).
+      // Public API types (index/api/lib) are unaffected.
+      exclude: ['bin/**', 'src/test/**'],
     }),
   ],
 

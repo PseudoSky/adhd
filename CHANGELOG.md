@@ -1,5 +1,11 @@
 ## Unreleased
 
+### Fixed — `@adhd/dispatch-cli` no longer ships test declarations (DEBT-DISPATCH-CLI-TEST-DECL-BLOAT-001) (2026-07-21)
+
+The publish-from-dist dry-run surfaced `test/helpers/fixtures.d.ts` + `test/integration/real-e2e.d.ts` in the dispatch-cli tarball. Cause: those test-support files live under `src/test/` without a `.spec`/`.test` suffix, so `tsconfig.lib.json`'s `*.spec.ts`/`*.test.ts` excludes missed them and `vite-plugin-dts` emitted their declarations. Fixed by excluding `src/test/**` from the lib build (`tsconfig.lib.json` `exclude` + the `vite-plugin-dts` `exclude`). The package's public API types (`index.d.ts` declared as `typings`, plus `api.d.ts`/`lib/core.d.ts`) are unaffected and still ship. Verified: dist now contains only `{api,index,lib/core}.d.ts` + `index.{js,mjs}` + `package.json` (test decls gone); `verify-dist-load`, `publish-hygiene`, and `test` (30 passed) all green.
+
+Citations: [build/dist-versioning-plugin, claude (opus), 1: entrypoint/dispatch-cli/tsconfig.lib.json (`exclude` += `src/test/**`); 2: entrypoint/dispatch-cli/vite.config.ts (dts `exclude` += `src/test/**`); 3: terminal 2026-07-21 — dispatch-cli dist file list post-fix + verify-dist-load/publish-hygiene/test green]
+
 ### Added — "version the dist at build" (`@adhd/nx-build:manifest`) + publish-from-dist; RESOLVES BUG-RELEASE-PIPELINE-UNFIT-FOR-FULL-PUBLISH-001 (Defects A–E) (2026-07-21)
 
 **The full-workspace `nx release` was unfit to publish: the one-command path was XOR-locked out, it crashed on unpublished internal deps, and — worst — it shipped stale, unsatisfiable internal `@adhd/*` ranges because nx versions projects in non-topological order (a dependency bumped *after* its dependent never rewrote the dependent's range). Rather than reconcile ranges after nx's broken pass, the build now produces a self-consistent publishable artifact and publishing packs *that*.**
