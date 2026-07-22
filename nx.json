@@ -182,6 +182,11 @@
         "verify-dist-load",
         "publish-hygiene"
       ]
+    },
+    "lint": {
+      "dependsOn": [
+        "sync-deps"
+      ]
     }
   },
   "targetDependencies": {

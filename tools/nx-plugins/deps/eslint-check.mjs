@@ -49,10 +49,26 @@
  * actually shipped broken commits (BUG-REPO-PRECOMMIT-DEPCHECK-STRIPS-
  * USED-DEPS-001, worktree agent-ab0393d4188e5ce5f, commit c176c2e6).
  *
- * So: refuse to run `@nx/dependency-checks` (fix OR check mode) at all in a
- * workspace whose `node_modules` isn't really installed — fail LOUDLY with
- * an actionable one-command fix, rather than silently producing (and, in
- * --fix mode, silently applying) false-positive results.
+ * So: refuse to run `@nx/dependency-checks` (fix OR check mode) against a
+ * workspace whose `node_modules` isn't really installed.
+ *
+ * BEHAVIOR CHANGE (BUILD-TOOLING-VERSION-SYNC-DEPS-001 — see CHANGELOG.md):
+ * this guard used to `process.exit(2)` (hard-fail) here. It now WARNS and
+ * no-ops with exit 0 instead. Reason: `sync-deps` is now a `dependsOn` of
+ * every project's `lint` target (tools/nx-plugins/lint dependency, wired via
+ * nx.json `targetDefaults.lint`), so a hard failure here would fail every
+ * `lint` task — and therefore every `build` (`build` depends on `lint`) — in
+ * any bare/fresh worktree, even for projects with zero actual dependency
+ * drift. The safety guarantee this guard exists for is unchanged: it still
+ * refuses to let a broken-graph @nx/dependency-checks run at all (so it can
+ * never misreport a used dep as unused, nor `--fix`-strip one) — it just
+ * reports that refusal as a loud, visible warning instead of a fatal exit.
+ * The pre-commit hook (`.githooks/pre-commit`) keeps its OWN, separate,
+ * hard-fail node_modules check that runs BEFORE it ever invokes `nx affected
+ * -t lint` at all — that is still the actual commit-blocking guarantee; this
+ * guard is the defense-in-depth backstop for every other caller (direct
+ * `nx run <project>:sync-deps`, `nx affected -t lint` run standalone outside
+ * the hook, etc).
  */
 
 import { existsSync } from 'node:fs';
@@ -63,7 +79,7 @@ import { dirname, join } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Locate the workspace root by walking up to nx.json — robust to where this
 // script lives (it moved from scripts/ into tools/nx-plugins/deps/).
-const findRoot = (d) => { while (d !== dirname(d)) { if (existsSync(join(d, 'nx.json'))) return d; d = dirname(d); } return d; };
+export const findRoot = (d) => { while (d !== dirname(d)) { if (existsSync(join(d, 'nx.json'))) return d; d = dirname(d); } return d; };
 const workspaceRoot = findRoot(__dirname);
 
 /**
@@ -71,54 +87,72 @@ const workspaceRoot = findRoot(__dirname);
  * absent in a freshly-created git worktree (git does not copy node_modules).
  * (Was `.yarn-state.yml` under the pre-migration yarn Berry setup.)
  */
-const PNPM_INSTALL_MARKER = join(workspaceRoot, 'node_modules', '.modules.yaml');
+const pnpmInstallMarker = (root) => join(root, 'node_modules', '.modules.yaml');
 /** Cheap secondary sanity check: a real, sizeable, always-present dep. */
-const CANARY_PACKAGE = join(workspaceRoot, 'node_modules', 'nx', 'package.json');
+const canaryPackage = (root) => join(root, 'node_modules', 'nx', 'package.json');
 
-function assertNodeModulesInstalled() {
-  if (existsSync(PNPM_INSTALL_MARKER) && existsSync(CANARY_PACKAGE)) {
-    return;
-  }
+/** True iff `root/node_modules` looks like a real package-manager install. */
+export function isRealInstall(root) {
+  return existsSync(pnpmInstallMarker(root)) && existsSync(canaryPackage(root));
+}
+
+/** Print the (non-fatal) "skipping, node_modules isn't real" warning. */
+export function warnSkip(root) {
   process.stderr.write(
     [
       '',
-      '✖ eslint-dependency-checks: node_modules in this workspace root',
-      `  (${workspaceRoot}) was not written by a real package-manager`,
-      '  install (missing node_modules/.modules.yaml and/or node_modules/nx).',
-      '',
+      '⚠ eslint-dependency-checks: node_modules in this workspace root',
+      `  (${root}) was not written by a real package-manager install`,
+      '  (missing node_modules/.modules.yaml and/or node_modules/nx).',
       '  Running @nx/dependency-checks here would misreport EVERY',
       '  project-level dependency as unused (BUG-REPO-PRECOMMIT-DEPCHECK-',
       '  STRIPS-USED-DEPS-001) and --fix would silently delete real,',
       '  statically-imported runtime dependencies from package.json.',
       '',
-      '  Fix: run a real install in this workspace root first, e.g.:',
-      '    pnpm install',
-      '  then re-run this command.',
+      '  Skipping this dependency check (no-op) rather than running it',
+      '  against a broken graph. Fix: run a real install in this workspace',
+      '  root first, e.g. `pnpm install`, then re-run this command.',
       '',
     ].join('\n')
   );
-  process.exit(2);
 }
 
-function main() {
-  const args = process.argv.slice(2);
-  if (args.length === 0) {
+/**
+ * Run the guarded `eslint <package.json> [--fix]` check.
+ *
+ * @param {string[]} argv `[packageJsonRelativePath, ...flags]`
+ * @param {{workspaceRoot?: string}} [opts] test seam — defaults to the real,
+ *   discovered workspace root; a test may pass a fake one to exercise the
+ *   node_modules-missing branch without touching the real repo's install.
+ * @returns {number} the intended process exit code (0 = ok/no-op-skip).
+ */
+export function main(argv = process.argv.slice(2), { workspaceRoot: root = workspaceRoot } = {}) {
+  if (argv.length === 0) {
     process.stderr.write(
       'Usage: eslint-dependency-checks.mjs <package.json-relative-path> [--fix]\n'
     );
-    process.exit(2);
+    return 2;
   }
 
-  assertNodeModulesInstalled();
+  if (!isRealInstall(root)) {
+    warnSkip(root);
+    return 0;
+  }
 
-  const eslintBin = join(workspaceRoot, 'node_modules', '.bin', 'eslint');
+  const eslintBin = join(root, 'node_modules', '.bin', 'eslint');
   const eslintCmd = existsSync(eslintBin) ? eslintBin : 'eslint';
 
   try {
-    execFileSync(eslintCmd, args, { cwd: workspaceRoot, stdio: 'inherit' });
+    execFileSync(eslintCmd, argv, { cwd: root, stdio: 'inherit' });
+    return 0;
   } catch (err) {
-    process.exit(typeof err.status === 'number' ? err.status : 1);
+    return typeof err.status === 'number' ? err.status : 1;
   }
 }
 
-main();
+// Only run as a CLI when invoked directly (`node eslint-check.mjs ...`) — not
+// when imported by a test for the exported pure-ish helpers above.
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isMain) {
+  process.exit(main());
+}

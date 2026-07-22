@@ -30,5 +30,17 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) => {
   // `version` bumps the SOURCE package.json iff the built dist differs from what's
   // published at its current version (registry as baseline — no tags). Runs before
   // publish in `pnpm release`; not cached (reads live registry, mutates source).
-  return { projects: { [projectRoot]: { targets: {"version":{"executor":"@adhd/nx-build:version","dependsOn":["build"],"cache":false},"dist-manifest":{"executor":"@adhd/nx-build:manifest","dependsOn":["build"],"cache":false},"verify-dist-load":{"executor":"@adhd/nx-build:verify","dependsOn":["build"],"cache":true},"publish-hygiene":{"executor":"@adhd/nx-build:hygiene","dependsOn":["dist-manifest"],"cache":true},"publish":{"executor":"@adhd/nx-build:publish","dependsOn":["dist-manifest","verify-dist-load","publish-hygiene"],"cache":false}} } } };
+  // `dependsOn: ["build", "^version"]` — `^version` orders versioning
+  // TOPOLOGICALLY: a package's own internal @adhd/* dependencies get their
+  // `version` task run FIRST, so by the time THIS project's version task
+  // runs, every dependency it declares has already settled its version. The
+  // version executor's own final step (see executors/version/impl.js) then
+  // reconciles this package's declared internal ranges against that now-
+  // settled state — reusing the `deps` plugin's `sync-deps` logic verbatim,
+  // never duplicating it. See tools/nx-plugins/build/README.md and
+  // tools/nx-plugins/deps/README.md for the full composition + the
+  // "no forced cascade bump" guarantee (compare-published.js already strips
+  // internal @adhd/* ranges before diffing, so a range-only sync is never
+  // itself a bump trigger).
+  return { projects: { [projectRoot]: { targets: {"version":{"executor":"@adhd/nx-build:version","dependsOn":["build","^version"],"cache":false},"dist-manifest":{"executor":"@adhd/nx-build:manifest","dependsOn":["build"],"cache":false},"verify-dist-load":{"executor":"@adhd/nx-build:verify","dependsOn":["build"],"cache":true},"publish-hygiene":{"executor":"@adhd/nx-build:hygiene","dependsOn":["dist-manifest"],"cache":true},"publish":{"executor":"@adhd/nx-build:publish","dependsOn":["dist-manifest","verify-dist-load","publish-hygiene"],"cache":false}} } } };
 }];

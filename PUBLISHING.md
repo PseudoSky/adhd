@@ -56,9 +56,27 @@ npx nx run-many -t publish --projects=agent-mcp,apigen-cli   # a subset
 npx nx run apigen-cli:publish              # a single package
 ```
 
+> ⚠️ **Scoped/single-project `--dryRun` does NOT reach `^version`'s dependency tasks —
+> use `ADHD_NX_VERSION_DRY_RUN=1` too.** `nx run-many -t version --projects=A,B --dryRun`
+> (or even a single `nx run A:version --dryRun`) only applies the `--dryRun` CLI override
+> to the projects you named — **not** to A/B's internal `@adhd/*` dependencies that
+> `^version`'s topological ordering pulls into the same run. Those dependency tasks get
+> the schema *default* (`dryRun: false`) and will really bump + write, despite the
+> invocation looking read-only. (Confirmed live 2026-07-22 while verifying this feature:
+> a 2-project `--dryRun` proof-of-topology run actually wrote real version bumps —
+> including a real internal-range sync — to 10 unrelated dependency packages; caught and
+> reverted immediately via `git restore`, no lasting effect, but a real near-miss. See
+> `BUG-NX-RUNMANY-DRYRUN-NOT-PROPAGATED-TO-DEPENDENCY-TASKS-001` in `BACKLOG.md`.)
+> **Always also set `ADHD_NX_VERSION_DRY_RUN=1`** when dry-running anything less than the
+> full, unscoped `nx run-many -t version --dryRun` (which IS safe — every project is
+> already explicitly targeted, nothing is dependency-pulled) — it's honored uniformly by
+> every task in the invocation (nx's task workers inherit the parent process's env),
+> unlike the CLI flag. `pnpm release:dry` already does this for you.
+
 `pnpm release` = `pnpm run build && npx nx run-many -t version && npx nx run-many -t publish`. Two tasks, both per-project and **not cached**:
 
-- **`version`** (`dependsOn: [build]`) bumps a package's SOURCE `version` **iff** it needs a new release: if the current version isn't on npm → a release is already *pending* → leave it; if it IS on npm → compare the built `dist` against the **published tarball** (ignoring the version field and internal `@adhd/*` ranges) → **changed → bump** (patch by default, `--bump=minor|major` to override), **identical → leave**. No git tags, no diff base — the published artifact is the baseline. It writes the bump but does **not** commit (review `git diff`).
+- **`version`** (`dependsOn: [build, ^version]`) bumps a package's SOURCE `version` **iff** it needs a new release: if the current version isn't on npm → a release is already *pending* → leave it; if it IS on npm → compare the built `dist` against the **published tarball** (ignoring the version field and internal `@adhd/*` ranges) → **changed → bump** (patch by default, `--bump=minor|major` to override), **identical → leave**. No git tags, no diff base — the published artifact is the baseline. It writes the bump but does **not** commit (review `git diff`).
+  - **`^version` — topological dependent-range sync (BUILD-TOOLING-VERSION-SYNC-DEPS-001):** `^version` runs a package's internal `@adhd/*` dependencies' `version` tasks FIRST, so by the time a package's own `version` task runs, every dependency it declares has already settled its version. After deciding its own bump (or not), `version`'s final step reconciles the package's declared internal `@adhd/*` ranges to that now-settled state — reusing the `deps` plugin's `sync-deps` (fix, real runs) / `sync-deps-check` (read-only, `--dryRun`) executors directly (see [`tools/nx-plugins/deps/README.md`](tools/nx-plugins/deps/README.md)), never a duplicated reimplementation. It writes **only that package's own** `package.json`. This never forces a cascade bump: `compare-published.js`'s `normalizeManifest` already strips internal `@adhd/*` ranges before diffing, so a range-only edit is invisible to the next run's change-detector — a caret range absorbs a dependency's bump at install time, and `dist-manifest` (above) already resolves published ranges independent of source-side sync order. This eliminates the manual `sync-deps` pass previously needed after a batch of bumps to keep dependents' declared ranges from drifting.
 - **`publish`** (`dependsOn: [dist-manifest, verify-dist-load, publish-hygiene]`) rebuilds anything `version` bumped (a version change invalidates its build cache), re-stamps its `dist/package.json` (internal `@adhd/*` ranges resolved to concrete versions from a live snapshot), and `npm publish`es the `dist` **iff** `name@version` isn't already on the registry. Already-published = no-op skip (no "cannot publish over", no republish).
 
 Exit code is the gate: `0` = everything versioned/published or skipped; non-zero = a task failed (nx names the project).
@@ -66,6 +84,17 @@ Exit code is the gate: `0` = everything versioned/published or skipped; non-zero
 **Versioning model:** automatic, registry-driven. A package bumps only when its own built artifact differs from what's published (external-dep/metadata/code changes count; a dependency's version moving does **not** — caret ranges absorb that at install time). Brand-new packages publish at their current version. To force a level, `--bump=minor|major`; to version one package, `nx run <project>:version`.
 
 > **OTP + parallelism:** `nx run-many` publishes in parallel. If your npm 2FA rejects a reused OTP across parallel publishes, serialize with `--parallel=1` (or use an npm **automation token**, which needs no OTP).
+
+> **Related, but not a publish step — `lint` is now self-healing for dependency-range drift**
+> (BUILD-TOOLING-VERSION-SYNC-DEPS-001). Every project's `lint` target `dependsOn: ["sync-deps"]`
+> (`nx.json` `targetDefaults`), so a stale/undeclared internal `@adhd/*` dependency range gets
+> fixed on disk automatically before `@nx/dependency-checks` ever runs — `lint` no longer hard-fails
+> on that specific, fixable class of drift; it self-heals instead. **This is a deliberate gate-
+> semantics change**, accepted knowingly: the dependency-check portion of `lint` moves from "hard
+> gate" to "self-healing." See [`tools/nx-plugins/deps/README.md`](tools/nx-plugins/deps/README.md)
+> and [`tools/nx-plugins/build/README.md`](tools/nx-plugins/build/README.md) for the full write-up,
+> the `node_modules`-absent no-op guard, and how `.githooks/pre-commit` handles the resulting
+> working-tree mutation (it never auto-stages — see that file's header).
 
 **After publishing:** the `version` task left any bumps uncommitted — commit them (`git add -p` the bumped `package.json`s, `git commit -m "chore(release): version bumps"`) and `git push` (human-approved). No tag push is needed; the registry itself records what's released. (Leaving them uncommitted is still coherent — next release sees source == npm and re-detects from the artifact — but committing keeps git and npm aligned.)
 
