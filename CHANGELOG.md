@@ -1,5 +1,21 @@
 ## Unreleased
 
+### Added — `version` is now a per-project nx task: registry-driven, tag-free auto-bump (2026-07-21)
+
+Versioning is no longer manual. `@adhd/nx-build:version` (target `version`, `dependsOn:[build]`, not cached) bumps a package's SOURCE `version` **iff it needs a new release**, using the npm registry as the baseline — no git tags, no diff base:
+- current version **not** on npm → a release is already *pending* → leave it;
+- current version **is** on npm → compare the built `dist` against the **published tarball** (`tools/nx-plugins/build/executors/version/compare-published.js`, which ignores the `version` field and internal `@adhd/*` dep ranges) → **changed → bump** (patch default; `--bump=minor|major` to override), **identical → leave**.
+
+Ignoring internal `@adhd/*` ranges in the comparison is deliberate: `dist-manifest` resolves them to concrete versions, so a *dependency's* version moving would otherwise make every dependent's manifest differ and cascade a bump graph-wide. Caret ranges already absorb a dependency's patch/minor bump at install time, so a package bumps only when its **own** code/external-deps/metadata changed. The task writes the bump but does not commit (review `git diff`).
+
+`pnpm release` is now `build → nx run-many -t version → nx run-many -t publish` (added `pnpm release:dry` for a no-write preview — needed because a chained `--dryRun` would only reach the last command). Publish rebuilds anything `version` bumped (a version change invalidates its build cache) and re-stamps the dist manifest before publishing.
+
+Pure `compare-published`/`bumpVersion` logic covered by 8 `node:test` teeth tests (`pnpm test:build-tools`, now 20 total): identical→no-bump, code-diff→bump, version-only→no-bump, internal-range-only→no-bump (no cascade churn), external-dep→bump, added/removed files→bump.
+
+**Verified (`nx run-many -t version --dryRun`, live registry):** EXIT 0 — **41 packages "release pending, no bump"** (not yet on npm), **11 "changed → would bump"** (already-published packages whose new dist-model artifact differs from their old published tarball, e.g. `agent-base-types 2.1.0 → 2.1.1`), 0 unchanged.
+
+Citations: [fix/release-version-task, claude (opus), 1: tools/nx-plugins/build/executors/version/compare-published.js (detector + bump); 2: tools/nx-plugins/build/executors/version/impl.js (registry check + tarball fetch/compare + source bump); 3: tools/nx-plugins/build/executors/version/compare-published.spec.mjs (8 teeth tests); 4: tools/nx-plugins/build/plugin.js (version target, dependsOn build, cache:false); 5: package.json (release = build+version+publish; release:dry; test:build-tools); 6: PUBLISHING.md (version-task workflow); 7: terminal 2026-07-21 `nx run-many -t version --dryRun` — 41 pending / 11 would-bump / 0 unchanged, EXIT 0]
+
 ### Changed — `publish` is now a per-project nx task; `nx release` retired; registry is the published-reference (2026-07-21)
 
 `nx release` proved unfit for this workspace at every layer — even after the dist-versioning fix it *still* broke: the `skipLockFileUpdate` flag silently did nothing because it sat at `release.version.skipLockFileUpdate` when `@nx/js`'s `updateLockFile` only reads `release.version.generatorOptions.skipLockFileUpdate` (`update-lock-file.js:11`), so a real `nx release` ran `pnpm install --lockfile-only` and 404'd on unpublished internal deps; and its non-topological version pass left source interdependency ranges stale, which then failed the build via `@nx/dependency-checks`.
