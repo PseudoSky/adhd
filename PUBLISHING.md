@@ -43,7 +43,33 @@ Consequences for releasing:
 
 ---
 
-## Workflow: Independent per-package versioning
+## Workflow — `publish` is a task; the registry is the source of truth
+
+**`nx release` is retired for this repo.** It fought the monorepo at every layer (git-config XOR, `pnpm install --lockfile-only` 404 on unpublished internal deps, non-topological versioning that shipped stale interdependency ranges, `@nx/dependency-checks` failing the build on those same stale ranges — `BUG-RELEASE-PIPELINE-UNFIT-FOR-FULL-PUBLISH-001`). Publishing is now a normal per-project **nx task** (`@adhd/nx-build:publish`), so releasing the workspace is just `nx run-many -t publish`.
+
+```bash
+pnpm release --dryRun            # build + gate everything, show what would publish (publishes nothing)
+pnpm release                     # build + gate + publish everything not already on npm
+npx nx run-many -t publish --otp=123456        # supply an npm one-time password (2FA)
+npx nx run-many -t publish --tag=next          # publish under a dist-tag
+npx nx run-many -t publish --projects=agent-mcp,apigen-cli   # a subset
+npx nx run apigen-cli:publish                  # a single package
+```
+
+`pnpm release` = `pnpm run build && npx nx run-many -t publish`. Each `publish` task (`dependsOn: [dist-manifest, verify-dist-load, publish-hygiene]`, **not cached**):
+1. is **gated** by nx's real targets — `build → dist-manifest → verify-dist-load → publish-hygiene` run first (nx's `dependsOn`). `dist-manifest` writes each `dist/package.json` with internal `@adhd/*` ranges resolved to concrete versions from a live workspace snapshot, so the artifact is self-consistent regardless of source-range style. Building first (`pnpm run build`) also avoids the composite-tsc cold-build race (`DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001`).
+2. **publishes** the built `dist/` via `npm publish` **iff** that `name@version` is not already on the registry — the **npm registry is the published-reference** (`npm view name@version`). Already-published versions are a **no-op skip** (no republish, no "cannot publish over" failure, no git tags to keep in sync).
+
+Exit code is the gate: `0` = everything published or skipped; non-zero = a gate or publish failed (nx names the project).
+
+**Versioning model:** the source `package.json` `version` IS the release version — there is no auto-bump. To release a new version of an already-published package, bump its source `version` first (the registry won't have it → it publishes). Publishing every not-yet-published package at its current version is exactly what gets the workspace onto npm; already-published versions are inert no-ops.
+
+> **OTP + parallelism:** `nx run-many` publishes in parallel. If your npm 2FA rejects a reused OTP across parallel publishes, serialize with `--parallel=1` (or use an npm **automation token**, which needs no OTP).
+
+**After publishing:** push the release commit — `git push` (human-approved). No tag push is needed; the registry itself records what's released.
+
+<details>
+<summary>Retired: the former <code>nx release</code> workflow (kept for reference only — do not use)</summary>
 
 ### 1. Version (compute what changed, bump versions, generate changelogs)
 
@@ -160,9 +186,11 @@ npm publish <projectRoot> --access public   # e.g. packages/agent/agent-base-typ
 # If prompted for OTP: add --otp=<code>
 ```
 
+</details>
+
 ---
 
-## How "only what changed" is determined
+## How "only what changed" is determined (retired — historical, applied to `nx release`)
 
 **Git tags are the source of truth.** When you run `nx release version`, it:
 
