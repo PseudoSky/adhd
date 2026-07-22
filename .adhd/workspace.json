@@ -61,7 +61,9 @@
     "ui-primitives": { "description": "Atomic visual units (Button, hooks)" },
     "ui-composites": { "description": "Complex pure-visual units (Cards)" },
     "components":    { "description": "UI meets Data — merge point" },
-    "workflows":     { "description": "Multi-step stateful journeys" }
+    "workflows":     { "description": "Multi-step stateful journeys" },
+    "ai":            { "description": "AI agent runtime — orchestration, providers, stores, prompt/tool registries" },
+    "mcp":           { "description": "MCP server/protocol surface — tool + resource exposure over MCP" }
   },
   "defaults": {
     "types": {

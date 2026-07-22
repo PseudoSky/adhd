@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,6 +9,7 @@ import { logger } from "./logger.js";
 import { env, toEngineConfig, resolveInitialSsePort, setSseBoundPort } from "./config.js";
 import { AgentStore } from "./store/agent-store.js";
 
+import { resolveRegistryDbPath, openRegistryDb } from "@adhd/agent-core-env";
 import { SessionStore, TaskStore } from "@adhd/agent-store-runtime";
 import {
     ComposedPromptStore,
@@ -107,21 +107,20 @@ export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolv
 
     let registrySqlite: Database.Database;
     try {
-        // Zero-config default: `registryDbPath` (~/.adhd/agent-mcp/registry.db)
-        // has never been written by anything on a fresh machine — unlike the
-        // operational DB (db/client.ts), nothing pre-creates it. Match that
-        // pattern: mkdir the parent dir, open WITHOUT `fileMustExist`, then run
-        // the full registry-family migration set so the file is schema-current
-        // before any compiler store queries it (BUG-AGENTMCP-REGISTRY-DB-CANTOPEN-001).
-        const resolvedRegistryPath = path.resolve(registryDbPath);
-        const registryDir = path.dirname(resolvedRegistryPath);
-        if (!fs.existsSync(registryDir)) {
-            fs.mkdirSync(registryDir, { recursive: true });
-        }
-
-        logger.info({ registryDbPath: resolvedRegistryPath }, "Opening registry DB for compiler integration");
-        registrySqlite = new Database(resolvedRegistryPath);
-        registrySqlite.pragma("journal_mode = WAL");
+        // Zero-config default: `registryDbPath` (via @adhd/agent-core-env's
+        // resolveRegistryDbPath(), ~/.adhd/agent-registry/production/data/
+        // registry.db) has never been written by anything on a fresh
+        // machine. openRegistryDb() mkdir's the parent dir, opens WITHOUT
+        // `fileMustExist`, and sets the same pragmas the pre-migration
+        // singleton did (journal_mode=WAL, foreign_keys=ON) — then we run
+        // the full registry-family migration set so the file is
+        // schema-current before any compiler store queries it
+        // (BUG-AGENTMCP-REGISTRY-DB-CANTOPEN-001). `runMigrationsOn` itself
+        // toggles `foreign_keys` OFF/ON around each migration run
+        // regardless of the connection's current setting, so opening with
+        // foreign_keys already ON here is safe (see migrate-runner.ts).
+        logger.info({ registryDbPath }, "Opening registry DB for compiler integration");
+        registrySqlite = openRegistryDb({ registryDbPath }).sqlite;
 
         // The registry is a five-package shared-SQLite-file family (see
         // packages/agent/agent-engine-compiler/CLAUDE.md "One shared SQLite
@@ -137,8 +136,6 @@ export function buildPromptResolver(opts: BuildPromptResolverOpts): PromptResolv
         runToolsMigrationsOn(registrySqlite, registryMigrationDb, TOOLS_MIGRATIONS_FOLDER);
         runPolicyMigrationsOn(registrySqlite, registryMigrationDb, POLICY_MIGRATIONS_FOLDER);
         compilerMigrationsOn(registrySqlite, registryMigrationDb, compilerMigrationsFolder);
-
-        registrySqlite.pragma("foreign_keys = ON");
     } catch (err) {
         logger.info(
             { registryDbPath, err },
@@ -258,7 +255,12 @@ async function main() {
     }
 
     const promptResolver = buildPromptResolver({
-        registryDbPath: env.config.server.registryDbPath,
+        // env.config.server.registryDbPath is unset by default (config.ts) —
+        // resolveRegistryDbPath() supplies the canonical fallback so this
+        // entrypoint and the 5 registry-family packages always agree on ONE
+        // path. An explicit ADHD_AGENT_REGISTRY_DB_PATH (or a config-file
+        // layer) still wins, exactly as before this migration.
+        registryDbPath: env.config.server.registryDbPath ?? resolveRegistryDbPath(),
         agentMcpDb: dbAny,
         compileAgentFn,
         compilerMigrationsOn,

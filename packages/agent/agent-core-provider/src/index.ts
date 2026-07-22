@@ -1,8 +1,6 @@
 // @adhd/agent-provider — barrel export
 // Each subsequent plan state adds exports here as new modules are created.
 
-export { db, sqlite } from './db/client.js';
-export { runMigrations } from './db/migrate.js';
 export { runMigrationsOn, MIGRATIONS_FOLDER } from './db/migrate-runner.js';
 export * from './db/schema.js';
 
