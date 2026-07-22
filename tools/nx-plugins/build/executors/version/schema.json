@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "$id": "version",
+  "type": "object",
+  "properties": {
+    "bump": {
+      "type": "string",
+      "enum": ["patch", "minor", "major"],
+      "description": "Semver level to bump when a change is detected.",
+      "default": "patch"
+    },
+    "dryRun": {
+      "type": "boolean",
+      "description": "Report what would bump; write nothing.",
+      "default": false
+    }
+  },
+  "required": [],
+  "additionalProperties": true
+}
