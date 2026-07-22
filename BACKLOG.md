@@ -1306,3 +1306,39 @@ The worktree context also means Nx cache is not shared (`DEBT-NX-WORKTREE-CACHE-
 - **Fix direction:** rewrite both existing READMEs from the real `src/index.ts` barrel + `REGISTRY-PACKAGE-RULES.md`, and author the 3 missing ones the same way. Out of scope for the `ENV-ADOPT-CLUSTERS(1)` DI migration itself (that migration touched none of the described functionality) — deliberately not attempted inline here to avoid describing behavior not independently verified end-to-end in the same pass; scope as its own doc-authoring task.
 - **Status:** OPEN.
 
+## agent-mcp / registry follow-ups (session 2026-07-22 — env-migration discussion)
+
+These are the outstanding, non-release findings from the ENV-ADOPT-CLUSTERS(1) discussion. (Release/publish work — coordinated republish of `agent-core-env`@0.0.1 + the 5 family packages + `agent-mcp` — is deliberately NOT filed here; it is a run-`pnpm release` action, not backlog.)
+
+### DEBT-AGENTMCP-REGISTRY-MIGRATE-NOT-CENTRALIZED-001 — registry "open + migrate" lives only inlined in `buildPromptResolver`; `agent-core-env` opens but never migrates
+- **Discovered:** 2026-07-22, tracing the migration trigger path after `ENV-ADOPT-CLUSTERS(1)`.
+- **Detail:** `@adhd/agent-core-env`'s `openRegistryDb()` deliberately opens (mkdir + WAL + `foreign_keys`) but does **not** run migrations — it leaves that to the caller[1]. The only place that opens AND runs all five registry-family migration sets (`runProvider/Prompts/Tools/Policy/CompilerMigrationsOn`) is `agent-mcp`'s `buildPromptResolver`, where the 5-set sequence is hand-inlined[2]. There is no single reusable "give me a migrated registry DB" call.
+- **Impact:** the agent-mcp server is fine (it migrates at startup), but any standalone tool / future consumer that calls `openRegistryDb()` and queries tables without re-assembling the 5 runners hits `no such table`; the 5-set sequence is also duplicated at every call site.
+- **Fix direction:** add `migrateRegistry(sqlite)` (runs all 5 sets in the canonical order) and/or `openRegistryDb({ migrate: true })` to `@adhd/agent-core-env`, and have `buildPromptResolver` call that instead of hand-listing the runners.
+- **Status:** OPEN. Cross-links: `ENV-ADOPT-CLUSTERS(1)`, `BUG-AGENTMCP-REGISTRY-DB-CANTOPEN-001` (CHANGELOG).
+- Citations: [main, claude, session-2026-07-22-env, 1: packages/agent/agent-core-env/src/open-registry-db.ts:11-13,50-65; 2: entrypoint/agent-mcp/src/index.ts:123-137]
+
+### BUG-AGENTMCP-REGISTRY-NO-WRITE-THROUGH-001 — the MCP creation path never writes the registry; registry composition is disconnected/dormant
+- **Discovered:** 2026-07-22, tracing whether agent-mcp actually uses the registry at runtime.
+- **Detail:** `agent_create` → `agentCreate` → `AgentStore` (constructed over the **operational** `agents.db`) → a single `insert(agentsTable)` storing the definition as a JSON blob[1]; the server handler does nothing registry-ward[2]. No create/update/delete path writes `registry_agents` or any registry table. The registry (`registry_agents`, composed prompts, compiler) is populated only by the separate `agent-engine-compiler` compile/seed pipeline, which the live server never invokes.
+- **Impact:** an MCP-created agent is never registered, so `resolveComposedPrompt` finds nothing and every one of the 48 agents falls back to its flat operational `systemPrompt` (verified: canonical `registry.db` `registry_agents` = 0 rows; operational `agents.db` `agents` = 48)[3]. The entire registry stack (`BUG-AGENTMCP-REGISTRY-DB-CANTOPEN-001` fix, `agent-core-env`, migrations) is infrastructure for a feature that is **not switched on**.
+- **Decision needed (product):** **(A) activate** — build the write-through / "agent-mcp-authoring" lane so `agent_create` also registers + compiles into the registry (appears planned in prior roadmap memory but unbuilt); or **(B) park** — accept the flat operational path as the product and keep the registry dormant-but-correct.
+- **Fix direction (if A):** add a define/discover authoring lane that writes `registry_agents` (+ triggers `compileAgent`) on create, closing the seam between the MCP write surface and the registry read surface.
+- **Status:** OPEN — needs product decision (A vs B). Cross-links: `ENV-ADOPT-CLUSTERS(1)`, `FEAT-ENV-001`.
+- Citations: [main, claude, session-2026-07-22-env, 1: entrypoint/agent-mcp/src/store/agent-store.ts:48-57; 2: entrypoint/agent-mcp/src/server.ts:545-551; 3: sqlite counts — ~/.adhd/agent-registry/production/data/registry.db registry_agents=0, ~/.adhd/agent-mcp/agents.db agents=48]
+
+### DEBT-AGENTMCP-OPERATIONAL-DATA-SCOPE-001 — agent-mcp's own operational `agents.db`: 48 agents stranded in the flat legacy path vs an empty namespaced/project-scope default
+- **Discovered:** 2026-07-22, diagnosing why the project/"production" agent-mcp server shows 0 agents.
+- **Detail:** the 48 real agents live in the flat legacy `~/.adhd/agent-mcp/agents.db`. The migrated zero-config resolution (namespace `production`) resolves the operational store to a **different, empty** path — e.g. the project scope `<repo>/.adhd/agent-mcp/production/data/agents.db` (0 rows), which the repo's own `.mcp.json` `agent-mcp` entry forces via `ADHD_ENV_SCOPE=project`. This is agent-mcp's OWN operational DB (`db.path` / `agentMcpEnvironmentSpec`), **distinct** from the registry migration (`ENV-ADOPT-CLUSTERS(1)`).
+- **Impact:** the project-scoped local server is empty despite 48 agents existing; only the global `agent-mcp` server works, and only because it pins `ADHD_AGENT_DATABASE_PATH` to the flat path explicitly.
+- **Fix direction:** decide the canonical operational location and run a one-time, row-count-verified data move — **schema-aware**, because the flat file's bare `composed_prompts` table differs from the registry-family `registry_composed_prompts`-prefixed schema (a pure path change is insufficient). Belongs to agent-mcp's own env adoption.
+- **Status:** OPEN. Cross-links: `ENV-ADOPT-PROOF-000` (agent-mcp adoption unproven end-to-end), `DEBT-WORKSPACE-ARTIFACTS-001`.
+- Citations: [main, claude, session-2026-07-22-env, 1: sqlite — ~/.adhd/agent-mcp/agents.db agents=48, .adhd/agent-mcp/production/data/agents.db agents=0; 2: .mcp.json agent-mcp env `ADHD_ENV_SCOPE=project`]
+
+### BUG-AGENTMCP-MCPJSON-REGISTRY-PATH-STALE-001 — both `.mcp.json` entries point the registry override at a non-canonical (empty) path
+- **Discovered:** 2026-07-22, after `ENV-ADOPT-CLUSTERS(1)` established the canonical shared registry location.
+- **Detail:** the repo `.mcp.json` sets `ADHD_AGENT_REGISTRY_DB_PATH` to `.adhd/agent-mcp/production/data/registry.db` (the `agent-mcp` local entry) and `${HOME}/.adhd/agent-mcp/registry.db` (the `agent-mcp-published` entry) — both pre-migration guesses. The new canonical shared registry location (`@adhd/agent-core-env`, global-pinned) is `~/.adhd/agent-registry/production/data/registry.db`[1][2]. So both servers' registry overrides point at non-canonical, empty files.
+- **Fix direction:** update both `.mcp.json` overrides to the canonical path, or drop `ADHD_AGENT_REGISTRY_DB_PATH` entirely so `resolveRegistryDbPath()`'s canonical default applies. (Low-risk edit; the registry is dormant per `BUG-AGENTMCP-REGISTRY-NO-WRITE-THROUGH-001`, so no data is affected — but the override is now misleading.)
+- **Status:** OPEN. Cross-links: `ENV-ADOPT-CLUSTERS(1)`, `BUG-AGENTMCP-REGISTRY-NO-WRITE-THROUGH-001`.
+- Citations: [main, claude, session-2026-07-22-env, 1: .mcp.json agent-mcp + agent-mcp-published env ADHD_AGENT_REGISTRY_DB_PATH; 2: canonical dir ~/.adhd/agent-registry/production/data/registry.db (agent-core-env resolveRegistryDbPath)]
+
