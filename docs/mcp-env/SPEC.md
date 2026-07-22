@@ -111,9 +111,10 @@ env vars are `ADHD_AGENT_`-prefixed** — the legacy `AGENT_MCP_` prefix and the
 | `config.server.registryDbPath` | `ADHD_AGENT_REGISTRY_DB_PATH` | `~/.adhd/agent-mcp/registry.db` | path |
 | `config.transport.kind` | `ADHD_AGENT_TRANSPORT` | `"stdio"` | enum |
 | `config.transport.port` | `ADHD_AGENT_PORT` | `3000` | int |
-| `config.sse.port` | `ADHD_AGENT_SSE_PORT` | `3001` | int — **dedupes** `sse-server.ts:6` + `task.ts:313` |
+| `config.sse.enabled` | `ADHD_AGENT_SSE_ENABLED` | `true` | bool — set `false` to skip the SSE/gateway HTTP bind entirely on an instance that will never serve it (BUG-AGENTMCP-SSE-PORT-CONTENTION-001) |
+| `config.sse.port` | `ADHD_AGENT_SSE_PORT` | `3001` | int — **dedupes** `sse-server.ts:6` + `task.ts:313`. **Only honored as-is when explicitly set** (`env.provenance['sse.port'].source !== 'default'`); otherwise `resolveInitialSsePort()` derives a per-instance candidate from `env.instanceId` so concurrent stdio instances don't all race for 3001. Either way, `startSseServer()` retries once on `EADDRINUSE` with an OS-assigned ephemeral port (`listen(0)`) — an instance never loses SSE/gateway service to port contention (BUG-AGENTMCP-SSE-PORT-CONTENTION-001; see BACKLOG.md/CHANGELOG.md). |
 | `config.sse.host` | `ADHD_AGENT_SSE_HOST` | `127.0.0.1` | str |
-| `config.sse.baseUrl` | `ADHD_AGENT_SSE_BASE_URL` | `http://localhost:${sse.port}` | url |
+| `config.sse.baseUrl` | `ADHD_AGENT_SSE_BASE_URL` | `http://localhost:${actual bound port}` (falls back to `${sse.port}` before any server has bound) | url — an explicit override here always wins; otherwise `toEngineConfig()` advertises the port the server ACTUALLY bound to (`setSseBoundPort()`, called from `main()` right after `startSseServer()` resolves), not the originally-requested one — required for `stream_url` correctness once port selection can differ from `sse.port` (see row above). |
 | `config.plugins.configPath` | `ADHD_AGENT_CONFIG` | — | path |
 | `config.plugins.entries` | `ADHD_AGENT_PLUGINS` | `[]` | csv → `string[]` |
 | `config.security.envAllowlist` | `ADHD_AGENT_ENV_ALLOWLIST` | none (prefix-only default, §6) | csv/globs → matcher |

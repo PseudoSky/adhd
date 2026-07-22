@@ -42,7 +42,12 @@ export interface AgentMcpConfig {
     readonly registryDbPath: string;
   };
   readonly transport: { readonly kind: string; readonly port: number };
-  readonly sse: { readonly port: number; readonly host: string; readonly baseUrl: string | undefined };
+  readonly sse: {
+    readonly enabled: boolean;
+    readonly port: number;
+    readonly host: string;
+    readonly baseUrl: string | undefined;
+  };
   readonly plugins: { readonly configPath: string | undefined; readonly entries: readonly string[] };
 }
 
@@ -131,11 +136,29 @@ export const agentMcpEnvironmentSpec: EnvironmentSpec<AgentMcpConfig> = {
       default: 3000,
       minimum: 1,
     },
+    "sse.enabled": {
+      type: "boolean",
+      env: "ADHD_AGENT_SSE_ENABLED",
+      default: true,
+      description:
+        "Whether to start the SSE/OpenAI-compat-gateway HTTP server at all. " +
+        "Set to false to opt an instance out entirely (no bind attempt) when " +
+        "it will never serve task streaming or /v1/chat/completions — " +
+        "`stream_url` is then omitted from task responses and the gateway " +
+        "endpoints are unreachable on this instance.",
+    },
     "sse.port": {
       type: "integer",
       env: "ADHD_AGENT_SSE_PORT",
       default: 3001,
       minimum: 1,
+      description:
+        "Port to attempt FIRST. Honored exactly when explicitly set (this " +
+        "env var, or a config-file layer) — see resolveInitialSsePort(). " +
+        "When left at default, a per-instance port is derived instead so " +
+        "concurrent instances don't all race for 3001. Either way, " +
+        "startSseServer() falls back to an OS-assigned ephemeral port on " +
+        "EADDRINUSE, so a busy port never leaves an instance without SSE.",
     },
     "sse.host": {
       type: "string",
@@ -251,6 +274,103 @@ export const env = Object.assign(
   { getProviderConfig, subprocessEnv },
 );
 
+// ============================================================================
+// SSE port selection (BUG-AGENTMCP-SSE-PORT-CONTENTION-001)
+// ============================================================================
+
+/** Lower/upper bound of the per-instance derived-port range (avoids the
+ *  well-known/privileged range and common dev-server defaults). */
+const DERIVED_PORT_RANGE_START = 20000;
+const DERIVED_PORT_RANGE_SIZE = 20000;
+
+/**
+ * Deterministic-per-process candidate port derived from `env.instanceId`
+ * (`pid` + short random per `Environment`'s own doc comment — see
+ * `environment-core-node/src/environment.ts`). Mirrors the per-instance
+ * path-suffixing intent in `@adhd/environment-builder`'s `dirs.ts` (a
+ * `share: 'per-instance'` dir gets `instanceId` appended so instances never
+ * collide) — same intent, applied to a port instead of a path. Not
+ * globally coordinated, so a collision between two instances is possible;
+ * `startSseServer`'s EADDRINUSE→ephemeral fallback covers that case.
+ */
+export function deriveInstancePort(instanceId: string): number {
+  let hash = 0;
+  for (let i = 0; i < instanceId.length; i++) {
+    hash = (Math.imul(hash, 31) + instanceId.charCodeAt(i)) >>> 0;
+  }
+  return DERIVED_PORT_RANGE_START + (hash % DERIVED_PORT_RANGE_SIZE);
+}
+
+/**
+ * Decides which port `startSseServer` should attempt FIRST, and whether
+ * that choice was an explicit user pin (for logging/diagnostics only —
+ * `startSseServer` falls back to an ephemeral port on EADDRINUSE either
+ * way).
+ *
+ * - `env.provenance['sse.port'].source !== 'default'` means the user
+ *   actually set `ADHD_AGENT_SSE_PORT` or pinned `sse.port` via a config
+ *   file layer — honor it exactly as the first attempt.
+ * - Otherwise derive a per-instance candidate so N concurrent instances
+ *   spread across different ports instead of all racing for 3001.
+ *
+ * @param targetEnv — defaults to the live `env` singleton; tests pass an
+ * isolated `Environment<AgentMcpConfig>` instance (constructed the same way
+ * `config.zero-config.test.ts` does) to exercise both branches without any
+ * process-wide state.
+ */
+export function resolveInitialSsePort(
+  targetEnv: Pick<typeof env, "provenance" | "config" | "instanceId"> = env
+): { port: number; explicit: boolean } {
+  const explicit = targetEnv.provenance["sse.port"]?.source !== "default";
+  if (explicit) {
+    return { port: targetEnv.config.sse.port, explicit: true };
+  }
+  return { port: deriveInstancePort(targetEnv.instanceId), explicit: false };
+}
+
+/**
+ * The ACTUAL port the SSE/gateway HTTP server bound to, once
+ * `startSseServer()`'s returned promise resolves (may differ from both
+ * `resolveInitialSsePort()`'s candidate AND `env.config.sse.port`, e.g. on
+ * an EADDRINUSE→ephemeral fallback). `undefined` until set, or if the
+ * server never managed to bind at all, or if `sse.enabled` is `false`.
+ * Read by `toEngineConfig()` below so every `stream_url`/gateway-baseUrl
+ * consumer reflects reality, not the originally-requested port.
+ */
+let resolvedSseBoundPort: number | undefined;
+
+/**
+ * Records the actual bound SSE port. Called exactly once, from `main()` in
+ * `index.ts`, immediately after `startSseServer()` resolves — BEFORE any
+ * consumer reads `toEngineConfig().sse.baseUrl` (including the one
+ * snapshot of it cached into `taskDepsRef.value` at startup).
+ */
+export function setSseBoundPort(port: number | undefined): void {
+  resolvedSseBoundPort = port;
+}
+
+/**
+ * Precedence for the advertised SSE/gateway base URL, extracted as a pure
+ * function so it's directly testable without the `env` singleton:
+ *   1. An explicit `sse.baseUrl` config override (`ADHD_AGENT_SSE_BASE_URL`
+ *      or a config-file layer) always wins — if an operator pinned a
+ *      public base URL, honor it verbatim regardless of what actually
+ *      bound.
+ *   2. Otherwise, the ACTUAL bound port (`resolvedSseBoundPort`, set by
+ *      `setSseBoundPort()` once `startSseServer()` resolves) — correct
+ *      even when it differs from `configuredPort` (EADDRINUSE→ephemeral
+ *      fallback, or a per-instance-derived candidate).
+ *   3. Otherwise (nothing has bound yet), the configured/candidate port —
+ *      matches pre-fix behavior for the window before the server binds.
+ */
+export function computeSseBaseUrl(
+  configuredOverride: string | undefined,
+  boundPort: number | undefined,
+  configuredPort: number
+): string {
+  return configuredOverride ?? `http://localhost:${boundPort ?? configuredPort}`;
+}
+
 /**
  * Builds the `EngineConfig`-shaped adapter the orchestrator layer (`server.ts`,
  * `index.ts`) is injected with — the engine MUST NOT import `config.ts`
@@ -267,7 +387,9 @@ export function toEngineConfig(): EngineConfig {
       defaultMaxTokens: env.config.server.defaultMaxTokens,
     },
     queue: { concurrency: env.config.queue.concurrency },
-    sse: { baseUrl: env.config.sse.baseUrl ?? `http://localhost:${env.config.sse.port}` },
+    sse: {
+      baseUrl: computeSseBaseUrl(env.config.sse.baseUrl, resolvedSseBoundPort, env.config.sse.port),
+    },
     plugins: {
       configPath: env.config.plugins.configPath,
       entries: env.config.plugins.entries as string[],
