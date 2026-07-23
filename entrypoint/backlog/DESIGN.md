@@ -491,8 +491,91 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
 
 No `apigen generate`, no nx codegen executor, no reimplemented API — exactly the
 "MOUNT, do NOT codegen" requirement. `index.ts` re-exports `client.ts`'s functions
-(for a Node consumer that wants to call them in-process, e.g. a test) and
-`startBacklogServer` (for the CLI/host entry).
+(for a Node consumer that wants to call them in-process, e.g. a test),
+`startBacklogServer` (HTTP/MCP host entry), and `runBacklogCli` (the third, CLI
+transport — §7a).
+
+### 7a. `cli.ts` — THIRD transport, `@adhd/apigen-plugin-cli-output` mount
+
+Same mount pattern as §7, extended to the CLI plugin, and factored to reuse the
+ACTUAL `buildBacklogApigenPackage(ctx)` this file's `startBacklogServer` calls
+(not a re-derived copy):
+
+```ts
+// cli.ts (real shape — see the actual file for full doc comments)
+import { cliPlugin } from '@adhd/apigen-plugin-cli-output';
+import { project } from '@adhd/apigen-engine-naming';
+import { buildBacklogApigenPackage, requireRun } from './server.js';
+import { buildBacklogEnv } from './env.js';
+import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
+
+export function resolveCommandPrefix(operations) {
+  const first = operations.find((op) => op.kind === 'action');
+  return project(first).cli.path.slice(0, -1); // ['backlog', 'client-d'] today
+}
+
+export function prefixCommand(userArgv, prefix) {
+  if (userArgv.length === 0 || userArgv[0]?.startsWith('-')) return [...userArgv];
+  if (prefix.every((seg, i) => userArgv[i] === seg)) return [...userArgv]; // already prefixed
+  return [...prefix, ...userArgv];
+}
+
+export async function runBacklogCli(argv, opts = {}) {
+  const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
+  env.ensureDirs();
+  const store = openGraphBacklogStore(env.files.db);
+  try {
+    const { pkg, operations } = await buildBacklogApigenPackage({ store, env });
+    const userArgv = argv ?? process.argv.slice(2);
+    await requireRun(cliPlugin)({
+      packages: [pkg], operations, outputDir: '',
+      options: { argv: prefixCommand(userArgv, resolveCommandPrefix(operations)) },
+      signal: opts.signal ?? new AbortController().signal,
+    });
+  } finally {
+    closeGraphBacklogStore(store);
+  }
+}
+```
+
+**The `client-d` segment (empirically verified, not assumed — see
+`cli.spec.ts`'s "namespace-prefix derivation" suite).** `@adhd/apigen-core-client`'s
+`extract()` unconditionally builds every operation's `path` as
+`[fileSegment, exportSegment]`; `fileSegment` is derived from the extracted
+source file's own name. `extractClientOperations()` (§7, above) always extracts
+from the BUILT `client.d.ts` (a deliberate workaround for a separate apigen
+`$ref`-resolution bug — see that function's own doc comment), so
+`normalizeFileName('client.d.ts')` → `'client-d'`, and that segment becomes part
+of EVERY canonical projected name: HTTP routes (`/backlog/client-d/get-item`),
+MCP tool names (`backlog_client_d_get_item`), and the cli-output plugin's
+internal command-table keys (`backlog client-d get-item`). HTTP and MCP now
+both consult this canonical projection too (as of commit `a6e895e2`, landed
+after this package's original commit) and so both expose the `client-d`
+segment verbatim to their callers — that is an accepted, if inelegant,
+consequence of the `.d.ts`-extraction workaround (tracked as BACKLOG
+`BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001`). The **CLI is the one
+transport that hides it**: `resolveCommandPrefix` derives the real prefix from
+the live `operations` list at runtime (never hardcoded to a literal
+`'backlog'`), and `prefixCommand` transparently prepends it, so a human types
+the clean `backlog get-item …` and the plugin still resolves it against its
+real, `client-d`-qualified table.
+
+**Bin mechanism** (`package.json`'s `"bin": { "backlog": "./dist/index.js" }`,
+mirroring `entrypoint/apigen-cli`'s proven mechanism — shebang via a rollup
+`output.banner`): unlike `apigen-cli` (a CLI-only package whose `index.ts`
+unconditionally runs the program), `@adhd/backlog`'s `index.ts` is ALSO the
+public library barrel (`startBacklogServer`/`runBacklogCli` are `require()`'d
+programmatically by `src/test/fixtures/mcp-stdio-entry.js` and any other Node
+consumer), so `dist/index.js` needs an entry-guard: run `runBacklogCli()` only
+when this file is itself the process's executed entry point, do nothing when
+merely imported. The guard is Node's own documented "no `require.main` in
+ESM" idiom — `import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href`
+— using `realpathSync` (not a bare `argv[1]` comparison) specifically because
+pnpm/npm always install a package's `bin` as a SYMLINK
+(`node_modules/.bin/backlog` → the real `dist/index.js`), and Node resolves
+symlinks for the executing module's own `import.meta.url`/`__filename` by
+default while leaving `process.argv[1]` unresolved — see `index.ts`'s own doc
+comment for the full reasoning.
 
 ## 8. Markdown interop implementation note
 

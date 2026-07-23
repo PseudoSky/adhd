@@ -231,7 +231,19 @@ export function staleClaims(store: GraphBacklogStore, maxAgeMin: number, scope: 
   const now = Date.now();
   return items.filter((it) => {
     if (!it.claimedBy || !it.claimedAt) return false;
-    return now - Date.parse(it.claimedAt) > cutoffMs;
+    // `>=`, not `>` (BUG-BACKLOG-STALE-CLAIMS-BOUNDARY-RACE-001, fixed here):
+    // `maxAgeMin=0` means "stale as of right now" — age is NEVER negative, so
+    // `>= 0` is the only comparison that's unconditionally true at the
+    // boundary. A strict `>` made this flaky: `claimItem`'s write and this
+    // read both resolve via `Date.now()` (millisecond resolution), and on a
+    // fast/quiescent run they can land in the SAME millisecond, making
+    // `now - claimedAtMs === 0` — `0 > 0` is false (item wrongly reported
+    // fresh), `0 >= 0` is true (correct). Reproduced via `client.spec.ts`'s
+    // "staleClaims surfaces claims older than maxAgeMin" test, which failed
+    // intermittently only when run as part of the FULL `nx test backlog`
+    // suite (never in isolation) — the exact signature of a sub-millisecond
+    // race, not a logic bug tied to any one input.
+    return now - Date.parse(it.claimedAt) >= cutoffMs;
   });
 }
 

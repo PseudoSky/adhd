@@ -46,7 +46,17 @@ import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-bac
 import { buildBacklogEnv } from './env.js';
 import type { OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 
-function requireRun(plugin: OutputPlugin): (input: RunInput) => Promise<void> {
+/**
+ * Guards a live-mount `plugin.run()` call. Exported (not local to this file)
+ * because `cli.ts`'s `runBacklogCli` — the third transport, mounting
+ * `@adhd/apigen-plugin-cli-output` the exact same way this file mounts
+ * fastify/mcp — needs the identical guard; duplicating a 3-line assertion
+ * across two files in the SAME package isn't worth a new `packages/`
+ * extraction (CLAUDE.md's "Two-Use Refactor Rule" targets logic reusable
+ * ACROSS packages, not an in-package private helper), so it's shared via a
+ * plain re-export instead.
+ */
+export function requireRun(plugin: OutputPlugin): (input: RunInput) => Promise<void> {
   if (!plugin.run) throw new Error(`@adhd/backlog: apigen plugin "${plugin.id}" declares no run() — cannot mount live`);
   return plugin.run;
 }

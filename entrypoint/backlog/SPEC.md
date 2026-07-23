@@ -532,12 +532,25 @@ entrypoint and observable, not a proxy:
 3. **Live apigen-mounted server, real HTTP call.** Per `AGENTS.md`'s "Live testing is
    mandatory" — a default-running (unflagged) test builds the entrypoint, mounts it via
    `apiFastifyPlugin.run()` against a real temp SQLite file, and issues a real HTTP
-   request (`GET /backlog/listItems?...` or the safe-op GET path
+   request (`GET /backlog/client-d/get-item?...` or the safe-op GET path
    `packages/apigen/apigen-core-client/README.md:244`) asserting a real JSON body —
-   not a mocked `fns`. A second variant mounts via `mcpPlugin.run()` and drives it as a
-   real MCP client (stdio transport) calling the `listItems` tool — proving the MCP
-   mount path independently of the HTTP path, per this repo's "drive the real tools,
-   never a bypass" rule (`AGENTS.md` §7 "Proving an MCP server works").
+   not a mocked `fns`. (Route is `/backlog/client-d/<kebab-export>`, not
+   `/backlog/<exportName>` — see the `client-d` segment note in DESIGN.md §7.)
+   A second variant mounts via `mcpPlugin.run()` and drives it as a
+   real MCP client (stdio transport) calling the `backlog_client_d_list_items` tool —
+   proving the MCP mount path independently of the HTTP path, per this repo's "drive
+   the real tools, never a bypass" rule (`AGENTS.md` §7 "Proving an MCP server works").
+3b. **Live apigen-mounted CLI, real spawned bin.** The THIRD transport
+   (`entrypoint/backlog/src/cli.ts`'s `runBacklogCli`, mounting
+   `@adhd/apigen-plugin-cli-output`'s `run()` the same live way): a default-running test
+   spawns the REAL BUILT `dist/index.js` as a genuine child process against a
+   temp-scoped `.adhd` root (`ADHD_BACKLOG_SCOPE=project` + a throwaway `cwd`) and
+   asserts on the process's real exit code + stdout/stderr JSON — never an in-process
+   call into `cliPlugin.run()`'s internals. Covers: a bare user command (`get-item
+   --repo … --human-id …`, no manual namespace prefix) round-tripping through
+   `create-item`, `get-item`, `list-items`; `CLI_EXIT_CODE` on an unknown command (`4`)
+   and an unknown flag (`2`); `--help`/no-args printing the live command listing and
+   exiting `0`. See `entrypoint/backlog/src/cli.spec.ts`.
 4. **Cross-repo scope isolation.** A test constructs two `Environment` instances at
    `project` scope rooted at two different temp directories (each with its own `.git`),
    confirms items created in one are invisible via `listItems` from the other, then

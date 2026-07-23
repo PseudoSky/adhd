@@ -54,10 +54,19 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
 
     const tools = await client.listTools();
     const toolNames = tools.tools.map((t) => t.name);
-    expect(toolNames).toEqual(expect.arrayContaining(['listItems', 'createItem', 'getItem']));
+    // Tool names are `backlog_client_d_<snake_export_name>`, NOT bare
+    // `listItems`/`createItem`/`getItem` — `apigen-plugin-mcp`'s canonical
+    // tool-name projection (commit a6e895e2, landed AFTER this package's
+    // original commit 1be78422) now names tools via
+    // `project(op).mcp.name` (namespace + file-segment + export-segment,
+    // snake_cased). See the matching note in server.spec.ts / BACKLOG
+    // BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001.
+    expect(toolNames).toEqual(
+      expect.arrayContaining(['backlog_client_d_list_items', 'backlog_client_d_create_item', 'backlog_client_d_get_item'])
+    );
 
     const result = await client.callTool({
-      name: 'listItems',
+      name: 'backlog_client_d_list_items',
       arguments: { data: { filter: { repo, family: 'BUG-MCP' } } },
     });
     const content = result.content as Array<{ type: string; text: string }>;
@@ -75,8 +84,10 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
     client = new Client({ name: 'backlog-mcp-test-client', version: '1.0.0' }, { capabilities: {} });
     await client.connect(transport);
 
+    // See the tool-name note in the previous test — real tool names are
+    // `backlog_client_d_<snake_export_name>`, not bare `createItem`/`getItem`.
     const createResult = await client.callTool({
-      name: 'createItem',
+      name: 'backlog_client_d_create_item',
       arguments: { data: { input: { family: 'BUG-MCPCREATE', title: 'created via mcp', body: 'x', repo } } },
     });
     const createContent = createResult.content as Array<{ type: string; text: string }>;
@@ -84,7 +95,7 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
     expect(created.item.humanId).toBe('BUG-MCPCREATE-001');
 
     const getResult = await client.callTool({
-      name: 'getItem',
+      name: 'backlog_client_d_get_item',
       arguments: { data: { repo, humanId: created.item.humanId } },
     });
     const getContent = getResult.content as Array<{ type: string; text: string }>;
