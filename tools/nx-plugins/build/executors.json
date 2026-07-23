@@ -10,6 +10,11 @@
       "schema": "./executors/version/schema.json",
       "description": "Bump source version iff the built dist differs from the published tarball."
     },
+    "reconcile": {
+      "implementation": "./executors/reconcile/impl",
+      "schema": "./executors/reconcile/schema.json",
+      "description": "Backfill/refresh this package's published-state.json cache entry from npm (integrity-gated, network-light)."
+    },
     "verify": {
       "implementation": "./executors/verify/impl",
       "schema": "./executors/verify/schema.json",

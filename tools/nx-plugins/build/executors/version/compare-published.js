@@ -23,9 +23,23 @@
  * Everything else — emitted JS/`.d.ts`/maps, external dependencies, name,
  * bin/exports/main, description, license, added/removed files — counts.
  *
+ * NORMALIZED-CONTENT HASH (`normalizedHash`, PUBLISHED-STATE-CACHE-001):
+ * `comparePublishedToLocal` above needs BOTH directories materialized on disk
+ * (it was built for the tarball-fetch world). The committed `published-state.json`
+ * cache instead stores a single `sha256` digest per package — `normalizedHash`
+ * feeds the EXACT SAME `normalizeManifest`/`listFiles`/`stableStringify`
+ * primitives above into one incremental hash, so two directories hash equal
+ * if and only if `comparePublishedToLocal` between them reports `changed:
+ * false` (proven both directions, including the range-only and real-content
+ * cases, in compare-published.spec.mjs's "normalizedHash equivalence" suite).
+ * This is what lets `version`/`reconcile` compare a freshly built local
+ * `dist/` against a cached PUBLISHED hash with zero network and zero
+ * temporary tarball extraction on the happy path.
+ *
  * @module compare-published
  */
 const { readFileSync, readdirSync, statSync, existsSync } = require('node:fs');
+const { createHash } = require('node:crypto');
 const { join, relative } = require('node:path');
 
 /** Recursively list files under `dir`, relative to it (sorted, posix-ish). */
@@ -99,6 +113,48 @@ function comparePublishedToLocal(localDistDir, publishedDir) {
 }
 
 /**
+ * Deterministic `sha256:<hex>` digest of a dist (or extracted published
+ * package) directory's NORMALIZED content — the single signal the
+ * `published-state.json` cache stores per package.
+ *
+ * Fed into one incremental hash, in this exact order:
+ *   1. `stableStringify(normalizeManifest(package.json))`
+ *   2. every OTHER file from `listFiles(dir)` (already sorted), each as
+ *      `"<relpath>\0<raw bytes>\0"` — the NUL delimiters make a
+ *      `path:'ab', content:'c'` pair unable to collide with `path:'a',
+ *      content:'bc'` (no real file path in this workspace's dist output
+ *      ever contains a NUL byte, so this is a pure safety margin, not a
+ *      real ambiguity that has been observed).
+ *
+ * Equivalence to `comparePublishedToLocal`: two directories feed IDENTICAL
+ * byte sequences into this hash if and only if (a) their normalized
+ * manifests stringify identically AND (b) they contain the exact same set
+ * of non-manifest files with byte-identical content — which is exactly the
+ * condition under which `comparePublishedToLocal(A, B).changed === false`
+ * above. See compare-published.spec.mjs for the proof (both directions,
+ * incl. the range-only-differs and real-code-differs cases).
+ *
+ * @param {string} dir a dist root, or an extracted published package root
+ * @returns {string} `sha256:<hex>`
+ */
+function normalizedHash(dir) {
+  const hash = createHash('sha256');
+  const files = listFiles(dir);
+  const manifestPath = join(dir, 'package.json');
+  const manifestJson = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
+  hash.update(stableStringify(normalizeManifest(manifestJson)));
+  hash.update('\0');
+  for (const f of files) {
+    if (f === 'package.json') continue;
+    hash.update(f);
+    hash.update('\0');
+    hash.update(readFileSync(join(dir, f)));
+    hash.update('\0');
+  }
+  return `sha256:${hash.digest('hex')}`;
+}
+
+/**
  * Bump a plain `MAJOR.MINOR.PATCH` version. Prerelease/build metadata is not
  * supported (this workspace uses plain semver); throws on anything else so a
  * malformed version fails loudly rather than silently mis-bumping.
@@ -117,4 +173,4 @@ function bumpVersion(version, level) {
   return `${major}.${minor}.${patch}`;
 }
 
-module.exports = { comparePublishedToLocal, normalizeManifest, bumpVersion, listFiles };
+module.exports = { comparePublishedToLocal, normalizeManifest, bumpVersion, listFiles, normalizedHash };

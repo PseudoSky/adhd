@@ -3,20 +3,37 @@
  * @adhd/nx-build:version — per-project versioning TASK.
  *
  * Bumps a package's SOURCE package.json `version` iff it needs a new release,
- * using the npm registry as the baseline (no git tags, no diff base):
+ * using the committed `published-state.json` cache as the baseline
+ * (PUBLISHED-STATE-CACHE-001 — no git tags, no diff base, and — on the happy
+ * path — NO NETWORK):
  *
- *   - source version NOT on npm  -> a release is already pending; leave as-is.
- *   - source version IS on npm   -> compare the freshly-built dist against the
- *                                   published tarball (see compare-published.js,
- *                                   which ignores the version field + internal
- *                                   @adhd/* ranges). Changed -> bump; identical
- *                                   -> leave.
+ *   - package absent from the cache -> single-package BACKFILL (in-process
+ *     call into `reconcile-core.js`'s `reconcilePackage`, the exact same
+ *     logic the standalone `reconcile` task uses) reconciles just this one
+ *     package from npm, then the decision below proceeds against the
+ *     now-populated entry. This is the ONLY place `version` touches the
+ *     network, and only for packages the cache doesn't know about yet.
+ *   - cached version !== source version -> source is already ahead of what's
+ *     recorded as published (a bump is already pending publish); leave as-is.
+ *   - cached version === source version -> compare `normalizedHash(localDist)`
+ *     against the cache's `normalizedHash` (the PUBLISHED content's hash,
+ *     computed with the exact same `normalizeManifest`/`listFiles`/
+ *     `stableStringify` primitives `comparePublishedToLocal` uses — see
+ *     compare-published.js's equivalence proof). Equal -> unchanged, leave;
+ *     different -> bump.
  *
- * dependsOn ["build", "^version"]: needs the built dist to compare (`build`),
- * and needs every internal @adhd/* dependency to have ALREADY settled its own
- * version first (`^version` — topological). Runs per-project (each writes
- * only its own package.json — no cross-file contention). Not cached: it reads
- * live registry state and mutates source.
+ * This is a drop-in behavioral replacement for the pre-cache tarball-fetch
+ * flow: the decision (bump / no-bump, and the resulting version) is provably
+ * identical (compare-published.spec.mjs's normalizedHash-equivalence suite),
+ * only the mechanism moved from "fetch + per-file diff every run" to
+ * "cache-hash compare, backfill only on a miss".
+ *
+ * dependsOn ["build", "assets", "^version"]: needs the built + doc-complete
+ * dist to hash (`build`+`assets`), and needs every internal @adhd/*
+ * dependency to have ALREADY settled its own version first (`^version` —
+ * topological). Runs per-project (each writes only its own package.json —
+ * no cross-file contention). Not cached: it reads/writes live
+ * published-state (on a miss) and mutates source.
  *
  * Options: --bump=patch|minor|major (default patch), --dryRun (report, no write).
  *
@@ -38,6 +55,10 @@
  * compare-published.js's `normalizeManifest` strips internal `@adhd/*`
  * ranges before diffing (see compare-published.spec.mjs), so a range-only
  * edit here is invisible to the NEXT run's change-detector — no cascade.
+ * This step is ALSO already zero-network — `sync-deps`/`sync-deps-check`
+ * (tools/nx-plugins/deps/eslint-check.mjs) reconcile against Nx's own
+ * project graph (every sibling's on-disk source package.json), never the
+ * registry.
  *
  * CHANGELOG GENERATION (real bump only, before range reconciliation): once
  * the own-version write lands, `writeChangelogEntry` shells out to the REAL
@@ -52,9 +73,11 @@
  * whole task, same as a `sync-deps` reconciliation failure does below.
  */
 const { spawnSync } = require('node:child_process');
-const { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } = require('node:fs');
+const { existsSync, readFileSync, writeFileSync, rmSync } = require('node:fs');
 const { join, relative } = require('node:path');
-const { comparePublishedToLocal, bumpVersion } = require('./compare-published');
+const { bumpVersion, normalizedHash } = require('./compare-published');
+const { readState, updatePublishedState } = require('../../lib/published-state');
+const { reconcilePackage } = require('../reconcile/reconcile-core');
 // Reuse — never duplicate — the `deps` plugin's own reconciliation logic.
 const syncInternalDeps = require('../../../deps/executors/sync/impl');
 const checkInternalDeps = require('../../../deps/executors/check/impl');
@@ -156,35 +179,40 @@ function sh(cmd, args, opts = {}) {
   return spawnSync(cmd, args, { encoding: 'utf8', ...opts });
 }
 
-/** Published versions of `name`, or [] if the package has never been published. */
-function publishedVersions(name) {
-  const res = sh('npm', ['view', name, 'versions', '--json'], { stdio: ['ignore', 'pipe', 'ignore'] });
-  if (res.status !== 0) return []; // E404 — never published
+/**
+ * Single-package backfill on a cache MISS: calls the SAME
+ * `reconcile-core.js` logic the standalone `reconcile` task uses, in-process
+ * (no nx sub-invocation), scoped to just this one package. Writes the
+ * resulting entry into `published-state.json` (concurrency-safe — see
+ * `lib/published-state.js`) before returning it, so the caller's decision
+ * below always has an authoritative entry to compare against (or `null` if
+ * the package genuinely isn't published yet — `reconcilePackage`'s
+ * `'pending'` status).
+ *
+ * @param {import('@nx/devkit').ExecutorContext} context
+ * @param {string} name
+ * @param {string} version
+ * @param {string} distDir
+ * @returns {Promise<{entry: {version:string,normalizedHash:string,publishedIntegrity:string}|null, error?: string}>}
+ */
+async function backfillOnMiss(context, name, version, distDir) {
+  const workDir = join(context.root, 'tmp', 'nx-build-version-backfill', context.projectName);
   try {
-    const parsed = JSON.parse(res.stdout);
-    return Array.isArray(parsed) ? parsed : [parsed];
-  } catch {
-    return [];
+    const result = reconcilePackage({ name, version, distDir, workDir });
+    if (result.status === 'pending') return { entry: null };
+    if (result.status === 'error') return { entry: null, error: result.error };
+    await updatePublishedState(context.root, (state) => {
+      state[name] = result.entry;
+      return state;
+    });
+    return { entry: result.entry };
+  } finally {
+    try {
+      rmSync(workDir, { recursive: true, force: true });
+    } catch {
+      // best-effort scratch cleanup
+    }
   }
-}
-
-/** Download + extract the published tarball for name@version; returns the extracted package dir or null. */
-function fetchPublished(name, version, workDir) {
-  mkdirSync(workDir, { recursive: true });
-  const packed = sh('npm', ['pack', `${name}@${version}`, '--pack-destination', workDir, '--json', '--silent'], { stdio: ['ignore', 'pipe', 'pipe'] });
-  if (packed.status !== 0) return null;
-  let filename;
-  try { filename = JSON.parse(packed.stdout)[0].filename; } catch { return null; }
-  // npm may report the filename with the scope dir stripped; resolve what actually landed.
-  let tgz = join(workDir, filename);
-  if (!existsSync(tgz)) {
-    const found = readdirSync(workDir).find((f) => f.endsWith('.tgz'));
-    if (!found) return null;
-    tgz = join(workDir, found);
-  }
-  const untar = sh('tar', ['-xzf', tgz, '-C', workDir]);
-  if (untar.status !== 0) return null;
-  return join(workDir, 'package'); // npm tarballs extract under package/
 }
 
 async function run(options, context) {
@@ -218,54 +246,75 @@ async function run(options, context) {
   const { name, version } = JSON.parse(raw);
   if (!name || !version) { console.error(`version: ${relative(context.root, srcPkgPath)} missing name/version.`); return { success: false }; }
 
-  const versions = publishedVersions(name);
-  if (!versions.includes(version)) {
+  // ZERO-NETWORK read: the committed published-state cache.
+  let cached = readState(context.root)[name];
+
+  if (!cached) {
+    // Cache MISS — do NOT silently pass. Backfill just THIS package from npm
+    // (in-process call into reconcile-core.js's reconcilePackage; the exact
+    // same logic `nx run <project>:reconcile` uses), then decide from the
+    // now-populated entry. This is the ONLY network this task ever performs,
+    // and it costs exactly one package, never the whole graph.
+    console.error(`version: ${name} not in published-state.json — backfilling from npm (single-package, cache miss)…`);
+    const backfill = await backfillOnMiss(context, name, version, distDir);
+    if (backfill.error) {
+      console.error(`version: backfill FAILED for ${name}: ${backfill.error} — leaving version as-is (verify manually).`);
+      const sync = await reconcileOwnInternalRanges(context, dryRun);
+      return { success: sync.success };
+    }
+    cached = backfill.entry; // null if genuinely not yet published (see below)
+  }
+
+  if (!cached) {
     console.error(`version: ${name}@${version} not yet on npm — release pending, no bump.`);
     const sync = await reconcileOwnInternalRanges(context, dryRun);
     return { success: sync.success };
   }
 
-  const workDir = join(context.root, 'tmp', 'nx-build-version', context.projectName);
-  let publishedDir;
-  try {
-    publishedDir = fetchPublished(name, version, workDir);
-    if (!publishedDir) {
-      console.error(`version: could not fetch published ${name}@${version} — leaving as-is (verify manually).`);
-      const sync = await reconcileOwnInternalRanges(context, dryRun);
-      return { success: sync.success };
-    }
-
-    const { changed, reasons } = comparePublishedToLocal(distDir, publishedDir);
-    if (!changed) {
-      console.error(`version: ${name}@${version} unchanged vs published — no bump.`);
-      const sync = await reconcileOwnInternalRanges(context, dryRun);
-      return { success: sync.success };
-    }
-
-    const next = bumpVersion(version, level);
-    console.error(`version: ${name} changed since ${version} -> bumping to ${next} (${level})`);
-    for (const r of reasons.slice(0, 6)) console.error(`         · ${r}`);
-    if (dryRun) {
-      console.error(`version: [dry-run] would write ${next} to ${relative(context.root, srcPkgPath)}`);
-      writeChangelogEntry(context, projectRoot, next, true);
-      const sync = await reconcileOwnInternalRanges(context, dryRun);
-      return { success: sync.success };
-    }
-
-    // Targeted replace of the version field only — preserve file formatting.
-    const replaced = raw.replace(/("version"\s*:\s*")[^"]+(")/, `$1${next}$2`);
-    if (replaced === raw) { console.error(`version: FAILED to rewrite version field in ${srcPkgPath}.`); return { success: false }; }
-    writeFileSync(srcPkgPath, replaced);
-    if (!writeChangelogEntry(context, projectRoot, next, false)) return { success: false };
-    // Own bump is applied; now reconcile dependency ranges against the
-    // (topologically) already-settled versions of internal deps. Order is
-    // safe either way — the fix only touches dependency-range fields, never
-    // "version" — but doing it after keeps the log narrative in decision order.
+  if (cached.version !== version) {
+    // Source is already ahead of the cache's last known published version —
+    // a bump is already pending publish (mirrors the legacy "source version
+    // not yet on npm" branch, without a live `npm view` — the cache always
+    // holds the LATEST known published version, kept current by `publish`'s
+    // write-through, Deliverable 3).
+    console.error(
+      `version: ${name}@${version} not yet on npm (published-state cache is at ${cached.version}) — release pending, no bump.`
+    );
     const sync = await reconcileOwnInternalRanges(context, dryRun);
     return { success: sync.success };
-  } finally {
-    try { rmSync(workDir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
   }
+
+  // ZERO-NETWORK decision: compare the freshly built local dist's normalized
+  // hash against the cache's PUBLISHED normalized hash. This holds whether
+  // or not the package actually changed (Deliverable 2) — the network was
+  // already spent, once, at backfill/write-through time, never here.
+  const localHash = normalizedHash(distDir);
+  if (cached.normalizedHash === localHash) {
+    console.error(`version: ${name}@${version} unchanged vs published (cache hit, zero network) — no bump.`);
+    const sync = await reconcileOwnInternalRanges(context, dryRun);
+    return { success: sync.success };
+  }
+
+  const next = bumpVersion(version, level);
+  console.error(`version: ${name} changed since ${version} -> bumping to ${next} (${level}) [cache hit, zero network]`);
+  if (dryRun) {
+    console.error(`version: [dry-run] would write ${next} to ${relative(context.root, srcPkgPath)}`);
+    writeChangelogEntry(context, projectRoot, next, true);
+    const sync = await reconcileOwnInternalRanges(context, dryRun);
+    return { success: sync.success };
+  }
+
+  // Targeted replace of the version field only — preserve file formatting.
+  const replaced = raw.replace(/("version"\s*:\s*")[^"]+(")/, `$1${next}$2`);
+  if (replaced === raw) { console.error(`version: FAILED to rewrite version field in ${srcPkgPath}.`); return { success: false }; }
+  writeFileSync(srcPkgPath, replaced);
+  if (!writeChangelogEntry(context, projectRoot, next, false)) return { success: false };
+  // Own bump is applied; now reconcile dependency ranges against the
+  // (topologically) already-settled versions of internal deps. Order is
+  // safe either way — the fix only touches dependency-range fields, never
+  // "version" — but doing it after keeps the log narrative in decision order.
+  const sync = await reconcileOwnInternalRanges(context, dryRun);
+  return { success: sync.success };
 }
 
 module.exports = run;
