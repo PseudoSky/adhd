@@ -1206,3 +1206,11 @@ These are the outstanding, non-release findings from the ENV-ADOPT-CLUSTERS(1) d
 - **Status:** OPEN.
 
 ## build-tooling / version-sync-deps (session 2026-07-22 — `^version` + `lint → sync-deps` implementation)
+
+### DEBT-BUILD-VERSION-NO-AUTOCOMMIT-001 — the `version` executor bumps source `package.json` but never commits, leaving the tree dirty after every release
+- **Discovered:** 2026-07-23, running the full `pnpm release`: the working tree carried ~48 uncommitted version-bumped `package.json` + per-package `CHANGELOG.md` stamps left over from a prior `version` run that was never committed.
+- **Detail:** `@adhd/nx-build:version` (`tools/nx-plugins/build/executors/version/impl.js`) writes the new version to each package's SOURCE `package.json` (plus the sync-deps range reconciliation) but deliberately does NOT commit — `PUBLISHING.md` documents "It writes the bump but does **not** commit (review `git diff`)". `pnpm release` (`= build && nx run-many -t version && nx run-many -t publish`) likewise never commits. So a completed release leaves every bumped `package.json` + generated `CHANGELOG.md` dirty, indistinguishable from stray churn.
+- **Impact:** fragile/confusing post-release state — a later session cannot tell released-but-uncommitted bumps from accidental edits (this exact ambiguity misled a reconciliation this session); the npm-published version has no corresponding committed source version until someone remembers to commit, so git history doesn't reflect what shipped, and the bumps can be lost or double-applied.
+- **Fix direction:** add an opt-in auto-commit to `pnpm release` (or a `version --commit` flag / a `release` wrapper) that, after `version`+`publish` succeed, commits exactly the bumped `package.json` + generated `CHANGELOG.md` with a `chore(release): …` message (explicit pathspecs, never `-A`). Keep it opt-in so a dry/review flow still leaves the diff for inspection.
+- **Status:** OPEN.
+- Citations: [main, claude (fork), session-2026-07-23-publish, 1: PUBLISHING.md ("writes the bump but does not commit"); 2: tools/nx-plugins/build/executors/version/impl.js; 3: live — 48 uncommitted version-bumped package.json after release]
