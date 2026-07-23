@@ -1,4 +1,4 @@
-// @adhd/apigen-naming — canonical naming & projection helpers (SPEC §5 + §9.1).
+// @adhd/apigen-engine-naming — canonical naming & projection helpers (SPEC §5 + §9.1).
 //
 // This module is the single source of truth for all transport-specific name
 // projections derived from an `Operation`'s casing-neutral `Segment` tokens.

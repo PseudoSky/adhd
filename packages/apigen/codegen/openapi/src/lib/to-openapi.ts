@@ -17,7 +17,7 @@
 //     also go through this function; their `id` strings starting with `_meta`
 //     are a convention, not a filter.
 
-import { project } from '@adhd/apigen-naming'
+import { project } from '@adhd/apigen-engine-naming'
 import type { Operation, JSONSchema } from '@adhd/apigen-core-client'
 
 // ---------------------------------------------------------------------------

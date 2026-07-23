@@ -18,14 +18,18 @@ import type {
   ComposedSchemas,
   Operation,
 } from '@adhd/apigen-core-client';
-import { envelopeKey, httpVerb } from '@adhd/apigen-naming';
+import { envelopeKey } from '@adhd/apigen-engine-naming';
 import { HTTP_STATUS, isApiError } from '@adhd/apigen-base-errors';
-import type { ProjectionConfig } from '@adhd/apigen-naming';
+import type { ProjectionConfig } from '@adhd/apigen-engine-naming';
 import type { ApiErrorCode } from '@adhd/apigen-base-errors';
+import { resolveRoute } from './route-projection';
 
 // ---------------------------------------------------------------------------
-// §5 — verb from safe (BUG-APIGEN-025 / FEAT-APIGEN-022: shared `httpVerb`
-// imported from @adhd/apigen-naming — no longer duplicated per plugin)
+// §5 — route + verb derivation (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001):
+// both are now derived via `project()` from `@adhd/apigen-engine-naming` — see
+// `./route-projection.ts` — so api-fastify's served routes are
+// byte-identical to what `@adhd/apigen-plugin-openapi` advertises for the
+// same operation. No longer duplicated per plugin.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -273,10 +277,12 @@ export async function run(input: RunInput): Promise<void> {
     };
 
     for (const [fnName, fnSchema] of Object.entries(pkg.schemas)) {
-      const route = `${routePrefix}/${pkg.id}/${fnName}`;
-      const verb = httpVerb(
-        `${pkg.id}:${fnName}`,
+      const { route, verb } = resolveRoute(
+        pkg.id,
+        fnName,
         fnSchema as Record<string, unknown>,
+        input.operations,
+        routePrefix,
         projection
       );
       const { params, text } = describeParams(fnSchema);

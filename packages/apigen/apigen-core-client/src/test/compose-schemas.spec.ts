@@ -423,7 +423,7 @@ describe('composeSchemas — FEAT-APIGEN-023: zero-param/zero-envelope schema', 
 // orchestrator.ts's buildDescriptor Step 5, BUG-APIGEN-025) and the
 // FEAT-APIGEN-022 primitive-param-shape auto-hoist combine into one
 // `x-apigen-safe` value every HTTP transport's shared `httpVerb()`
-// (@adhd/apigen-naming) reads identically.
+// (@adhd/apigen-engine-naming) reads identically.
 // ---------------------------------------------------------------------------
 
 describe('composeSchemas — FEAT-APIGEN-022 / BUG-APIGEN-025: x-apigen-safe', () => {

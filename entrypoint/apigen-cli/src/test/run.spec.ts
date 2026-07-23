@@ -662,8 +662,15 @@ describe('[cli-run-cmd.1 live] run command starts a live MCP server via plugin.r
       const tools = parsed?.result?.tools ?? parsed?.tools ?? [];
       const names = tools.map((t: { name: string }) => t.name);
 
-      expect(names).toContain('getUser');
-      expect(names).toContain('sendEmail');
+      // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: BUG-APIGEN-
+      // OPENAPI-ROUTE-PATH-MISMATCH-001's MCP-side fix makes @adhd/apigen-
+      // plugin-mcp derive every tool name via project(op).mcp.name
+      // (<namespace>_<file>_<export>, snake_case) instead of the raw export
+      // name — `apiFixture` resolves to namespace "apigen-cli" (no
+      // --namespace override, directory-derived), file segment "api" (from
+      // api.ts), so getUser/sendEmail project to these canonical names.
+      expect(names).toContain('apigen_cli_api_get_user');
+      expect(names).toContain('apigen_cli_api_send_email');
       expect(names).not.toContain('__samples__');
 
       // Shut down by emitting SIGINT — triggers the process.on('SIGINT') handler

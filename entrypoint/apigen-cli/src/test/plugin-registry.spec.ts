@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { OutputPlugin } from '@adhd/apigen-core-client';
+import cliOutputPlugin from '@adhd/apigen-plugin-cli-output';
+import jsonschemaPlugin from '@adhd/apigen-plugin-jsonschema';
 import {
   pluginTypeIds,
   runCapableTypeIds,
@@ -63,6 +65,40 @@ describe('runCapableTypeIds / generateOnlyTypeIds', () => {
     };
     expect(runCapableTypeIds(registryBefore)).toEqual([]);
     expect(runCapableTypeIds(registryAfter)).toEqual(['x']);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// `cli` run-capability — proves the REAL `@adhd/apigen-plugin-cli-output`
+// export (not a fixture) now satisfies `runCapableTypeIds`/`describeRunTypeOption`
+// purely because it grew a `run()` method. This registry file has no
+// per-plugin allowlist to edit — `runCapableTypeIds` derives from
+// `typeof plugin.run === 'function'` — so `--type cli` accepting `apigen run`
+// falls out of the CLI plugin gaining `run()`, with zero changes needed here.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('cli plugin run-capability (real @adhd/apigen-plugin-cli-output export)', () => {
+  const realRegistry: Record<string, OutputPlugin> = {
+    cli: cliOutputPlugin,
+    jsonschema: jsonschemaPlugin,
+  };
+
+  it('cli is now run-capable — apigen run --type cli is accepted', () => {
+    expect(runCapableTypeIds(realRegistry)).toContain('cli');
+    expect(generateOnlyTypeIds(realRegistry)).not.toContain('cli');
+  });
+
+  it('jsonschema (a real generate-only plugin) stays generate-only for contrast', () => {
+    expect(generateOnlyTypeIds(realRegistry)).toContain('jsonschema');
+    expect(runCapableTypeIds(realRegistry)).not.toContain('jsonschema');
+  });
+
+  it('describeRunTypeOption / unsupportedRunError reflect cli as run-capable', () => {
+    expect(describeRunTypeOption(realRegistry)).toContain('cli');
+    expect(() => {
+      const plugin = realRegistry['cli'];
+      if (!plugin.run) throw unsupportedRunError('cli', realRegistry);
+    }).not.toThrow();
   });
 });
 

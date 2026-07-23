@@ -1,17 +1,23 @@
 /**
  * py-flask plugin tests — drives a LIVE Python server via real curl/fetch.
  *
- * Gated behind APIGEN_PYFLASK_LIVE=1 for offline CI (Python subprocess
- * spawning is non-hermetic), but this is NOT a mock test — when the env var
- * is set, it spawns the real server, fires real HTTP, and asserts real responses.
+ * NOT gated behind an env var — Python subprocess spawning is non-hermetic
+ * setup, not a reason to skip (AGENTS.md §7 "Live testing is mandatory"); it
+ * always spawns the real server, fires real HTTP, and asserts real responses.
  *
  * Tests:
  *   1. GET /_meta/health → 200 {"status":"ok","host":"<ns>"}
- *   2. POST /<ns>/echo_str → 200, plain string round-trip
- *   3. POST /<ns>/double_decimal → decimal string round-trip ("123.456" stays "123.456")
- *   4. POST /<ns>/get_datetime → RFC3339 datetime round-trip
- *   5. POST /<ns>/double_decimal with wrong type → HTTP 400 invalid_argument
+ *   2. POST <route> → 200, plain string round-trip
+ *   3. POST <route> → decimal string round-trip ("123.456" stays "123.456")
+ *   4. POST <route> → RFC3339 datetime round-trip
+ *   5. POST <route> with wrong type → HTTP 400 invalid_argument
  *   6. NEGATIVE CONTROL: verify test goes RED when decimal encoding is broken
+ *   7. BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001: the served route + verb for
+ *      a representative op set (safe/GET-via-primitive-hoist, unsafe/POST,
+ *      multi-path-segment) exactly equal `@adhd/apigen-engine-naming`'s
+ *      `project(op).http` — including a live-server positive check on the
+ *      project()-derived route AND a negative control that the OLD flat
+ *      `/<ns>/<fnName>` route now 404s.
  *
  * All waiting is event-driven (readline + latch), no sleep-based proofs.
  */
@@ -21,6 +27,9 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import * as readline from 'node:readline';
 import * as path from 'node:path';
 import { ensurePythonEnv } from '@adhd/apigen-python-env';
+import { tokenize } from '@adhd/apigen-core-client';
+import type { Operation, Segment, JSONSchema } from '@adhd/apigen-core-client';
+import { project } from '@adhd/apigen-engine-naming';
 
 // Managed interpreter — provisioned from apigen-python's own pyproject.toml,
 // exactly like the plugin's run() path. Never bare `python3`.
@@ -32,11 +41,86 @@ const NS = 'testapi';
 const BASE = `http://127.0.0.1:${PORT}`;
 
 // ---------------------------------------------------------------------------
+// Route/verb parity helpers — BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001
+//
+// Builds the SAME `Operation`-shaped descriptor that
+// `apigen_python.extractor.extract_module()` produces for a function in
+// `fixtures/test_api.py` (namespace = NS; path = [fileSegment, exportSegment]
+// — `test_api.py` is not `index`/`main`, so the file segment is NOT dropped),
+// then calls the real `@adhd/apigen-engine-naming` `project()` on it. This is the
+// authority both api-fastify/openapi/mcp AND (independently, since Python
+// cannot import this TS package) apigen_python.flask_server's `_route_for_op`
+// / `_http_verb` must agree with byte-for-byte.
+// ---------------------------------------------------------------------------
+
+function seg(raw: string): Segment {
+  return { raw, words: tokenize(raw) };
+}
+
+// `_normalise_filename('test_api.py')` (extractor.py) → strip '.py', then
+// dots/underscores → hyphens → 'test-api'.
+const FILE_SEG = seg('test-api');
+const NS_SEG = seg(NS);
+
+/**
+ * Builds a synthetic `Operation` mirroring what the Python extractor emits
+ * for `fnName` in `fixtures/test_api.py`. Only `namespace`/`path` (route) and
+ * `safe`/`input` (verb) are load-bearing for `project(op).http`; the rest are
+ * filled with harmless placeholders.
+ */
+function pyOp(fnName: string, input: JSONSchema, safe = false): Operation {
+  return {
+    id: `${NS}/test-api/${tokenize(fnName).join('-')}`,
+    host: 'python',
+    namespace: NS_SEG,
+    path: [FILE_SEG, seg(fnName)],
+    kind: 'action',
+    async: false,
+    streaming: false,
+    safe,
+    input,
+    output: {},
+    envelope: {},
+    typeText: null,
+  };
+}
+
+const PRIMITIVE_STRING_INPUT = (propName: string): JSONSchema => ({
+  type: 'object',
+  properties: { [propName]: { type: 'string' } },
+  required: [propName],
+});
+
+// Representative op set (task requirement: safe/GET, unsafe/POST, multi-segment):
+//   - echo_str:   primitive-only (string) input, safe:false → GET-hoisted (FEAT-APIGEN-022)
+//   - sum_ints:   array (non-primitive) input → stays POST
+//   - both are inherently multi-segment: namespace + file-seg + export-seg (3 segments)
+const ECHO_STR_OP = pyOp('echo_str', PRIMITIVE_STRING_INPUT('msg'));
+const SUM_INTS_OP = pyOp('sum_ints', {
+  type: 'object',
+  properties: { values: { type: 'array', items: { type: 'integer' } } },
+  required: ['values'],
+});
+const GREET_WITH_CTX_OP = pyOp('greet_with_ctx', PRIMITIVE_STRING_INPUT('name'));
+
+/** Canonical route for `fnName` in the fixture module, per `project()`. */
+function routeFor(op: Operation): string {
+  return project(op).http.route;
+}
+
+// ---------------------------------------------------------------------------
 // Server lifecycle helpers
 // ---------------------------------------------------------------------------
 
 interface LiveServer {
   proc: ChildProcessWithoutNullStreams;
+  /**
+   * Every stderr line emitted by the Python process since spawn, in order —
+   * captured from the very first 'data' event (not attached post-hoc), so
+   * the route log `start()` prints synchronously before the readiness signal
+   * is never missed. Used by the route-log parity test.
+   */
+  stderrLines: string[];
   stop(): Promise<void>;
 }
 
@@ -60,8 +144,15 @@ async function startServer(): Promise<LiveServer> {
     }
   ) as ChildProcessWithoutNullStreams;
 
-  // Forward stderr for debuggability
-  proc.stderr.on('data', (b: Buffer) => process.stderr.write(b));
+  // Capture + forward stderr for debuggability (captured from spawn, so the
+  // route-log lines start() prints before the ready signal are never missed
+  // by a listener attached after startServer() resolves).
+  const stderrLines: string[] = [];
+  const stderrRl = readline.createInterface({ input: proc.stderr });
+  stderrRl.on('line', (line: string) => {
+    stderrLines.push(line);
+    process.stderr.write(line + '\n');
+  });
 
   // Wait for {"ready":true} on stdout — bounded to 10 s, event-driven
   await new Promise<void>((resolve, reject) => {
@@ -99,6 +190,7 @@ async function startServer(): Promise<LiveServer> {
 
   return {
     proc,
+    stderrLines,
     async stop() {
       if (proc.killed) return;
       await new Promise<void>((res) => {
@@ -129,7 +221,13 @@ async function post(
   fn: string,
   data: Record<string, unknown>
 ): Promise<Response> {
-  return fetch(`${BASE}/${NS}/${fn}`, {
+  // Route derivation depends only on namespace/path (not `input`), so an
+  // empty input schema is fine here — this drives every call through the
+  // SAME `project()`-derived canonical route the server now serves
+  // (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001), not the old flat
+  // `/<ns>/<fnName>` shape.
+  const route = routeFor(pyOp(fn, {}));
+  return fetch(`${BASE}${route}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ data }),
@@ -228,7 +326,7 @@ describe('py-flask plugin — LIVE server', () => {
 
   it('[envelope] x-adhd-session header forwarded to ctx parameter', async () => {
     server = await startServer();
-    const res = await fetch(`${BASE}/${NS}/greet_with_ctx`, {
+    const res = await fetch(`${BASE}${routeFor(GREET_WITH_CTX_OP)}`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -243,11 +341,108 @@ describe('py-flask plugin — LIVE server', () => {
 
   it('[not found] unknown route → 404', async () => {
     server = await startServer();
-    const res = await fetch(`${BASE}/${NS}/does_not_exist`, {
+    const res = await fetch(`${BASE}${routeFor(pyOp('does_not_exist', {}))}`, {
       method: 'POST',
       body: '{}',
       headers: { 'content-type': 'application/json' },
     });
     expect(res.status).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 — route/verb parity with
+// @adhd/apigen-engine-naming's project() (the SAME authority api-fastify/openapi/mcp
+// derive their routes from).
+// ---------------------------------------------------------------------------
+
+describe('py-flask plugin — route/verb parity with project() (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001)', () => {
+  it('project(): echo_str (primitive-only input, safe:false) hoists to GET at a 3-segment kebab route', () => {
+    const { verb, route } = project(ECHO_STR_OP).http;
+    expect(verb).toBe('GET');
+    expect(route).toBe('/testapi/test-api/echo-str');
+    // Multi-path-segment: namespace + file-seg + export-seg.
+    expect(route.split('/').filter(Boolean)).toEqual([
+      'testapi',
+      'test-api',
+      'echo-str',
+    ]);
+  });
+
+  it('project(): sum_ints (array/non-primitive input) stays POST at its 3-segment kebab route', () => {
+    const { verb, route } = project(SUM_INTS_OP).http;
+    expect(verb).toBe('POST');
+    expect(route).toBe('/testapi/test-api/sum-ints');
+  });
+
+  it('LIVE: the server exposes GET at the project()-derived route for echo_str, and the OLD flat route 404s', async () => {
+    server = await startServer();
+    const { verb, route } = project(ECHO_STR_OP).http;
+    expect(verb).toBe('GET');
+
+    // Positive: a real GET request to the project()-derived, kebab, 3-segment
+    // route succeeds.
+    const res = await fetch(`${BASE}${route}?msg=hello`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toBe('hello');
+
+    // NEGATIVE CONTROL: the pre-fix flat `/ns/echo_str` route must now 404 —
+    // proves the derivation actually changed (not merely aliased). Verified
+    // manually against the pre-fix flask_server.py: this same request
+    // returned 200 there (and the line above's 3-segment GET 404'd), i.e.
+    // this assertion is RED against the old code and GREEN against the fix.
+    const legacy = await fetch(`${BASE}/${NS}/echo_str`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: { msg: 'hello' } }),
+    });
+    expect(legacy.status).toBe(404);
+  });
+
+  it('LIVE: the server exposes POST-only at the project()-derived route for sum_ints, and the OLD flat route 404s', async () => {
+    server = await startServer();
+    const { verb, route } = project(SUM_INTS_OP).http;
+    expect(verb).toBe('POST');
+
+    // Positive: POST to the project()-derived, kebab, 3-segment route.
+    const res = await fetch(`${BASE}${route}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: { values: [1, 2, 3] } }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toBe(6);
+
+    // NEGATIVE CONTROL: the pre-fix flat route 404s now.
+    const legacy = await fetch(`${BASE}/${NS}/sum_ints`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: { values: [1, 2, 3] } }),
+    });
+    expect(legacy.status).toBe(404);
+
+    // A GET to the same canonical route must be rejected (POST-only op) —
+    // proves the verb, not just the path, is honored.
+    const wrongVerb = await fetch(`${BASE}${route}?values=1`);
+    expect(wrongVerb.status).toBe(405);
+  });
+
+  it('LIVE: the served stderr route log matches project() for every fixture op', async () => {
+    server = await startServer();
+    // `server.stderrLines` is captured from process spawn (see startServer()),
+    // so start()'s route-log lines — printed synchronously before the
+    // ready signal — are guaranteed to already be present by the time
+    // startServer() resolves.
+    const lines = server.stderrLines;
+
+    for (const op of [ECHO_STR_OP, SUM_INTS_OP]) {
+      const { verb, route } = project(op).http;
+      const logLine = lines.find((l) => l.includes(route));
+      expect(
+        logLine,
+        `expected a stderr route-log line containing ${route} (from:\n${lines.join('\n')})`
+      ).toBeDefined();
+      expect(logLine).toMatch(new RegExp(`^\\s*${verb}\\s+${route.replace(/[-/]/g, '\\$&')}$`));
+    }
   });
 });

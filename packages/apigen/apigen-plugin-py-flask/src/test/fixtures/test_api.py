@@ -21,7 +21,7 @@ from decimal import Decimal
 from typing import Any, Dict
 
 # Only expose the API functions -- prevents stdlib imports from being extracted.
-__all__ = ["echo_str", "double_decimal", "get_datetime", "greet_with_ctx"]
+__all__ = ["echo_str", "double_decimal", "get_datetime", "greet_with_ctx", "sum_ints"]
 
 
 def echo_str(msg: str) -> str:
@@ -84,3 +84,22 @@ def greet_with_ctx(ctx: Dict[str, Any], name: str) -> str:
     """
     session = ctx.get("session", "anonymous")
     return f"Hello {name}! session={session}"
+
+
+def sum_ints(values: list[int]) -> int:
+    """Sum a list of integers -- a non-primitive (array) param.
+
+    Used by the BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 route/verb parity
+    test as the "unsafe/POST" representative op: `values: list[int]` fails
+    FEAT-APIGEN-022's "properly typed primitives only" check (arrays are not
+    query-string round-trippable), so this operation must stay POST-only even
+    though it carries no explicit `safe` flag -- proving the GET/POST split
+    follows the exact same hoist rule as `@adhd/apigen-engine-naming`'s `project()`.
+
+    Args:
+        values: A list of integers to sum.
+
+    Returns:
+        The sum of all values.
+    """
+    return sum(values)

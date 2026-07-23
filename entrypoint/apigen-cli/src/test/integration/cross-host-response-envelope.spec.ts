@@ -368,8 +368,24 @@ describe('[cross-host-response-envelope] BUG-APIGEN-015 regression guard', () =>
           startPyServer(pyFixture, pyPort, NS),
         ]);
 
-        const tsBase = `http://127.0.0.1:${tsServer.port}/${NS}/price`;
-        const pyBase = `http://127.0.0.1:${pyServer.port}/${NS}/price`;
+        // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: since BUG-
+        // APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001's api-fastify-side fix, this
+        // spawns the REAL bundled CLI with a real TS extraction — the served
+        // route is the full, kebab-cased `project(op).http.route`
+        // (namespace "price_api" -> "price-api", file "price_api.ts" ->
+        // "price-api", export "price"), a genuine multi-segment path, not the
+        // OLD flat `/price_api/price`. Verified against a live spawned server
+        // (`/price-api/price-api/price` -> 200, every other candidate -> 404).
+        const tsBase = `http://127.0.0.1:${tsServer.port}/price-api/price-api/price`;
+        // py-flask's `_route_for_op()` re-derives the SAME `project()` kebab
+        // formula natively (py-flask side of BUG-APIGEN-OPENAPI-ROUTE-PATH-
+        // MISMATCH-001, resolved 2026-07-23) — namespace AND file segment are
+        // both kebab-cased too, not just the export; only the GET/POST VERB
+        // derivation differs from TS (py-flask has no FEAT-APIGEN-022
+        // primitive-only-input GET-hoist, so this op stays POST-only).
+        // Verified against a live spawned py-flask server (`/price-api/
+        // price-api/price` -> 200 POST, every flatter candidate -> 404).
+        const pyBase = `http://127.0.0.1:${pyServer.port}/price-api/price-api/price`;
 
         const body = JSON.stringify({ data: { v: '123.456' } });
         const headers = { 'Content-Type': 'application/json' };
@@ -451,8 +467,11 @@ describe('[cross-host-response-envelope] BUG-APIGEN-015 regression guard', () =>
         // FEAT-APIGEN-022: `price(v: Decimal)`'s single bare-string param
         // auto-hoists to GET (see the byte-identical test above) — query
         // string, not a JSON body.
+        // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: multi-segment
+        // kebab route (see the byte-identical test above for the full
+        // derivation + live-server verification).
         const res = await fetch(
-          `http://127.0.0.1:${tsPort}/${NS2}/price?v=0.000`,
+          `http://127.0.0.1:${tsPort}/price-api/price-api/price?v=0.000`,
           { method: 'GET' }
         );
 

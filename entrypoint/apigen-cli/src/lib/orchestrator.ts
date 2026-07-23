@@ -38,8 +38,8 @@ import type {
   RunInput,
   OutputPlugin,
 } from '@adhd/apigen-core-client';
-import { checkCollisions, CollisionDetectedError } from '@adhd/apigen-naming';
-import type { ProjectionConfig } from '@adhd/apigen-naming';
+import { checkCollisions, CollisionDetectedError } from '@adhd/apigen-engine-naming';
+import type { ProjectionConfig } from '@adhd/apigen-engine-naming';
 import { resolveTsconfig, resolveNamespace } from './resolve-tsconfig';
 
 // ---------------------------------------------------------------------------
@@ -188,7 +188,7 @@ export function parseOverrides(pairs: string[]): OverrideConfig {
       const opId = verbMatch[1];
       config.http ??= {};
       config.http.verb ??= {};
-      config.http.verb[opId] = value as import('@adhd/apigen-naming').HttpVerb;
+      config.http.verb[opId] = value as import('@adhd/apigen-engine-naming').HttpVerb;
     }
   }
 
@@ -560,6 +560,12 @@ export async function orchestrateGenerate(
     outputDir,
     options: pluginOpts,
     logger: opts.logger,
+    // DEBT-APIGEN-PLUGIN-MCP-GENERATE-OPERATIONS-001: thread the real merged
+    // Operation[] through so generate() can call project(op) on real ops
+    // (exact for multi-file namespaces / npm-specifier importPath /
+    // default-object exports) instead of synthesizing a best-effort stub —
+    // mirrors what orchestrateRun() already does for run().
+    operations: descriptor.operations,
   };
 
   const pluginOutput = await plugin.generate(input);

@@ -222,6 +222,19 @@ export function registerRunCommand(
 ): void {
   program
     .command('run')
+    // DEBT-APIGEN-CLI-RUN-ARGV-PASSTHROUGH-001: a trailing variadic argument
+    // so `apigen run --source f --type cli -- <command> <args>` reaches a
+    // run-capable plugin's argv (e.g. @adhd/apigen-plugin-cli-output) natively
+    // — Commander otherwise rejects any positional token (including
+    // everything after a literal `--`) with "too many arguments for 'run'"
+    // since zero arguments were declared. Threaded onto
+    // `RunInput.options['argv']` below (the same key the cli-output plugin's
+    // `resolveArgv()` already reads) — the `--opt argv=<string>` delivery
+    // path keeps working unchanged for back-compat.
+    .argument(
+      '[cliArgs...]',
+      'Passthrough command + args for a run-capable plugin (e.g. `-- get-item --id 42`)'
+    )
     .requiredOption('--source <path>', 'Path to TypeScript source file')
     .requiredOption('--type <plugin-id>', describeRunTypeOption(plugins))
     .option(
@@ -253,16 +266,19 @@ export function registerRunCommand(
       'Path to apigen.config.json projection-override file (Tenet 1)'
     )
     .action(
-      async (opts: {
-        source: string;
-        type: string;
-        export?: string;
-        tsconfig?: string;
-        namespace?: string;
-        opt: string[];
-        use: string[];
-        config?: string;
-      }) => {
+      async (
+        cliArgs: string[],
+        opts: {
+          source: string;
+          type: string;
+          export?: string;
+          tsconfig?: string;
+          namespace?: string;
+          opt: string[];
+          use: string[];
+          config?: string;
+        }
+      ) => {
         const plugin = plugins[opts.type];
         if (!plugin) throw unknownTypeError(opts.type, plugins);
         if (!plugin.run) throw unsupportedRunError(opts.type, plugins);
@@ -279,6 +295,14 @@ export function registerRunCommand(
         const logger = buildCliLogger(program);
         const allOpts = opts.opt;
         const options = parseOptPairs(allOpts);
+        // DEBT-APIGEN-CLI-RUN-ARGV-PASSTHROUGH-001: the native `-- <command>
+        // <args>` positional passthrough takes precedence over the `--opt
+        // argv=<string>` delivery path when both are present — it's the more
+        // explicit, idiomatic form. `resolveArgv()` (apigen-plugin-cli-
+        // output's run.ts) already accepts a real `string[]` here.
+        if (cliArgs.length > 0) {
+          options['argv'] = cliArgs;
+        }
         // BUG-APIGEN-009 / -010: load `--use` plugins and thread the live plugin
         // objects to the run plugin via options.usePlugins so it can compose their
         // layer (validation, logging) + mount (health) capabilities into the

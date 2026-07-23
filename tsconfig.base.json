@@ -16,6 +16,7 @@
     "rootDir": "./",
     "sourceMap": true,
     "declaration": false,
+    "declarationMap": true,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "noImplicitThis": false,
@@ -98,9 +99,6 @@
       "@adhd/apigen-generator-nx": [
         "./packages/apigen/apigen-generator-nx/src/index.ts"
       ],
-      "@adhd/apigen-naming": [
-        "./packages/apigen/apigen-engine-naming/src/index.ts"
-      ],
       "@adhd/apigen-plugin-api-express": [
         "./packages/apigen/apigen-plugin-api-express/src/index.ts"
       ],
@@ -135,6 +133,7 @@
         "./packages/apigen/apigen-plugin-py-grpc/src/index.ts"
       ],
       "@adhd/apigen-python-env": ["./packages/apigen/python-env/src/index.ts"],
+      "@adhd/backlog": ["./entrypoint/backlog/src/index.ts"],
       "@adhd/data-base-transforms": [
         "./packages/data/data-base-transforms/src/index.ts"
       ],

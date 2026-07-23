@@ -3,7 +3,7 @@
 // Drives the REAL v2 extractor (`@adhd/apigen-core-client's `extract`) over one fixture
 // per export shape and asserts that EVERY operation is named by its EXPORTED
 // symbol — never the local declaration name. The per-transport projections
-// (`@adhd/apigen-naming`'s `project`) are derived from the same operations, so
+// (`@adhd/apigen-engine-naming`'s `project`) are derived from the same operations, so
 // the MCP tool name / HTTP route / CLI path all track the exported symbol too.
 //
 // Teeth (CLAUDE.md §6): the `renamed` / `default-object` / `cjs` rows have a
@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import * as path from 'node:path';
 import { extract } from '@adhd/apigen-core-client';
-import { project } from '@adhd/apigen-naming';
+import { project } from '@adhd/apigen-engine-naming';
 import type { Operation } from '@adhd/apigen-core-client';
 
 const shapesDir = path.join(__dirname, '..', 'fixtures', 'shapes');
