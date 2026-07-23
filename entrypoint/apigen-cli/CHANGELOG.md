@@ -1,3 +1,55 @@
+## 0.1.3 (2026-07-23)
+
+
+### 🚀 Features
+
+- **release:** nx release independent versioning + verify-dist-load publish gate (Agent 2)
+
+- **apigen:** canonical route/tool-name projection across transports; serve + generate() + import-specifier fixes
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** triage BUG-APIGEN-041 (low, edge case only), 042 (medium, architectural path mismatch), 043 (logging-only, part 1+2 resolved, part 3 feature request)
+
+- **apigen-cli:** correct BUG-APIGEN-041 triage — root cause is broken @rollup/plugin-commonjs dynamic-require stubs in plugin dist, not loadUsePlugins detection logic
+
+- **apigen-cli:** BUG-APIGEN-041 — dist bundle found not viable; fix direction is tsx-based source loading instead
+
+- **apigen-cli:** BUG-APIGEN-041 — final verdict; not fixable at runtime, systemic build-tool issue tracked at INVESTIGATION-BUILD-TOOL-001
+
+- **apigen:** externalize real npm deps in vite builds — 10 packages shipped broken dist bundles (__filename/timeOrigin crash)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
+## 0.1.2 (2026-07-23)
+
+
+### 🚀 Features
+
+- **release:** nx release independent versioning + verify-dist-load publish gate (Agent 2)
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** triage BUG-APIGEN-041 (low, edge case only), 042 (medium, architectural path mismatch), 043 (logging-only, part 1+2 resolved, part 3 feature request)
+
+- **apigen-cli:** correct BUG-APIGEN-041 triage — root cause is broken @rollup/plugin-commonjs dynamic-require stubs in plugin dist, not loadUsePlugins detection logic
+
+- **apigen-cli:** BUG-APIGEN-041 — dist bundle found not viable; fix direction is tsx-based source loading instead
+
+- **apigen-cli:** BUG-APIGEN-041 — final verdict; not fixable at runtime, systemic build-tool issue tracked at INVESTIGATION-BUILD-TOOL-001
+
+- **apigen:** externalize real npm deps in vite builds — 10 packages shipped broken dist bundles (__filename/timeOrigin crash)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 # Changelog — @adhd/apigen-cli
 
 All notable changes to this project are documented here.
@@ -519,7 +571,7 @@ All notable changes to this project are documented here.
   same bug class (`BUG-APIGEN-CLI-001`, `packages/apigen/BACKLOG.md`, fixed
   2026-07-06) as a private, unexported `sanitizeIdentifier()` helper — never shared,
   so `api-express`/`api-fastify` never had access to it. Fixed by extracting
-  `sanitizeIdentifier()` into `@adhd/apigen-naming`
+  `sanitizeIdentifier()` into `@adhd/apigen-engine-naming`
   (`packages/apigen/apigen-engine-naming/src/lib/naming.ts:383-407`, exported via
   `src/index.ts`) — the one shared naming/projection-helper package all three plugins
   already depended on (zero new dependency edges needed) and whose own doc comment

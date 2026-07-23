@@ -1,3 +1,32 @@
+## 2.1.3 (2026-07-23)
+
+
+### 🚀 Features
+
+- session batch — dispatch tool-exec + provider routing, publish hygiene, agent/env/apigen fixes
+
+- **release:** nx release independent versioning + verify-dist-load publish gate (Agent 2)
+
+- **agent-core-env:** shared registry-DB resolver + DI kills import-time DB-open side effect
+
+
+### 🩹 Fixes
+
+- **agent-mcp:** publish from dist — add packageRoot config, narrow asset glob (drops stray dist project.json), add publishConfig
+
+- **agent-mcp:** 2.1.1 — ship drizzle migrations + pin external deps (2.1.0 was broken)
+
+- **agent-mcp:** agent-mcp-tail no longer fans per-task usage across every event (BUG-AGENTMCP-006)
+
+- **agent-mcp:** create + migrate registry DB on fresh machines instead of crashing SQLITE_CANTOPEN
+
+- **agent-mcp:** eliminate SSE-port contention across concurrent stdio instances
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 # Changelog
 
 All notable changes to this project will be documented in this file.

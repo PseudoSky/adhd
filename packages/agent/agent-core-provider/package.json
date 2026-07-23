@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-core-provider",
-  "version": "2.1.2",
+  "version": "2.1.4",
   "description": "Provider registry: adapters, model catalog, and tool-format emitter for @adhd/agent-mcp",
   "type": "module",
   "publishConfig": {

@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-store-runtime",
-  "version": "2.1.2",
+  "version": "2.1.4",
   "description": "Runtime state stores for sessions, tasks, and usage tracking — extracted from agent-mcp",
   "type": "module",
   "publishConfig": {

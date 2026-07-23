@@ -4,8 +4,8 @@
   "dependencies": {
     "@adhd/sox-graph-store": "^0.3.0",
     "better-sqlite3": "^12.10.0",
-    "@adhd/environment": "0.0.1",
-    "@adhd/environment-base-spec": "0.0.2",
+    "@adhd/environment": "0.0.2",
+    "@adhd/environment-base-spec": "0.0.3",
     "@adhd/apigen-core-client": "^0.1.1",
     "@adhd/apigen-plugin-api-fastify": "^0.1.2",
     "@adhd/apigen-plugin-openapi": "^0.1.3",

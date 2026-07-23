@@ -1,3 +1,53 @@
+## 2.1.3 (2026-07-23)
+
+
+### 🚀 Features
+
+- session batch — dispatch tool-exec + provider routing, publish hygiene, agent/env/apigen fixes
+
+- **agent-mcp:** name-only tool advertisement + per-turn raw usage storage
+
+- **release:** nx release independent versioning + verify-dist-load publish gate (Agent 2)
+
+
+### 🩹 Fixes
+
+- **agent:** update stale @adhd/agent-mcp-budget, agent-mcp-sanitize, agent-mcp-types references + clean tsconfig stale entries
+
+- **agent-mcp:** cache-preserving context mgmt, provider-neutral token accounting, refactor-parity fixes; prep 2.1.0 family release
+
+- **agent-mcp:** 2.1.1 — ship drizzle migrations + pin external deps (2.1.0 was broken)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
+## 2.1.2 (2026-07-23)
+
+
+### 🚀 Features
+
+- session batch — dispatch tool-exec + provider routing, publish hygiene, agent/env/apigen fixes
+
+- **agent-mcp:** name-only tool advertisement + per-turn raw usage storage
+
+- **release:** nx release independent versioning + verify-dist-load publish gate (Agent 2)
+
+
+### 🩹 Fixes
+
+- **agent:** update stale @adhd/agent-mcp-budget, agent-mcp-sanitize, agent-mcp-types references + clean tsconfig stale entries
+
+- **agent-mcp:** cache-preserving context mgmt, provider-neutral token accounting, refactor-parity fixes; prep 2.1.0 family release
+
+- **agent-mcp:** 2.1.1 — ship drizzle migrations + pin external deps (2.1.0 was broken)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 # Changelog
 
 All notable changes to `@adhd/agent-mcp-types`. Format based on

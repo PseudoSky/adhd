@@ -1,12 +1,12 @@
 {
   "name": "@adhd/data-query-engine",
-  "version": "2.2.1",
+  "version": "2.2.3",
   "private": false,
   "publishConfig": {
     "access": "public"
   },
   "peerDependencies": {
-    "@adhd/data-base-transforms": "2.2.1"
+    "@adhd/data-base-transforms": "2.2.3"
   },
   "main": "./dist/index.js",
   "typings": "./dist/index.d.ts",
