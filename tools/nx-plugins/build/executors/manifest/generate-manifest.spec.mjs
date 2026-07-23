@@ -105,15 +105,32 @@ test('drops devDependencies, scripts, nx, and the source files allowlist', () =>
   assert.equal(out.files, undefined);
 });
 
-test('rebases string bin and object bin', () => {
+test('rebases string bin and object bin, stripping the leading "./" that main/module/typings keep', () => {
+  // Unlike main/module/typings (which keep a leading "./"), bin values must NOT
+  // have one — npm's publish-time bin validation silently strips any bin entry
+  // whose path starts with "./" (confirmed empirically, npm 11.6.2: identical
+  // file + permissions, only the leading "./" differs between accepted and
+  // rejected). A dropped bin entry means `npm install -g` installs with no
+  // command registered at all — no error, just a warning naming the wrong cause.
   assert.deepEqual(
     generateDistManifest({ name: '@adhd/cli', version: '1.0.0', bin: { adhd: './dist/index.js' } }, MAP).bin,
-    { adhd: './index.js' }
+    { adhd: 'index.js' }
   );
   assert.equal(
     generateDistManifest({ name: '@adhd/cli', version: '1.0.0', bin: './dist/cli.js' }, MAP).bin,
-    './cli.js'
+    'cli.js'
   );
+});
+
+test('bin rebasing does not affect main/module/typings, which keep their leading "./"', () => {
+  const out = generateDistManifest(
+    { name: '@adhd/cli', version: '1.0.0', main: './dist/index.js', module: './dist/index.mjs', typings: './dist/index.d.ts', bin: './dist/cli.js' },
+    MAP
+  );
+  assert.equal(out.main, './index.js');
+  assert.equal(out.module, './index.mjs');
+  assert.equal(out.typings, './index.d.ts');
+  assert.equal(out.bin, 'cli.js');
 });
 
 test('preserves identity metadata (name, version, license, publishConfig, type)', () => {

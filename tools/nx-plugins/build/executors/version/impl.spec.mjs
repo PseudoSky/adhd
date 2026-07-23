@@ -1,7 +1,8 @@
 /**
  * Teeth tests for the `version` executor's composition (impl.js) —
- * BUILD-TOOLING-VERSION-SYNC-DEPS-001 (orchestration/reuse) and
- * PUBLISHED-STATE-CACHE-001 (cache-driven, zero-network happy path).
+ * BUILD-TOOLING-VERSION-SYNC-DEPS-001 (orchestration/reuse),
+ * PUBLISHED-STATE-CACHE-001 (cache-driven, zero-network happy path), and
+ * BUILD-TOOLING-METRICS-001 (subprocess-overhead elimination).
  *
  * Covers what compare-published.spec.mjs (the pure decision core) and
  * reconcile-core.spec.mjs (the pure backfill core) cannot: the ORCHESTRATION
@@ -16,13 +17,17 @@
  *     reimplementation — writes only ITS OWN package.json, and never lets
  *     that reconciliation cause (or be caused by) a spurious own version bump.
  *
- * Mocking boundary: ONLY `node:child_process.spawnSync` is mocked — the
- * external-process boundary (real `npm`/`tar`, and the real `node
- * eslint-check.mjs` subprocess `deps/executors/sync/impl.js` shells out to).
- * Everything else (compare-published.js's real hashing/diffing, the real
+ * Mocking boundary: `node:child_process.spawnSync` is mocked for the real
+ * `npm`/`tar`/`git`/`nx` process boundary. The `deps/executors/sync|check`
+ * dependency-check call is mocked one layer further in, at their own
+ * `__internals.runDependencyCheck` seam (BUILD-TOOLING-METRICS-001 — that
+ * call is now an in-process `import()` of `eslint-check.mjs`, not a
+ * subprocess at all; see `deps/executors/sync/impl.spec.mjs` for the
+ * dedicated proof that it never touches `node:child_process`). Everything
+ * else (compare-published.js's real hashing/diffing, the real
  * `reconcile-core.js` gate, the real `lib/published-state.js` cache I/O, the
- * real `deps/executors/sync|check/impl.js` modules, real file I/O) runs for
- * real.
+ * real `deps/executors/sync|check/impl.js` orchestration, real file I/O)
+ * runs for real.
  *
  * Run: node --test tools/nx-plugins/build/executors/version/impl.spec.mjs
  */
@@ -42,6 +47,7 @@ const npmRegistryAbs = require.resolve('../../lib/npm-registry.js');
 const publishedStateAbs = require.resolve('../../lib/published-state.js');
 const syncAbs = require.resolve('../../../deps/executors/sync/impl.js');
 const checkAbs = require.resolve('../../../deps/executors/check/impl.js');
+const NX_BIN = require.resolve('nx/bin/nx.js');
 
 /** Force impl.js AND every module it (transitively) requires that itself
  * touches `node:child_process.spawnSync` to reload, so their top-level
@@ -58,6 +64,23 @@ function resetAll() {
 function loadFreshImpl() {
   resetAll();
   return require(implAbs);
+}
+
+/**
+ * Install the `__internals.runDependencyCheck` mock on BOTH the fresh
+ * sync/check modules `impl.js` just picked up (via `resetAll`'s cache
+ * eviction) — call AFTER `loadFreshImpl()`. Populates `state.eslintCalls`
+ * exactly like the old spawnSync-mock branch used to, so every existing
+ * assertion below keeps working against the new in-process call shape:
+ * `state.eslintCalls[i] === [pkgJsonPath, ...extraArgs]`.
+ */
+function installEslintCheckMock(state) {
+  const fn = async (pkgJsonPath, extraArgs) => {
+    state.eslintCalls.push([pkgJsonPath, ...extraArgs]);
+    return state.eslintStatus ?? 0;
+  };
+  require(syncAbs).__internals.runDependencyCheck = fn;
+  require(checkAbs).__internals.runDependencyCheck = fn;
 }
 
 /** Materialize a directory from a {relpath: contents} map. */
@@ -91,9 +114,14 @@ function integrityOf(content) {
  *    .tgz and reports its filename (real tar/npm never run)
  *  - `tar -xzf <tgz> -C <dir>`                              -> materializes
  *    state.publishedFiles directly under <dir>/package (skips real extraction)
- *  - `node .../eslint-check.mjs <pkgJsonPath> [--fix]`      -> the reused
- *    deps/executors/sync|check impl's real subprocess call; records every
- *    invocation in state.eslintCalls and returns state.eslintStatus (default 0)
+ *  - `<nx bin> release changelog ...`                       -> records into
+ *    state.changelogCalls and returns state.changelogStatus (default 0)
+ *
+ * The dependency-check call (`deps/executors/sync|check`) is NOT a spawnSync
+ * call anymore (BUILD-TOOLING-METRICS-001 — it's now in-process) — see
+ * `installEslintCheckMock` above, which mocks it at its own
+ * `__internals.runDependencyCheck` seam instead, populating `state.eslintCalls`
+ * the same way for every assertion below.
  */
 function makeSpawnSyncMock(state) {
   return (cmd, args = [], _opts = {}) => {
@@ -127,15 +155,16 @@ function makeSpawnSyncMock(state) {
       makeFiles(pkgDir, state.publishedFiles ?? {});
       return { status: 0, stdout: '', stderr: '' };
     }
-    if (cmd === 'node' && args.some((a) => String(a).includes('eslint-check.mjs'))) {
-      state.eslintCalls.push(args);
-      return { status: state.eslintStatus ?? 0, stdout: '', stderr: '' };
-    }
     if (cmd === 'git' && args[0] === 'log') {
       return { status: 0, stdout: state.lastChangelogSha ?? '', stderr: '' };
     }
-    if (cmd === 'npx' && args[0] === 'nx' && args[1] === 'release' && args[2] === 'changelog') {
-      state.changelogCalls.push(args);
+    // BUILD-TOOLING-METRICS-001: `nx release changelog` is now invoked as
+    // `node <nx/bin/nx.js> release changelog ...` directly (never `npx nx
+    // ...` — npx's own resolution overhead was pure waste in a monorepo
+    // where the local `nx` binary is always already known). `args[0]` is the
+    // resolved nx bin path; the actual CLI argv starts at `args[1]`.
+    if (cmd === process.execPath && args[0] === NX_BIN && args[1] === 'release' && args[2] === 'changelog') {
+      state.changelogCalls.push(args.slice(1));
       return { status: state.changelogStatus ?? 0, stdout: '', stderr: state.changelogStatus ? 'boom' : '' };
     }
     throw new Error(`unexpected spawnSync in test mock: ${cmd} ${JSON.stringify(args)}`);
@@ -200,6 +229,7 @@ test('cache HIT, unchanged: ZERO network calls (no npm/tar spawnSync at all), no
     const state = newState();
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     const result = await versionImpl({}, context);
     assert.equal(result.success, true);
@@ -207,6 +237,19 @@ test('cache HIT, unchanged: ZERO network calls (no npm/tar spawnSync at all), no
     assert.equal(state.eslintCalls.length, 1, 'sync-deps reconciliation still runs (a separate, already-zero-network step)');
     const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
     assert.equal(after.version, '1.0.0', 'unchanged vs the cached published hash -> no bump');
+
+    // BUILD-TOOLING-METRICS-001: `run()` records a 'version' task-run, plus a
+    // NESTED 'sync-deps' record from the in-process reconciliation call.
+    const metricsAbs = require.resolve('../../../lib/metrics.js');
+    delete require.cache[metricsAbs];
+    const { readMetrics } = require(metricsAbs);
+    const { records } = readMetrics(rootDir);
+    const versionRecords = records.filter((r) => r.task === 'version');
+    const syncDepsRecords = records.filter((r) => r.task === 'sync-deps');
+    assert.equal(versionRecords.length, 1);
+    assert.equal(versionRecords[0].project, 'pkg-b');
+    assert.equal(versionRecords[0].success, true);
+    assert.equal(syncDepsRecords.length, 1, 'the in-process sync-deps call must land its own nested metrics record');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
@@ -230,6 +273,7 @@ test('cache HIT, changed: ZERO network calls, still bumps correctly', async (t) 
     const state = newState();
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     const result = await versionImpl({}, context);
     assert.equal(result.success, true);
@@ -254,6 +298,7 @@ test('cache HIT but source already ahead of the cached version: ZERO network, tr
     const state = newState();
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     const result = await versionImpl({}, context);
     assert.equal(result.success, true);
@@ -278,6 +323,7 @@ test('cache HIT, integrity fast path used at backfill time is directly consumabl
     const state1 = newState({ publishedVersions: ['1.0.0'], publishedIntegrity: matchingIntegrity });
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state1));
     let versionImpl = loadFreshImpl();
+    installEslintCheckMock(state1);
     const result1 = await versionImpl({}, context);
     assert.equal(result1.success, true);
     assert.ok(existsSync(publishedStatePath(rootDir)), 'backfill must have populated published-state.json');
@@ -290,6 +336,7 @@ test('cache HIT, integrity fast path used at backfill time is directly consumabl
     const state2 = newState();
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state2));
     versionImpl = loadFreshImpl();
+    installEslintCheckMock(state2);
     const result2 = await versionImpl({}, context);
     assert.equal(result2.success, true);
     assert.deepEqual(networkCalls(state2), [], 'the second run, against the now-warm cache, must be entirely zero-network');
@@ -313,13 +360,13 @@ test('"not yet published" path (cache miss -> backfill -> still pending): reconc
     const state = newState({ publishedVersions: [] }); // never published
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     const result = await versionImpl({}, context);
     assert.equal(result.success, true);
     assert.equal(state.eslintCalls.length, 1, 'sync-deps subprocess must run exactly once');
     assert.ok(state.eslintCalls[0].includes('--fix'), 'must invoke the FIX mode (sync), not check, when not a dry run');
-    assert.ok(state.eslintCalls[0][0].endsWith('tools/nx-plugins/deps/eslint-check.mjs'), 'must be the shared script — proves reuse, not reimplementation');
-    assert.ok(state.eslintCalls[0][1].endsWith(join('packages', 'pkg-b', 'package.json')), 'must target THIS project\'s own package.json');
+    assert.ok(state.eslintCalls[0][0].endsWith(join('packages', 'pkg-b', 'package.json')), 'must target THIS project\'s own package.json');
     assert.equal(existsSync(publishedStatePath(rootDir)), false, '"pending" (never published) must never write a cache entry');
     // Version untouched (no dist to compare against — release is already pending).
     const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
@@ -341,6 +388,7 @@ test('dry run: reconciliation delegates to check (read-only) and NEVER writes pa
     const state = newState({ publishedVersions: [], eslintStatus: 1 }); // simulate a REAL drift finding (check would "fail")
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     const result = await versionImpl({ dryRun: true }, context);
     assert.equal(result.success, true, 'a dry run must never fail just because check reported drift');
@@ -371,6 +419,7 @@ test('ADHD_NX_VERSION_DRY_RUN=1 env var forces dry-run behavior even when option
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     process.env.ADHD_NX_VERSION_DRY_RUN = '1';
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     // Note: options.dryRun is deliberately OMITTED here — simulating a
     // dependency task that `nx run-many --dryRun` failed to propagate the
@@ -403,6 +452,7 @@ test('published (cache miss, backfill) + range-only drift vs published tarball: 
     });
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     const result = await versionImpl({}, context);
     assert.equal(result.success, true);
@@ -431,6 +481,7 @@ test('published (cache miss, backfill) + REAL code drift: DOES bump, then reconc
     });
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     const result = await versionImpl({}, context);
     assert.equal(result.success, true);
@@ -460,18 +511,27 @@ test('published (cache miss, backfill) + REAL code drift: generates a CHANGELOG.
     });
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     const result = await versionImpl({}, context);
     assert.equal(result.success, true);
     assert.equal(state.changelogCalls.length, 1, 'nx release changelog must be invoked exactly once');
     const args = state.changelogCalls[0];
-    assert.deepEqual(args.slice(0, 4), ['nx', 'release', 'changelog', '1.0.1'], 'must target the NEW version just decided');
+    assert.deepEqual(args.slice(0, 3), ['release', 'changelog', '1.0.1'], 'must target the NEW version just decided');
     assert.ok(args.includes('--projects') && args.includes('pkg-b'), 'must scope to THIS project only');
     assert.ok(args.includes('--first-release'), 'no prior changelog commit known -> --first-release, not a fabricated --from');
     assert.ok(!args.includes('--from'), 'must not pass --from when no boundary is known');
     assert.ok(args.includes('--git-commit') && args[args.indexOf('--git-commit') + 1] === 'false', 'must never let nx auto-commit');
     assert.ok(args.includes('--git-tag') && args[args.indexOf('--git-tag') + 1] === 'false', 'must never let nx auto-tag');
     assert.ok(!args.includes('--dry-run'), 'a real (non-dry-run) bump must NOT pass --dry-run to the changelog call');
+    assert.ok(
+      state.calls.every((c) => c.cmd !== 'npx'),
+      'BUILD-TOOLING-METRICS-001: the changelog call must invoke the local nx bin directly, never via `npx` (npx resolution overhead is pure waste in a monorepo)'
+    );
+    assert.ok(
+      state.calls.some((c) => c.cmd === process.execPath && c.args[0] === NX_BIN),
+      'must invoke `node <nx/bin/nx.js> ...` directly'
+    );
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
@@ -493,6 +553,7 @@ test("when a prior commit touched this project's CHANGELOG.md, uses --from=<that
     });
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     const result = await versionImpl({}, context);
     assert.equal(result.success, true);
@@ -520,6 +581,7 @@ test('dry run with real code drift (cache miss -> backfill still runs, but never
     });
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     const result = await versionImpl({ dryRun: true }, context);
     assert.equal(result.success, true);
@@ -548,6 +610,7 @@ test('changelog generation failure fails the whole version task (bump already la
     });
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     const result = await versionImpl({}, context);
     assert.equal(result.success, false, 'a real changelog-generation failure must fail the task');
@@ -570,6 +633,7 @@ test('sync-deps failure during reconciliation propagates as an overall executor 
     const state = newState({ publishedVersions: [], eslintStatus: 1 }); // real, unfixable eslint failure
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     const result = await versionImpl({}, context);
     assert.equal(result.success, false, 'a real (non-dry-run) sync-deps failure must fail the version task');
@@ -601,6 +665,7 @@ test('backfill failure (network error reconciling a cache miss) leaves version u
       return baseMock(cmd, args, opts);
     });
     const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
 
     const result = await versionImpl({}, context);
     assert.equal(result.success, true, 'a backfill failure must not fail the whole task — it leaves version as-is for manual verification');

@@ -140,3 +140,9 @@ packages/agent/*/tsconfig.tsbuildinfo
 # exit but left behind by an interrupted/parallel run. Regenerable, never
 # meaningful to track.
 **/vite.config.ts.timestamp-*.mjs
+
+# tools/nx-plugins/lib/metrics.js's local perf log (BUILD-TOOLING-METRICS-001)
+# — a per-developer profiling artifact, NOT the published-reference cache
+# (published-state.json, which IS committed as source of truth). Regenerable
+# by just re-running any instrumented nx target; never meaningful to track.
+/metrics.json

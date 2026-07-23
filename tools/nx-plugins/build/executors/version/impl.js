@@ -77,10 +77,24 @@ const { existsSync, readFileSync, writeFileSync, rmSync } = require('node:fs');
 const { join, relative } = require('node:path');
 const { bumpVersion, normalizedHash } = require('./compare-published');
 const { readState, updatePublishedState } = require('../../lib/published-state');
-const { reconcilePackage } = require('../reconcile/reconcile-core');
+const { reconcilePackage, describeNetworkCalls } = require('../reconcile/reconcile-core');
+const { withMetrics } = require('../../../lib/metrics');
 // Reuse — never duplicate — the `deps` plugin's own reconciliation logic.
 const syncInternalDeps = require('../../../deps/executors/sync/impl');
 const checkInternalDeps = require('../../../deps/executors/check/impl');
+
+/**
+ * Absolute path to the workspace's own locally-installed `nx` CLI entry.
+ * `writeChangelogEntry` invokes this directly (`node <nxBin> release
+ * changelog ...`) instead of `npx nx release changelog ...`
+ * (BUILD-TOOLING-METRICS-001) — `npx` pays its own extra resolution overhead
+ * (checking whether `nx` is installed locally, resolving the bin shim) EVERY
+ * time, purely to re-discover a binary that's already known and pinned at
+ * this exact absolute path in a monorepo like this one. Behavior is
+ * identical: `npx nx <args>` and `node <nx/bin/nx.js> <args>` invoke the same
+ * CLI entry point with the same argv.
+ */
+const NX_BIN = require.resolve('nx/bin/nx.js');
 
 /**
  * The `--from` git ref for `nx release changelog`'s commit range: the commit
@@ -100,10 +114,14 @@ const checkInternalDeps = require('../../../deps/executors/check/impl');
  *
  * @param {import('@nx/devkit').ExecutorContext} context
  * @param {string} changelogRelPath workspace-root-relative path, e.g. "packages/x/y/CHANGELOG.md"
+ * @param {import('../../../lib/metrics').MetricsRecorder} [rec]
  * @returns {string | null}
  */
-function lastChangelogCommit(context, changelogRelPath) {
-  const res = sh('git', ['log', '-1', '--format=%H', '--', changelogRelPath], { cwd: context.root });
+function lastChangelogCommit(context, changelogRelPath, rec) {
+  const cmd = ['git', 'log', '-1', '--format=%H', '--', changelogRelPath];
+  const res = rec
+    ? rec.time(cmd.join(' '), () => sh('git', cmd.slice(1), { cwd: context.root }))
+    : sh('git', cmd.slice(1), { cwd: context.root });
   const sha = (res.stdout || '').trim();
   return res.status === 0 && sha ? sha : null;
 }
@@ -122,13 +140,14 @@ function lastChangelogCommit(context, changelogRelPath) {
  * @param {string} version the version this changelog entry is FOR (the new,
  *                         just-decided version — matches the header nx renders)
  * @param {boolean} dryRun
+ * @param {import('../../../lib/metrics').MetricsRecorder} [rec]
  * @returns {boolean} success
  */
-function writeChangelogEntry(context, projectRoot, version, dryRun) {
+function writeChangelogEntry(context, projectRoot, version, dryRun, rec) {
   const changelogRelPath = join(projectRoot, 'CHANGELOG.md').split('\\').join('/');
-  const fromSha = lastChangelogCommit(context, changelogRelPath);
+  const fromSha = lastChangelogCommit(context, changelogRelPath, rec);
   const args = [
-    'nx', 'release', 'changelog', version,
+    'release', 'changelog', version,
     '--projects', context.projectName,
     '--to', 'HEAD',
     '--git-commit', 'false',
@@ -137,7 +156,9 @@ function writeChangelogEntry(context, projectRoot, version, dryRun) {
   if (fromSha) args.push('--from', fromSha);
   else args.push('--first-release');
   if (dryRun) args.push('--dry-run');
-  const res = sh('npx', args, { cwd: context.root });
+  const res = rec
+    ? rec.time(`node ${NX_BIN} ${args.join(' ')}`, () => sh(process.execPath, [NX_BIN, ...args], { cwd: context.root }))
+    : sh(process.execPath, [NX_BIN, ...args], { cwd: context.root });
   if (res.status !== 0) {
     console.error(`version: changelog generation FAILED for ${context.projectName}:\n${res.stderr || res.stdout}`);
     return false;
@@ -193,12 +214,16 @@ function sh(cmd, args, opts = {}) {
  * @param {string} name
  * @param {string} version
  * @param {string} distDir
+ * @param {import('../../../lib/metrics').MetricsRecorder} rec
  * @returns {Promise<{entry: {version:string,normalizedHash:string,publishedIntegrity:string}|null, error?: string}>}
  */
-async function backfillOnMiss(context, name, version, distDir) {
+async function backfillOnMiss(context, name, version, distDir, rec) {
   const workDir = join(context.root, 'tmp', 'nx-build-version-backfill', context.projectName);
   try {
-    const result = reconcilePackage({ name, version, distDir, workDir });
+    const result = rec.time('reconcilePackage (npm view/pack, offline pack, maybe tar)', () =>
+      reconcilePackage({ name, version, distDir, workDir })
+    );
+    for (const label of describeNetworkCalls(result)) rec.network(label);
     if (result.status === 'pending') return { entry: null };
     if (result.status === 'error') return { entry: null, error: result.error };
     await updatePublishedState(context.root, (state) => {
@@ -216,6 +241,10 @@ async function backfillOnMiss(context, name, version, distDir) {
 }
 
 async function run(options, context) {
+  return withMetrics('version', context, (rec) => runVersion(options, context, rec));
+}
+
+async function runVersion(options, context, rec) {
   const level = options.bump || 'patch';
   // BUG-NX-RUNMANY-DRYRUN-NOT-PROPAGATED-TO-DEPENDENCY-TASKS-001 (BACKLOG.md):
   // `nx run-many -t version --projects=A,B --dryRun` (and even a single
@@ -248,6 +277,7 @@ async function run(options, context) {
 
   // ZERO-NETWORK read: the committed published-state cache.
   let cached = readState(context.root)[name];
+  rec.phase('readState');
 
   if (!cached) {
     // Cache MISS — do NOT silently pass. Backfill just THIS package from npm
@@ -256,7 +286,7 @@ async function run(options, context) {
     // now-populated entry. This is the ONLY network this task ever performs,
     // and it costs exactly one package, never the whole graph.
     console.error(`version: ${name} not in published-state.json — backfilling from npm (single-package, cache miss)…`);
-    const backfill = await backfillOnMiss(context, name, version, distDir);
+    const backfill = await backfillOnMiss(context, name, version, distDir, rec);
     if (backfill.error) {
       console.error(`version: backfill FAILED for ${name}: ${backfill.error} — leaving version as-is (verify manually).`);
       const sync = await reconcileOwnInternalRanges(context, dryRun);
@@ -289,6 +319,7 @@ async function run(options, context) {
   // or not the package actually changed (Deliverable 2) — the network was
   // already spent, once, at backfill/write-through time, never here.
   const localHash = normalizedHash(distDir);
+  rec.phase('normalizedHash');
   if (cached.normalizedHash === localHash) {
     console.error(`version: ${name}@${version} unchanged vs published (cache hit, zero network) — no bump.`);
     const sync = await reconcileOwnInternalRanges(context, dryRun);
@@ -299,7 +330,7 @@ async function run(options, context) {
   console.error(`version: ${name} changed since ${version} -> bumping to ${next} (${level}) [cache hit, zero network]`);
   if (dryRun) {
     console.error(`version: [dry-run] would write ${next} to ${relative(context.root, srcPkgPath)}`);
-    writeChangelogEntry(context, projectRoot, next, true);
+    writeChangelogEntry(context, projectRoot, next, true, rec);
     const sync = await reconcileOwnInternalRanges(context, dryRun);
     return { success: sync.success };
   }
@@ -308,7 +339,7 @@ async function run(options, context) {
   const replaced = raw.replace(/("version"\s*:\s*")[^"]+(")/, `$1${next}$2`);
   if (replaced === raw) { console.error(`version: FAILED to rewrite version field in ${srcPkgPath}.`); return { success: false }; }
   writeFileSync(srcPkgPath, replaced);
-  if (!writeChangelogEntry(context, projectRoot, next, false)) return { success: false };
+  if (!writeChangelogEntry(context, projectRoot, next, false, rec)) return { success: false };
   // Own bump is applied; now reconcile dependency ranges against the
   // (topologically) already-settled versions of internal deps. Order is
   // safe either way — the fix only touches dependency-range fields, never
