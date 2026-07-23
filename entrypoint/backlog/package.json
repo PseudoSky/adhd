@@ -1,0 +1,27 @@
+{
+  "name": "@adhd/backlog",
+  "version": "0.0.1",
+  "dependencies": {
+    "@adhd/sox-graph-store": "^0.3.0",
+    "better-sqlite3": "^12.10.0",
+    "@adhd/environment": "0.0.1",
+    "@adhd/environment-base-spec": "0.0.2",
+    "@adhd/apigen-core-client": "^0.1.1",
+    "@adhd/apigen-plugin-api-fastify": "^0.1.2",
+    "@adhd/apigen-plugin-openapi": "^0.1.3",
+    "@adhd/apigen-plugin-mcp": "^0.1.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "name": "backlog",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "entrypoint/backlog/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "domain:entrypoint",
+    "pkg-kind:entrypoint",
+    "pkg-class:entrypoint",
+    "layer:entrypoints",
+    "platform:node",
+    "access:domain"
+  ],
+  "targets": {
+    "test": {
+      "executor": "@nx/vite:test",
+      "//dependsOn": "the real-MCP stdio test (server.mcp.spec.ts) spawns the BUILT dist/index.js as a child process (a real MCP client can only talk to a real process, never an in-process stdio hijack) and verify-dist-load parity checks also read dist/ — the default targetDefaults.test dependsOn is only [\"^build\"] (dependencies), so backlog's OWN build must be added explicitly or dist/ is stale/missing when tests run.",
+      "dependsOn": [
+        "^build",
+        "build"
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/entrypoint/backlog"
+      ],
+      "options": {
+        "configFile": "entrypoint/backlog/vite.config.ts"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "typescript"
+          ]
+        }
+      ],
+      "options": {
+        "command": "tsc -p entrypoint/backlog/tsconfig.lib.json --noEmit"
+      }
+    },
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "entrypoint/backlog/dist",
+        "main": "entrypoint/backlog/src/index.ts",
+        "tsConfig": "entrypoint/backlog/tsconfig.lib.json",
+        "assets": [
+          "entrypoint/backlog/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      },
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ]
+    }
+  }
+}
