@@ -1,0 +1,167 @@
+[
+  {
+    "id": "agent-mcp-server",
+    "name": "Agent MCP Server",
+    "description": "MCP server that enables LLMs to spawn, delegate to, and coordinate AI agents across multiple providers with session support, DAG task dependencies, human-in-the-loop, and recursive sub-agent delegation.",
+    "status": "shipped",
+    "category": "entrypoint",
+    "receipts": [
+      "entrypoint/agent-mcp/src/index.ts",
+      "entrypoint/agent-mcp/src/server.ts (startServer function)",
+      "entrypoint/agent-mcp/package.json (v2.1.2)"
+    ],
+    "verify": "npx tsx -e \"import('@adhd/agent-mcp').then(m => console.log(Object.keys(m).slice(0,5)))\"",
+    "verified_output": "🔴 UNVERIFIED (missing tool: nx-build broken)",
+    "last_verified_sha": "28888998c0a68e2712d06b89ed1602e0c6aab3c4",
+    "last_verified_at": "2026-07-22T16:08:33-05:00",
+    "substance": "substantial",
+    "signature_note": "MCP protocol via stdio/SSE, DAG-based task dispatch, provider abstraction layer (Claude, LM Studio, etc.), session/task/prompt/tool persistence via SQLite, usage budgeting and policy enforcement plugins."
+  },
+  {
+    "id": "agent-core-env",
+    "name": "Agent Registry Environment Resolver",
+    "description": "Shared @adhd/environment-backed resolver for the agent-registry family's single shared SQLite database. Replaces import-time DB opens with lazy DI pattern.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "agent",
+    "tier": "core",
+    "receipts": [
+      "packages/agent/agent-core-env/package.json (v0.0.1, new 2026-07-22)",
+      "packages/agent/agent-core-env/src/index.ts (exports resolveRegistryDbPath, openRegistryDb, agentRegistryEnvironmentSpec)",
+      "packages/agent/agent-core-env/src/resolve-registry-db-path.ts",
+      "packages/agent/agent-core-env/src/open-registry-db.ts"
+    ],
+    "verify": "npx tsx -e \"const {resolveRegistryDbPath}=await import('@adhd/agent-core-env');console.log(typeof resolveRegistryDbPath)\"",
+    "verified_output": "🔴 UNVERIFIED (needs build)",
+    "last_verified_sha": "28888998c0a68e2712d06b89ed1602e0c6aab3c4",
+    "last_verified_at": "2026-07-22T16:08:33-05:00",
+    "substance": "moderate",
+    "signature_note": "Eliminates import-time side effect (DB open at module load), switches registry family to lazy environment-based resolution, unifies DB path discovery for prompts/tools/policy/provider stores."
+  },
+  {
+    "id": "apigen-cli-api-generation",
+    "name": "Apigen CLI: Code-First API Generation",
+    "description": "CLI tool: write plain TypeScript functions, apigen generates transport-neutral descriptor and projects to HTTP (Fastify/Express), MCP tools, CLI, JSON Schema, OpenAPI, Python (Flask/gRPC).",
+    "status": "shipped",
+    "category": "entrypoint",
+    "receipts": [
+      "entrypoint/apigen-cli/src/index.ts (Commander program, commands: generate, run, serve, list-types)",
+      "entrypoint/apigen-cli/package.json (v0.1.1)"
+    ],
+    "verify": "npx apigen-cli --help | head -20",
+    "verified_output": "🔴 UNVERIFIED (needs built dist/)",
+    "last_verified_sha": "28888998c0a68e2712d06b89ed1602e0c6aab3c4",
+    "last_verified_at": "2026-07-22T16:08:33-05:00",
+    "substance": "substantial",
+    "signature_note": "Schema extraction via ts-morph + ts-json-schema-generator, middleware system (logging, health), multi-package gateway composition, wire format conformance for cross-host compatibility."
+  },
+  {
+    "id": "dispatch-cli-task-orchestration",
+    "name": "Dispatch CLI: DAG Task Orchestration",
+    "description": "CLI for validating task DAGs, generating snapshots for cost estimation, optimizing execution paths, and running dispatch cycles with milestone tracking.",
+    "status": "shipped",
+    "category": "entrypoint",
+    "receipts": [
+      "entrypoint/dispatch-cli/src/index.ts (exports validate, snapshot, optimize, eligible, status, run, calibrate)",
+      "entrypoint/dispatch-cli/package.json (v0.0.1)"
+    ],
+    "verify": "npx dispatch-cli --help | head -20",
+    "verified_output": "🔴 UNVERIFIED (needs built dist/)",
+    "last_verified_sha": "28888998c0a68e2712d06b89ed1602e0c6aab3c4",
+    "last_verified_at": "2026-07-22T16:08:33-05:00",
+    "substance": "substantial",
+    "signature_note": "DAG validation with cycle detection, cost-per-milestone snapshot generation for budget planning, route optimization (topological sort + cost minimization), live dispatch cycle execution with cancellation and error recovery."
+  },
+  {
+    "id": "environment-zero-config",
+    "name": "Environment: Zero-Config Cascade",
+    "description": "Cascading configuration system for @adhd ecosystem: code defaults → system → global (~/.adhd) → project → local → env vars. Fully optional — no files required, pure TypeScript, safe for Node and browser.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "environment",
+    "tier": "core",
+    "receipts": [
+      "packages/environment/environment-core-node/src/index.ts (Environment class)",
+      "packages/environment/environment-core-node/package.json (v0.0.1)",
+      "docs/environment/ARCHITECTURE.md (full design)"
+    ],
+    "verify": "npx tsx -e \"const {Environment}=await import('@adhd/environment');const e=new Environment('test',{});console.log(typeof e.get)\"",
+    "verified_output": "🔴 UNVERIFIED (needs build)",
+    "last_verified_sha": "28888998c0a68e2712d06b89ed1602e0c6aab3c4",
+    "last_verified_at": "2026-07-22T16:08:33-05:00",
+    "substance": "substantial",
+    "signature_note": "Cascade resolution with type-safe config, advisory locking for multi-instance collision avoidance, snapshot persistence for cross-process state sharing, scope auto-detection (project vs global), remappable env var prefix."
+  },
+  {
+    "id": "apigen-plugin-system",
+    "name": "Apigen Plugin System",
+    "description": "Transport plugins that project the same operation descriptor to multiple endpoints: MCP tools, HTTP servers (Fastify/Express), CLI commands, JSON Schema docs, OpenAPI docs, Python servers (Flask/gRPC).",
+    "status": "shipped",
+    "category": "package-family",
+    "domain": "apigen",
+    "tier": "plugin",
+    "receipts": [
+      "packages/apigen/apigen-plugin-mcp/package.json (v0.1.1)",
+      "packages/apigen/apigen-plugin-api-fastify/package.json (v0.1.1)",
+      "packages/apigen/apigen-plugin-api-express/package.json (v0.1.1)",
+      "packages/apigen/apigen-plugin-cli-output/package.json (v0.1.1)",
+      "packages/apigen/apigen-plugin-jsonschema/package.json (v0.1.1)",
+      "packages/apigen/apigen-plugin-openapi/package.json (v0.1.2)",
+      "packages/apigen/apigen-plugin-py-flask/package.json (v0.1.1)",
+      "packages/apigen/apigen-plugin-py-grpc/package.json (v0.1.1)"
+    ],
+    "verify": "find packages/apigen/apigen-plugin-* -name 'index.ts' | wc -l",
+    "verified_output": "🔴 UNVERIFIED (count check only)",
+    "last_verified_sha": "28888998c0a68e2712d06b89ed1602e0c6aab3c4",
+    "last_verified_at": "2026-07-22T16:08:33-05:00",
+    "substance": "substantial",
+    "signature_note": "Unified operation descriptor across 8 transport plugins, OutputPlugin contract enforced, MCP server uses @adhd/environment for multi-instance port binding (SSE per-instance port derivation)."
+  },
+  {
+    "id": "agent-registry-family",
+    "name": "Agent Registry Family",
+    "description": "12-package ecosystem for agent execution: base types, policy engine, provider registry, session/task/prompt/tool stores, orchestration engine, and plugins (budget capping, output sanitization).",
+    "status": "shipped",
+    "category": "package-family",
+    "domain": "agent",
+    "receipts": [
+      "packages/agent/agent-base-types/package.json (v2.1.1)",
+      "packages/agent/agent-core-policy/package.json (v2.1.2)",
+      "packages/agent/agent-core-provider/package.json (v2.1.2)",
+      "packages/agent/agent-core-env/package.json (v0.0.1)",
+      "packages/agent/agent-store-prompts/package.json (v2.1.2)",
+      "packages/agent/agent-store-tools/package.json (v2.1.2)",
+      "packages/agent/agent-store-runtime/package.json (v2.1.2)",
+      "packages/agent/agent-engine-compiler/package.json (v2.1.2)",
+      "packages/agent/agent-engine-orchestrator/package.json (v2.1.2)",
+      "packages/agent/agent-plugin-budget/package.json (v2.1.2)",
+      "packages/agent/agent-plugin-sanitize/package.json (v2.1.2)",
+      "packages/agent/agent-generator-plugin/package.json (v0.0.1)"
+    ],
+    "verify": "find packages/agent -name 'package.json' | wc -l",
+    "verified_output": "12 ✓",
+    "last_verified_sha": "28888998c0a68e2712d06b89ed1602e0c6aab3c4",
+    "last_verified_at": "2026-07-22T16:08:33-05:00",
+    "substance": "substantial",
+    "signature_note": "Modular tier hierarchy (base→core→store→engine), shared SQLite via agent-core-env (new, replaces import-time DB opens), policy enforcement with rate limiting and safety checks, Nx generator for scaffold conformance."
+  },
+  {
+    "id": "workspace-codegen-nx",
+    "name": "Workspace Codegen Nx Generator",
+    "description": "Mandatory package scaffolding generator. Creates tier-correct packages with proper naming (domain-tier-name), tagging, and architectural boundaries. NEVER use @nx/js:library or manual package creation.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "workspace",
+    "tier": "core",
+    "receipts": [
+      "packages/workspace/workspace-codegen-nx/package.json",
+      "AGENTS.md §1 (mandatory scaffolding rule)"
+    ],
+    "verify": "npx nx g @adhd/workspace-codegen-nx:types --group test --name example --dry-run 2>&1 | head -5",
+    "verified_output": "🔴 UNVERIFIED (nx graph broken)",
+    "last_verified_sha": "28888998c0a68e2712d06b89ed1602e0c6aab3c4",
+    "last_verified_at": "2026-07-22T16:08:33-05:00",
+    "substance": "moderate",
+    "signature_note": "Generator enforces tier/domain/platform/layer/access tags, emits correct project.json structure, prevents upward dependencies and platform isolation violations, integrates with .adhd/workspace.json domain registry."
+  }
+]

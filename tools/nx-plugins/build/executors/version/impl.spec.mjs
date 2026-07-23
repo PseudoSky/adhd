@@ -86,6 +86,13 @@ function makeSpawnSyncMock(state) {
       state.eslintCalls.push(args);
       return { status: state.eslintStatus ?? 0, stdout: '', stderr: '' };
     }
+    if (cmd === 'git' && args[0] === 'log') {
+      return { status: 0, stdout: state.lastChangelogSha ?? '', stderr: '' };
+    }
+    if (cmd === 'npx' && args[0] === 'nx' && args[1] === 'release' && args[2] === 'changelog') {
+      state.changelogCalls.push(args);
+      return { status: state.changelogStatus ?? 0, stdout: '', stderr: state.changelogStatus ? 'boom' : '' };
+    }
     throw new Error(`unexpected spawnSync in test mock: ${cmd} ${JSON.stringify(args)}`);
   };
 }
@@ -104,7 +111,7 @@ function makeProject({ rootDir, name, projectRoot, srcPkg, distFiles }) {
 }
 
 function newState(overrides = {}) {
-  return { calls: [], eslintCalls: [], publishedVersions: [], publishedFiles: {}, eslintStatus: 0, ...overrides };
+  return { calls: [], eslintCalls: [], changelogCalls: [], publishedVersions: [], publishedFiles: {}, eslintStatus: 0, changelogStatus: 0, ...overrides };
 }
 
 test('reuses the deps plugin sync/check modules verbatim — not a duplicated reimplementation', () => {
@@ -248,6 +255,121 @@ test('published + REAL code drift: DOES bump, then reconciles ranges afterward',
     const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
     assert.equal(after.version, '1.0.1', 'a genuine code change must still bump (unchanged pre-existing behavior)');
     assert.equal(state.eslintCalls.length, 1, 'reconciliation runs after the bump too');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('published + REAL code drift: generates a CHANGELOG.md entry via real `nx release changelog`, --first-release when no prior entry commit is known', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const { context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b',
+      srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 2;\n' },
+    });
+    const state = newState({
+      publishedVersions: ['1.0.0'],
+      publishedFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' },
+      lastChangelogSha: '', // no prior commit touched this project's CHANGELOG.md
+    });
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true);
+    assert.equal(state.changelogCalls.length, 1, 'nx release changelog must be invoked exactly once');
+    const args = state.changelogCalls[0];
+    assert.deepEqual(args.slice(0, 4), ['nx', 'release', 'changelog', '1.0.1'], 'must target the NEW version just decided');
+    assert.ok(args.includes('--projects') && args.includes('pkg-b'), 'must scope to THIS project only');
+    assert.ok(args.includes('--first-release'), 'no prior changelog commit known -> --first-release, not a fabricated --from');
+    assert.ok(!args.includes('--from'), 'must not pass --from when no boundary is known');
+    assert.ok(args.includes('--git-commit') && args[args.indexOf('--git-commit') + 1] === 'false', 'must never let nx auto-commit');
+    assert.ok(args.includes('--git-tag') && args[args.indexOf('--git-tag') + 1] === 'false', 'must never let nx auto-tag');
+    assert.ok(!args.includes('--dry-run'), 'a real (non-dry-run) bump must NOT pass --dry-run to the changelog call');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("when a prior commit touched this project's CHANGELOG.md, uses --from=<that sha> instead of --first-release", async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const { context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b',
+      srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 2;\n' },
+    });
+    const state = newState({
+      publishedVersions: ['1.0.0'],
+      publishedFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' },
+      lastChangelogSha: 'deadbeef1234567890deadbeef1234567890dead',
+    });
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true);
+    const args = state.changelogCalls[0];
+    assert.ok(args.includes('--from') && args[args.indexOf('--from') + 1] === 'deadbeef1234567890deadbeef1234567890dead');
+    assert.ok(!args.includes('--first-release'), 'a known boundary must not ALSO claim first-release');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('dry run with real code drift: previews the changelog via --dry-run and never writes package.json', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const { pkgRoot, context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b',
+      srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 2;\n' },
+    });
+    const before = readFileSync(join(pkgRoot, 'package.json'), 'utf8');
+    const state = newState({
+      publishedVersions: ['1.0.0'],
+      publishedFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' },
+    });
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+
+    const result = await versionImpl({ dryRun: true }, context);
+    assert.equal(result.success, true);
+    const after = readFileSync(join(pkgRoot, 'package.json'), 'utf8');
+    assert.equal(after, before, 'dry run must never write package.json');
+    assert.equal(state.changelogCalls.length, 1, 'dry run still PREVIEWS the changelog for visibility');
+    assert.ok(state.changelogCalls[0].includes('--dry-run'), 'the preview call must itself be a dry run — never writes CHANGELOG.md');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('changelog generation failure fails the whole version task (bump already landed, still surfaced as a failure)', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const { pkgRoot, context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b',
+      srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 2;\n' },
+    });
+    const state = newState({
+      publishedVersions: ['1.0.0'],
+      publishedFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' },
+      changelogStatus: 1, // real nx release changelog failure
+    });
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, false, 'a real changelog-generation failure must fail the task');
+    assert.equal(state.eslintCalls.length, 0, 'must fail FAST — never reach range reconciliation once changelog generation fails');
+    const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    assert.equal(after.version, '1.0.1', 'the version write itself already landed before the changelog step — this is a surfaced failure, not a rollback');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }

@@ -12,7 +12,7 @@ export default defineConfig({
     dts({ entryRoot: 'src', tsconfigPath: path.join(__dirname, 'tsconfig.lib.json') }),
   ],
   build: {
-    outDir: '../../../dist/packages/workspace/workspace-codegen-nx',
+    outDir: 'dist',
     emptyOutDir: true,
     lib: {
       entry: 'src/index.ts',

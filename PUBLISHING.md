@@ -2,7 +2,7 @@
 
 How to version, build, and publish packages in this monorepo to npm.
 
-**This workflow uses `nx release` for independent per-package versioning.** Each package is versioned independently based on commits since its last `{projectName}@{version}` git tag. Only packages with changes since their last publish are selected for release.
+**This workflow does NOT use `nx release`** (see "Workflow" below — it's retired for this repo). Versioning and publishing are normal per-project **nx tasks** backed by custom executors (`@adhd/nx-build:version` / `@adhd/nx-build:publish`), driven by one command: `pnpm release`. The **npm registry is the source of truth** for what's released — no git tags, no `nx release` commit/tag side effects.
 
 ### Build & publish layout: in-source dist, **publish-from-dist**
 
@@ -10,29 +10,36 @@ Each buildable package builds **in-source** to `{projectRoot}/dist/`, and its *s
 `package.json` `main`/`module`/`types`/`exports`/`bin` point into `./dist/…` (so pnpm resolves
 `@adhd/*` natively in-repo via each package's source manifest — no separate "link" step).
 
-**Publishing packs the built `dist/` directory, not the source root.** At build time the
-`dist-manifest` target (executor `@adhd/nx-build:manifest`) writes `{projectRoot}/dist/package.json`
-as a fully-resolved, dist-root manifest — entry paths rebased (`./dist/index.js` → `./index.js`),
-internal `@adhd/*` ranges resolved to concrete `^<version>` from a live workspace snapshot,
-`devDependencies`/`scripts`/`files` stripped, `CHANGELOG.md` copied in. See
-[`tools/nx-plugins/build/README.md`](tools/nx-plugins/build/README.md).
+**Publishing packs the built `dist/` directory itself, not the source root.** `@adhd/nx-build:publish`
+(`executors/publish/impl.js`) runs `npm publish {projectRoot}/dist` — npm treats that directory AS
+the package root. Anything outside it (a source-root README.md, for instance) is completely
+invisible to that publish; there is no path by which docs "ship from the source root" for this
+executor. Concretely, `{projectRoot}/dist` needs, before `publish` ever runs:
+- **A resolved dist-root manifest** — the `dist-manifest` target (executor `@adhd/nx-build:manifest`)
+  (over)writes `{projectRoot}/dist/package.json`: entry paths rebased (`./dist/index.js` →
+  `./index.js`), internal `@adhd/*` ranges resolved to concrete `^<version>` from a live workspace
+  snapshot, `devDependencies`/`scripts`/`files` stripped. It does **not** touch README/CHANGELOG.
+- **README.md + CHANGELOG.md (+ any package.json-declared extra files) physically copied into dist**
+  — that's the `assets` target (executor `@adhd/nx-assets:copy`, `tools/nx-plugins/assets/`), which
+  every doc-dependent downstream target (`version`, `dist-manifest` — and transitively
+  `publish-hygiene`/`publish` through it) depends on.
+
+See [`tools/nx-plugins/build/README.md`](tools/nx-plugins/build/README.md) and
+[`tools/nx-plugins/assets/README.md`](tools/nx-plugins/assets/README.md) for the full target
+breakdown.
 
 Consequences for releasing:
-- **Two `packageRoot`s, by design:** `nx release version` targets the **source**
-  (`release.version.generatorOptions.packageRoot: {projectRoot}`) so version bumps land in the
-  committed source of truth; `nx-release-publish` packs the **artifact**
-  (`options.packageRoot: {projectRoot}/dist`).
-- **`nx release version` bumps the REAL source `package.json`.** The publish-phase build then
-  re-stamps every dist manifest from the *final* set of source versions, so internal dependency
-  ranges are correct **independent of nx's non-topological versioning order** — this is what
-  fixes the stale/unsatisfiable-range failure (`BUG-RELEASE-PIPELINE-UNFIT-FOR-FULL-PUBLISH-001`,
-  Defect C). No source-side range reconciliation is needed.
-- **One command:** `pnpm release` (= `pnpm run build && pnpm exec nx release`). Building first
-  (proper dependency order) also sidesteps the composite-tsc cold-build parallelism race
-  (`DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001`).
+- **`version` bumps the REAL source `package.json`, never the dist copy.** The build step then
+  re-stamps every dist manifest from the *final* set of source versions (`dist-manifest`), so
+  internal dependency ranges are correct **independent of versioning order** — this is what fixes
+  the stale/unsatisfiable-range failure `nx release` itself couldn't (`BUG-RELEASE-PIPELINE-UNFIT-FOR-FULL-PUBLISH-001`,
+  Defect C — the reason `nx release` was retired for this repo in the first place).
+- **One command:** `pnpm release` (= `pnpm run build && npx nx run-many -t version && npx nx run-many -t publish`).
+  Building first (proper dependency order) also sidesteps the composite-tsc cold-build parallelism
+  race (`DEBT-BUILD-COMPOSITE-TSC-PARALLEL-001`).
 - **Already-published, unchanged packages are skipped**, not republished — npm refuses to publish
-  over an existing version. Only packages bumped since their last `{projectName}@{version}` tag
-  actually publish.
+  over an existing version. Only packages whose built `dist/` actually differs from what's on npm
+  at their current version get bumped (see "Versioning model" below) and then publish.
 
 ---
 
@@ -75,7 +82,7 @@ npx nx run apigen-cli:publish              # a single package
 
 `pnpm release` = `pnpm run build && npx nx run-many -t version && npx nx run-many -t publish`. Two tasks, both per-project and **not cached**:
 
-- **`version`** (`dependsOn: [build, ^version]`, configured in `nx.json` `targetDefaults`) bumps a package's SOURCE `version` **iff** it needs a new release: if the current version isn't on npm → a release is already *pending* → leave it; if it IS on npm → compare the built `dist` against the **published tarball** (ignoring the version field and internal `@adhd/*` ranges) → **changed → bump** (patch by default, `--bump=minor|major` to override), **identical → leave**. The `build` dependency ensures `dist/` is fresh before comparison; `^version` ensures all internal dependencies settle first. It writes the bump but does **not** commit (review `git diff`).
+- **`version`** (`dependsOn: [build, assets, ^version]`, inferred by `tools/nx-plugins/build/plugin.js`'s `createNodes`) bumps a package's SOURCE `version` **iff** it needs a new release: if the current version isn't on npm → a release is already *pending* → leave it; if it IS on npm → compare the built `dist` against the **published tarball** (ignoring the version field and internal `@adhd/*` ranges) → **changed → bump** (patch by default, `--bump=minor|major` to override), **identical → leave**. The `build` + `assets` dependencies ensure `dist/` is fresh AND doc-complete before comparison (a bare `build` alone doesn't include README/CHANGELOG — comparing it against an already-published tarball that has them would falsely register as "changed" every time); `^version` ensures all internal dependencies settle first. It writes the bump but does **not** commit (review `git diff`).
   - **`^version` — topological dependent-range sync (BUILD-TOOLING-VERSION-SYNC-DEPS-001):** `^version` runs a package's internal `@adhd/*` dependencies' `version` tasks FIRST, so by the time a package's own `version` task runs, every dependency it declares has already settled its version. After deciding its own bump (or not), `version`'s final step reconciles the package's declared internal `@adhd/*` ranges to that now-settled state — reusing the `deps` plugin's `sync-deps` (fix, real runs) / `sync-deps-check` (read-only, `--dryRun`) executors directly (see [`tools/nx-plugins/deps/README.md`](tools/nx-plugins/deps/README.md)), never a duplicated reimplementation. It writes **only that package's own** `package.json`. This never forces a cascade bump: `compare-published.js`'s `normalizeManifest` already strips internal `@adhd/*` ranges before diffing, so a range-only edit is invisible to the next run's change-detector — a caret range absorbs a dependency's bump at install time, and `dist-manifest` (above) already resolves published ranges independent of source-side sync order. This eliminates the manual `sync-deps` pass previously needed after a batch of bumps to keep dependents' declared ranges from drifting.
 - **`publish`** (`dependsOn: [dist-manifest, verify-dist-load, publish-hygiene]`) rebuilds anything `version` bumped (a version change invalidates its build cache), re-stamps its `dist/package.json` (internal `@adhd/*` ranges resolved to concrete versions from a live snapshot), and `npm publish`es the `dist` **iff** `name@version` isn't already on the registry. Already-published = no-op skip (no "cannot publish over", no republish).
 
@@ -287,12 +294,15 @@ package-specific verification steps. Check there for the full smoke-test procedu
 
 ## Troubleshooting
 
+(Current pipeline — `@adhd/nx-build:version`/`:publish`, no git tags, `scripts/release-publish.mjs` and everything referencing `nx release`/`updateDependents`/tag deletion belongs to the retired workflow above, not this one.)
+
 | Error | Fix |
 |---|---|
-| `You cannot publish over the previously published versions` | Package was already published at that version. Check `npm view @adhd/<name> versions` to confirm. Delete the tag locally with `git tag -d <tag>` and re-run release, or bump to a higher version. |
-| `EOTP` | Need OTP from authenticator app, or switch to an automation token. |
-| `E401 Unauthorized` | Run `npm login` first. |
-| `dist/` missing package.json or has wrong version | `nx release publish` (and `scripts/release-publish.mjs`, when NOT given `--projects`) always rebuilds. If you edited `dist/` manually, delete it and re-run `node scripts/release-publish.mjs`. |
-| `No projects to release` | All projects are up-to-date (no commits since last tag). Create a test commit (`chore:` prefix won't trigger a bump, but `fix:` will) or force a specific version with `--force-publish`. |
-| `The project X does not have a package.json at dist/...` | Project needs to be built first. The `nx-release-publish` target includes `dependsOn: ["build"]`, so if build fails, publish will fail — but only if you published via `scripts/release-publish.mjs` or unfiltered `nx release publish`. `nx release publish --projects=` skips this dependsOn entirely (`BUG-RELEASE-PUBLISH-GATE-BYPASS-001`) and would instead fail with a raw `ENOENT` reading `dist/.../package.json` — another reason to always use `scripts/release-publish.mjs`. Run `npx nx build <project>` to see the real build error. |
-| `updateDependents did not bump dependent packages` | `updateDependents: "auto"` only triggers when versioning a base package. If you bump a leaf package manually and its consumers don't change, consumers stay at their old versions. This is intentional — base packages (e.g., `-base-types`, `-core-policy`) are candidates for auto-cascade. |
+| `You cannot publish over the previously published versions` | `version`'s bump decision should have caught this — `isPublished(name, version)` in `publish/impl.js` also independently no-op-skips anything already on the registry, so this means the two disagree. Check `npm view @adhd/<name> versions` against the source `package.json` version; if they already match, `publish` should have skipped it silently (`already on npm — skipping`) rather than erroring — investigate why it tried to publish at all. |
+| `EOTP` | Need OTP from authenticator app (`nx run <project>:publish --otp=<code>`), or switch to an npm **automation token** (bypasses OTP). |
+| `E401 Unauthorized` | Run `npm login` first (`npm whoami` to confirm). |
+| `version: no built dist at .../dist — this target dependsOn build.` | `version` (and `dist-manifest`, `assets`) all `dependsOn: ["build"]` — if you invoke one directly without the graph resolving its dependencies (rare; `nx run <project>:version` normally pulls `build` in automatically), run `npx nx build <project>` first and check for a real build error. |
+| `assets: no dist for <project> (build first)` | Same as above — `assets` also `dependsOn: ["build"]`; the target ran before a dist existed. |
+| `version` reports a spurious "changed" (`removed: README.md` / `removed: CHANGELOG.md`) on a package that has no real code changes | `version`'s `dependsOn` is missing `assets` for that target (should be `["build","assets","^version"]` — see `tools/nx-plugins/build/plugin.js`). Without `assets` in the chain, a bare `build` doesn't include docs that the already-published tarball has, and `compare-published.js` reads that as a real diff. This is a graph-wiring bug, not a real package change — check `plugin.js`'s `dependsOn` arrays before trusting the bump. |
+| `publish: npm publish failed` with the built package missing README/CHANGELOG | `dist-manifest` (and transitively `publish-hygiene`/`publish`) must `dependsOn` include `assets`, not just `build` — `@adhd/nx-build:publish` runs `npm publish {projectRoot}/dist` directly, so anything not physically copied into `dist/` (that's `assets`' job) never ships, regardless of what the source-root `package.json` `"files"` says. |
+| `pnpm release` bumped a package you didn't expect | The bump is driven entirely by `compare-published.js` diffing the built `dist/` against the currently-published npm tarball — not by git commits or conventional-commit messages. Any real change to the built output (code, external deps, non-`@adhd/*` metadata) triggers a bump; only internal `@adhd/*` dependency RANGE changes are deliberately excluded (`normalizeManifest`). Check the printed `reasons` list in the task output for exactly what differed. |

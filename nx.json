@@ -87,6 +87,9 @@
       "plugin": "./tools/nx-plugins/build/plugin.js"
     },
     {
+      "plugin": "./tools/nx-plugins/assets/plugin.js"
+    },
+    {
       "plugin": "./tools/nx-plugins/deps/plugin.js"
     },
     {
@@ -177,6 +180,7 @@
     "nx-release-publish": {
       "dependsOn": [
         "build",
+        "assets",
         "test",
         "dist-manifest",
         "verify-dist-load",
@@ -200,22 +204,6 @@
   "release": {
     "projectsRelationship": "independent",
     "releaseTagPattern": "{projectName}@{version}",
-    "git": {
-      "commit": true,
-      "tag": true,
-      "commitMessage": "chore(release): publish"
-    },
-    "version": {
-      "preVersionCommand": "npx nx run-many -t build",
-      "updateDependents": "auto",
-      "generatorOptions": {
-        "packageRoot": "{projectRoot}",
-        "currentVersionResolver": "git-tag",
-        "fallbackCurrentVersionResolver": "disk",
-        "specifierSource": "conventional-commits",
-        "skipLockFileUpdate": true
-      }
-    },
     "projects": [
       "*",
       "!@adhd/source",
