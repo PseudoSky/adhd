@@ -1,3 +1,19 @@
+## 0.1.2 (2026-07-23)
+
+
+### 🚀 Features
+
+- **apigen:** canonical route/tool-name projection across transports; serve + generate() + import-specifier fixes
+
+
+### ❤️  Thank You
+
+- pseudosky
+
+## 0.1.1 (2026-07-23)
+
+This was a version bump only for apigen-core-client to align it with other projects, there were no code changes.
+
 ## [Unreleased]
 
 ### Fixed

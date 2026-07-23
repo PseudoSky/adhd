@@ -1,9 +1,9 @@
 {
   "name": "@adhd/apigen-plugin-health",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "main": "./dist/index.js",
   "dependencies": {
-    "@adhd/apigen-core-client": "0.1.0"
+    "@adhd/apigen-core-client": "0.1.2"
   },
   "publishConfig": {
     "access": "public"

@@ -1,0 +1,11 @@
+## 2.1.3 (2026-07-23)
+
+
+### 🚀 Features
+
+- **agent-core-env:** shared registry-DB resolver + DI kills import-time DB-open side effect
+
+
+### ❤️  Thank You
+
+- pseudosky

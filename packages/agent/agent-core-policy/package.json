@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-core-policy",
-  "version": "2.1.2",
+  "version": "2.1.4",
   "description": "Policy engine for @adhd/agent-mcp — permission, safety, audit, rate, scope, compliance, and quality policies with SQLite/Drizzle persistence",
   "type": "module",
   "publishConfig": {
