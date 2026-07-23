@@ -3,7 +3,6 @@ import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
-import { copyReadme } from '../../../tools/vite-plugins/copy-readme.mjs';
 import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs';
 
 const repoRoot = path.resolve(__dirname, '../../..');
@@ -13,7 +12,6 @@ export default defineConfig({
   cacheDir: path.join(repoRoot, 'node_modules/.vite/packages/apigen/core'),
 
   plugins: [
-    copyReadme(__dirname),
     nxViteTsPaths(),
     dts({
       entryRoot: 'src',
@@ -22,7 +20,7 @@ export default defineConfig({
   ],
 
   build: {
-    outDir: path.join(repoRoot, 'dist/packages/apigen/core'),
+    outDir: 'dist',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {

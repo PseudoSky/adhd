@@ -17,7 +17,7 @@ export default defineConfig({
   ],
 
   build: {
-    outDir: '../../../dist/packages/apigen/logical',
+    outDir: 'dist',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {

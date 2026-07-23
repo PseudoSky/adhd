@@ -49,5 +49,8 @@
   "files": [
     "dist",
     "CHANGELOG.md"
+  ],
+  "assets": [
+    "src/lib/default-tsconfig.json"
   ]
 }

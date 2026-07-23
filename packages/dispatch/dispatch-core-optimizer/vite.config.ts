@@ -2,27 +2,15 @@
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
-import fs from 'node:fs';
 import p from 'node:path';
 
 const repoRoot = p.resolve(__dirname, '../../..');
-const distDir = p.join(repoRoot, 'dist/packages/dispatch/dispatch-optimizer');
 
 export default defineConfig({
   root: __dirname,
   cacheDir: p.join(repoRoot, 'node_modules/.vite/packages/dispatch/dispatch-optimizer'),
 
   plugins: [
-    {
-      name: 'apigen-copy-readme',
-      apply: 'build',
-      closeBundle() {
-        const src = p.resolve(__dirname, 'README.md');
-        if (!fs.existsSync(src)) return;
-        fs.mkdirSync(distDir, { recursive: true });
-        fs.copyFileSync(src, p.join(distDir, 'README.md'));
-      },
-    },
     nxViteTsPaths(),
     dts({
       entryRoot: 'src',
@@ -31,7 +19,7 @@ export default defineConfig({
   ],
 
   build: {
-    outDir: distDir,
+    outDir: 'dist',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {

@@ -1,7 +1,7 @@
 /// <reference types='vitest' />
-import { defineConfig } from 'vite';
-import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import * as path from 'path';
+import { defineConfig } from 'vite';
 
 const repoRoot = path.resolve(__dirname, '../../..');
 
@@ -12,7 +12,7 @@ export default defineConfig({
   plugins: [nxViteTsPaths()],
 
   build: {
-    outDir: path.join(repoRoot, 'dist/packages/agent/agent-engine-orchestrator'),
+    outDir: 'dist',
     reportCompressedSize: true,
     commonjsOptions: {
       transformMixedEsModules: true,

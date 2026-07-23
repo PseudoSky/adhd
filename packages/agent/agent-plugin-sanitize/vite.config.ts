@@ -1,9 +1,8 @@
 /// <reference types='vitest' />
+import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import * as path from 'path';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
-import * as path from 'path';
-import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
-import { copyDocFiles } from '../../../tools/vite-plugins/copy-readme.mjs';
 
 export default defineConfig({
   root: __dirname,
@@ -15,13 +14,10 @@ export default defineConfig({
       entryRoot: 'src',
       tsconfigPath: path.join(__dirname, 'tsconfig.lib.json'),
     }),
-    // @nx/vite:build ignores project.json `assets` — copy README/CHANGELOG
-    // into dist ourselves so they ship on npm (BUG-AGENTMCP-003).
-    copyDocFiles(__dirname),
   ],
 
   build: {
-    outDir: '../../../dist/packages/agent/agent-plugin-sanitize',
+    outDir: 'dist',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {

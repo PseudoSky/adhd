@@ -22,7 +22,7 @@ export default defineConfig({
     // PUBLISHING.md) — this value only matters if `vite build` is ever run
     // directly. Matches the identical (also-overridden) value in the
     // sibling `@adhd/environment` (environment-core-node) vite.config.ts.
-    outDir: '../../../dist/packages/agent/agent-core-env',
+    outDir: 'dist',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {

@@ -1,8 +1,8 @@
 /// <reference types='vitest' />
+import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import * as path from 'path';
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
-import * as path from 'path';
-import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 
 // NOTE: this project's `build` target now uses `@nx/js:tsc` (not this vite
 // config's `build` block) — @nx/js:tsc mirrors the src/ directory structure
@@ -27,7 +27,7 @@ export default defineConfig({
 
   // Configuration for building the generator library.
   build: {
-    outDir: '../../../dist/packages/ai/agent-nx',
+    outDir: 'dist',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {

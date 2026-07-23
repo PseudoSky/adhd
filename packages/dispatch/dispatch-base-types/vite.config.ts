@@ -19,7 +19,7 @@ export default defineConfig({
   ],
 
   build: {
-    outDir: path.join(repoRoot, 'dist/packages/dispatch/dispatch-base-types'),
+    outDir: 'dist',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {

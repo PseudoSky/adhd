@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [nxViteTsPaths()],
 
   build: {
-    outDir: '../../../dist/entrypoint/agent-mcp',
+    outDir: 'dist',
     reportCompressedSize: true,
     commonjsOptions: {
       transformMixedEsModules: true,
