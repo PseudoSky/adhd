@@ -1149,6 +1149,17 @@ These are the outstanding, non-release findings from the ENV-ADOPT-CLUSTERS(1) d
 - **Status:** OPEN — documented scope reduction, not a bug.
 - Citations: [main, claude (sonnet-5), backlog-implementation, 1: entrypoint/backlog/SPEC.md §5.6 AuditTrailEntry; 2: entrypoint/backlog/src/store/query.ts auditTrail()]
 
+## `@adhd/backlog` RAG-SPEC design (session 2026-07-23 — architect-reviewer, RAG-SPEC.md authoring)
+
+### DEBT-BACKLOG-AUTOLINK-DRYRUN-NO-CANDIDATES-001 — `@adhd/sox-analysis`'s `buildAutoLinks` dry-run mode discards its candidate list, returning only `void`
+- **Discovered:** 2026-07-23, authoring `entrypoint/backlog/RAG-SPEC.md` §5.5 (auto-suggested dependency/relation edges with a human/planner confirm gate).
+- **Where:** `~/dev/ai/sox-ecosystem/libs/data/analysis/analysis/src/index.ts:1181-1238` — `buildAutoLinks(vec, graph, opts)` computes pairwise cosine-similarity candidates, applies a `maxLinksPerNode` cap, and either calls `graph.writeEdge(...)` per accepted candidate or (when `opts.dryRun` is true) skips the write — but the function's return type is `void` either way. There is no path by which a caller can retrieve the candidate list a dry run would have written.
+- **Impact:** any confirm-gate feature (write nothing, show a human/planner the ranked candidates, let them approve individually) cannot be built on top of this function at all, dry-run or not — it is a blind writer or a no-op, with no read-only "compute and return" mode. This blocked `entrypoint/backlog/RAG-SPEC.md` §5.5's `suggestDependencies`/`suggestRelated` design from reusing it.
+- **Fix direction (upstream, out of `@adhd/backlog`'s scope):** add a `returnCandidates?: boolean` mode to `AutoLinkOpts` that returns `Array<{a: number; b: number; sim: number}>` instead of `void` when set — mirroring `detectNearDupPairs`' already-correct pure/return-value shape in the same file (`:182-214`), which has no equivalent gap. Until then, any consumer needing a confirm-gated suggestion feature must replicate `buildAutoLinks`'s selection algorithm (pairwise cosine + per-node cap + threshold) in-package rather than calling this function.
+- **Workaround adopted in the RAG-SPEC design:** `entrypoint/backlog/RAG-SPEC.md` §5.5's `suggestDependencies`/`suggestRelated` are specified as an in-package, read-only composition directly over `@adhd/sox-vector-store`'s `VectorBackend.knn` and `@adhd/sox-graph-store`'s `getEdges`/`queryNodes`, never calling `buildAutoLinks`. `buildAutoLinks` remains the right choice for the *non-gated* periodic soft-edge sweep (`RAG-SPEC.md` §4/§5.5's `runDedupSweep`), where blind-write-on-threshold is the accepted convention.
+- **Status:** OPEN (upstream `@adhd/sox-analysis` behavior) — worked around in `entrypoint/backlog/RAG-SPEC.md`'s design; not blocking, since `@adhd/backlog`'s RAG layer is itself unimplemented (design-only) as of this entry.
+- Citations: [main, architect-reviewer, claude (sonnet-5), backlog-rag-design, 1: ~/dev/ai/sox-ecosystem/libs/data/analysis/analysis/src/index.ts:1181-1238 (buildAutoLinks) vs :182-214 (detectNearDupPairs, no equivalent gap); 2: entrypoint/backlog/RAG-SPEC.md §5.5, §9 open question 1]
+
 ## apigen transport defects (session 2026-07-23 — surfaced running the live `@adhd/backlog` HTTP API)
 
 ### BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 — the `openapi` plugin's advertised paths do not match the `api-fastify` plugin's actually-served routes
