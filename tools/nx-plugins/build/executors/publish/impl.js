@@ -43,14 +43,18 @@ const { join, relative } = require('node:path');
 const { normalizedHash } = require('../version/compare-published');
 const { packLocalDir, tarballIntegrity } = require('../../lib/npm-registry');
 const { readState, updatePublishedState } = require('../../lib/published-state');
+const { withMetrics } = require('../../../lib/metrics');
 
 function sh(cmd, args, opts = {}) {
   return spawnSync(cmd, args, { encoding: 'utf8', ...opts });
 }
 
 /** true iff <name>@<version> is already on the registry (live network check — used only as a cache-miss fallback path, never on the happy path). */
-function isPublishedLive(name, version) {
-  const res = sh('npm', ['view', `${name}@${version}`, 'version'], { stdio: ['ignore', 'pipe', 'ignore'] });
+function isPublishedLive(name, version, rec) {
+  const res = rec
+    ? rec.time('npm view <name>@<version> version', () => sh('npm', ['view', `${name}@${version}`, 'version'], { stdio: ['ignore', 'pipe', 'ignore'] }))
+    : sh('npm', ['view', `${name}@${version}`, 'version'], { stdio: ['ignore', 'pipe', 'ignore'] });
+  if (rec) rec.network('npm view <name>@<version> version');
   return res.status === 0 && String(res.stdout).trim() === version;
 }
 
@@ -75,8 +79,8 @@ function isAlreadyPublishedError(npmStderrOrStdout) {
  * @param {string} distDir
  * @param {string} workDir scratch dir for the local pack
  */
-async function writeThroughCache(root, name, version, distDir, workDir) {
-  const tgz = packLocalDir(distDir, workDir);
+async function writeThroughCache(root, name, version, distDir, workDir, rec) {
+  const tgz = rec ? rec.time('npm pack <distDir> (offline, local)', () => packLocalDir(distDir, workDir)) : packLocalDir(distDir, workDir);
   const publishedIntegrity = tgz ? tarballIntegrity(tgz) : null;
   const entry = { version, normalizedHash: normalizedHash(distDir), publishedIntegrity };
   await updatePublishedState(root, (state) => {
@@ -87,58 +91,62 @@ async function writeThroughCache(root, name, version, distDir, workDir) {
 }
 
 async function run(options, context) {
-  const projectRoot = context.projectsConfigurations.projects[context.projectName].root;
-  const distDir = join(context.root, projectRoot, 'dist');
-  const distPkgPath = join(distDir, 'package.json');
+  return withMetrics('publish', context, async (rec) => {
+    const projectRoot = context.projectsConfigurations.projects[context.projectName].root;
+    const distDir = join(context.root, projectRoot, 'dist');
+    const distPkgPath = join(distDir, 'package.json');
 
-  if (!existsSync(distPkgPath)) {
-    console.error(`publish: no ${relative(context.root, distPkgPath)} — build + dist-manifest must run first (this target dependsOn them).`);
-    return { success: false };
-  }
-  const { name, version } = JSON.parse(readFileSync(distPkgPath, 'utf8'));
-  if (!name || !version) {
-    console.error(`publish: ${relative(context.root, distPkgPath)} has no name/version.`);
-    return { success: false };
-  }
+    if (!existsSync(distPkgPath)) {
+      console.error(`publish: no ${relative(context.root, distPkgPath)} — build + dist-manifest must run first (this target dependsOn them).`);
+      return { success: false };
+    }
+    const { name, version } = JSON.parse(readFileSync(distPkgPath, 'utf8'));
+    if (!name || !version) {
+      console.error(`publish: ${relative(context.root, distPkgPath)} has no name/version.`);
+      return { success: false };
+    }
 
-  // ZERO-NETWORK existence check: the committed published-state cache.
-  const cached = readState(context.root)[name];
-  if (cached && cached.version === version) {
-    console.error(`publish: ${name}@${version} already on npm (published-state cache hit, zero network) — skipping.`);
-    return { success: true };
-  }
-
-  const args = ['publish', distDir, '--access', options.access || 'public'];
-  if (options.tag) args.push('--tag', String(options.tag));
-  if (options.otp) args.push('--otp', String(options.otp));
-  if (options.dryRun) args.push('--dry-run');
-
-  console.error(`publish: ${name}@${version}${options.dryRun ? ' [dry-run]' : ''} from ${relative(context.root, distDir)}`);
-  // stdout stays inherited (a human watching a real publish sees npm's own
-  // progress live); stderr is piped so a failure can be inspected here to
-  // distinguish "genuinely failed" from "cannot publish over previously
-  // published version" (the write-through's read-lag case) — and is echoed
-  // to our own stderr afterward either way, so nothing that used to be
-  // visible under the old `stdio:'inherit'` is lost.
-  const res = sh('npm', args, { stdio: ['inherit', 'inherit', 'pipe'] });
-  if (res.stderr) process.stderr.write(res.stderr);
-  const workDir = join(context.root, 'tmp', 'nx-build-publish', context.projectName);
-
-  if (res.status !== 0) {
-    if (isAlreadyPublishedError(res.stderr) || isPublishedLive(name, version)) {
-      console.error(`publish: ${name}@${version} already on npm (registry disagreed with a stale cache) — treating as success, reconciling cache.`);
-      if (!options.dryRun) await writeThroughCache(context.root, name, version, distDir, workDir);
+    // ZERO-NETWORK existence check: the committed published-state cache.
+    const cached = readState(context.root)[name];
+    rec.phase('readState');
+    if (cached && cached.version === version) {
+      console.error(`publish: ${name}@${version} already on npm (published-state cache hit, zero network) — skipping.`);
       return { success: true };
     }
-    console.error(`publish: npm publish failed (exit ${res.status}) for ${name}@${version} — nothing published for this package.`);
-    return { success: false };
-  }
 
-  if (!options.dryRun) {
-    await writeThroughCache(context.root, name, version, distDir, workDir);
-    console.error(`publish: ${name}@${version} -> published-state.json updated (write-through).`);
-  }
-  return { success: true };
+    const args = ['publish', distDir, '--access', options.access || 'public'];
+    if (options.tag) args.push('--tag', String(options.tag));
+    if (options.otp) args.push('--otp', String(options.otp));
+    if (options.dryRun) args.push('--dry-run');
+
+    console.error(`publish: ${name}@${version}${options.dryRun ? ' [dry-run]' : ''} from ${relative(context.root, distDir)}`);
+    // stdout stays inherited (a human watching a real publish sees npm's own
+    // progress live); stderr is piped so a failure can be inspected here to
+    // distinguish "genuinely failed" from "cannot publish over previously
+    // published version" (the write-through's read-lag case) — and is echoed
+    // to our own stderr afterward either way, so nothing that used to be
+    // visible under the old `stdio:'inherit'` is lost.
+    const res = rec.time(`npm ${args.join(' ')}`, () => sh('npm', args, { stdio: ['inherit', 'inherit', 'pipe'] }));
+    rec.network('npm publish');
+    if (res.stderr) process.stderr.write(res.stderr);
+    const workDir = join(context.root, 'tmp', 'nx-build-publish', context.projectName);
+
+    if (res.status !== 0) {
+      if (isAlreadyPublishedError(res.stderr) || isPublishedLive(name, version, rec)) {
+        console.error(`publish: ${name}@${version} already on npm (registry disagreed with a stale cache) — treating as success, reconciling cache.`);
+        if (!options.dryRun) await writeThroughCache(context.root, name, version, distDir, workDir, rec);
+        return { success: true };
+      }
+      console.error(`publish: npm publish failed (exit ${res.status}) for ${name}@${version} — nothing published for this package.`);
+      return { success: false };
+    }
+
+    if (!options.dryRun) {
+      await writeThroughCache(context.root, name, version, distDir, workDir, rec);
+      console.error(`publish: ${name}@${version} -> published-state.json updated (write-through).`);
+    }
+    return { success: true };
+  });
 }
 
 module.exports = run;

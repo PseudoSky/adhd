@@ -23,19 +23,17 @@
  * design and `tools/nx-plugins/build/executors/version/impl.js` for the
  * cache-miss backfill fallback.
  *
+ * Concurrency (the lockfile/atomic-write read-modify-write below) is backed
+ * by `tools/nx-plugins/lib/file-lock.js`'s generic, dependency-free mutex —
+ * extracted (BUILD-TOOLING-METRICS-001) so `lib/metrics.js`'s concurrent
+ * `metrics.json` writers reuse the EXACT same proven primitive instead of a
+ * second hand-rolled lock implementation.
+ *
  * @module published-state
  */
-const {
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  renameSync,
-  openSync,
-  closeSync,
-  unlinkSync,
-  statSync,
-} = require('node:fs');
+const { existsSync, readFileSync, writeFileSync, renameSync } = require('node:fs');
 const { join } = require('node:path');
+const { acquireLock, releaseLock } = require('../../lib/file-lock');
 
 const FILE_NAME = 'published-state.json';
 
@@ -52,10 +50,6 @@ function statePath(root) {
 
 function lockPath(root) {
   return join(root, `.${FILE_NAME}.lock`);
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Stable key order so a re-write of unchanged data produces a clean, empty `git diff`. */
@@ -95,51 +89,20 @@ function writeStateAtomic(root, state) {
 }
 
 /**
- * Acquire an exclusive lock on the cache file using an atomic `O_CREAT|O_EXCL`
- * create (`wx`) as the mutex primitive — portable, dependency-free, and safe
- * across BOTH threads and separate OS processes (parallel `nx run-many
- * -t publish` / `-t reconcile` tasks are typically separate processes). A
- * lock older than `LOCK_STALE_MS` is assumed abandoned (a crashed prior
- * holder) and force-broken rather than deadlocking every future writer
- * forever.
+ * Acquire an exclusive lock on the cache file — a thin, `published-state`-scoped
+ * wrapper over `lib/file-lock.js`'s generic `acquireLock`, parameterized with
+ * this module's own stale/wait/poll constants (unchanged behavior from before
+ * the BUILD-TOOLING-METRICS-001 extraction).
  *
  * @param {string} root
  * @returns {Promise<string>} the acquired lock's path (pass to {@link releaseLock})
  */
-async function acquireLock(root) {
-  const lp = lockPath(root);
-  const deadline = Date.now() + LOCK_MAX_WAIT_MS;
-  for (;;) {
-    try {
-      const fd = openSync(lp, 'wx');
-      writeFileSync(fd, String(process.pid));
-      closeSync(fd);
-      return lp;
-    } catch (err) {
-      if (err.code !== 'EEXIST') throw err;
-      try {
-        if (Date.now() - statSync(lp).mtimeMs > LOCK_STALE_MS) {
-          unlinkSync(lp);
-          continue; // retry immediately — the stale lock is gone
-        }
-      } catch {
-        // Lock vanished between the EEXIST and this stat (another writer
-        // just released it) — fall through and retry the create.
-      }
-      if (Date.now() > deadline) {
-        throw new Error(`published-state: could not acquire lock at ${lp} within ${LOCK_MAX_WAIT_MS}ms`);
-      }
-      await sleep(LOCK_POLL_MS);
-    }
-  }
-}
-
-function releaseLock(lockFilePath) {
-  try {
-    unlinkSync(lockFilePath);
-  } catch {
-    // Already gone — fine (e.g. a stale-lock break by a concurrent waiter).
-  }
+async function acquireStateLock(root) {
+  return acquireLock(lockPath(root), {
+    staleMs: LOCK_STALE_MS,
+    maxWaitMs: LOCK_MAX_WAIT_MS,
+    pollMs: LOCK_POLL_MS,
+  });
 }
 
 /**
@@ -156,7 +119,7 @@ function releaseLock(lockFilePath) {
  * @returns {Promise<Record<string, any>>} the state that was written
  */
 async function updatePublishedState(root, mutate) {
-  const lockFilePath = await acquireLock(root);
+  const lockFilePath = await acquireStateLock(root);
   try {
     const current = readState(root);
     const next = await mutate({ ...current });
@@ -174,5 +137,5 @@ module.exports = {
   readState,
   writeStateAtomic,
   updatePublishedState,
-  __internals: { acquireLock, releaseLock, sortEntries, LOCK_STALE_MS, LOCK_MAX_WAIT_MS },
+  __internals: { acquireLock: acquireStateLock, releaseLock, sortEntries, LOCK_STALE_MS, LOCK_MAX_WAIT_MS },
 };

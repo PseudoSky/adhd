@@ -22,6 +22,7 @@
 const { existsSync, readFileSync, writeFileSync, copyFileSync } = require('node:fs');
 const { join, relative } = require('node:path');
 const { generateDistManifest } = require('./generate-manifest');
+const { withMetrics } = require('../../../lib/metrics');
 
 /**
  * Build `{ "@adhd/x": "1.2.3", … }` from every project's source package.json.
@@ -46,37 +47,43 @@ function buildVersionMap(context) {
 }
 
 async function run(_options, context) {
-  const projectRoot = context.projectsConfigurations.projects[context.projectName].root;
-  const pkgRoot = join(context.root, projectRoot);
-  const distDir = join(pkgRoot, 'dist');
-  const srcPkgPath = join(pkgRoot, 'package.json');
+  return withMetrics('dist-manifest', context, async (rec) => {
+    const projectRoot = context.projectsConfigurations.projects[context.projectName].root;
+    const pkgRoot = join(context.root, projectRoot);
+    const distDir = join(pkgRoot, 'dist');
+    const srcPkgPath = join(pkgRoot, 'package.json');
 
-  if (!existsSync(distDir)) {
-    console.error(
-      `dist-manifest: no built output at ${relative(context.root, distDir)} — did 'build' run? (this target must dependsOn:["build"])`
+    if (!existsSync(distDir)) {
+      console.error(
+        `dist-manifest: no built output at ${relative(context.root, distDir)} — did 'build' run? (this target must dependsOn:["build"])`
+      );
+      return { success: false };
+    }
+    if (!existsSync(srcPkgPath)) {
+      console.error(`dist-manifest: no source package.json at ${relative(context.root, srcPkgPath)}.`);
+      return { success: false };
+    }
+
+    const sourcePkg = JSON.parse(readFileSync(srcPkgPath, 'utf8'));
+    rec.phase('read');
+    const versionMap = buildVersionMap(context);
+    rec.phase('buildVersionMap');
+    const manifest = generateDistManifest(sourcePkg, versionMap);
+    rec.phase('generateDistManifest');
+
+    writeFileSync(join(distDir, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
+
+    // Ship CHANGELOG.md from the dist root (publish-from-dist). README.md is
+    // already copied into dist by the build itself (tools/vite-plugins/copy-readme).
+    const srcChangelog = join(pkgRoot, 'CHANGELOG.md');
+    if (existsSync(srcChangelog)) copyFileSync(srcChangelog, join(distDir, 'CHANGELOG.md'));
+    rec.phase('write');
+
+    console.log(
+      `dist-manifest: ${manifest.name}@${manifest.version} -> ${relative(context.root, join(distDir, 'package.json'))}`
     );
-    return { success: false };
-  }
-  if (!existsSync(srcPkgPath)) {
-    console.error(`dist-manifest: no source package.json at ${relative(context.root, srcPkgPath)}.`);
-    return { success: false };
-  }
-
-  const sourcePkg = JSON.parse(readFileSync(srcPkgPath, 'utf8'));
-  const versionMap = buildVersionMap(context);
-  const manifest = generateDistManifest(sourcePkg, versionMap);
-
-  writeFileSync(join(distDir, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
-
-  // Ship CHANGELOG.md from the dist root (publish-from-dist). README.md is
-  // already copied into dist by the build itself (tools/vite-plugins/copy-readme).
-  const srcChangelog = join(pkgRoot, 'CHANGELOG.md');
-  if (existsSync(srcChangelog)) copyFileSync(srcChangelog, join(distDir, 'CHANGELOG.md'));
-
-  console.log(
-    `dist-manifest: ${manifest.name}@${manifest.version} -> ${relative(context.root, join(distDir, 'package.json'))}`
-  );
-  return { success: true };
+    return { success: true };
+  });
 }
 
 module.exports = run;

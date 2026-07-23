@@ -24,58 +24,66 @@
  */
 const { existsSync, readFileSync, rmSync } = require('node:fs');
 const { join, relative } = require('node:path');
-const { reconcilePackage } = require('./reconcile-core');
+const { reconcilePackage, describeNetworkCalls } = require('./reconcile-core');
 const { updatePublishedState } = require('../../lib/published-state');
+const { withMetrics } = require('../../../lib/metrics');
 
 async function run(_options, context) {
-  const projectRoot = context.projectsConfigurations.projects[context.projectName].root;
-  const pkgRoot = join(context.root, projectRoot);
-  const distDir = join(pkgRoot, 'dist');
-  const srcPkgPath = join(pkgRoot, 'package.json');
+  return withMetrics('reconcile', context, async (rec) => {
+    const projectRoot = context.projectsConfigurations.projects[context.projectName].root;
+    const pkgRoot = join(context.root, projectRoot);
+    const distDir = join(pkgRoot, 'dist');
+    const srcPkgPath = join(pkgRoot, 'package.json');
 
-  if (!existsSync(srcPkgPath)) {
-    console.error(`reconcile: no source package.json at ${relative(context.root, srcPkgPath)}.`);
-    return { success: false };
-  }
-  const { name, version } = JSON.parse(readFileSync(srcPkgPath, 'utf8'));
-  if (!name || !version) {
-    console.error(`reconcile: ${relative(context.root, srcPkgPath)} missing name/version.`);
-    return { success: false };
-  }
-  if (!existsSync(distDir)) {
-    console.error(`reconcile: no built dist at ${relative(context.root, distDir)} — this target dependsOn build.`);
-    return { success: false };
-  }
-
-  const workDir = join(context.root, 'tmp', 'nx-build-reconcile', context.projectName);
-  try {
-    const result = reconcilePackage({ name, version, distDir, workDir });
-
-    if (result.status === 'pending') {
-      console.error(`reconcile: ${name}@${version} not yet on npm — no cache entry (release pending).`);
-      return { success: true };
-    }
-    if (result.status === 'error') {
-      console.error(`reconcile: FAILED for ${name}@${version}: ${result.error}`);
+    if (!existsSync(srcPkgPath)) {
+      console.error(`reconcile: no source package.json at ${relative(context.root, srcPkgPath)}.`);
       return { success: false };
     }
-
-    await updatePublishedState(context.root, (state) => {
-      state[name] = result.entry;
-      return state;
-    });
-    console.error(
-      `reconcile: ${name}@${version} -> published-state.json ` +
-        (result.status === 'fast' ? '[integrity match — no tarball pull]' : '[content diverged — tarball pulled]')
-    );
-    return { success: true };
-  } finally {
-    try {
-      rmSync(workDir, { recursive: true, force: true });
-    } catch {
-      // best-effort scratch cleanup
+    const { name, version } = JSON.parse(readFileSync(srcPkgPath, 'utf8'));
+    if (!name || !version) {
+      console.error(`reconcile: ${relative(context.root, srcPkgPath)} missing name/version.`);
+      return { success: false };
     }
-  }
+    if (!existsSync(distDir)) {
+      console.error(`reconcile: no built dist at ${relative(context.root, distDir)} — this target dependsOn build.`);
+      return { success: false };
+    }
+    rec.phase('readSourcePkg');
+
+    const workDir = join(context.root, 'tmp', 'nx-build-reconcile', context.projectName);
+    try {
+      const result = rec.time('reconcilePackage (npm view/pack, offline pack, maybe tar)', () =>
+        reconcilePackage({ name, version, distDir, workDir })
+      );
+      for (const label of describeNetworkCalls(result)) rec.network(label);
+
+      if (result.status === 'pending') {
+        console.error(`reconcile: ${name}@${version} not yet on npm — no cache entry (release pending).`);
+        return { success: true };
+      }
+      if (result.status === 'error') {
+        console.error(`reconcile: FAILED for ${name}@${version}: ${result.error}`);
+        return { success: false };
+      }
+
+      await updatePublishedState(context.root, (state) => {
+        state[name] = result.entry;
+        return state;
+      });
+      rec.phase('updatePublishedState');
+      console.error(
+        `reconcile: ${name}@${version} -> published-state.json ` +
+          (result.status === 'fast' ? '[integrity match — no tarball pull]' : '[content diverged — tarball pulled]')
+      );
+      return { success: true };
+    } finally {
+      try {
+        rmSync(workDir, { recursive: true, force: true });
+      } catch {
+        // best-effort scratch cleanup
+      }
+    }
+  });
 }
 
 module.exports = run;
