@@ -1258,19 +1258,29 @@ measured against real usage.
    creation), not just a query-shape change. Worth investigating once/if a
    non-brute-force `SimilarityBackend` is ever justified by real corpus size; §2.1's
    JOIN-based fix is sufficient for the shipped brute-force backend regardless.
-3b. **New, unverified in this revision:** `apigen-plugin-cli-output`'s exact
-   per-invocation shutdown lifecycle (does its generated command wrapper already `await`
-   an async `close()`-shaped teardown hook, or does it call `process.exit()` without
-   one?) was **not read** as part of this revision — §3.1.1's "CLI/short-lived contract"
-   states what a one-shot host MUST do (`awaitEmbed`/`flushEmbeds`/awaited
-   `closeGraphBacklogStore`), but whether `apigen-plugin-cli-output`'s existing
-   generated wrapper already provides a hook to do so, or needs its own change to add
-   one, is unconfirmed — flagged rather than assumed. Note this is an **adhd-monorepo**
-   package, not a sox-ecosystem one — `packages/apigen/apigen-plugin-cli-output/src/`
-   in this repo, not `~/dev/ai/sox-ecosystem` — so any fix needed there is a normal
-   in-repo change, outside this spec's "only sox packages" constraint (which applies to
-   §2.1's `knn` upgrade, not to this). Read that package's source before implementing
-   the CLI-specific half of §3.1.1.
+3b. **RESOLVED (was "unverified in this revision")** — `apigen-plugin-cli-output`'s
+   `run()` mount is now live and verified end-to-end (`entrypoint/backlog/src/cli.ts`'s
+   `runBacklogCli`, tested by `cli.spec.ts` against the real built `dist/index.js`
+   bin), which directly answers the exact shutdown-lifecycle question this item
+   raised: `cliPlugin.run()` (`packages/apigen/apigen-plugin-cli-output/src/lib/run.ts`)
+   dispatches exactly ONE command, does not call `process.exit()` itself, and
+   `await`s to completion before its returned promise resolves — it provides NO
+   `close()`-shaped teardown hook of its own; the CALLER is entirely responsible for
+   post-dispatch cleanup. Confirmed directly: `runBacklogCli` wraps its
+   `await requireRun(cliPlugin)({...})` call in a `try { … } finally {
+   closeGraphBacklogStore(store) }`, and this is proven to run to completion (not
+   raced against process exit) by `cli.spec.ts`'s two-separate-process round-trip
+   test (`create-item` in one spawned process, `get-item` in a SECOND spawned
+   process reading the same SQLite file — this would fail with a lock/stale-read
+   error if the first process's `finally` hadn't actually closed the store before
+   exiting). **Consequence for §3.1.1's future `awaitEmbed`/`flushEmbeds` hook:** it
+   slots into that SAME `finally` block, `await`ed alongside (or before)
+   `closeGraphBacklogStore` — no change to `apigen-plugin-cli-output` itself is
+   needed to support the drain contract §3.1.1 designs; the hook point already
+   exists in `@adhd/backlog`'s OWN `cli.ts`, not in the plugin. This is a fully
+   in-repo `adhd`-monorepo package either way
+   (`packages/apigen/apigen-plugin-cli-output/src/`), outside this spec's "only sox
+   packages" constraint (which applies to §2.1's `knn` upgrade, not to this).
 4. **`getSubgraph`'s `depth` parameter's exact semantics for "unbounded" were not
    independently verified against the real signature beyond the type
    (`opts?: { rel?, depth?, direction? }`, `graph-store/src/index.ts:375-378`)** — §5.2's

@@ -54,10 +54,46 @@ const abort = new AbortController();
 await startBacklogServer({ transport: 'both', port: 3400, signal: abort.signal });
 ```
 
-- `POST /backlog/createItem`, `GET /backlog/getItem`, ... — every `client.ts`
-  export, mounted live via `@adhd/apigen-plugin-api-fastify`.
-- Every export is also available as an MCP tool via `@adhd/apigen-plugin-mcp`
-  (stdio transport by default).
+- `POST /backlog/client-d/create-item`, `GET /backlog/client-d/get-item`, ... —
+  every `client.ts` export, mounted live via `@adhd/apigen-plugin-api-fastify`.
+  (The `client-d` route segment is not a typo — see `DESIGN.md` §7's CLI
+  section / `SPEC.md` §7's transport table for why it's there.)
+- Every export is also available as an MCP tool (e.g. `backlog_client_d_get_item`)
+  via `@adhd/apigen-plugin-mcp` (stdio transport by default).
+
+## CLI (`backlog`, live apigen mount — no codegen)
+
+```bash
+pnpm add -g @adhd/backlog   # installs the `backlog` bin
+backlog --help              # live-derived command listing
+backlog create-item --input '{"family":"BUG-EXAMPLE","title":"t","body":"b","repo":"org/repo"}'
+backlog get-item --repo org/repo --human-id BUG-EXAMPLE-001
+backlog list-items --filter '{"status":"OPEN"}'
+```
+
+- Same architecture as the HTTP/MCP transports above — `entrypoint/backlog/src/cli.ts`'s
+  `runBacklogCli()` reuses `buildBacklogApigenPackage()` and hands it straight
+  to `@adhd/apigen-plugin-cli-output`'s `run()`. No `apigen generate`, no
+  bespoke argument parsing — routing, flag parsing, validation, dispatch, and
+  exit codes all come from that plugin.
+- **You type `backlog <command>`, never the internal `client-d` segment.**
+  `runBacklogCli` derives the real command-table prefix from the live
+  `operations` list at runtime (`resolveCommandPrefix`) and prepends it before
+  dispatch — so `backlog get-item …` resolves even though the plugin's real
+  command table is keyed `backlog client-d get-item` internally (same
+  `client-d` artifact as the HTTP/MCP routes above; the CLI is the one
+  transport that hides it from the caller).
+- Flags are the schema's domain params, kebab-cased (`humanId` → `--human-id`);
+  object/array-typed params take a JSON string (`--input '{...}'`,
+  `--filter '{...}'`).
+- Exit codes follow `@adhd/apigen-base-errors`'s `CLI_EXIT_CODE` table: `0`
+  success, `2` invalid argument (bad/unknown flag, failed validation), `4`
+  unknown command, etc. Result is printed as JSON to stdout; errors as JSON to
+  stderr.
+- Honors the same `ADHD_BACKLOG_SCOPE`/`ADHD_ENV_SCOPE` scope env vars as the
+  library API (see Scope below) — there is no separate CLI-only config.
+- `runBacklogCli(argv?, opts?)` is also exported for in-process programmatic
+  use (e.g. a test harness), symmetric with `startBacklogServer`.
 
 ## Scope
 

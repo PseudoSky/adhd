@@ -47,6 +47,17 @@ export default defineConfig({
       // builtin. See BACKLOG.md INVESTIGATION-BUILD-TOOL-001 and this
       // package's DESIGN.md §10.
       external: externalizeRealDeps(__dirname),
+      output: {
+        // Real executable: node shebang on the built entry, matching
+        // `entrypoint/apigen-cli`'s proven `bin` mechanism (its
+        // `vite.config.ts` uses the identical banner). Harmless for the
+        // library-import path (`require('@adhd/backlog')` /
+        // `require(distIndexPath)`, e.g. `src/test/fixtures/mcp-stdio-
+        // entry.js`) — Node's module loader strips a leading `#!` line for
+        // ANY `.js`/`.mjs` file it compiles, not only the process's main
+        // module.
+        banner: '#!/usr/bin/env node',
+      },
     },
   },
 
