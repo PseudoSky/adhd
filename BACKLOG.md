@@ -1149,4 +1149,23 @@ These are the outstanding, non-release findings from the ENV-ADOPT-CLUSTERS(1) d
 - **Status:** OPEN — documented scope reduction, not a bug.
 - Citations: [main, claude (sonnet-5), backlog-implementation, 1: entrypoint/backlog/SPEC.md §5.6 AuditTrailEntry; 2: entrypoint/backlog/src/store/query.ts auditTrail()]
 
+## apigen transport defects (session 2026-07-23 — surfaced running the live `@adhd/backlog` HTTP API)
+
+### BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 — the `openapi` plugin's advertised paths do not match the `api-fastify` plugin's actually-served routes
+- **Discovered:** 2026-07-23, driving the live `@adhd/backlog` server (`apiFastifyPlugin.run()` + `openapiPlugin`).
+- **Detail:** the served Fastify routes use namespace `backlog` + the camelCase export name — `GET /backlog/getItem`, `POST /backlog/createItem` (confirmed 200). The OpenAPI 3.1 doc served at `GET /_meta/openapi` instead lists `GET /backlog/client-d/get-item`, `POST /backlog/client-d/create-item` — a `client-d` segment (derived from the extraction source basename `client.d.ts`) plus kebab-casing. The two disagree on BOTH the namespace segment and the casing.
+- **Evidence:** `GET /backlog/getItem` → 200; `GET /backlog/client-d/get-item` (the OpenAPI-advertised path) → 404. So every path in the generated spec is wrong.
+- **Impact:** any client generated from the OpenAPI document (codegen, Swagger UI "try it", a typed SDK) hits 404 on every call — the spec is actively misleading, not merely cosmetic. Cross-plugin contract break between `@adhd/apigen-plugin-openapi` and `@adhd/apigen-plugin-api-fastify`.
+- **Fix direction:** the two plugins must derive route path + namespace + casing from ONE shared function (the api-fastify route builder is the source of truth since it's what actually serves) so the OpenAPI `paths` are byte-identical to the registered routes. Likely the openapi plugin re-derives the namespace from `op.path`/the source file rather than reusing the served route string.
+- **Status:** OPEN (apigen bug; `@adhd/backlog` works via the real camelCase routes — a `@adhd/backlog` follow-up could pin `--namespace` and pre-extract to avoid the `client-d` basename leak, but the plugin mismatch is the root defect).
+- Citations: [main, claude (sonnet-5), backlog-serve, 1: live `GET /_meta/openapi` paths vs `GET /backlog/getItem`→200 / `GET /backlog/client-d/get-item`→404 (terminal 2026-07-23); 2: packages/apigen/apigen-plugin-openapi/src; 3: packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts route registration]
+
+### BUG-APIGEN-SAFE-OP-MUTATIONS-OVER-GET-001 — the safe-op→GET heuristic routes state-mutating operations as GET
+- **Discovered:** 2026-07-23, same live-server session — enumerating the `@adhd/backlog` GET routes.
+- **Detail:** apigen hoists an operation to `GET` (query-param) when its parameters are all scalars, regardless of whether the function mutates state. Of `@adhd/backlog`'s 14 GET routes, only 3 are true reads (`getItem`, `blockers`, `auditTrail`); the other 11 mutate: `addDependency`, `removeDependency`, `linkRelated`, `mergeItems`, `assignItem`, `attachToPlan`, `setPriority`, `appendNote`, `startWork`, `renewClaim`, `softDeleteItem`. A `merge` and a `delete` answering over GET is the sharpest case.
+- **Impact:** non-idempotent writes reachable via GET can be triggered by link prefetchers, browser/CDN caches, crawlers, and naive retries — a real correctness/safety hazard, not a style nit. GET responses are also cacheable, so a stale write-result may be served.
+- **Fix direction:** the GET-hoist should require BOTH all-scalar params AND an explicit safety signal — honor `x-apigen-safe` (already extracted per-op) / a `@safe`/`@readonly` JSDoc tag / a naming convention, defaulting mutating ops to POST. Interim `@adhd/backlog` mitigation: annotate the 11 mutating client fns so they are not classed safe, once apigen exposes the signal.
+- **Status:** OPEN (apigen behavior; affects every apigen-served package, not just backlog).
+- Citations: [main, claude (sonnet-5), backlog-serve, 1: live server startup route log — 14 GET incl. mergeItems/softDeleteItem/removeDependency (tmp/backlog/serve.log 2026-07-23); 2: entrypoint/backlog/src/client.ts (the 11 mutating fns with all-scalar params); 3: packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts safe-op GET-hoist]
+
 ## build-tooling / version-sync-deps (session 2026-07-22 — `^version` + `lint → sync-deps` implementation)
