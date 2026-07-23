@@ -82,10 +82,23 @@ export function externalizeRealDeps(packageJsonDir) {
         realDepNames.add(name);
         continue;
       }
-      // @adhd/* dependency: bundle its source too, so walk into ITS deps.
+      // @adhd/* dependency: bundle its source too, so walk into ITS deps —
+      // UNLESS the name doesn't resolve against tsconfig.base.json's `paths`
+      // map at all, which means it isn't actually an in-repo workspace
+      // package. `@adhd/sox-graph-store` (a real, externally-published npm
+      // package that happens to share the `@adhd/` npm scope — the first
+      // such case in this monorepo, entrypoint/backlog) is exactly this: it
+      // has no `tsconfig.base.json` path entry, so silently dropping it here
+      // (the prior behaviour) left it neither bundled-as-workspace-source nor
+      // externalized-as-a-real-dep — it fell through to rollup's default
+      // (bundle from node_modules), reproducing the exact __filename/
+      // perf_hooks-in-ESM failure class this whole utility exists to avoid.
+      // Treat an unresolvable `@adhd/*` name as a real external dependency.
       const depDir = resolveAdhdPackageDir(name, pathsMap, repoRoot);
-      if (depDir && !visitedAdhdDirs.has(depDir)) {
-        queue.push(depDir);
+      if (depDir) {
+        if (!visitedAdhdDirs.has(depDir)) queue.push(depDir);
+      } else {
+        realDepNames.add(name);
       }
     }
   }
