@@ -1089,4 +1089,22 @@ These are the outstanding, non-release findings from the ENV-ADOPT-CLUSTERS(1) d
 - **Status:** OPEN. Cross-links: `ENV-ADOPT-CLUSTERS(1)`, `BUG-AGENTMCP-REGISTRY-NO-WRITE-THROUGH-001`.
 - Citations: [main, claude, session-2026-07-22-env, 1: .mcp.json agent-mcp + agent-mcp-published env ADHD_AGENT_REGISTRY_DB_PATH; 2: canonical dir ~/.adhd/agent-registry/production/data/registry.db (agent-core-env resolveRegistryDbPath)]
 
+## `@adhd/backlog` design (session 2026-07-22 — SPEC.md/DESIGN.md authoring)
+
+### DEBT-BACKLOG-CI-NODE22-001 — `@adhd/backlog`'s required Node ≥22 exceeds this repo's CI-pinned Node 20
+- **Discovered:** 2026-07-22, authoring `entrypoint/backlog/DESIGN.md` (technical design for the new multi-agent backlog-graph tool). The task's stated requirement is Node ≥22 (needed for the `@adhd/sox-graph-store`/`better-sqlite3@^12` native-module toolchain this package depends on).
+- **Where:** `.github/workflows/ci.yml:26` and `.github/workflows/pull-request.yml:25` both pin `node-version: 20`.
+- **Impact:** once `@adhd/backlog` is implemented, `npx nx build backlog` / `npx nx test backlog` will not run correctly (or at all) under either CI workflow's Node 20 runner.
+- **Fix direction:** bump both workflows' `node-version` to ≥22 before `@adhd/backlog` lands, OR confirm the package can actually run on Node 20 (re-verify the Node≥22 requirement's real driver — if it's just a documented assumption in the task brief rather than a hard `better-sqlite3`/`@adhd/sox-graph-store` engine constraint, this may be moot). Not resolved here — design-only pass, no code exists yet to test against.
+- **Status:** OPEN.
+- Citations: [main, architect-reviewer, claude (sonnet-5), backlog-design, 1: .github/workflows/ci.yml:26; 2: .github/workflows/pull-request.yml:25; 3: entrypoint/backlog/DESIGN.md §12]
+
+### DEBT-BACKLOG-MARKDOWN-DUP-001 — `@adhd/backlog`'s markdown parser will duplicate `tools/util/backlog.mjs`'s parsing algorithm until the latter is deprecated
+- **Discovered:** 2026-07-22, same design pass, designing `entrypoint/backlog/src/markdown.ts`'s `importFromMarkdown`/`renderToMarkdown` contract.
+- **Detail:** `tools/util/backlog.mjs` (`HEADER_RE`, `classifyStatus`, `detectStatus`, `detectPriority`, `parse` — `tools/util/backlog.mjs:34-155`) is a standalone `tools/` script, not a built/importable package, so `@adhd/backlog`'s `markdown.ts` must **port** (reimplement), not `import`, the same parsing algorithm — a real, acknowledged violation of the "Two-Use Refactor Rule" (`AGENTS.md` §8) that is deliberate for v0.1 (extracting a shared package for a two-line parser duplicated exactly once is premature; DESIGN.md §8 states the reasoning).
+- **Impact:** once `@adhd/backlog` ships and is proven equivalent (its own DoD requires round-tripping against the real `tools/util/backlog.mjs` — see `entrypoint/backlog/SPEC.md` §7 item 2), the two implementations will drift if either is edited without the other — `tools/util/backlog.mjs` should be deprecated/removed at that point, not kept indefinitely as a duplicate.
+- **Fix direction:** once `@adhd/backlog importFromMarkdown`/`renderToMarkdown` are implemented and proven byte-compatible with `tools/util/backlog.mjs`'s parser (per the DoD), deprecate and remove `tools/util/backlog.mjs`, updating any docs/scripts that still invoke it directly.
+- **Status:** OPEN — blocked on `@adhd/backlog` implementation; not actionable until then.
+- Citations: [main, architect-reviewer, claude (sonnet-5), backlog-design, 1: tools/util/backlog.mjs:1-22,34-155; 2: entrypoint/backlog/DESIGN.md §8; 3: entrypoint/backlog/SPEC.md §7 item 2, §4.3]
+
 ## build-tooling / version-sync-deps (session 2026-07-22 — `^version` + `lint → sync-deps` implementation)
