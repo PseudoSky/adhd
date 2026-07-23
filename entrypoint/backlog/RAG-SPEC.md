@@ -1,6 +1,6 @@
 # `@adhd/backlog` — RAG-Enabled Intelligent Plan-Graph System
 
-**Version:** v0.2.0
+**Version:** v0.2.1
 **Date:** 2026-07-23
 **Status:** DESIGN ONLY — no implementation in this document. This is an **additive**
 extension of the shipped `entrypoint/backlog/` package (`@adhd/backlog@0.0.1`, committed
@@ -10,6 +10,18 @@ entries). `SPEC.md` v0.1.0 and `DESIGN.md` v0.1.0 remain the base contract; this
 never contradicts them, only adds new operations and swaps internals **behind** three
 existing ones. A subsequent implementer builds the RAG layer from this document without
 re-deriving any of the research or API verification below.
+
+**v0.2.1 changelog (this revision):** (1) folds in a required **upstream**
+`@adhd/sox-vector-store` change — a filtered-KNN upgrade (new §2.1) that pushes
+`NodeFilter` predicates directly into the vector candidate-selection query, replacing
+the pre-resolve-ids-then-`{ids}` workaround in §3.3/§3.4/§4/§5.5 and closing v0.2.0's §9
+open question 3; (2) closes a real correctness gap in §3.1's fire-and-forget Phase B for
+short-lived/CLI processes (a one-shot process could exit before its embed promise
+resolved, permanently losing the vector at write time, not just delaying it) via a
+tracked in-flight set + `store.flushEmbeds()` + an `awaitEmbed` opt-in, mirroring
+`@adhd/sox-memory-core`'s own `embed-pipeline.ts` drain mechanism. Neither change alters
+any existing `client.ts` signature's meaning for a caller that ignores the new optional
+fields.
 
 **Companion reading:** `SPEC.md` (operation surface, personas, status vocabulary),
 `DESIGN.md` (graph mapping, claim protocol, §9 "The RAG seam", §14 verified
@@ -115,6 +127,203 @@ surface used by this design is cited by file:line. No signature below is assumed
 | `@adhd/sox-ingest` | `0.1.0` | `libs/data/ingest/ingest/src/*.ts` | **Not used.** Ingest's chunkers (`ast-chunker.ts`, `heading-chunker.ts`) target long documents that exceed one embedding's token budget; a backlog item's `content` (`${title}\n\n${body}`, DESIGN.md §2.2) is a short, single-chunk unit by construction (title + a bug/feature body, not a multi-page document) — chunking would add complexity with no present need. Re-evaluate only if a future `body` field is allowed to grow past the model's `maxTokens` (`fastembed.ts` model configs cap at 512–8192 tokens depending on model). |
 | `@adhd/sox-blob-store` | `0.1.0` | `libs/data/store/blob-store/src/*.ts` | **Not used.** No binary/blob artifact exists in the `BacklogItem` domain model. |
 
+### 2.1 Upstream change required — filtered `VectorBackend.knn` in `@adhd/sox-vector-store`
+
+Every scoped RAG call site in this design (semantic search restricted to a repo,
+`relatedItems` restricted to the same namespace, semantic dedup restricted to a repo)
+needs "K nearest neighbors **matching a filter**," and `@adhd/sox-vector-store`'s real,
+shipped `knn` does not support that today — verified by reading the actual
+implementation, not assumed:
+
+**The real current implementation (`libs/data/vectors/vector-store/src/index.ts`):**
+
+- `VecFilter` (`:14-16`) has exactly one field: `ids?: number[]`.
+- `SqliteVectorBackend.knn(query, space, k, filter?)` (`:256-265`) delegates to an
+  internal, unexported `SimilarityBackend.search()` seam (`:103-111`) — the only
+  implementation that ships is `BruteForceBackend` (`:113-147`), the constructor default
+  (`:155`, `similarity ?? new BruteForceBackend()`).
+- `BruteForceBackend.search` (`:114-146`) runs `SELECT node_id, embedding FROM "${tbl}"
+  WHERE node_id IN (${placeholders})` when `filter.ids` is given, else a full-table
+  `SELECT` — then computes cosine similarity **in JS**, for every returned row, and
+  sorts/truncates to `k` in JS. **This is brute-force, not sqlite-vec's native ANN
+  query** — the `vec0` virtual table (created at `:171`,
+  `CREATE VIRTUAL TABLE ... USING vec0(node_id INTEGER PRIMARY KEY, embedding
+  FLOAT[dim])`) is used here purely as typed storage, never queried via `MATCH`. (Contrast
+  with `@adhd/sox-memory-core`'s own `neardup.ts:38-44`, which DOES issue a real
+  `WHERE embedding MATCH ? AND k = ?` sqlite-vec query against its private `vec_node`
+  table — proving the native path exists and works elsewhere in the ecosystem, just not
+  inside this package's shipped backend.)
+- Today's only way to scope a `knn` call to a `NodeFilter` (namespace/tags/projectPath/
+  metadata) is the two-step workaround every RAG call site in v0.2.0 of this spec used:
+  `graph.queryNodes(nodeFilter).map(n => n.id)` to materialize a matching-id array, then
+  pass `{ids: matchedIds}` to `knn` — the exact pattern `@adhd/sox-hybrid-search`'s
+  `SqliteSearchBackend` already has to use internally today (`hybrid-search/src/
+  index.ts:536-542`, the BL-294 fix).
+
+**Why this is a real bug, not just slow, at scale:** the two-step workaround
+string-interpolates one `?` placeholder per matched id into the vec table's `IN (...)`
+clause (`BruteForceBackend.search`, `:124-130`). SQLite bounds the number of bound
+parameters per statement (`SQLITE_LIMIT_VARIABLE_NUMBER` — historically 999, 32766 by
+default in modern SQLite builds). A filter matching more ids than that ceiling makes the
+**existing** two-step workaround throw outright, not just run slowly — a correctness
+limit, not merely a performance one, that a JOIN-based push-down (below) removes
+entirely by construction (a JOIN's `WHERE` clause needs a fixed, small number of bound
+parameters regardless of how many rows match).
+
+**The upgrade — extend `VecFilter`, not `knn`'s parameter list:**
+
+```ts
+// libs/data/vectors/vector-store/src/index.ts (design sketch — extends the real file)
+import type { NodeFilter } from '@adhd/sox-graph-store';
+
+export interface VecFilter {
+  ids?: number[];
+  /** NEW, additive. When present, pushed into the candidate-selection query as a
+   *  JOIN + WHERE against the `node` table — see SimilarityBackend below. ANDed with
+   *  `ids` when both are given. */
+  nodeFilter?: NodeFilter;
+}
+```
+
+`knn(query: Float32Array, space: VectorSpace, k: number, filter?: VecFilter)`'s
+**signature is unchanged** — this is the key backward-compatibility decision: rather
+than the example shape floated in the task brief (`knn(vec, space, k, opts?: {filter?:
+NodeFilter})`, a new wrapper param), extending the *existing* `filter?: VecFilter`
+parameter's type is strictly more compatible — every current caller passing `{ids:
+[...]}` (or nothing) keeps compiling and behaving byte-identically; there is no
+parameter to rename or thread through, and `VecFilter` is already the one recognized
+"how do I scope a `knn` call" type for this interface, so a second, parallel `opts.filter`
+sitting beside it would be redundant rather than additive.
+
+**The SQL shape (`BruteForceBackend.search`, extended):**
+
+```ts
+// libs/data/vectors/vector-store/src/index.ts (design sketch)
+import { buildNodeFilterClause } from '@adhd/sox-graph-store'; // NEWLY EXPORTED — see below
+
+class BruteForceBackend implements SimilarityBackend {
+  search(query: Float32Array, k: number, db: SQLiteDB, tbl: string, filter?: VecFilter): Array<{ nodeId: number; score: number }> {
+    if (!tableExists(db, tbl)) return [];
+
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+
+    if (filter?.nodeFilter) {
+      // Reuse the EXACT predicate builder @adhd/sox-graph-store's own queryNodes/
+      // countNodes/searchNodes already use internally (index.ts:516-630) — one
+      // canonical NodeFilter->SQL translation across both packages, not two that
+      // could silently diverge.
+      const { where, params: fParams } = buildNodeFilterClause(filter.nodeFilter, true, 'n');
+      if (where) clauses.push(where.replace(/^WHERE /, ''));
+      params.push(...fParams);
+    }
+    if (filter?.ids && filter.ids.length > 0) {
+      clauses.push(`v.node_id IN (${filter.ids.map(() => '?').join(',')})`);
+      params.push(...filter.ids);
+    }
+
+    const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    const joinSql = filter?.nodeFilter ? `JOIN node n ON n.rowid = v.node_id` : '';
+    const rows = db
+      .prepare<unknown[], { node_id: number; embedding: Buffer }>(
+        `SELECT v.node_id, v.embedding FROM "${tbl}" v ${joinSql} ${whereSql}`,
+      )
+      .all(...params);
+
+    const results: Array<{ nodeId: number; score: number }> = [];
+    for (const row of rows) {
+      results.push({ nodeId: row.node_id, score: cosineSimilarity(query, bufferToVec(row.embedding)) });
+    }
+    results.sort((a, b) => b.score - a.score);
+    return results.slice(0, k);
+  }
+}
+```
+
+**The `k` vs post-filter-`k` subtlety — resolved for the shipped backend, documented as
+a forward contract for any future one.** Because `BruteForceBackend` computes cosine
+over **every row the SQL already filtered** and only truncates to `k` in JS *after*
+scoring the whole filtered set, there is no over-fetch/under-fetch problem here: the
+result is the exact true top-`k` among filter-matching rows, identical in correctness to
+today's two-step workaround (which is also exact, for the same reason — scoring a
+pre-filtered id set is already exact top-k) — the upgrade changes the query count and
+plumbing (one JOIN'd `SELECT` vs. a `queryNodes` call plus an `IN`-list `knn` call), not
+the correctness of the result. This does **not** generalize automatically to a
+hypothetical future non-brute-force `SimilarityBackend` (e.g. one that issues sqlite-vec's
+native `WHERE embedding MATCH ? AND k = ?`, `neardup.ts:38-44`'s pattern): sqlite-vec's
+ANN traversal picks its `k` nearest **before** a joined `WHERE` on non-partition-key
+columns is applied, so `MATCH ... AND k=? JOIN node WHERE n.namespace=?` can legitimately
+return **fewer than `k`** rows (possibly zero) even when plenty of matching-namespace
+items exist further out in vector space — a well-known ANN-plus-post-filter pitfall, not
+specific to sqlite-vec. **This spec does not implement a native-ANN backend** (none
+ships today), but documents the required contract now, in `SimilarityBackend`'s
+interface comment, so `knn`'s public shape never has to change again if one is added
+later: any future non-brute-force `SimilarityBackend` MUST over-fetch (`k' = k ×
+overFetchMultiplier`, e.g. 4×, widening and retrying, or falling back to brute force,
+if the post-filtered result is still under `k`) rather than passing the filter straight
+into `MATCH ... AND k=?` and returning whatever survives. A real, verified alternative
+—sqlite-vec's `vec0` **partition key** columns, declared at `CREATE VIRTUAL TABLE` time
+—can make a *specific, pre-declared* filter dimension (e.g. `namespace`) efficient
+inside the ANN index itself, but that requires a schema change (the partition-key
+column must be declared when the table is created) and was not verified against the
+exact `sqlite-vec@^0.1.9` version pinned in this ecosystem — flagged as a phase-2
+optimization in §9, not designed here.
+
+**Backward compatibility:** `knn`'s signature is unchanged; `VecFilter.ids`-only callers
+are unaffected; `VecFilter.nodeFilter` is a new optional field with no default behavior
+change when absent. `SqliteVectorBackend`'s constructor, `ensureSpace`, `upsert`, `iter`,
+`get`, `delete`, and the `openVectorStore`/`openLanceDbVectorStore` factories are
+untouched.
+
+**Two new dependencies this upgrade introduces:**
+- `@adhd/sox-vector-store`'s `package.json` gains `@adhd/sox-graph-store: workspace:*`
+  (currently absent — its only real dependencies are `better-sqlite3` and `sqlite-vec`,
+  verified). **No dependency cycle:** `@adhd/sox-graph-store`'s own dependencies are only
+  `better-sqlite3` and `drizzle-orm` (verified, its `package.json`) — it does not depend
+  on `vector-store`, so `vector-store -> graph-store` is a safe, one-directional new
+  edge, and matches the layering `@adhd/sox-hybrid-search` already sits on top of (it
+  already depends on both, verified).
+- `buildNodeFilterClause` (`graph-store/src/index.ts:516-630`) must be **exported** —
+  today it is a private, unexported module function, called only internally by
+  `queryNodes`/`countNodes`/`searchNodes` (`:1022`, `:1050`, `:1070`). Exporting it is the
+  DRY-preserving choice: without it, `vector-store` would have to reimplement
+  `NodeFilter`→SQL translation independently, and the two implementations could silently
+  drift apart on any future `NodeFilter` field addition.
+
+**Benefit to `@adhd/sox-hybrid-search`'s `SqliteSearchBackend` — a second, independent
+real call site, not just backlog:** `SqliteSearchBackend.search`'s vector channel
+(`hybrid-search/src/index.ts:525-564`) does the identical two-step workaround today —
+`this.graph.queryNodes(nodeFilter).map(n => n.id)` then `this.vec.knn(query.vec!,
+matchingSpace, limit * 2, vecIdFilter)`. Once `knn` accepts `nodeFilter` directly, that
+block collapses to a single `this.vec.knn(query.vec!, matchingSpace, limit * 2, {
+nodeFilter })` call — removing `SqliteSearchBackend`'s own id-materialization step too.
+This is grounds for landing the change upstream in `@adhd/sox-vector-store` rather than
+only inside `@adhd/backlog`: it fixes the same real limitation for every hybrid-search
+consumer in the ecosystem, not just this one.
+
+**Files this change lands in** (see also the "Upstream sox-ecosystem changes required"
+box at the end of this section):
+1. `~/dev/ai/sox-ecosystem/libs/data/vectors/vector-store/src/index.ts` — `VecFilter`,
+   `SimilarityBackend`, `BruteForceBackend.search`, `package.json` dependency addition.
+2. `~/dev/ai/sox-ecosystem/libs/data/graph/graph-store/src/index.ts:516` — export
+   `buildNodeFilterClause` (currently private).
+3. `~/dev/ai/sox-ecosystem/libs/data/search/hybrid-search/src/index.ts:525-564` —
+   simplify `SqliteSearchBackend`'s vector channel to use the new `nodeFilter` field
+   (not required for `@adhd/backlog` to benefit, but should land in the same upstream
+   change for consistency, since it is the same fix).
+
+> **Upstream sox-ecosystem changes required (dependency of this spec):**
+> `@adhd/sox-vector-store`'s `knn`/`VecFilter` filter-pushdown upgrade (this §2.1) must
+> land in `~/dev/ai/sox-ecosystem` — bumping `@adhd/sox-vector-store` and
+> `@adhd/sox-graph-store` (for the `buildNodeFilterClause` export) — **before**
+> `@adhd/backlog`'s Phase 1 (§9) implementation can use `nodeFilter`-scoped `knn` calls
+> directly. Until it lands, an implementer must either (a) pin the pre-upgrade
+> `@adhd/sox-vector-store` version and use the two-step `queryNodes`-then-`{ids}`
+> workaround exactly as v0.2.0 of this spec specified (functionally correct, just the
+> extra round-trip and the `SQLITE_LIMIT_VARIABLE_NUMBER` ceiling noted above), or (b)
+> implement and land the §2.1 upgrade themselves as a prerequisite PR in
+> `sox-ecosystem` first. This spec assumes (b) for all code sketches from §3.3 onward.
+
 ---
 
 ## 3. Semantic retrieval / RAG
@@ -157,16 +366,142 @@ async function scheduleEmbed(store: GraphBacklogStore, nodeId: number, content: 
 }
 ```
 
-`createItem`/`updateItem` call `void scheduleEmbed(ctx.store, item.nodeId, content)`
-(fire-and-forget, not awaited) immediately before returning — mirroring
-`sox-memory-core`'s rule that Phase B is invoked **from outside any queue task**
-(`embed-pipeline.ts:375-377`, "NEVER call this from inside a WriteQueue task (BL-154)").
-`@adhd/backlog` has no `WriteQueue` of its own (its CAS unit is a single
-`db.transaction(...).immediate()` call, not a persistent queue), so the applicable
-generalization of BL-154 here is: **`scheduleEmbed` must never be called from inside
-`mutateMetadata`'s updater callback** — it always runs after that transaction has
-already committed and released the write lock, exactly the ordering constraint
-`embed-pipeline.ts:375` states for its own case.
+`createItem`/`updateItem` call `scheduleEmbed(ctx.store, item.nodeId, content)`
+immediately before returning. By default (long-lived server path, `startBacklogServer`'s
+HTTP/MCP transports — no change from earlier drafts of this spec) the call is
+fire-and-forget: not awaited, mirroring `sox-memory-core`'s rule that Phase B is invoked
+**from outside any queue task** (`embed-pipeline.ts:375-377`, "NEVER call this from
+inside a WriteQueue task (BL-154)"). `@adhd/backlog` has no `WriteQueue` of its own (its
+CAS unit is a single `db.transaction(...).immediate()` call, not a persistent queue), so
+the applicable generalization of BL-154 here is: **`scheduleEmbed` must never be called
+from inside `mutateMetadata`'s updater callback** — it always runs after that
+transaction has already committed and released the write lock, exactly the ordering
+constraint `embed-pipeline.ts:375` states for its own case.
+
+#### 3.1.1 The short-lived-process gap — fire-and-forget alone is not enough
+
+**A real correctness gap, not just added latency.** Fire-and-forget is correct for a
+process that keeps running (the vector lands a few hundred milliseconds later; the next
+`semanticSearch` call sees it). It is **wrong** for a one-shot process: `@adhd/backlog`
+is also runnable as a short-lived CLI (via the `apigen-plugin-cli-output` mount) or as a
+plain library call from a short script (`index.ts`'s barrel re-export of `client.ts`,
+used in-process without `startBacklogServer` at all). Such a process calls `createItem`,
+receives its result, and **exits before the un-awaited `scheduleEmbed` promise
+resolves** — the ONNX round-trip (worker-thread or child-process, §3.6) has not
+completed when the event loop drains and the process exits, so the vector is never
+written at all, not merely delayed. It is silently "repaired" only much later by
+`backfillEmbeddings` (§7.3) — which is a real gap when the caller's very next action
+(in the same script, moments later) is a `semanticSearch`/`relatedItems` call that
+expects the item it just created to already be retrievable.
+
+**The fix, mirroring `@adhd/sox-memory-core`'s own drain mechanism exactly, not
+invented fresh.** `embed-pipeline.ts:350-366` (verified) already solves this identical
+problem for memory-core's own writes:
+
+```ts
+// libs/memory-core/src/embed-pipeline.ts (REAL, existing code — the pattern reused below)
+const inFlight = new Set<Promise<unknown>>();
+function track<T>(p: Promise<T>): Promise<T> {
+  inFlight.add(p);
+  void p.finally(() => inFlight.delete(p));
+  return p;
+}
+export async function flushPendingEmbeds(): Promise<void> {
+  while (inFlight.size > 0) {
+    await Promise.allSettled([...inFlight]);
+  }
+}
+```
+
+`schedulePendingEmbeds` (`:382-426`, cited §2) wraps its own work in `track(...)` before
+returning, so every in-flight Phase-B batch is discoverable by `flushPendingEmbeds`
+regardless of whether the original caller awaited it. `@adhd/backlog` reuses this exact
+shape — a per-store `Set`, not a module-level one, since a process may legitimately open
+more than one `GraphBacklogStore` (tests, multi-scope tooling):
+
+```ts
+// store/graph-backlog-store.ts (design sketch — extends §3.2's construction)
+export interface GraphBacklogStore {
+  readonly db: Database.Database;
+  readonly graph: GraphBackend;
+  readonly embedding?: { readonly provider: EmbeddingProvider; readonly vector: VectorBackend; readonly space: VectorSpace };
+  /** NEW. Drains every in-flight scheduleEmbed call. Mirrors sox-memory-core's
+   *  embed-pipeline.ts:350-366 inFlight/track/flushPendingEmbeds pattern verbatim,
+   *  scoped per-store instead of per-module. */
+  flushEmbeds(): Promise<void>;
+}
+
+export async function openGraphBacklogStore(dbPath: string, opts?: { embedding?: {...} }): Promise<GraphBacklogStore> {
+  // ... unchanged construction (§3.2) ...
+  const inFlight = new Set<Promise<unknown>>();
+  function track<T>(p: Promise<T>): Promise<T> {
+    inFlight.add(p);
+    void p.finally(() => inFlight.delete(p));
+    return p;
+  }
+  async function flushEmbeds(): Promise<void> {
+    while (inFlight.size > 0) {
+      await Promise.allSettled([...inFlight]);
+    }
+  }
+  const store: GraphBacklogStore = { db, graph, embedding, flushEmbeds };
+  // scheduleEmbed (above) is called as `track(scheduleEmbed(store, nodeId, content))`
+  // from createItem/updateItem, below — always tracked, whether or not the caller awaits it.
+  return store;
+}
+```
+
+`createItem`/`updateItem` gain an optional `awaitEmbed?: boolean` field on
+`CreateItemInput`/`UpdateItemInput` (additive, defaults `false` — today's fire-and-forget
+server behavior, unchanged) rather than a new positional parameter, keeping the existing
+single-object-input convention and every current caller's call site untouched:
+
+```ts
+// client.ts (design sketch)
+export async function createItem(ctx: BacklogCtx, input: CreateItemInput): Promise<CreateItemResult> {
+  // ... existing Phase A (unchanged) ...
+  const embedPromise = track(ctx.store, scheduleEmbed(ctx.store, item.nodeId, content));
+  if (input.awaitEmbed) {
+    await embedPromise; // synchronous caller explicitly opted in — vector guaranteed queryable when this returns
+  }
+  // else: fire-and-forget for the default server path — but ALWAYS tracked in
+  // ctx.store's inFlight set, so a later flushEmbeds() still sees it.
+  return result;
+}
+```
+
+**The CLI/short-lived contract — stated explicitly, not left implicit.** The long-lived
+`startBacklogServer` HTTP/MCP path needs **no change**: it keeps fire-and-forget, exactly
+as before, since the process outlives every embed by construction. Any **one-shot**
+entry point — the `apigen-plugin-cli-output` mount (one process = one command = one
+exit), or a plain script importing `client.ts`/`index.ts` functions directly — **MUST**
+do one of:
+1. Pass `awaitEmbed: true` on every `createItem`/`updateItem` call it makes, or
+2. Call `await ctx.store.flushEmbeds()` once, after all its writes and before process
+   exit (cheaper for a script doing many writes — pays the ONNX latency once, batched,
+   instead of per-call).
+
+Either is sufficient; a caller doing neither reproduces the original bug. Because
+`closeGraphBacklogStore` (real, shipped, currently synchronous —
+`store/graph-backlog-store.ts:34-36`, `store.db.close()`) is the natural "I'm done"
+call every consumer already makes, it becomes the belt-and-suspenders backstop:
+
+```ts
+// store/graph-backlog-store.ts (design sketch — real function, signature changes sync->async)
+export async function closeGraphBacklogStore(store: GraphBacklogStore): Promise<void> {
+  await store.flushEmbeds(); // drains any embed the caller forgot to await/flush explicitly
+  store.db.close();
+}
+```
+
+This IS a breaking signature change (`void` → `Promise<void>`) to a real, shipped
+function — but `closeGraphBacklogStore` is an internal `store/*` helper, not part of the
+apigen-exposed `client.ts` surface (SPEC.md §5's operation list), so it requires
+updating only this package's own internal call sites (`server.ts`'s shutdown path,
+every `*.spec.ts`'s test teardown — all real, all already `await`-capable contexts) —
+**never** a consumer-facing break. A one-shot host that calls `closeGraphBacklogStore`
+correctly (awaited, as any async `close()` should be) closes the gap even if it forgot
+`awaitEmbed`/`flushEmbeds` explicitly — belt AND suspenders, not either/or.
 
 ### 3.2 Vector store wiring — extending `openGraphBacklogStore`
 
@@ -221,6 +556,11 @@ export async function openGraphBacklogStore(
 }
 ```
 
+> **Note:** §3.1.1 below extends this same `GraphBacklogStore`/`openGraphBacklogStore`
+> sketch with a `flushEmbeds()` method and its `inFlight`-tracking construction — shown
+> separately there (next to the short-lived-process problem it solves) rather than
+> duplicated here; the two are the same interface, not two competing designs.
+
 **RAG is opt-in, not forced.** `startBacklogServer` (`server.ts`) gains an `embedding?:
 {...}` field on `StartOpts`, defaulting to **absent** — every `@adhd/backlog` deployment
 that does not configure it keeps behaving exactly as v0.1 (`listItems({grep})` stays
@@ -261,6 +601,16 @@ caller relying on vector recall is never quietly downgraded to keyword search wi
 knowing it (contrast with `listItems({grep})`, which degrades a *generic* text filter on
 purpose, per its existing "just search" contract).
 
+**The §2.1 `knn` filter-pushdown upgrade benefits this call site with zero code change
+here.** `listItemsGrep`/`semanticSearch` never touch `VectorBackend.knn` directly — they
+delegate to `SqliteSearchBackend`, which is already a black box from backlog's point of
+view. Once the upstream `SqliteSearchBackend` itself is updated to pass `{ nodeFilter }`
+instead of pre-resolving ids (§2.1's third landing file,
+`hybrid-search/src/index.ts:525-564`), `listItemsGrep`/`semanticSearch`'s code above is
+**unchanged** — the efficiency gain flows through automatically, which is exactly the
+point of treating `searchNodes`/`SqliteSearchBackend` as a swappable internal, per
+`DESIGN.md` §9's original framing.
+
 ### 3.4 `relatedItems(id)` — embedding nearest-neighbor
 
 ```ts
@@ -269,7 +619,12 @@ export async function relatedItems(ctx: BacklogCtx, repo: string, humanId: strin
   if (!ctx.store.embedding) throw new RagNotConfiguredError('relatedItems');
   const ownVec = ctx.store.embedding.vector.get(item.nodeId, ctx.store.embedding.space.modelId);
   if (!ownVec) return []; // embedding not yet landed (Phase B pending) — not an error
-  const neighbors = ctx.store.embedding.vector.knn(ownVec, ctx.store.embedding.space, (opts?.limit ?? 10) + 1);
+  // §2.1 upgrade: scope directly in the KNN query — no pre-resolve-ids step, and no
+  // post-hoc filtering of unrelated-repo neighbors out of the result (a real scoping
+  // gap in the pre-upgrade version of this function: an unscoped knn() call in a
+  // GLOBAL-scope store could surface another repo's items as "related").
+  const nodeFilter = { tags: ['backlog-item'], namespace: repo };
+  const neighbors = ctx.store.embedding.vector.knn(ownVec, ctx.store.embedding.space, (opts?.limit ?? 10) + 1, { nodeFilter });
   return neighbors
     .filter((n) => n.id !== item.nodeId)
     .map((n) => ctx.store.graph.getNode(n.id))
@@ -281,9 +636,13 @@ export async function relatedItems(ctx: BacklogCtx, repo: string, humanId: strin
 
 This is the SubgraphRAG-style "adjustable neighborhood size" pattern from §1's citation
 `01KXNX6T9TTC4AQFD2FEPR695H`, simplified to what a real sox package actually offers: a
-plain cosine-KNN (`VectorBackend.knn`, `vector-store/src/index.ts:256-265`) with a
-caller-supplied `limit`, not a trained relevance scorer — no sox package trains one, so
-this spec does not invent one (per §1's instruction to note rather than fabricate).
+plain cosine-KNN (`VectorBackend.knn`, `vector-store/src/index.ts:256-265`, upgraded per
+§2.1) with a caller-supplied `limit`, not a trained relevance scorer — no sox package
+trains one, so this spec does not invent one (per §1's instruction to note rather than
+fabricate). Before §2.1's upgrade, this function would have needed the two-step
+`graph.queryNodes(nodeFilter).map(n=>n.id)` → `{ids: matchedIds}` workaround (identical
+to §3.3/§4/§5.5's pre-upgrade shape) to achieve the same repo-scoping; the single
+`{ nodeFilter }` call above is only possible once §2.1 has landed.
 
 ### 3.5 Reranking — optional, threshold-gated
 
@@ -349,9 +708,11 @@ async function dedupeScanSemantic(store: GraphBacklogStore, repo: string, input:
   if (!store.embedding) return [];
   const content = `${input.title}\n\n${input.body}`;
   const vec = await store.embedding.provider.embedSingle(content, 'query');
+  // §2.1 upgrade: filter pushed directly into the KNN query — no separate
+  // queryNodes() round trip, no materialized id array, no SQLITE_LIMIT_VARIABLE_NUMBER
+  // ceiling on a repo with a very large item count (§2.1's correctness note).
   const nodeFilter = { tags: ['backlog-item'], namespace: repo };
-  const matchedIds = store.graph.queryNodes(nodeFilter).map((n) => n.id); // BL-294 pattern (§2 hybrid-search entry)
-  const hits = store.embedding.vector.knn(vec, store.embedding.space, 10, { ids: matchedIds });
+  const hits = store.embedding.vector.knn(vec, store.embedding.space, 10, { nodeFilter });
   return hits
     .filter((h) => h.score >= 0.90) // "candidate" band per detectNearDupPairs' own default distinctThreshold/nearDupThreshold split (sox-analysis :186-187)
     .map((h) => store.graph.getNode(h.id))
@@ -586,9 +947,9 @@ export async function suggestDependencies(ctx: BacklogCtx, repo: string, humanId
   const item = requireItem(ctx.store, repo, humanId);
   const ownVec = ctx.store.embedding.vector.get(item.nodeId, ctx.store.embedding.space.modelId);
   if (!ownVec) return [];
+  // §2.1 upgrade: same filter-pushdown as §3.4/§4 — one KNN call, no id pre-resolve.
   const nodeFilter = { tags: ['backlog-item'], namespace: repo };
-  const matchedIds = ctx.store.graph.queryNodes(nodeFilter).map((n) => n.id); // BL-294 pattern, again (§3.3/§4)
-  const neighbors = ctx.store.embedding.vector.knn(ownVec, ctx.store.embedding.space, (opts?.limit ?? 5) + 1, { ids: matchedIds });
+  const neighbors = ctx.store.embedding.vector.knn(ownVec, ctx.store.embedding.space, (opts?.limit ?? 5) + 1, { nodeFilter });
   const existingEdgeTargets = new Set([
     ...ctx.store.graph.getEdges({ src: item.nodeId }).map((e) => e.dst),
     ...ctx.store.graph.getEdges({ dst: item.nodeId }).map((e) => e.src),
@@ -648,10 +1009,38 @@ export async function suggestRelated(ctx: BacklogCtx, repo: string, humanId: str
 export async function backfillEmbeddings(ctx: BacklogCtx, opts?: { batchSize?: number; dryRun?: boolean }): Promise<BackfillResult>;
 ```
 
+`CreateItemInput` and `UpdateItemInput` (both existing, real types in `model.ts`) each
+gain one new optional field, additive, defaulting to today's behavior:
+
+```ts
+// model.ts (design sketch — extends the two REAL existing interfaces)
+export interface CreateItemInput {
+  // ... existing fields, unchanged ...
+  /** NEW (§3.1.1). When true, createItem awaits Phase B before returning — the vector
+   *  is guaranteed queryable the moment this call resolves. Default false (fire-and-
+   *  forget, today's server behavior). One-shot/CLI callers should set this OR call
+   *  the store-level flushEmbeds() below before exit. */
+  awaitEmbed?: boolean;
+}
+export interface UpdateItemInput {
+  // ... existing fields, unchanged ...
+  awaitEmbed?: boolean; // same contract as CreateItemInput's
+}
+```
+
+`flushEmbeds` is **not** a `client.ts`/apigen-exposed RPC — it is a method on
+`GraphBacklogStore` (§3.1.1), reachable only by a caller holding the real `ctx.store`
+object in-process (a CLI host, a script, `server.ts`'s own shutdown path). An MCP/HTTP
+caller has no reason to invoke "flush pending embeds" remotely — it is a process-
+lifecycle concern, not a domain operation — so it is deliberately absent from the
+`client.ts` export list above; it is documented here because it is still new,
+implementer-facing surface introduced by this spec, just at the store layer instead of
+the RPC layer.
+
 | Operation | Persona | §/algorithm |
 |---|---|---|
-| `semanticSearch` | implementer, orchestrator, human | §3.3 hybrid search (`sox-hybrid-search`) |
-| `relatedItems` | implementer, orchestrator | §3.4 KNN (`sox-vector-store`) |
+| `semanticSearch` | implementer, orchestrator, human | §3.3 hybrid search (`sox-hybrid-search`), scoped via §2.1's `knn` upgrade |
+| `relatedItems` | implementer, orchestrator | §3.4 KNN (`sox-vector-store`), scoped via §2.1 |
 | `listNearDuplicates` | planner, human | §4 (in-package, `getEdges({rel:'SAME_AS'})`) |
 | `runDedupSweep` | orchestrator (periodic), human (manual) | §4 `detectNearDupPairs` (`sox-analysis`) |
 | `criticalPath` | orchestrator, planner | §5.1 `criticalPath` (`sox-analysis`) |
@@ -660,8 +1049,10 @@ export async function backfillEmbeddings(ctx: BacklogCtx, opts?: { batchSize?: n
 | `promoteClusterToPlan` | planner (confirm gate) | §5.3 — wraps existing `attachToPlan` |
 | `planReadiness` | orchestrator | §5.4 — aggregates `topoSort` + `readyItems` |
 | `recommendNextWork` | orchestrator, implementer | §5.2/§5.1 combined ranking |
-| `suggestDependencies` / `suggestRelated` | planner (confirm gate) | §5.5 in-package KNN, never auto-writes |
+| `suggestDependencies` / `suggestRelated` | planner (confirm gate) | §5.5 in-package KNN, never auto-writes, scoped via §2.1 |
 | `backfillEmbeddings` | human, ops | §7.3 migration |
+| `createItem`/`updateItem`'s `awaitEmbed` | implementer, CLI/script author | §3.1.1 — synchronous embed opt-in |
+| `GraphBacklogStore.flushEmbeds()` (store-level, not RPC) | ops, CLI/script author | §3.1.1 — drains pending embeds before process exit |
 
 ---
 
@@ -693,7 +1084,10 @@ even while the FTS `content` is not** — a real, useful asymmetry worth stating
 so an implementer does not assume both are equally stale. If/when
 `DEBT-BACKLOG-CONTENT-IMMUTABLE-001` is resolved (e.g. via a `supersedeItem`-based
 content refresh), the embedding re-sync trigger point does not change — it is already
-correct.
+correct. `updateItem`'s re-embed is subject to the same fire-and-forget-by-default /
+`awaitEmbed`-opt-in / `flushEmbeds`-before-exit contract as `createItem`'s (§3.1.1) — a
+short-lived process editing an item and immediately re-querying it needs the same
+explicit drain.
 
 `DEBT-BACKLOG-CONTENT-HASH-COLLISION-001`'s mitigation (an HTML-comment uniqueness
 marker appended to every node's `content`, `BACKLOG.md:1134`) has **no interaction**
@@ -774,6 +1168,19 @@ embedding models later reuses that exact function, not reinvented here).
    `@adhd/sox-vector-store`/`@adhd/sox-embedding-provider`/`@adhd/sox-hybrid-search`/
    `@adhd/sox-analysis` as real native/ONNX-bearing dependencies, not just resolve them
    at the source level.
+9. **A short-lived process's embed survives process exit (§3.1.1's fix has teeth).**
+   Real flow: open a store (real `fastembed` provider, per DoD rule 5's default-running
+   case), `createItem` with `awaitEmbed: true` (or fire-and-forget followed by `await
+   store.flushEmbeds()`), then `await closeGraphBacklogStore(store)`, then open a
+   **brand-new** `GraphBacklogStore` over the SAME db path (a fresh connection, proving
+   durability rather than an in-process cache artifact), then assert
+   `newStore.embedding.vector.get(nodeId, modelId) !== null` AND that `relatedItems`/
+   `semanticSearch` against the reopened store returns the item. **Negative control:**
+   repeat the identical flow but bypass `closeGraphBacklogStore` — call `store.db.close()`
+   directly with no `awaitEmbed`/`flushEmbeds()` call at all (reproducing the exact
+   pre-fix fire-and-forget-only behavior) — and confirm the reopened store's vector
+   lookup is `null`, proving the drain mechanism is what closes the gap, not that the
+   embed would have landed anyway given enough wall-clock time.
 
 Every test above uses a real DB + real embeddings under `tmp/backlog/<test-name>/`
 (`AGENTS.md` §10), removed on teardown, per the existing `SPEC.md`/`DESIGN.md`
@@ -785,10 +1192,18 @@ convention this document does not change.
 
 ### Phasing
 
+0. **Phase 0 — upstream `sox-ecosystem` prerequisite (§2.1).** The `@adhd/sox-vector-store`
+   `knn`/`VecFilter` filter-pushdown upgrade + `@adhd/sox-graph-store`'s
+   `buildNodeFilterClause` export must land and both packages must be version-bumped
+   **before** Phase 1 below can use `{ nodeFilter }` directly. This is a real
+   cross-repo dependency, not a formality — every Phase 1 code sketch in §3.3/§3.4
+   assumes it is already done.
 1. **Phase 1 — retrieval only (§3).** `openGraphBacklogStore`'s `embedding` opt-in,
-   `scheduleEmbed` Phase-A/Phase-B wiring, `semanticSearch`, `relatedItems`, upgraded
+   `scheduleEmbed`/`flushEmbeds`/`awaitEmbed` Phase-A/Phase-B wiring (§3.1.1's
+   short-lived-process fix ships as part of Phase 1, not deferred — it is a
+   correctness fix, not an enhancement), `semanticSearch`, `relatedItems`, upgraded
    `listItems({grep})`. No plan-graph algorithms yet. This is the smallest slice that
-   makes RAG real and independently testable (DoD items 1, 7).
+   makes RAG real and independently testable (DoD items 1, 7, 9).
 2. **Phase 2 — semantic dedup (§4).** `dedupeScan`'s third candidate source,
    `listNearDuplicates`, `runDedupSweep`. Depends on Phase 1's embeddings existing.
 3. **Phase 3 — plan-graph intelligence (§5).** `criticalPath`, `blockerImpact` (does
@@ -821,15 +1236,41 @@ measured against real usage.
    power-iteration over `getEdges`-derived adjacency for the former; a modularity-
    optimization pass over `getSubgraph`-derived neighborhoods for the latter) — this
    spec does not design either, per §1's "note the gap rather than invent" instruction.
-3. **`VectorBackend.knn`'s `VecFilter` only supports `{ids}`, not a general `NodeFilter`**
-   (`vector-store/src/index.ts:14-16`, verified) — every RAG call site in this design
-   that needs scoping (repo/namespace) first resolves the id set via
-   `graph.queryNodes(nodeFilter)` and passes `{ids}` to `knn` (the exact BL-294 pattern
-   `SqliteSearchBackend` already uses internally, `hybrid-search/src/index.ts:536-542`).
-   This is a real perf cost at large scale (materializing every matching id before the
-   KNN call) — acceptable at backlog's expected scale (hundreds to low thousands of
-   items per repo, matching `DESIGN.md` §2.2's own "~100 package / few-thousand-item
-   scale" assumption) but worth re-measuring if that assumption changes.
+3. **RESOLVED in this revision (was open in v0.2.0): `VectorBackend.knn`'s `VecFilter`
+   only supported `{ids}`, not a general `NodeFilter`** (`vector-store/src/index.ts:
+   14-16`, verified), forcing every scoped RAG call site to pre-resolve matching ids via
+   `graph.queryNodes(nodeFilter)` before calling `knn` — the exact BL-294 pattern
+   `SqliteSearchBackend` already used internally (`hybrid-search/src/index.ts:536-542`).
+   §2.1 designs the upstream fix (`VecFilter.nodeFilter`, pushed into a SQL JOIN against
+   `node`) and §3.3/§3.4/§4/§5.5 have been reworked to use it directly. Two residual
+   items, not full open questions but worth tracking: (a) the fix requires
+   `@adhd/sox-graph-store`'s `buildNodeFilterClause` to be exported (currently private,
+   `graph-store/src/index.ts:516`) — a small, low-risk change, but a real one; (b) a
+   **future** non-brute-force `SimilarityBackend` (none ships today) would need the
+   over-fetch-then-filter contract §2.1 documents but does not implement, to avoid the
+   ANN-plus-post-filter under-count problem — flagged there, not designed further here.
+3a. **New, phase-2 optimization, not designed here:** sqlite-vec's `vec0` virtual
+   tables support declaring **partition key** columns at `CREATE VIRTUAL TABLE` time,
+   which can make a specific pre-declared filter dimension (e.g. `namespace`) efficient
+   inside a *native* ANN index — this was not verified against the exact
+   `sqlite-vec@^0.1.9` version pinned in `@adhd/sox-vector-store`'s `package.json`, and
+   would require a `vec0` schema change (the partition-key column must exist at table
+   creation), not just a query-shape change. Worth investigating once/if a
+   non-brute-force `SimilarityBackend` is ever justified by real corpus size; §2.1's
+   JOIN-based fix is sufficient for the shipped brute-force backend regardless.
+3b. **New, unverified in this revision:** `apigen-plugin-cli-output`'s exact
+   per-invocation shutdown lifecycle (does its generated command wrapper already `await`
+   an async `close()`-shaped teardown hook, or does it call `process.exit()` without
+   one?) was **not read** as part of this revision — §3.1.1's "CLI/short-lived contract"
+   states what a one-shot host MUST do (`awaitEmbed`/`flushEmbeds`/awaited
+   `closeGraphBacklogStore`), but whether `apigen-plugin-cli-output`'s existing
+   generated wrapper already provides a hook to do so, or needs its own change to add
+   one, is unconfirmed — flagged rather than assumed. Note this is an **adhd-monorepo**
+   package, not a sox-ecosystem one — `packages/apigen/apigen-plugin-cli-output/src/`
+   in this repo, not `~/dev/ai/sox-ecosystem` — so any fix needed there is a normal
+   in-repo change, outside this spec's "only sox packages" constraint (which applies to
+   §2.1's `knn` upgrade, not to this). Read that package's source before implementing
+   the CLI-specific half of §3.1.1.
 4. **`getSubgraph`'s `depth` parameter's exact semantics for "unbounded" were not
    independently verified against the real signature beyond the type
    (`opts?: { rel?, depth?, direction? }`, `graph-store/src/index.ts:375-378`)** — §5.2's
@@ -870,7 +1311,9 @@ disclosure rule — discovered during this design pass, not deferred to later):
 | Capability | Algorithm | Package (real API cited) | Research grounding |
 |---|---|---|---|
 | Embedding on write | Two-phase async write (embed off the SQLite write lock) | `@adhd/sox-embedding-provider` (`createEmbeddingProvider`, `getSharedOnnxWorker`) + pattern from `@adhd/sox-memory-core`'s `embed-pipeline.ts` | No direct memory hit; verified via source + reused shipped pattern |
+| Embed durability for short-lived processes | Tracked in-flight `Set<Promise>` + drain-until-empty (`flushEmbeds`) + explicit `awaitEmbed` opt-in | In-package, mirroring `@adhd/sox-memory-core`'s `embed-pipeline.ts:350-366` `inFlight`/`track`/`flushPendingEmbeds` verbatim | No direct memory hit; verified via source + reused shipped pattern (§3.1.1) |
 | Vector persistence | sqlite-vec virtual table, node-id keyed | `@adhd/sox-vector-store` (`SqliteVectorBackend`) | — |
+| Filtered KNN (scoped semantic search / related items / dedup / suggestions) | SQL `JOIN` pushdown of `NodeFilter` predicates into the vector candidate-selection query | **Upstream upgrade to `@adhd/sox-vector-store`** (`VecFilter.nodeFilter`, §2.1) + `@adhd/sox-graph-store`'s `buildNodeFilterClause` (newly exported) | No external research needed — standard SQL JOIN/WHERE pushdown; motivated by a genuine `SQLITE_LIMIT_VARIABLE_NUMBER` correctness ceiling in the pre-upgrade two-step workaround, not just perf (§2.1) |
 | Hybrid search | BM25 + cosine fusion (min_max/L2/z_score) | `@adhd/sox-hybrid-search` (`SqliteSearchBackend`, `fuse`) | GraphRAG survey `01KXNX6X8AR7XJWMHM43GNCHKD` (structure-aware retrieval rationale) |
 | Nearest-neighbor "related items" | Cosine KNN | `@adhd/sox-vector-store` (`VectorBackend.knn`) | SubgraphRAG `01KXNX6T9TTC4AQFD2FEPR695H` (adjustable-neighborhood framing) |
 | Reranking | Cross-encoder, threshold-gated | `@adhd/sox-hybrid-search` (`createCrossEncoder`) | — |
