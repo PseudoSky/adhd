@@ -1,6 +1,9 @@
 {
   "name": "@adhd/backlog",
   "version": "0.0.1",
+  "bin": {
+    "backlog": "./dist/index.js"
+  },
   "dependencies": {
     "@adhd/sox-graph-store": "^0.3.0",
     "better-sqlite3": "^12.10.0",
@@ -9,7 +12,9 @@
     "@adhd/apigen-core-client": "^0.1.1",
     "@adhd/apigen-plugin-api-fastify": "^0.1.2",
     "@adhd/apigen-plugin-openapi": "^0.1.3",
-    "@adhd/apigen-plugin-mcp": "^0.1.2"
+    "@adhd/apigen-plugin-mcp": "^0.1.2",
+    "@adhd/apigen-plugin-cli-output": "^0.1.3",
+    "@adhd/apigen-engine-naming": "^0.1.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13"

@@ -76,9 +76,19 @@ describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', ()
     controller = new AbortController();
     serverPromise = startBacklogServer({ transport: 'http', port, host: '127.0.0.1', scope: 'project', cwd: adhdRoot, adhdRoot, signal: controller.signal });
 
-    await waitForHttpReady(port, `/backlog/getItem?repo=${encodeURIComponent(repo)}&humanId=${seeded.item.humanId}`);
+    // Route is `/backlog/client-d/get-item`, NOT `/backlog/getItem` —
+    // `apigen-plugin-api-fastify`'s canonical route projection (commit
+    // a6e895e2, landed AFTER this package's original commit 1be78422) now
+    // routes via `project(op).http.route`, which is namespace + file-segment
+    // + export-segment, all kebab-cased. Because `extractClientOperations()`
+    // (server.ts) extracts from the BUILT `client.d.ts` (a deliberate
+    // workaround — see that function's own doc comment), the file segment is
+    // `client-d` (`normalizeFileName('client.d.ts')`), and it leaks into
+    // every canonical route. Filed as BACKLOG
+    // BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001.
+    await waitForHttpReady(port, `/backlog/client-d/get-item?repo=${encodeURIComponent(repo)}&humanId=${seeded.item.humanId}`);
 
-    const res = await fetch(`http://127.0.0.1:${port}/backlog/getItem?repo=${encodeURIComponent(repo)}&humanId=${seeded.item.humanId}`);
+    const res = await fetch(`http://127.0.0.1:${port}/backlog/client-d/get-item?repo=${encodeURIComponent(repo)}&humanId=${seeded.item.humanId}`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as { humanId: string; title: string; body: string };
     expect(body.humanId).toBe(seeded.item.humanId);
@@ -100,7 +110,9 @@ describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', ()
 
     await waitForHttpReady(port, `/_meta/openapi`);
 
-    const createRes = await fetch(`http://127.0.0.1:${port}/backlog/createItem`, {
+    // See the "client-d" route-segment note in the previous test — routes are
+    // `/backlog/client-d/<kebab-export-name>`, not `/backlog/<exportName>`.
+    const createRes = await fetch(`http://127.0.0.1:${port}/backlog/client-d/create-item`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { input: { family: 'BUG-HTTPPOST', title: 'posted', body: 'x', repo } } }),
@@ -109,7 +121,7 @@ describe('startBacklogServer — live HTTP mount, real fetch, no mocked fns', ()
     const created = (await createRes.json()) as { item: { humanId: string } };
     expect(created.item.humanId).toBe('BUG-HTTPPOST-001');
 
-    const getRes = await fetch(`http://127.0.0.1:${port}/backlog/getItem?repo=${encodeURIComponent(repo)}&humanId=${created.item.humanId}`);
+    const getRes = await fetch(`http://127.0.0.1:${port}/backlog/client-d/get-item?repo=${encodeURIComponent(repo)}&humanId=${created.item.humanId}`);
     const got = (await getRes.json()) as { title: string };
     expect(got.title).toBe('posted');
   }, 30_000);
