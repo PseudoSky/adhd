@@ -80,14 +80,24 @@ function rebaseExports(node) {
 /**
  * Rebase a `bin` field (string form or { name: path } map).
  *
+ * Unlike `main`/`module`/`typings`/`exports` (rebased via {@link rebaseDistPath}
+ * alone, which preserves a leading `./`), `bin` values ALSO get that leading
+ * `./` stripped entirely. npm's publish-time bin validation rejects a `./`-
+ * prefixed path outright — silently, with no error, just a warning naming the
+ * wrong cause ("script name X was invalid and removed") and the bin entry
+ * dropped from the published package. Confirmed empirically (npm 11.6.2,
+ * isolated repro outside this repo): identical file, identical permissions,
+ * only the leading `./` differs — `"./index.js"` stripped, `"index.js"` kept.
+ *
  * @param {unknown} bin
  * @returns {unknown}
  */
 function rebaseBin(bin) {
-  if (typeof bin === 'string') return rebaseDistPath(bin);
+  const stripLeadingDotSlash = (v) => (typeof v === 'string' ? rebaseDistPath(v).replace(/^\.\//, '') : v);
+  if (typeof bin === 'string') return stripLeadingDotSlash(bin);
   if (bin && typeof bin === 'object') {
     const out = {};
-    for (const [k, v] of Object.entries(bin)) out[k] = rebaseDistPath(v);
+    for (const [k, v] of Object.entries(bin)) out[k] = stripLeadingDotSlash(v);
     return out;
   }
   return bin;

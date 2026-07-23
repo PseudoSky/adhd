@@ -117,4 +117,28 @@ function reconcilePackage({ name, version, distDir, workDir }) {
   };
 }
 
-module.exports = { reconcilePackage };
+/**
+ * Describe the network calls a given {@link ReconcileResult} implies, in the
+ * exact order `reconcilePackage` makes them — used by BOTH `reconcile/impl.js`
+ * (the standalone `reconcile` task) and `version/impl.js` (its single-package
+ * cache-miss `backfillOnMiss` fallback) to feed `lib/metrics.js`'s
+ * `rec.network(label)` without duplicating this sequencing knowledge in two
+ * places, and without threading a `MetricsRecorder` through this shared,
+ * independently-tested library (`reconcile-core.spec.mjs`).
+ *
+ * @param {ReconcileResult} result
+ * @returns {string[]} network-call labels, in call order
+ */
+function describeNetworkCalls(result) {
+  if (result.status === 'error' && result.error && result.error.startsWith('no built dist at')) {
+    return []; // reconcilePackage's very first guard — no network reached at all
+  }
+  const labels = ['npm view <name> versions'];
+  if (result.status !== 'pending') {
+    labels.push('npm view <name>@<version> dist.integrity');
+  }
+  if (result.tarballPulled) labels.push('npm pack <name>@<version> (tarball)');
+  return labels;
+}
+
+module.exports = { reconcilePackage, describeNetworkCalls };
