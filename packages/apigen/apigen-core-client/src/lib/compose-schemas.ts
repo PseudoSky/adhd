@@ -77,7 +77,7 @@ function validateComposedRefs(domainSchemas: GeneratedSchemas): void {
  * that (a) ALL domain parameters are wrapped in a `data: {}` envelope, and
  * (b) any transport-level envelope fields (session, auth token, …) are NOT
  * part of `data` — for MCP specifically they travel via
- * `arguments._meta["x-<pluginId>-<field>"]` (see `@adhd/apigen-naming`
+ * `arguments._meta["x-<pluginId>-<field>"]` (see `@adhd/apigen-engine-naming`
  * `envelopeMetaKey`), not as sibling properties of `data`.
  */
 function buildEnvelopeDescription(
@@ -96,7 +96,7 @@ function buildEnvelopeDescription(
         .join(', ')} are transport-level envelope metadata, NOT domain data — ` +
         `do not nest them under "data". Over MCP they are read from ` +
         `arguments._meta["x-<pluginId>-<field>"] (default pluginId "adhd"); ` +
-        `see @adhd/apigen-naming's envelopeMetaKey/envelopeCliFlag/envelopeEnvVar ` +
+        `see @adhd/apigen-engine-naming's envelopeMetaKey/envelopeCliFlag/envelopeEnvVar ` +
         `for the HTTP-header / CLI-flag / env-var equivalents.`
     );
   }
@@ -179,7 +179,7 @@ export function composeSchemas(
     // params) — the param-shape criterion FEAT-APIGEN-022 asked for — WITHOUT
     // requiring the manual `--opt http.verb.<id>=GET` override. Stamped as
     // `x-apigen-safe` so every HTTP transport's shared `httpVerb()`
-    // (`@adhd/apigen-naming`) picks it up identically; the manual override
+    // (`@adhd/apigen-engine-naming`) picks it up identically; the manual override
     // still wins there regardless of this value (checked first).
     const safe =
       fnSchema.safe === true || isPrimitiveOnlyInputSchema(fnSchema.input);

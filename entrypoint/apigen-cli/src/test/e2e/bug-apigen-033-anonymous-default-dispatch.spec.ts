@@ -79,14 +79,21 @@ describe('BUG-APIGEN-033: anonymous default-export dispatch, against the REAL bu
     const client = await connectTo(path.join(shapesDir, 'anonymous-default.ts'));
 
     const listed = await client.listTools();
-    // The tool must be named 'default' — the runtime .name buildFnTable can
-    // actually resolve — not a filename-derived synthetic id.
-    expect(listed.tools.map((t) => t.name)).toEqual(['default']);
+    // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: since BUG-APIGEN-
+    // OPENAPI-ROUTE-PATH-MISMATCH-001's MCP-side fix, the tool is registered
+    // under the canonical project(op).mcp.name
+    // (<namespace>_<file>_<export> — namespace "apigen-cli", file
+    // "anonymous-default", export "default"), not the raw runtime `.name`.
+    // That dispatch's fnName lookup still resolves via the runtime `.name`
+    // ('default') internally is exactly what this regression guards — the
+    // *served/callable tool identifier* is now the qualified name.
+    const toolName = 'apigen_cli_anonymous_default_default';
+    expect(listed.tools.map((t) => t.name)).toEqual([toolName]);
 
     // Pre-fix this call would throw/error ("function not found") because
     // dispatch looked up a key buildFnTable never produced.
     const res = (await client.callTool({
-      name: 'default',
+      name: toolName,
       arguments: { data: { n: 21 } },
     })) as { content: Array<{ type: string; text: string }>; isError?: boolean };
     expect(res.isError, JSON.stringify(res)).not.toBe(true);
@@ -102,10 +109,14 @@ describe('BUG-APIGEN-033: anonymous default-export dispatch, against the REAL bu
     );
 
     const listed = await client.listTools();
-    expect(listed.tools.map((t) => t.name)).toEqual(['default']);
+    // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001 (see the other
+    // test in this suite for the full explanation): namespace "apigen-cli",
+    // file "anonymous-default-fn-decl", export "default".
+    const toolName = 'apigen_cli_anonymous_default_fn_decl_default';
+    expect(listed.tools.map((t) => t.name)).toEqual([toolName]);
 
     const res = (await client.callTool({
-      name: 'default',
+      name: toolName,
       arguments: { data: { n: 7 } },
     })) as { content: Array<{ type: string; text: string }>; isError?: boolean };
     expect(res.isError, JSON.stringify(res)).not.toBe(true);
@@ -119,10 +130,13 @@ describe('BUG-APIGEN-033: anonymous default-export dispatch, against the REAL bu
     const client = await connectTo(path.join(shapesDir, 'default-fn.ts'));
 
     const listed = await client.listTools();
-    expect(listed.tools.map((t) => t.name)).toEqual(['greet']);
+    // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: namespace
+    // "apigen-cli", file "default-fn", export "greet".
+    const toolName = 'apigen_cli_default_fn_greet';
+    expect(listed.tools.map((t) => t.name)).toEqual([toolName]);
 
     const res = (await client.callTool({
-      name: 'greet',
+      name: toolName,
       arguments: { data: { name: 'Ada' } },
     })) as { content: Array<{ type: string; text: string }>; isError?: boolean };
     expect(res.isError, JSON.stringify(res)).not.toBe(true);

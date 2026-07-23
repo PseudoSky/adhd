@@ -136,8 +136,8 @@ describe('generate()', () => {
     expect(content).toContain('Router');
     expect(content).toContain("from 'express'");
     // unsafe ops → POST
-    expect(content).toContain("router.post('/test-pkg/getUser'");
-    expect(content).toContain("router.post('/test-pkg/listUsers'");
+    expect(content).toContain("router.post('/test-pkg/get-user'");
+    expect(content).toContain("router.post('/test-pkg/list-users'");
   });
 
   it('[plugin-api-express.2] generated routes.ts imports dispatch from @adhd/apigen-engine-runtime', () => {
@@ -153,8 +153,8 @@ describe('generate()', () => {
   it('[plugin-api-express.4] route shape is POST /<packageId>/<fnName> for unsafe ops', () => {
     const out = generate(baseInput);
     const content = out.files[0].content;
-    expect(content).toContain("router.post('/test-pkg/getUser'");
-    expect(content).toContain("router.post('/test-pkg/listUsers'");
+    expect(content).toContain("router.post('/test-pkg/get-user'");
+    expect(content).toContain("router.post('/test-pkg/list-users'");
   });
 
   it('generated routes.ts calls res.json(result) not return', () => {
@@ -168,7 +168,7 @@ describe('generate()', () => {
   it('respects routePrefix option', () => {
     const out = generate({ ...baseInput, options: { routePrefix: '/v1' } });
     expect(out.files[0].content).toContain(
-      "router.post('/v1/test-pkg/getUser'"
+      "router.post('/v1/test-pkg/get-user'"
     );
   });
 
@@ -194,20 +194,24 @@ describe('generate()', () => {
 
   it('[v2-express.verb.2] unsafe op (no x-apigen-safe) → router.post()', () => {
     const { content } = generate(baseInput).files[0];
-    expect(content).toContain("router.post('/test-pkg/getUser'");
-    expect(content).not.toContain("router.get('/test-pkg/getUser'");
+    expect(content).toContain("router.post('/test-pkg/get-user'");
+    expect(content).not.toContain("router.get('/test-pkg/get-user'");
   });
 
   it('[v2-express.verb.3] projection override flips unsafe→GET', () => {
     const input: PluginInput = {
       ...baseInput,
       options: {
-        projection: { http: { verb: { 'test-pkg:getUser': 'GET' } } },
+        // BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001: overrides are now keyed
+        // by the canonical `Operation.id` slug (`project()`'s own lookup key),
+        // matching the OpenAPI/gRPC/CLI transports — not the old
+        // `${pkgId}:${fnName}` shape `httpVerb()` used pre-fix.
+        projection: { http: { verb: { 'test-pkg/get-user': 'GET' } } },
       },
     };
     const { content } = generate(input).files[0];
-    expect(content).toContain("router.get('/test-pkg/getUser'");
-    expect(content).not.toContain("router.post('/test-pkg/getUser'");
+    expect(content).toContain("router.get('/test-pkg/get-user'");
+    expect(content).not.toContain("router.post('/test-pkg/get-user'");
   });
 
   // ---- [v2-proj-transport] envelope from headers (§9.1) ----
@@ -288,7 +292,7 @@ describe('run() — real Express server', () => {
     const deadline = Date.now() + 10000;
     while (Date.now() < deadline) {
       try {
-        const r = await fetch(`${baseUrl}/test-pkg/listUsers`, {
+        const r = await fetch(`${baseUrl}/test-pkg/list-users`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ data: {} }),
@@ -304,8 +308,8 @@ describe('run() — real Express server', () => {
     controller.abort();
   });
 
-  it('[plugin-api-express.3] POST /test-pkg/getUser returns correct JSON via res.json', async () => {
-    const res = await fetch(`${baseUrl}/test-pkg/getUser`, {
+  it('[plugin-api-express.3] POST /test-pkg/get-user returns correct JSON via res.json', async () => {
+    const res = await fetch(`${baseUrl}/test-pkg/get-user`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { userId: 'u42' } }),
@@ -317,8 +321,8 @@ describe('run() — real Express server', () => {
     expect(body).toEqual(expected);
   });
 
-  it('POST /test-pkg/listUsers returns correct JSON', async () => {
-    const res = await fetch(`${baseUrl}/test-pkg/listUsers`, {
+  it('POST /test-pkg/list-users returns correct JSON', async () => {
+    const res = await fetch(`${baseUrl}/test-pkg/list-users`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: {} }),
@@ -331,7 +335,7 @@ describe('run() — real Express server', () => {
   it('[plugin-api-express.4] body envelope — extra fields pass through, data routes to fn', async () => {
     // In v2, envelope comes from headers not body; extra body fields are ignored.
     // The function still returns correct data-driven result.
-    const res = await fetch(`${baseUrl}/test-pkg/getUser`, {
+    const res = await fetch(`${baseUrl}/test-pkg/get-user`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ session: 'tok-123', data: { userId: 'u99' } }),
@@ -386,7 +390,7 @@ describe('[v2-proj-transport] run() — safe→GET / envelope from headers', () 
     const deadline = Date.now() + 10000;
     while (Date.now() < deadline) {
       try {
-        const r = await fetch(`${baseUrl}/unsafe-pkg/listUsers`, {
+        const r = await fetch(`${baseUrl}/unsafe-pkg/list-users`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ data: {} }),
@@ -420,7 +424,7 @@ describe('[v2-proj-transport] run() — safe→GET / envelope from headers', () 
   });
 
   it('[v2-express.run.verb.3] unsafe op responds to POST', async () => {
-    const res = await fetch(`${baseUrl}/unsafe-pkg/getUser`, {
+    const res = await fetch(`${baseUrl}/unsafe-pkg/get-user`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { userId: 'u1' } }),
@@ -430,7 +434,7 @@ describe('[v2-proj-transport] run() — safe→GET / envelope from headers', () 
   });
 
   it('[v2-express.run.env.1] envelope field bound from x-<pluginId>-<field> header', async () => {
-    const res = await fetch(`${baseUrl}/env-pkg/getUser`, {
+    const res = await fetch(`${baseUrl}/env-pkg/get-user`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -444,7 +448,7 @@ describe('[v2-proj-transport] run() — safe→GET / envelope from headers', () 
 
   it('[v2-express.run.env.2] (negative) session in body without header does not crash server', async () => {
     // In v2, envelope is from headers; sending session in body is ignored (not fatal).
-    const res = await fetch(`${baseUrl}/env-pkg/getUser`, {
+    const res = await fetch(`${baseUrl}/env-pkg/get-user`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ session: 'wrong', data: { userId: 'u77' } }),
@@ -537,7 +541,7 @@ describe('[BUG-APIGEN-009/010] run() — validate-Layer + health mount (Express)
 
   it('[009] malformed date-time → 400 invalid_argument, fn never called', async () => {
     const before = scheduleCalls;
-    const res = await fetch(`${baseUrl}/sched/scheduleEvent`, {
+    const res = await fetch(`${baseUrl}/sched/schedule-event`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { when: '2099-02-30T00:00:00.000Z' } }),
@@ -549,7 +553,7 @@ describe('[BUG-APIGEN-009/010] run() — validate-Layer + health mount (Express)
 
   it('[009] missing required field → 400 invalid_argument, fn never called', async () => {
     const before = scheduleCalls;
-    const res = await fetch(`${baseUrl}/sched/scheduleEvent`, {
+    const res = await fetch(`${baseUrl}/sched/schedule-event`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: {} }),
@@ -561,7 +565,7 @@ describe('[BUG-APIGEN-009/010] run() — validate-Layer + health mount (Express)
 
   it('[009] valid date-time → 200 and the fn runs', async () => {
     const before = scheduleCalls;
-    const res = await fetch(`${baseUrl}/sched/scheduleEvent`, {
+    const res = await fetch(`${baseUrl}/sched/schedule-event`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { when: '2026-01-02T03:04:05.000Z' } }),
@@ -592,7 +596,7 @@ describe('[BUG-APIGEN-009/010] run() — validate-Layer + health mount (Express)
 /** Two real multi-route operations mirroring `testSchema`/`testFns` above. */
 const openapiTestOperations: Operation[] = [
   {
-    id: 'test-pkg/getUser',
+    id: 'test-pkg/get-user',
     host: 'ts',
     namespace: { raw: 'test-pkg', words: ['test', 'pkg'] },
     path: [{ raw: 'getUser', words: ['get', 'user'] }],
@@ -606,7 +610,7 @@ const openapiTestOperations: Operation[] = [
     typeText: null,
   },
   {
-    id: 'test-pkg/listUsers',
+    id: 'test-pkg/list-users',
     host: 'ts',
     namespace: { raw: 'test-pkg', words: ['test', 'pkg'] },
     path: [{ raw: 'listUsers', words: ['list', 'users'] }],

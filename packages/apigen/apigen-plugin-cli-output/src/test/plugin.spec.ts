@@ -112,9 +112,12 @@ describe('cliPlugin shape', () => {
     expect(typeof cliPlugin.generate).toBe('function');
   });
 
-  // [plugin-cli-output.6] Plugin has no run() method (generate-only plugin).
-  it('has no run() method (generate-only plugin)', () => {
-    expect(cliPlugin.run).toBeUndefined();
+  // [plugin-cli-output.6] Plugin now supports the run() path (live CLI
+  // execution) alongside generate() — see src/test/run.spec.ts for
+  // behavioral coverage. Superseded the old generate-only assertion once
+  // `apigen run --type cli` became a supported invocation.
+  it('has a run() method (run-capable plugin)', () => {
+    expect(typeof cliPlugin.run).toBe('function');
   });
 });
 

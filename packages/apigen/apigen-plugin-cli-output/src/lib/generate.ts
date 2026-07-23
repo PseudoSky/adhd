@@ -1,55 +1,15 @@
 import type { PluginInput, PluginOutput } from '@adhd/apigen-core-client';
 import { needsEnvelopeField, dataParamNames } from '@adhd/apigen-engine-runtime';
-import { envelopeCliFlag, envelopeEnvVar, sanitizeIdentifier } from '@adhd/apigen-naming';
+import { sanitizeIdentifier } from '@adhd/apigen-engine-naming';
 import { CLI_EXIT_CODE } from '@adhd/apigen-base-errors';
 import * as path from 'node:path';
-
-// ---------------------------------------------------------------------------
-// §9.1 — envelope field binding for CLI (flag + env var per field)
-// ---------------------------------------------------------------------------
-
-interface EnvelopeFieldBinding {
-  /** The bare field name as it appears in the composed schema. */
-  field: string;
-  /** pluginId resolved from x-apigen-envelope metadata (defaults to 'adhd'). */
-  pluginId: string;
-  /** Generated CLI flag, e.g. '--auth-session' or '--adhd-session'. */
-  flag: string;
-  /** Generated env var, e.g. 'APIGEN_AUTH_SESSION' or 'APIGEN_SESSION'. */
-  envVar: string;
-}
-
-/**
- * Collects all envelope field bindings for a schema, following SPEC §9.1:
- *   flag: --<pluginId>-<field>  +  env: APIGEN_<PLUGINID>_<FIELD>
- *   (flag takes precedence over env when both are present)
- *
- * Reads x-apigen-envelope (Record<field, pluginId>) from the schema;
- * defaults to pluginId='adhd' for any field without an explicit entry.
- */
-function envelopeBindings(
-  schema: Record<string, unknown>
-): EnvelopeFieldBinding[] {
-  const inputProps =
-    ((schema['input'] as Record<string, unknown> | undefined)?.[
-      'properties'
-    ] as Record<string, unknown> | undefined) ?? {};
-  const meta = schema['x-apigen-envelope'] as
-    | Record<string, string>
-    | undefined;
-  const bindings: EnvelopeFieldBinding[] = [];
-  for (const field of Object.keys(inputProps)) {
-    if (field === 'data') continue;
-    const pluginId = meta?.[field] ?? 'adhd';
-    bindings.push({
-      field,
-      pluginId,
-      flag: envelopeCliFlag(pluginId, field),
-      envVar: envelopeEnvVar(pluginId, field),
-    });
-  }
-  return bindings;
-}
+import {
+  envelopeBindings,
+  isJsonTypedProp,
+  isBooleanTypedProp,
+  dataSchemaProps,
+  kebabCase,
+} from './schema-introspect';
 
 /**
  * Converts an absolute (or package-name) import path to one relative to
@@ -64,34 +24,19 @@ function relativeImportPath(outDir: string, importPath: string): string {
   return rel
 }
 
-/**
- * BUG-APIGEN-031: the CLI transport's "wire" values are always raw argv
- * strings — unlike the HTTP transports (Express/Fastify), which already
- * deliver a real parsed array/object from a JSON request body.
- * `apigen-base-logical`'s shared decode path (`runmode.ts`'s array/object
- * branches) intentionally passes a non-array/non-object wire value straight
- * through unchanged, since that's correct for HTTP. For the CLI it means an
- * `array`- or `object`-typed domain param's raw `"[10,20,30]"` string reaches
- * the target function un-parsed — either a hard crash (`.reduce is not a
- * function`) or, worse, a silently wrong answer (string-indexing coincidence,
- * e.g. `sorted[idx]` on a 16-char stringified array). Only the CLI plugin
- * knows its wire values are string-only, so the JSON.parse belongs here
- * (transport-specific), not in the shared decode path.
- */
-function isJsonTypedProp(
-  prop: { type?: string; anyOf?: Array<{ type?: string }> } | undefined
-): boolean {
-  if (!prop) return false
-  if (prop.type === 'array' || prop.type === 'object') return true
-  if (prop.anyOf) {
-    const nonNull = prop.anyOf.filter((m) => m.type !== 'null')
-    return (
-      nonNull.length > 0 &&
-      nonNull.every((m) => m.type === 'array' || m.type === 'object')
-    )
-  }
-  return false
-}
+// BUG-APIGEN-031: the CLI transport's "wire" values are always raw argv
+// strings — unlike the HTTP transports (Express/Fastify), which already
+// deliver a real parsed array/object from a JSON request body.
+// `apigen-base-logical`'s shared decode path (`runmode.ts`'s array/object
+// branches) intentionally passes a non-array/non-object wire value straight
+// through unchanged, since that's correct for HTTP. For the CLI it means an
+// `array`- or `object`-typed domain param's raw `"[10,20,30]"` string reaches
+// the target function un-parsed — either a hard crash (`.reduce is not a
+// function`) or, worse, a silently wrong answer (string-indexing coincidence,
+// e.g. `sorted[idx]` on a 16-char stringified array). Only the CLI plugin
+// knows its wire values are string-only, so the JSON.parse belongs here
+// (transport-specific), not in the shared decode path. See
+// `isJsonTypedProp` (now shared with `run.ts` via `./schema-introspect`).
 
 /** Runtime helper embedded in generated CLI output — see {@link isJsonTypedProp}. */
 const JSON_PARSE_ARG_HELPER = [
@@ -112,17 +57,7 @@ export function generate(input: PluginInput): PluginOutput {
 
   const usesJsonParseHelper = input.packages.some((pkg) =>
     Object.values(pkg.schemas).some((fnSchema) => {
-      const dataSchema = (
-        (fnSchema.input as Record<string, unknown>)?.['properties'] as Record<
-          string,
-          unknown
-        >
-      )?.['data'] as Record<string, unknown> | undefined;
-      const schemaProps =
-        (dataSchema?.['properties'] as Record<
-          string,
-          { type?: string; anyOf?: Array<{ type?: string }> }
-        >) ?? {};
+      const { props: schemaProps } = dataSchemaProps(fnSchema);
       return dataParamNames(fnSchema).some((p) =>
         isJsonTypedProp(schemaProps[p])
       );
@@ -173,27 +108,8 @@ export function generate(input: PluginInput): PluginOutput {
       // the full §9.1 binding handles all envelope fields generically below.
       const needsSession = needsEnvelopeField(fnSchema, 'session');
       const bindings = envelopeBindings(fnSchema as Record<string, unknown>);
-      const dataSchema = (
-        (fnSchema.input as Record<string, unknown>)?.['properties'] as Record<
-          string,
-          unknown
-        >
-      )?.['data'] as Record<string, unknown> | undefined;
-      const schemaProps =
-        (dataSchema?.['properties'] as Record<string, { type?: string; anyOf?: Array<{ type?: string }>; default?: unknown }>) ?? {};
-      const requiredParams = (dataSchema?.['required'] as string[]) ?? [];
-
-      // Helper: anyOf with all non-null members being 'boolean' counts as boolean
-      const isBooleanParam = (param: string): boolean => {
-        const prop = schemaProps[param]
-        if (!prop) return false
-        if (prop.type === 'boolean') return true
-        if (prop.anyOf) {
-          const nonNull = prop.anyOf.filter((m) => m.type !== 'null')
-          return nonNull.length > 0 && nonNull.every((m) => m.type === 'boolean')
-        }
-        return false
-      }
+      const { props: schemaProps, required: requiredParams } =
+        dataSchemaProps(fnSchema);
 
       lines.push(`program`);
       lines.push(`  .command('${fnName}')`);
@@ -223,11 +139,10 @@ export function generate(input: PluginInput): PluginOutput {
       // what camelCase param names map to). Commander normalises a `--user-id`
       // flag to the camelCase opt key `userId`, so the flag is kebab while the
       // value is read back via the original camelCase name below.
-      const kebab = (p: string) =>
-        p.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase());
+      const kebab = kebabCase;
       for (const param of paramNames) {
         const flag = kebab(param);
-        const isBoolean = isBooleanParam(param);
+        const isBoolean = isBooleanTypedProp(schemaProps[param]);
         const isRequired = requiredParams.includes(param);
         if (isBoolean) {
           lines.push(`  .option('--${flag}')`);

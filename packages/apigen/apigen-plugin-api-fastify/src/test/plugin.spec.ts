@@ -9,6 +9,8 @@ import type {
   RunInput,
   Operation,
 } from '@adhd/apigen-core-client';
+import { project } from '@adhd/apigen-engine-naming';
+import { toOpenApi } from '@adhd/apigen-codegen-openapi';
 import * as net from 'node:net';
 
 /** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */
@@ -134,9 +136,12 @@ describe('generate()', () => {
     expect(out.files).toHaveLength(1);
     expect(out.files[0].path).toBe('routes.ts');
     const content = out.files[0].content;
-    // unsafe ops → POST
-    expect(content).toContain("app.post('/test-pkg/getUser'");
-    expect(content).toContain("app.post('/test-pkg/listUsers'");
+    // unsafe ops → POST. Route is kebab-cased via `project()`
+    // (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001) — NOT the raw camelCase
+    // fn name — so it is byte-identical to what `apigen-plugin-openapi` would
+    // advertise for the same operation.
+    expect(content).toContain("app.post('/test-pkg/get-user'");
+    expect(content).toContain("app.post('/test-pkg/list-users'");
   });
 
   it('[plugin-api-fastify.2] generated routes.ts imports dispatch from @adhd/apigen-engine-runtime', () => {
@@ -151,7 +156,7 @@ describe('generate()', () => {
 
   it('respects routePrefix option', () => {
     const out = generate({ ...baseInput, options: { routePrefix: '/v1' } });
-    expect(out.files[0].content).toContain("app.post('/v1/test-pkg/getUser'");
+    expect(out.files[0].content).toContain("app.post('/v1/test-pkg/get-user'");
   });
 
   it('[plugin-api-fastify.4] no schema body attachment in generate output', () => {
@@ -184,20 +189,26 @@ describe('generate()', () => {
 
   it('[v2-fastify.verb.2] unsafe op (no x-apigen-safe) → app.post()', () => {
     const { content } = generate(baseInput).files[0];
-    expect(content).toContain("app.post('/test-pkg/getUser'");
-    expect(content).not.toContain("app.get('/test-pkg/getUser'");
+    expect(content).toContain("app.post('/test-pkg/get-user'");
+    expect(content).not.toContain("app.get('/test-pkg/get-user'");
   });
 
   it('[v2-fastify.verb.3] projection override flips unsafe→GET', () => {
+    // Override key is the canonical `project()`/`Operation.id` slug
+    // (`<namespace>/<kebab-path>`), NOT the old `<pkgId>:<fnName>` shape —
+    // route + verb are now derived by the SAME `project(op, config)` call
+    // `apigen-plugin-openapi` uses (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001),
+    // whose `ProjectionConfig.http.verb` is documented as keyed by the
+    // canonical id (see naming.ts's `ProjectionConfig` doc comment).
     const input: PluginInput = {
       ...baseInput,
       options: {
-        projection: { http: { verb: { 'test-pkg:getUser': 'GET' } } },
+        projection: { http: { verb: { 'test-pkg/get-user': 'GET' } } },
       },
     };
     const { content } = generate(input).files[0];
-    expect(content).toContain("app.get('/test-pkg/getUser'");
-    expect(content).not.toContain("app.post('/test-pkg/getUser'");
+    expect(content).toContain("app.get('/test-pkg/get-user'");
+    expect(content).not.toContain("app.post('/test-pkg/get-user'");
   });
 
   // ---- [v2-proj-transport] envelope from headers (§9.1) ----
@@ -280,7 +291,7 @@ describe('run() — real Fastify server', () => {
     const deadline = Date.now() + 10000;
     while (Date.now() < deadline) {
       try {
-        const r = await fetch(`${baseUrl}/test-pkg/listUsers`, {
+        const r = await fetch(`${baseUrl}/test-pkg/list-users`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ data: {} }),
@@ -296,8 +307,10 @@ describe('run() — real Fastify server', () => {
     controller.abort();
   });
 
-  it('[plugin-api-fastify.3] POST /test-pkg/getUser returns correct JSON', async () => {
-    const res = await fetch(`${baseUrl}/test-pkg/getUser`, {
+  // Routes are kebab-cased via `project()` (BUG-APIGEN-OPENAPI-ROUTE-PATH-
+  // MISMATCH-001) — `/test-pkg/get-user`, NOT the raw camelCase fn name.
+  it('[plugin-api-fastify.3] POST /test-pkg/get-user returns correct JSON', async () => {
+    const res = await fetch(`${baseUrl}/test-pkg/get-user`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { userId: 'u42' } }),
@@ -309,8 +322,8 @@ describe('run() — real Fastify server', () => {
     expect(body).toEqual(expected);
   });
 
-  it('POST /test-pkg/listUsers returns correct JSON', async () => {
-    const res = await fetch(`${baseUrl}/test-pkg/listUsers`, {
+  it('POST /test-pkg/list-users returns correct JSON', async () => {
+    const res = await fetch(`${baseUrl}/test-pkg/list-users`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: {} }),
@@ -323,7 +336,7 @@ describe('run() — real Fastify server', () => {
   it('[plugin-api-fastify.4] routes have no AJV schema attachment (runtime check)', async () => {
     // If schema: { body } were attached, AJV would reject our oneOf schema and
     // the server would throw at startup — so a successful 200 here proves it.
-    const res = await fetch(`${baseUrl}/test-pkg/getUser`, {
+    const res = await fetch(`${baseUrl}/test-pkg/get-user`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { userId: 'check' } }),
@@ -379,7 +392,7 @@ describe('[v2-proj-transport] run() — safe→GET / envelope from headers', () 
     const deadline = Date.now() + 10000;
     while (Date.now() < deadline) {
       try {
-        const r = await fetch(`${baseUrl}/unsafe-pkg/listUsers`, {
+        const r = await fetch(`${baseUrl}/unsafe-pkg/list-users`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ data: {} }),
@@ -419,7 +432,7 @@ describe('[v2-proj-transport] run() — safe→GET / envelope from headers', () 
   });
 
   it('[v2-fastify.run.verb.3] unsafe op responds to POST', async () => {
-    const res = await fetch(`${baseUrl}/unsafe-pkg/getUser`, {
+    const res = await fetch(`${baseUrl}/unsafe-pkg/get-user`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { userId: 'u1' } }),
@@ -431,7 +444,7 @@ describe('[v2-proj-transport] run() — safe→GET / envelope from headers', () 
   it('[v2-fastify.run.env.1] envelope field bound from x-<pluginId>-<field> header', async () => {
     // session field with pluginId='auth' → header x-auth-session
     // Our fixture fn ignores ctx/session, just reads userId, so any session value is fine.
-    const res = await fetch(`${baseUrl}/env-pkg/getUser`, {
+    const res = await fetch(`${baseUrl}/env-pkg/get-user`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -447,7 +460,7 @@ describe('[v2-proj-transport] run() — safe→GET / envelope from headers', () 
     // Session in body (old v1 pattern) must NOT be picked up as envelope.
     // Since our fn ignores the envelope, both should return the same 200 result.
     // The critical check is that the server doesn't crash when session is in body.
-    const res = await fetch(`${baseUrl}/env-pkg/getUser`, {
+    const res = await fetch(`${baseUrl}/env-pkg/get-user`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       // Deliberately omit the x-auth-session header; session is only in body (wrong carrier)
@@ -543,7 +556,7 @@ describe('[BUG-APIGEN-009/010] run() — validate-Layer + health mount (Fastify)
 
   it('[009] malformed date-time → 400 invalid_argument, fn never called', async () => {
     const before = scheduleCalls;
-    const res = await fetch(`${baseUrl}/sched/scheduleEvent`, {
+    const res = await fetch(`${baseUrl}/sched/schedule-event`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       // 2099-02-30 is not a real calendar date → ajv date-time format rejects it.
@@ -558,7 +571,7 @@ describe('[BUG-APIGEN-009/010] run() — validate-Layer + health mount (Fastify)
 
   it('[009] missing required field → 400 invalid_argument, fn never called', async () => {
     const before = scheduleCalls;
-    const res = await fetch(`${baseUrl}/sched/scheduleEvent`, {
+    const res = await fetch(`${baseUrl}/sched/schedule-event`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: {} }),
@@ -570,7 +583,7 @@ describe('[BUG-APIGEN-009/010] run() — validate-Layer + health mount (Fastify)
 
   it('[009] valid date-time → 200 and the fn runs', async () => {
     const before = scheduleCalls;
-    const res = await fetch(`${baseUrl}/sched/scheduleEvent`, {
+    const res = await fetch(`${baseUrl}/sched/schedule-event`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { when: '2026-01-02T03:04:05.000Z' } }),
@@ -602,7 +615,7 @@ describe('[BUG-APIGEN-009/010] run() — validate-Layer + health mount (Fastify)
 /** Two real multi-route operations mirroring `testSchema`/`testFns` above. */
 const openapiTestOperations: Operation[] = [
   {
-    id: 'test-pkg/getUser',
+    id: 'test-pkg/get-user',
     host: 'ts',
     namespace: { raw: 'test-pkg', words: ['test', 'pkg'] },
     path: [{ raw: 'getUser', words: ['get', 'user'] }],
@@ -616,7 +629,7 @@ const openapiTestOperations: Operation[] = [
     typeText: null,
   },
   {
-    id: 'test-pkg/listUsers',
+    id: 'test-pkg/list-users',
     host: 'ts',
     namespace: { raw: 'test-pkg', words: ['test', 'pkg'] },
     path: [{ raw: 'listUsers', words: ['list', 'users'] }],
@@ -750,6 +763,281 @@ describe('[BUG-APIGEN-024] run() — --use openapi mount serves real paths (Fast
     expect(Object.keys(body!.paths).length).toBe(0);
     controller2.abort();
   }, 15000);
+});
+
+// ---------- BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 — parity proof ----------
+// Proves api-fastify's derived route + verb are EXACTLY EQUAL to
+// `project(op).http` — the same call `@adhd/apigen-plugin-openapi` makes —
+// for a representative set of operations: a safe/GET op, an unsafe/POST op,
+// and a MULTI-PATH-SEGMENT op (namespace + a dropped-file-segment path, e.g.
+// `backlog/client-d/get-item` — the exact shape of the reported bug, where a
+// live server served `/backlog/getItem` while the OpenAPI doc advertised
+// `/backlog/client-d/get-item`).
+//
+// Negative control (verified by hand while authoring this fix): reverting
+// `resolveRoute()`/`resolveOperation()` to the old `${routePrefix}/${pkgId}/
+// ${fnName}` + `httpVerb()` derivation turns EVERY assertion in this block
+// red — the multi-segment op's route regresses to `/backlog/getItem` (losing
+// the `client-d` segment entirely) and the single-segment ops regress to
+// their raw camelCase spelling (`/utils/createThing` instead of
+// `/utils/create-thing`).
+
+/** A safe (idempotent), zero-param operation → GET. */
+const parityOpSafeGet: Operation = {
+  id: 'utils/ping',
+  host: 'ts',
+  namespace: { raw: 'utils', words: ['utils'] },
+  path: [{ raw: 'ping', words: ['ping'] }],
+  kind: 'query',
+  async: false,
+  streaming: false,
+  safe: true,
+  input: { type: 'object', properties: {}, required: [] },
+  output: { type: 'string' },
+  envelope: {},
+  typeText: null,
+};
+
+/** An unsafe, single-segment operation with a non-primitive param → POST. */
+const parityOpUnsafePost: Operation = {
+  id: 'utils/create-thing',
+  host: 'ts',
+  namespace: { raw: 'utils', words: ['utils'] },
+  path: [{ raw: 'createThing', words: ['create', 'thing'] }],
+  kind: 'action',
+  async: false,
+  streaming: false,
+  safe: false,
+  input: {
+    type: 'object',
+    properties: { payload: { type: 'object', properties: {}, required: [] } },
+    required: ['payload'],
+  },
+  output: { type: 'object' },
+  envelope: {},
+  typeText: null,
+};
+
+/**
+ * A MULTI-PATH-SEGMENT operation — namespace `backlog`, a non-index file
+ * segment `client-d`, then the export segment `getItem` — mirroring the
+ * reported bug's exact shape (`namespace/file/export`, `index.*` files drop
+ * their file segment but non-index files don't). Unsafe + a non-primitive
+ * param, so it stays POST (isolating this fixture to the ROUTE-shape
+ * regression rather than also exercising FEAT-APIGEN-022's GET auto-hoist).
+ */
+const parityOpMultiSegment: Operation = {
+  id: 'backlog/client-d/get-item',
+  host: 'ts',
+  namespace: { raw: 'backlog', words: ['backlog'] },
+  path: [
+    { raw: 'client-d', words: ['client', 'd'] },
+    { raw: 'getItem', words: ['get', 'item'] },
+  ],
+  kind: 'action',
+  async: false,
+  streaming: false,
+  safe: false,
+  input: {
+    type: 'object',
+    properties: { filter: { type: 'object', properties: {}, required: [] } },
+    required: ['filter'],
+  },
+  output: { type: 'object' },
+  envelope: {},
+  typeText: null,
+};
+
+const parityOperations: Operation[] = [
+  parityOpSafeGet,
+  parityOpUnsafePost,
+  parityOpMultiSegment,
+];
+
+/** `ComposedSchemas`-shaped (`data`-wrapped) entries for the `utils` package. */
+const utilsComposedSchemas = {
+  ping: {
+    input: {
+      type: 'object',
+      properties: { data: { type: 'object', properties: {}, required: [] } },
+      required: ['data'],
+    },
+    output: { type: 'string' },
+    'x-apigen-safe': true,
+  },
+  createThing: {
+    input: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: {
+            payload: { type: 'object', properties: {}, required: [] },
+          },
+          required: ['payload'],
+        },
+      },
+      required: ['data'],
+    },
+    output: { type: 'object' },
+  },
+};
+
+/** `ComposedSchemas`-shaped (`data`-wrapped) entries for the `backlog` package. */
+const backlogComposedSchemas = {
+  getItem: {
+    input: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: {
+            filter: { type: 'object', properties: {}, required: [] },
+          },
+          required: ['filter'],
+        },
+      },
+      required: ['data'],
+    },
+    output: { type: 'object' },
+  },
+};
+
+describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] generate() route/verb parity with project()', () => {
+  it('emits routes byte-identical to project(op).http for GET / POST / multi-segment ops', () => {
+    const input: PluginInput & { operations: Operation[] } = {
+      packages: [
+        {
+          id: 'utils',
+          schemas: utilsComposedSchemas,
+          importPath: '@test/utils',
+        },
+        {
+          id: 'backlog',
+          schemas: backlogComposedSchemas,
+          importPath: '@test/backlog',
+        },
+      ],
+      operations: parityOperations,
+      outputDir: '/tmp/out',
+      options: {},
+    };
+    const { content } = generate(input).files[0];
+
+    for (const op of parityOperations) {
+      const { route, verb } = project(op, {}).http;
+      const method = verb.toLowerCase();
+      expect(content).toContain(`app.${method}('${route}'`);
+    }
+
+    // Explicit ground-truth routes (guards against a vacuous project() call
+    // that happened to agree with itself but not with the actual literal
+    // strings the OpenAPI doc would emit for the same operations).
+    expect(content).toContain("app.get('/utils/ping'");
+    expect(content).toContain("app.post('/utils/create-thing'");
+    expect(content).toContain("app.post('/backlog/client-d/get-item'");
+    // The OLD (buggy) derivation would have produced these — must be absent.
+    expect(content).not.toContain("'/utils/createThing'");
+    expect(content).not.toContain("'/backlog/getItem'");
+  });
+});
+
+describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] run() route/verb parity with project()', () => {
+  let controller: AbortController;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    controller = new AbortController();
+    const port = await freePort();
+    const runInput: RunInput = {
+      packages: [
+        {
+          id: 'utils',
+          schemas: utilsComposedSchemas,
+          importPath: '@test/utils',
+          fns: {
+            ping: () => 'pong2',
+            createThing: (payload: unknown) => ({ payload }),
+          },
+        },
+        {
+          id: 'backlog',
+          schemas: backlogComposedSchemas,
+          importPath: '@test/backlog',
+          fns: {
+            getItem: (filter: unknown) => ({ filter }),
+          },
+        },
+      ],
+      operations: parityOperations,
+      outputDir: '/tmp/out',
+      options: { port },
+      signal: controller.signal,
+    };
+
+    run(runInput).catch(() => {
+      /* swallowed after abort */
+    });
+
+    baseUrl = `http://127.0.0.1:${port}`;
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      try {
+        const r = await fetch(`${baseUrl}/utils/ping`, { method: 'GET' });
+        if (r.status < 500) break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+  }, 15000);
+
+  afterAll(() => {
+    controller.abort();
+  });
+
+  it('serves each op at EXACTLY project(op).http.route + .http.verb', async () => {
+    for (const op of parityOperations) {
+      const { route, verb } = project(op, {}).http;
+      const res = await fetch(`${baseUrl}${route}`, {
+        method: verb,
+        headers: { 'content-type': 'application/json' },
+        body: verb === 'GET' ? undefined : JSON.stringify({ data: {} }),
+      });
+      expect(res.status, `${verb} ${route}`).toBeLessThan(500);
+      expect(res.status, `${verb} ${route}`).not.toBe(404);
+    }
+  });
+
+  it('[teeth] the multi-segment op is served at /backlog/client-d/get-item, matching a real /_meta/openapi doc for the same op', async () => {
+    const doc = toOpenApi(parityOperations);
+    expect(doc.paths['/backlog/client-d/get-item']).toBeDefined();
+    const res = await fetch(`${baseUrl}/backlog/client-d/get-item`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: { filter: {} } }),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('[negative control] the OLD `${pkgId}/${fnName}` route is NOT served for the multi-segment op', async () => {
+    // Old (buggy) derivation would have registered `/backlog/getItem`
+    // (dropping the `client-d` file segment entirely). It must 404 now.
+    const res = await fetch(`${baseUrl}/backlog/getItem`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: { filter: {} } }),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('[negative control] the OLD raw-camelCase route is NOT served for the single-segment unsafe op', async () => {
+    const res = await fetch(`${baseUrl}/utils/createThing`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ data: { payload: {} } }),
+    });
+    expect(res.status).toBe(404);
+  });
 });
 
 describe('api-fastify plugin — language declaration', () => {

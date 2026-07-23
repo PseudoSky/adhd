@@ -4,9 +4,26 @@
  * Serves a Python `.py` module over real HTTP by spawning
  * `python3 -m apigen_python.flask_server` as a subprocess.
  *
- * Route contract (mirrors api-fastify):
- *   POST /<ns>/<fn>     body: {"data":{<param>:…}}
+ * Route contract (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 — byte-identical
+ * to `@adhd/apigen-engine-naming`'s `project(op).http`, the SAME derivation the
+ * `openapi` mount plugin uses):
+ *   POST <route>        body: {"data":{<param>:…}}
+ *   GET  <route>        query-string (safe OR primitive-only-input ops)
  *   GET  /_meta/health  → {"status":"ok","host":"<ns>"}
+ *   <route> = '/' + [namespace, ...path].map(toKebab).join('/')
+ *
+ * Unlike the TS-extraction plugins (api-fastify/api-express/mcp), this plugin
+ * never sees an `Operation[]` on the TS side — `RunInput.operations` is
+ * absent for non-TS-extraction run paths (the CLI's `run` command routes
+ * `.py` sources straight to `plugin.run()` with an empty `schemas: {}`
+ * package stub; see `entrypoint/apigen-cli/src/lib/commands/run.ts`). The
+ * Python module's own extraction (`apigen_python.extractor.extract_module()`)
+ * produces the SAME casing-neutral `{raw, words}` Segment shape as the TS
+ * extractor, so the canonical route/verb derivation is reimplemented
+ * byte-for-byte against that Segment structure in
+ * `apigen_python/flask_server.py` (`_route_for_op()` / `_http_verb()`) rather
+ * than computed here and interpolated — there is no TS-side Operation to call
+ * `project()` on for this run path, and Python cannot import the TS package.
  *
  * The Python server emits `{"ready":true}` on stdout immediately after
  * binding the port.  This plugin waits for that line (bounded to 10 s)

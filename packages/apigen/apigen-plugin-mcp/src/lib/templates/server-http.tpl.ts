@@ -62,11 +62,14 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
   // §9.1: envelope from _meta, domain args from data
   const mcpMeta = (args as any)['_meta'] as Record<string, unknown> | undefined ?? {}
   const envelope = extractEnvelope(meta.schema as Record<string, unknown>, mcpMeta)
+  // Dispatch by the REAL exported fn name (\`meta.fnName\`, not the incoming
+  // call's canonical tool name \`name\`) — see ../tool-naming.ts module doc
+  // (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 / BEHAVIOR CHANGE).
   const result = await dispatch(
     groupFns[meta.group],
     groupCreateClient[meta.group],
     meta.schema as any,
-    name,
+    meta.fnName,
     envelope,
     ((args as any)['data'] ?? {}) as Record<string, unknown>,
   )

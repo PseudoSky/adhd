@@ -41,6 +41,13 @@ export function registerRunRegistryCommand(
 ): void {
   program
     .command('run-registry')
+    // DEBT-APIGEN-CLI-RUN-ARGV-PASSTHROUGH-001: same native `-- <command>
+    // <args>` passthrough as `run` — see that command's registration for the
+    // full rationale. Threaded onto `RunInput.options['argv']` below.
+    .argument(
+      '[cliArgs...]',
+      'Passthrough command + args for a run-capable plugin (e.g. `-- get-item --id 42`)'
+    )
     .requiredOption(
       '--packages-dir <path>',
       'Directory containing package subdirectories'
@@ -69,20 +76,28 @@ export function registerRunRegistryCommand(
       [] as string[]
     )
     .action(
-      async (opts: {
-        packagesDir: string;
-        type: string;
-        tag: string[];
-        excludeTag: string[];
-        tsconfig?: string;
-        opt: string[];
-      }) => {
+      async (
+        cliArgs: string[],
+        opts: {
+          packagesDir: string;
+          type: string;
+          tag: string[];
+          excludeTag: string[];
+          tsconfig?: string;
+          opt: string[];
+        }
+      ) => {
         const plugin = plugins[opts.type];
         if (!plugin) throw unknownTypeError(opts.type, plugins);
         if (!plugin.run) throw unsupportedRunError(opts.type, plugins);
 
         const logger = buildCliLogger(program);
         const options = parseOptPairs(opts.opt);
+        // DEBT-APIGEN-CLI-RUN-ARGV-PASSTHROUGH-001: native passthrough takes
+        // precedence over `--opt argv=<string>` when both are present.
+        if (cliArgs.length > 0) {
+          options['argv'] = cliArgs;
+        }
         const packagesDir = path.resolve(opts.packagesDir);
 
         const discovered = discoverPackages({

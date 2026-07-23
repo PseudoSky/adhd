@@ -19,14 +19,17 @@ import type {
   Operation,
 } from '@adhd/apigen-core-client';
 import type { Server } from 'node:http';
-import { envelopeKey, httpVerb } from '@adhd/apigen-naming';
+import { envelopeKey } from '@adhd/apigen-engine-naming';
 import { HTTP_STATUS, isApiError } from '@adhd/apigen-base-errors';
-import type { ProjectionConfig } from '@adhd/apigen-naming';
+import type { ProjectionConfig } from '@adhd/apigen-engine-naming';
 import type { ApiErrorCode } from '@adhd/apigen-base-errors';
+import { buildOperationIndex, resolveRoute } from './route';
 
 // ---------------------------------------------------------------------------
-// §5 — verb from safe (BUG-APIGEN-025 / FEAT-APIGEN-022: shared `httpVerb`
-// imported from @adhd/apigen-naming — no longer duplicated per plugin)
+// §5 — route + verb from the canonical `project()` projection
+// (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 / BUG-APIGEN-025 /
+// FEAT-APIGEN-022) — see `./route.ts` for the full derivation + why `run()`
+// prefers the REAL `Operation[]` threaded via `RunInput.operations`.
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -210,6 +213,16 @@ export async function run(input: RunInput): Promise<void> {
   // Fall back to a default stderr logger when the CLI did not supply one.
   const logger = input.logger ?? createLogger();
 
+  // BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001: index the REAL merged
+  // `Operation[]` (threaded through since BUG-APIGEN-024) once up front so
+  // every function route below can be projected via the SAME `project()` call
+  // `@adhd/apigen-plugin-openapi` uses — full path fidelity, including
+  // multi-segment paths a static codegen pass could never recover. Falls back
+  // to a synthesized single-segment `Operation` (see `./route.ts`) only when
+  // no real descriptor was threaded through (non-TS-extraction run paths per
+  // `RunInput.operations`'s own doc comment) — never crashes the server.
+  const operationIndex = buildOperationIndex(input.operations ?? []);
+
   const app = express();
   // pino-http logs every request via the shared logger instance.
   app.use(pinoHttp({ logger }));
@@ -237,10 +250,12 @@ export async function run(input: RunInput): Promise<void> {
     };
 
     for (const [fnName, fnSchema] of Object.entries(pkg.schemas)) {
-      const route = `${routePrefix}/${pkg.id}/${fnName}`;
-      const verb = httpVerb(
-        `${pkg.id}:${fnName}`,
+      const { route, verb } = resolveRoute(
+        pkg.id,
+        fnName,
         fnSchema as Record<string, unknown>,
+        operationIndex,
+        routePrefix,
         projection
       );
       const { params, text } = describeParams(fnSchema);

@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { run } from '../lib/run';
 import { dispatch } from '@adhd/apigen-engine-runtime';
-import type { RunInput } from '@adhd/apigen-core-client';
+import type { Operation, RunInput, Segment } from '@adhd/apigen-core-client';
+import { project } from '@adhd/apigen-engine-naming';
+import { deriveToolName } from '../lib/tool-naming';
 import * as net from 'node:net';
 
 /** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */
@@ -82,6 +84,24 @@ const testFns: Record<string, (...args: unknown[]) => unknown> = {
 const envelopeFns: Record<string, (...args: unknown[]) => unknown> = {
   getUser: (userId: unknown) => getUser(userId as string),
 };
+
+// ---------- BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 ----------
+// The MCP tool name is no longer the raw exported fn name (e.g. `getUser`) —
+// it is the canonical `project(op).mcp.name` derived by
+// `../lib/tool-naming.ts`'s `deriveToolName`. Every fixture below computes
+// its EXPECTED tool name the same way `run()` does internally, so these
+// tests stay correct as the derivation evolves instead of hardcoding a
+// snapshot of today's output.
+const testPkg = { id: 'test-pkg', importPath: '@test/test-pkg' };
+const envPkg = { id: 'env-pkg', importPath: '@test/env-pkg' };
+const outPkg = { id: 'out-pkg', importPath: '@test/out-pkg' };
+
+const testPkgGetUserName = deriveToolName(testPkg, 'getUser');
+const testPkgListUsersName = deriveToolName(testPkg, 'listUsers');
+const envPkgGetUserName = deriveToolName(envPkg, 'getUser');
+const outPkgGetUserName = deriveToolName(outPkg, 'getUser');
+const outPkgSearchName = deriveToolName(outPkg, 'search');
+const outPkgListUsersArrayName = deriveToolName(outPkg, 'listUsersArray');
 
 // ---------- streaming-http integration — real MCP HTTP transport ----------
 
@@ -166,15 +186,29 @@ describe('[plugin-mcp.4] run() streaming-http — tools/list + callTool via real
     return JSON.parse(text);
   }
 
-  it('[plugin-mcp.4] tools/list returns getUser and listUsers', async () => {
+  it('[plugin-mcp.4] tools/list returns the canonical names for getUser and listUsers', async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resp = (await rpc('tools/list', {})) as any;
     // Result may be at resp.result (raw JSON-RPC) or resp itself (SDK unwrapped)
     const tools: Array<{ name: string }> =
       resp?.result?.tools ?? resp?.tools ?? [];
     const names = tools.map((t) => t.name);
-    expect(names).toContain('getUser');
-    expect(names).toContain('listUsers');
+    expect(names).toContain(testPkgGetUserName);
+    expect(names).toContain(testPkgListUsersName);
+  });
+
+  it('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] (negative control) tools/list no longer registers the OLD raw fn name', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const resp = (await rpc('tools/list', {})) as any;
+    const tools: Array<{ name: string }> =
+      resp?.result?.tools ?? resp?.tools ?? [];
+    const names = tools.map((t) => t.name);
+    // Proves this is a RENAME, not an added alias: the pre-fix raw fn name
+    // must be gone once the canonical name differs from it.
+    expect(testPkgGetUserName).not.toBe('getUser');
+    expect(names).not.toContain('getUser');
+    expect(testPkgListUsersName).not.toBe('listUsers');
+    expect(names).not.toContain('listUsers');
   });
 
   it('tools/list does NOT include __samples__ or non-function exports', async () => {
@@ -186,9 +220,9 @@ describe('[plugin-mcp.4] run() streaming-http — tools/list + callTool via real
     expect(names).not.toContain('__samples__');
   });
 
-  it('callTool(getUser) routes through dispatch and returns correct value', async () => {
+  it('[round-trip] callTool(<canonical getUser name>) routes through dispatch and returns correct value', async () => {
     const resp = (await rpc('tools/call', {
-      name: 'getUser',
+      name: testPkgGetUserName,
       arguments: { data: { userId: 'u99' } },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
@@ -200,9 +234,9 @@ describe('[plugin-mcp.4] run() streaming-http — tools/list + callTool via real
     expect(parsed).toEqual(getUser('u99'));
   });
 
-  it('callTool(listUsers) returns correct value', async () => {
+  it('[round-trip] callTool(<canonical listUsers name>) returns correct value', async () => {
     const resp = (await rpc('tools/call', {
-      name: 'listUsers',
+      name: testPkgListUsersName,
       arguments: { data: {} },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
@@ -211,6 +245,31 @@ describe('[plugin-mcp.4] run() streaming-http — tools/list + callTool via real
     expect(content.length).toBeGreaterThan(0);
     const parsed = JSON.parse(content[0].text);
     expect(parsed).toEqual(listUsers());
+  });
+
+  it('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] (negative control) callTool with the OLD raw fn name fails', async () => {
+    const resp = (await rpc('tools/call', {
+      name: 'getUser',
+      arguments: { data: { userId: 'u99' } },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    })) as any;
+    // The MCP SDK surfaces "Unknown tool" via a JSON-RPC error or an
+    // isError:true result — either way it must NOT be the success shape a
+    // real dispatch would return.
+    const content: Array<{ type: string; text: string }> =
+      resp?.result?.content ?? resp?.content ?? [];
+    const succeeded =
+      !resp?.error &&
+      !resp?.result?.isError &&
+      content.length > 0 &&
+      (() => {
+        try {
+          return JSON.parse(content[0].text)?.id === 'u99';
+        } catch {
+          return false;
+        }
+      })();
+    expect(succeeded).toBe(false);
   });
 
   it('[plugin-mcp.abort] abort signal stops the server', async () => {
@@ -343,7 +402,7 @@ describe('[v2-proj-transport] run() — MCP envelope from _meta (§9.1)', () => 
   it('[v2-mcp.env.1] envelope field bound from _meta["x-<pluginId>-<field>"]', async () => {
     // §9.1: 'session' field from plugin 'auth' → _meta key 'x-auth-session'
     const resp = (await rpc('tools/call', {
-      name: 'getUser',
+      name: envPkgGetUserName,
       arguments: {
         _meta: { 'x-auth-session': 'tok-mcp' }, // §9.1 MCP carrier
         data: { userId: 'u-meta' },
@@ -362,7 +421,7 @@ describe('[v2-proj-transport] run() — MCP envelope from _meta (§9.1)', () => 
     // Sending 'session' in args body instead of _meta is the wrong carrier.
     // The server must still succeed (fn ignores envelope value, just reads userId).
     const resp = (await rpc('tools/call', {
-      name: 'getUser',
+      name: envPkgGetUserName,
       arguments: {
         session: 'wrong-carrier', // wrong carrier — should be in _meta
         data: { userId: 'u-body' },
@@ -531,7 +590,7 @@ describe('[plugin-mcp.7] run() — BUG-APIGEN-019 MCP outputSchema + structuredC
     const resp = (await rpc('tools/list', {})) as any;
     const tools: Array<{ name: string; outputSchema?: unknown }> =
       resp?.result?.tools ?? resp?.tools ?? [];
-    const getUserTool = tools.find((t) => t.name === 'getUser');
+    const getUserTool = tools.find((t) => t.name === outPkgGetUserName);
     expect(getUserTool?.outputSchema).toEqual(outputSchemaTestSchema.getUser.output);
   });
 
@@ -541,7 +600,7 @@ describe('[plugin-mcp.7] run() — BUG-APIGEN-019 MCP outputSchema + structuredC
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools: Array<{ name: string; outputSchema?: any }> =
       resp?.result?.tools ?? resp?.tools ?? [];
-    const searchTool = tools.find((t) => t.name === 'search');
+    const searchTool = tools.find((t) => t.name === outPkgSearchName);
     expect(searchTool?.outputSchema?.type).toBe('object');
     expect(searchTool?.outputSchema?.required).toEqual(['result']);
     expect(searchTool?.outputSchema?.properties?.result).toEqual(
@@ -559,7 +618,7 @@ describe('[plugin-mcp.7] run() — BUG-APIGEN-019 MCP outputSchema + structuredC
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools: Array<{ name: string; outputSchema?: any }> =
       resp?.result?.tools ?? resp?.tools ?? [];
-    const listTool = tools.find((t) => t.name === 'listUsersArray');
+    const listTool = tools.find((t) => t.name === outPkgListUsersArrayName);
     expect(listTool?.outputSchema?.type).toBe('object');
     expect(listTool?.outputSchema?.properties?.result).toEqual({
       type: 'array',
@@ -569,7 +628,7 @@ describe('[plugin-mcp.7] run() — BUG-APIGEN-019 MCP outputSchema + structuredC
 
   it('object-shaped output: tools/call structuredContent equals the raw result (no wrapping)', async () => {
     const resp = (await rpc('tools/call', {
-      name: 'getUser',
+      name: outPkgGetUserName,
       arguments: { data: { userId: 'u1' } },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
@@ -583,7 +642,7 @@ describe('[plugin-mcp.7] run() — BUG-APIGEN-019 MCP outputSchema + structuredC
 
   it('union-return output: tools/call structuredContent is wrapped as { result: <value> }', async () => {
     const resp = (await rpc('tools/call', {
-      name: 'search',
+      name: outPkgSearchName,
       arguments: { data: {} },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     })) as any;
@@ -597,5 +656,221 @@ describe('[plugin-mcp.7] run() — BUG-APIGEN-019 MCP outputSchema + structuredC
     expect(result.structuredContent).toEqual({ result: dispatched });
     expect(dispatched.outcome).toBeDefined();
     expect(dispatched.hits).toEqual(['result-1']);
+  });
+});
+
+// ---------- [BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] canonical MCP naming via RunInput.operations ----------
+//
+// Exercises the EXACT correlation path (real `Operation[]`, not the
+// generate-time best-effort fallback): each op's `path` deliberately carries
+// an extra "file" segment (`catalogApi`) that a naive `(namespace, fnName)`
+// reconstruction would drop — proving `run()` genuinely projects the REAL
+// `Operation` (via `RunInput.operations`), not an approximation.
+
+function getItem(itemId: string): { id: string; sku: string } {
+  return { id: itemId, sku: `SKU-${itemId}` };
+}
+function listItems(): string[] {
+  return ['item-1', 'item-2'];
+}
+
+const projPkg = { id: 'proj-pkg', importPath: '@test/proj-pkg' };
+
+const projNamespaceSeg: Segment = { raw: 'proj-pkg', words: ['proj', 'pkg'] };
+// Intermediate "file" segment — present in every real extracted Operation
+// (`opPath = [fileSeg, exportSeg]`, apigen-core-client/extract.ts) but NOT
+// derivable from `(pkg.id, fnName)` alone.
+const catalogFileSeg: Segment = { raw: 'catalogApi', words: ['catalog', 'api'] };
+
+function makeProjOp(exportName: string, exportWords: string[]): Operation {
+  return {
+    id: `proj-pkg/catalog-api/${exportName}`,
+    host: 'ts',
+    namespace: projNamespaceSeg,
+    path: [catalogFileSeg, { raw: exportName, words: exportWords }],
+    kind: 'action',
+    async: false,
+    streaming: false,
+    safe: false,
+    input: { type: 'object', properties: {}, required: [] },
+    output: { type: 'object' },
+    envelope: {},
+    typeText: null,
+  };
+}
+
+const getItemOp = makeProjOp('getItem', ['get', 'item']);
+const listItemsOp = makeProjOp('listItems', ['list', 'items']);
+const projOperations: Operation[] = [getItemOp, listItemsOp];
+
+const projSchema = {
+  getItem: {
+    input: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: { itemId: { type: 'string' } },
+          required: ['itemId'],
+        },
+      },
+      required: ['data'],
+    },
+    output: { type: 'object' },
+  },
+  listItems: {
+    input: {
+      type: 'object',
+      properties: { data: { type: 'object', properties: {}, required: [] } },
+      required: ['data'],
+    },
+    output: { type: 'array' },
+  },
+};
+
+const projFns: Record<string, (...args: unknown[]) => unknown> = {
+  getItem: (itemId: unknown) => getItem(itemId as string),
+  listItems: () => listItems(),
+};
+
+// Independent oracle: compute the expected canonical name by calling
+// `project()` DIRECTLY (not via `deriveToolName`, the code under test) so
+// this test cannot pass merely by agreeing with itself.
+const expectedGetItemName = project(getItemOp).mcp.name;
+const expectedListItemsName = project(listItemsOp).mcp.name;
+
+describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] run() derives tool names via RunInput.operations + project()', () => {
+  let port: number;
+  let controller: AbortController;
+
+  beforeAll(async () => {
+    port = await freePort();
+    controller = new AbortController();
+    const input: RunInput = {
+      packages: [
+        {
+          id: projPkg.id,
+          schemas: projSchema,
+          importPath: projPkg.importPath,
+          fns: projFns,
+        },
+      ],
+      outputDir: '/tmp/out',
+      options: { transport: 'streaming-http', port },
+      signal: controller.signal,
+      operations: projOperations,
+    };
+    run(input).catch(() => {
+      /* swallowed after abort */
+    });
+
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      try {
+        const r = await fetch(`http://127.0.0.1:${port}/mcp`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 0,
+            method: 'tools/list',
+            params: {},
+          }),
+        });
+        if (r.ok) break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+  }, 15000);
+
+  afterAll(() => {
+    controller.abort();
+  });
+
+  async function rpc(method: string, params: unknown): Promise<unknown> {
+    const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+    });
+    const text = await res.text();
+    const dataLines = text
+      .split('\n')
+      .filter((l) => l.startsWith('data: '))
+      .map((l) => l.slice(6).trim());
+    return dataLines.length > 0
+      ? JSON.parse(dataLines[dataLines.length - 1])
+      : JSON.parse(text);
+  }
+
+  it('[parity] registered tool names equal project(op).mcp.name for every op in a representative set', async () => {
+    // Sanity: the fixture's fileSeg genuinely changes the name vs a naive
+    // (namespace, fnName)-only join — otherwise this test could pass even if
+    // `run()` silently ignored `op.path`'s file segment.
+    expect(expectedGetItemName).toBe('proj_pkg_catalog_api_get_item');
+    expect(expectedListItemsName).toBe('proj_pkg_catalog_api_list_items');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const resp = (await rpc('tools/list', {})) as any;
+    const tools: Array<{ name: string }> =
+      resp?.result?.tools ?? resp?.tools ?? [];
+    const names = tools.map((t) => t.name);
+    expect(names).toContain(expectedGetItemName);
+    expect(names).toContain(expectedListItemsName);
+  });
+
+  it('[round-trip] callTool(<canonical getItem name>) dispatches to the real getItem fn', async () => {
+    const resp = (await rpc('tools/call', {
+      name: expectedGetItemName,
+      arguments: { data: { itemId: 'sku-1' } },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    })) as any;
+    const content: Array<{ type: string; text: string }> =
+      resp?.result?.content ?? resp?.content ?? [];
+    expect(content.length).toBeGreaterThan(0);
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed).toEqual(getItem('sku-1'));
+  });
+
+  it('[round-trip] callTool(<canonical listItems name>) dispatches to the real listItems fn', async () => {
+    const resp = (await rpc('tools/call', {
+      name: expectedListItemsName,
+      arguments: { data: {} },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    })) as any;
+    const content: Array<{ type: string; text: string }> =
+      resp?.result?.content ?? resp?.content ?? [];
+    expect(content.length).toBeGreaterThan(0);
+    const parsed = JSON.parse(content[0].text);
+    expect(parsed).toEqual(listItems());
+  });
+
+  it('[negative control] callTool with the OLD raw fn name ("getItem") is rejected', async () => {
+    const resp = (await rpc('tools/call', {
+      name: 'getItem',
+      arguments: { data: { itemId: 'sku-1' } },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    })) as any;
+    const content: Array<{ type: string; text: string }> =
+      resp?.result?.content ?? resp?.content ?? [];
+    const succeeded =
+      !resp?.error &&
+      !resp?.result?.isError &&
+      content.length > 0 &&
+      (() => {
+        try {
+          return JSON.parse(content[0].text)?.sku === 'SKU-sku-1';
+        } catch {
+          return false;
+        }
+      })();
+    expect(succeeded).toBe(false);
   });
 });

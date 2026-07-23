@@ -5,7 +5,7 @@
 // `verb from safe with config override`.
 //
 // REAL components: `@adhd/apigen-plugin-api-fastify`'s `run` (a live Fastify
-// server), `@adhd/apigen-engine-runtime`'s `dispatch`, `@adhd/apigen-naming`'s envelope
+// server), `@adhd/apigen-engine-runtime`'s `dispatch`, `@adhd/apigen-engine-naming`'s envelope
 // key + projection-config. Only the domain fns are local — everything that
 // implements the contract under test is the real component.
 //
@@ -15,7 +15,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { run as runFastify } from '@adhd/apigen-plugin-api-fastify';
-import { envelopeKey } from '@adhd/apigen-naming';
+import { envelopeKey } from '@adhd/apigen-engine-naming';
 import type { RunInput } from '@adhd/apigen-core-client';
 import type { ComposedSchemas } from '@adhd/apigen-engine-runtime';
 
@@ -121,7 +121,7 @@ describe('canonical: envelope binding', () => {
     const sessionHeader = envelopeKey('adhd', 'session'); // 'x-adhd-session'
 
     // (a) session supplied via transport METADATA (header) → reaches envelope.
-    const withHeader = await fetch(`http://127.0.0.1:${port}/pkg/whoAmI`, {
+    const withHeader = await fetch(`http://127.0.0.1:${port}/pkg/who-am-i`, {
       method: 'GET',
       headers: { [sessionHeader]: 'sess-from-header' },
     });
@@ -133,7 +133,7 @@ describe('canonical: envelope binding', () => {
     //      `session`, which is the BODY/data channel, not metadata. It must be
     //      ignored for the envelope.)
     const withBody = await fetch(
-      `http://127.0.0.1:${port}/pkg/whoAmI?session=sess-from-body`,
+      `http://127.0.0.1:${port}/pkg/who-am-i?session=sess-from-body`,
       { method: 'GET' }
     );
     const bodyBody = (await withBody.json()) as { session: unknown };
@@ -192,22 +192,34 @@ describe('canonical: HTTP verb derivation', () => {
       outputDir: '',
       options: {
         port,
-        // Out-of-source override: force pkg:actionOp to GET. Source (the schema's
-        // missing x-apigen-safe) is untouched.
-        projection: { http: { verb: { 'pkg:actionOp': 'GET' } } },
+        // Out-of-source override: force pkg/action-op to GET. Source (the
+        // schema's missing x-apigen-safe) is untouched.
+        //
+        // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: since BUG-
+        // APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001's api-fastify-side fix, the
+        // override key is the canonical `Operation.id` slug
+        // (`<namespace>/<kebab-path>`) — matching openapi/gRPC/CLI's own
+        // override key — not the OLD `${pkgId}:${fnName}` shape.
+        projection: { http: { verb: { 'pkg/action-op': 'GET' } } },
       },
     };
     await startServer(input, port);
 
+    // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: routes are now
+    // kebab-cased per project(op).http.route (queryOp -> query-op, actionOp
+    // -> action-op) since no real Operation[] is threaded here (a bare
+    // RunInput built directly by this test), so the fastify plugin's
+    // single-segment synthesis fallback tokenizes+kebab-cases the raw fn name.
+
     // queryOp is safe → served as GET (POST should 404 / not be registered).
-    const queryGet = await fetch(`http://127.0.0.1:${port}/pkg/queryOp`, {
+    const queryGet = await fetch(`http://127.0.0.1:${port}/pkg/query-op`, {
       method: 'GET',
     });
     expect(queryGet.status).toBe(200);
     expect(await queryGet.json()).toEqual({ result: 'query-result' });
 
     // actionOp would default to POST, but the override forces GET — so GET works.
-    const actionGet = await fetch(`http://127.0.0.1:${port}/pkg/actionOp`, {
+    const actionGet = await fetch(`http://127.0.0.1:${port}/pkg/action-op`, {
       method: 'GET',
     });
     expect(actionGet.status).toBe(200);
@@ -216,7 +228,7 @@ describe('canonical: HTTP verb derivation', () => {
     // Negative control: with the override active, the action is NOT served on POST
     // (it moved to GET). A regression that ignores the override leaves it on POST,
     // so POST would 200 and GET would 404 — flipping both assertions.
-    const actionPost = await fetch(`http://127.0.0.1:${port}/pkg/actionOp`, {
+    const actionPost = await fetch(`http://127.0.0.1:${port}/pkg/action-op`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: {} }),
