@@ -156,7 +156,7 @@ Segment = { "raw": "humanizeBytes", "words": ["humanize","bytes"] }   // casing-
 ## 5. Naming & per-transport projection
 
 One canonical identity projects to each target's idiom; **casing is per-plugin** (helpers in
-`@adhd/apigen-naming`: `toKebab/toPascal/toSnake/toCamel` + tokenizer).
+`@adhd/apigen-engine-naming`: `toKebab/toPascal/toSnake/toCamel` + tokenizer).
 
 `namespace=transform`, `path=[humanize, humanizeBytes]`, `kind=action`:
 
@@ -178,7 +178,7 @@ One canonical identity projects to each target's idiom; **casing is per-plugin**
   `*.spec.*`/`*.test.*`/`*.d.ts`; `index.*` drops its file segment.
 - **Uniqueness invariant:** two distinct `id`s MUST project to **distinct** targets in *every*
   transport (no two ops may share an MCP flat name, HTTP route, gRPC method, or CLI command path).
-  `@adhd/apigen-naming` runs a collision check **once over the merged descriptor**; a collision is a
+  `@adhd/apigen-engine-naming` runs a collision check **once over the merged descriptor**; a collision is a
   **hard extract-time error**, never silent last-writer-wins. (Guards the default-object recursion +
   multi-file glob cases.)
 
@@ -476,7 +476,7 @@ touches host functions or runs in its server = **per-language**.*
 apigen/
   core/                                   # COMMON (neutral; the contract + neutral codegen)
     @adhd/apigen-core            # descriptor model + its JSON Schema
-    @adhd/apigen-naming          # tokenizer + casing + route/id projection rules
+    @adhd/apigen-engine-naming          # tokenizer + casing + route/id projection rules
     @adhd/apigen-errors          # ApiError codes + transport status-mapping tables
     @adhd/apigen-schema          # JSON-Schema utils + transforms (→proto/openapi/ts/cli-flags)
     @adhd/apigen-conformance     # cross-language conformance vectors (every host must pass)

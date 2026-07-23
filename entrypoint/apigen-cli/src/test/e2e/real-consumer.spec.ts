@@ -32,6 +32,49 @@ import * as path from 'node:path';
 import * as net from 'node:net';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { tokenize } from '@adhd/apigen-core-client';
+import type { Operation, Segment } from '@adhd/apigen-core-client';
+import { project } from '@adhd/apigen-engine-naming';
+
+// DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: since BUG-APIGEN-
+// OPENAPI-ROUTE-PATH-MISMATCH-001, every transport derives its operation
+// identifiers from the single shared authority, `@adhd/apigen-engine-naming`'s
+// `project(op)` — never the raw exported fn name. Compute the expected
+// canonical MCP tool name / HTTP route from the SAME `project()` call
+// (rather than a hand-guessed literal) for `TRANSFORM_SRC`'s
+// namespace ("data-base-transforms") + file ("text") + each export.
+function seg(raw: string): Segment {
+  return { raw, words: tokenize(raw) };
+}
+function buildOp(exportName: string): Operation {
+  const namespace = seg('data-base-transforms');
+  const path = [seg('text'), seg(exportName)];
+  return {
+    id: [namespace, ...path].map((s) => s.words.join('-')).join('/'),
+    host: 'ts',
+    namespace,
+    path,
+    kind: 'action',
+    async: true,
+    streaming: false,
+    safe: true,
+    input: {},
+    output: {},
+    envelope: {},
+    typeText: null,
+  };
+}
+/** The canonical `project(op).mcp.name` for a raw `text.ts` export name. */
+function canonicalToolName(exportName: string): string {
+  return project(buildOp(exportName)).mcp.name;
+}
+/** The canonical `project(op).http.route` (namespace-relative, no leading `/`). */
+function canonicalHttpPath(exportName: string): string {
+  // `.http.route` is `/` + namespace + path — strip the leading `/namespace/`
+  // since the call sites below build `${namespace}/${fnPath}` themselves.
+  const route = project(buildOp(exportName)).http.route;
+  return route.split('/').slice(2).join('/');
+}
 
 /** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */
 async function freePort(): Promise<number> {
@@ -153,13 +196,17 @@ describe('real-consumer: MCP over the built bin against UNMODIFIED @adhd/data-ba
     );
     await mcpClient.connect(mcpTransport);
 
-    // tools/list must equal the package's exported function names (derived).
+    // tools/list must equal the package's exported function names, each
+    // projected to its canonical MCP tool name (project(op).mcp.name).
     const listed = await mcpClient.listTools();
     const toolNames = listed.tools.map((t) => t.name).sort();
-    expect(toolNames).toEqual(ground.exportedNames);
+    const expectedToolNames = ground.exportedNames
+      .map((n) => canonicalToolName(n))
+      .sort();
+    expect(toolNames).toEqual(expectedToolNames);
     // Teeth: every sampled export is present (a dropped/renamed export → red).
     for (const name of Object.keys(SAMPLE_ARGS)) {
-      expect(toolNames).toContain(name);
+      expect(toolNames).toContain(canonicalToolName(name));
     }
 
     // Each callTool deep-equals calling the export directly in-process.
@@ -169,7 +216,7 @@ describe('real-consumer: MCP over the built bin against UNMODIFIED @adhd/data-ba
       // schema's first param name. The dispatch spreads dataParamNames in order.
       const dataArg = buildDataArg(name, args);
       const res = (await mcpClient.callTool({
-        name,
+        name: canonicalToolName(name),
         arguments: { data: dataArg },
       })) as {
         content: Array<{ type: string; text: string }>;
@@ -258,8 +305,12 @@ describe('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transf
       const query = new URLSearchParams(
         Object.entries(dataArg).map(([k, v]) => [k, String(v)])
       );
+      // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: routes are now
+      // kebab-cased per project(op).http.route (BUG-APIGEN-OPENAPI-ROUTE-
+      // PATH-MISMATCH-001's api-fastify-side fix), e.g. `upperFirst` →
+      // `upper-first`, not the raw camelCase export name.
       const res = await fetch(
-        `http://127.0.0.1:${port}/${namespace}/${name}?${query.toString()}`,
+        `http://127.0.0.1:${port}/${namespace}/${canonicalHttpPath(name)}?${query.toString()}`,
         { method: 'GET' }
       );
       expect(res.status, `GET ${name} status`).toBe(200);
@@ -280,13 +331,17 @@ describe('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transf
     // attempting a real call and accepting the first that yields a 200.
     const candidates = ['data-base-transforms', 'lib', 'text'];
     const deadline = Date.now() + 15_000;
+    // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: the readiness
+    // probe must hit the SAME kebab-cased route the fixed api-fastify plugin
+    // now serves (`upper-first`, not `upperFirst`).
+    const probePath = canonicalHttpPath('upperFirst');
     while (Date.now() < deadline) {
       for (const ns of candidates) {
         try {
           // FEAT-APIGEN-022: upperFirst(str?: string) is a single-string-param
           // fn — auto-hoisted to GET, so the readiness probe must match.
           const res = await fetch(
-            `http://127.0.0.1:${p}/${ns}/upperFirst?str=probe`,
+            `http://127.0.0.1:${p}/${ns}/${probePath}?str=probe`,
             { method: 'GET' }
           );
           if (res.status === 200) {
@@ -324,18 +379,24 @@ describe('real-consumer: LIVE client drives the MCP loop (model-independent inva
     try {
       const listed = await client.listTools();
       const names = listed.tools.map((t) => t.name);
-      // Model-independent invariant: the live surface exposes the real exports.
-      // Sort both sides — the MCP server returns tools in declaration order,
-      // ground.exportedNames is sorted alphabetically.
-      expect(names.slice().sort()).toEqual(ground.exportedNames);
+      // Model-independent invariant: the live surface exposes the real
+      // exports, each projected to its canonical MCP tool name
+      // (project(op).mcp.name — DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-
+      // ASSERTIONS-001). Sort both sides — the MCP server returns tools in
+      // declaration order, ground.exportedNames is sorted alphabetically.
+      const expectedNames = ground.exportedNames
+        .map((n) => canonicalToolName(n))
+        .sort();
+      expect(names.slice().sort()).toEqual(expectedNames);
       // A real model would pick a tool from `names` and call it; we assert the
       // model-INDEPENDENT outcome — calling a listed tool returns the same value
       // as the in-process export. (The model's CHOICE is non-deterministic; the
       // INVARIANT it must satisfy is not.)
       const sample = 'upperFirst';
-      expect(names).toContain(sample);
+      const sampleTool = canonicalToolName(sample);
+      expect(names).toContain(sampleTool);
       const res = (await client.callTool({
-        name: sample,
+        name: sampleTool,
         arguments: { data: { str: 'live' } },
       })) as { content: Array<{ type: string; text: string }> };
       const got = JSON.parse(

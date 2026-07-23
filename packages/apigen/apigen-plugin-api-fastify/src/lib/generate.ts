@@ -1,12 +1,35 @@
-import type { PluginInput, PluginOutput } from '@adhd/apigen-core-client';
-import { envelopeKey, sanitizeIdentifier, httpVerb } from '@adhd/apigen-naming';
+import type {
+  PluginInput,
+  PluginOutput,
+  Operation,
+} from '@adhd/apigen-core-client';
+import { envelopeKey, sanitizeIdentifier } from '@adhd/apigen-engine-naming';
 import { HTTP_STATUS } from '@adhd/apigen-base-errors';
-import type { ProjectionConfig } from '@adhd/apigen-naming';
+import type { ProjectionConfig } from '@adhd/apigen-engine-naming';
+import { resolveRoute } from './route-projection';
 
 // ---------------------------------------------------------------------------
-// §5 — verb from safe (BUG-APIGEN-025 / FEAT-APIGEN-022: shared `httpVerb`
-// imported from @adhd/apigen-naming — no longer duplicated per plugin)
+// §5 — route + verb derivation (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001):
+// both are now derived via `project()` from `@adhd/apigen-engine-naming` — see
+// `./route-projection.ts` — so generated routes.ts is byte-identical to what
+// `@adhd/apigen-plugin-openapi` advertises for the same operation. No longer
+// duplicated per plugin.
 // ---------------------------------------------------------------------------
+
+/**
+ * `generate()`'s input.
+ *
+ * DEBT-APIGEN-PLUGIN-MCP-GENERATE-OPERATIONS-001 (RESOLVED): `PluginInput`
+ * (`@adhd/apigen-core-client`) now carries an optional `operations?:
+ * Operation[]` field directly, threaded through by `entrypoint/apigen-cli`'s
+ * `orchestrateGenerate()` the same way `orchestrateRun()` threads
+ * `RunInput.operations` (BUG-APIGEN-024) — so this is populated in the CLI's
+ * actual wiring today, giving fully byte-identical-to-openapi codegen output.
+ * `resolveRoute()` falls back to a synthesized single-segment Operation only
+ * when a caller builds a bare `PluginInput` with no `operations` at all (e.g.
+ * a unit test).
+ */
+type GenerateInput = PluginInput & { operations?: Operation[] };
 
 // ---------------------------------------------------------------------------
 // §9.1 helpers — envelope field metadata carried on a schema entry
@@ -37,7 +60,7 @@ function envelopeHeaders(
   return result;
 }
 
-export function generate(input: PluginInput): PluginOutput {
+export function generate(input: GenerateInput): PluginOutput {
   const port = (input.options['port'] as number) ?? 3000;
   const routePrefix = (input.options['routePrefix'] as string) ?? '';
   const projection =
@@ -79,10 +102,12 @@ export function generate(input: PluginInput): PluginOutput {
   for (const pkg of input.packages) {
     const varName = sanitizeIdentifier(pkg.id);
     for (const [fnName, fnSchema] of Object.entries(pkg.schemas)) {
-      const route = `${routePrefix}/${pkg.id}/${fnName}`;
-      const verb = httpVerb(
-        `${pkg.id}:${fnName}`,
+      const { route, verb } = resolveRoute(
+        pkg.id,
+        fnName,
         fnSchema as Record<string, unknown>,
+        input.operations,
+        routePrefix,
         projection
       );
       const headerMap = envelopeHeaders(fnSchema as Record<string, unknown>);

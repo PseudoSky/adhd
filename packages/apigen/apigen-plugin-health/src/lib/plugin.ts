@@ -62,7 +62,7 @@ export interface HealthResponse {
 // ---------------------------------------------------------------------------
 
 /**
- * Builds a casing-neutral segment inline (avoids importing @adhd/apigen-naming
+ * Builds a casing-neutral segment inline (avoids importing @adhd/apigen-engine-naming
  * to keep the health plugin dependency-light; the shape is trivially stable).
  */
 function seg(raw: string): { raw: string; words: string[] } {

@@ -38,7 +38,7 @@ export type ComposedSchemas = Record<
     // FEAT-APIGEN-022 / BUG-APIGEN-025: `op.safe` OR "properly typed
     // primitives only" param shape (see get-safety.ts's
     // `isPrimitiveOnlyInputSchema`), stamped by `composeSchemas()`. Read by
-    // the shared `httpVerb()` in `@adhd/apigen-naming` (SPEC §5) — every
+    // the shared `httpVerb()` in `@adhd/apigen-engine-naming` (SPEC §5) — every
     // HTTP-emitting plugin derives its verb from THIS field, never by
     // re-deriving safety itself.
     'x-apigen-safe'?: boolean;
@@ -74,6 +74,19 @@ export interface PluginInput {
    * a default stderr logger when this is absent.
    */
   logger?: Logger;
+  /**
+   * DEBT-APIGEN-PLUGIN-MCP-GENERATE-OPERATIONS-001: the full merged
+   * `Operation[]` descriptor (the same set `buildDescriptor()` produces),
+   * threaded through so `generate()` can call the real `project(op)` for
+   * every operation instead of falling back to a best-effort synthesized
+   * `Operation` (exact only for the single-source-file case; wrong for
+   * multi-file namespaces / npm-specifier importPath / default-object
+   * exports). Lifted from `RunInput` (BUG-APIGEN-024) onto the base
+   * `PluginInput` so both `generate()` and `run()` get real ops from the
+   * same field. Optional: absent for non-TS-extraction paths (e.g.
+   * py-flask) where nothing was extracted to describe.
+   */
+  operations?: Operation[];
 }
 
 export interface PluginOutput {
@@ -83,15 +96,6 @@ export interface PluginOutput {
 
 export interface RunInput extends PluginInput {
   signal?: AbortSignal;
-  /**
-   * BUG-APIGEN-024: the full merged `Operation[]` descriptor (the same set
-   * `buildDescriptor()` produces), threaded through so a `--use` mount plugin
-   * (e.g. `apigen-plugin-openapi`) can build its real `Descriptor` instead of
-   * the empty-`operations` stub `collectMountRoutes()` used to synthesize.
-   * Absent for non-TS-extraction run paths (e.g. py-flask), where mount
-   * plugins have nothing extracted to describe.
-   */
-  operations?: Operation[];
 }
 
 /** Source-language tags understood by apigen's routing layer. */

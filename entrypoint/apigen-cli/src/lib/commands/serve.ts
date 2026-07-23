@@ -29,6 +29,24 @@
  *      are muxed on the single `--port` using a raw `net.Server` that peeks
  *      the first bytes of each connection.
  *
+ *      **Client-facing contract (canonical-everywhere, path-preserving —
+ *      BUG-APIGEN-CLI-SERVE-FRONT-PROXY-DOUBLE-SEGMENT-001):** the front does
+ *      ZERO path rewriting.  A client addresses an operation at the exact
+ *      same route its owning child actually serves — `project(op).http.route`
+ *      from `@adhd/apigen-engine-naming` (TS: `api-fastify`) / the byte-identical
+ *      `_route_for_op()` re-derivation in `apigen_python/flask_server.py`
+ *      (Python: `py-flask`) — i.e. `/<ns>/<file-or-class-segment(s)>/<op>`,
+ *      every segment independently kebab-cased.  This is deliberately NOT a
+ *      flat `/<ns>/<op>` client shape: the file (and, for class-based
+ *      exports, class) segment is *always* present in the canonical route,
+ *      so a single-file host's route is `/<ns>/<file-stem>/<op>`, not
+ *      `/<ns>/<op>` — consistent with every other canonical transport
+ *      (openapi/mcp/grpc) rather than a serve-only special case.  The front's
+ *      ONLY job is to read the URL's leading segment to pick which child to
+ *      forward the (otherwise byte-identical) request to — see
+ *      {@link httpNamespaceSegment} for why that lookup must itself be
+ *      kebab-cased, not the host's raw namespace string.
+ *
  *   4. **Merged health + partial availability.** `GET /_meta/health` (served
  *      over HTTP/1.1 on the same port) aggregates every child's `ready`/`down`
  *      status.  If a child dies, **only its `/<ns>/*` routes return errors** —
@@ -52,7 +70,11 @@ import * as net from 'node:net';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { languageOfSource, type PluginLanguage } from '@adhd/apigen-core-client';
+import {
+  languageOfSource,
+  tokenize,
+  type PluginLanguage,
+} from '@adhd/apigen-core-client';
 import { ensurePythonEnv } from '@adhd/apigen-python-env';
 
 /** Interpreter provisioned by a prior startServe in this process (vs a user's APIGEN_PYTHON). */
@@ -134,6 +156,36 @@ export function namespaceOfSource(file: string): string {
 }
 
 /**
+ * Computes the wire-level HTTP namespace route segment for a host: the
+ * tokenized, kebab-cased rendering of its raw `namespace` string.
+ *
+ * This is the exact `toKebab(makeSeg(ns))` derivation `@adhd/apigen-engine-naming`'s
+ * `project()` applies to `Operation.namespace` for every HTTP-emitting
+ * plugin (`api-fastify`), mirrored byte-for-byte by
+ * `apigen_python/flask_server.py`'s `_route_for_op()` for `py-flask` — so a
+ * host whose raw namespace is `myUserAccounts` is actually addressed on the
+ * wire at `/my-user-accounts/...`, never `/myUserAccounts/...`.
+ *
+ * Routing on the raw namespace string only ever "worked" for namespaces that
+ * are already a single lowercase word (kebab-neutral, e.g. this file's own
+ * test fixtures `a`/`b`) — for any realistic multi-word or differently-cased
+ * namespace the front would 404 with "no host mounted", even though the
+ * child is up and serving (BUG-APIGEN-CLI-SERVE-FRONT-PROXY-DOUBLE-SEGMENT-001,
+ * reproduced live: `GET /my-user-accounts/my-user-accounts/list-all` 404s
+ * against a `byNamespace` map keyed by raw `myUserAccounts`).
+ *
+ * NOT used for gRPC hosts: `apigen-plugin-py-grpc` uses the raw namespace
+ * verbatim as its package name — its own, simpler convention, independent of
+ * `@adhd/apigen-engine-naming` — see {@link handleH2Stream}.
+ *
+ * @example httpNamespaceSegment('a')              // → 'a'
+ * @example httpNamespaceSegment('myUserAccounts')  // → 'my-user-accounts'
+ */
+export function httpNamespaceSegment(raw: string): string {
+  return tokenize(raw).join('-');
+}
+
+/**
  * Resolve the {@link Host} descriptors (sans runtime fields) for the given
  * `--source` list, applying any `--mount` overrides.
  *
@@ -144,14 +196,19 @@ export function namespaceOfSource(file: string): string {
  *   4. `transport = GRPC_PLUGINS.has(plugin) ? 'grpc' : 'http'`.
  *
  * @throws on an unknown extension, an unmappable language, or a duplicate
- *         namespace (two sources would collide on the same `/<ns>/*` prefix).
+ *         namespace. Duplicates are detected on the CANONICAL (kebab, via
+ *         {@link httpNamespaceSegment}) form, not the raw string — two
+ *         differently-cased/spelled namespaces that kebab to the same wire
+ *         segment (e.g. `myApi` and `my-api`) collide on the same
+ *         `/<ns>/*` prefix just as much as an exact string match would, and
+ *         would otherwise silently shadow one host with another.
  */
 export function resolveHosts(
   sources: string[],
   mounts: Record<string, string>
 ): Host[] {
   const hosts: Host[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, string>(); // canonical http segment -> raw namespace
   for (const src of sources) {
     const source = path.resolve(src);
     const language = languageOfSource(source);
@@ -162,13 +219,20 @@ export function resolveHosts(
       );
     }
     const namespace = namespaceOfSource(source);
-    if (seen.has(namespace)) {
+    const canonical = httpNamespaceSegment(namespace);
+    const priorRaw = seen.get(canonical);
+    if (priorRaw !== undefined) {
+      const collidesOn =
+        priorRaw === namespace
+          ? ''
+          : ` (collides with "${priorRaw}", both route to /${canonical}/*)`;
       throw new Error(
-        `duplicate namespace "${namespace}" — two sources resolve to the same ` +
-          `/${namespace}/* prefix; rename one file or use --mount to disambiguate`
+        `duplicate namespace "${namespace}"${collidesOn} — two sources resolve ` +
+          `to the same /${canonical}/* prefix; rename one file or use --mount ` +
+          `to disambiguate`
       );
     }
-    seen.add(namespace);
+    seen.set(canonical, namespace);
     const plugin = mounts[namespace] ?? DEFAULT_PLUGIN_FOR_LANGUAGE[language];
     if (!plugin) {
       throw new Error(
@@ -197,6 +261,13 @@ export function resolveHosts(
  * Extract the leading path segment of a request URL (the namespace).
  *
  * `/users/getUser?x=1` → `users`; `/_meta/health` → `_meta`; `/` → `''`.
+ *
+ * The URL is never rewritten by the front (see {@link handleHttp1Request}),
+ * so for a canonical HTTP request this leading segment IS already the
+ * wire-level namespace a real client sends — i.e. the kebab form
+ * {@link httpNamespaceSegment} computes from a host's raw namespace, e.g.
+ * `/user-accounts/user-accounts/list-all` → `'user-accounts'`. This function
+ * itself does no casing work; it only slices the string apart.
  */
 export function namespaceFromUrl(url: string): string {
   const pathOnly = url.split('?')[0] ?? '';
@@ -915,11 +986,22 @@ function proxyGrpcStream(
  *
  * This is extracted so it can be shared between the plain `http.Server` path
  * and the net.Server fallback path after determining the connection is HTTP/1.1.
+ *
+ * Forwarding is byte-identical path-preserving (`path: url` below, unchanged)
+ * — the front never rewrites the request path. `ns`, the URL's leading
+ * segment, is therefore already the CANONICAL kebab namespace segment a real
+ * client sends (matching `project(op).http.route`'s first segment); `byNamespaceHttp`
+ * MUST be keyed the same way ({@link httpNamespaceSegment}), not by a host's
+ * raw namespace string, or this lookup silently misses for any non-kebab-neutral
+ * namespace (BUG-APIGEN-CLI-SERVE-FRONT-PROXY-DOUBLE-SEGMENT-001).
+ *
+ * @param byNamespaceHttp - Hosts keyed by {@link httpNamespaceSegment} of their
+ *   raw namespace (the HTTP wire-level convention; NOT the raw string).
  */
 function handleHttp1Request(
   req: http.IncomingMessage,
   res: http.ServerResponse,
-  byNamespace: Map<string, Host>,
+  byNamespaceHttp: Map<string, Host>,
   allHosts: Host[]
 ): void {
   const url = req.url ?? '/';
@@ -944,7 +1026,7 @@ function handleHttp1Request(
     return;
   }
 
-  const host = byNamespace.get(ns);
+  const host = byNamespaceHttp.get(ns);
   if (!host) {
     res.writeHead(404, { 'content-type': 'application/json' });
     res.end(
@@ -1021,11 +1103,19 @@ function handleHttp1Request(
  * the first alive gRPC host.  grpcurl (and other tools) use reflection to look up
  * service descriptors before making calls; since our gRPC backends all run the
  * reflection service, routing reflection to the first alive gRPC host is correct.
+ *
+ * Unlike {@link handleHttp1Request}'s HTTP hosts, `apigen-plugin-py-grpc` uses
+ * the RAW namespace verbatim as its gRPC package name (its own convention,
+ * independent of `@adhd/apigen-engine-naming`'s kebab-casing) — so `byNamespaceRaw`
+ * here is intentionally keyed by the host's raw namespace string, NOT
+ * {@link httpNamespaceSegment}.
+ *
+ * @param byNamespaceRaw - Hosts keyed by their raw (un-kebabed) namespace.
  */
 function handleH2Stream(
   stream: http2.ServerHttp2Stream,
   headers: http2.IncomingHttpHeaders,
-  byNamespace: Map<string, Host>,
+  byNamespaceRaw: Map<string, Host>,
   allHosts: Host[]
 ): void {
   // Derive the namespace from the gRPC method path: /<ns>.<NsService>/<method>
@@ -1060,7 +1150,7 @@ function handleH2Stream(
     return;
   }
 
-  const host = byNamespace.get(ns);
+  const host = byNamespaceRaw.get(ns);
   if (!host) {
     sendGrpcUnavailable(stream, ns, `no host mounted at namespace "${ns}"`);
     return;
@@ -1089,15 +1179,28 @@ function handleH2Stream(
  * @param frontPort - The TCP port the front should listen on.
  */
 export function createFrontServer(hosts: Host[]): http.Server {
-  const byNamespace = new Map<string, Host>();
-  for (const h of hosts) byNamespace.set(h.namespace, h);
+  // Two lookup tables, one per wire-level namespace convention (see
+  // {@link httpNamespaceSegment} / {@link handleH2Stream}'s docs for why a
+  // single raw-keyed map is wrong for HTTP hosts):
+  //   - HTTP hosts (api-fastify/py-flask) are addressed by the KEBAB-CASED,
+  //     tokenized namespace — the same derivation `@adhd/apigen-engine-naming`'s
+  //     `project()` / `_route_for_op()` apply.
+  //   - gRPC hosts (py-grpc) are addressed by the RAW namespace verbatim.
+  // A host is present in both; only the KEY differs, so this is safe even
+  // when both host types are present on the same front.
+  const byNamespaceHttp = new Map<string, Host>();
+  const byNamespaceRaw = new Map<string, Host>();
+  for (const h of hosts) {
+    byNamespaceHttp.set(httpNamespaceSegment(h.namespace), h);
+    byNamespaceRaw.set(h.namespace, h);
+  }
 
   const hasGrpcHosts = hosts.some((h) => h.transport === 'grpc');
 
   if (!hasGrpcHosts) {
     // No gRPC hosts — use a plain HTTP/1.1 server (simpler, no peeking needed).
     return http.createServer((req, res) => {
-      handleHttp1Request(req, res, byNamespace, hosts);
+      handleHttp1Request(req, res, byNamespaceHttp, hosts);
     });
   }
 
@@ -1111,14 +1214,14 @@ export function createFrontServer(hosts: Host[]): http.Server {
   //   (b) Hand off to the http server's socket
 
   const httpServer = http.createServer((req, res) => {
-    handleHttp1Request(req, res, byNamespace, hosts);
+    handleHttp1Request(req, res, byNamespaceHttp, hosts);
   });
 
   const h2Server = http2.createServer();
   h2Server.on(
     'stream',
     (stream: http2.ServerHttp2Stream, headers: http2.IncomingHttpHeaders) => {
-      handleH2Stream(stream, headers, byNamespace, hosts);
+      handleH2Stream(stream, headers, byNamespaceRaw, hosts);
     }
   );
   h2Server.on('error', () => {

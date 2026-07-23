@@ -17,8 +17,9 @@ import {
 } from '@adhd/apigen-engine-runtime';
 import type { Logger } from '@adhd/apigen-engine-runtime';
 import type { RunInput } from '@adhd/apigen-core-client';
-import { envelopeMetaKey } from '@adhd/apigen-naming';
+import { envelopeMetaKey } from '@adhd/apigen-engine-naming';
 import { MCP_ERROR_KIND } from '@adhd/apigen-base-errors';
+import { deriveToolName } from './tool-naming';
 
 // ---------------------------------------------------------------------------
 // §9.1 — envelope from MCP _meta (x-<pluginId>-<field>)
@@ -57,7 +58,7 @@ function buildMcpServer(
   logger: Logger
 ): {
   server: InstanceType<typeof Server>;
-  toolMetas: Record<string, { group: string; schema: unknown }>;
+  toolMetas: Record<string, { group: string; fnName: string; schema: unknown }>;
 } {
   const descriptions =
     (input.options['toolDescriptions'] as Record<string, string>) ?? {};
@@ -67,11 +68,28 @@ function buildMcpServer(
     { capabilities: { tools: {} } }
   );
 
-  // Build toolMetas from all packages
-  const toolMetas: Record<string, { group: string; schema: unknown }> = {};
+  // Build toolMetas from all packages, keyed by the CANONICAL MCP tool name
+  // (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 — see ./tool-naming.ts),
+  // never the raw exported fn name. `fnName` is retained on the meta entry
+  // so dispatch (which looks fns up by their real exported name via
+  // `pkg.fns[fnName]`) still routes to the correct function under the new
+  // tool name.
+  const toolMetas: Record<
+    string,
+    { group: string; fnName: string; schema: unknown }
+  > = {};
   for (const pkg of input.packages) {
     for (const fnName of Object.keys(pkg.schemas)) {
-      toolMetas[fnName] = { group: pkg.id, schema: pkg.schemas[fnName] };
+      const toolName = deriveToolName(
+        { id: pkg.id, importPath: pkg.importPath },
+        fnName,
+        input.operations
+      );
+      toolMetas[toolName] = {
+        group: pkg.id,
+        fnName,
+        schema: pkg.schemas[fnName],
+      };
     }
   }
 
@@ -92,7 +110,11 @@ function buildMcpServer(
         description: buildToolDescription(
           name,
           meta.schema as { input?: { description?: unknown } },
-          descriptions[name]
+          // Look up by the new canonical name first, falling back to the
+          // OLD raw-fnName key for backward compat with existing
+          // `toolDescriptions` option configs (BEHAVIOR CHANGE — see
+          // ./tool-naming.ts module doc).
+          descriptions[name] ?? descriptions[meta.fnName]
         ),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         inputSchema: (meta.schema as any).input,
@@ -123,7 +145,10 @@ function buildMcpServer(
         pkg.createClient,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         meta.schema as any,
-        name,
+        // Dispatch by the REAL exported fn name (`pkg.fns` is keyed by it),
+        // not by `name` (the incoming call's CANONICAL tool name) — see
+        // ./tool-naming.ts module doc / BEHAVIOR CHANGE.
+        meta.fnName,
         envelope,
         domainData
       );

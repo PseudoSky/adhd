@@ -1182,6 +1182,10 @@ importers:
       '@adhd/apigen-python-env':
         specifier: ^0.1.0
         version: link:../python-env
+    devDependencies:
+      '@adhd/apigen-engine-naming':
+        specifier: 0.1.2
+        version: link:../apigen-engine-naming
 
   packages/apigen/apigen-plugin-py-grpc:
     dependencies:

@@ -8,6 +8,7 @@ import {
   parseMounts,
   namespaceOfSource,
   namespaceFromUrl,
+  httpNamespaceSegment,
   resolveHosts,
   aggregateHealth,
   findFreePort,
@@ -55,6 +56,19 @@ describe('[serve.namespaceFromUrl] leading path segment routing', () => {
   });
 });
 
+describe('[serve.httpNamespaceSegment] kebab-cased HTTP wire namespace (BUG-APIGEN-CLI-SERVE-FRONT-PROXY-DOUBLE-SEGMENT-001)', () => {
+  it('is a no-op for an already-kebab-neutral single word', () => {
+    expect(httpNamespaceSegment('a')).toBe('a');
+    expect(httpNamespaceSegment('billing')).toBe('billing');
+  });
+
+  it('tokenizes camelCase/PascalCase/snake_case into kebab-case', () => {
+    expect(httpNamespaceSegment('myUserAccounts')).toBe('my-user-accounts');
+    expect(httpNamespaceSegment('MyUserAccounts')).toBe('my-user-accounts');
+    expect(httpNamespaceSegment('my_user_accounts')).toBe('my-user-accounts');
+  });
+});
+
 describe('[serve.resolveHosts] partition by language → plugin', () => {
   it('routes .ts → api-fastify and .py → py-flask by default', () => {
     const hosts = resolveHosts(['/x/a.ts', '/x/b.py'], {});
@@ -88,6 +102,15 @@ describe('[serve.resolveHosts] partition by language → plugin', () => {
     expect(() => resolveHosts(['/x/api.ts', '/y/api.py'], {})).toThrowError(
       /duplicate namespace/
     );
+  });
+
+  it('throws on a CANONICAL (kebab) collision even when the raw namespaces differ', () => {
+    // 'myApi' and 'my-api' are different raw strings but both kebab to
+    // 'my-api' — the same wire route prefix — so this must be caught here,
+    // not silently shadow one host with another at request time.
+    expect(() =>
+      resolveHosts(['/x/myApi.ts', '/y/my-api.py'], {})
+    ).toThrowError(/duplicate namespace "my-api".*collides with "myApi"/s);
   });
 });
 
@@ -218,10 +241,14 @@ describe('[serve.live] real cross-language serve front', () => {
         true
       );
 
-      // --- fixtures: one TS source, one Python Decimal source ---
+      // --- fixtures: one TS source, one Python Decimal source, and a
+      // multi-word-namespace TS source (proves BUG-APIGEN-CLI-SERVE-FRONT-
+      // PROXY-DOUBLE-SEGMENT-001's kebab-namespace fix, not just the
+      // already-kebab-neutral single-letter `a`/`b` fixtures) ---
       tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-serve-'));
       const aTs = path.join(tmpDir, 'a.ts');
       const bPy = path.join(tmpDir, 'b.py');
+      const myUserAccountsTs = path.join(tmpDir, 'myUserAccounts.ts');
       fs.writeFileSync(
         aTs,
         `export async function addNumbers(a: number, b: number): Promise<number> { return a + b }\n` +
@@ -233,10 +260,14 @@ describe('[serve.live] real cross-language serve front', () => {
           `def add_decimal(amount: Decimal) -> Decimal:\n` +
           `    return amount + Decimal("0.001")\n`
       );
+      fs.writeFileSync(
+        myUserAccountsTs,
+        `export async function listAll(): Promise<string[]> { return ['x'] }\n`
+      );
 
       const port = await findFreePort();
       const { hosts, shutdown } = await startServe({
-        sources: [aTs, bPy],
+        sources: [aTs, bPy, myUserAccountsTs],
         port,
         cliPath,
         log: () => undefined,
@@ -244,33 +275,65 @@ describe('[serve.live] real cross-language serve front', () => {
       shutdownFn = shutdown;
       const base = `http://127.0.0.1:${port}`;
 
-      // --- both hosts ready ---
+      // --- all hosts ready ---
       const health0 = (await (await fetch(`${base}/_meta/health`)).json()) as {
         status: string;
         hosts: Record<string, string>;
       };
       expect(health0).toEqual({
         status: 'ok',
-        hosts: { a: 'ready', b: 'ready' },
+        hosts: { a: 'ready', b: 'ready', myUserAccounts: 'ready' },
       });
 
       // --- TS call through the front (in-process TS host) ---
+      // Canonical route (BUG-APIGEN-CLI-SERVE-FRONT-PROXY-DOUBLE-SEGMENT-001):
+      // `/<ns>/<file-stem>/<op>`, every segment kebab-cased — byte-identical
+      // to `@adhd/apigen-engine-naming`'s `project(op).http.route`, verified against
+      // the real spawned api-fastify child, NOT a flat `/a/addNumbers`.
       // FEAT-APIGEN-022: addNumbers(a: number, b: number) — all-primitive
       // params — auto-hoists to GET (query-string), not POST.
-      const tsRes = await fetch(`${base}/a/addNumbers?a=2&b=40`, {
+      const tsRes = await fetch(`${base}/a/a/add-numbers?a=2&b=40`, {
         method: 'GET',
       });
       expect(tsRes.status).toBe(200);
       expect(await tsRes.json()).toBe(42);
 
+      // The pre-fix flat 2-segment shape must NOT resolve — proves the front
+      // isn't accidentally tolerant of the old shape via some other path.
+      const tsFlat = await fetch(`${base}/a/addNumbers?a=2&b=40`, {
+        method: 'GET',
+      });
+      expect(tsFlat.status).toBe(404);
+
       // --- Python Decimal call through the proxy: exact decimal string ---
-      const pyRes = await fetch(`${base}/b/add_decimal`, {
+      // Canonical route: `/b/b/add-decimal` (namespace "b" + file-stem "b" +
+      // kebab("add_decimal")), verified against the real spawned py-flask child.
+      const pyRes = await fetch(`${base}/b/b/add-decimal`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ data: { amount: '123.456' } }),
       });
       expect(pyRes.status).toBe(200);
       expect(await pyRes.json()).toBe('123.457');
+
+      // --- multi-word namespace host: canonical kebab route resolves ---
+      // `myUserAccounts` (raw) → `my-user-accounts` (wire) at EVERY segment.
+      // This is the case the raw-namespace-keyed routing table before the fix
+      // could never serve (`byNamespace` was keyed by the raw `myUserAccounts`
+      // string, which never appears on the wire — the real child only ever
+      // answers at the kebab form).
+      const multiWordRes = await fetch(
+        `${base}/my-user-accounts/my-user-accounts/list-all`
+      );
+      expect(multiWordRes.status).toBe(200);
+      expect(await multiWordRes.json()).toEqual(['x']);
+
+      // The raw (un-kebabed) namespace must NOT resolve — a regression back
+      // to keying `byNamespaceHttp` by the raw string would make this 200.
+      const multiWordRaw = await fetch(
+        `${base}/myUserAccounts/myUserAccounts/listAll`
+      );
+      expect(multiWordRaw.status).toBe(404);
 
       // --- partial availability: kill the Python child, /b/* → 503, /a/* → 200 ---
       const pyHost = hosts.find((h) => h.namespace === 'b');
@@ -280,7 +343,7 @@ describe('[serve.live] real cross-language serve front', () => {
       // Bounded wait until the front observes the death (exit event flips alive).
       const downRes = await pollUntil(
         () =>
-          fetch(`${base}/b/add_decimal`, {
+          fetch(`${base}/b/b/add-decimal`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ data: { amount: '1.0' } }),
@@ -296,20 +359,20 @@ describe('[serve.live] real cross-language serve front', () => {
 
       // The TS host keeps serving — a dead host fails ONLY its own ops.
       // FEAT-APIGEN-022: all-primitive params — GET, not POST.
-      const stillUp = await fetch(`${base}/a/addNumbers?a=1&b=1`, {
+      const stillUp = await fetch(`${base}/a/a/add-numbers?a=1&b=1`, {
         method: 'GET',
       });
       expect(stillUp.status).toBe(200);
       expect(await stillUp.json()).toBe(2);
 
-      // Aggregate health now degraded with b down, a still ready.
+      // Aggregate health now degraded with b down, others still ready.
       const health1 = (await (await fetch(`${base}/_meta/health`)).json()) as {
         status: string;
         hosts: Record<string, string>;
       };
       expect(health1).toEqual({
         status: 'degraded',
-        hosts: { a: 'ready', b: 'down' },
+        hosts: { a: 'ready', b: 'down', myUserAccounts: 'ready' },
       });
 
       // --- orphan-free teardown: shutdown kills the remaining TS child ---
@@ -413,8 +476,10 @@ describe('[serve.live] real cross-language serve front', () => {
       });
 
       // --- TS host serves HTTP on the same port ---
+      // Canonical route (BUG-APIGEN-CLI-SERVE-FRONT-PROXY-DOUBLE-SEGMENT-001):
+      // `/a/a/add-numbers`, not the flat pre-fix `/a/addNumbers`.
       // FEAT-APIGEN-022: all-primitive params — GET, not POST.
-      const tsRes = await fetch(`${base}/a/addNumbers?a=2&b=40`, {
+      const tsRes = await fetch(`${base}/a/a/add-numbers?a=2&b=40`, {
         method: 'GET',
       });
       expect(tsRes.status).toBe(200);
@@ -536,7 +601,7 @@ describe('[serve.live] real cross-language serve front', () => {
 
       // TS still serves even after gRPC child death.
       // FEAT-APIGEN-022: all-primitive params — GET, not POST.
-      const stillUp = await fetch(`${base}/a/addNumbers?a=1&b=1`, {
+      const stillUp = await fetch(`${base}/a/a/add-numbers?a=1&b=1`, {
         method: 'GET',
       });
       expect(stillUp.status).toBe(200);

@@ -11,12 +11,24 @@ Usage:
         --namespace <ns> \\
         --port <p>
 
-Route contract (mirrors api-fastify/src/lib/run.ts):
-    POST /<ns>/<fn>     body: {"data": {<param>: <value>, …}}
+Route contract (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 — byte-identical to
+`@adhd/apigen-engine-naming`'s `project(op).http`, the SAME derivation used by the
+`openapi` mount plugin):
+    POST <route>        body: {"data": {<param>: <value>, …}}
     GET  /_meta/health  → {"status": "ok", "host": "<ns>"}
 
-    safe=True operations are also served on GET /<ns>/<fn> with query-string args
-    (SPEC §5 / verb-from-safe).
+    <route> = "/" + kebab(namespace) + "/" + kebab(pathSeg) + "/" + …
+    (every §4 Segment — namespace AND each path segment, e.g. the file segment
+    plus the export-name segment — is independently kebab-cased and joined
+    with "/"; see `_route_for_op()` below). This is a pure re-derivation of
+    `project()`'s algorithm against the Segment `words` the extractor already
+    produces (`_seg()`), NOT a call into the TS package — Python cannot import
+    `@adhd/apigen-engine-naming`, so the SAME shared algorithm is reimplemented here
+    from the identical Segment structure.
+
+    Verb is GET when the operation is `safe` OR its input is "primitive-only"
+    per FEAT-APIGEN-022 (`_is_primitive_only_input_schema()` mirrors
+    `@adhd/apigen-core-client`'s `isPrimitiveOnlyInputSchema()`); otherwise POST.
 
 Validation:
     Input is validated BEFORE dispatch. Malformed input → HTTP 400
@@ -221,12 +233,85 @@ def _extract_envelope(
 
 
 # ---------------------------------------------------------------------------
-# HTTP verb from safe (SPEC §5 — mirrors api-fastify httpVerb())
+# HTTP route + verb — BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001
+#
+# Byte-identical re-derivation of `@adhd/apigen-engine-naming`'s `project(op).http`
+# (route) and the FEAT-APIGEN-022 GET-hoist rule it applies for verb — see the
+# module docstring's "Route contract" section for the full rationale. Python
+# cannot import the TS package, so both algorithms are reimplemented here
+# against the SAME Segment (`{"raw", "words"}`) structures `extract_module()`
+# already builds via `_seg()`, which is itself documented as mirroring the TS
+# tokeniser exactly.
 # ---------------------------------------------------------------------------
 
+def _kebab(seg: dict[str, Any]) -> str:
+    """Kebab-case a §4 Segment — mirrors apigen-naming's `toKebab()`."""
+    return "-".join(seg["words"])
+
+
+def _route_for_op(op: dict[str, Any]) -> str:
+    """Canonical HTTP route for an operation.
+
+    Mirrors `@adhd/apigen-engine-naming`'s `project(op).http.route`:
+    `'/' + [namespace, ...path].map(toKebab).join('/')`. Every segment
+    (namespace AND each path segment) is independently kebab-cased — this is
+    what api-fastify/openapi/mcp all derive from, and what this server must
+    match byte-for-byte.
+    """
+    segs = [op["namespace"], *op["path"]]
+    return "/" + "/".join(_kebab(s) for s in segs)
+
+
+_PRIMITIVE_TYPES = {"string", "number", "boolean", "integer"}
+
+
+def _is_primitive_only_input_schema(input_schema: dict[str, Any] | None) -> bool:
+    """Port of `@adhd/apigen-core-client`'s `isPrimitiveOnlyInputSchema()`
+    (FEAT-APIGEN-022) — structural check over a bare domain-input JSON Schema.
+
+    Returns True iff every declared property is a "properly typed primitive"
+    (string/number/boolean/integer, optionally unioned with null), including
+    the vacuous zero-property case. Absence of a `properties` key entirely
+    (as opposed to an explicit empty object) returns False.
+    """
+    if not isinstance(input_schema, dict):
+        return False
+    if "properties" not in input_schema:
+        return False
+    properties = input_schema["properties"]
+    if not isinstance(properties, dict):
+        return False
+    return all(_is_primitive_property_schema(p) for p in properties.values())
+
+
+def _is_primitive_property_schema(prop_schema: Any) -> bool:
+    if not isinstance(prop_schema, dict):
+        return False
+    if "$ref" in prop_schema:
+        return False
+    if prop_schema.get("oneOf") or prop_schema.get("anyOf") or prop_schema.get("allOf"):
+        return False
+
+    type_ = prop_schema.get("type")
+    if isinstance(type_, str):
+        return type_ in _PRIMITIVE_TYPES
+    if isinstance(type_, list):
+        return all(t in _PRIMITIVE_TYPES or t == "null" for t in type_)
+
+    enum = prop_schema.get("enum")
+    if isinstance(enum, list) and len(enum) > 0:
+        return all(isinstance(v, (str, int, float, bool)) for v in enum)
+
+    return False
+
+
 def _http_verb(op: dict[str, Any]) -> str:
-    """Return 'GET' for safe operations, 'POST' for unsafe ones."""
-    return "GET" if op.get("safe", False) else "POST"
+    """Return 'GET' when safe OR primitive-only-input (FEAT-APIGEN-022),
+    else 'POST' — mirrors `@adhd/apigen-engine-naming`'s `project()` default-verb rule.
+    """
+    if op.get("safe", False) or _is_primitive_only_input_schema(op.get("input")):
+        return "GET"
+    return "POST"
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +332,7 @@ def _json_dumps(obj: Any) -> str:
 class _ServerState:
     """Immutable server configuration shared across all request threads."""
 
-    __slots__ = ("namespace", "runtime", "operations", "op_map", "input_schema_map")
+    __slots__ = ("namespace", "runtime", "operations", "route_map")
 
     def __init__(
         self,
@@ -258,18 +343,16 @@ class _ServerState:
         self.namespace = namespace
         self.runtime = runtime
         self.operations = operations
-        # Map fn_name → operation descriptor for O(1) dispatch
-        self.op_map: dict[str, dict[str, Any]] = {}
-        # Map fn_name → the 'data' sub-schema from the wrapped input schema
-        # (runtime uses the wrapped schema; we need the inner schema for param decode)
-        self.input_schema_map: dict[str, dict[str, Any]] = {}
+        # Map canonical HTTP route (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001:
+        # `_route_for_op()`, byte-identical to apigen-naming's project().http.route)
+        # → operation descriptor, for O(1) request dispatch. The operation's
+        # `input` dict IS the inner param schema directly (no data-wrapper in the
+        # extractor's output — that wrapper is a TS-side composition artifact;
+        # the Python runtime receives bare params), so no separate schema map
+        # is needed alongside this.
+        self.route_map: dict[str, dict[str, Any]] = {}
         for op in operations:
-            fn_name = op["path"][-1]["raw"]
-            self.op_map[fn_name] = op
-            # The operation's input schema IS the inner schema (no data-wrapper
-            # in the extractor's output — the data wrapper is a TS-side composition
-            # artifact; the Python runtime receives bare params directly).
-            self.input_schema_map[fn_name] = op.get("input", {})
+            self.route_map[_route_for_op(op)] = op
 
 
 # ---------------------------------------------------------------------------
@@ -296,35 +379,23 @@ class _ApigenHandler(BaseHTTPRequestHandler):
         self._send_json(200, body)
 
     # ------------------------------------------------------------------
-    # Route: GET /<ns>/<fn> (safe ops — query-string params)
+    # Route: GET <route> (safe / primitive-only-input ops — query-string params)
     # ------------------------------------------------------------------
 
-    def _handle_safe_get(self, fn_name: str) -> None:
-        state: _ServerState = self.server.state  # type: ignore[attr-defined]
-        op = state.op_map.get(fn_name)
-        if op is None:
-            self._send_error(404, "not_found", f"no operation: {fn_name}")
-            return
-
+    def _handle_safe_get(self, op: dict[str, Any]) -> None:
         # Parse query-string → data dict
         parsed = urllib.parse.urlparse(self.path)
         qs = urllib.parse.parse_qs(parsed.query, keep_blank_values=False)
         # Flatten single-value lists (query-string repeats are unusual for APIs)
         data: dict[str, Any] = {k: v[0] if len(v) == 1 else v for k, v in qs.items()}
 
-        self._dispatch(fn_name, op, data, envelope_from_headers=True)
+        self._dispatch(op, data, envelope_from_headers=True)
 
     # ------------------------------------------------------------------
-    # Route: POST /<ns>/<fn>
+    # Route: POST <route>
     # ------------------------------------------------------------------
 
-    def _handle_post(self, fn_name: str) -> None:
-        state: _ServerState = self.server.state  # type: ignore[attr-defined]
-        op = state.op_map.get(fn_name)
-        if op is None:
-            self._send_error(404, "not_found", f"no operation: {fn_name}")
-            return
-
+    def _handle_post(self, op: dict[str, Any]) -> None:
         # Read body
         content_length = int(self.headers.get("Content-Length", "0") or "0")
         body_bytes = self.rfile.read(content_length) if content_length > 0 else b"{}"
@@ -343,7 +414,7 @@ class _ApigenHandler(BaseHTTPRequestHandler):
             self._send_error(400, "invalid_argument", '"data" must be a JSON object')
             return
 
-        self._dispatch(fn_name, op, data, envelope_from_headers=True)
+        self._dispatch(op, data, envelope_from_headers=True)
 
     # ------------------------------------------------------------------
     # Dispatch (shared between GET/POST paths)
@@ -351,7 +422,6 @@ class _ApigenHandler(BaseHTTPRequestHandler):
 
     def _dispatch(
         self,
-        fn_name: str,
         op: dict[str, Any],
         data: dict[str, Any],
         *,
@@ -360,15 +430,17 @@ class _ApigenHandler(BaseHTTPRequestHandler):
         """Validate input → decode logical types → invoke → encode result → respond."""
         state: _ServerState = self.server.state  # type: ignore[attr-defined]
 
+        # The operation's `input` IS the inner param schema (no data-wrapper —
+        # see _ServerState.route_map's doc comment).
+        input_schema: dict[str, Any] = op.get("input", {})
+
         # §9.1 envelope from headers
         envelope: dict[str, Any] = {}
         if envelope_from_headers:
             headers_lc = {k.lower(): v for k, v in self.headers.items()}
-            input_schema = state.input_schema_map.get(fn_name, {})
             envelope = _extract_envelope(input_schema, headers_lc)
 
         # SPEC §6: validate BEFORE dispatch (malformed → 400 before fn is called)
-        input_schema = state.input_schema_map.get(fn_name, {})
         if input_schema:
             try:
                 validate(input_schema, data)
@@ -412,7 +484,16 @@ class _ApigenHandler(BaseHTTPRequestHandler):
     # ------------------------------------------------------------------
 
     def do_GET(self) -> None:  # noqa: N802
-        """Handle GET requests: health endpoint + safe operations."""
+        """Handle GET requests: health endpoint + GET-eligible operations.
+
+        Routing is a direct lookup of the full request path against
+        `state.route_map` (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001) — the
+        canonical, kebab-cased, multi-segment route computed by
+        `_route_for_op()`, NOT a `/<ns>/<lastSegmentRaw>` prefix strip. This is
+        what makes a multi-segment op (namespace + file segment + export
+        segment, e.g. `/testapi/test-api/echo-str`) resolve at all — the old
+        prefix-strip approach silently dropped every segment but the last.
+        """
         parsed = urllib.parse.urlparse(self.path)
         path_only = parsed.path
 
@@ -420,35 +501,30 @@ class _ApigenHandler(BaseHTTPRequestHandler):
             self._handle_health()
             return
 
-        ns = self.server.state.namespace  # type: ignore[attr-defined]
-        prefix = f"/{ns}/"
-        if path_only.startswith(prefix):
-            fn_name = path_only[len(prefix):]
-            if fn_name:
-                state: _ServerState = self.server.state  # type: ignore[attr-defined]
-                op = state.op_map.get(fn_name)
-                if op is not None and op.get("safe", False):
-                    self._handle_safe_get(fn_name)
-                    return
-                # Known fn but wrong verb
-                if op is not None:
-                    self._send_error(405, "invalid_argument", f"use POST for {fn_name}")
-                    return
+        state: _ServerState = self.server.state  # type: ignore[attr-defined]
+        op = state.route_map.get(path_only)
+        if op is not None:
+            if _http_verb(op) == "GET":
+                self._handle_safe_get(op)
+                return
+            # Known route but wrong verb (POST-only operation).
+            self._send_error(405, "invalid_argument", f"use POST for {path_only}")
+            return
 
         self._send_error(404, "not_found", f"no route for GET {path_only}")
 
     def do_POST(self) -> None:  # noqa: N802
-        """Handle POST requests: function dispatch."""
+        """Handle POST requests: function dispatch via the canonical route map
+        (see `do_GET`'s doc comment for why this is a full-path lookup, not a
+        prefix strip)."""
         parsed = urllib.parse.urlparse(self.path)
         path_only = parsed.path
 
-        ns = self.server.state.namespace  # type: ignore[attr-defined]
-        prefix = f"/{ns}/"
-        if path_only.startswith(prefix):
-            fn_name = path_only[len(prefix):]
-            if fn_name:
-                self._handle_post(fn_name)
-                return
+        state: _ServerState = self.server.state  # type: ignore[attr-defined]
+        op = state.route_map.get(path_only)
+        if op is not None:
+            self._handle_post(op)
+            return
 
         self._send_error(404, "not_found", f"no route for POST {path_only}")
 
@@ -545,14 +621,15 @@ class ApigenFlaskServer:
         httpd.state = state  # type: ignore[attr-defined]
         self._httpd = httpd
 
-        # Log the registered routes to stderr
-        ns = self._namespace
+        # Log the registered routes to stderr — canonical route (parity with
+        # apigen-naming's project().http.route; BUG-APIGEN-OPENAPI-ROUTE-PATH-
+        # MISMATCH-001), not the old `/<ns>/<lastSegmentRaw>` shape.
         print(f"apigen-py-flask  listening on http://{self._host}:{self._port}", file=sys.stderr)
         print(f"  GET  /_meta/health", file=sys.stderr)
         for op in state.operations:
-            fn_name = op["path"][-1]["raw"]
+            route = _route_for_op(op)
             verb = _http_verb(op)
-            print(f"  {verb:<4} /{ns}/{fn_name}", file=sys.stderr)
+            print(f"  {verb:<4} {route}", file=sys.stderr)
         sys.stderr.flush()
 
         self._thread = threading.Thread(
@@ -621,10 +698,12 @@ def _main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "apigen Python HTTP server — serves a .py module over HTTP.\n\n"
-            "Routes:\n"
+            "Routes (byte-identical to @adhd/apigen-engine-naming's project().http —\n"
+            "BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001):\n"
             "  GET  /_meta/health  → {status, host}\n"
-            "  POST /<ns>/<fn>     → body {data: {<params>}} → result\n"
-            "  GET  /<ns>/<fn>     → query-string (safe=True ops only)\n\n"
+            "  POST <route>        → body {data: {<params>}} → result\n"
+            "  GET  <route>        → query-string (safe OR primitive-only-input ops)\n"
+            "  <route> = /<kebab-namespace>/<kebab-pathSeg>/…  (multi-segment)\n\n"
             "Startup: emits {ready: true} on stdout once the server is up."
         )
     )

@@ -31,7 +31,14 @@
       ],
       "options": {
         "configFile": "packages/apigen/apigen-plugin-cli-output/vite.config.ts"
-      }
+      },
+      "dependsOn": [
+        "build",
+        {
+          "projects": ["apigen-cli"],
+          "target": "build"
+        }
+      ]
     },
     "nx-release-publish": {
       "dependsOn": [

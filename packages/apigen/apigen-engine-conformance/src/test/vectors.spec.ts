@@ -64,7 +64,7 @@ import {
   envelopeKey,
   envelopeMetaKey,
   envelopeEnvVar,
-} from '@adhd/apigen-naming';
+} from '@adhd/apigen-engine-naming';
 import { ApiError } from '@adhd/apigen-base-errors';
 
 // ---------------------------------------------------------------------------

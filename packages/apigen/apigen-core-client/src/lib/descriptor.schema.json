@@ -75,7 +75,7 @@
   "$defs": {
     "Segment": {
       "title": "Segment",
-      "description": "A casing-neutral name segment (§4/§5). Identity is the tokenized 'words'; 'raw' preserves the original spelling. Transports derive their own casing from 'words' via @adhd/apigen-naming.",
+      "description": "A casing-neutral name segment (§4/§5). Identity is the tokenized 'words'; 'raw' preserves the original spelling. Transports derive their own casing from 'words' via @adhd/apigen-engine-naming.",
       "type": "object",
       "additionalProperties": false,
       "required": ["raw", "words"],

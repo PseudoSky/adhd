@@ -84,7 +84,7 @@ export interface ApigenSchemaHints {
  *
  * Identity is carried by the tokenized `words`; the original `raw` spelling is
  * preserved so a same-host plugin can reproduce it, but every transport derives
- * its own casing from `words` via `@adhd/apigen-naming` (kebab for HTTP/CLI,
+ * its own casing from `words` via `@adhd/apigen-engine-naming` (kebab for HTTP/CLI,
  * `_`-joined for MCP, Pascal for gRPC). Casing is therefore per-plugin, never
  * baked into the descriptor.
  */

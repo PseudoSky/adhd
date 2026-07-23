@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { generate } from '../lib/generate';
 import { mcpPlugin } from '../lib/plugin';
-import type { PluginInput } from '@adhd/apigen-core-client';
+import type { Operation, PluginInput, RunInput, Segment } from '@adhd/apigen-core-client';
+import { project } from '@adhd/apigen-engine-naming';
+import { deriveToolName } from '../lib/tool-naming';
 
 // ---------- fixture ----------
 // Simple domain functions — schemas follow ComposedSchemas shape (data-wrapped).
@@ -371,5 +373,111 @@ describe('[v2-proj-transport] §9.1 MCP envelope binding in generated server.ts'
       if (!server) throw new Error('Expected server.ts');
       expect(server.content).toContain('extractEnvelope');
     }
+  });
+});
+
+// ---------- [BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] canonical MCP naming in generate() ----------
+
+describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] generate() derives canonical MCP tool names', () => {
+  it('keys toolMetas by project(op).mcp.name (best-effort fallback path — no operations supplied)', () => {
+    const out = generate(baseInput);
+    const idx = out.files.find((f) => f.path === 'index.ts');
+    expect(idx).toBeDefined();
+    if (!idx) throw new Error('Expected index.ts');
+
+    const getUserName = deriveToolName(
+      { id: 'test-pkg', importPath: '@test/test-pkg' },
+      'getUser'
+    );
+    const listUsersName = deriveToolName(
+      { id: 'test-pkg', importPath: '@test/test-pkg' },
+      'listUsers'
+    );
+    // Sanity: the derived names are genuinely canonical (not the raw fn name).
+    expect(getUserName).not.toBe('getUser');
+    expect(listUsersName).not.toBe('listUsers');
+
+    expect(idx.content).toContain(JSON.stringify(getUserName));
+    expect(idx.content).toContain(JSON.stringify(listUsersName));
+    // Each entry retains the REAL fn name for dispatch (round-trip wiring —
+    // see templates/server-*.tpl.ts's `dispatch(..., meta.fnName, ...)`).
+    expect(idx.content).toContain(`fnName: "getUser"`);
+    expect(idx.content).toContain(`fnName: "listUsers"`);
+  });
+
+  it('[negative control] toolMetas is NOT keyed by the OLD raw fn name', () => {
+    const out = generate(baseInput);
+    const idx = out.files.find((f) => f.path === 'index.ts');
+    if (!idx) throw new Error('Expected index.ts');
+    // The OLD (pre-fix) behavior keyed the object literal as `getUser: {...}`
+    // / `listUsers: {...}` (bare identifier key === raw fn name). Assert that
+    // exact key form is gone.
+    expect(idx.content).not.toMatch(/\n\s*getUser:\s*\{/);
+    expect(idx.content).not.toMatch(/\n\s*listUsers:\s*\{/);
+  });
+
+  it('matches run()\'s EXACT-path derivation when given the same real Operation[] (cross-transport / generate-vs-run consistency)', () => {
+    const namespaceSeg: Segment = { raw: 'catalog', words: ['catalog'] };
+    const fileSeg: Segment = { raw: 'itemApi', words: ['item', 'api'] };
+    const getItemOp: Operation = {
+      id: 'catalog/item-api/getItem',
+      host: 'ts',
+      namespace: namespaceSeg,
+      path: [fileSeg, { raw: 'getItem', words: ['get', 'item'] }],
+      kind: 'action',
+      async: false,
+      streaming: false,
+      safe: false,
+      input: {},
+      output: {},
+      envelope: {},
+      typeText: null,
+    };
+    const schema = {
+      getItem: {
+        input: {
+          type: 'object',
+          properties: {
+            data: {
+              type: 'object',
+              properties: { itemId: { type: 'string' } },
+              required: ['itemId'],
+            },
+          },
+          required: ['data'],
+        },
+        output: { type: 'object' },
+      },
+    };
+    // A RunInput-shaped object is structurally a superset of PluginInput —
+    // generate() reads `input.operations` directly (PluginInput carries it
+    // natively since DEBT-APIGEN-PLUGIN-MCP-GENERATE-OPERATIONS-001 was
+    // resolved; see generate.ts's comment).
+    const input: RunInput = {
+      packages: [
+        { id: 'catalog', schemas: schema, importPath: '@acme/catalog' },
+      ],
+      outputDir: '/tmp/out',
+      options: {},
+      operations: [getItemOp],
+    };
+    const out = generate(input);
+    const idx = out.files.find((f) => f.path === 'index.ts');
+    if (!idx) throw new Error('Expected index.ts');
+
+    const expectedName = project(getItemOp).mcp.name;
+    expect(expectedName).toBe('catalog_item_api_get_item');
+    expect(idx.content).toContain(JSON.stringify(expectedName));
+
+    // The EXACT path (real Operation) and the best-effort fallback would
+    // DIVERGE here (fallback can't see the 'itemApi' file segment from
+    // importPath '@acme/catalog') — proving generate() actually used the
+    // supplied `operations`, not silently falling back.
+    const fallbackName = deriveToolName(
+      { id: 'catalog', importPath: '@acme/catalog' },
+      'getItem'
+    );
+    expect(fallbackName).not.toBe(expectedName);
+    expect(idx.content).not.toContain(JSON.stringify(fallbackName));
   });
 });

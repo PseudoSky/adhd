@@ -77,10 +77,16 @@ describe('importSource: CommonJS-format source with a .js-extension relative spe
     await mcpClient.connect(mcpTransport);
 
     const listed = await mcpClient.listTools();
-    expect(listed.tools.map((t) => t.name)).toEqual(['greet']);
+    // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: since BUG-APIGEN-
+    // OPENAPI-ROUTE-PATH-MISMATCH-001's MCP-side fix, the tool is registered
+    // under project(op).mcp.name (<namespace>_<file>_<export>) — namespace
+    // "apigen-cli", file "index" (fixtures/cjs-format-js-import/index.ts),
+    // export "greet" — not the raw export name.
+    const toolName = 'apigen_cli_index_greet';
+    expect(listed.tools.map((t) => t.name)).toEqual([toolName]);
 
     const res = (await mcpClient.callTool({
-      name: 'greet',
+      name: toolName,
       arguments: { data: { name: 'world' } },
     })) as { content: Array<{ type: string; text: string }> };
     const got = JSON.parse(

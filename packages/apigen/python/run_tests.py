@@ -224,7 +224,7 @@ def run_conformance_vectors(results: _Results, vectors: dict[str, Any]) -> None:
         field: str = v["field"]
         expected = v["expected"]
 
-        # Reproduce the @adhd/apigen-naming logic in Python.
+        # Reproduce the @adhd/apigen-engine-naming logic in Python.
         def _envelope_key(pid: str, f: str) -> str:
             if pid == "adhd":
                 return f"x-adhd-{f}"

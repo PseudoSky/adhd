@@ -24,9 +24,9 @@ import {
   opMatchesExportMode,
 } from '../lib/orchestrator';
 import { collectFormats } from '../lib/commands/generate';
-import { checkCollisions, CollisionDetectedError } from '@adhd/apigen-naming';
-import { project as projectOp } from '@adhd/apigen-naming';
-import { httpVerb as httpVerbShared } from '@adhd/apigen-naming';
+import { checkCollisions, CollisionDetectedError } from '@adhd/apigen-engine-naming';
+import { project as projectOp } from '@adhd/apigen-engine-naming';
+import { httpVerb as httpVerbShared } from '@adhd/apigen-engine-naming';
 import type {
   Operation,
   Segment,
@@ -509,7 +509,7 @@ describe('[dod.10 v2 teeth] buildDescriptor: default-import Decimal source carri
 // FEAT-APIGEN-022 / BUG-APIGEN-025 — full real pipeline: extract() (real
 // TS source) → buildDescriptor()'s Step 5 (op.safe threading) →
 // composeSchemas() (x-apigen-safe stamping) → the shared httpVerb()
-// (@adhd/apigen-naming), proving the whole chain end-to-end rather than any
+// (@adhd/apigen-engine-naming), proving the whole chain end-to-end rather than any
 // single stage in isolation.
 // ---------------------------------------------------------------------------
 
