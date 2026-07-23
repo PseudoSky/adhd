@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
-const { comparePublishedToLocal, normalizeManifest, bumpVersion } = require('./compare-published.js');
+const { comparePublishedToLocal, normalizeManifest, bumpVersion, normalizedHash } = require('./compare-published.js');
 
 /** Materialize a package dir from a {relpath: contents} map. */
 function makeDir(files) {
@@ -86,6 +86,91 @@ test('normalizeManifest strips version + all @adhd/* dep entries', () => {
   assert.equal(n.version, undefined);
   assert.equal(n.dependencies['@adhd/apigen-core-client'], undefined);
   assert.equal(n.dependencies['better-sqlite3'], '12.10.0');
+});
+
+// ---------------------------------------------------------------------------
+// normalizedHash equivalence proof (PUBLISHED-STATE-CACHE-001, Deliverable 1):
+// the published-state cache stores `normalizedHash(dist)` instead of the full
+// directory it's compared against. These tests prove, for every scenario
+// compare-published.spec.mjs above already covers, that
+//   normalizedHash(A) === normalizedHash(B)  <=>  comparePublishedToLocal(A, B).changed === false
+// in BOTH directions — i.e. reverting the cache lookup to the legacy
+// directory-diff path can never change a decision.
+// ---------------------------------------------------------------------------
+
+/** Assert the equivalence for one (a, b) pair in both directions. */
+function assertEquivalent(a, b) {
+  const legacy = comparePublishedToLocal(a, b);
+  const legacyReversed = comparePublishedToLocal(b, a);
+  const ha = normalizedHash(a);
+  const hb = normalizedHash(b);
+  assert.equal(legacy.changed, legacyReversed.changed, 'comparePublishedToLocal must itself be symmetric for these fixtures');
+  assert.equal(ha === hb, !legacy.changed, `normalizedHash equality (${ha === hb}) must match "not changed" (${!legacy.changed})`);
+}
+
+test('normalizedHash equivalence: identical dist vs published -> hashes EQUAL (matches changed=false)', () => {
+  const a = makeDir({ 'package.json': PKG(), 'index.js': 'export const x=1;\n' });
+  const b = makeDir({ 'package.json': PKG(), 'index.js': 'export const x=1;\n' });
+  try {
+    assertEquivalent(a, b);
+    assert.equal(normalizedHash(a), normalizedHash(b));
+  } finally { rmSync(a, { recursive: true, force: true }); rmSync(b, { recursive: true, force: true }); }
+});
+
+test('normalizedHash equivalence: real code change -> hashes DIFFERENT (matches changed=true)', () => {
+  const a = makeDir({ 'package.json': PKG(), 'index.js': 'export const x=2;\n' });
+  const b = makeDir({ 'package.json': PKG(), 'index.js': 'export const x=1;\n' });
+  try {
+    assertEquivalent(a, b);
+    assert.notEqual(normalizedHash(a), normalizedHash(b));
+  } finally { rmSync(a, { recursive: true, force: true }); rmSync(b, { recursive: true, force: true }); }
+});
+
+test('normalizedHash equivalence: only the version field differs -> hashes EQUAL', () => {
+  const a = makeDir({ 'package.json': PKG({ version: '1.2.4' }), 'index.js': 'x\n' });
+  const b = makeDir({ 'package.json': PKG({ version: '1.2.3' }), 'index.js': 'x\n' });
+  try {
+    assertEquivalent(a, b);
+    assert.equal(normalizedHash(a), normalizedHash(b));
+  } finally { rmSync(a, { recursive: true, force: true }); rmSync(b, { recursive: true, force: true }); }
+});
+
+test('normalizedHash equivalence: moved internal @adhd/* dep RANGE -> hashes EQUAL (no cascade churn)', () => {
+  const a = makeDir({ 'package.json': PKG({ dependencies: { 'better-sqlite3': '12.10.0', '@adhd/apigen-core-client': '^0.2.0' } }), 'index.js': 'x\n' });
+  const b = makeDir({ 'package.json': PKG({ dependencies: { 'better-sqlite3': '12.10.0', '@adhd/apigen-core-client': '^0.1.0' } }), 'index.js': 'x\n' });
+  try {
+    assertEquivalent(a, b);
+    assert.equal(normalizedHash(a), normalizedHash(b), 'a moved internal @adhd/* range must hash EQUAL — it must never look like a change to the cache');
+  } finally { rmSync(a, { recursive: true, force: true }); rmSync(b, { recursive: true, force: true }); }
+});
+
+test('normalizedHash equivalence: an EXTERNAL dep change -> hashes DIFFERENT', () => {
+  const a = makeDir({ 'package.json': PKG({ dependencies: { 'better-sqlite3': '13.0.0', '@adhd/apigen-core-client': '^0.1.0' } }), 'index.js': 'x\n' });
+  const b = makeDir({ 'package.json': PKG(), 'index.js': 'x\n' });
+  try {
+    assertEquivalent(a, b);
+    assert.notEqual(normalizedHash(a), normalizedHash(b));
+  } finally { rmSync(a, { recursive: true, force: true }); rmSync(b, { recursive: true, force: true }); }
+});
+
+test('normalizedHash equivalence: added/removed files -> hashes DIFFERENT, both directions', () => {
+  const a = makeDir({ 'package.json': PKG(), 'index.js': 'x\n', 'extra.js': 'y\n' });
+  const b = makeDir({ 'package.json': PKG(), 'index.js': 'x\n' });
+  try {
+    assertEquivalent(a, b);
+    assert.notEqual(normalizedHash(a), normalizedHash(b));
+    assert.notEqual(normalizedHash(b), normalizedHash(a)); // symmetry
+  } finally { rmSync(a, { recursive: true, force: true }); rmSync(b, { recursive: true, force: true }); }
+});
+
+test('normalizedHash is deterministic (same input -> same digest, repeated calls)', () => {
+  const a = makeDir({ 'package.json': PKG(), 'index.js': 'export const x=1;\n', 'nested/deep.js': 'y\n' });
+  try {
+    const h1 = normalizedHash(a);
+    const h2 = normalizedHash(a);
+    assert.equal(h1, h2);
+    assert.match(h1, /^sha256:[0-9a-f]{64}$/);
+  } finally { rmSync(a, { recursive: true, force: true }); }
 });
 
 test('bumpVersion patch/minor/major', () => {

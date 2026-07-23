@@ -7,14 +7,32 @@
  * ordering, and the gate `dependsOn` (build → dist-manifest → verify-dist-load →
  * publish-hygiene, wired in plugin.js). Not cached: publishing is a side effect.
  *
- * The npm REGISTRY is the source of truth for what's released (no git tags): this
- * publishes the built `dist/` iff `name@version` is not already on the registry,
- * and is a no-op skip if it is (npm refuses to publish over an existing version
- * anyway). Versioning model: the source package.json `version` IS the release
- * version — bump it to cut a new release.
+ * EXISTENCE CHECK (PUBLISHED-STATE-CACHE-001, zero-network happy path):
+ * "is `name@version` already released" is answered from the committed
+ * `published-state.json` cache FIRST — `cached.version === version` skips
+ * straight to success with NO `npm view` call. This is the common case for
+ * every package `nx run-many -t publish` re-visits after a run where nothing
+ * new got versioned. Only when the cache does NOT already know this exact
+ * version does `publish` fall through to the real `npm publish` attempt
+ * (which needs the network anyway — that's the actual release action).
+ *
+ * WRITE-THROUGH (Deliverable 3): on a successful `npm publish` — OR on npm's
+ * "cannot publish over previously published version" error, treated as
+ * already-published/success (the real read-lag case: the cache said "not
+ * published yet" but the registry disagrees, e.g. a previous run's publish
+ * actually landed before this run's cache read) — this writes/updates the
+ * package's `{version, normalizedHash, publishedIntegrity}` entry from the
+ * dist THIS TASK JUST PACKED, not a re-fetched copy: it's authoritative and
+ * immune to npm's own read-after-write propagation lag. The write is
+ * concurrency-safe (`lib/published-state.js`'s lockfile-guarded
+ * read-modify-write) so parallel `nx run-many -t publish` tasks — each a
+ * separate process — never lose one another's update.
+ *
+ * Versioning model: the source package.json `version` IS the release
+ * version — bump it (via `version`) to cut a new release.
  *
  * Options (forwarded from `nx run-many -t publish --<opt>=<val>`):
- *   --dryRun         pack + report, publish nothing
+ *   --dryRun         pack + report, publish nothing (cache is NOT written)
  *   --otp=<code>     npm one-time password (2FA)
  *   --tag=<dist-tag> publish under a dist-tag (default: latest)
  *   --access=<a>     npm access (default: public)
@@ -22,15 +40,50 @@
 const { spawnSync } = require('node:child_process');
 const { existsSync, readFileSync } = require('node:fs');
 const { join, relative } = require('node:path');
+const { normalizedHash } = require('../version/compare-published');
+const { packLocalDir, tarballIntegrity } = require('../../lib/npm-registry');
+const { readState, updatePublishedState } = require('../../lib/published-state');
 
 function sh(cmd, args, opts = {}) {
   return spawnSync(cmd, args, { encoding: 'utf8', ...opts });
 }
 
-/** true iff <name>@<version> is already on the registry (the "published reference"). */
-function isPublished(name, version) {
+/** true iff <name>@<version> is already on the registry (live network check — used only as a cache-miss fallback path, never on the happy path). */
+function isPublishedLive(name, version) {
   const res = sh('npm', ['view', `${name}@${version}`, 'version'], { stdio: ['ignore', 'pipe', 'ignore'] });
   return res.status === 0 && String(res.stdout).trim() === version;
+}
+
+/**
+ * npm's message when a version already exists on the registry — treated as
+ * success (already-published), not a failure, because the cache's write
+ * (below) is authoritative regardless of *why* it was stale.
+ */
+function isAlreadyPublishedError(npmStderrOrStdout) {
+  return /cannot publish over( the)? previously published version/i.test(String(npmStderrOrStdout || ''));
+}
+
+/**
+ * Write-through: compute this package's `{version, normalizedHash,
+ * publishedIntegrity}` from the dist that was JUST packed/published — an
+ * OFFLINE local pack + hash, never a re-fetch from the registry (immune to
+ * npm read-after-write lag by construction: we know exactly what we shipped).
+ *
+ * @param {string} root workspace root
+ * @param {string} name
+ * @param {string} version
+ * @param {string} distDir
+ * @param {string} workDir scratch dir for the local pack
+ */
+async function writeThroughCache(root, name, version, distDir, workDir) {
+  const tgz = packLocalDir(distDir, workDir);
+  const publishedIntegrity = tgz ? tarballIntegrity(tgz) : null;
+  const entry = { version, normalizedHash: normalizedHash(distDir), publishedIntegrity };
+  await updatePublishedState(root, (state) => {
+    state[name] = entry;
+    return state;
+  });
+  return entry;
 }
 
 async function run(options, context) {
@@ -48,9 +101,10 @@ async function run(options, context) {
     return { success: false };
   }
 
-  // Registry is the source of truth — skip anything already released.
-  if (isPublished(name, version)) {
-    console.error(`publish: ${name}@${version} already on npm — skipping.`);
+  // ZERO-NETWORK existence check: the committed published-state cache.
+  const cached = readState(context.root)[name];
+  if (cached && cached.version === version) {
+    console.error(`publish: ${name}@${version} already on npm (published-state cache hit, zero network) — skipping.`);
     return { success: true };
   }
 
@@ -60,13 +114,33 @@ async function run(options, context) {
   if (options.dryRun) args.push('--dry-run');
 
   console.error(`publish: ${name}@${version}${options.dryRun ? ' [dry-run]' : ''} from ${relative(context.root, distDir)}`);
-  const res = sh('npm', args, { stdio: 'inherit' });
+  // stdout stays inherited (a human watching a real publish sees npm's own
+  // progress live); stderr is piped so a failure can be inspected here to
+  // distinguish "genuinely failed" from "cannot publish over previously
+  // published version" (the write-through's read-lag case) — and is echoed
+  // to our own stderr afterward either way, so nothing that used to be
+  // visible under the old `stdio:'inherit'` is lost.
+  const res = sh('npm', args, { stdio: ['inherit', 'inherit', 'pipe'] });
+  if (res.stderr) process.stderr.write(res.stderr);
+  const workDir = join(context.root, 'tmp', 'nx-build-publish', context.projectName);
+
   if (res.status !== 0) {
+    if (isAlreadyPublishedError(res.stderr) || isPublishedLive(name, version)) {
+      console.error(`publish: ${name}@${version} already on npm (registry disagreed with a stale cache) — treating as success, reconciling cache.`);
+      if (!options.dryRun) await writeThroughCache(context.root, name, version, distDir, workDir);
+      return { success: true };
+    }
     console.error(`publish: npm publish failed (exit ${res.status}) for ${name}@${version} — nothing published for this package.`);
     return { success: false };
+  }
+
+  if (!options.dryRun) {
+    await writeThroughCache(context.root, name, version, distDir, workDir);
+    console.error(`publish: ${name}@${version} -> published-state.json updated (write-through).`);
   }
   return { success: true };
 }
 
 module.exports = run;
 module.exports.default = run;
+module.exports.__internals = { isPublishedLive, isAlreadyPublishedError, writeThroughCache };

@@ -1,0 +1,272 @@
+{
+  "@adhd/agent-base-types": {
+    "version": "2.1.3",
+    "normalizedHash": "sha256:3047b58894f912c498cc45ead72e7ee62095c20230950fc2c57fc89988555122",
+    "publishedIntegrity": "sha512-nb47j7ArW8qAde3pNJcxt9trjPl3Cgj2oQgCxAH/vmhlcwXDq2m3xp9ldZrCcvKrAKERKtMmOmCcuCK1PrrsAw=="
+  },
+  "@adhd/agent-core-env": {
+    "version": "0.0.2",
+    "normalizedHash": "sha256:81f85591790abbc567ad35b2aa539cb11ebb64fb53764310b5d85c5c0cbc0916",
+    "publishedIntegrity": "sha512-U6aa9WgxasErg5+RYdvDT+UC3lPSW3fgsOxXr/QWdROMbkIyii49uz4Ms/VokX3gNqH5WlkWnLVaHihKkd6kDw=="
+  },
+  "@adhd/agent-core-policy": {
+    "version": "2.1.4",
+    "normalizedHash": "sha256:582729472bffd4114a32ca7921eb8c2c9f537ba539e16e82627a326398bd10b2",
+    "publishedIntegrity": "sha512-I1ITVQ8W83ZEoZ3IgHbwcoW/kRnbeECrrdF4YKkl+sQNg9cI7cNKEA1aqCsOm4mgEaz9kMshTOd8itC4sLd6+g=="
+  },
+  "@adhd/agent-core-provider": {
+    "version": "2.1.4",
+    "normalizedHash": "sha256:6ff7a0fca79b5e6114640b7649e09be10515735a75baf3a6f38f6dff5acdb0ea",
+    "publishedIntegrity": "sha512-/LJ3t84waRnli7nEEeUPXDGioAOr6Oe4aBgOQ7NeQ1M1SOS8S4OULAf9BQTgf2YlwMGQzAuhDKF7x4vDNI+eiw=="
+  },
+  "@adhd/agent-engine-compiler": {
+    "version": "2.1.3",
+    "normalizedHash": "sha256:49d6b88e8f3f534d3364f7f226c827ed404e3aec865e369db2803e5a1120dcde",
+    "publishedIntegrity": "sha512-rBCxCTvIgaiggsnDgGCEYu68tNojlZ5HSvcgjiQCDbUQMdgFnYZfOWAwC9DnCsK/wV28W0Ll+bQxaY9SrVtiWA=="
+  },
+  "@adhd/agent-engine-orchestrator": {
+    "version": "2.1.3",
+    "normalizedHash": "sha256:0ffedf87aa4c96e12c0b39fee499c829ca95a8c3b5c3b942d3b7f800160452c5",
+    "publishedIntegrity": "sha512-VT3mmRiFVo+GmAPS3C8F2EEf88uB2T9vkleCUHFHVtrqXi7NrCH/CGffHrZl2qOhOudfajtoSMa6/L6Jk+e35Q=="
+  },
+  "@adhd/agent-generator-plugin": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:9b9f074eb5f80f141b3b99ddae9fe424195b6a510845c169872407e00ddfdeac",
+    "publishedIntegrity": "sha512-caEtmpJqEkR0WXOZdF34tYsOTvWfOvmoYMR9qg1qXjz2goECAgscmcO/gB9U/EPBHlaU6RTPECJauTBKLwmeXA=="
+  },
+  "@adhd/agent-mcp": {
+    "version": "2.1.3",
+    "normalizedHash": "sha256:68daee2ff3470b9b8b4a18a2a230f72cbea93585ecdd334ed3a3d4534b92fa11",
+    "publishedIntegrity": "sha512-s2lh4ivqB/i+x4hDIpGwyfrsyfb+HHLM4HRWxstqDRvN3QKVQsSp0I/LTySTKh84cAmwg8lpwhzVeXOPmAnSjQ=="
+  },
+  "@adhd/agent-plugin-budget": {
+    "version": "0.0.4",
+    "normalizedHash": "sha256:8c0c86ddf9f5a6f007d166f41500f85b66f6b74187337868fe5e68b968ba0c6c",
+    "publishedIntegrity": "sha512-KX8RIfwEjbntOYXsARDr/UfCgJqHY+wv3dbJXWSKL3nE8mRVdSj+EiKi252Rr53IVlQzHtygFh7KK9sRJJMl+Q=="
+  },
+  "@adhd/agent-plugin-sanitize": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:aa22c60b17c5943a506faaa0a3a78cae5aabefff98d921d69b26640a87c2ed46",
+    "publishedIntegrity": "sha512-QnLAnq57O3SqEIZ98mquY9/MHF0Z+LJDbYhqb3s8nej5NV7VAJ5g+Ri+jvH69UkKCMJVh3NN6NRzmS8e2sS+Cg=="
+  },
+  "@adhd/agent-store-prompts": {
+    "version": "2.1.3",
+    "normalizedHash": "sha256:8451144f498275cfd1b58b8c2845f29861d02edb106e44a20f567166acb1fa2f",
+    "publishedIntegrity": "sha512-jdRqTIIHyHlEUPu2gt1ocgFlCrtXot68hgDbycKKmQwAS28hW9Fzcr/qYEFO7mY+2jBm4O9o1GCcSiwTJqiY3A=="
+  },
+  "@adhd/agent-store-runtime": {
+    "version": "2.1.4",
+    "normalizedHash": "sha256:1c3366ba92c1d896e946acdcf60f5a6f7f6723f915ba9d3a4c05b5c944b723cc",
+    "publishedIntegrity": "sha512-yN6w6stQd5FN8uYfBBPFHmCnu/Rnyi/3N4jFNFP0XK9dBYDXSrrckaDTA/KelHXpE5T3kokTCILscxnu0P8U3A=="
+  },
+  "@adhd/agent-store-tools": {
+    "version": "2.1.4",
+    "normalizedHash": "sha256:cb70f5fda23388a228cfd0f7efebde8e4d47c4b8401f8da3695c897e00435d5c",
+    "publishedIntegrity": "sha512-9EjeZiytiJX0RqQwCRIEPYsD7ojTHx7EPj/6J/98FTEMltMp6Au8FyG4XFRJf27HXKynZQyMG2wSdITXjpgRHA=="
+  },
+  "@adhd/apigen-base-errors": {
+    "version": "0.1.3",
+    "normalizedHash": "sha256:0f980904bf467c19da56ca6f3a19fa5cc58b94476fdd42fe889db8646e7999a6",
+    "publishedIntegrity": "sha512-9RLZ4j4SS45NyoVNY26WkEGkohs8G4KVTeDG8qiUoZevuVN1OP6YVflgShdkAaWGNy7gyz0Kmp2PQoag8dG6cQ=="
+  },
+  "@adhd/apigen-base-logical": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:479c83c91348658189ccc3e40b4f0da1a598b916cc5eda78bb3f5727570f58b5",
+    "publishedIntegrity": "sha512-E/8nekRJK9R9nNQCuXHQdE0yuDhfJ0xPt/a+5rWowzJ6yTQpu5VpOIZJX2d4oQhB2C1BgvJ3AZZJcuc5roEzlg=="
+  },
+  "@adhd/apigen-base-schema": {
+    "version": "0.1.3",
+    "normalizedHash": "sha256:aab6ba03140e3580ac702b912e1813c2d0d25ef986e355fd772e9006298ad9df",
+    "publishedIntegrity": "sha512-fH5KpAV+buzRc5iHqaFnIZgaUca1+10/mBGR40seNJc1uC58/XX7ANyFR3JcWJXdGyCXBGdhOqQ+ylCZizhSxw=="
+  },
+  "@adhd/apigen-base-types": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:223fb211083e438d0c84c721659ac0e675b697806df68b4010d3a12321439519",
+    "publishedIntegrity": "sha512-3nazYWxVLguHXJsPakwjOkCxegvecQeRMazzcmeNxiKhUW1khVPIVLWgvNGfJXs6JKfez6X02NY+2LpH5MNm9Q=="
+  },
+  "@adhd/apigen-cli": {
+    "version": "0.1.3",
+    "normalizedHash": "sha256:89f1fa47aa6b799922c23963ae46996d7a82eff9d877aef878209eaecd722401",
+    "publishedIntegrity": "sha512-pFaOISchZR0uP5xA7ADuO0LD8Gf/rsy1OhvqJnuDw33S3uq8ApyEuuT+oQkdrZI/nRl/NtpmEismZuK3J+46/g=="
+  },
+  "@adhd/apigen-codegen-openapi": {
+    "version": "0.1.4",
+    "normalizedHash": "sha256:333a9a21448e98a95b518ddc636409b6a04a2dc06e5aa2e90cdf2186cc6cce06",
+    "publishedIntegrity": "sha512-W3jzjm1YGF4eeC8xNzMcI0ybHMagTxUhkUX4bsX/yUU4jR2ZP9j4Cyp+DPCmJ1bF26Hn7TsY5abP36BIfIafYA=="
+  },
+  "@adhd/apigen-core-client": {
+    "version": "0.1.2",
+    "normalizedHash": "sha256:1e7851f54d5eda3c552e1058231da1ab0138e762333b0ca68bb61e32791bf1e8",
+    "publishedIntegrity": "sha512-i3mBureNp1o2eNHFYwMRgrzZJIKvxe9MtIeYyJXr3vAth0vvSKuxY+xVsaerhRXsgGGQoJX8DuEofKC2UQXdYg=="
+  },
+  "@adhd/apigen-engine-conformance": {
+    "version": "0.1.3",
+    "normalizedHash": "sha256:01c7041fb54a58e45b44617b5649c5d1e704ad9a91a9bae6a55e46e2faba1651",
+    "publishedIntegrity": "sha512-O5uCzxepnhLsIALv9wrYNVo9qLPOF5aI6CBPtisbunc0H0wYXK3RZTWlA6WGzwN29+4nx1eUTe/BbSZgqwJGFg=="
+  },
+  "@adhd/apigen-engine-gateway": {
+    "version": "0.1.3",
+    "normalizedHash": "sha256:d6e68474de55d69343174ddf1003e40b8f2cdcaf2fc0688b14f25629397cd777",
+    "publishedIntegrity": "sha512-dI3/zXAhBm3zWU6xRrqdU0kSuDtdN9FRoTQg/c/0XqQf4eO46fKTDKSGwbKXtR8I9UFqoW7ESdu89y5FphLubQ=="
+  },
+  "@adhd/apigen-engine-naming": {
+    "version": "0.1.3",
+    "normalizedHash": "sha256:421232d6643f58f260f44c19722e598319a91b60b3842c60bebdbb42fc469b44",
+    "publishedIntegrity": "sha512-sSNzeCapwAgmQhjqnMA9DkWUBCkQwl21/N9wObTnsiER82z5ZFh8K70ep6rbL3+ORjjqUOH9rFkW2bnpDF5lQQ=="
+  },
+  "@adhd/apigen-engine-runtime": {
+    "version": "0.1.2",
+    "normalizedHash": "sha256:fa7f0ec5e7311ab04f26cd2be3fc008a3d69bebb715676161912422d76cc602f",
+    "publishedIntegrity": "sha512-k6l8M7rmzoM7mGNtQ/brnJg+Ez1ZvF95xxWL/JNVzAleTowyjdxgImrVXVDhR5fodvinHxL5+c76Sn5545/jSA=="
+  },
+  "@adhd/apigen-generator-nx": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:3178cf6208cb7849461483c8ea8ab9f81566f73d3d1aead578a119b3230a0b62",
+    "publishedIntegrity": "sha512-x28EmX+qy39zIXJkX6Q9/uGJMlFq69JoCdze/GKdHt2lsLZWTbZqyIrrNDB4S5wFZHKV86z1ZRFJAJ92LOe6ng=="
+  },
+  "@adhd/apigen-plugin-api-express": {
+    "version": "0.1.3",
+    "normalizedHash": "sha256:e6adfe91cd3e1fc08e4ebd4b03223d6814f2aa719a9feb37e711bfb1d0152214",
+    "publishedIntegrity": "sha512-1Tda/5Cl8u5Iezm5lb22hr00FIfFJz2wWNE8QgTpu/qNf6T0TDIskACPtZvWiqifcUTcmMFpFNzeAkpoyZRHgw=="
+  },
+  "@adhd/apigen-plugin-api-fastify": {
+    "version": "0.1.3",
+    "normalizedHash": "sha256:41450410f5fce4dc8ede6223bd4145242b52b73e385d36ece7d16b069f00f753",
+    "publishedIntegrity": "sha512-IerRO/10+UfwI7jl+dtsKv6MJ7/EmL4Huf2jEpYKuOJsth89JqoMaZT22dItVSF/qMf9hpM55dLWdndUE32ZzQ=="
+  },
+  "@adhd/apigen-plugin-cli-output": {
+    "version": "0.1.3",
+    "normalizedHash": "sha256:f8b6909c9a576a207156b649347fad8a2f4b04fb496b7d951d9e1a7efaf7ab61",
+    "publishedIntegrity": "sha512-3qc7WIWZApOXkYogtyPd7laCoepynYD/HKcq2pN84T3yEl9tk5NCOxPmfiM6HYlkfYPtk/YPa5B1LzOa6lJAHQ=="
+  },
+  "@adhd/apigen-plugin-health": {
+    "version": "0.1.4",
+    "normalizedHash": "sha256:eeec5e860065a34795cad92c70a83ee629e6db8fdddc50df07294d72da9c09e4",
+    "publishedIntegrity": "sha512-wKrFYdm3iZRq43qCMG/sUFCzRMLTjEAnc9XwN4R+CRbo3Lnaa8o15zu7mKyJ7Co/mX8lSW+DFDUUvQZBg8qXGg=="
+  },
+  "@adhd/apigen-plugin-jsonschema": {
+    "version": "0.1.3",
+    "normalizedHash": "sha256:86513ddd984f31af8f17d2948b6fab41e6c381067e57dd50bb32d1a00da89f2d",
+    "publishedIntegrity": "sha512-cfnhqO1YzsAV/v3Yq3yB0cvC8f5RN9O9dqscw98WBpwTbU7+WfUcoVLObteg41xl0u414SRpxcnYhmxPv+zB2Q=="
+  },
+  "@adhd/apigen-plugin-logger": {
+    "version": "0.1.4",
+    "normalizedHash": "sha256:e1dd39f052c9dad9c3c949c220927a193501eda5193a6463ab97c2d899eeb7b5",
+    "publishedIntegrity": "sha512-fw1oWxCowM04TAWTWyJCyixBridUhq3Mh6rHrFMlwcnQt638u+RFcujf8VFMdiJ0tpwMX0PgY+1bk80xBf8ivA=="
+  },
+  "@adhd/apigen-plugin-mcp": {
+    "version": "0.1.3",
+    "normalizedHash": "sha256:29968b450c90e04ee0168e735ff96a9656e90a0b2eae3ffdfab891e8bc3be7c8",
+    "publishedIntegrity": "sha512-A4jLdpkWzvS0TkLpOrucLh9hnGTUYU3RtGD90PtEzd6tD9vczedFZdxMxf2Kd8YYtoEgUGodv9Gycj0es5gPhg=="
+  },
+  "@adhd/apigen-plugin-openapi": {
+    "version": "0.1.4",
+    "normalizedHash": "sha256:351e806dbd5bfaee70b270ad5bb9108e809a63a67c4e5c23934bcc2f4336654f",
+    "publishedIntegrity": "sha512-6SoYC228xDCFFj243g5zGFWRK5sHKeRdB1w0dAAgKW4Z5e9Bhi8NaokYJUrZUABOGD8IiaGHXH33oZOdEAaZ1A=="
+  },
+  "@adhd/apigen-plugin-py-flask": {
+    "version": "0.1.3",
+    "normalizedHash": "sha256:cfe9cccd0b0c295ac5e083a5088857bbdc5fb729ed3bd57ba4f9451e4164898f",
+    "publishedIntegrity": "sha512-JPstUB2CGFUsmnLSXuKS/IkZzJobptqqNsSs/LMGbGtdMzk8gaLuQ1Q8yoS8Gqrz1KGmfI2QSxK7Ux7mv7E54Q=="
+  },
+  "@adhd/apigen-plugin-py-grpc": {
+    "version": "0.1.3",
+    "normalizedHash": "sha256:457e5c8cb454d4c72a5448ce516385e2f15f665603471e7e117c1f8ae2575540",
+    "publishedIntegrity": "sha512-rCr1PCPsvaYjU47yRrqkIL1UXsz8vFcIhOc6eIr49V3+oSRyC1U5Yi697xHgAbTa5FRLzEFf70Oc2eQe+EwJ7Q=="
+  },
+  "@adhd/apigen-python-env": {
+    "version": "0.1.2",
+    "normalizedHash": "sha256:12e6220dcac6c7950d23cb84b28049b4fd7bec5f6ffdb159e52682e9aa9943f8",
+    "publishedIntegrity": "sha512-9EHZw4dRoiD1G8zGuWv1XJqKkMRPW5SFzv0FM5k+bt0MSDclezIRMcWkqqNETkrywE4giTYtM96gQWmt4zwZIQ=="
+  },
+  "@adhd/backlog": {
+    "version": "0.0.1",
+    "normalizedHash": "sha256:b5a177e4b0826b61a0b5c91838546bdc217941985fd80a9d5dade4155bec11a7",
+    "publishedIntegrity": "sha512-6Lmgdh44Jexuh5KFkFYm+fQCjUrEEOIajGr3xHGHs9h1RtP3znpfSeS3QHYjwQHRvfOR1UybJ1qGwhAHuPXXfA=="
+  },
+  "@adhd/data-base-transforms": {
+    "version": "2.2.3",
+    "normalizedHash": "sha256:8280f16d5698f8e80beb3404ddaf77116c2701f1d80546fd481de6d7be487c2e",
+    "publishedIntegrity": "sha512-OSZpyL3rfA7HqgGagKiFuz4UsYj4EnEX9vW+m/koACUHPZmYJ/827DXzDsAJkYMVNHuH65ycH+TCaLeizSvPWQ=="
+  },
+  "@adhd/data-core-structures": {
+    "version": "2.2.3",
+    "normalizedHash": "sha256:a9fcb37ddd7794a77dc73ae9e4d12a62b9742139f44e2c8d8ed0988626fd0683",
+    "publishedIntegrity": "sha512-02kslRwU+EoAd/Arv29Hwya3ZckpBDIlw3ywK6Kq5qovkRdDsnmnzEavq+sE2s9QaptUtH0m27UWdwY2PBGXVQ=="
+  },
+  "@adhd/data-query-engine": {
+    "version": "2.2.3",
+    "normalizedHash": "sha256:120d8afab6d2f0109e20731dd5f2b61320d0443d7a80b10301282ca6bbe61a5b",
+    "publishedIntegrity": "sha512-eycPkZK359KCLuVMfCfPtkn6VBzqcdcDcmy0D03ulltbU314pg0GotkUH7C69YjFDpFv4TmGe+WO548aIbtw0w=="
+  },
+  "@adhd/decompile-cli": {
+    "version": "0.1.10",
+    "normalizedHash": "sha256:ab478a84c2f1c72a52e2adae6121418de53f1b2808245aa5ba865ae0b8c7400f",
+    "publishedIntegrity": "sha512-JiEaPbaUWX8+/scKSaIPyzCTPj47sqggFd1J8yjUHLBoqk8HJdUjy+Mj5ZFgOaXLdNKDUuWopqjoQmieSguHCg=="
+  },
+  "@adhd/dispatch-base-spec": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:50e5c43097ba07f37a7d927c1efc6b39aba8ef80ed536ce8b082ac10464c5194",
+    "publishedIntegrity": "sha512-xXy/IaXMGisqwDWJGE3dWNbCAT2yds4ctJFmsRDL/4jaomfyypgLj0E29PCxIJctVBO+ZOYEbas1Ur5sCqzx4w=="
+  },
+  "@adhd/dispatch-base-types": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:5f62919f7c9658641d4878b27badcaaf38083b2cdfa2f27ce200a91980882a0d",
+    "publishedIntegrity": "sha512-thXtTGcc2c/Rlkv9NuQJjtIG1cecVhzVdPLEQga5UbKZofdYNYnI22nGIe3OvygF0dMRD19FcSmqnxua5enUWA=="
+  },
+  "@adhd/dispatch-cli": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:0fbbd8c1109e3d352562d27558320bb8d12e17728ebf6127a7be3ed0b2ba0e53",
+    "publishedIntegrity": "sha512-zL+zaufpzxJ7j6alwzW8ldN8EAB5QenzaQehOR+um4a/2CZhcNpJkXaEWRj+EET+AssVcl67CWMpV/tkdtCeRg=="
+  },
+  "@adhd/dispatch-core-client": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:a919bfba332a9d9021159a18b6067076d70af13134389fca610417db07aadba0",
+    "publishedIntegrity": "sha512-PlYiZyRCDNtHBtx2OHGNSaIrFEp1Y7vFxkUa02KgUkHkrQUR2PoWwEUgJiiJEF5NMybqiwvElKc9nXYz7Clb/w=="
+  },
+  "@adhd/dispatch-core-optimizer": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:7bfc091846e7ccc832b017cbd03b5a7261d4bb826a26548de5f8781ab1d6991b",
+    "publishedIntegrity": "sha512-grw5Azp3fm6QzvkhxGI9ByZ25SuVJSIK6H2aSHBcYZ8znGsuqJ87ubTpcgHvY2W5XUfrB2MyHVPTJcxUdJojHA=="
+  },
+  "@adhd/dispatch-orchestrator": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:2603d465eae69dfde4c949860e8b15f2fa984012ff13d1b044a38cc86acdb385",
+    "publishedIntegrity": "sha512-RcKzmWLbNZ15dBGPGO0SYF58qfrkCn3hXGMcbcJHYuVx3ngrCxWu1+kHN7EVmjmQMd80O50VArJxW8Ul3UvyFw=="
+  },
+  "@adhd/dispatch-serializer-json": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:d97e1e90fc656c0ae8a51108cda4cc10c52cea47cb5273acf0b1dbfe39719bc1",
+    "publishedIntegrity": "sha512-+xA/YyVAbNouVYpCkns+GJZh6JeQ+xqyvgo9oLGNr1b5PDU/SYhNmmMnzonr62GPWCsM2A3yUjhDmmuR0Nj2LQ=="
+  },
+  "@adhd/environment": {
+    "version": "0.0.2",
+    "normalizedHash": "sha256:2c399d10edfedac130a59f6865bc337f17c3998664602a42b953e78d55885dae",
+    "publishedIntegrity": "sha512-UQ6xsNyM5M3ALnjVFiG2UpABbVW7j0AdkMp22O+foeNDKsJ5ngpyFE3q65hmuYE7QPQRmWtCYNF/AbrZCv2HGg=="
+  },
+  "@adhd/environment-base-spec": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:e2d4a0feee62d4257bb4e95d74fa1363fc9be1d412b9b1d5c199755afeb06487",
+    "publishedIntegrity": "sha512-m+T6XTM60QwpHlaf+L8ZWxyLTl4cCBoka21Q53NG7ZWqf1uQ83CdtqQIukVoqk2lNrVEopxDcN7bddQ8B1tSwQ=="
+  },
+  "@adhd/environment-builder": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:f474ebfdd9ba681e41c90ddbd9a1bbb3ce77c6d669cbf569b5e9e25e884f6ccf",
+    "publishedIntegrity": "sha512-Tf+TvI9tNlgsiW50Bx//FauCNYraAj4zvsNysx7L8IkIzrkS676IvL7Jiv67beZkl0SegYbQbemeclTQ0aYinw=="
+  },
+  "@adhd/ui-react-base-hooks": {
+    "version": "2.2.3",
+    "normalizedHash": "sha256:2f0acb100c2547f2ab747e6d318de370a0c64a0d4d7d614045bab1cc1d4ac3d4",
+    "publishedIntegrity": "sha512-h+9SKriW+hN/AFL35zHdJDYhHVWWzVa2IPjcPwEnhXGzDjuCmPZU9uAcvg+9JVzM0SdfhUpKGwA+Mc8+Fwy19w=="
+  },
+  "@adhd/workspace-base-tools": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:71de2992e36637b4f863f792aa0297a86c209bd2bac872d2f84c07534693cd68",
+    "publishedIntegrity": "sha512-ZFe5X+irZwlvGuztKJpC6tt0tZkCo7G+YjT4nnj7GrLuzDCqxtCO2hS+XlyAEIo9RtmGM6CgCC4AekJ8cWQwBw=="
+  },
+  "@adhd/workspace-codegen-nx": {
+    "version": "0.0.3",
+    "normalizedHash": "sha256:6465ea2352c5c58ba828931cdbaddcff9aefa6e41beaea5c2fd82ec89d612df6",
+    "publishedIntegrity": "sha512-o1Ddev8hlNWMlCsCVn9VhOimYxk98R22skyAN4iMZu54sDkllpUdOveAmgj1whY1/p7Vl8zttk4Qux0+haeqqQ=="
+  }
+}
