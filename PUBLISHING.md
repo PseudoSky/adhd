@@ -28,6 +28,28 @@ See [`tools/nx-plugins/build/README.md`](tools/nx-plugins/build/README.md) and
 [`tools/nx-plugins/assets/README.md`](tools/nx-plugins/assets/README.md) for the full target
 breakdown.
 
+### The `published-state.json` cache — zero-network change detection (PUBLISHED-STATE-CACHE-001)
+
+A committed, source-controlled file at the workspace root,
+`published-state.json` records `{ version, normalizedHash, publishedIntegrity }`
+per package — a snapshot of what's actually on npm. `version` reads it to
+decide bump/no-bump with **zero network calls** on the happy path (a hash
+compare against the cache, not a live `npm view`/`npm pack`/tarball fetch);
+`publish`'s existence-check reads it too before ever calling `npm publish`.
+The **only** tasks that ever touch the registry for a tarball are `nx run-many
+-t reconcile` (backfills/refreshes the cache, integrity-gated so it skips the
+tarball pull whenever a local pack's content already matches what's
+published) and `publish`'s own write-through (updates the cache from the dist
+it just packed, after a real publish). A package missing from the cache
+triggers a single-package, in-process backfill inside `version` itself — cost
+is paid once per package, never on every subsequent run. See
+[`tools/nx-plugins/build/README.md`](tools/nx-plugins/build/README.md)'s
+"published-state.json cache" section for the full design, the equivalence
+proof, and the concurrency-safe write-through mechanism.
+
+`published-state.json` should be committed alongside version bumps (like a
+lockfile) so the next contributor/CI run doesn't re-pay the backfill cost.
+
 Consequences for releasing:
 - **`version` bumps the REAL source `package.json`, never the dist copy.** The build step then
   re-stamps every dist manifest from the *final* set of source versions (`dist-manifest`), so
@@ -40,6 +62,9 @@ Consequences for releasing:
 - **Already-published, unchanged packages are skipped**, not republished — npm refuses to publish
   over an existing version. Only packages whose built `dist/` actually differs from what's on npm
   at their current version get bumped (see "Versioning model" below) and then publish.
+- **Change detection is zero-network on the happy path** — `version` compares a locally-computed
+  hash against the committed `published-state.json` cache instead of fetching a tarball from npm
+  every run. See "The `published-state.json` cache" below.
 
 ---
 
@@ -61,6 +86,9 @@ npx nx run-many -t version --bump=minor    # bump changed packages minor instead
 npx nx run-many -t publish --otp=123456    # supply an npm one-time password (2FA)
 npx nx run-many -t publish --projects=agent-mcp,apigen-cli   # a subset
 npx nx run apigen-cli:publish              # a single package
+
+npx nx run-many -t reconcile               # (re)build published-state.json from npm (integrity-gated; network-light)
+npx nx run apigen-cli:reconcile            # backfill/refresh just one package's cache entry
 ```
 
 > ⚠️ **Scoped/single-project `--dryRun` does NOT reach `^version`'s dependency tasks —
@@ -103,7 +131,12 @@ Exit code is the gate: `0` = everything versioned/published or skipped; non-zero
 > the `node_modules`-absent no-op guard, and how `.githooks/pre-commit` handles the resulting
 > working-tree mutation (it never auto-stages — see that file's header).
 
-**After publishing:** the `version` task left any bumps uncommitted — commit them (`git add -p` the bumped `package.json`s, `git commit -m "chore(release): version bumps"`) and `git push` (human-approved). No tag push is needed; the registry itself records what's released. (Leaving them uncommitted is still coherent — next release sees source == npm and re-detects from the artifact — but committing keeps git and npm aligned.)
+**After publishing:** the `version` task (and `reconcile`/`publish`'s cache write-through) left any bumps + `published-state.json` updates uncommitted (`DEBT-BUILD-VERSION-NO-AUTOCOMMIT-001`, addressed by an OPT-IN step, never automatic) —
+```bash
+pnpm release:commit:dry   # preview exactly what would be staged + the commit message; commits nothing
+pnpm release:commit       # stage + commit ONLY the bumped package.json + CHANGELOG.md + published-state.json
+```
+`release-commit` (`tools/nx-plugins/build/executors/publish/release-commit.mjs`) stages explicit pathspecs only — never `git add -A`/`.` — so unrelated concurrent work in the tree is never swept in. Then `git push` (human-approved). No tag push is needed; the registry itself records what's released. (Leaving them uncommitted is still coherent — next release sees source == npm/cache and re-detects from the artifact — but committing keeps git, npm, and the cache aligned for the next contributor/CI run.)
 
 <details>
 <summary>Retired: the former <code>nx release</code> workflow (kept for reference only — do not use)</summary>
@@ -305,4 +338,5 @@ package-specific verification steps. Check there for the full smoke-test procedu
 | `assets: no dist for <project> (build first)` | Same as above — `assets` also `dependsOn: ["build"]`; the target ran before a dist existed. |
 | `version` reports a spurious "changed" (`removed: README.md` / `removed: CHANGELOG.md`) on a package that has no real code changes | `version`'s `dependsOn` is missing `assets` for that target (should be `["build","assets","^version"]` — see `tools/nx-plugins/build/plugin.js`). Without `assets` in the chain, a bare `build` doesn't include docs that the already-published tarball has, and `compare-published.js` reads that as a real diff. This is a graph-wiring bug, not a real package change — check `plugin.js`'s `dependsOn` arrays before trusting the bump. |
 | `publish: npm publish failed` with the built package missing README/CHANGELOG | `dist-manifest` (and transitively `publish-hygiene`/`publish`) must `dependsOn` include `assets`, not just `build` — `@adhd/nx-build:publish` runs `npm publish {projectRoot}/dist` directly, so anything not physically copied into `dist/` (that's `assets`' job) never ships, regardless of what the source-root `package.json` `"files"` says. |
-| `pnpm release` bumped a package you didn't expect | The bump is driven entirely by `compare-published.js` diffing the built `dist/` against the currently-published npm tarball — not by git commits or conventional-commit messages. Any real change to the built output (code, external deps, non-`@adhd/*` metadata) triggers a bump; only internal `@adhd/*` dependency RANGE changes are deliberately excluded (`normalizeManifest`). Check the printed `reasons` list in the task output for exactly what differed. |
+| `pnpm release` bumped a package you didn't expect | The bump is driven entirely by comparing the built `dist/`'s `normalizedHash` against the cached PUBLISHED hash in `published-state.json` (equivalent to the legacy per-file tarball diff — see `compare-published.spec.mjs`'s equivalence suite) — not by git commits or conventional-commit messages. Any real change to the built output (code, external deps, non-`@adhd/*` metadata) triggers a bump; only internal `@adhd/*` dependency RANGE changes are deliberately excluded (`normalizeManifest`). Unlike the retired tarball-diff flow, a cache-hit decision doesn't print a per-file `reasons` list — run `nx run <project>:reconcile` to refresh that package's entry and inspect `published-state.json`'s stored hash if you need to dig further. |
+| `version` says "not in published-state.json — backfilling from npm" for a package you expected to already be cached | Normal on the FIRST run after `published-state.json` is introduced, or for a brand-new package — `version` self-heals with a single-package backfill (network, one package only) and caches the result. If you see this repeatedly for the SAME already-published package, `published-state.json` isn't being committed/persisted between runs — commit it. |

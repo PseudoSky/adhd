@@ -1,20 +1,28 @@
 /**
  * Teeth tests for the `version` executor's composition (impl.js) —
- * BUILD-TOOLING-VERSION-SYNC-DEPS-001, Change 1.
+ * BUILD-TOOLING-VERSION-SYNC-DEPS-001 (orchestration/reuse) and
+ * PUBLISHED-STATE-CACHE-001 (cache-driven, zero-network happy path).
  *
- * Covers what compare-published.spec.mjs (the pure decision core) cannot:
- * the ORCHESTRATION around it — that after deciding whether to bump, `run()`
- * reconciles THIS package's own internal `@adhd/*` ranges by calling through
- * to the `deps` plugin's real `sync-deps` (fix) / `sync-deps-check` (dryRun)
- * executors — not a reimplementation — writes only ITS OWN package.json,
- * and never lets that reconciliation cause (or be caused by) a spurious own
- * version bump.
+ * Covers what compare-published.spec.mjs (the pure decision core) and
+ * reconcile-core.spec.mjs (the pure backfill core) cannot: the ORCHESTRATION
+ * around them —
+ *   - a CACHE HIT never touches npm/tar at all (Deliverables 1 + 2);
+ *   - a CACHE MISS backfills exactly once (via the SAME reconcile-core.js
+ *     logic the standalone `reconcile` task uses — not a duplicated
+ *     reimplementation), then decides from the now-populated entry;
+ *   - after deciding whether to bump, `run()` reconciles THIS package's own
+ *     internal `@adhd/*` ranges by calling through to the `deps` plugin's
+ *     real `sync-deps` (fix) / `sync-deps-check` (dryRun) executors — not a
+ *     reimplementation — writes only ITS OWN package.json, and never lets
+ *     that reconciliation cause (or be caused by) a spurious own version bump.
  *
  * Mocking boundary: ONLY `node:child_process.spawnSync` is mocked — the
  * external-process boundary (real `npm`/`tar`, and the real `node
  * eslint-check.mjs` subprocess `deps/executors/sync/impl.js` shells out to).
- * Everything else (compare-published.js's real diffing, the real
- * `deps/executors/sync|check/impl.js` modules, real file I/O) runs for real.
+ * Everything else (compare-published.js's real hashing/diffing, the real
+ * `reconcile-core.js` gate, the real `lib/published-state.js` cache I/O, the
+ * real `deps/executors/sync|check/impl.js` modules, real file I/O) runs for
+ * real.
  *
  * Run: node --test tools/nx-plugins/build/executors/version/impl.spec.mjs
  */
@@ -22,20 +30,28 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import child_process from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const implAbs = require.resolve('./impl.js');
+const reconcileCoreAbs = require.resolve('../reconcile/reconcile-core.js');
+const npmRegistryAbs = require.resolve('../../lib/npm-registry.js');
+const publishedStateAbs = require.resolve('../../lib/published-state.js');
 const syncAbs = require.resolve('../../../deps/executors/sync/impl.js');
 const checkAbs = require.resolve('../../../deps/executors/check/impl.js');
 
-/** Force impl.js AND the deps modules it requires to reload, so their
- * top-level `const { spawnSync } = require('node:child_process')` picks up
- * whatever mock is currently installed on the (singleton) child_process module. */
+/** Force impl.js AND every module it (transitively) requires that itself
+ * touches `node:child_process.spawnSync` to reload, so their top-level
+ * `const { spawnSync } = require('node:child_process')` picks up whatever
+ * mock is currently installed on the (singleton) child_process module. */
 function resetAll() {
   delete require.cache[implAbs];
+  delete require.cache[reconcileCoreAbs];
+  delete require.cache[npmRegistryAbs];
+  delete require.cache[publishedStateAbs];
   delete require.cache[syncAbs];
   delete require.cache[checkAbs];
 }
@@ -53,26 +69,55 @@ function makeFiles(root, files) {
   }
 }
 
+/** sha512-<base64> of a string/Buffer's bytes — matches npm-registry.js's `tarballIntegrity` format. */
+function integrityOf(content) {
+  return `sha512-${createHash('sha512').update(Buffer.from(content)).digest('base64')}`;
+}
+
 /**
  * Fabricate a `spawnSync` stand-in that fakes the OS-process boundary:
- *  - `npm view <name> versions --json`      -> state.publishedVersions
- *  - `npm pack <name>@<v> --pack-destination <dir> --json` -> writes a dummy
+ *  - `npm view <name> versions --json`                    -> state.publishedVersions
+ *  - `npm view <name>@<v> dist.integrity`                  -> state.publishedIntegrity
+ *    (undefined/null -> npm-view "not found", forcing the reconcile
+ *    integrity gate's SLOW/tarball-pull path — the default here, so tests
+ *    that don't care about the fast path get the old, fully-materialized
+ *    published-dir behavior by default)
+ *  - `npm pack <ABSOLUTE local dir path> --pack-destination <dir> --json`
+ *    (packLocalDir, offline)                                -> writes a
+ *    tarball with bytes `state.localTgzContent` (default: a fixed string,
+ *    deliberately never equal to `state.publishedIntegrity` unless a test
+ *    opts in, to force the slow path by default)
+ *  - `npm pack <name>@<v> --pack-destination <dir> --json`  -> writes a dummy
  *    .tgz and reports its filename (real tar/npm never run)
- *  - `tar -xzf <tgz> -C <dir>`               -> materializes state.publishedFiles
- *    directly under <dir>/package (skips real extraction)
- *  - `node .../eslint-check.mjs <pkgJsonPath> [--fix]` -> the reused
+ *  - `tar -xzf <tgz> -C <dir>`                              -> materializes
+ *    state.publishedFiles directly under <dir>/package (skips real extraction)
+ *  - `node .../eslint-check.mjs <pkgJsonPath> [--fix]`      -> the reused
  *    deps/executors/sync|check impl's real subprocess call; records every
  *    invocation in state.eslintCalls and returns state.eslintStatus (default 0)
  */
 function makeSpawnSyncMock(state) {
   return (cmd, args = [], _opts = {}) => {
     state.calls.push({ cmd, args });
-    if (cmd === 'npm' && args[0] === 'view') {
+    if (cmd === 'npm' && args[0] === 'view' && args[2] === 'versions') {
       return { status: 0, stdout: JSON.stringify(state.publishedVersions ?? []), stderr: '' };
     }
-    if (cmd === 'npm' && args[0] === 'pack') {
+    if (cmd === 'npm' && args[0] === 'view' && args[2] === 'dist.integrity') {
+      if (state.publishedIntegrity == null) return { status: 1, stdout: '', stderr: 'npm error E404' };
+      return { status: 0, stdout: state.publishedIntegrity, stderr: '' };
+    }
+    if (cmd === 'npm' && args[0] === 'pack' && String(args[1]).startsWith('/')) {
+      // packLocalDir — an absolute filesystem path, never a `name@version` spec.
       const destIdx = args.indexOf('--pack-destination');
       const workDir = args[destIdx + 1];
+      mkdirSync(workDir, { recursive: true });
+      writeFileSync(join(workDir, 'local-fake.tgz'), state.localTgzContent ?? 'local-tgz-bytes\n');
+      return { status: 0, stdout: JSON.stringify([{ filename: 'local-fake.tgz' }]), stderr: '' };
+    }
+    if (cmd === 'npm' && args[0] === 'pack') {
+      // fetchPublished — a `name@version` registry spec.
+      const destIdx = args.indexOf('--pack-destination');
+      const workDir = args[destIdx + 1];
+      mkdirSync(workDir, { recursive: true });
       writeFileSync(join(workDir, 'fake-0.0.0.tgz'), 'not a real tarball\n');
       return { status: 0, stdout: JSON.stringify([{ filename: 'fake-0.0.0.tgz' }]), stderr: '' };
     }
@@ -114,6 +159,19 @@ function newState(overrides = {}) {
   return { calls: [], eslintCalls: [], changelogCalls: [], publishedVersions: [], publishedFiles: {}, eslintStatus: 0, changelogStatus: 0, ...overrides };
 }
 
+/** Every spawnSync call this run made that hit the registry or the tarball layer (npm/tar) — the zero-network assertion helper. */
+function networkCalls(state) {
+  return state.calls.filter((c) => c.cmd === 'npm' || c.cmd === 'tar');
+}
+
+function publishedStatePath(rootDir) {
+  return join(rootDir, 'published-state.json');
+}
+
+function writePublishedState(rootDir, entries) {
+  writeFileSync(publishedStatePath(rootDir), JSON.stringify(entries, null, 2) + '\n');
+}
+
 test('reuses the deps plugin sync/check modules verbatim — not a duplicated reimplementation', () => {
   const versionImpl = loadFreshImpl();
   const directSync = require(syncAbs);
@@ -122,7 +180,129 @@ test('reuses the deps plugin sync/check modules verbatim — not a duplicated re
   assert.strictEqual(versionImpl.__internals.checkInternalDeps, directCheck, 'must be the SAME function reference as deps/executors/check/impl.js — not a copy');
 });
 
-test('"not yet published" path: reconciles via sync (fix), not check', async (t) => {
+// ---------------------------------------------------------------------------
+// PUBLISHED-STATE-CACHE-001 — cache HIT: zero-network happy path
+// ---------------------------------------------------------------------------
+
+test('cache HIT, unchanged: ZERO network calls (no npm/tar spawnSync at all), no bump', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const distFiles = { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' };
+    const { pkgRoot, context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg, distFiles });
+    // Pre-populate the cache with the EXACT local dist's normalizedHash.
+    const { normalizedHash } = require('./compare-published.js');
+    const localDist = join(pkgRoot, 'dist');
+    writePublishedState(rootDir, {
+      '@adhd/pkg-b': { version: '1.0.0', normalizedHash: normalizedHash(localDist), publishedIntegrity: 'sha512-whatever' },
+    });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true);
+    assert.deepEqual(networkCalls(state), [], 'a cache hit must NEVER touch npm or tar');
+    assert.equal(state.eslintCalls.length, 1, 'sync-deps reconciliation still runs (a separate, already-zero-network step)');
+    const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    assert.equal(after.version, '1.0.0', 'unchanged vs the cached published hash -> no bump');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('cache HIT, changed: ZERO network calls, still bumps correctly', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const distFiles = { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 2;\n' }; // NEW code
+    const { pkgRoot, context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg, distFiles });
+    // Cache holds the hash of the OLD published content (different index.js).
+    const { normalizedHash } = require('./compare-published.js');
+    const oldPublishedDir = mkdtempSync(join(tmpdir(), 'old-published-'));
+    makeFiles(oldPublishedDir, { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' });
+    writePublishedState(rootDir, {
+      '@adhd/pkg-b': { version: '1.0.0', normalizedHash: normalizedHash(oldPublishedDir), publishedIntegrity: 'sha512-whatever' },
+    });
+    rmSync(oldPublishedDir, { recursive: true, force: true });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true);
+    assert.deepEqual(networkCalls(state), [], 'a cache hit must NEVER touch npm or tar, even when the package DID change (Deliverable 2)');
+    const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    assert.equal(after.version, '1.0.1', 'a real code change vs the cached hash must still bump');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('cache HIT but source already ahead of the cached version: ZERO network, treated as "release pending"', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.1', main: './index.js', dependencies: {} }; // already bumped locally
+    const distFiles = { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 2;\n' };
+    const { pkgRoot, context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg, distFiles });
+    writePublishedState(rootDir, {
+      '@adhd/pkg-b': { version: '1.0.0', normalizedHash: 'sha256:irrelevant', publishedIntegrity: 'sha512-whatever' },
+    });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true);
+    assert.deepEqual(networkCalls(state), [], 'must never touch the network just to notice source is already ahead of the cache');
+    const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    assert.equal(after.version, '1.0.1', 'must be left exactly as-is — release already pending');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('cache HIT, integrity fast path used at backfill time is directly consumable later with zero network (end-to-end: miss -> populate -> hit)', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const distFiles = { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' };
+    const { pkgRoot, context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg, distFiles });
+
+    // Run 1: cold cache -> backfill fires, and (fast path) integrity MATCHES,
+    // so no tarball is ever pulled even on this first, cache-populating run.
+    const matchingIntegrity = integrityOf('local-tgz-bytes\n'); // must equal packLocalDir's default fake tgz bytes
+    const state1 = newState({ publishedVersions: ['1.0.0'], publishedIntegrity: matchingIntegrity });
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state1));
+    let versionImpl = loadFreshImpl();
+    const result1 = await versionImpl({}, context);
+    assert.equal(result1.success, true);
+    assert.ok(existsSync(publishedStatePath(rootDir)), 'backfill must have populated published-state.json');
+    const tarCalls1 = state1.calls.filter((c) => c.cmd === 'tar');
+    assert.deepEqual(tarCalls1, [], 'the FAST path (integrity match) must never pull/extract a tarball, even on the populating run');
+    const after1 = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    assert.equal(after1.version, '1.0.0', 'local content matches what was just confirmed published -> no bump');
+
+    // Run 2: SAME cache, now warm -> must be entirely zero-network.
+    const state2 = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state2));
+    versionImpl = loadFreshImpl();
+    const result2 = await versionImpl({}, context);
+    assert.equal(result2.success, true);
+    assert.deepEqual(networkCalls(state2), [], 'the second run, against the now-warm cache, must be entirely zero-network');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PUBLISHED-STATE-CACHE-001 — cache MISS: single-package backfill
+// ---------------------------------------------------------------------------
+
+test('"not yet published" path (cache miss -> backfill -> still pending): reconciles via sync (fix), not check, and writes NO cache entry', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
   try {
     const { pkgRoot, context } = makeProject({
@@ -140,6 +320,7 @@ test('"not yet published" path: reconciles via sync (fix), not check', async (t)
     assert.ok(state.eslintCalls[0].includes('--fix'), 'must invoke the FIX mode (sync), not check, when not a dry run');
     assert.ok(state.eslintCalls[0][0].endsWith('tools/nx-plugins/deps/eslint-check.mjs'), 'must be the shared script — proves reuse, not reimplementation');
     assert.ok(state.eslintCalls[0][1].endsWith(join('packages', 'pkg-b', 'package.json')), 'must target THIS project\'s own package.json');
+    assert.equal(existsSync(publishedStatePath(rootDir)), false, '"pending" (never published) must never write a cache entry');
     // Version untouched (no dist to compare against — release is already pending).
     const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
     assert.equal(after.version, '9.9.9');
@@ -148,7 +329,7 @@ test('"not yet published" path: reconciles via sync (fix), not check', async (t)
   }
 });
 
-test('dry run: reconciliation delegates to check (read-only) and NEVER writes / never fails on drift', async (t) => {
+test('dry run: reconciliation delegates to check (read-only) and NEVER writes package.json / never fails on drift', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
   try {
     const { pkgRoot, context } = makeProject({
@@ -166,7 +347,7 @@ test('dry run: reconciliation delegates to check (read-only) and NEVER writes / 
     assert.equal(state.eslintCalls.length, 1);
     assert.ok(!state.eslintCalls[0].includes('--fix'), 'dry run must use CHECK (read-only), never fix');
     const after = readFileSync(join(pkgRoot, 'package.json'), 'utf8');
-    assert.equal(after, before, 'dry run must never write anything');
+    assert.equal(after, before, 'dry run must never write package.json');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
@@ -206,7 +387,7 @@ test('ADHD_NX_VERSION_DRY_RUN=1 env var forces dry-run behavior even when option
   }
 });
 
-test('published + range-only drift vs published tarball: does NOT bump, but DOES reconcile the range (no cascade, no false positive)', async (t) => {
+test('published (cache miss, backfill) + range-only drift vs published tarball: does NOT bump, but DOES reconcile the range (no cascade, no false positive)', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
   try {
     const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: { '@adhd/pkg-a': '^1.1.0' } };
@@ -229,12 +410,13 @@ test('published + range-only drift vs published tarball: does NOT bump, but DOES
     assert.equal(after.version, '1.0.0', 'a range-only diff vs published must NOT bump the own version');
     assert.equal(state.eslintCalls.length, 1, 'must STILL reconcile the (now-known-stale) internal range going forward');
     assert.ok(state.eslintCalls[0].includes('--fix'));
+    assert.ok(existsSync(publishedStatePath(rootDir)), 'the backfill must have populated the cache');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
 });
 
-test('published + REAL code drift: DOES bump, then reconciles ranges afterward', async (t) => {
+test('published (cache miss, backfill) + REAL code drift: DOES bump, then reconciles ranges afterward', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
   try {
     const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
@@ -255,12 +437,14 @@ test('published + REAL code drift: DOES bump, then reconciles ranges afterward',
     const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
     assert.equal(after.version, '1.0.1', 'a genuine code change must still bump (unchanged pre-existing behavior)');
     assert.equal(state.eslintCalls.length, 1, 'reconciliation runs after the bump too');
+    const cached = JSON.parse(readFileSync(publishedStatePath(rootDir), 'utf8'));
+    assert.equal(cached['@adhd/pkg-b'].version, '1.0.0', 'cache records the PUBLISHED version (pre-bump), not the new local one');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
 });
 
-test('published + REAL code drift: generates a CHANGELOG.md entry via real `nx release changelog`, --first-release when no prior entry commit is known', async (t) => {
+test('published (cache miss, backfill) + REAL code drift: generates a CHANGELOG.md entry via real `nx release changelog`, --first-release when no prior entry commit is known', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
   try {
     const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
@@ -320,7 +504,7 @@ test("when a prior commit touched this project's CHANGELOG.md, uses --from=<that
   }
 });
 
-test('dry run with real code drift: previews the changelog via --dry-run and never writes package.json', async (t) => {
+test('dry run with real code drift (cache miss -> backfill still runs, but never writes package.json): previews the changelog via --dry-run', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
   try {
     const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
@@ -389,6 +573,41 @@ test('sync-deps failure during reconciliation propagates as an overall executor 
 
     const result = await versionImpl({}, context);
     assert.equal(result.success, false, 'a real (non-dry-run) sync-deps failure must fail the version task');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('backfill failure (network error reconciling a cache miss) leaves version untouched and still reconciles ranges', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const { pkgRoot, context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b',
+      srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'x\n' },
+    });
+    // publishedVersions says it IS published, but the tarball fetch (both
+    // packLocalDir-independent integrity check AND the fallback pull) fails
+    // -> reconcile-core returns status:'error'.
+    const state = newState({ publishedVersions: ['1.0.0'] });
+    // Override the mock so `npm pack <name>@<version>` (the registry pull) fails.
+    const baseMock = makeSpawnSyncMock(state);
+    t.mock.method(child_process, 'spawnSync', (cmd, args = [], opts = {}) => {
+      if (cmd === 'npm' && args[0] === 'pack' && !String(args[1]).startsWith('/')) {
+        state.calls.push({ cmd, args });
+        return { status: 1, stdout: '', stderr: 'network unreachable' };
+      }
+      return baseMock(cmd, args, opts);
+    });
+    const versionImpl = loadFreshImpl();
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true, 'a backfill failure must not fail the whole task — it leaves version as-is for manual verification');
+    const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    assert.equal(after.version, '1.0.0', 'must be left untouched on a backfill error');
+    assert.equal(existsSync(publishedStatePath(rootDir)), false, 'an errored backfill must never write a cache entry');
+    assert.equal(state.eslintCalls.length, 1, 'range reconciliation still runs even after a backfill error');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }

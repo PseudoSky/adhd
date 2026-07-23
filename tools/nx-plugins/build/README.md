@@ -1,12 +1,120 @@
 # @adhd/nx-build
 
-Build-lifecycle plugin: `manifest`, `version`, `verify-dist-load`, `publish-hygiene`, `publish`, `link` executors + `detect-target` util. Targets are inferred onto every buildable project; wiring lives in plugin.js/targetDefaults, never in project.json.
+Build-lifecycle plugin: `manifest`, `version`, `reconcile`, `verify-dist-load`, `publish-hygiene`, `publish`, `link` executors + `detect-target` util. Targets are inferred onto every buildable project; wiring lives in plugin.js/targetDefaults, never in project.json.
+
+## The `published-state.json` cache (PUBLISHED-STATE-CACHE-001)
+
+`<workspaceRoot>/published-state.json` is a **committed, source-controlled**
+snapshot of what's actually on npm for every publishable package — the
+"published-reference" — keyed by npm package name:
+
+```json
+{
+  "@adhd/agent-base-types": {
+    "version": "2.1.3",
+    "normalizedHash": "sha256:3047b58894f912c498cc45ead72e7ee62095c20230950fc2c57fc89988555122",
+    "publishedIntegrity": "sha512-nb47j7ArW8qAde3pNJcxt9trjPl3Cgj2oQgCxAH/vmhlcwXDq2m3xp9ldZrCcvKrAKERKtMmOmCcuCK1PrrsAw=="
+  }
+}
+```
+
+- **`version`** — the last version this cache KNOWS is on the registry.
+- **`normalizedHash`** — [`compare-published.js`](executors/version/compare-published.js)'s
+  `normalizedHash(dir)`: a `sha256` over `stableStringify(normalizeManifest(package.json))`
+  concatenated with every other file's path+bytes (in `listFiles()`'s sorted
+  order) — the EXACT SAME primitives `comparePublishedToLocal` uses, so a
+  cache-hash comparison is provably equivalent to the legacy per-file/
+  per-manifest diff (see `compare-published.spec.mjs`'s "normalizedHash
+  equivalence" suite — both directions, incl. the range-only and real-content
+  cases). This is the PUBLISHED content's hash, computed once at
+  backfill/publish time.
+- **`publishedIntegrity`** — the packument's own `dist.integrity` (sha512) for
+  that version, used by the integrity gate below to skip a tarball pull when
+  a fresh local pack already matches what's published.
+
+**Why:** the pre-cache `version` task fetched + extracted a full tarball from
+npm for EVERY publishable package, on EVERY run, just to decide bump/no-bump —
+real, measured network+CPU cost that scales with the workspace (53 packages ×
+`npm view` + `npm pack` + `tar` = the whole cost of "did anything change?").
+The cache makes that decision **zero-network on the happy path**: `version`
+reads this file and compares a locally-computed `normalizedHash` against the
+cached one — no registry call, no tarball, whether or not the package
+actually changed. See the root-level task report / CHANGELOG for the measured
+before/after numbers.
+
+### `reconcile` — network-light cache backfill (the ONLY tarball puller besides `publish`'s write-through)
+
+`nx run <project>:reconcile` / `nx run-many -t reconcile` (executor
+`@adhd/nx-build:reconcile`, `dependsOn: ["build", "assets"]`, **not cached** —
+it reads live registry state) rebuilds/refreshes THIS package's cache entry
+from npm, using an **integrity gate** ([`executors/reconcile/reconcile-core.js`](executors/reconcile/reconcile-core.js))
+to avoid a tarball pull whenever possible:
+
+1. Pack the **local** dist **offline** (`npm pack <local-dir>` never contacts
+   the registry) and hash that tarball's bytes.
+2. Fetch **only** the packument's `dist.integrity` for `name@version`
+   (`npm view name@version dist.integrity` — metadata, ~KB, never the tarball).
+3. **Match** → local dist is byte-identical to what's published → cache
+   `normalizedHash(localDist)` + the confirmed integrity. **No tarball pull.**
+4. **Diverge** (or integrity unavailable) → pull the real published tarball,
+   extract it, and cache `normalizedHash` computed from the **extracted
+   published content** — so the cached signal stays exact even though local
+   and published currently differ.
+
+This is sound because `npm pack` is **content-deterministic** — verified
+empirically against this workspace's pinned npm version: identical file
+bytes always produce a byte-identical tarball, independent of file mtimes —
+so a local-pack integrity match can only happen when the underlying content
+is truly identical, never as a timestamp coincidence.
+
+### Cache MISS: single-package backfill, never a silent pass
+
+If `version` finds a package absent from `published-state.json`, it does
+**not** silently assume "unchanged" or "pending" — it calls the exact same
+`reconcile-core.js` logic **in-process** (no nx sub-invocation) to backfill
+**just that one package**, writes the result into the cache, then decides.
+This is the *only* network `version` ever performs, and it costs exactly one
+package — never a graph-wide re-backfill. Once a package's entry exists, every
+future `version` run for it is zero-network, whether or not it changed (the
+network was already spent once, at backfill/write-through time).
+
+### Concurrency-safe writes (`lib/published-state.js`)
+
+Both `reconcile` and `publish`'s write-through (below) can run in parallel
+across many projects (`nx run-many -t reconcile` / `-t publish`, one process
+per project). [`lib/published-state.js`](lib/published-state.js) guards every
+read-modify-write with an exclusive, portable filesystem lock (atomic
+`O_CREAT|O_EXCL` create as the mutex, with stale-lock recovery so a crashed
+holder can never deadlock every future writer) — proven under real parallel
+load in `lib/published-state.spec.mjs` (N concurrent writers, zero lost
+updates) and `executors/publish/impl.spec.mjs`.
+
+### `publish`'s existence-check + write-through
+
+`publish` answers "is `name@version` already released?" from this cache
+FIRST — zero network on a hit. Only a cache miss falls through to a real `npm
+publish` attempt (which needs the network anyway — that IS the release
+action). On success — or on npm's "cannot publish over previously published
+version" (treated as already-published/success, the read-lag case where the
+cache was stale but the registry had already caught up) — `publish` writes
+this package's entry from the dist it **just packed locally** (offline,
+`packLocalDir` + `tarballIntegrity`), never a re-fetch: authoritative and
+immune to npm's own read-after-write propagation lag. See
+[`executors/publish/impl.js`](executors/publish/impl.js).
+
+### `published-state.json` is committed
+
+Like a lockfile, this file is source-controlled — it's the durable,
+diffable record of "what did we last confirm is published, and what did that
+content hash to". A release that runs `reconcile`/`publish` and commits the
+resulting `published-state.json` diff keeps the cache authoritative for the
+next contributor/CI run without anyone paying the backfill cost again.
 
 ## `version` — topological dependent-range sync (BUILD-TOOLING-VERSION-SYNC-DEPS-001)
 
 `nx run <project>:version` (executor `@adhd/nx-build:version`, `dependsOn: ["build", "assets", "^version"]`, **not cached**):
 
-1. **Decides its own bump** — see [`executors/version/impl.js`](executors/version/impl.js) header and `compare-published.js` above: registry-driven, no git tags. Unchanged from before this section was added.
+1. **Decides its own bump** — see [`executors/version/impl.js`](executors/version/impl.js) header: now cache-driven (`published-state.json` above) instead of a live tarball fetch, but the DECISION is provably identical (see `compare-published.spec.mjs`'s normalizedHash-equivalence suite). Registry-driven, no git tags.
 2. **`^version` (new):** runs a package's internal `@adhd/*` dependencies' `version` tasks FIRST (Nx topological ordering), so by the time a package's own `version` runs, every dependency it declares has already settled its version for this run.
 3. **Reconciles its own declared internal ranges (new, every run, regardless of step 1's outcome):** after the bump decision, `version` reconciles THIS package's declared internal `@adhd/*` dependency ranges to the workspace's now-settled versions — by calling `tools/nx-plugins/deps/executors/sync/impl.js` (fix) or `.../check/impl.js` (read-only, only in `--dryRun`) **directly** (`require(...)`, not a subprocess re-implementation, not a copy — see `impl.js`'s `syncInternalDeps`/`checkInternalDeps`). It writes **only this project's own** `package.json`, never a sibling's.
 
@@ -14,7 +122,7 @@ Build-lifecycle plugin: `manifest`, `version`, `verify-dist-load`, `publish-hygi
 
 **What this replaces:** previously, after a batch of version bumps, dependents' declared internal ranges could drift out of sync with the actual bumped versions until someone ran `sync-deps` manually. `^version`'s topological ordering plus this reconciliation step makes that self-healing as part of `version` itself.
 
-Tests: `tools/nx-plugins/build/executors/version/impl.spec.mjs` (the orchestration/composition — reuse, dry-run routing, bump/sync independence, failure propagation) and `compare-published.spec.mjs` (the pure change-detector, including the range-only-doesn't-bump invariant). Run: `pnpm test:build-tools`.
+Tests: `tools/nx-plugins/build/executors/version/impl.spec.mjs` (the orchestration/composition — cache hit/miss, backfill, reuse, dry-run routing, bump/sync independence, failure propagation), `compare-published.spec.mjs` (the pure change-detector + `normalizedHash` equivalence proof), `executors/reconcile/reconcile-core.spec.mjs` (the integrity-gated backfill core), `executors/publish/impl.spec.mjs` (existence-check + write-through + concurrency), and `lib/published-state.spec.mjs` (the cache's concurrency-safe I/O). Run: `pnpm test:build-tools`.
 
 > ⚠️ **`--dryRun` alone does not cover `^version`'s dependency tasks** — see the schema
 > description on `dryRun` in [`executors/version/schema.json`](executors/version/schema.json)
@@ -39,8 +147,10 @@ Each package publishes from its **built artifact** directory `{projectRoot}/dist
 
 `nx run <project>:assets` (executor `@adhd/nx-assets:copy`, `dependsOn:["build"]`, cached) copies `README.md` + `CHANGELOG.md` (if present) + any files declared in the package's own `package.json` `"assets"` array into `{projectRoot}/dist`, flattening every destination to its basename (so a nested source path like `src/schema.json` still lands at `dist/schema.json`, matching where a runtime consumer looks for it beside `index.js`). See [`tools/nx-plugins/assets/README.md`](../assets/README.md).
 
-**Everything downstream that needs a doc-complete dist depends on it:** `version` (its bump decision diffs `dist/` against the published tarball — without `assets`, a bare `build` alone is missing README/CHANGELOG that the already-published tarball has, producing a false "changed" on every package) and `dist-manifest` (whose consumers, `publish-hygiene` and `publish`, inherit the dependency transitively). If you add a new target that reads or packs `{projectRoot}/dist`, it needs `assets` in its `dependsOn` too — this is not automatic just because `build` ran.
+**Everything downstream that needs a doc-complete dist depends on it:** `version`/`reconcile` (their bump/backfill decisions hash `dist/` against the published content — without `assets`, a bare `build` alone is missing README/CHANGELOG that the already-published tarball has, producing a false "changed" on every package) and `dist-manifest` (whose consumers, `publish-hygiene` and `publish`, inherit the dependency transitively). If you add a new target that reads or packs `{projectRoot}/dist`, it needs `assets` in its `dependsOn` too — this is not automatic just because `build` ran.
 
 Pure transform tests: `pnpm test:build-tools`.
 
-The publish gate chain is `build → assets → dist-manifest → verify-dist-load → publish-hygiene → publish` (wired in `plugin.js`; `version` branches off after `build`+`assets` too). `nx-release-publish` is Nx's own native task name, used only by the retired `nx release publish` command — this repo's real pipeline never invokes it (see `PUBLISHING.md`).
+## Target chain summary
+
+`build → assets → { version (^version topological) | reconcile | dist-manifest → verify-dist-load → publish-hygiene → publish }` (wired in `plugin.js`). `version` and `reconcile` both read/populate the same `published-state.json` cache; `publish`'s existence-check reads it too, and its write-through keeps it current after every real publish. `reconcile` and `publish`'s write-through are the ONLY tasks that ever pull a tarball from npm — and `reconcile` only for a package whose local dist has actually diverged (integrity gate). `nx-release-publish` is Nx's own native task name, used only by the retired `nx release publish` command — this repo's real pipeline never invokes it (see `PUBLISHING.md`).

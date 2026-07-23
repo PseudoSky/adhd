@@ -9,6 +9,8 @@
     "build": "nx run-many --targets=build --configuration=production --all",
     "release": "pnpm run build && npx nx run-many -t version && npx nx run-many -t publish",
     "release:dry": "pnpm run build && ADHD_NX_VERSION_DRY_RUN=1 npx nx run-many -t version --dryRun && npx nx run-many -t publish --dryRun",
+    "release:commit": "node tools/nx-plugins/build/executors/publish/release-commit.mjs",
+    "release:commit:dry": "node tools/nx-plugins/build/executors/publish/release-commit.mjs --dry-run",
     "storybook": "nx run storybook:storybook",
     "list": "nx show projects --affected",
     "lint": "nx run-many --targets=lint --configuration=production",
@@ -18,7 +20,7 @@
     "check:publish-hygiene": "nx run @adhd/source:check-publish-hygiene",
     "logs:agent": "node dist/packages/ai/agent-mcp/src/scripts/agent-mcp-tail.js",
     "check:test-wiring": "node scripts/check-test-wiring.mjs",
-    "test:build-tools": "node --test tools/nx-plugins/build/executors/manifest/generate-manifest.spec.mjs tools/nx-plugins/build/executors/version/compare-published.spec.mjs tools/nx-plugins/build/executors/version/impl.spec.mjs tools/nx-plugins/deps/eslint-check.spec.mjs"
+    "test:build-tools": "node --test tools/nx-plugins/build/executors/manifest/generate-manifest.spec.mjs tools/nx-plugins/build/executors/version/compare-published.spec.mjs tools/nx-plugins/build/executors/version/impl.spec.mjs tools/nx-plugins/build/executors/publish/impl.spec.mjs tools/nx-plugins/build/executors/publish/release-commit.spec.mjs tools/nx-plugins/build/executors/reconcile/reconcile-core.spec.mjs tools/nx-plugins/build/lib/published-state.spec.mjs tools/nx-plugins/deps/eslint-check.spec.mjs"
   },
   "private": true,
   "dependencies": {
