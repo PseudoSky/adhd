@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-cli",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "bin": {
     "apigen": "./dist/index.js"
   },
@@ -25,11 +25,11 @@
     "@adhd/apigen-plugin-health": "^0.1.1",
     "@adhd/apigen-plugin-logger": "^0.1.1",
     "@adhd/apigen-python-env": "^0.1.0",
-    "@adhd/apigen-base-logical": "0.0.1",
-    "@adhd/apigen-engine-runtime": "0.1.0",
-    "@adhd/apigen-core-client": "0.1.0",
-    "@adhd/apigen-engine-naming": "0.1.1",
-    "@adhd/apigen-plugin-openapi": "0.1.2"
+    "@adhd/apigen-base-logical": "0.0.3",
+    "@adhd/apigen-engine-runtime": "0.1.2",
+    "@adhd/apigen-core-client": "0.1.2",
+    "@adhd/apigen-engine-naming": "0.1.3",
+    "@adhd/apigen-plugin-openapi": "0.1.4"
   },
   "devDependencies": {
     "decimal.js": "^10.4.3"
