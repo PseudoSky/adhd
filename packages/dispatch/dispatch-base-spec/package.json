@@ -11,5 +11,9 @@
   "files": [
     "dist",
     "CHANGELOG.md"
+  ],
+  "assets": [
+    "src/dag-v4.schema.json",
+    "src/valid-ops-by-kind.json"
   ]
 }

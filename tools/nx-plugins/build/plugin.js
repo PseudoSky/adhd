@@ -15,22 +15,28 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) => {
   // @adhd/* natively via each package's own manifest (main → ./dist/…). The old `link`
   // target (symlink node_modules/@adhd/<name> → repo-root dist) is retired — it created
   // the per-package-source-link shadowing that broke @adhd builds (BUG-WORKSPACE-NO-LINKING-001).
-  // The `assets` executor (copied README/CHANGELOG into repo-root dist) is likewise retired:
-  // README/CHANGELOG now ship straight from the package root via files:["dist","CHANGELOG.md"]
-  // + npm's always-included README, and in-dist *.md copies (where wanted) come from each
-  // build target's own `options.assets`.
+  // CORRECTED (2026-07-22 — the previous version of this comment was WRONG and nearly
+  // caused a real regression): `@adhd/nx-build:publish` (executors/publish/impl.js) runs
+  // `npm publish {projectRoot}/dist` — npm treats that DIRECTORY ITSELF as the package
+  // root. Anything outside it (including a source-root README.md/CHANGELOG.md) is
+  // completely invisible to that publish — there is no "ships straight from the package
+  // root" path. README.md/CHANGELOG.md (+ any package.json-declared extra assets) MUST
+  // physically exist inside {projectRoot}/dist before publish packs it. That's what the
+  // `assets` target (@adhd/nx-assets, tools/nx-plugins/assets/) does — every target that
+  // needs a doc-complete dist (`dist-manifest`, and transitively `publish-hygiene` +
+  // `publish` which depend on it; `version`, which diffs dist against the published
+  // tarball) depends on it below.
   // `dist-manifest` versions the dist: it (over)writes {projectRoot}/dist/package.json
   // with the resolved, dist-root publishable manifest (see executors/manifest). It is
   // NOT cached (its correctness depends on every sibling's version, an impractical
   // cache key) and is authoritative over any manifest an earlier build step emitted.
-  // Publishing packs from {projectRoot}/dist, so publish-hygiene, publish, and nx's
-  // own nx-release-publish (wired in nx.json) all depend on it. verify-dist-load
-  // reads the source manifest against the same physical dist/ files, so it needs only
-  // `build` and stays independently cacheable.
+  // Publishing packs from {projectRoot}/dist, so publish-hygiene and publish both
+  // depend on it. verify-dist-load reads the source manifest against the same physical
+  // dist/ files, so it needs only `build` and stays independently cacheable.
   // `version` bumps the SOURCE package.json iff the built dist differs from what's
   // published at its current version (registry as baseline — no tags). Runs before
   // publish in `pnpm release`; not cached (reads live registry, mutates source).
-  // `dependsOn: ["build", "^version"]` — `^version` orders versioning
+  // `dependsOn: ["build", "assets", "^version"]` — `^version` orders versioning
   // TOPOLOGICALLY: a package's own internal @adhd/* dependencies get their
   // `version` task run FIRST, so by the time THIS project's version task
   // runs, every dependency it declares has already settled its version. The
@@ -42,5 +48,5 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) => {
   // "no forced cascade bump" guarantee (compare-published.js already strips
   // internal @adhd/* ranges before diffing, so a range-only sync is never
   // itself a bump trigger).
-  return { projects: { [projectRoot]: { targets: {"version":{"executor":"@adhd/nx-build:version","dependsOn":["build","^version"],"cache":false},"dist-manifest":{"executor":"@adhd/nx-build:manifest","dependsOn":["build"],"cache":false},"verify-dist-load":{"executor":"@adhd/nx-build:verify","dependsOn":["build"],"cache":true},"publish-hygiene":{"executor":"@adhd/nx-build:hygiene","dependsOn":["dist-manifest"],"cache":true},"publish":{"executor":"@adhd/nx-build:publish","dependsOn":["dist-manifest","verify-dist-load","publish-hygiene"],"cache":false}} } } };
+  return { projects: { [projectRoot]: { targets: {"version":{"executor":"@adhd/nx-build:version","dependsOn":["build","assets","^version"],"cache":false},"dist-manifest":{"executor":"@adhd/nx-build:manifest","dependsOn":["build","assets"],"cache":false},"verify-dist-load":{"executor":"@adhd/nx-build:verify","dependsOn":["build"],"cache":true},"publish-hygiene":{"executor":"@adhd/nx-build:hygiene","dependsOn":["dist-manifest"],"cache":true},"publish":{"executor":"@adhd/nx-build:publish","dependsOn":["dist-manifest","verify-dist-load","publish-hygiene"],"cache":false}} } } };
 }];

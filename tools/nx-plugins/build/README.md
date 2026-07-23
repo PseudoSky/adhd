@@ -4,7 +4,7 @@ Build-lifecycle plugin: `manifest`, `version`, `verify-dist-load`, `publish-hygi
 
 ## `version` — topological dependent-range sync (BUILD-TOOLING-VERSION-SYNC-DEPS-001)
 
-`nx run <project>:version` (executor `@adhd/nx-build:version`, `dependsOn: ["build", "^version"]`, **not cached**):
+`nx run <project>:version` (executor `@adhd/nx-build:version`, `dependsOn: ["build", "assets", "^version"]`, **not cached**):
 
 1. **Decides its own bump** — see [`executors/version/impl.js`](executors/version/impl.js) header and `compare-published.js` above: registry-driven, no git tags. Unchanged from before this section was added.
 2. **`^version` (new):** runs a package's internal `@adhd/*` dependencies' `version` tasks FIRST (Nx topological ordering), so by the time a package's own `version` runs, every dependency it declares has already settled its version for this run.
@@ -25,16 +25,22 @@ Tests: `tools/nx-plugins/build/executors/version/impl.spec.mjs` (the orchestrati
 
 ## Publish-from-dist model
 
-Each package publishes from its **built artifact** directory `{projectRoot}/dist` — `nx-release-publish` packs from `packageRoot: {projectRoot}/dist`. Versioning still targets the **source** `package.json` (`release.version.generatorOptions.packageRoot: {projectRoot}`); the source is the version source of truth.
+Each package publishes from its **built artifact** directory `{projectRoot}/dist` — `@adhd/nx-build:publish` (`executors/publish/impl.js`) runs `npm publish {projectRoot}/dist` directly. npm treats that directory itself as the package root: anything outside it — including a source-root README.md — is invisible to that publish. There is no "ships from the source root" path for this executor; **`{projectRoot}/dist` must be doc-complete before `publish` runs.** Versioning still targets the **source** `package.json` — the source is the version source of truth; only the built artifact is what actually gets packed and published.
 
 ### `dist-manifest` — "version the dist at build"
 
-`nx run <project>:dist-manifest` (executor `@adhd/nx-build:manifest`, `dependsOn:["build"]`, **not cached**) (over)writes `{projectRoot}/dist/package.json` into a resolved, dist-root publishable manifest via [`executors/manifest/generate-manifest.js`](executors/manifest/generate-manifest.js):
+`nx run <project>:dist-manifest` (executor `@adhd/nx-build:manifest`, `dependsOn:["build","assets"]`, **not cached**) (over)writes `{projectRoot}/dist/package.json` into a resolved, dist-root publishable manifest via [`executors/manifest/generate-manifest.js`](executors/manifest/generate-manifest.js):
 
 - **entry paths rebased** source-relative → dist-root (`./dist/index.js` → `./index.js`; tsc's `./dist/src/index.js` → `./src/index.js`) — dist is the package root.
 - **internal `@adhd/*` ranges resolved** to concrete `^<version>` from a live snapshot of every workspace package's version. Because the build reads the *final* version of every sibling, this is correct **regardless of the order packages are versioned in** — the guarantee nx's own `updateDependents` fails to give (it versions non-topologically, leaving a dependency bumped *after* its dependent stale — `BUG-RELEASE-PIPELINE-UNFIT-FOR-FULL-PUBLISH-001` Defect C). Also repairs `workspace:*` (npm never substitutes it) and bare `*` internal ranges.
-- **drops** `devDependencies`, `scripts`, `nx`, and the source `files` allowlist; copies `CHANGELOG.md` into dist.
+- **drops** `devDependencies`, `scripts`, `nx`, and the source `files` allowlist. Does **not** touch README.md/CHANGELOG.md — that's `assets`' job (below), which `dist-manifest` depends on.
+
+### `assets` — "make dist doc-complete" (`@adhd/nx-assets`, `tools/nx-plugins/assets/`)
+
+`nx run <project>:assets` (executor `@adhd/nx-assets:copy`, `dependsOn:["build"]`, cached) copies `README.md` + `CHANGELOG.md` (if present) + any files declared in the package's own `package.json` `"assets"` array into `{projectRoot}/dist`, flattening every destination to its basename (so a nested source path like `src/schema.json` still lands at `dist/schema.json`, matching where a runtime consumer looks for it beside `index.js`). See [`tools/nx-plugins/assets/README.md`](../assets/README.md).
+
+**Everything downstream that needs a doc-complete dist depends on it:** `version` (its bump decision diffs `dist/` against the published tarball — without `assets`, a bare `build` alone is missing README/CHANGELOG that the already-published tarball has, producing a false "changed" on every package) and `dist-manifest` (whose consumers, `publish-hygiene` and `publish`, inherit the dependency transitively). If you add a new target that reads or packs `{projectRoot}/dist`, it needs `assets` in its `dependsOn` too — this is not automatic just because `build` ran.
 
 Pure transform tests: `pnpm test:build-tools`.
 
-The publish gate chain is `build → dist-manifest → verify-dist-load → publish-hygiene → nx-release-publish` (wired in `plugin.js` + `nx.json` targetDefaults).
+The publish gate chain is `build → assets → dist-manifest → verify-dist-load → publish-hygiene → publish` (wired in `plugin.js`; `version` branches off after `build`+`assets` too). `nx-release-publish` is Nx's own native task name, used only by the retired `nx release publish` command — this repo's real pipeline never invokes it (see `PUBLISHING.md`).

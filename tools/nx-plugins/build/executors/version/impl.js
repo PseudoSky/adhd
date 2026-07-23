@@ -38,6 +38,18 @@
  * compare-published.js's `normalizeManifest` strips internal `@adhd/*`
  * ranges before diffing (see compare-published.spec.mjs), so a range-only
  * edit here is invisible to the NEXT run's change-detector — no cascade.
+ *
+ * CHANGELOG GENERATION (real bump only, before range reconciliation): once
+ * the own-version write lands, `writeChangelogEntry` shells out to the REAL
+ * `nx release changelog` (Nx's own conventional-commits parser + renderer,
+ * configured via `nx.json` `release.changelog.projectChangelogs`) to update
+ * THIS project's `{projectRoot}/CHANGELOG.md`. `--from` is resolved from the
+ * commit that last touched that file (self-maintaining — no separate tag or
+ * marker bookkeeping), falling back to `--first-release` for a package with
+ * no prior recorded entry. `--git-commit=false --git-tag=false`: identical
+ * "never commits" contract as the version bump itself. A dry run previews
+ * via `--dry-run` (never writes); a changelog-generation failure fails the
+ * whole task, same as a `sync-deps` reconciliation failure does below.
  */
 const { spawnSync } = require('node:child_process');
 const { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } = require('node:fs');
@@ -46,6 +58,77 @@ const { comparePublishedToLocal, bumpVersion } = require('./compare-published');
 // Reuse — never duplicate — the `deps` plugin's own reconciliation logic.
 const syncInternalDeps = require('../../../deps/executors/sync/impl');
 const checkInternalDeps = require('../../../deps/executors/check/impl');
+
+/**
+ * The `--from` git ref for `nx release changelog`'s commit range: the commit
+ * that last touched THIS project's own CHANGELOG.md (i.e. when the previous
+ * entry was recorded), or null if the file has never been committed —
+ * `nx release changelog` is told `--first-release` in that case (lists full
+ * history, correct for a genuinely first entry).
+ *
+ * Deliberately NOT git tags: this repo's `{project}@{version}` tags are
+ * leftovers from the retired `nx release version` era (PUBLISHING.md) and
+ * are already stale relative to the real npm-published version — the npm
+ * registry, not git tags, is this repo's source of truth (compare-published.js
+ * uses the same principle for the bump DECISION). The changelog file's own
+ * last-modifying commit is self-maintaining instead: every future run's
+ * boundary is set by THIS run's own write (once committed), with no
+ * separate tag/marker bookkeeping to fall out of sync.
+ *
+ * @param {import('@nx/devkit').ExecutorContext} context
+ * @param {string} changelogRelPath workspace-root-relative path, e.g. "packages/x/y/CHANGELOG.md"
+ * @returns {string | null}
+ */
+function lastChangelogCommit(context, changelogRelPath) {
+  const res = sh('git', ['log', '-1', '--format=%H', '--', changelogRelPath], { cwd: context.root });
+  const sha = (res.stdout || '').trim();
+  return res.status === 0 && sha ? sha : null;
+}
+
+/**
+ * Generate/update THIS project's `{projectRoot}/CHANGELOG.md` by shelling
+ * out to the REAL `nx release changelog` — reusing Nx's own conventional-
+ * commits parser + renderer (already configured via `nx.json`
+ * `release.changelog.projectChangelogs`) rather than hand-rolling markdown
+ * generation. `--git-commit=false --git-tag=false`: this task, like the
+ * version bump itself, never commits — a human (or `pnpm release`'s
+ * downstream publish step) reviews and commits the diff.
+ *
+ * @param {import('@nx/devkit').ExecutorContext} context
+ * @param {string} projectRoot
+ * @param {string} version the version this changelog entry is FOR (the new,
+ *                         just-decided version — matches the header nx renders)
+ * @param {boolean} dryRun
+ * @returns {boolean} success
+ */
+function writeChangelogEntry(context, projectRoot, version, dryRun) {
+  const changelogRelPath = join(projectRoot, 'CHANGELOG.md').split('\\').join('/');
+  const fromSha = lastChangelogCommit(context, changelogRelPath);
+  const args = [
+    'nx', 'release', 'changelog', version,
+    '--projects', context.projectName,
+    '--to', 'HEAD',
+    '--git-commit', 'false',
+    '--git-tag', 'false',
+  ];
+  if (fromSha) args.push('--from', fromSha);
+  else args.push('--first-release');
+  if (dryRun) args.push('--dry-run');
+  const res = sh('npx', args, { cwd: context.root });
+  if (res.status !== 0) {
+    console.error(`version: changelog generation FAILED for ${context.projectName}:\n${res.stderr || res.stdout}`);
+    return false;
+  }
+  console.error(`version: ${dryRun ? '[dry-run] would update' : 'updated'} ${changelogRelPath}`);
+  // On a dry run, `nx release changelog --dry-run`'s own diff preview is the
+  // only visibility into what would actually be written — without echoing it,
+  // a dry run reports NOTHING about content, unlike the version bump's own
+  // `reasons` list above. Preview output is on stdout; forward it verbatim.
+  if (dryRun && res.stdout && res.stdout.trim()) {
+    console.error(res.stdout.trim());
+  }
+  return true;
+}
 
 /**
  * Reconcile THIS package's own declared internal `@adhd/*` dependency ranges
@@ -164,6 +247,7 @@ async function run(options, context) {
     for (const r of reasons.slice(0, 6)) console.error(`         · ${r}`);
     if (dryRun) {
       console.error(`version: [dry-run] would write ${next} to ${relative(context.root, srcPkgPath)}`);
+      writeChangelogEntry(context, projectRoot, next, true);
       const sync = await reconcileOwnInternalRanges(context, dryRun);
       return { success: sync.success };
     }
@@ -172,6 +256,7 @@ async function run(options, context) {
     const replaced = raw.replace(/("version"\s*:\s*")[^"]+(")/, `$1${next}$2`);
     if (replaced === raw) { console.error(`version: FAILED to rewrite version field in ${srcPkgPath}.`); return { success: false }; }
     writeFileSync(srcPkgPath, replaced);
+    if (!writeChangelogEntry(context, projectRoot, next, false)) return { success: false };
     // Own bump is applied; now reconcile dependency ranges against the
     // (topologically) already-settled versions of internal deps. Order is
     // safe either way — the fix only touches dependency-range fields, never
@@ -191,4 +276,4 @@ module.exports.default = run;
 // (same require-cache entry, same absolute file), proving reuse rather than
 // a duplicated reimplementation. Not used by Nx (which only calls the
 // default export).
-module.exports.__internals = { reconcileOwnInternalRanges, syncInternalDeps, checkInternalDeps };
+module.exports.__internals = { reconcileOwnInternalRanges, syncInternalDeps, checkInternalDeps, lastChangelogCommit, writeChangelogEntry };
