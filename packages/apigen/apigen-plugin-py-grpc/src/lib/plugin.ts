@@ -83,7 +83,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { Operation, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
-import { ensurePythonEnv } from '@adhd/apigen-python-env';
+import { ensurePythonEnv, runExtractorEmitJson } from '@adhd/apigen-python-env';
 import { project } from '@adhd/apigen-engine-naming';
 
 // ---------------------------------------------------------------------------
@@ -148,76 +148,10 @@ function waitForReady(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Phase 1 — spawn `apigen_python.extractor --emit-json` (short-lived,
-// extract-only) and parse its stdout into Operation[].
-//
-// [dupe-flag] This is a byte-for-byte duplicate of py-flask's plugin.ts
-// `runExtractorEmitJson` (read-only reference for this state — see this
-// package's task reservations). A shared `@adhd/apigen-python-env` (or a new
-// small helper package) home for this function is the correct DRY fix per
-// AGENTS.md §8's "Two-Use Refactor Rule" now that a second caller exists,
-// but py-flask's plugin.ts is READ-ONLY for this state, so it cannot be
-// refactored to import a shared helper here without violating that
-// reservation — reported to the orchestrator as a follow-up rather than
-// done inline.
-// ---------------------------------------------------------------------------
-
-function runExtractorEmitJson(
-  pyenv: ReturnType<typeof ensurePythonEnv>,
-  modulePath: string,
-  namespace: string
-): Promise<Operation[]> {
-  return new Promise<Operation[]>((resolve, reject) => {
-    const proc = spawn(
-      pyenv.python,
-      [
-        '-m',
-        'apigen_python.extractor',
-        modulePath,
-        '--namespace',
-        namespace,
-        '--emit-json',
-      ],
-      {
-        cwd: pyenv.pythonPkgDir,
-        env: { ...process.env, PYTHONPATH: pyenv.pythonPkgDir },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
-    );
-
-    let stdout = '';
-    let stderr = '';
-    proc.stdout?.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString('utf8');
-    });
-    proc.stderr?.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8');
-    });
-    proc.on('error', reject);
-    proc.on('exit', (code) => {
-      if (code !== 0) {
-        reject(
-          new Error(
-            `py-grpc: extractor --emit-json exited with code ${code}:\n${stderr}`
-          )
-        );
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout) as Operation[]);
-      } catch (err) {
-        reject(
-          new Error(
-            `py-grpc: extractor --emit-json produced invalid JSON (${
-              (err as Error).message
-            }):\n${stdout}`
-          )
-        );
-      }
-    });
-  });
-}
+// `runExtractorEmitJson` (phase 1 of the two-phase spawn — module docstring)
+// now lives in `@adhd/apigen-python-env` (previously hand-duplicated here,
+// in `apigen-plugin-py-flask`, and in the cross-host response-envelope
+// integration test — see that shared module's doc comment).
 
 // ---------------------------------------------------------------------------
 // run() — two-phase spawn: extract-only, then project(), then serve.
@@ -265,7 +199,13 @@ async function run(input: RunInput): Promise<void> {
   const pyenv = ensurePythonEnv({ extras: ['grpc'] });
 
   // ---- Phase 1: extract-only subprocess -> Operation[] ----
-  const operations = await runExtractorEmitJson(pyenv, modulePath, namespace);
+  const operations = await runExtractorEmitJson(
+    pyenv.python,
+    pyenv.pythonPkgDir,
+    modulePath,
+    namespace,
+    'py-grpc'
+  );
 
   // ---- Phase 2: canonical package/service/method via the REAL project()
   // (never a Python re-derivation — see grpc_server.py's module docstring) ----

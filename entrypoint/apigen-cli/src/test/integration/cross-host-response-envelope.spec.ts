@@ -54,8 +54,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as net from 'node:net';
 import * as readline from 'node:readline';
-import type { Operation } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
+import { runExtractorEmitJson } from '@adhd/apigen-python-env';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -321,38 +321,12 @@ interface ServePlanRoute {
   verb: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 }
 
-function runExtractorEmitJson(
-  modulePath: string,
-  namespace: string
-): Promise<Operation[]> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(
-      'python3',
-      ['-m', 'apigen_python.extractor', modulePath, '--namespace', namespace, '--emit-json'],
-      {
-        cwd: PYTHON_PKG_DIR,
-        env: { ...process.env, PYTHONPATH: PYTHON_PKG_DIR },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
-    );
-    let stdout = '';
-    let stderr = '';
-    proc.stdout?.on('data', (c: Buffer) => (stdout += c.toString()));
-    proc.stderr?.on('data', (c: Buffer) => (stderr += c.toString()));
-    proc.on('error', reject);
-    proc.on('exit', (code) => {
-      if (code !== 0) {
-        reject(new Error(`extractor --emit-json exited ${code}:\n${stderr}`));
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout) as Operation[]);
-      } catch (err) {
-        reject(new Error(`extractor --emit-json produced invalid JSON: ${err}\n${stdout}`));
-      }
-    });
-  });
-}
+// `runExtractorEmitJson` (spawns the extractor + parses its `Operation[]`
+// stdout) now lives in `@adhd/apigen-python-env` — previously hand-duplicated
+// here and in both py-flask/py-grpc plugin.ts (see that shared module's doc
+// comment). This call site keeps its bare-`python3` / self-resolved
+// `PYTHON_PKG_DIR` convention (see module docstring) by passing them in
+// explicitly rather than going through `ensurePythonEnv`'s managed venv.
 
 /**
  * Builds a `--plan-file` for `modulePath`/`namespace` via the REAL extractor
@@ -362,7 +336,13 @@ function runExtractorEmitJson(
  * (the server has already read the file by the time it signals ready).
  */
 async function buildFlaskPlanFile(modulePath: string, namespace: string): Promise<string> {
-  const operations = await runExtractorEmitJson(modulePath, namespace);
+  const operations = await runExtractorEmitJson(
+    'python3',
+    PYTHON_PKG_DIR,
+    modulePath,
+    namespace,
+    'apigen-cli-xhost-test'
+  );
   const routes: Record<string, ServePlanRoute> = {};
   for (const op of operations) {
     const { verb, route } = project(op).http;
