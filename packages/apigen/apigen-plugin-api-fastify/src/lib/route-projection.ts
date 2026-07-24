@@ -1,30 +1,20 @@
 // BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 — single source of truth for
-// deriving an api-fastify route + HTTP verb for a served/generated
+// resolving the canonical `Operation` behind a served/generated
 // `(pkgId, fnName)` pair.
 //
-// Both `run.ts` (live serve) and `generate.ts` (codegen) previously
-// hand-rolled `${routePrefix}/${pkgId}/${fnName}` — raw camelCase `fnName`,
-// namespace = `pkgId` — which diverges from `@adhd/apigen-plugin-openapi`'s
-// derivation (`project(op).http.route` / `.http.verb` from
-// `@adhd/apigen-engine-naming`, kebab-cased, namespace + full `path`). A live
-// api-fastify server therefore served `/backlog/getItem` while the OpenAPI
-// doc it mounted advertised `/backlog/client-d/get-item` for the SAME
-// operation — every spec-generated client 404s.
-//
-// This module makes api-fastify call the exact same `project()` the openapi
-// plugin uses, so served + generated routes are byte-identical to the
-// OpenAPI spec's `paths` for the same operations.
+// serve-core migration (fastify-adapter): the route+verb PROJECTION that
+// `resolveRoute()` used to perform is now `OpPlan`'s job — `buildOpPlan()`
+// (`@adhd/apigen-engine-runtime`) calls the exact same
+// `project()`/`@adhd/apigen-engine-naming` derivation the OpenAPI plugin uses,
+// so served + generated routes stay byte-identical to the OpenAPI spec's
+// `paths`. This module therefore no longer projects at all; it only resolves
+// the `Operation` (real or synthesized) that `buildOpPlan()` consumes. The
+// former `resolveRoute`/`resolveOperation` exports were DELETED and collapsed
+// into `OpPlan` ([fastify-adapter.4], contract: "route-projection resolveRoute
+// shim removed").
 
 import { tokenize } from '@adhd/apigen-core-client';
 import type { Operation, Segment } from '@adhd/apigen-core-client';
-import { project } from '@adhd/apigen-engine-naming';
-import type { ProjectionConfig, HttpVerb } from '@adhd/apigen-engine-naming';
-
-/** The route + verb api-fastify should register/emit for one operation. */
-export interface ResolvedRoute {
-  route: string;
-  verb: HttpVerb;
-}
 
 function makeSegment(raw: string): Segment {
   return { raw, words: tokenize(raw) };
@@ -32,7 +22,7 @@ function makeSegment(raw: string): Segment {
 
 /**
  * Resolves the canonical {@link Operation} for a served/generated
- * `(pkgId, fnName)` pair.
+ * `(pkgId, fnName)` pair — the input `buildOpPlan()` projects to route/verb.
  *
  * Preferred path: correlate against the REAL merged `Operation[]` (threaded
  * on `RunInput.operations`, or on `generate.ts`'s `GenerateInput.operations`
@@ -45,23 +35,24 @@ function makeSegment(raw: string): Segment {
  * what `@adhd/apigen-plugin-openapi`'s `toOpenApi()` emits for the same op.
  *
  * Fallback (RESOLVED — see BACKLOG.md
- * DEBT-APIGEN-PLUGIN-MCP-GENERATE-OPERATIONS-001): `orchestrateGenerate()`
- * (`entrypoint/apigen-cli/src/lib/orchestrator.ts`) now threads
- * `descriptor.operations` into the codegen-mode `PluginInput` the same way
- * `orchestrateRun()` does for `RunInput` (both now share the same
- * `operations?: Operation[]` field on `PluginInput` itself), so `generate()`
- * receives real `Operation`s in the CLI's actual wiring today. The
- * single-segment synthesis below (`namespace = pkgId`, `path = [fnName]`,
- * tokenized with the SAME `tokenize()` the real TS extractor uses to build
- * `Segment.words` — `@adhd/apigen-core-client`) now only fires for a caller
- * that builds a bare `PluginInput`/`GenerateInput` with no `operations` at
- * all (e.g. a unit test) — the common index-file-export case still resolves
- * correctly since real `path` is exactly `[fnName]` there (SPEC §4:
- * "`index.*` drops its file segment"), and any multi-segment path (e.g.
- * `client-d/get-item`) is now resolved from the real `Operation`, not
- * reconstructed.
+ * DEBT-APIGEN-PLUGIN-MCP-GENERATE-OPERATIONS-001): the single-segment
+ * synthesis below (`namespace = pkgId`, `path = [fnName]`, tokenized with the
+ * SAME `tokenize()` the real TS extractor uses to build `Segment.words` —
+ * `@adhd/apigen-core-client`) fires only for a caller that builds a bare
+ * `PluginInput`/`RunInput` with no `operations` at all (e.g. a unit test) —
+ * the common index-file-export case still resolves correctly since real `path`
+ * is exactly `[fnName]` there (SPEC §4: "`index.*` drops its file segment"),
+ * and any multi-segment path (e.g. `client-d/get-item`) is resolved from the
+ * real `Operation`, not reconstructed.
+ *
+ * NOTE: the synthesized op carries `streaming: false` and derives `safe` only
+ * from the composed schema's `x-apigen-safe` stamp. An op whose transport
+ * facts depend on fields the composed schema cannot carry — a `streaming:true`
+ * export, or the FEAT-APIGEN-022 GET-hoist of an UNSAFE primitive-only op
+ * (which needs the BARE `Operation.input`, not the `data`-wrapped composed
+ * input) — MUST be supplied via real `operations` for those facts to survive.
  */
-export function resolveOperation(
+export function operationFor(
   pkgId: string,
   fnName: string,
   schema: Record<string, unknown>,
@@ -87,24 +78,4 @@ export function resolveOperation(
     envelope: {},
     typeText: null,
   };
-}
-
-/**
- * Resolves the route + verb for a served/generated `(pkgId, fnName)` pair by
- * calling `project()` on the {@link resolveOperation} result — the SAME call
- * `@adhd/apigen-plugin-openapi`'s `toOpenApi()` makes — then prepends
- * `routePrefix` (preserved exactly as the old `${routePrefix}/${pkgId}/
- * ${fnName}` derivation did).
- */
-export function resolveRoute(
-  pkgId: string,
-  fnName: string,
-  schema: Record<string, unknown>,
-  operations: Operation[] | undefined,
-  routePrefix: string,
-  config: ProjectionConfig
-): ResolvedRoute {
-  const op = resolveOperation(pkgId, fnName, schema, operations);
-  const { route, verb } = project(op, config).http;
-  return { route: routePrefix + route, verb };
 }
