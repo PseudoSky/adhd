@@ -1,5 +1,20 @@
 ## Unreleased
 
+### Fixed — 3 same-file duplicate human-ID headers in the markdown backlog, blocking the `backlog-adoption` Phase 3 cutover (DEBT-BACKLOG-DUPLICATE-ID-INSOURCE-001) (2026-07-24)
+
+`DEBT-BACKLOG-DUPLICATE-ID-INSOURCE-001` (filed 2026-07-24 during Phase 1) flagged two cases where the SAME human ID had two distinct `##`/`###` headers within one source file — `FEAT-WORKSPACE-001` (root `BACKLOG.md:253` and `:281`, "reframed" follow-up) and `BUG-APIGEN-031` (`entrypoint/apigen-cli/BACKLOG.md:460` and `:605`, a "ported, now fixed" summary and the original full root-cause report). Re-scanning all 19 manifest sources with the parser's REAL header pattern (`HEADER_RE = /^(#{2,3})\s+.../`, which matches 2- or 3-hash headers, not just `###`) during this session's final Phase 3 re-import found a THIRD, previously undetected instance the original scan (which only checked `###`) missed: `AMA-010` (`BACKLOG.md:601` and `:638`, a "(revised)" correction header).
+
+**Fix (markdown hygiene, per the item's own fix-direction (a)):**
+- `AMA-010`: folded the "(revised)" correction into the original header as an inline `**Update 2026-07-24:**` note (the convention this file already uses elsewhere for corrections) and removed the second header. Status downgraded from "architecture decision required" to "prose fix", per the correction.
+- `FEAT-WORKSPACE-001`: folded the "reframed: agent-optimized, core/adapter split" content into the original header as an inline `**Update 2026-06-26 (reframed):**` note and removed the second header. All content preserved; nothing dropped.
+- `BUG-APIGEN-031`: both headers described an already-FIXED bug already fully documented in `entrypoint/apigen-cli/CHANGELOG.md` (lines ~510, ~532) — per the "completed items move to CHANGELOG.md, BACKLOG.md holds only open work" rule, both stale headers were removed outright rather than merged (there is nothing left to track).
+
+**Verified:** a same-file duplicate-ID scan (`grep -oE '^#{2,3}[[:space:]]+[A-Z][A-Z0-9]*(-[A-Z0-9]+)+'` per file, `sort | uniq -d`) across all 19 `backlog-adoption` manifest sources now returns zero duplicates.
+
+**Follow-up filed (tool-hardening, not blocking):** `DEBT-BACKLOG-IMPORT-DUP-DETECT-001` (BACKLOG.md) — `importFromMarkdown` has no diagnostic for this class of collision; while these 3 instances existed, re-importing root `BACKLOG.md` back-to-back with the `upsert-on-reimport` fix (above) produced a non-idempotent `updated` count (`18` then `4` then `4`) because the parser walks past both same-ID headers and writes the node forward-then-back-then-forward each pass, converging on the last occurrence's content but never settling at a stable 0-diff re-import.
+
+**Files:** `BACKLOG.md`, `entrypoint/apigen-cli/BACKLOG.md`.
+
 ### Fixed — `@adhd/backlog`'s `importFromMarkdown` is now UPSERT, not insert-only (BUG-BACKLOG-IMPORT-INSERT-ONLY-NO-UPDATE-001) (2026-07-24)
 
 `importFromMarkdown` re-importing an already-live `humanId` was a permanent no-op forever, regardless of whether the SOURCE `BACKLOG.md`'s title/body/priority/status had genuinely changed since the first import (e.g. a bug got fixed and its status/body edited directly in the file) — `createItemNode`'s `idOverride` fast-path correctly detected the duplicate but the caller only ever incremented `skippedDuplicates` and threw the diff away, so a re-import could never converge the graph with the live file short of a full re-seed.
