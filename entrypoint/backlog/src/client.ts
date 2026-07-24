@@ -31,6 +31,7 @@ import type {
   MigrationStatusResult,
   Priority,
   ReleaseResult,
+  SetMigrationPhaseResult,
   StatsScope,
   TopoOrderResult,
   TransitionOpts,
@@ -38,6 +39,7 @@ import type {
 } from './model.js';
 import { BacklogItemNotFoundError, isTerminalStatus, requiresCitation, requiresReason } from './model.js';
 import type { BacklogConfig } from './env.js';
+import { writeMigrationPhase } from './migration-admin.js';
 import type { GraphBacklogStore } from './store/graph-backlog-store.js';
 import { createItemNode, getItemNode, softDeleteItemNode, updateItemNode } from './store/crud.js';
 import { auditTrail as auditTrailNode, blockers as blockersNode, computeStats, dependencyGraph as dependencyGraphNode, listItems as listItemsNode, queryItemNodes, readyItems as readyItemsNode, spotlight as spotlightNode, staleClaims as staleClaimsNode, topoOrder as topoOrderNode } from './store/query.js';
@@ -52,6 +54,18 @@ import { readFileSync } from 'node:fs';
 export interface BacklogCtx {
   store: GraphBacklogStore;
   env: Environment<BacklogConfig>;
+  /**
+   * Test-isolation escape hatch ONLY — mirrors `BuildBacklogEnvOptions.adhdRoot`
+   * (the same value passed to `buildBacklogEnv({ adhdRoot })` when constructing
+   * `env`). NEVER set this in production code (`server.ts`/`cli.ts` never do).
+   * `setMigrationPhase` threads it through to `writeMigrationPhase` so a
+   * temp-rooted test `ctx` can never write to the real machine-global
+   * `~/.adhd` — omitting this on a real ctx write is exactly the bug
+   * `migration-admin.spec.ts`'s negative control caught (a test run wrote
+   * `phase-4` to the real `~/.adhd/backlog/production/config.yaml` before
+   * this field existed; reverted, see CHANGELOG).
+   */
+  adhdRoot?: string;
 }
 
 function requireItem(ctx: BacklogCtx, repo: string, humanId: string): BacklogItem {
@@ -327,7 +341,24 @@ const MIGRATION_PHASE_DESCRIPTIONS: Record<MigrationPhase, string> = {
  */
 export async function migrationStatus(ctx: BacklogCtx): Promise<MigrationStatusResult> {
   const phase = ctx.env.config.migration.phase as MigrationPhase;
+  return describeMigrationPhase(phase);
+}
+
+function describeMigrationPhase(phase: MigrationPhase): MigrationStatusResult {
   const description = MIGRATION_PHASE_DESCRIPTIONS[phase] ?? `unknown phase value: ${phase}`;
   const toolIsAuthoritative = phase === 'phase-3' || phase === 'phase-4' || phase === 'phase-5' || phase === 'complete';
   return { phase, description, toolIsAuthoritative };
+}
+
+/**
+ * MIGRATION.md §4.4's "admin CLI call" half: writes `migration.phase`
+ * THROUGH to the GLOBAL layer's `config.yaml` (`migration-admin.ts`) so the
+ * new value is a durable, cross-process, cross-repo signal — not merely an
+ * env var scoped to whoever's shell happened to export it. Whoever executes
+ * a phase's Definition of Done calls this exactly once, after verifying the
+ * DoD, never speculatively.
+ */
+export async function setMigrationPhase(ctx: BacklogCtx, phase: MigrationPhase): Promise<SetMigrationPhaseResult> {
+  const configPath = writeMigrationPhase(ctx.env, phase, ctx.adhdRoot);
+  return { ...describeMigrationPhase(phase), configPath };
 }

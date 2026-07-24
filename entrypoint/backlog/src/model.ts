@@ -376,3 +376,11 @@ export interface MigrationStatusResult {
   /** True once the graph (not hand-edited markdown) is authoritative — phase-3 and later. */
   toolIsAuthoritative: boolean;
 }
+
+/** `setMigrationPhase`'s result — `MigrationStatusResult` plus the absolute
+ *  path of the GLOBAL `config.yaml` the new phase was persisted to (so a
+ *  caller can confirm this was a durable, cross-process write, not merely an
+ *  in-memory value). */
+export interface SetMigrationPhaseResult extends MigrationStatusResult {
+  configPath: string;
+}
