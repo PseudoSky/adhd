@@ -18,6 +18,7 @@
 
 - [mcp-adapter.1] mcp composes createPackageInvoker+makeValidateLayer for the first time (BUG-001 fix)
 
+- [mcp-adapter.2] projectStreamMcp wired live (DEBT-002 mcp half)
 ---
 
 ## Reservations
