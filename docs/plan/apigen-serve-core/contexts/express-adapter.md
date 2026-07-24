@@ -55,3 +55,9 @@ Mostly DELETION — the `UsePlugin`/`readUsePlugins`/`readUseOptions`/`adaptCore
 ## Notes for executor
 
 Collapse onto shared adapter; closes DEBT-003 (undefined->null). Void-return fixture pins the intentional change.
+
+
+## Review folds
+
+- **[fix:invoker-promotion] (dod.13):** express COLLAPSES onto `createPackageInvoker`; DELETE its byte-identical local `buildInvokerForPackage`/`readUsePlugins`/`readUseOptions`/`adaptCoreLayer` copy (`run.ts:84-159`) rather than keeping a divergent one.
+- Stamp `plan.transport = 'http'` per [fix:transport-stamping].
