@@ -1,23 +1,23 @@
 {
   "@adhd/agent-base-types": {
-    "version": "2.1.4",
-    "normalizedHash": "sha256:e2006db8e6d3f6a142271a2832a7b201415d0e8cb8b0960f9bbf90a7ff9be186",
-    "publishedIntegrity": "sha512-annVmU85Nx+DyWG+H6sVFhBT7/0g8UJ0rpTR4E5VSPpuzVD6InS29MINJRvWXoYMHl/8P0gdfjTRLtE5RVC5Vw=="
+    "version": "2.1.5",
+    "normalizedHash": "sha256:91a75bbe6f60655d39da00562055ad214781112c76fc365d364e9b6e87f61524",
+    "publishedIntegrity": "sha512-PxmVHocVDA9QvRjOxaNBvZevVadO1T+jvlxIXEnbmbpzpDyOkINPRRtazm9vLwneAriXrCJcK2gjzYaGNG60ww=="
   },
   "@adhd/agent-core-env": {
-    "version": "0.0.3",
+    "version": "0.0.4",
     "normalizedHash": "sha256:36d0a9f439acc074b9c00e375e2414d45cfe15404f3974b62eaf9b3bc9f529db",
-    "publishedIntegrity": "sha512-3d/WKfoUod08aESMUI2T+Xqao4+hm46TVWTjM9GBHaubLPbm9MmKewDYDFaULLi3XEFICiPSghNrQa0KIVWNIA=="
+    "publishedIntegrity": "sha512-n0vsyL4t+BHYNr+JYcfoiPXbMN8nfLe8lZodWxxFV+mhIRn9QgDpdUhtYU3wyua3swRDiWH65yGhWVB8LtPhgQ=="
   },
   "@adhd/agent-core-policy": {
-    "version": "2.1.5",
+    "version": "2.1.6",
     "normalizedHash": "sha256:be68d741ad116ba02a23546106f7bf986ce4925c128bed250bba8465c4fa0d78",
-    "publishedIntegrity": "sha512-0RQyZ6LKXgJM7waNiEQStukmZX4E2+2sDp03/LJ/PNdCDkarytlJy21+l8UhHx6LfXfqjXJlUceYJ+3KNIxZhw=="
+    "publishedIntegrity": "sha512-LC5PNrDZO6ZlAGkY16uP1IhR1YdukA9bjaQeEfjyEgWSTyTzihAoamHD0cfkzTI2meAovCLjYDMn3/naWH/2+w=="
   },
   "@adhd/agent-core-provider": {
-    "version": "2.1.5",
+    "version": "2.1.6",
     "normalizedHash": "sha256:f59b7129f7ba0e3d77906fe36b2e424c5cebf65ea24923893fb618f8472974bb",
-    "publishedIntegrity": "sha512-XJwv9Dg2AESPvNSR7D2DyzUiOXZQqCLO3XAD3Rf2Kcn6EeH5Hrn0UwdTcGN+y2mvjx31lkIat/CTOHRygldpfw=="
+    "publishedIntegrity": "sha512-VEzHPbFjfnMhi/fy+6BHYKyH/SMgKMZ6h7+CeUibycriGVgBrnr2aY3tJVfvNE/bRpE+WF6VNLf4TAEwKNn3Iw=="
   },
   "@adhd/agent-engine-compiler": {
     "version": "2.1.4",
@@ -60,19 +60,19 @@
     "publishedIntegrity": "sha512-n1qLOXOA1P8MJzUzl5w/6I0V8UHxxzY6C6JaXhQ6Na5j2I2x1v7w7StJqZl94UrFMpB4gHA7+aL8QtdOnfx+EQ=="
   },
   "@adhd/agent-store-tools": {
-    "version": "2.1.5",
-    "normalizedHash": "sha256:45de29ebc4dcdc6b264f73903fa9248632f6531db350f50fb00d014a23d89950",
-    "publishedIntegrity": "sha512-RQXjuVw/y3fzhdkOXkFbfAwODJ6JrNSyQ//jrtNoopumYxvx8L6R3ATg46MPyu+23Vq5onB2rXeVguJSDIvs/Q=="
+    "version": "2.1.6",
+    "normalizedHash": "sha256:3cf5f0072a8710705d5777cb3e4d05a172c5187de3b346de1ef7fe3b42f8274d",
+    "publishedIntegrity": "sha512-XJstJagLQO9aOLpv1sW/gX12kMupQKEMm3OIkm0YlGWlXyTE6swzCY4YdT/nQN/LjITqsAq5x+M39HWyFEaNHg=="
   },
   "@adhd/apigen-base-errors": {
-    "version": "0.1.4",
-    "normalizedHash": "sha256:febbc88f8f4f57a65befad035a31e5fe0b8ea1cc93f78695bb753eca5c851648",
-    "publishedIntegrity": "sha512-HzoT9VR+Bh6ARzWKtJQcR7aqOLnTcKDgAyEDpvyF1b/xzUs9KGOWBOuu2v7C0Awh8Gxma2IQnhaoHx2LIB7peA=="
+    "version": "0.1.5",
+    "normalizedHash": "sha256:fb401171bb1ac0add86f3fc827cd654da510f94033e0106a83931c3f0965dd16",
+    "publishedIntegrity": "sha512-H2uhE4TL2XseTsBsAUQ8/RSDgNX/i4eLw9sSy73s33tfec4MVklU4zCy2dkNllBjKo0ufZjQIkYxwe7Y18xYCA=="
   },
   "@adhd/apigen-base-logical": {
-    "version": "0.0.4",
-    "normalizedHash": "sha256:d9f453d90eaa1922550d29c145c0ad5ae1d82b18f023b8ecc032c9bdcdd6638c",
-    "publishedIntegrity": "sha512-TqEpg/F+W6lsLusFxMGXuA+qwgqNzTM9HzT7qzZJdPjj4nA1H18w3j2V9FGmhNN3TvOFgI8ooQKqEprRfnqTzQ=="
+    "version": "0.0.5",
+    "normalizedHash": "sha256:a8adfa17962f904971f2ccb6bbc087e00e57b36900577984d092cf220d778934",
+    "publishedIntegrity": "sha512-4yfihRsQrUcIjJD2Zw2lG8iKODAVt0smVaCOri1jb6T0mX9Py2o3e/EpREA0nrmf6TF/OR+gtxBzgxva5W+PYw=="
   },
   "@adhd/apigen-base-schema": {
     "version": "0.1.4",
@@ -90,14 +90,14 @@
     "publishedIntegrity": "sha512-daArNNtzEzqSEdEnlO+1X++ANDP6OX35Xwocr79pU+7PBlCxKqRPYJbJrPQyrwqh6wB0gOFfNAP61sfzfuMWYA=="
   },
   "@adhd/apigen-codegen-openapi": {
-    "version": "0.1.5",
-    "normalizedHash": "sha256:54f2c0739f6a45c88dbffeb4c74bad42599ff7de6ef7e37813531a8d240c6177",
-    "publishedIntegrity": "sha512-9v0lZTERBiGzCkjCkjtz3uSjFtlLu5Ipoulmu0peDawEwODeR6TjCabXvJ4tEL+LmhlmZbX0vq15ZIs9XiK8Aw=="
+    "version": "0.1.6",
+    "normalizedHash": "sha256:29d1f0a31ea939612f367845f777fdcb7db5bfecae1d148d1edc3eb702a809fb",
+    "publishedIntegrity": "sha512-Py7ypwxwUeLuBUanLe6UKEHorwMcFJ3WmxoAQgo66SF2z+5hSSBro5XXwKIjnk5Isxhz6dR9FJo6tTziN1RhQA=="
   },
   "@adhd/apigen-core-client": {
-    "version": "0.1.3",
+    "version": "0.1.4",
     "normalizedHash": "sha256:b2bc51e6619134ec4859a87073f37b38b258b4dba5039a2fe3626c66e2cd5935",
-    "publishedIntegrity": "sha512-Oz/YhTvYH8NmbY+mfmuFfWmINhait3CKv5Ij4GZ24TknOdUUAQcYnEK7p3S06QGCOkQIFbSRjQ9LA73jiBbu1g=="
+    "publishedIntegrity": "sha512-WMhkKkZEfY64Ylt20C2Xh50LBoFVp8+x2Rq6fpG8LOHbmUEWQqk4eFk2vNVOmpo1NvezRiPahBz/JNOYoLPCwA=="
   },
   "@adhd/apigen-engine-conformance": {
     "version": "0.1.4",
@@ -115,9 +115,9 @@
     "publishedIntegrity": "sha512-ZrctYRdWv8mcjpjcHSmqt7F/VylFc7FRcIi/foy6g4F48Tqz1J167Vat1TFU/f6POUvPi9WR7aLJHtptOlk89A=="
   },
   "@adhd/apigen-engine-runtime": {
-    "version": "0.1.3",
-    "normalizedHash": "sha256:38ecc1f62490aecd31d65309b38b260e27ea3998111f89091259f46f60c647bb",
-    "publishedIntegrity": "sha512-1H8qPTSr4UUjf+VNBGO0oPSXHrffeokej/lfPLwrBsiisJPd3k51Hm7rugF267cOy5pv+4P4T6s6igZ/i47iSw=="
+    "version": "0.1.4",
+    "normalizedHash": "sha256:e780f6a40c7cabc21016554666dcb79dcbba8725a5f7c251f7c6a6530614f239",
+    "publishedIntegrity": "sha512-20zGMUp0irMlbjKn3LEL4HJn7OFxv21A7DbsSIQ/0zTiTiekdHg6Zxbvnwa1CqT5+yJUUDswdvrwzHUgxC1nGQ=="
   },
   "@adhd/apigen-generator-nx": {
     "version": "0.0.4",
@@ -135,14 +135,14 @@
     "publishedIntegrity": "sha512-TRTDSdzI66oTfvwf3Gk6q1kC2Xj9aawuAq+rB5oV98obx4R02uVgHP85F0UemEfJWNPFXgG+0N+4x/eETj6Meg=="
   },
   "@adhd/apigen-plugin-cli-output": {
-    "version": "0.1.4",
-    "normalizedHash": "sha256:8db3649fd1c45d73b0d08fe02acb944a7c4378b81734827d268a8ccc8020f015",
-    "publishedIntegrity": "sha512-+3GSWmjgN1NN2A7IYgFR+ORNb/jOTnU//jJkJLfSqXxerebC5GOvliAmrucQIMkDfsg3GNHlW0Vz0n4s+EiVCg=="
+    "version": "0.1.5",
+    "normalizedHash": "sha256:f39093bf644dde8d3c900ec5cdc820aef2bb569859e5640f66e9e2eda5f71e8a",
+    "publishedIntegrity": "sha512-o7op69jAuSh2pfyPXkJ7H41oye2hkHwr5/F0BPmws8/P2Yj0/w6TvchWrk3l4ryi32bsP9jllzc4uC4j5OS/9w=="
   },
   "@adhd/apigen-plugin-health": {
-    "version": "0.1.5",
-    "normalizedHash": "sha256:3e68ce86e400cdd839191df2417e5ca3b2c6ef9a57e39b2673076c86e42872c8",
-    "publishedIntegrity": "sha512-BcGcwZIC0TzxtzxKpma5cCirUbememFvYJIIUJpgEmhcD4y6XiNIjM1AKcKep0LJqpz3jO3TUO6dXhjgL6+pcQ=="
+    "version": "0.1.6",
+    "normalizedHash": "sha256:a7d46e5c2f736c5d06bbff0392055b0d3c28835c7b40950ce4a2d47cd39597d3",
+    "publishedIntegrity": "sha512-/Nrlj33rPjmuJ4NC/+xX5xC7fT/K+qTIJMAUOWQoHdjvgVLoiiy1m/pPcEIkSLHH/KTYVdrQdzLSvCxlU4VrMg=="
   },
   "@adhd/apigen-plugin-jsonschema": {
     "version": "0.1.4",
@@ -160,9 +160,9 @@
     "publishedIntegrity": "sha512-uOtqfbZCl8mzRTLNRt8zqbF0g+XOJBsgYwrZx7ZNC7CYtEwYEvdkHuVUdc9uE+/RbRH3UctCPRzZAjcBnWe9Lg=="
   },
   "@adhd/apigen-plugin-openapi": {
-    "version": "0.1.5",
-    "normalizedHash": "sha256:762107b4ae1d4469a5f7800389417ddc169c5c216dd2538bd57f90a693a76146",
-    "publishedIntegrity": "sha512-TM44IprqwLrnjNGqjFt7j7GYAy2ncdkdOjj2BPZ7Rouo/hqnZ0fgouBXY+wRmkqDJ770zeda5y73ME8h/eJauA=="
+    "version": "0.1.6",
+    "normalizedHash": "sha256:bed56186ef69ad2bddcbffd89e68e6ad869aa67aab88ef73482b6702419f0bb3",
+    "publishedIntegrity": "sha512-/Cz29KikrZuD9zc2dwuYNHxKC0trFGJXdzXQnbBUea7vflMKfgYQwNXu4znL0CuFleDUa0EJ2Gys7onPX/MvFQ=="
   },
   "@adhd/apigen-plugin-py-flask": {
     "version": "0.1.4",
@@ -175,9 +175,9 @@
     "publishedIntegrity": "sha512-/sp+f30mCAopWgoGeAOFUIO1O2voIPR9fjWr1TDSuf5zHFBnQ2cX3ky96HRChdkYmKj784/38Exr5VIcHWxY7w=="
   },
   "@adhd/apigen-python-env": {
-    "version": "0.1.3",
-    "normalizedHash": "sha256:5c3f70d6e125dfed69f9cbaeb2a506d752a942a9bb59a12ef63da8e7b424fd5e",
-    "publishedIntegrity": "sha512-+daucvLmidnPQlfSav+RreYjRKF8zDZS376PP151TLERXfXi9MJxfeT10pQevwAau2rK9YFES2+X3nZ0XSvAbw=="
+    "version": "0.1.4",
+    "normalizedHash": "sha256:692da59ed55ceb03924be3753222d65b5f4f7b75691418ccda9296694060d94d",
+    "publishedIntegrity": "sha512-SDMJJs+zf8gdYsZmilZZ8iKh1X6fxeMaApoXcFUebGHuRF02glldmWJw1Gx0QTnkyMEzYLxoGSHwK0Mfn704sA=="
   },
   "@adhd/backlog": {
     "version": "0.0.2",
@@ -185,9 +185,9 @@
     "publishedIntegrity": "sha512-L3jawu7wqENxCBIf9yt7Ek3YT9s5QMIOb8h2NHzro3PVOwEkXBsgPy2UbxAGunU1r7h6cYOTilKcKG9IogrvYA=="
   },
   "@adhd/data-base-transforms": {
-    "version": "2.2.4",
-    "normalizedHash": "sha256:2979b3140c6a71b09170ca9182eb9cf85a59930cbf7c1b2df3f8fc1f93c144f5",
-    "publishedIntegrity": "sha512-qcVKgDvi6+po8iLXIqMYjX5u4cGn5s31U/MCbgCzpjCOGffZjRliv/3yqmh9XhWsZayRxgJlo3/V7Nb7xdWMrA=="
+    "version": "2.2.5",
+    "normalizedHash": "sha256:9a49a6d67ea6a9b7bea463d32fef774eab824a6ab240fa35b52f2c267efad638",
+    "publishedIntegrity": "sha512-RWl91Mt/9dE0+a8zjL55OOe9ozFcQtdacp9dNLkqE2mmRNme9SVF6593kTGWPNbsEdX5T94jmp6M2xEXTm3EJA=="
   },
   "@adhd/data-core-structures": {
     "version": "2.2.4",
@@ -205,9 +205,9 @@
     "publishedIntegrity": "sha512-dRHKaEH7L6BEIe8vyi2PVhrs40oOA0Fxhqa5WM4IxDf6fpN7Wjh0BTH3VMb/ve5tAIW1wHrMus1aPwO+F4IAUA=="
   },
   "@adhd/dispatch-base-spec": {
-    "version": "0.0.4",
-    "normalizedHash": "sha256:4ee630a88b78313a2cf11bd3cd159e163cff56bf43b9a6587530a266c57177b1",
-    "publishedIntegrity": "sha512-X2XJSKRR2lviR/5WQkcuxxyb3Jb/0eNxQF6WCe0Zucemu1pyRMVLiKfcF+0v4u0jAWqzP8+XPb9cOzIRD2hp+A=="
+    "version": "0.0.5",
+    "normalizedHash": "sha256:3ff8aee9a5f317991fd78701ebaed965503c4fe92a31521e4d320af59151ae6b",
+    "publishedIntegrity": "sha512-Xg4h30SFcaQOhhG18M5nAVW4BzIBkjeH0dmWxrwP0wddua5nyii6o6BKcQjbjHGeGET/gKRgeZ/p7n0bhDiTIw=="
   },
   "@adhd/dispatch-base-types": {
     "version": "0.0.4",
@@ -220,14 +220,14 @@
     "publishedIntegrity": "sha512-JceHk2fTDfD3jOzG846yjqVh4ZhmN0lx5OBs2qlljzEDX3rqnXqKh7/n6gUy+ARiUc+UDLaNMfBpxgKhSEmZNQ=="
   },
   "@adhd/dispatch-core-client": {
-    "version": "0.0.4",
-    "normalizedHash": "sha256:f1efc34987da388a78150a4070e95d497c2fe2401ae778e7feff39ab97a55aaa",
-    "publishedIntegrity": "sha512-gleh0u0gW+RVDeUZ/tXUEqR7b9eAM/coDm1mifbuMTlUlBIgyMfAdapRhX5aSGkUHtEMH/YD+yapAjoZeo6WsA=="
+    "version": "0.0.5",
+    "normalizedHash": "sha256:e1f450666be52e33cf84bb4861772fb27b9892ea6ab6641613aa55647dc5e955",
+    "publishedIntegrity": "sha512-bAR0OqG/9tDJkgbOEBpmPsX7bVVF6rEvnzzg0VLxHZ/BkLZmF476M6LVtZozZVyBgrP2TZtHmV3YzpTewoElrg=="
   },
   "@adhd/dispatch-core-optimizer": {
-    "version": "0.0.4",
-    "normalizedHash": "sha256:e288b2ac266bdd550a46795c5f539b65d49f7c3c37f12344c4a6056bb0313070",
-    "publishedIntegrity": "sha512-/uD2QEKRCVJXRTSxzoV+WfHluuF7GAOVvwrdZIjlWT27+a6T4jGWAj5kdZqL75H+huAqDGl+fuFDwwPk/al3rg=="
+    "version": "0.0.5",
+    "normalizedHash": "sha256:08e1f991a92cb41ad28552525f59faea8fc8d19b39d4b73fc7cd99645eddeffa",
+    "publishedIntegrity": "sha512-DmN5hd6Yehj2/lt9hUdPTz/f16icPOd8W8TsfZh9reWEK2QRnkmmiqbBcndvgN4+rxbQfmKBdeVY6i8xkpvB1A=="
   },
   "@adhd/dispatch-orchestrator": {
     "version": "0.0.4",
@@ -235,9 +235,9 @@
     "publishedIntegrity": "sha512-5PPxcNMNzNdFdiCUxfNCDwS3GUrR3t6cSleSETzJC/yiUbX1Lh1GKYuAJg82mLKExRT5DHeu1R8h1ogApfwL5Q=="
   },
   "@adhd/dispatch-serializer-json": {
-    "version": "0.0.4",
-    "normalizedHash": "sha256:60ff4adeed47b56147da285f0ef65d60fa9a15850520baf18c2676cc57927e89",
-    "publishedIntegrity": "sha512-UucWFhmaPkaaxmVVZxqYQrzedRLKVYI9liE0lROgQ+VSBZVCbMm/l7Ecg+TpI68OgLoNxvSULKEuwk0bXLtL2Q=="
+    "version": "0.0.5",
+    "normalizedHash": "sha256:b65327eba066da3f8eca97bd2562984be7a9304125db30218ba1c2390c7e3efe",
+    "publishedIntegrity": "sha512-csljuKfgzv/hLRmlybhp/BoTSGUAlk/cuCIidcr42CdUXWkwR72hboTICq/n4ylEvMwbXlNsIEPikV7HAZhxbQ=="
   },
   "@adhd/environment": {
     "version": "0.0.3",
@@ -245,9 +245,9 @@
     "publishedIntegrity": "sha512-Oxqvz49/AD+1pfgkAe3jXXq4455Bdeir5k4to75vRN5yKQcpUtFp0eiR6VVvItUb1BcHsJWcwTzUY+7Qw6vQHA=="
   },
   "@adhd/environment-base-spec": {
-    "version": "0.0.4",
+    "version": "0.0.5",
     "normalizedHash": "sha256:6b9b888e36ea1aa3db84cac6ea68181705e415b8dc2ef8e7571b17c5d91038a8",
-    "publishedIntegrity": "sha512-gxsgj8Pz41ss1EY0fHSkWFoMm24KxDD4rZLOcVJ+gZtTi9bGeFoWwprOaW/2/SpbSPpA9I7sA+xp4Kx2m8cAMQ=="
+    "publishedIntegrity": "sha512-M4k3RJMkfivY5Ge1X0ht7clCa7stA9VOu55QJ2cf6LhUH+AjZ3cDmXllfh082VfWcIFtrVD32yWhC0vN3aoksQ=="
   },
   "@adhd/environment-builder": {
     "version": "0.0.4",

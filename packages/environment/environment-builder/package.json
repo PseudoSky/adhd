@@ -2,7 +2,7 @@
   "name": "@adhd/environment-builder",
   "version": "0.0.4",
   "dependencies": {
-    "@adhd/environment-base-spec": "0.0.4",
+    "@adhd/environment-base-spec": "0.0.5",
     "ajv": "^8.20.0",
     "yaml": "^1.10.2"
   },

@@ -2940,6 +2940,177 @@
       "updated_at": "2026-07-17T23:56:00.992Z"
     },
     {
+      "plan": "apigen-serve-core",
+      "dir": "apigen-serve-core",
+      "status": "published",
+      "mutate_set": [
+        "docs/apigen/proposals/py-extract-serve-split-findings.md",
+        "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py",
+        "packages/apigen/apigen-engine-runtime/src/index.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/dispatch-for-plan.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/op-plan.spec.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/package-invoker.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/transport-adapter.ts",
+        "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.spec.ts",
+        "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts",
+        "packages/apigen/apigen-plugin-api-express/src/lib/generate.ts",
+        "packages/apigen/apigen-plugin-api-express/src/lib/route.ts",
+        "packages/apigen/apigen-plugin-api-express/src/lib/run.ts",
+        "packages/apigen/apigen-plugin-api-express/src/test/golden/express.snapshot.json",
+        "packages/apigen/apigen-plugin-api-express/src/test/route-parity.spec.ts",
+        "packages/apigen/apigen-plugin-api-fastify/src/lib/generate.ts",
+        "packages/apigen/apigen-plugin-api-fastify/src/lib/route-projection.ts",
+        "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts",
+        "packages/apigen/apigen-plugin-api-fastify/src/lib/stream.ts",
+        "packages/apigen/apigen-plugin-api-fastify/src/test/golden/fastify.snapshot.json",
+        "packages/apigen/apigen-plugin-api-fastify/src/test/plugin.spec.ts",
+        "packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts",
+        "packages/apigen/apigen-plugin-cli-output/src/lib/run.ts",
+        "packages/apigen/apigen-plugin-cli-output/src/lib/schema-introspect.ts",
+        "packages/apigen/apigen-plugin-cli-output/src/test/golden/cli.snapshot.json",
+        "packages/apigen/apigen-plugin-cli-output/src/test/run-cli-integration.spec.ts",
+        "packages/apigen/apigen-plugin-mcp/src/lib/generate.ts",
+        "packages/apigen/apigen-plugin-mcp/src/lib/run.ts",
+        "packages/apigen/apigen-plugin-mcp/src/lib/stream.ts",
+        "packages/apigen/apigen-plugin-mcp/src/lib/tool-naming.ts",
+        "packages/apigen/apigen-plugin-mcp/src/test/golden/mcp.snapshot.json",
+        "packages/apigen/apigen-plugin-mcp/src/test/run.spec.ts",
+        "packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts",
+        "packages/apigen/apigen-plugin-py-flask/src/test/golden/py-flask.snapshot.json",
+        "packages/apigen/apigen-plugin-py-flask/src/test/plugin.spec.ts",
+        "packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts",
+        "packages/apigen/apigen-plugin-py-grpc/src/test/golden/py-grpc.snapshot.json",
+        "packages/apigen/apigen-plugin-py-grpc/src/test/plugin.spec.ts",
+        "packages/apigen/python/apigen_python/extractor.py",
+        "packages/apigen/python/apigen_python/flask_server.py",
+        "packages/apigen/python/apigen_python/grpc_server.py"
+      ],
+      "read_only_set": [],
+      "reservations": {
+        "serve-core-primitives": {
+          "mutates": [
+            "packages/apigen/apigen-engine-runtime/src/index.ts",
+            "packages/apigen/apigen-engine-runtime/src/lib/dispatch-for-plan.ts",
+            "packages/apigen/apigen-engine-runtime/src/lib/op-plan.spec.ts",
+            "packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts",
+            "packages/apigen/apigen-engine-runtime/src/lib/package-invoker.ts",
+            "packages/apigen/apigen-engine-runtime/src/lib/transport-adapter.ts"
+          ],
+          "read_only": []
+        },
+        "parity-harness": {
+          "mutates": [
+            "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.spec.ts",
+            "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts"
+          ],
+          "read_only": []
+        },
+        "fastify-adapter": {
+          "mutates": [
+            "packages/apigen/apigen-plugin-api-fastify/src/lib/generate.ts",
+            "packages/apigen/apigen-plugin-api-fastify/src/lib/route-projection.ts",
+            "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts",
+            "packages/apigen/apigen-plugin-api-fastify/src/lib/stream.ts",
+            "packages/apigen/apigen-plugin-api-fastify/src/test/golden/fastify.snapshot.json",
+            "packages/apigen/apigen-plugin-api-fastify/src/test/plugin.spec.ts"
+          ],
+          "read_only": []
+        },
+        "audit-foundation": {
+          "mutates": [
+            "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
+          ],
+          "read_only": []
+        },
+        "express-adapter": {
+          "mutates": [
+            "packages/apigen/apigen-plugin-api-express/src/lib/generate.ts",
+            "packages/apigen/apigen-plugin-api-express/src/lib/route.ts",
+            "packages/apigen/apigen-plugin-api-express/src/lib/run.ts",
+            "packages/apigen/apigen-plugin-api-express/src/test/golden/express.snapshot.json",
+            "packages/apigen/apigen-plugin-api-express/src/test/route-parity.spec.ts"
+          ],
+          "read_only": []
+        },
+        "mcp-adapter": {
+          "mutates": [
+            "packages/apigen/apigen-plugin-mcp/src/lib/generate.ts",
+            "packages/apigen/apigen-plugin-mcp/src/lib/run.ts",
+            "packages/apigen/apigen-plugin-mcp/src/lib/stream.ts",
+            "packages/apigen/apigen-plugin-mcp/src/lib/tool-naming.ts",
+            "packages/apigen/apigen-plugin-mcp/src/test/golden/mcp.snapshot.json",
+            "packages/apigen/apigen-plugin-mcp/src/test/run.spec.ts"
+          ],
+          "read_only": []
+        },
+        "cli-adapter": {
+          "mutates": [
+            "packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts",
+            "packages/apigen/apigen-plugin-cli-output/src/lib/run.ts",
+            "packages/apigen/apigen-plugin-cli-output/src/lib/schema-introspect.ts",
+            "packages/apigen/apigen-plugin-cli-output/src/test/golden/cli.snapshot.json",
+            "packages/apigen/apigen-plugin-cli-output/src/test/run-cli-integration.spec.ts"
+          ],
+          "read_only": []
+        },
+        "audit-transports": {
+          "mutates": [
+            "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
+          ],
+          "read_only": []
+        },
+        "py-extract-preflight": {
+          "mutates": [
+            "docs/apigen/proposals/py-extract-serve-split-findings.md"
+          ],
+          "read_only": []
+        },
+        "py-flask-serve-split": {
+          "mutates": [
+            "packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts",
+            "packages/apigen/apigen-plugin-py-flask/src/test/golden/py-flask.snapshot.json",
+            "packages/apigen/apigen-plugin-py-flask/src/test/plugin.spec.ts",
+            "packages/apigen/python/apigen_python/extractor.py",
+            "packages/apigen/python/apigen_python/flask_server.py"
+          ],
+          "read_only": []
+        },
+        "py-grpc-serve-split": {
+          "mutates": [
+            "packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts",
+            "packages/apigen/apigen-plugin-py-grpc/src/test/golden/py-grpc.snapshot.json",
+            "packages/apigen/apigen-plugin-py-grpc/src/test/plugin.spec.ts",
+            "packages/apigen/python/apigen_python/grpc_server.py"
+          ],
+          "read_only": []
+        },
+        "audit-python": {
+          "mutates": [
+            "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
+          ],
+          "read_only": []
+        },
+        "audit-final": {
+          "mutates": [
+            "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
+          ],
+          "read_only": []
+        }
+      },
+      "references": [],
+      "interfaces": [],
+      "demo": {
+        "source": "demo/DEMO.md",
+        "present": false,
+        "validate": null,
+        "package_artifact": null
+      },
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-07-24T02:36:46.065Z"
+    },
+    {
       "plan": "dispatch-completion",
       "dir": "agent-final/superseded/dispatch-completion",
       "status": "published",
@@ -3746,6 +3917,6 @@
       "updated_at": "2026-07-17T23:56:00.980Z"
     }
   ],
-  "updated_at": "2026-07-17T23:56:00.992Z",
+  "updated_at": "2026-07-24T02:36:46.074Z",
   "verified_at": null
 }

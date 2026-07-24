@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-base-types",
-  "version": "2.1.4",
+  "version": "2.1.5",
   "dependencies": {},
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

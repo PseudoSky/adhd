@@ -1,3 +1,7 @@
+## 2.2.5 (2026-07-24)
+
+This was a version bump only for ui-react-base-hooks to align it with other projects, there were no code changes.
+
 ## 2.2.4 (2026-07-24)
 
 This was a version bump only for ui-react-base-hooks to align it with other projects, there were no code changes.
