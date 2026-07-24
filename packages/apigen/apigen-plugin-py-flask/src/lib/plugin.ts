@@ -321,8 +321,22 @@ async function run(input: RunInput): Promise<void> {
 
     if (input.signal) {
       input.signal.addEventListener('abort', () => {
+        // Resolve ONLY via the `exit` listener above, once the process has
+        // actually died — a bare `resolve()` here settled the promise the
+        // instant the SIGTERM was sent, before the process (which may
+        // ignore SIGTERM) had actually exited, letting it outlive the
+        // caller and leak (BUG-APIGEN-TEST-SUBPROCESS-TEARDOWN-LEAK-001).
+        // Escalate to SIGKILL if it hasn't exited within the grace period.
+        let exited = false;
+        proc.once('exit', () => {
+          exited = true;
+        });
         proc.kill('SIGTERM');
-        resolve();
+        setTimeout(() => {
+          if (!exited) {
+            proc.kill('SIGKILL');
+          }
+        }, 3000).unref();
       });
     }
   });
