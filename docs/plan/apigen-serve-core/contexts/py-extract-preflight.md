@@ -19,6 +19,7 @@
 - [py-extract-preflight.1] findings doc exists
 
 - [py-extract-preflight.2] records a DECISION line (extract_module import-time side-effect safety verdict, §8.3)
+- [py-extract-preflight.3] records the py-grpc run/grpc_server shape (confirms/denies it mirrors py-flask)
 ---
 
 ## Reservations
