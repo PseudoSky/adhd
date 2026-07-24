@@ -39,10 +39,10 @@
       "end_ref": null
     },
     "mcp-adapter": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-24T08:07:21.365Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "ef642fa2f83c4b07ca224d02befe056c19920ff5",
       "end_ref": null
     },
     "cli-adapter": {
@@ -163,7 +163,7 @@
     "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
-  "current_state": "express-adapter",
+  "current_state": "mcp-adapter",
   "dod_provenance": {
     "confirmed_at": "2026-07-24T03:27:07.924Z",
     "by": "plan-orchestrator",
