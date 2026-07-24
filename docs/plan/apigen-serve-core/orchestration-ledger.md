@@ -54,6 +54,46 @@ schema; a human-readable trail alongside `state.json`/`events.ndjson`.
 - Status: dispatched, awaiting completion notifications. Will update this
   ledger with outcomes + run `--complete` per slug once each reports back.
 
+### Hazard: mcp-adapter's in-flight build breakage transitively couples to cli-adapter's guard
+
+Routed via team-lead (originally surfaced by the cli-adapter executor). Verified
+state-side, not from executor prose:
+
+- `CI=true nx run apigen-plugin-mcp:build` — confirmed RED right now. Root
+  cause verified by reading the actual compiler output: a `McpCallToolResult`
+  type mismatch at `run.ts:451` (the SDK's `CallToolRequestSchema` handler
+  now expects a `task` property mcp-adapter's in-flight handler return type
+  doesn't supply) — **not** the `deriveToolName`/`findOperation` import the
+  routed report guessed (grepped: `run.ts` imports only `operationFor` from
+  `./tool-naming` now; `tool-naming.ts` has already dropped the old exports
+  cleanly; the only surviving `deriveToolName` reference is in
+  `src/test/run.spec.ts`, itself inside mcp-adapter's own `mutates` set and
+  expected to be mid-update).
+- `CI=true nx run apigen-cli:build` — confirmed RED, transitively, because
+  `entrypoint/apigen-cli/src/index.ts:8` statically imports
+  `@adhd/apigen-plugin-mcp`.
+- `apigen-plugin-cli-output`'s `test` target project.json has a REAL,
+  pre-existing explicit `dependsOn: [{projects:["apigen-cli"], target:
+  "build"}]` (needed because its real-consumer-protocol tests spawn
+  `entrypoint/apigen-cli/dist/index.js` as a subprocess — confirmed by
+  reading `run-cli-integration.spec.ts`). So cli-adapter's guard IS
+  genuinely coupled to mcp-adapter's build health right now.
+- `apigen-plugin-api-express`'s `test` target has **no** such `dependsOn`
+  (only the default `^build`, i.e. express's own upstream deps) and its test
+  files don't spawn the built apigen-cli — **express-adapter is NOT
+  affected**, contrary to the routed report's broader claim.
+- Action taken (sequencing, not worktree-isolation — the 3 TS agents are
+  already mid-flight in the shared tree, converting to worktrees now would
+  cost more than it saves): messaged all 3 running agents directly.
+  mcp-adapter told to prioritize getting `apigen-plugin-mcp:build` (not just
+  `:test`) green since it blocks a sibling. cli-adapter told the coupling is
+  real, not to touch `apigen-plugin-mcp` (outside its reservation) if it hits
+  this, and to sanity-check `apigen-plugin-mcp:build` standalone before
+  running its own guard. express-adapter told it is unaffected.
+- Will re-verify `apigen-plugin-mcp:build` + `apigen-cli:build` directly
+  (not from agent prose) before treating cli-adapter's guard result as
+  trustworthy.
+
 ## Next
 
 Wave 4 (`audit-transports` + `py-flask-serve-split`), wave 5
