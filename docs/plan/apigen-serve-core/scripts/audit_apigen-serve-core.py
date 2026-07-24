@@ -50,13 +50,17 @@ RUN_AUDIT = os.path.join(HERE, "run-audit.js")
 #   check("dod.8", ok, "CI=true ./node_modules/.bin/nx run-many -t test -p apigen-plugin-py-flask,apigen-plugin-py-grpc")
 #   check("dod.9")
 #   check("dod.10", ok, "python3 docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py --phase final")
+#   check("dod.11")
+#   check("dod.12", ok, "CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test")
+#   check("dod.13")
+#   check("dod.14")
 #
 # Which DoD clause is proven by which per-state criterion IDs. A dod PASSes iff
 # every supporting criterion PASSed in this run. dod.10 is special (live gate).
 DOD_SUPPORT = {
     "dod.1": [
         "serve-core-primitives.1", "serve-core-primitives.2", "serve-core-primitives.3",
-        "serve-core-primitives.4", "serve-core-primitives.5",
+        "serve-core-primitives.4", "serve-core-primitives.5", "serve-core-primitives.9",
         "fastify-adapter.4", "express-adapter.2", "mcp-adapter.3", "cli-adapter.2",
     ],
     "dod.2": ["fastify-adapter.6", "express-adapter.4", "mcp-adapter.5", "cli-adapter.4"],
@@ -72,8 +76,13 @@ DOD_SUPPORT = {
         "py-flask-serve-split.1", "py-flask-serve-split.2", "py-flask-serve-split.3",
         "py-flask-serve-split.4", "py-flask-serve-split.5", "py-flask-serve-split.6",
         "py-grpc-serve-split.1", "py-grpc-serve-split.2", "py-grpc-serve-split.3",
+        "py-grpc-serve-split.5",
     ],
     "dod.9": ["fastify-adapter.6", "cli-adapter.4"],
+    "dod.11": ["mcp-adapter.7", "cli-adapter.6"],
+    "dod.12": ["mcp-adapter.8", "mcp-adapter.5"],
+    "dod.13": ["serve-core-primitives.7", "fastify-adapter.8", "express-adapter.6"],
+    "dod.14": ["serve-core-primitives.8", "fastify-adapter.9"],
     # dod.10 is proven by DOD10_DIST_PACKAGES verify-dist-load + all command criteria.
 }
 

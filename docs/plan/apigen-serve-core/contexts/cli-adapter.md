@@ -56,3 +56,10 @@ CLI's read side is an argv FLAG TABLE (`run.ts:195-315`: kebab names, `--no-` ne
 ## Notes for executor
 
 readCall=parseArgs over OpPlan.cliFlags; writeResult=stdout+exit-code. Real spawned child process only. Decide --use capability explicitly.
+
+
+## Review folds
+
+- **[fix:use-capability-explicit] (dod.11):** RESOLVE cli-output's `--use` capability (it has zero today) — either add `--use` layer/mount support consistent with the other transports, OR explicitly declare cli-output `--use`-incapable AND file that as a follow-up BACKLOG item. Document the decision in code/comment; do not leave it an unstated gap.
+- **F2:** the parity fixture MUST include an env-var-fallback envelope case (`APIGEN_<PLUGINID>_<FIELD>`), exercising `OpPlan.cliFlags[...].envVar` -> `parseArgs` fallback (`run.ts:300-306`).
+- Stamp `plan.transport = 'cli'` per [fix:transport-stamping].

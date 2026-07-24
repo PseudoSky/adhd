@@ -58,3 +58,10 @@ The REFERENCE adapter — it exercises the whole port surface (full `--use` comp
 ## Notes for executor
 
 Reference TransportAdapter migration. Fold DEBT-004 mount fidelity + wire dead sendStreamSse live. Parity gate + negative control.
+
+
+## Review folds
+
+- **[fix:invoker-promotion] (dod.13):** DELETE `buildInvokerForPackage`/`readUsePlugins`/`readUseOptions`/`adaptCoreLayer` from this file — they now live in `createPackageInvoker`. (`run.ts:91-166`)
+- **[fix:transport-stamping] (F3/dod.14):** stamp `plan.transport = 'http'` for this package so `dispatchForPlan`'s mount branch tags `Call.transport` correctly — the mechanism (not the value) is what Phase 1 must prove generic.
+- **[fix:mount-through-layers] (GO §8.1):** mount ops now flow through the composed invoker (a `--use auth` layer today never sees mount routes — `run.ts:380-391` calls `m.handler(call)` directly, bypassing `invoke()`). Parity fixture class (e).
