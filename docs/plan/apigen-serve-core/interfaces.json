@@ -16,5 +16,14 @@
     "resolved_version": "git:fb491d52",
     "source": "packages/apigen/apigen-engine-runtime/src/lib/invoke.ts:68-82 (Call); apigen-plugin-api-fastify/src/lib/run.ts (current per-plugin read/write to abstract)",
     "audit_check": "serve-core-primitives.4"
+  },
+  "create-package-invoker": {
+    "interface": "createPackageInvoker",
+    "shape": "function createPackageInvoker(schemas: ComposedSchemas, usePlugins: UsePlugin[]): InvokeFn  // absorbs the byte-identical buildInvokerForPackage/readUsePlugins/readUseOptions/adaptCoreLayer block; returns the existing InvokeFn; built once per package, not per request",
+    "provenance": "vendored-source",
+    "confidence": "vendored",
+    "resolved_version": "git:fb491d52",
+    "source": "packages/apigen/apigen-engine-runtime/src/lib/invoke.ts:133-209 (InvokeFn/createInvoker/InvokeOptions); apigen-plugin-api-fastify/src/lib/run.ts:91-166 (duplicated block absorbed)",
+    "audit_check": "serve-core-primitives.1"
   }
 }
