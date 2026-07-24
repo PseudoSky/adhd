@@ -31,3 +31,15 @@ Source of truth for the gate: `MIGRATION.md` §5 (Prerequisites / blockers).
 
 > Do not begin Phase 3 until every Phase-3-gating row above is RESOLVED in the
 > repo-root `BACKLOG.md` (and moved to `CHANGELOG.md` per the disclosure standard).
+
+## Discovered executing Phase 1 (seed import) — session 2026-07-24
+
+Not Phase-3 blockers (Phases 1-2 are read-only against markdown, per §5); filed
+for tool-robustness/data-hygiene follow-up. Root-BACKLOG.md is authoritative;
+rows below are the plan cross-reference.
+
+| ID | Gates | Root-BACKLOG anchor |
+|---|---|---|
+| `DEBT-BACKLOG-IMPORT-SILENT-DROP-001` | none (tool robustness) | root `BACKLOG.md` (a malformed-ID header is silently dropped on import with zero diagnostic — violates this plan's own Phase-1 negative-control DoD) |
+| `DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001` | none (worked around this session via a post-import `attachToPlan` pass) | root `BACKLOG.md` (`ImportMarkdownInput` has no `plan`/`sourcePath` field, though §2.2/§1-step-3 assume both) |
+| `DEBT-BACKLOG-DUPLICATE-ID-INSOURCE-001` | Phase 3 (should resolve before markdown files become generated projections) | root `BACKLOG.md` (`FEAT-WORKSPACE-001` and `BUG-APIGEN-031` each reused as two distinct headers within one source file, pre-dating this migration) |
