@@ -1,3 +1,15 @@
+## 0.1.4 (2026-07-24)
+
+
+### 🩹 Fixes
+
+- **backlog:** resolve cross-file duplicate human-ids blocking cut-over parity
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.3 (2026-07-23)
 
 

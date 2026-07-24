@@ -1,3 +1,20 @@
+## 0.1.4 (2026-07-24)
+
+
+### 🚀 Features
+
+- **apigen-plugin-api-fastify:** migrate to TransportAdapter/OpPlan serve-core
+
+
+### 🩹 Fixes
+
+- **apigen-plugin-api-fastify:** widen Fastify() options type so build typechecks
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.3 (2026-07-23)
 
 

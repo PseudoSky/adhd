@@ -1,3 +1,15 @@
+## 0.1.4 (2026-07-24)
+
+
+### 🚀 Features
+
+- **apigen-plugin-api-express:** migrate to shared TransportAdapter; close DEBT-APIGEN-SERVE-CORE-003
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.3 (2026-07-23)
 
 

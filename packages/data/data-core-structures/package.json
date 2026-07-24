@@ -1,12 +1,12 @@
 {
   "name": "@adhd/data-core-structures",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "private": false,
   "publishConfig": {
     "access": "public"
   },
   "dependencies": {
-    "@adhd/data-base-transforms": "2.2.3"
+    "@adhd/data-base-transforms": "2.2.4"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

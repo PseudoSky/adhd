@@ -1,13 +1,13 @@
 {
   "name": "@adhd/apigen-plugin-mcp",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "main": "./dist/index.js",
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
-    "@adhd/apigen-core-client": "0.1.2",
-    "@adhd/apigen-engine-runtime": "0.1.2",
-    "@adhd/apigen-base-errors": "0.1.3",
-    "@adhd/apigen-engine-naming": "0.1.3"
+    "@adhd/apigen-core-client": "0.1.3",
+    "@adhd/apigen-engine-runtime": "0.1.3",
+    "@adhd/apigen-base-errors": "0.1.4",
+    "@adhd/apigen-engine-naming": "0.1.4"
   },
   "publishConfig": {
     "access": "public"

@@ -1,3 +1,20 @@
+## 0.1.3 (2026-07-24)
+
+
+### 🚀 Features
+
+- **apigen-engine-runtime:** add serve-core OpPlan + TransportAdapter + createPackageInvoker + dispatchForPlan
+
+
+### 🩹 Fixes
+
+- **apigen:** guarantee py-flask/py-grpc test subprocess teardown
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.2 (2026-07-23)
 
 

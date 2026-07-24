@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-store-prompts",
-  "version": "2.1.3",
+  "version": "2.1.4",
   "description": "Prompt component registry for agent composition: stores prompt types, components, agent compositions, and context rules",
   "type": "module",
   "publishConfig": {

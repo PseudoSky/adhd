@@ -1,3 +1,21 @@
+## 0.1.4 (2026-07-24)
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** update cross-host-response-envelope test's startPyServer for required --plan-file
+
+- **apigen:** wire EnvelopeCapability into real --use schema composition
+
+- **backlog:** sourcepath-ownership gate for importFromMarkdown (DEBT-BACKLOG-IMPORT-SCOPE-CROSSFILE-001)
+
+- **backlog:** resolve cross-file duplicate human-ids blocking cut-over parity
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.3 (2026-07-23)
 
 
