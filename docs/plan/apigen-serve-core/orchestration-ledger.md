@@ -231,9 +231,28 @@ Token telemetry captured for all four via `--input-tokens`/`--output-tokens`
 py-extract-preflight ~55k/6k/16 (all executor self-reported best-effort
 estimates, not byte-proxy fallback).
 
+## Wave 4 — audit-transports (gate) + py-flask-serve-split
+
+- `audit-transports` ran directly by the orchestrator (deterministic gate,
+  no LLM needed, same pattern as `audit-foundation`): exit 0, 44/44,
+  `dod_confirmed:true`, `next_state: py-flask-serve-split`. Fully clean —
+  no new fixes needed here since both criteria.json regex bugs and mcp's
+  self-referential comment were already resolved during wave-3 closeout.
+- `py-flask-serve-split` dispatched to python-pro (sonnet) as a background
+  agent — mixed Python (`extractor.py`, `flask_server.py`) + TypeScript
+  (`apigen-plugin-py-flask/src/lib/plugin.ts`) two-phase extract/serve
+  split, per team-lead's routing. Self-contained prompt included: the
+  py-extract-preflight findings doc's SAFE verdict (this split was already
+  proven safe), excerpts of the current self-extracting
+  `_route_for_op`/`_http_verb`/`_is_primitive_only_input_schema` functions
+  to delete, the current single-phase `plugin.ts` spawn to convert to
+  two-phase, and pointers to the parity-harness API + fastify's reference
+  spec for the golden/neg-control pattern. Explicitly told not to touch
+  BACKLOG.md/CHANGELOG.md (new directive) and to report any found-but-
+  unfixed bugs directly instead.
+- Status: dispatched, awaiting completion.
+
 ## Next
 
-Wave 4: `audit-transports` (gate, depends on cli/express/mcp-adapter — all
-complete) + `py-flask-serve-split` (depends on py-extract-preflight —
-complete). Then wave 5 (`py-grpc-serve-split`), wave 6 (`audit-python`),
-wave 7 (`audit-final`).
+Wave 5 (`py-grpc-serve-split`, depends on py-flask-serve-split), wave 6
+(`audit-python`), wave 7 (`audit-final`) — pending wave-4 completion.
