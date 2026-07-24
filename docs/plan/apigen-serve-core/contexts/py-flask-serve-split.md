@@ -19,6 +19,7 @@
 - [py-flask-serve-split.1] extractor gains --emit-json extract-only CLI mode
 
 - [py-flask-serve-split.2] flask_server accepts --plan (TS-computed route/verb triples)
+- [py-flask-serve-split.3] _route_for_op re-derivation deleted
 ---
 
 ## Reservations
