@@ -93,6 +93,20 @@ state-side, not from executor prose:
 - Will re-verify `apigen-plugin-mcp:build` + `apigen-cli:build` directly
   (not from agent prose) before treating cli-adapter's guard result as
   trustworthy.
+- **Resolved.** mcp-adapter fixed its own build (imported `ServerResult` from
+  the SDK, asserted at the return site, documented why). Re-verified BOTH
+  `CI=true nx run apigen-plugin-mcp:build` and `CI=true nx run
+  apigen-cli:build` directly — both green (a momentary intervening
+  `apigen-plugin-cli-output:lint` failure on one `apigen-cli:build` attempt
+  was transient — cli-adapter mid-edit at that instant; re-ran seconds later
+  and it passed clean). Told cli-adapter it is unblocked and may run its real
+  guard now. express-adapter reports done: guard green 45/45, negative
+  control proven RED→GREEN twice, and it independently re-ran
+  `apigen-cli:test` (156/156) to self-check for mcp bleed-through before
+  reporting — awaiting its full completion report with token telemetry.
+  mcp-adapter still finishing (mount/--use tests, malformed-input negative
+  control, transport-http-parity spec) — build won't regress again per its
+  own note; awaiting its full report.
 
 ## Next
 
