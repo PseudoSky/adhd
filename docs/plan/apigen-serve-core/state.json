@@ -46,10 +46,10 @@
       "end_ref": null
     },
     "cli-adapter": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-24T08:07:21.185Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "1891776cd571d5d06487bb691adcca90bc77f4bd",
       "end_ref": null
     },
     "audit-transports": {
@@ -163,7 +163,7 @@
     "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
-  "current_state": "express-adapter",
+  "current_state": "cli-adapter",
   "dod_provenance": {
     "confirmed_at": "2026-07-24T03:27:07.924Z",
     "by": "plan-orchestrator",
