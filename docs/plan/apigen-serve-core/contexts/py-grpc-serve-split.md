@@ -18,6 +18,7 @@
 
 - [py-grpc-serve-split.1] grpc_server accepts the injected TS-computed --plan
 
+- [py-grpc-serve-split.2] grpc project() re-derivation deleted (exact symbol confirmed by py-extract-preflight)
 ---
 
 ## Reservations

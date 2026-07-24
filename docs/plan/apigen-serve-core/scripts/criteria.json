@@ -396,6 +396,16 @@
       "paths": [
         "packages/apigen/python/apigen_python/grpc_server.py"
       ]
+    },
+    {
+      "id": "py-grpc-serve-split.2",
+      "phase": "phase-3",
+      "tier": 1,
+      "kind": "absent",
+      "pattern": "_route_for",
+      "paths": [
+        "packages/apigen/python/apigen_python/grpc_server.py"
+      ]
     }
   ]
 }
