@@ -57,3 +57,5 @@ Centralize the op->wire serve loop into OpPlan + createPackageInvoker + dispatch
   - entrypoint: `CI=true ./node_modules/.bin/nx run-many -t test -p apigen-plugin-py-flask,apigen-plugin-py-grpc`
   - observable: `py-flask + py-grpc parity specs pass against real spawned servers, and grep shows the three re-derivation functions removed from flask_server.py/grpc_server.py`
   - delivered-by: `py-flask-serve-split, py-grpc-serve-split`
+
+- `[dod.9]` **OUT OF SCOPE, pinned unchanged: BUG-APIGEN-SAFE-OP-MUTATIONS-OVER-GET-001 (GET-hoist of unsafe scalar-input ops) and BUG-APIGEN-CLI-SERVE-FRONT-PROXY-DOUBLE-SEGMENT-001 behave exactly as before this refactor — each has a parity fixture proving the current behavior is preserved, and neither is closed by this epic. (structural)** — OUT OF SCOPE, pinned unchanged: BUG-APIGEN-SAFE-OP-MUTATIONS-OVER-GET-001 (GET-hoist of unsafe scalar-input ops) and BUG-APIGEN-CLI-SERVE-FRONT-PROXY-DOUBLE-SEGMENT-001 behave exactly as before this refactor — each has a parity fixture proving the current behavior is preserved, and neither is closed by this epic..
