@@ -7,5 +7,14 @@
     "resolved_version": "git:fb491d52",
     "source": "packages/apigen/apigen-engine-naming/src/lib/naming.ts:94-177 (TransportProjection/project); apigen-engine-runtime/src/lib/describe-params.ts (ParamInfo); apigen-core-client/src/lib/plugin.ts:359-375 (MountedOperation)",
     "audit_check": "serve-core-primitives.3"
+  },
+  "transport-adapter": {
+    "interface": "TransportAdapter",
+    "shape": "interface TransportAdapter<Raw=unknown> { registerRoute(plan:OpPlan, dispatch:(call:Omit<Call,'operation'|'ctx'>)=>Promise<unknown>|AsyncIterable<unknown>):void; readCall(raw:Raw, plan:OpPlan):Omit<Call,'operation'|'ctx'>|Promise<Omit<Call,'operation'|'ctx'>>; writeResult(raw:Raw, result:unknown|AsyncIterable<unknown>, plan:OpPlan):void|Promise<void>; writeError(raw:Raw, err:unknown, plan:OpPlan):void|Promise<void> }  // Raw stays a generic escape hatch (SSE needs reply.hijack); read/write are genuinely transport-specific (proposal §3c)",
+    "provenance": "vendored-source",
+    "confidence": "vendored",
+    "resolved_version": "git:fb491d52",
+    "source": "packages/apigen/apigen-engine-runtime/src/lib/invoke.ts:68-82 (Call); apigen-plugin-api-fastify/src/lib/run.ts (current per-plugin read/write to abstract)",
+    "audit_check": "serve-core-primitives.4"
   }
 }
