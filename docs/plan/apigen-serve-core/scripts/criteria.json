@@ -30,6 +30,16 @@
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/index.ts"
       ]
+    },
+    {
+      "id": "serve-core-primitives.4",
+      "phase": "phase-1",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "TransportAdapter",
+      "paths": [
+        "packages/apigen/apigen-engine-runtime/src/index.ts"
+      ]
     }
   ]
 }
