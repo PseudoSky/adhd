@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts", "packages/apigen/apigen-engine-runtime/src/lib/package-invoker.ts", "packages/apigen/apigen-engine-runtime/src/lib/dispatch-for-plan.ts", "packages/apigen/apigen-engine-runtime/src/lib/transport-adapter.ts", "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts", "packages/apigen/apigen-engine-naming/src/lib/naming.ts", "packages/apigen/apigen-core-client/src/lib/plugin.ts"]
 mutates:    ["packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts", "packages/apigen/apigen-plugin-api-fastify/src/lib/generate.ts", "packages/apigen/apigen-plugin-api-fastify/src/lib/route-projection.ts", "packages/apigen/apigen-plugin-api-fastify/src/lib/stream.ts", "packages/apigen/apigen-plugin-api-fastify/src/test/plugin.spec.ts", "packages/apigen/apigen-plugin-api-fastify/src/test/golden/fastify.snapshot.json"]
 ```
 
