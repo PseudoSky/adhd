@@ -22,6 +22,7 @@
 - [fastify-adapter.3] sendStreamSse wired live for streaming:true ops (DEBT-002 fastify half)
 - [fastify-adapter.4] route-projection resolveRoute shim removed (collapsed into OpPlan)
 - [fastify-adapter.5] committed pre-migration golden snapshot exists
+- [fastify-adapter.6] fastify parity gate green (real fetch-driven live server, deep-equal snapshot)
 ---
 
 ## Reservations
