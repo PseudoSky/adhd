@@ -231,6 +231,17 @@ export interface BacklogFilter {
   claimedBy?: string;
   tags?: string[];
   grep?: string; // FTS query over title+body
+  /**
+   * Exact-match on `BacklogItem.importedFrom` — the sourcePath that OWNS an
+   * item's canonical content (DEBT-BACKLOG-IMPORT-SCOPE-CROSSFILE-001).
+   * Needed for a root-level `BACKLOG.md` projection: filtering by bare
+   * `{repo}` alone would also surface every item cross-referenced FROM root
+   * by a plan/package file (which correctly carries a `plan`/`projectPath`
+   * of its own once ownership-gating lands) — `importedFrom` is the only
+   * field that reliably answers "does THIS file own this item's content",
+   * independent of which OTHER files also cite the same id.
+   */
+  importedFrom?: string;
   limit?: number;
   offset?: number;
 }
