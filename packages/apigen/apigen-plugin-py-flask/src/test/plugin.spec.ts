@@ -53,6 +53,7 @@ import {
   captureGolden,
   assertParity,
   proveNegativeControl,
+  killChildProcess,
   type GoldenFixture,
   type GoldenSnapshot,
   type ParityDriver,
@@ -272,6 +273,10 @@ async function startServer(port: number = PORT): Promise<LiveServer> {
       if (done) return;
       done = true;
       rl.close();
+      // Never made it to ready within the deadline — nothing to gracefully
+      // drain, so kill immediately rather than leaving it running
+      // (BUG-APIGEN-TEST-SUBPROCESS-TEARDOWN-LEAK-001).
+      proc.kill('SIGKILL');
       reject(new Error('py-flask test: timed out waiting for ready signal'));
     }, 10_000);
 
@@ -302,12 +307,11 @@ async function startServer(port: number = PORT): Promise<LiveServer> {
     proc,
     stderrLines,
     async stop() {
-      if (proc.killed) return;
-      await new Promise<void>((res) => {
-        proc.once('exit', () => res());
-        proc.kill('SIGTERM');
-        setTimeout(res, 2000);
-      });
+      // Awaits the REAL exit event (SIGTERM, escalating to SIGKILL if it
+      // doesn't die within the grace period) — never a bare timer that
+      // resolves regardless of whether the process actually died
+      // (BUG-APIGEN-TEST-SUBPROCESS-TEARDOWN-LEAK-001).
+      await killChildProcess(proc);
     },
   };
 }
@@ -669,6 +673,7 @@ const parityFixtures: ReadonlyArray<GoldenFixture<HttpFixtureInput>> = [
 describe('[py-flask-parity] extract/serve-split golden-snapshot parity gate', () => {
   let controller: AbortController;
   let driver: ParityDriver<HttpFixtureInput, HttpFixtureOutput>;
+  let runPromise: Promise<void>;
 
   beforeAll(async () => {
     // Drive the REAL production entrypoint (`pyFlaskPlugin.run()`), NOT the
@@ -686,7 +691,7 @@ describe('[py-flask-parity] extract/serve-split golden-snapshot parity gate', ()
       options: { port: PARITY_PORT, namespace: NS },
       signal: controller.signal,
     };
-    pyFlaskPlugin.run(runInput).catch(() => {
+    runPromise = pyFlaskPlugin.run(runInput).catch(() => {
       /* swallowed after abort */
     });
 
@@ -723,8 +728,13 @@ describe('[py-flask-parity] extract/serve-split golden-snapshot parity gate', ()
     };
   }, 20000);
 
-  afterAll(() => {
+  afterAll(async () => {
+    // Await the actual subprocess exit (plugin.ts's abort handler now
+    // escalates SIGTERM -> SIGKILL and only settles on real exit) — never
+    // fire-and-forget, or a slow-to-die Python process outlives the test
+    // suite and leaks (BUG-APIGEN-TEST-SUBPROCESS-TEARDOWN-LEAK-001).
     controller.abort();
+    await runPromise;
   });
 
   // [py-flask-serve-split.6] the parity gate. Recapture through the

@@ -62,6 +62,7 @@ import {
   captureGolden,
   assertParity,
   proveNegativeControl,
+  killChildProcess,
   type GoldenFixture,
   type GoldenSnapshot,
   type ParityDriver,
@@ -284,6 +285,10 @@ async function startServerWithPlan(planPath: string, port: number): Promise<Live
       if (done) return;
       done = true;
       rl.close();
+      // Never made it to ready within the deadline — nothing to gracefully
+      // drain, so kill immediately rather than leaving it running
+      // (BUG-APIGEN-TEST-SUBPROCESS-TEARDOWN-LEAK-001).
+      proc.kill('SIGKILL');
       reject(new Error('py-grpc test: timed out waiting for ready signal'));
     }, 10_000);
 
@@ -314,12 +319,11 @@ async function startServerWithPlan(planPath: string, port: number): Promise<Live
     proc,
     stderrLines,
     async stop() {
-      if (proc.killed) return;
-      await new Promise<void>((res) => {
-        proc.once('exit', () => res());
-        proc.kill('SIGTERM');
-        setTimeout(res, 2000);
-      });
+      // Awaits the REAL exit event (SIGTERM, escalating to SIGKILL if it
+      // doesn't die within the grace period) — never a bare timer that
+      // resolves regardless of whether the process actually died
+      // (BUG-APIGEN-TEST-SUBPROCESS-TEARDOWN-LEAK-001).
+      await killChildProcess(proc);
     },
   };
 }
@@ -593,10 +597,12 @@ describe('py-grpc plugin — streaming deferral ([fix:pygrpc-streaming-deferral]
     proc.stderr.on('data', (b: Buffer) => (stderr += b.toString()));
 
     const exitCode = await new Promise<number | null>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error('streaming-rejection test: server did not exit within 5s')),
-        5000
-      );
+      const timer = setTimeout(() => {
+        // Expected to self-exit rejecting the streaming op; if it didn't,
+        // don't leave it running (BUG-APIGEN-TEST-SUBPROCESS-TEARDOWN-LEAK-001).
+        proc.kill('SIGKILL');
+        reject(new Error('streaming-rejection test: server did not exit within 5s'));
+      }, 5000);
       proc.on('exit', (code) => {
         clearTimeout(timer);
         resolve(code);
@@ -688,6 +694,7 @@ const parityFixtures: ReadonlyArray<GoldenFixture<GrpcFixtureInput>> = [
 describe('[py-grpc-parity] extract/serve-split golden-snapshot parity gate', () => {
   let controller: AbortController;
   let driver: ParityDriver<GrpcFixtureInput, GrpcFixtureOutput>;
+  let runPromise: Promise<void>;
   const addr = `localhost:${PARITY_PORT}`;
 
   beforeAll(async () => {
@@ -704,7 +711,7 @@ describe('[py-grpc-parity] extract/serve-split golden-snapshot parity gate', () 
       options: { port: PARITY_PORT, namespace: NS },
       signal: controller.signal,
     };
-    pyGrpcPlugin.run(runInput).catch(() => {
+    runPromise = pyGrpcPlugin.run(runInput).catch(() => {
       /* swallowed after abort */
     });
 
@@ -734,8 +741,13 @@ describe('[py-grpc-parity] extract/serve-split golden-snapshot parity gate', () 
     };
   }, 20000);
 
-  afterAll(() => {
+  afterAll(async () => {
+    // Await the actual subprocess exit (plugin.ts's abort handler now
+    // escalates SIGTERM -> SIGKILL and only settles on real exit) — never
+    // fire-and-forget, or a slow-to-die Python process outlives the test
+    // suite and leaks (BUG-APIGEN-TEST-SUBPROCESS-TEARDOWN-LEAK-001).
     controller.abort();
+    await runPromise;
   });
 
   // [py-grpc-serve-split.3/.5] the parity gate. Recapture through the
