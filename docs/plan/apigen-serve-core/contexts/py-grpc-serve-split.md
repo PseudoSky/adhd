@@ -54,3 +54,9 @@ Scope CONFIRMED by `py-extract-preflight` (py-grpc was not read in the architect
 ## Notes for executor
 
 Reuse --emit-json extractor mode; inject TS-computed plan into grpc_server via --plan; delete its project() re-derivation. Scope confirmed by py-extract-preflight.
+
+
+## Review folds (architect F4 — CONFIRMED divergent, resize)
+
+- **F4:** py-grpc is NOT "same pattern, cheaper." Its Python-side naming implements a DIFFERENT algorithm from `project()`'s gRPC rule — single-segment `namespace.capitalize()+"Service"` + raw fn-name method dispatch (`grpc_server.py:397-421,448-459`) — unlike py-flask which at least re-derives the SAME HTTP algorithm. So the extract/serve split must ADDITIONALLY RECONCILE py-grpc's service/method naming to `project()`'s real grpc projection (`naming.ts:165-166`): the injected plan carries `grpc.package/service/method` and grpc_server builds its dispatch table from THAT, deleting the divergent naming. This is a second, non-trivial reconciliation — not a verify-then-proceed checkbox.
+- **[fix:pygrpc-streaming-deferral] (dod.5):** rejecting streaming ops is a DOCUMENTED, filed deferral (gRPC natively streams) — file the follow-up BACKLOG item; it is a scope boundary, not a permanent capability verdict.

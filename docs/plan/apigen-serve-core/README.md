@@ -71,7 +71,7 @@ vocabulary — these terms appear in DoD clauses as that consumer's outcomes:
 - `[dod.5]` **Streaming is wired live: a streaming:true op emits SSE frames over fastify and progressive content over MCP; CLI, py-flask, and py-grpc explicitly reject a streaming op rather than silently mis-serializing an AsyncIterable. (behavioral)**
   - given: a package exposing a streaming:true op
   - when: the op is driven over fastify, mcp, and cli/py
-  - then: fastify yields SSE frames, mcp progressive content, cli/py an explicit rejection
+  - then: fastify yields SSE frames, mcp progressive content, cli/py an explicit rejection — py-grpc's rejection is a DOCUMENTED, filed deferral (gRPC natively streams; BACKLOG follow-up), not a permanent capability verdict ([fix:pygrpc-streaming-deferral])
   - entrypoint: `CI=true ./node_modules/.bin/nx run-many -t test -p apigen-plugin-api-fastify,apigen-plugin-mcp,apigen-plugin-cli-output`
   - observable: `fastify streaming fixture yields SSE frames; mcp yields progressive content; cli/py streaming fixture returns an explicit rejection`
   - negative-control: `git apply docs/plan/apigen-serve-core/neg-control/fastify-adapter.patch` (perturbs the streaming write path) must flip the fastify parity suite RED; `git apply -R` restores GREEN

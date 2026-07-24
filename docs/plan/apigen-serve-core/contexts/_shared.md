@@ -55,9 +55,44 @@
   streaming code live now; CLI/py-flask/py-grpc explicitly REJECT a `streaming:true`
   op (never silently stringify an `AsyncIterable`). Not deferred.
 
-> The two `[fix:]` decisions above are the architect verdict baked into the plan.
-> If the architect-reviewer's returned verdict differs, this file is the ONE place
-> to update and every citing state inherits it.
+- **[fix:layerresult-return]** — DECISION (architect F1): `invoke()` ALWAYS returns a
+  `Promise`; only the RESOLVED value is the `unknown | AsyncIterable` union, i.e.
+  `LayerResult` (`apigen-engine-runtime/src/lib/invoke.ts:94-102,152-156`). So
+  `dispatchForPlan` returns `Promise<LayerResult>`, `TransportAdapter.registerRoute`'s
+  dispatch callback is `(call)=>Promise<LayerResult>`, and `writeResult` takes the
+  resolved `LayerResult`. The proposal §3b/§3c bare-union sketch does NOT type-check —
+  cite the corrected signatures ([iface:dispatch-for-plan], [iface:transport-adapter]).
+- **[fix:transport-stamping]** — DECISION (architect F3): `OpPlan` carries a
+  `transport: Transport` field, stamped per-package by the adapter. `dispatchForPlan`'s
+  mount branch adapts the runtime `Call` (`domainArgs`/`ctx:LayerContext`) to the
+  core-client `Call` (`data`/`ctx:Extensions`/`transport`/`raw`,
+  `apigen-core-client/src/lib/plugin.ts:87-117`) and stamps `Call.transport` from
+  `plan.transport` — NEVER a hardcoded `'http'` (which would mis-tag every non-HTTP
+  transport's mount provenance once mcp/cli land). Decided AND tested in Phase 1.
+- **[fix:invoker-promotion]** — DECISION (architect topology gap): the
+  `UsePlugin`/`readUsePlugins`/`readUseOptions`/`adaptCoreLayer`/`buildInvokerForPackage`
+  block (~120 identical lines, proposal §4) is PROMOTED into `apigen-engine-runtime`
+  (`createPackageInvoker`) and DELETED from `apigen-plugin-api-fastify/src/lib/run.ts`;
+  express then COLLAPSES onto `createPackageInvoker` instead of keeping its own copy.
+  Named migration + deletion, not "extract OpPlan" — otherwise Phase-2 express silently
+  keeps a divergent copy.
+- **[fix:mcp-toolmeta-hoist]** — DECISION (team-lead, dod.4 add): the MCP tool table /
+  `toolMetas` is computed ONCE at startup from `OpPlan`, never rebuilt per request in
+  `streaming-http` mode (`apigen-plugin-mcp/src/lib/run.ts:269-276`). An observable,
+  tested clause so it cannot silently regress.
+- **[fix:use-capability-explicit]** — DECISION (team-lead, dod.11): every transport's
+  `--use` capability — BOTH layer AND mount — is explicitly RESOLVED and DOCUMENTED, not
+  left implicit. cli-output (zero `--use` today) either gains it or is declared
+  `--use`-incapable WITH a filed follow-up. mcp must state whether it now hosts `--use`
+  mount ops and pin it (dod.4 covers validate-layer, NOT mount capability).
+- **[fix:pygrpc-streaming-deferral]** — DECISION (team-lead, dod.5 refine): py-grpc
+  rejecting streaming ops is a DOCUMENTED, filed deferral (gRPC natively supports
+  streaming; a consumer will want it) — a scope boundary for THIS epic, not a permanent
+  capability verdict. File the follow-up; never a silent no.
+
+> The `[fix:]` decisions above are the architect (F1-F4, GO §8.1/§8.2, topology) +
+> team-lead verdict baked into the plan. This file is the ONE place to update; every
+> citing state inherits it.
 
 ## Interface contracts
 

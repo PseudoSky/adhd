@@ -57,3 +57,10 @@ The HIGHEST-RISK Phase-2 state — MCP is GAINING validate-layer + streaming + `
 ## Notes for executor
 
 Fixes BUG-APIGEN-SERVE-CORE-001 (first-time validate-layer) + wires projectStreamMcp. malformed->invalid_argument is a flagged behavior change. Real @modelcontextprotocol/sdk client only.
+
+
+## Review folds
+
+- **[fix:use-capability-explicit] (dod.11):** mcp gains `--use` layer AND mount composition via `createPackageInvoker` (GO §8.1) — state explicitly that mcp now hosts `--use` mount ops and pin it. dod.4 covers validate-layer composition; this is the SEPARATE mount capability.
+- **[fix:mcp-toolmeta-hoist] (dod.12):** the tool table / `toolMetas` is computed ONCE at startup from `OpPlan`, NOT rebuilt per request in streaming-http mode (`run.ts:269-276`). Add a test asserting the build count stays 1 across multiple CallTool requests.
+- Stamp `plan.transport = 'mcp'` per [fix:transport-stamping] — a hardcoded `'http'` in `dispatchForPlan` would mis-tag mcp mount provenance.

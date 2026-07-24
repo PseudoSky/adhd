@@ -58,3 +58,11 @@ The `Operation → wire` projection is re-authored per plugin today; this state 
 ## Notes for executor
 
 New serve-core primitives (OpPlan, createPackageInvoker, dispatchForPlan) + TransportAdapter port. Grounded in [iface:op-plan],[iface:transport-adapter],[iface:create-package-invoker],[iface:dispatch-for-plan].
+
+
+## Review folds (architect F1/F2/F3 + topology)
+
+- **F1 [fix:layerresult-return]:** cite the CORRECTED signatures, not the proposal §3b/§3c sketch — `dispatchForPlan` returns `Promise<LayerResult>`; `TransportAdapter.registerRoute`'s dispatch callback is `(call)=>Promise<LayerResult>`; `writeResult` takes the resolved `LayerResult`. `invoke()` ALWAYS returns a Promise (`invoke.ts:94-102,152-156`) — the bare-union sketch does not type-check. ([iface:dispatch-for-plan], [iface:transport-adapter])
+- **F2:** `OpPlan.cliFlags` value carries `envVar?:string` (cli-output `FlagSpec`, `run.ts:53-59`) so `parseArgs`'s flag->env-var fallback (`run.ts:300-306`) is not silently regressed in Phase 2c. ([iface:op-plan])
+- **F3 [fix:transport-stamping]:** `OpPlan.transport: Transport` is stamped per-package; `dispatchForPlan`'s mount branch adapts runtime `Call` -> core-client `Call` and stamps `Call.transport` from `plan.transport` — decided AND tested in Phase 1, never a hardcoded `'http'`.
+- **Topology [fix:invoker-promotion]:** `createPackageInvoker` PROMOTES `UsePlugin`/`readUsePlugins`/`readUseOptions`/`adaptCoreLayer`/`buildInvokerForPackage` into `apigen-engine-runtime`; these are then DELETED from the fastify/express plugin files (dod.13). Name the migration + deletion, not just "extract OpPlan."

@@ -44,7 +44,7 @@
         "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.spec.ts"
       ],
       "context": "contexts/parity-harness.md",
-      "notes": "Shared golden-fixture parity harness (proposal §6): golden-capture + deep-equal re-capture + negative-control helpers, driving REAL consumer protocols."
+      "notes": "Shared golden-fixture parity harness (proposal \u00a76): golden-capture + deep-equal re-capture + negative-control helpers, driving REAL consumer protocols."
     },
     "fastify-adapter": {
       "kind": "work",
@@ -68,7 +68,11 @@
       "changes": {
         "deletes": [
           "resolveRoute",
-          "resolveOperation"
+          "resolveOperation",
+          "buildInvokerForPackage",
+          "readUsePlugins",
+          "readUseOptions",
+          "adaptCoreLayer"
         ]
       }
     },
@@ -104,7 +108,11 @@
       "notes": "Collapse onto shared adapter; closes DEBT-003 (undefined->null). Void-return fixture pins the intentional change.",
       "changes": {
         "deletes": [
-          "buildOperationIndex"
+          "buildOperationIndex",
+          "buildInvokerForPackage",
+          "readUsePlugins",
+          "readUseOptions",
+          "adaptCoreLayer"
         ]
       }
     },
@@ -179,7 +187,7 @@
         "docs/apigen/proposals/py-extract-serve-split-findings.md"
       ],
       "context": "contexts/py-extract-preflight.md",
-      "notes": "SPIKE (proposal §8.3): verify extractor.py has no import-time side effects tied to serving; read py-grpc run/grpc_server shape. Records DECISION: line gating Phase 3."
+      "notes": "SPIKE (proposal \u00a78.3): verify extractor.py has no import-time side effects tied to serving; read py-grpc run/grpc_server shape. Records DECISION: line gating Phase 3."
     },
     "py-flask-serve-split": {
       "kind": "work",
