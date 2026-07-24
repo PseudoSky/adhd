@@ -11,6 +11,9 @@
     "venv",
     "provisioning"
   ],
+  "dependencies": {
+    "@adhd/apigen-core-client": "0.1.2"
+  },
   "publishConfig": {
     "access": "public"
   },

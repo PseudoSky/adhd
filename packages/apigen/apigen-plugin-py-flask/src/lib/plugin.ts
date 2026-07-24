@@ -70,7 +70,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { Operation, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
-import { ensurePythonEnv } from '@adhd/apigen-python-env';
+import { ensurePythonEnv, runExtractorEmitJson } from '@adhd/apigen-python-env';
 import { project } from '@adhd/apigen-engine-naming';
 
 // ---------------------------------------------------------------------------
@@ -157,67 +157,10 @@ interface ServePlan {
   routes: Record<string, ServePlanRoute>;
 }
 
-/**
- * Runs `python -m apigen_python.extractor --emit-json` to completion and
- * parses its stdout into `Operation[]` — phase 1 of the two-phase spawn
- * (module docstring). This is a short-lived process: it exits as soon as
- * extraction finishes, well before `flask_server` (phase 3) is spawned.
- */
-function runExtractorEmitJson(
-  pyenv: ReturnType<typeof ensurePythonEnv>,
-  modulePath: string,
-  namespace: string
-): Promise<Operation[]> {
-  return new Promise<Operation[]>((resolve, reject) => {
-    const proc = spawn(
-      pyenv.python,
-      [
-        '-m',
-        'apigen_python.extractor',
-        modulePath,
-        '--namespace',
-        namespace,
-        '--emit-json',
-      ],
-      {
-        cwd: pyenv.pythonPkgDir,
-        env: { ...process.env, PYTHONPATH: pyenv.pythonPkgDir },
-        stdio: ['ignore', 'pipe', 'pipe'],
-      }
-    );
-
-    let stdout = '';
-    let stderr = '';
-    proc.stdout?.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString('utf8');
-    });
-    proc.stderr?.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf8');
-    });
-    proc.on('error', reject);
-    proc.on('exit', (code) => {
-      if (code !== 0) {
-        reject(
-          new Error(
-            `py-flask: extractor --emit-json exited with code ${code}:\n${stderr}`
-          )
-        );
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout) as Operation[]);
-      } catch (err) {
-        reject(
-          new Error(
-            `py-flask: extractor --emit-json produced invalid JSON (${
-              (err as Error).message
-            }):\n${stdout}`
-          )
-        );
-      }
-    });
-  });
-}
+// `runExtractorEmitJson` (phase 1 of the two-phase spawn — module docstring)
+// now lives in `@adhd/apigen-python-env` (previously hand-duplicated here,
+// in `apigen-plugin-py-grpc`, and in the cross-host response-envelope
+// integration test — see that shared module's doc comment).
 
 // ---------------------------------------------------------------------------
 // run() — two-phase spawn: extract-only, then project(), then serve.
@@ -249,7 +192,13 @@ async function run(input: RunInput): Promise<void> {
   const pyenv = ensurePythonEnv({});
 
   // ---- Phase 1: extract-only subprocess -> Operation[] ----
-  const operations = await runExtractorEmitJson(pyenv, modulePath, namespace);
+  const operations = await runExtractorEmitJson(
+    pyenv.python,
+    pyenv.pythonPkgDir,
+    modulePath,
+    namespace,
+    'py-flask'
+  );
 
   // ---- Phase 2: canonical route/verb via the REAL project() (never a
   // Python re-derivation — BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001) ----
