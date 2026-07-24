@@ -10,6 +10,7 @@ import type { EnvironmentOptions, EnvironmentSpec, Scope } from '@adhd/environme
 export interface BacklogConfig {
   readonly db: { readonly path: string | undefined; readonly busyTimeoutMs: number };
   readonly logging: { readonly level: string };
+  readonly migration: { readonly phase: string };
 }
 
 export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
@@ -43,6 +44,15 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
       env: 'ADHD_BACKLOG_LOG_LEVEL',
       default: 'info',
       enum: ['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent'],
+    },
+    'migration.phase': {
+      type: 'string',
+      env: 'ADHD_BACKLOG_MIGRATION_PHASE',
+      default: 'not-started',
+      enum: ['not-started', 'phase-1', 'phase-2', 'phase-3', 'phase-4', 'phase-5', 'complete'],
+      description:
+        'MIGRATION.md §4.4 — a queried signal (never hardcoded prose) for whether BACKLOG.md or the tool is authoritative right now. ' +
+        'Read via `migrationStatus(ctx)`/`backlog migration-status`. NOT yet per-repo-keyed (MIGRATION.md §9 open decision 6) — one global value.',
     },
   },
 };

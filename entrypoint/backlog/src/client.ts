@@ -27,6 +27,8 @@ import type {
   DependencyGraph,
   ImportMarkdownInput,
   ImportResult,
+  MigrationPhase,
+  MigrationStatusResult,
   Priority,
   ReleaseResult,
   StatsScope,
@@ -302,4 +304,30 @@ export async function exportJson(ctx: BacklogCtx, filter?: BacklogFilter): Promi
 /** Bi-temporal history + supersession chain. */
 export async function auditTrail(ctx: BacklogCtx, repo: string, humanId: string): Promise<AuditTrailResult> {
   return auditTrailNode(ctx.store, repo, humanId);
+}
+
+const MIGRATION_PHASE_DESCRIPTIONS: Record<MigrationPhase, string> = {
+  'not-started': 'not-started: BACKLOG.md is authoritative everywhere; the tool has not been adopted for this repo yet.',
+  'phase-1': 'phase-1: seed import complete (or in progress) — BACKLOG.md remains authoritative; the graph is a read-only shadow copy.',
+  'phase-2': 'phase-2: BACKLOG.md is still authoritative; the tool is shadow-running in parity-check mode (render vs. hand-edited markdown, non-blocking).',
+  'phase-3': 'phase-3: the graph is authoritative. File/claim/transition/resolve via the backlog CLI/MCP — every BACKLOG.md is a generated projection, never hand-edited.',
+  'phase-4': 'phase-4: phase-3 write path is live; the backlog-usage skill is published and distributed for agent discovery.',
+  'phase-5': 'phase-5: the legacy tools/util/backlog.mjs parser has been deprecated/removed.',
+  complete: 'complete: migration fully done, including cross-repo rollout (Phase 6) where applicable.',
+};
+
+/**
+ * MIGRATION.md §4.4 — a QUERIED signal, never hardcoded prose: reports the
+ * live `migration.phase` config value (`env.ts`, env-overridable via
+ * `ADHD_BACKLOG_MIGRATION_PHASE`) plus a human-readable meaning, so an agent
+ * (or the `backlog-usage` skill) always asks the tool which of BACKLOG.md or
+ * the tool is authoritative right now, instead of trusting a stale doc
+ * sentence. NOT yet per-repo-keyed (MIGRATION.md §9 open decision 6) — one
+ * global value for the whole machine.
+ */
+export async function migrationStatus(ctx: BacklogCtx): Promise<MigrationStatusResult> {
+  const phase = ctx.env.config.migration.phase as MigrationPhase;
+  const description = MIGRATION_PHASE_DESCRIPTIONS[phase] ?? `unknown phase value: ${phase}`;
+  const toolIsAuthoritative = phase === 'phase-3' || phase === 'phase-4' || phase === 'phase-5' || phase === 'complete';
+  return { phase, description, toolIsAuthoritative };
 }

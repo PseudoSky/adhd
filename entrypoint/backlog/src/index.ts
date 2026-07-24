@@ -30,6 +30,7 @@ export {
   linkRelated,
   listItems,
   mergeItems,
+  migrationStatus,
   readyItems,
   releaseClaim,
   removeDependency,

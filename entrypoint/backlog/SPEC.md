@@ -505,6 +505,15 @@ export interface AuditTrailResult {
 }
 /** Bi-temporal history + supersession chain (getSupersessionChain), per DESIGN.md §2.3. */
 export async function auditTrail(ctx: BacklogCtx, repo: string, humanId: string): Promise<AuditTrailResult>;
+
+export type MigrationPhase = 'not-started' | 'phase-1' | 'phase-2' | 'phase-3' | 'phase-4' | 'phase-5' | 'complete';
+export interface MigrationStatusResult {
+  phase: MigrationPhase;
+  description: string;
+  toolIsAuthoritative: boolean;
+}
+/** MIGRATION.md §4.4 — a QUERIED signal (config `migration.phase`, env `ADHD_BACKLOG_MIGRATION_PHASE`), never hardcoded prose. */
+export async function migrationStatus(ctx: BacklogCtx): Promise<MigrationStatusResult>;
 ```
 
 ## 6. Standardized status vocabulary — normalization table (import compatibility)
