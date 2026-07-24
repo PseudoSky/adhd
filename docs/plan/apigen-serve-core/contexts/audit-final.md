@@ -1,12 +1,12 @@
-# audit-final — STATE_NAME
+# audit-final — Final audit — every [dod.N] proven
 
-**Phase:** final · **Kind:** audit · **Depends on:** audit-transports, audit-python · **Guard:** `node docs/plan/apigen-serve-core/scripts/run-audit.js --phase final`
+**Phase:** final · **Kind:** audit · **Depends on:** audit-transports, audit-python · **Guard:** `python3 docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py --phase final`
 
 ---
 
 ## Goal
 
-<What is true after this state that was not true before?>
+Every [dod.1]..[dod.10] emits an executed PASS: all transport parity gates green, all flagged behavior changes tested, the two out-of-scope bugs pinned unchanged, no shim modules remain, and verify-dist-load is green for every consumer-loaded package. This is what 'done' means.
 
 ---
 
@@ -31,4 +31,4 @@ mutates:    ["docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"]
 
 ## Notes for executor
 
-<footguns, ordering constraints, non-obvious decisions>
+Read-only audit: fixes go in SOURCE, never by weakening a check. Runs `audit_apigen-serve-core.py --phase final` which proxies run-audit.js over criteria.json (accumulating prior phases) and, for `final`, emits every `[dod.N]` proof. Every fix made during this audit is listed in the transition log.

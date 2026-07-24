@@ -1,4 +1,4 @@
-# mcp-adapter — STATE_NAME
+# mcp-adapter — mcp migration + first-time validate layer (BUG-001)
 
 **Phase:** phase-2 · **Kind:** work · **Depends on:** audit-foundation · **Guard:** `CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test`
 
@@ -6,7 +6,7 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+`mcp` is a `TransportAdapter`; `createPackageInvoker`+`makeValidateLayer` are composed for the FIRST time (closing `BUG-APIGEN-SERVE-CORE-001` — malformed input now rejects with `invalid_argument`); `projectStreamMcp` is wired live; `toolMetas` are hoisted out of the per-request path; the tool-naming shim is collapsed; the mcp [def:parity-gate] is green via a real sdk client (incl. the malformed case) with a recorded [inv:negative-control].
 
 ---
 
@@ -31,6 +31,24 @@
 read_only:  ["packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts", "packages/apigen/apigen-engine-runtime/src/lib/package-invoker.ts", "packages/apigen/apigen-engine-runtime/src/lib/dispatch-for-plan.ts", "packages/apigen/apigen-engine-runtime/src/lib/transport-adapter.ts", "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts", "packages/apigen/apigen-engine-runtime/src/lib/validate-layer.ts", "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts", "packages/apigen/apigen-engine-naming/src/lib/naming.ts", "packages/apigen/apigen-core-client/src/lib/plugin.ts"]
 mutates:    ["packages/apigen/apigen-plugin-mcp/src/lib/run.ts", "packages/apigen/apigen-plugin-mcp/src/lib/generate.ts", "packages/apigen/apigen-plugin-mcp/src/lib/tool-naming.ts", "packages/apigen/apigen-plugin-mcp/src/lib/stream.ts", "packages/apigen/apigen-plugin-mcp/src/test/run.spec.ts", "packages/apigen/apigen-plugin-mcp/src/test/golden/mcp.snapshot.json", "docs/plan/apigen-serve-core/neg-control/mcp-adapter.patch"]
 ```
+
+---
+
+## Semantic Distillation
+
+The HIGHEST-RISK Phase-2 state — MCP is GAINING validate-layer + streaming + `--use` for the first time, not collapsing onto an existing shape. Today `run.ts:126-173` calls `dispatch()` directly and imports no `createInvoker`/`makeValidateLayer` (`run.ts:1-22`); `run.ts:269-276` rebuilds the whole tool table PER REQUEST in `streaming-http` mode. Drive ONLY a real `@modelcontextprotocol/sdk` client against the BUILT server (AGENTS.md §"Proving an MCP server works") — never `run.ts` internals. Applies [fix:streaming-wired].
+
+---
+
+## Contract Promise
+
+**modified:** `run.ts` (adapter + validate composition + hoisted `toolMetas`), `generate.ts`, `stream.ts` (`projectStreamMcp` called). **deleted:** `deriveToolName`/`findOperation` from `tool-naming.ts` (collapsed into `OpPlan.mcp.name`). **added:** `golden/mcp.snapshot.json` + `neg-control/mcp-adapter.patch`. **flagged behavior change:** malformed input `invalid_argument` (`[dod.4]`) — previously succeeded; call out as breaking in the commit/PR.
+
+---
+
+## Commit points
+
+(1) capture + commit `golden/mcp.snapshot.json` first; (2) migration + parity green (incl. malformed→invalid_argument case); (3) neg-control recorded. Post-guard: `fix(apigen-plugin-mcp): compose validate-layer + migrate to TransportAdapter (BUG-APIGEN-SERVE-CORE-001)`.
 
 ---
 

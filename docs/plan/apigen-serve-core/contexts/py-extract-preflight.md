@@ -1,4 +1,4 @@
-# py-extract-preflight — STATE_NAME
+# py-extract-preflight — Python extract/serve split preflight (spike, §8.3)
 
 **Phase:** phase-3 · **Kind:** work · **Depends on:** audit-foundation · **Guard:** `grep -q '^DECISION:' docs/apigen/proposals/py-extract-serve-split-findings.md`
 
@@ -6,7 +6,7 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+A findings doc records, with a machine-checkable `DECISION:` line, (a) whether `apigen_python.extractor.extract_module()` has import-time side effects tied to the serving process (proposal §8.3) — i.e. whether the two-phase extract/serve split is safe as designed — and (b) the py-grpc `plugin.ts` + `grpc_server.py` run/serve shape and whether it mirrors py-flask's spawn+re-derivation.
 
 ---
 
@@ -28,6 +28,24 @@
 read_only:  ["packages/apigen/python/apigen_python/extractor.py", "packages/apigen/python/apigen_python/flask_server.py", "packages/apigen/python/apigen_python/grpc_server.py", "packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts", "packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts", "packages/apigen/apigen-engine-naming/src/lib/naming.ts"]
 mutates:    ["docs/apigen/proposals/py-extract-serve-split-findings.md"]
 ```
+
+---
+
+## Semantic Distillation
+
+A SPIKE that gates all of Phase 3. It resolves the one open assumption the architecture review time-boxed out: `extractor.py` was NOT read in the review, and py-grpc's shape was NOT verified. If extraction carries serving-coupled import-time state, the split needs adjustment and this state escalates PLANNER-CLASS (a state may need inserting). If py-grpc does NOT mirror py-flask, `py-grpc-serve-split`'s scope/criteria are amended before it runs.
+
+---
+
+## Contract Promise
+
+**added:** `docs/apigen/proposals/py-extract-serve-split-findings.md` with a `DECISION:` line + a `grpc_server`-shape section. **modified/deleted:** no source.
+
+---
+
+## Commit points
+
+After the findings doc has a `DECISION:` line: `docs(apigen): py extract/serve split preflight findings (proposal §8.3)`.
 
 ---
 
