@@ -41,3 +41,15 @@ jobs:
 
       - run: npx nx format:check
       - run: npx nx affected -t lint test build verify-dist-load
+
+      - name: Backlog migration Phase-2 parity check (non-blocking soak — MIGRATION.md §Phase 2)
+        # Diagnostic only: reports every {sourcePath, filter} projection row
+        # where the graph's renderToMarkdown view disagrees with the live
+        # hand-edited BACKLOG.md. Never fails the job (continue-on-error) —
+        # per MIGRATION.md, this stays non-blocking until Phase 2's soak
+        # period proves convergence, at which point Phase 3 promotes it to
+        # blocking.
+        continue-on-error: true
+        run: |
+          npx nx build backlog
+          node docs/plan/backlog-adoption/parity-check.mjs

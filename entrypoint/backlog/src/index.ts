@@ -37,6 +37,7 @@ export {
   renderToMarkdown,
   renewClaim,
   resolveItem,
+  setMigrationPhase,
   setPriority,
   softDeleteItem,
   spotlight,
