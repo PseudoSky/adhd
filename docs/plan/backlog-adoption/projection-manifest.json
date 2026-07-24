@@ -15,10 +15,15 @@
     { "sourcePath": "packages/agent/agent-engine-compiler/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/agent/agent-engine-compiler" } },
     { "sourcePath": "packages/agent/agent-plugin-budget/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/agent/agent-plugin-budget" } },
     { "sourcePath": "packages/agent/agent-store-prompts/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/agent/agent-store-prompts" } },
-    { "sourcePath": "packages/environment/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/environment" } }
+    { "sourcePath": "packages/environment/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/environment" } },
+    { "sourcePath": "packages/apigen/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/apigen" } },
+    { "sourcePath": "packages/apigen/apigen-core-client/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/apigen/apigen-core-client" } },
+    { "sourcePath": "packages/apigen/apigen-engine-conformance/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/apigen/apigen-engine-conformance" } },
+    { "sourcePath": "packages/apigen/apigen-engine-runtime/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/apigen/apigen-engine-runtime" } },
+    { "sourcePath": "packages/apigen/python-env/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/apigen/python-env" } }
   ],
   "excludedThisSession": {
-    "packagesApigenStar": "packages/apigen/** excluded per explicit instruction — a separate apigen orchestration is running concurrently there; re-run Phase 1 import + add manifest rows for these once that work lands.",
+    "packagesApigenStar": "RESOLVED 2026-07-24 — packages/apigen/** was excluded in the initial Phase-1 pass (a separate, concurrent apigen-serve-core orchestration owns that tree); the 5 rows above were added and imported once confirmed read-only-safe (the concurrent orchestration only edits the markdown files, never the graph store, so importing does not race it — re-run this import again after that plan closes to pick up its final BACKLOG->CHANGELOG state).",
     "worktrees": ".worktrees/** and .claude/worktrees/** excluded — these are checked-out copies of files already covered above, not distinct sources."
   }
 }
