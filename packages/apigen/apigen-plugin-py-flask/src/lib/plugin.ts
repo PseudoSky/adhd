@@ -47,9 +47,18 @@
  * package stub; see `entrypoint/apigen-cli/src/lib/commands/run.ts`).
  * Instead, THIS plugin obtains `Operation[]` itself via phase 1 above.
  *
- * The Python server emits `{"ready":true}` on stdout immediately after
- * binding the port.  This plugin waits for that line (bounded to 10 s)
- * before resolving, so downstream tools know the server is ready.
+ * The Python server emits `{"ready":true,"port":<n>}` on stdout immediately
+ * after binding the port (`port` is the ACTUAL bound port — identical to the
+ * requested one unless `port: 0` was passed, in which case the OS assigned
+ * it — BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001). This plugin waits for that
+ * line (bounded to 10 s) before resolving `run()`'s own readiness wait.
+ *
+ * `input.options['onListening']`, if supplied, is an escape hatch (NOT part
+ * of the shared `RunInput`/`PluginInput` type — `options` is already an
+ * untyped bag) invoked with the actual bound port once the server reports
+ * ready. Production callers never pass it and behavior is unchanged; test
+ * callers that pass `port: 0` for ephemeral-port isolation use it to learn
+ * which port the server actually bound.
  *
  * Usage:
  *   apigen run --source my_api.py --type py-flask --opt port=8000 --opt namespace=myapi
@@ -74,18 +83,19 @@ import { project } from '@adhd/apigen-engine-naming';
 // server never depends on the ambient PATH python having grpcio installed.
 
 /**
- * Wait until the Python subprocess emits `{"ready":true}` on stdout
- * or the process exits (failure), bounded by `timeoutMs`.
+ * Wait until the Python subprocess emits `{"ready":true,"port":<n>}` on
+ * stdout or the process exits (failure), bounded by `timeoutMs`.
  *
  * @param proc       - The spawned child process.
  * @param timeoutMs  - Maximum milliseconds to wait (default 10 000).
- * @returns           Resolves when ready; rejects on timeout or early exit.
+ * @returns           Resolves with the ACTUAL bound port once ready; rejects
+ *                     on timeout or early exit.
  */
 function waitForReady(
   proc: ChildProcessWithoutNullStreams,
   timeoutMs = 10_000
-): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
+): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
     const rl = readline.createInterface({ input: proc.stdout });
     let settled = false;
 
@@ -108,7 +118,7 @@ function waitForReady(
       try {
         const msg = JSON.parse(trimmed) as Record<string, unknown>;
         if (msg['ready'] === true) {
-          settle(() => resolve());
+          settle(() => resolve(msg['port'] as number));
         }
       } catch {
         // Not JSON — ignore; the server may log non-JSON lines
@@ -302,11 +312,22 @@ async function run(input: RunInput): Promise<void> {
   // tests, the gateway) can start sending requests immediately. Only once
   // the server has bound its port (and therefore already read --plan-file
   // during _build_state()) is it safe to clean up the temp plan file.
+  let boundPort: number;
   try {
-    await waitForReady(proc);
+    boundPort = await waitForReady(proc);
   } finally {
     cleanupPlan();
   }
+
+  // BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001: report the ACTUAL bound port
+  // back to the caller via the `onListening` escape hatch on `options` (see
+  // module docstring — deliberately not a change to the shared `RunInput`
+  // type). No-op for production callers, who never pass `port: 0` and never
+  // supply this callback.
+  const onListening = input.options['onListening'] as
+    | ((port: number) => void)
+    | undefined;
+  onListening?.(boundPort);
 
   // Block until the signal fires (SIGINT/SIGTERM → controller.abort())
   // or the process exits unexpectedly.

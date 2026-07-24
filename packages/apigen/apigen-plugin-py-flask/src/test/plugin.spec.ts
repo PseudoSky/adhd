@@ -64,9 +64,20 @@ import {
 const PYENV = ensurePythonEnv();
 const PYTHON_PKG_DIR = PYENV.pythonPkgDir;
 const FIXTURE_MODULE = path.resolve(__dirname, 'fixtures', 'test_api.py');
-const PORT = 49271; // deterministic high port, avoids clashes
 const NS = 'testapi';
-const BASE = `http://127.0.0.1:${PORT}`;
+// BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001: no fixed port. Every
+// `startServer()` call below requests an OS-assigned ephemeral port
+// (`--port 0`) and learns the actual bound port from the `{"ready":true,
+// "port":<n>}` stdout line — see `LiveServer.port`. `base()` reads it off
+// the currently-active `server` so concurrent runs of this suite (or of
+// py-flask alongside py-grpc) on the same shared checkout can never collide
+// on the same TCP port.
+function base(): string {
+  if (!server) {
+    throw new Error('py-flask test: base() called with no active server');
+  }
+  return `http://127.0.0.1:${server.port}`;
+}
 
 // ---------------------------------------------------------------------------
 // --plan-file construction — apigen-serve-core py-flask-serve-split
@@ -223,6 +234,12 @@ function routeFor(op: Operation): string {
 interface LiveServer {
   proc: ChildProcessWithoutNullStreams;
   /**
+   * The ACTUAL bound port, read back from the `{"ready":true,"port":<n>}`
+   * stdout line (BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001) — never the
+   * requested port, since `startServer()` always requests ephemeral (0).
+   */
+  port: number;
+  /**
    * Every stderr line emitted by the Python process since spawn, in order —
    * captured from the very first 'data' event (not attached post-hoc), so
    * the route log `start()` prints synchronously before the readiness signal
@@ -232,7 +249,14 @@ interface LiveServer {
   stop(): Promise<void>;
 }
 
-async function startServer(port: number = PORT): Promise<LiveServer> {
+/**
+ * @param port - TCP port to request. Defaults to `0` (OS-assigned ephemeral
+ *   — BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001), so concurrent test runs on
+ *   the same shared checkout can never collide on the same port. Callers
+ *   that need a genuinely fixed port (e.g. the streaming-rejection test,
+ *   which never actually binds) may still pass one explicitly.
+ */
+async function startServer(port = 0): Promise<LiveServer> {
   const planPath = await ensurePlan();
   const proc = spawn(
     PYENV.python,
@@ -265,8 +289,9 @@ async function startServer(port: number = PORT): Promise<LiveServer> {
     process.stderr.write(line + '\n');
   });
 
-  // Wait for {"ready":true} on stdout — bounded to 10 s, event-driven
-  await new Promise<void>((resolve, reject) => {
+  // Wait for {"ready":true,"port":<n>} on stdout — bounded to 10 s,
+  // event-driven. Resolves with the ACTUAL bound port.
+  const boundPort = await new Promise<number>((resolve, reject) => {
     const rl = readline.createInterface({ input: proc.stdout });
     let done = false;
     const timer = setTimeout(() => {
@@ -288,7 +313,7 @@ async function startServer(port: number = PORT): Promise<LiveServer> {
           done = true;
           clearTimeout(timer);
           rl.close();
-          resolve();
+          resolve(msg['port'] as number);
         }
       } catch {
         /* non-JSON line — keep waiting */
@@ -305,6 +330,7 @@ async function startServer(port: number = PORT): Promise<LiveServer> {
 
   return {
     proc,
+    port: boundPort,
     stderrLines,
     async stop() {
       // Awaits the REAL exit event (SIGTERM, escalating to SIGKILL if it
@@ -341,7 +367,7 @@ async function post(
   // (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001), not the old flat
   // `/<ns>/<fnName>` shape.
   const route = routeFor(pyOp(fn, {}));
-  return fetch(`${BASE}${route}`, {
+  return fetch(`${base()}${route}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ data }),
@@ -349,7 +375,7 @@ async function post(
 }
 
 async function getHealth(): Promise<Response> {
-  return fetch(`${BASE}/_meta/health`);
+  return fetch(`${base()}/_meta/health`);
 }
 
 // ---------------------------------------------------------------------------
@@ -440,7 +466,7 @@ describe('py-flask plugin — LIVE server', () => {
 
   it('[envelope] x-adhd-session header forwarded to ctx parameter', async () => {
     server = await startServer();
-    const res = await fetch(`${BASE}${routeFor(GREET_WITH_CTX_OP)}`, {
+    const res = await fetch(`${base()}${routeFor(GREET_WITH_CTX_OP)}`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -455,7 +481,7 @@ describe('py-flask plugin — LIVE server', () => {
 
   it('[not found] unknown route → 404', async () => {
     server = await startServer();
-    const res = await fetch(`${BASE}${routeFor(pyOp('does_not_exist', {}))}`, {
+    const res = await fetch(`${base()}${routeFor(pyOp('does_not_exist', {}))}`, {
       method: 'POST',
       body: '{}',
       headers: { 'content-type': 'application/json' },
@@ -496,7 +522,7 @@ describe('py-flask plugin — route/verb parity with project() (BUG-APIGEN-OPENA
 
     // Positive: a real GET request to the project()-derived, kebab, 3-segment
     // route succeeds.
-    const res = await fetch(`${BASE}${route}?msg=hello`);
+    const res = await fetch(`${base()}${route}?msg=hello`);
     expect(res.status).toBe(200);
     expect(await res.json()).toBe('hello');
 
@@ -505,7 +531,7 @@ describe('py-flask plugin — route/verb parity with project() (BUG-APIGEN-OPENA
     // manually against the pre-fix flask_server.py: this same request
     // returned 200 there (and the line above's 3-segment GET 404'd), i.e.
     // this assertion is RED against the old code and GREEN against the fix.
-    const legacy = await fetch(`${BASE}/${NS}/echo_str`, {
+    const legacy = await fetch(`${base()}/${NS}/echo_str`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { msg: 'hello' } }),
@@ -519,7 +545,7 @@ describe('py-flask plugin — route/verb parity with project() (BUG-APIGEN-OPENA
     expect(verb).toBe('POST');
 
     // Positive: POST to the project()-derived, kebab, 3-segment route.
-    const res = await fetch(`${BASE}${route}`, {
+    const res = await fetch(`${base()}${route}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { values: [1, 2, 3] } }),
@@ -528,7 +554,7 @@ describe('py-flask plugin — route/verb parity with project() (BUG-APIGEN-OPENA
     expect(await res.json()).toBe(6);
 
     // NEGATIVE CONTROL: the pre-fix flat route 404s now.
-    const legacy = await fetch(`${BASE}/${NS}/sum_ints`, {
+    const legacy = await fetch(`${base()}/${NS}/sum_ints`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ data: { values: [1, 2, 3] } }),
@@ -537,7 +563,7 @@ describe('py-flask plugin — route/verb parity with project() (BUG-APIGEN-OPENA
 
     // A GET to the same canonical route must be rejected (POST-only op) —
     // proves the verb, not just the path, is honored.
-    const wrongVerb = await fetch(`${BASE}${route}?values=1`);
+    const wrongVerb = await fetch(`${base()}${route}?values=1`);
     expect(wrongVerb.status).toBe(405);
   });
 
@@ -597,7 +623,9 @@ interface HttpFixtureOutput {
   body: string;
 }
 
-const PARITY_PORT = 49290; // distinct from PORT (49271) — its own server lifecycle
+// BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001: no fixed PARITY_PORT — this
+// suite's own server (below) requests ephemeral port 0 and learns the
+// actual bound port via the `onListening` escape hatch.
 const PARITY_GOLDEN_PATH = path.join(__dirname, 'golden', 'py-flask.snapshot.json');
 
 /** Route for `fnName` in the fixture module, with an empty input schema —
@@ -684,32 +712,42 @@ describe('[py-flask-parity] extract/serve-split golden-snapshot parity gate', ()
     // patches would stay GREEN no matter what — AGENTS.md §7 "drive the real
     // entrypoint, never a bypass").
     controller = new AbortController();
-    const base = `http://127.0.0.1:${PARITY_PORT}`;
-    const runInput: RunInput = {
-      packages: [{ id: NS, schemas: {}, importPath: FIXTURE_MODULE }],
-      outputDir: '/tmp/out',
-      options: { port: PARITY_PORT, namespace: NS },
-      signal: controller.signal,
-    };
-    runPromise = pyFlaskPlugin.run(runInput).catch(() => {
-      /* swallowed after abort */
-    });
 
-    // Poll for readiness — pyFlaskPlugin.run()'s own promise doesn't resolve
-    // until the process exits/aborts, so wait on the real health endpoint.
-    const deadline = Date.now() + 15000;
-    for (;;) {
-      try {
-        const res = await fetch(`${base}/_meta/health`);
-        if (res.status < 500) break;
-      } catch {
-        /* not listening yet */
-      }
-      if (Date.now() > deadline) {
-        throw new Error('[py-flask-parity] server did not become ready within 15s');
-      }
-      await new Promise((r) => setTimeout(r, 50));
-    }
+    // BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001: request an OS-assigned
+    // ephemeral port (0) and learn the real one via `onListening` — the
+    // production `RunInput`/`OutputPlugin` types are untouched; `options` is
+    // already an untyped bag and `onListening` is plugin.ts's own escape
+    // hatch (see its module docstring). `onListening` fires only after
+    // plugin.ts's own `waitForReady()` has already parsed the server's
+    // `{"ready":true}` line, so by the time `portPromise` resolves the
+    // server is genuinely accepting connections — no separate health-poll
+    // loop is needed.
+    const portPromise = new Promise<number>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error('[py-flask-parity] server did not report a bound port within 15s'));
+      }, 15000);
+      const runInput: RunInput = {
+        packages: [{ id: NS, schemas: {}, importPath: FIXTURE_MODULE }],
+        outputDir: '/tmp/out',
+        options: {
+          port: 0,
+          namespace: NS,
+          onListening: (port: number) => {
+            clearTimeout(timer);
+            resolve(port);
+          },
+        },
+        signal: controller.signal,
+      };
+      runPromise = pyFlaskPlugin.run(runInput).catch((err: unknown) => {
+        // If the process died before reporting readiness, surface that as
+        // the portPromise rejection reason instead of waiting out the timer.
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      });
+    });
+    const boundPort = await portPromise;
+    const base = `http://127.0.0.1:${boundPort}`;
 
     driver = {
       async invoke(fixture: GoldenFixture<HttpFixtureInput>): Promise<HttpFixtureOutput> {

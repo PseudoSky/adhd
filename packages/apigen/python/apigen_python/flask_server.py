@@ -597,6 +597,16 @@ class ApigenFlaskServer:
         httpd.state = state  # type: ignore[attr-defined]
         self._httpd = httpd
 
+        # BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001: bind() already happened
+        # synchronously in the `_Server(...)` constructor above (TCPServer.
+        # __init__ calls server_bind()+server_activate() before returning), so
+        # the OS has already resolved `port=0` to a real ephemeral port by
+        # this point. Read the actual bound port back so callers that asked
+        # for port 0 can learn what they actually got — self._port is the
+        # single source of truth from here on (used by the log line below and
+        # by serve_forever()'s readiness signal).
+        self._port = httpd.socket.getsockname()[1]
+
         # Log the registered routes to stderr — canonical route/verb, TS-
         # computed via the injected --plan-file (BUG-APIGEN-OPENAPI-ROUTE-
         # PATH-MISMATCH-001), not re-derived here.
@@ -622,13 +632,16 @@ class ApigenFlaskServer:
     def serve_forever(self) -> None:
         """Block until interrupted (Ctrl-C / SIGTERM).
 
-        Prints the §13.1-compatible readiness signal ``{"ready": true}`` to
-        stdout immediately after the server thread starts, so the TS plugin
-        subprocess launcher can poll for it.
+        Prints the §13.1-compatible readiness signal ``{"ready": true, "port":
+        <n>}`` to stdout immediately after the server thread starts, so the TS
+        plugin subprocess launcher can poll for it. ``port`` is the ACTUAL
+        bound port (BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001) — identical to
+        the requested ``--port`` unless 0 (OS-assigned ephemeral) was passed,
+        in which case this is the only way the caller learns the real port.
         """
         self.start()
         # §13.1 readiness signal — TS launcher polls for this line on stdout
-        print(json.dumps({"ready": True}), flush=True)
+        print(json.dumps({"ready": True, "port": self._port}), flush=True)
         try:
             # Block main thread while the daemon thread serves
             if self._thread is not None:
@@ -700,7 +713,9 @@ def _main() -> None:
     )
     parser.add_argument(
         "--port", type=int, default=8000,
-        help="TCP port (default: 8000)"
+        help="TCP port (default: 8000; pass 0 to bind an OS-assigned "
+             "ephemeral port — the actual bound port is reported back in "
+             "the {ready: true, port: <n>} stdout line)"
     )
     parser.add_argument(
         "--plan-file", required=True,

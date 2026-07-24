@@ -792,7 +792,13 @@ class ApigenGrpcServer:
             )
 
         address = f"{self._host}:{self._port}"
-        server.add_insecure_port(address)
+        # BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001: grpc's add_insecure_port
+        # returns the ACTUAL bound port — identical to the requested port
+        # unless 0 (OS-assigned ephemeral) was passed, in which case this is
+        # the only way to learn the real port. self._port is the single
+        # source of truth from here on (used by the log line below and by
+        # serve_forever()'s readiness signal).
+        self._port = server.add_insecure_port(address)
         server.start()
         self._server = server
 
@@ -817,13 +823,16 @@ class ApigenGrpcServer:
     def serve_forever(self) -> None:
         """Start the server and block until SIGTERM / SIGINT / Ctrl-C.
 
-        Emits ``{"ready": true}`` on stdout immediately after binding so the
-        TS plugin subprocess launcher can detect readiness (same §13.1 protocol
-        as flask_server.py).
+        Emits ``{"ready": true, "port": <n>}`` on stdout immediately after
+        binding so the TS plugin subprocess launcher can detect readiness
+        (same §13.1 protocol as flask_server.py). ``port`` is the ACTUAL
+        bound port (BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001) — identical to
+        the requested ``--port`` unless 0 (OS-assigned ephemeral) was passed,
+        in which case this is the only way the caller learns the real port.
         """
         self.start()
         # §13.1 readiness signal — TS launcher polls stdout for this line.
-        print(json.dumps({"ready": True}), flush=True)
+        print(json.dumps({"ready": True, "port": self._port}), flush=True)
 
         stop_event = threading.Event()
 
@@ -908,7 +917,12 @@ def _main() -> None:
         help="Namespace slug (informational only; wire naming comes from --plan-file)",
     )
     parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=50051, help="TCP port (default: 50051)")
+    parser.add_argument(
+        "--port", type=int, default=50051,
+        help="TCP port (default: 50051; pass 0 to bind an OS-assigned "
+             "ephemeral port — the actual bound port is reported back in "
+             "the {ready: true, port: <n>} stdout line)",
+    )
     parser.add_argument(
         "--plan-file", required=True,
         help=(
