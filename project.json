@@ -1,0 +1,27 @@
+{
+  "name": "@adhd/source",
+  "$schema": "node_modules/nx/schemas/project-schema.json",
+  "targets": {
+    "local-registry": {
+      "executor": "@nx/js:verdaccio",
+      "options": {
+        "port": 4873,
+        "config": ".verdaccio/config.yml",
+        "storage": "tmp/local-registry/storage"
+      }
+    },
+    "check-publish-hygiene": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "agent-mcp:build",
+        "agent-base-types:build",
+        "agent-generator-plugin:build",
+        "agent-plugin-budget:build",
+        "agent-plugin-sanitize:build"
+      ],
+      "options": {
+        "command": "node scripts/check-publish-hygiene.mjs"
+      }
+    }
+  }
+}
