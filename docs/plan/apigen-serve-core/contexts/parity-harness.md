@@ -19,6 +19,7 @@
 - [parity-harness.1] harness exports captureGolden (drives a real consumer protocol, records snapshot)
 
 - [parity-harness.2] harness exports assertParity (deep-equal vs committed snapshot)
+- [parity-harness.3] parity-harness self-test passes
 ---
 
 ## Reservations
