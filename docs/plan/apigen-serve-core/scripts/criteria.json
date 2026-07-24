@@ -170,6 +170,13 @@
       "paths": [
         "packages/apigen/apigen-plugin-api-express/src/lib/route.ts"
       ]
+    },
+    {
+      "id": "express-adapter.3",
+      "phase": "phase-2",
+      "tier": 1,
+      "kind": "exists",
+      "path": "packages/apigen/apigen-plugin-api-express/src/test/golden/express.snapshot.json"
     }
   ]
 }
