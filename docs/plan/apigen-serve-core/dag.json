@@ -136,6 +136,19 @@
       ],
       "context": "contexts/audit-transports.md",
       "notes": ""
+    },
+    "py-extract-preflight": {
+      "kind": "work",
+      "phase": "phase-3",
+      "depends_on": [
+        "audit-foundation"
+      ],
+      "guard": "grep -q '^DECISION:' docs/apigen/proposals/py-extract-serve-split-findings.md",
+      "artifacts": [
+        "docs/apigen/proposals/py-extract-serve-split-findings.md"
+      ],
+      "context": "contexts/py-extract-preflight.md",
+      "notes": "SPIKE (proposal §8.3): verify extractor.py has no import-time side effects tied to serving; read py-grpc run/grpc_server shape. Records DECISION: line gating Phase 3."
     }
   },
   "authored_with": {
