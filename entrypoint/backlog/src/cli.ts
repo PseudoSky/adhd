@@ -9,19 +9,22 @@
  * validation, dispatch, and `CLI_EXIT_CODE` mapping — see
  * `@adhd/apigen-plugin-cli-output`'s `run.ts`).
  *
- * `runBacklogCli` is deliberately symmetric with `startBacklogServer`:
- * same `buildBacklogEnv`/`ensureDirs`/`openGraphBacklogStore` setup, same
- * `requireRun()` guard (imported from `./server.js`, not duplicated — see
- * that export's doc comment), same `closeGraphBacklogStore` teardown. The
- * ONLY thing specific to the CLI transport is argv resolution and the
- * one-shot (non-listening) nature of `cliPlugin.run()`.
+ * `runBacklogCli` is deliberately symmetric with `startBacklogServer` in
+ * shape (`buildBacklogEnv`/`openGraphBacklogStore`/`closeGraphBacklogStore`),
+ * but diverges from it on purpose: the store is opened LAZILY, only if a
+ * dispatched command actually reaches a real `client.ts` function
+ * (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001 — a bare `--help`/no-args/unknown-
+ * command invocation used to open a real SQLite store, unconditionally,
+ * before `argv` was ever inspected). `buildBacklogApigenPackage` accepts a
+ * lazy `() => BacklogCtx` thunk for exactly this reason — see its own doc
+ * comment.
  */
 import type { Scope } from '@adhd/environment-base-spec';
 import { cliPlugin } from '@adhd/apigen-plugin-cli-output';
 import type { Operation } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import type { BacklogCtx } from './client.js';
-import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
+import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore } from './store/graph-backlog-store.js';
 import { buildBacklogEnv } from './env.js';
 import { buildBacklogApigenPackage, requireRun } from './server.js';
 
@@ -121,13 +124,23 @@ export interface RunBacklogCliOpts {
  *   convention.
  */
 export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {}): Promise<void> {
-  const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
-  env.ensureDirs();
-  const store = openGraphBacklogStore(env.files.db, env.config.db.busyTimeoutMs);
+  // Opened lazily, at most once, only if `getCtx()` is actually invoked (a
+  // dispatched command reaching a real function) — never for `--help`,
+  // no-args, an unknown command, or a bad-flag rejection, all of which `run()`
+  // resolves entirely from the static `operations`/`schemas` below.
+  let opened: { store: GraphBacklogStore; ctx: BacklogCtx } | undefined;
+  const getCtx = (): BacklogCtx => {
+    if (!opened) {
+      const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
+      env.ensureDirs();
+      const store = openGraphBacklogStore(env.files.db, env.config.db.busyTimeoutMs);
+      opened = { store, ctx: { store, env } };
+    }
+    return opened.ctx;
+  };
 
   try {
-    const ctx: BacklogCtx = { store, env };
-    const { pkg, operations } = await buildBacklogApigenPackage(ctx);
+    const { pkg, operations } = await buildBacklogApigenPackage(getCtx);
     const userArgv = argv ?? process.argv.slice(2);
     const prefix = resolveCommandPrefix(operations);
 
@@ -139,6 +152,6 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
       signal: opts.signal ?? new AbortController().signal,
     });
   } finally {
-    closeGraphBacklogStore(store);
+    if (opened) closeGraphBacklogStore(opened.store);
   }
 }
