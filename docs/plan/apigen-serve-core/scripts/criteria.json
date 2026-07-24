@@ -185,6 +185,15 @@
       "kind": "command",
       "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-api-express:test",
       "expect": "exit0"
+    },
+    {
+      "id": "express-adapter.5",
+      "phase": "phase-2",
+      "tier": 3,
+      "kind": "negative-control",
+      "positive": "CI=true ./node_modules/.bin/nx run apigen-plugin-api-express:test",
+      "mutate": "git apply docs/plan/apigen-serve-core/neg-control/express-adapter.patch",
+      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/express-adapter.patch"
     }
   ]
 }

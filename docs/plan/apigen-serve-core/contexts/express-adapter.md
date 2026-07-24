@@ -21,6 +21,7 @@
 - [express-adapter.2] express route.ts buildOperationIndex shim removed
 - [express-adapter.3] committed express golden snapshot exists
 - [express-adapter.4] express parity gate green incl. void-return-op fixture pinning undefined->null (DEBT-003)
+- [express-adapter.5] negative control: express regression turns parity RED, restore GREEN
 ---
 
 ## Reservations
