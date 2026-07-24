@@ -108,6 +108,57 @@ state-side, not from executor prose:
   control, transport-http-parity spec) — build won't regress again per its
   own note; awaiting its full report.
 
+### Directive: stop editing BACKLOG.md/CHANGELOG.md
+
+Per user simplification relayed by team-lead: the orchestrator (and its
+executors) no longer touch BACKLOG.md/CHANGELOG.md at all — file every
+discovered bug and every resolved-item hygiene note to `main` via
+SendMessage instead. `main` now owns disclosure on those two files.
+No closeout bookkeeping on them is required from this orchestrator.
+
+### First real --complete attempt (express-adapter) — exit 4, audit_failed 42/44
+
+All four wave-3 states' guards independently re-verified green by me before
+attempting completion: py-extract-preflight (`DECISION:` line present,
+well-cited), cli-output 70/70, express 45/45, mcp 85/85 (fresh, not cached).
+Ran `state-transition.js express-adapter --complete` with express-adapter's
+self-reported telemetry (~145k in / ~14k out / ~65 tool calls) — got exit 4,
+42/44 phase-2-accumulated criteria. Root-caused the 2 failures directly
+(never trusted the summary alone):
+
+- `cli-adapter.2` (absent-pattern check: `"project("` must not appear in
+  `apigen-plugin-cli-output/src/lib/run.ts`) — re-grepped fresh: **0
+  occurrences now**. This was a transient snapshot — the audit's `runAudit`
+  reads the LIVE working-tree file, not a git-committed one, and cli-adapter
+  had already fixed this itself in commit `fe160ae7` ("reword run.ts doc
+  comments to avoid literal project( substring") by the time I re-checked;
+  the audit run that reported the failure must have raced a moment before
+  that commit landed. No action needed — already resolved.
+- `mcp-adapter.3` (absent-pattern check: `"findOperation"` must not appear in
+  `apigen-plugin-mcp/src/lib/tool-naming.ts`) — re-grepped: **genuinely still
+  present**, in mcp-adapter's own doc comment (line 10: `` // `findOperation`
+  exports are DELETED and collapsed into `OpPlan.mcp.name`. ``). The
+  absent-pattern check is a dumb string match, not comment-aware, so the
+  self-referential comment trips its own criterion — the identical class of
+  self-inflicted failure cli-adapter already hit and fixed for itself.
+  Messaged mcp-adapter's executor with the exact fix pattern (mirror
+  `fe160ae7`) and asked it to ping back once fixed.
+- I also independently re-ran `apigen-plugin-api-fastify:test` (56/56 clean)
+  because the raw audit stdout transiently showed two RED fastify assertions
+  mid-run (`v2-fastify.run.verb.1`, golden-snapshot parity) — confirmed this
+  was concurrent-process contention from my own overlapping verification
+  runs, NOT a regression in the already-completed fastify-adapter state. Per
+  the plan's own guidance, treated as a retry-not-fail signal and reproved
+  clean.
+- **Holding ALL FOUR wave-3 `--complete` calls**, including
+  py-extract-preflight — corrected an initial assumption: `run-audit.js`
+  accumulates phase X + every phase ordered before it, so py-extract-
+  preflight's own completion (phase-3) would ALSO run the phase-2 criteria
+  and hit the same `mcp-adapter.3` failure, even though its own guard (the
+  standalone `grep -q '^DECISION:'` check) has nothing to do with mcp. Every
+  phase-2-or-later state's `--complete` is blocked on this one criterion
+  until mcp-adapter's executor fixes its comment.
+
 ## Next
 
 Wave 4 (`audit-transports` + `py-flask-serve-split`), wave 5
