@@ -16,7 +16,7 @@
      matching audit check ID so Check 3's ID-mirror holds. Do not hand-add
      bare [slug.N] tokens here without a matching audit check. -->
 
-_No criteria yet._
+- [parity-harness.1] harness exports captureGolden (drives a real consumer protocol, records snapshot)
 
 ---
 

@@ -58,6 +58,16 @@
       "kind": "command",
       "cmd": "CI=true ./node_modules/.bin/nx run apigen-engine-runtime:test",
       "expect": "exit0"
+    },
+    {
+      "id": "parity-harness.1",
+      "phase": "phase-1",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "captureGolden",
+      "paths": [
+        "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts"
+      ]
     }
   ]
 }
