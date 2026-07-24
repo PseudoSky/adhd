@@ -377,6 +377,15 @@
       "kind": "command",
       "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-flask:test",
       "expect": "exit0"
+    },
+    {
+      "id": "py-flask-serve-split.7",
+      "phase": "phase-3",
+      "tier": 3,
+      "kind": "negative-control",
+      "positive": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-flask:test",
+      "mutate": "git apply docs/plan/apigen-serve-core/neg-control/py-flask-serve-split.patch",
+      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/py-flask-serve-split.patch"
     }
   ]
 }
