@@ -25,6 +25,7 @@
 - [fastify-adapter.6] fastify parity gate green (real fetch-driven live server, deep-equal snapshot)
 - [fastify-adapter.7] negative control: one-line adapter regression turns fastify parity RED, restore GREEN
 - [fastify-adapter.8] buildInvokerForPackage block deleted from fastify (promoted to createPackageInvoker, dod.13)
+- [fastify-adapter.9] fastify stamps plan.transport per-package (F3/dod.14)
 ---
 
 ## Reservations
