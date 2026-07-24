@@ -2,7 +2,9 @@
   "schema_version": 2,
   "title": "apigen transport-neutral serve-core + thin adapters",
   "plan_kind": "brownfield",
-  "phases": [],
+  "phases": [
+    "phase-1"
+  ],
   "terminal": "done",
   "nodes": {},
   "authored_with": {
