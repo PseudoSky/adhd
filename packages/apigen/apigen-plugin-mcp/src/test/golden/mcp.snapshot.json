@@ -1,0 +1,92 @@
+{
+  "tools-list": {
+    "ok": true,
+    "tools": [
+      {
+        "name": "parity_env_pkg_get_user",
+        "description": "parity_env_pkg_get_user",
+        "outputSchema": {
+          "type": "object"
+        }
+      },
+      {
+        "name": "parity_err_pkg_get_thing",
+        "description": "parity_err_pkg_get_thing",
+        "outputSchema": {
+          "type": "object"
+        }
+      },
+      {
+        "name": "parity_pkg_get_user",
+        "description": "parity_pkg_get_user",
+        "outputSchema": {
+          "type": "object"
+        }
+      },
+      {
+        "name": "parity_pkg_list_users",
+        "description": "parity_pkg_list_users",
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "result": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "result"
+          ]
+        }
+      }
+    ]
+  },
+  "call-getUser": {
+    "ok": true,
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"id\":\"u1\",\"name\":\"User-u1\"}"
+      }
+    ],
+    "structuredContent": {
+      "id": "u1",
+      "name": "User-u1"
+    }
+  },
+  "call-listUsers": {
+    "ok": true,
+    "content": [
+      {
+        "type": "text",
+        "text": "[\"alice\",\"bob\"]"
+      }
+    ],
+    "structuredContent": {
+      "result": [
+        "alice",
+        "bob"
+      ]
+    }
+  },
+  "call-session-envelope": {
+    "ok": true,
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"id\":\"u-env\",\"name\":\"User-u-env\"}"
+      }
+    ],
+    "structuredContent": {
+      "id": "u-env",
+      "name": "User-u-env"
+    }
+  },
+  "call-domain-apierror": {
+    "ok": false,
+    "errorCode": -32603,
+    "errorMessage": "MCP error -32603: no such thing"
+  }
+}
