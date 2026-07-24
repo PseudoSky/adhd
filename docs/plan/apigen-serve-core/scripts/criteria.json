@@ -382,7 +382,7 @@
       "phase": "phase-3",
       "tier": 1,
       "kind": "absent",
-      "pattern": "_route_for_op",
+      "pattern": "def _route_for_op",
       "paths": [
         "packages/apigen/python/apigen_python/flask_server.py"
       ],
@@ -393,7 +393,7 @@
       "phase": "phase-3",
       "tier": 1,
       "kind": "absent",
-      "pattern": "_http_verb",
+      "pattern": "def _http_verb",
       "paths": [
         "packages/apigen/python/apigen_python/flask_server.py"
       ],
@@ -404,7 +404,7 @@
       "phase": "phase-3",
       "tier": 1,
       "kind": "absent",
-      "pattern": "_is_primitive_only_input_schema",
+      "pattern": "def _is_primitive_only_input_schema",
       "paths": [
         "packages/apigen/python/apigen_python/flask_server.py"
       ],
