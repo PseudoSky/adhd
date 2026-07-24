@@ -248,6 +248,16 @@
       "positive": "CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test",
       "mutate": "git apply docs/plan/apigen-serve-core/neg-control/mcp-adapter.patch",
       "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/mcp-adapter.patch"
+    },
+    {
+      "id": "cli-adapter.1",
+      "phase": "phase-2",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "cliFlags",
+      "paths": [
+        "packages/apigen/apigen-plugin-cli-output/src/lib/run.ts"
+      ]
     }
   ]
 }
