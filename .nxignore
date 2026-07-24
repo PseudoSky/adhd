@@ -37,3 +37,4 @@ docs
 # release. Scoped to the whole fixtures dir so future pkg-c/pkg-d fixtures
 # don't reintroduce this without an .nxignore update.
 entrypoint/apigen-cli/src/test/fixtures
+docs
