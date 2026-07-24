@@ -42,6 +42,14 @@ export type ComposedSchemas = Record<
     // HTTP-emitting plugin derives its verb from THIS field, never by
     // re-deriving safety itself.
     'x-apigen-safe'?: boolean;
+    // DEBT-APIGEN-ENVELOPE-CAPABILITY-UNWIRED-001: §9.1 envelope field →
+    // owning pluginId, stamped by `composeSchemas()` from each contributing
+    // `--use` plugin's own `id` (`pluginsToEnvelopeMiddlewares()`). Read by
+    // `apigen-engine-runtime`'s `op-plan.ts` (`computeEnvelopeFields`) to
+    // resolve the `x-<pluginId>-<field>` / `--<pluginId>-<field>` /
+    // `APIGEN_<PLUGINID>_<FIELD>` transport bindings. Absent when no `--use`
+    // plugin contributed an envelope field for this op.
+    'x-apigen-envelope'?: Record<string, string>;
   }
 >;
 

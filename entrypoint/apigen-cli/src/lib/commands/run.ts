@@ -354,6 +354,12 @@ export function registerRunCommand(
           {
             sources: [sourceEntry],
             usePlugins: opts.use,
+            // DEBT-APIGEN-ENVELOPE-CAPABILITY-UNWIRED-001: thread the LOADED
+            // plugin objects (not just their specifier strings) so
+            // buildDescriptor() can merge a declared `envelope`/
+            // `layer.envelopeFields` capability into the composed schema
+            // before this namespace's ComposedSchemas is built.
+            usePluginObjects: usePlugins,
             overrides,
             logger,
           },
