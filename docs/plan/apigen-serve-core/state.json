@@ -60,10 +60,10 @@
       "end_ref": null
     },
     "py-extract-preflight": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-24T08:07:21.451Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "fed039814474da4d290ccef90f0d811e6bdce9a9",
       "end_ref": null
     },
     "py-flask-serve-split": {
@@ -163,7 +163,7 @@
     "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
-  "current_state": "mcp-adapter",
+  "current_state": "py-extract-preflight",
   "dod_provenance": {
     "confirmed_at": "2026-07-24T03:27:07.924Z",
     "by": "plan-orchestrator",
