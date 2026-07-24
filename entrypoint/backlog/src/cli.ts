@@ -28,6 +28,7 @@ import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore }
 import { buildBacklogEnv } from './env.js';
 import { buildBacklogApigenPackage, requireRun } from './server.js';
 import { runInstallSkillCommand } from './install-skill.js';
+import { runServeCommand } from './serve.js';
 
 /**
  * Derives the internal command-path PREFIX every `client.ts` operation
@@ -134,6 +135,15 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
   // `-h` before consulting its own route table.
   if (userArgvEarly[0] === 'install-skill') {
     await runInstallSkillCommand(userArgvEarly.slice(1));
+    return;
+  }
+  // `serve` (MIGRATION.md §4.5) starts the long-lived HTTP/MCP listener
+  // (`startBacklogServer`) — a different lifecycle shape than every other
+  // one-shot `client.ts` op (dispatch, print one JSON result, exit), so it
+  // is special-cased the same way `install-skill` is, before ever building
+  // the one-shot apigen CLI-output package.
+  if (userArgvEarly[0] === 'serve') {
+    await runServeCommand(userArgvEarly.slice(1), opts);
     return;
   }
 

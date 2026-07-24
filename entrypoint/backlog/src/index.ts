@@ -61,6 +61,9 @@ export type { RunBacklogCliOpts } from './cli.js';
 export { installSkill, runInstallSkillCommand } from './install-skill.js';
 export type { InstallSkillResult, SkillHost, SkillScope } from './install-skill.js';
 
+export { runServeCommand } from './serve.js';
+export type { RunServeCommandOpts } from './serve.js';
+
 export { buildBacklogEnv, resolveBacklogScope, suggestClaimantIdentity, backlogEnvironmentSpec } from './env.js';
 export type { BacklogConfig, BuildBacklogEnvOptions } from './env.js';
 
