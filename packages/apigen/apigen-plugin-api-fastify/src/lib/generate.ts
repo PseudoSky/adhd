@@ -5,15 +5,19 @@ import type {
 } from '@adhd/apigen-core-client';
 import { envelopeKey, sanitizeIdentifier } from '@adhd/apigen-engine-naming';
 import { HTTP_STATUS } from '@adhd/apigen-base-errors';
+import { buildOpPlan } from '@adhd/apigen-engine-runtime';
 import type { ProjectionConfig } from '@adhd/apigen-engine-naming';
-import { resolveRoute } from './route-projection';
+import { operationFor } from './route-projection';
 
 // ---------------------------------------------------------------------------
 // §5 — route + verb derivation (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001):
-// both are now derived via `project()` from `@adhd/apigen-engine-naming` — see
-// `./route-projection.ts` — so generated routes.ts is byte-identical to what
-// `@adhd/apigen-plugin-openapi` advertises for the same operation. No longer
-// duplicated per plugin.
+// serve-core migration — route/verb now come off the resolved `OpPlan`
+// (`buildOpPlan`, `@adhd/apigen-engine-runtime`), which calls the same
+// `project()`/`@adhd/apigen-engine-naming` derivation `@adhd/apigen-plugin-
+// openapi` uses. Generated routes.ts stays byte-identical to what the OpenAPI
+// doc advertises for the same operation, and the derivation is no longer
+// duplicated per plugin. `operationFor` (`./route-projection.ts`) resolves the
+// `Operation` `buildOpPlan` projects.
 // ---------------------------------------------------------------------------
 
 /**
@@ -25,7 +29,7 @@ import { resolveRoute } from './route-projection';
  * `orchestrateGenerate()` the same way `orchestrateRun()` threads
  * `RunInput.operations` (BUG-APIGEN-024) — so this is populated in the CLI's
  * actual wiring today, giving fully byte-identical-to-openapi codegen output.
- * `resolveRoute()` falls back to a synthesized single-segment Operation only
+ * `operationFor()` falls back to a synthesized single-segment Operation only
  * when a caller builds a bare `PluginInput` with no `operations` at all (e.g.
  * a unit test).
  */
@@ -102,14 +106,20 @@ export function generate(input: GenerateInput): PluginOutput {
   for (const pkg of input.packages) {
     const varName = sanitizeIdentifier(pkg.id);
     for (const [fnName, fnSchema] of Object.entries(pkg.schemas)) {
-      const { route, verb } = resolveRoute(
+      const op = operationFor(
         pkg.id,
         fnName,
         fnSchema as Record<string, unknown>,
-        input.operations,
-        routePrefix,
-        projection
+        input.operations
       );
+      const plan = buildOpPlan({
+        op,
+        schema: fnSchema,
+        transport: 'http',
+        projection,
+      });
+      const route = routePrefix + plan.http.route;
+      const verb = plan.http.verb;
       const headerMap = envelopeHeaders(fnSchema as Record<string, unknown>);
       const headerEntries = Object.entries(headerMap);
 
