@@ -21,6 +21,7 @@
 - [cli-adapter.2] inline project() call removed from cli run.ts
 - [cli-adapter.3] committed cli golden snapshot exists
 - [cli-adapter.4] cli parity gate green via real spawned child process (argv in, stdout+exit out)
+- [cli-adapter.5] negative control: cli regression turns parity RED, restore GREEN
 ---
 
 ## Reservations
