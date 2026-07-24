@@ -292,7 +292,7 @@
       "phase": "phase-2",
       "tier": 1,
       "kind": "absent",
-      "pattern": "project(",
+      "pattern": "project\\(",
       "paths": [
         "packages/apigen/apigen-plugin-cli-output/src/lib/run.ts"
       ],
@@ -338,7 +338,7 @@
       "phase": "phase-3",
       "tier": 1,
       "kind": "present",
-      "pattern": "^DECISION:",
+      "pattern": "DECISION:",
       "paths": [
         "docs/apigen/proposals/py-extract-serve-split-findings.md"
       ],
