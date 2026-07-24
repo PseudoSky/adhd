@@ -1,3 +1,15 @@
+## 0.1.3 (2026-07-24)
+
+
+### 🩹 Fixes
+
+- **apigen:** wire EnvelopeCapability into real --use schema composition
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.2 (2026-07-23)
 
 

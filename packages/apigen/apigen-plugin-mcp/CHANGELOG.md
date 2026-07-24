@@ -1,3 +1,15 @@
+## 0.1.4 (2026-07-24)
+
+
+### 🩹 Fixes
+
+- **apigen-plugin-mcp:** compose validate-layer + migrate to TransportAdapter (BUG-APIGEN-SERVE-CORE-001)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.3 (2026-07-23)
 
 

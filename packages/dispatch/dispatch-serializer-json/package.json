@@ -1,9 +1,9 @@
 {
   "name": "@adhd/dispatch-serializer-json",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "dependencies": {
-    "@adhd/dispatch-base-spec": "0.0.3",
-    "@adhd/dispatch-core-client": "0.0.3"
+    "@adhd/dispatch-base-spec": "0.0.4",
+    "@adhd/dispatch-core-client": "0.0.4"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
