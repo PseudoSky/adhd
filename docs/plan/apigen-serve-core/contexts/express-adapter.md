@@ -18,6 +18,7 @@
 
 - [express-adapter.1] express composes the shared createPackageInvoker (deletes duplicated block)
 
+- [express-adapter.2] express route.ts buildOperationIndex shim removed
 ---
 
 ## Reservations
