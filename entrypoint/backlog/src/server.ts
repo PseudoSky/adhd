@@ -176,8 +176,20 @@ async function extractClientOperations(): Promise<Operation[]> {
   return extract({ sourceFile: clientDts, namespace: 'backlog' });
 }
 
-/** Builds the composed, apigen-ready package descriptor for `client.ts`'s exports. */
-export async function buildBacklogApigenPackage(ctx: BacklogCtx): Promise<{
+/**
+ * Builds the composed, apigen-ready package descriptor for `client.ts`'s
+ * exports. `ctx` may be a plain `BacklogCtx` (the store is already open —
+ * `startBacklogServer`'s case, where a long-lived server needs its store
+ * immediately regardless of what request comes first) OR a LAZY `() =>
+ * BacklogCtx` thunk (`runBacklogCli`'s case) — `createClient` only calls it
+ * when a dispatched command actually reaches the real function, which never
+ * happens for `--help`/no-args/an unknown command. This is what closes
+ * DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001: `operations`/`schemas` below are
+ * computed purely from the built `client.d.ts` (via `extractClientOperations`)
+ * and never touch `ctx` at all, so a lazy caller can defer opening the real
+ * backing store until a command that actually needs it is dispatched.
+ */
+export async function buildBacklogApigenPackage(ctx: BacklogCtx | (() => BacklogCtx)): Promise<{
   pkg: {
     id: string;
     schemas: ReturnType<typeof composeSchemas>;
@@ -187,6 +199,7 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx): Promise<{
   };
   operations: Operation[];
 }> {
+  const getCtx: () => BacklogCtx = typeof ctx === 'function' ? ctx : () => ctx;
   const operations = await extractClientOperations();
   const generated = {
     metadata: { namespace: 'backlog', phase: '' },
@@ -221,7 +234,7 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx): Promise<{
       schemas,
       importPath: join(backlogDistDir(), 'client.js'),
       fns: clientMod as unknown as Record<string, (...args: unknown[]) => unknown>,
-      createClient: async () => ctx,
+      createClient: async () => getCtx(),
     },
     operations,
   };
