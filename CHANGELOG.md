@@ -1,5 +1,17 @@
 ## Unreleased
 
+### Fixed — `@adhd/backlog`'s `auditTrail` now reconstructs a full transition/claim history, not just the current status (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001) (2026-07-24)
+
+Previously `auditTrail()` derived history purely from durable fields — a synthetic `created` entry plus every real `note`/`citation` — because every past `status`/`claimedBy` value was overwritten in place by `touch()`'s wholesale metadata replace (DESIGN.md §14 point 4); nothing recorded the sequence of transitions/claims that led to the current state. SPEC.md §5.6 already documented `AuditTrailEntry.kind` as including `'transition'`/`'claim'`, but the store never actually emitted either.
+
+**Fix:** new `store/audit-log.ts` writes one small, independent `kind:'generic'` node (tagged `backlog-audit-event`, linked to the item via a `DERIVED_FROM` edge) per real transition/claim/renew/release event — immune to `touch()`'s replace-not-merge semantics by construction, since it's never written into the item's own `meta` at all. `transitionStatusNode` (lifecycle.ts) and `claimItemNode`/`renewClaimNode`/`releaseClaimNode` (claim.ts) now call it after each state change actually commits; a REJECTED transition (missing required citation/reason) or a no-op claim/release branch (`held`, `release-noop`) logs nothing, since nothing changed. `auditTrail()` (query.ts) merges these events into its existing `history` array before the final chronological sort.
+
+**Teeth:** new `store/audit-log.spec.ts` — creates an item, drives it through 4 real transitions plus claim/renew/release cycles, and asserts every individual transition (not just the final status) and every claim event (not just the current claimant) is independently recoverable from `auditTrail`; separately asserts a rejected transition and a no-op release produce zero spurious events. `client.spec.ts`'s existing `supersedeItem` audit-trail assertion is unaffected (no behavior change to `supersessionChain`).
+
+**Verification:** `nx build/lint/verify-dist-load backlog` green; `nx test backlog` 96/96 green (up from 92).
+
+**Files:** new `entrypoint/backlog/src/store/audit-log.ts`, new `entrypoint/backlog/src/store/audit-log.spec.ts`; `entrypoint/backlog/src/store/{lifecycle,claim,query}.ts`.
+
 ### Fixed — MIGRATION.md §3.3 20-writer concurrency scale test surfaced two new `@adhd/backlog` bugs; both fixed in the same session (2026-07-24)
 
 Building the plan's own required 20-real-worker scale DoD (`store/concurrency-scale.spec.ts`, extending `claim.spec.ts`/`busy-retry.spec.ts` from 2 to 20 genuine `worker_threads`) surfaced two previously-unreported, real correctness gaps — not the ones the test set out to prove, but the exact kind of thing driving the real path through real components at real scale is supposed to catch.

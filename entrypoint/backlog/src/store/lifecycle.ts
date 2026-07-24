@@ -12,6 +12,7 @@ import { claimItemNode } from './claim.js';
 import { findItemNode, listItems } from './query.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import { toBacklogItem, type BacklogNodeMeta } from './mapping.js';
+import { writeAuditEvent } from './audit-log.js';
 
 function requireItemNode(store: GraphBacklogStore, repo: string, humanId: string) {
   const node = findItemNode(store, repo, humanId);
@@ -21,8 +22,10 @@ function requireItemNode(store: GraphBacklogStore, repo: string, humanId: string
 
 export function transitionStatusNode(store: GraphBacklogStore, repo: string, humanId: string, status: BacklogStatus, opts: TransitionOpts): BacklogItem {
   const node = requireItemNode(store, repo, humanId);
+  let fromStatus: BacklogStatus | undefined;
 
   mutateMetadata<BacklogNodeMeta>(store, node.id, (meta) => {
+    fromStatus = meta.status;
     const citations = opts.citations && opts.citations.length > 0 ? [...meta.citations, ...opts.citations] : meta.citations;
 
     if (requiresCitation(status) && citations.length === 0) {
@@ -45,6 +48,10 @@ export function transitionStatusNode(store: GraphBacklogStore, repo: string, hum
     }
     return next;
   });
+  // Only reached once mutateMetadata's updater returns WITHOUT throwing — a
+  // rejected transition (missing citation/reason) never logs a fake event
+  // (DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001).
+  writeAuditEvent(store, node.id, repo, humanId, 'transition', { from: fromStatus, to: status, by: opts.by, ...(opts.reason ? { reason: opts.reason } : {}) });
 
   const updated = store.graph.getNode(node.id);
   if (!updated) throw new BacklogItemNotFoundError(repo, humanId);
