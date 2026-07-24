@@ -503,6 +503,16 @@
       "paths": [
         "packages/apigen/apigen-plugin-mcp/src/lib/run.ts"
       ]
+    },
+    {
+      "id": "cli-adapter.6",
+      "phase": "phase-2",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "use",
+      "paths": [
+        "packages/apigen/apigen-plugin-cli-output/src/lib/run.ts"
+      ]
     }
   ]
 }
