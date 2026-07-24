@@ -120,7 +120,8 @@
         "packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts",
         "packages/apigen/apigen-plugin-cli-output/src/lib/schema-introspect.ts",
         "packages/apigen/apigen-plugin-cli-output/src/test/run-cli-integration.spec.ts",
-        "packages/apigen/apigen-plugin-cli-output/src/test/golden/cli.snapshot.json"
+        "packages/apigen/apigen-plugin-cli-output/src/test/golden/cli.snapshot.json",
+        "docs/plan/apigen-serve-core/neg-control/cli-adapter.patch"
       ],
       "context": "contexts/cli-adapter.md",
       "notes": "readCall=parseArgs over OpPlan.cliFlags; writeResult=stdout+exit-code. Real spawned child process only. Decide --use capability explicitly."

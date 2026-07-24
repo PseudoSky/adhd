@@ -28,7 +28,7 @@
 
 ```text
 read_only:  ["packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts", "packages/apigen/apigen-engine-runtime/src/lib/package-invoker.ts", "packages/apigen/apigen-engine-runtime/src/lib/dispatch-for-plan.ts", "packages/apigen/apigen-engine-runtime/src/lib/transport-adapter.ts", "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts", "packages/apigen/apigen-engine-naming/src/lib/naming.ts", "packages/apigen/apigen-core-client/src/lib/plugin.ts"]
-mutates:    ["packages/apigen/apigen-plugin-cli-output/src/lib/run.ts", "packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts", "packages/apigen/apigen-plugin-cli-output/src/lib/schema-introspect.ts", "packages/apigen/apigen-plugin-cli-output/src/test/run-cli-integration.spec.ts", "packages/apigen/apigen-plugin-cli-output/src/test/golden/cli.snapshot.json"]
+mutates:    ["packages/apigen/apigen-plugin-cli-output/src/lib/run.ts", "packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts", "packages/apigen/apigen-plugin-cli-output/src/lib/schema-introspect.ts", "packages/apigen/apigen-plugin-cli-output/src/test/run-cli-integration.spec.ts", "packages/apigen/apigen-plugin-cli-output/src/test/golden/cli.snapshot.json", "docs/plan/apigen-serve-core/neg-control/cli-adapter.patch"]
 ```
 
 ---
