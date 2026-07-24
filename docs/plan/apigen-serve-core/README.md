@@ -156,3 +156,5 @@ py-grpc-serve-split → audit-python → audit-final.
   - entrypoint: `CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test`
   - observable: `the mcp server builds its tool table once at startup; a test asserting the build count stays 1 across multiple CallTool requests passes`
   - delivered-by: `mcp-adapter`
+
+- `[dod.13]` **The UsePlugin/readUsePlugins/readUseOptions/adaptCoreLayer/buildInvokerForPackage block (~120 identical lines) is PROMOTED into apigen-engine-runtime (createPackageInvoker) and DELETED from apigen-plugin-api-fastify/src/lib/run.ts; express COLLAPSES onto createPackageInvoker instead of keeping its own copy. (structural)** — The UsePlugin/readUsePlugins/readUseOptions/adaptCoreLayer/buildInvokerForPackage block (~120 identical lines) is PROMOTED into apigen-engine-runtime (createPackageInvoker) and DELETED from apigen-plugin-api-fastify/src/lib/run.ts; express COLLAPSES onto createPackageInvoker instead of keeping its own copy..
