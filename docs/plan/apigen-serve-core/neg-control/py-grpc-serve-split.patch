@@ -1,0 +1,13 @@
+diff --git a/packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts b/packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts
+index f0970422..b0dadf38 100644
+--- a/packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts
++++ b/packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts
+@@ -264,7 +264,7 @@ async function run(input: RunInput): Promise<void> {
+     grpcMap[op.id] = {
+       package: projected.grpc.package,
+       service: projected.grpc.service,
+-      method: projected.grpc.method,
++      method: op.path[op.path.length - 1].raw,
+     };
+   }
+   const plan: ServePlan = { operations, grpc: grpcMap };

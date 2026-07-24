@@ -1,0 +1,21 @@
+{
+  "decimal-roundtrip": {
+    "ok": true,
+    "decoded": "123.457"
+  },
+  "decimal-precision": {
+    "ok": true,
+    "decoded": "0.101"
+  },
+  "string-roundtrip": {
+    "ok": true,
+    "decoded": "Hello, World!"
+  },
+  "session-envelope": {
+    "ok": true,
+    "decoded": "Hello Alice! session=sess-parity"
+  },
+  "validation-failure": {
+    "ok": false
+  }
+}

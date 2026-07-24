@@ -8,20 +8,37 @@ apigen plugin: serve Python functions over gRPC using `grpcio` with in-memory pr
 apigen run --source my_api.py --type py-grpc --opt port=8950 --opt namespace=myapi
 ```
 
+Internally this is a two-phase spawn (apigen-serve-core `py-grpc-serve-split`):
+the plugin runs `apigen_python.extractor --emit-json` (extract-only), computes
+each operation's canonical `package`/`service`/`method` via the REAL
+`@adhd/apigen-engine-naming` `project(op).grpc` — the SAME projector every
+other transport (fastify/express/mcp/cli) uses — and spawns
+`apigen_python.grpc_server` with the result via `--plan-file`. The server no
+longer self-extracts or derives its own naming.
+
 With grpcurl (no .proto file needed — reflection is always on):
 
 ```bash
 grpcurl -plaintext \
   -d '{"data":{"amount":"123.456"}}' \
-  localhost:8950 myapi.MyapiService/add_decimal
+  localhost:8950 myapi.my-api.MyApi/AddDecimal
 ```
 
 ## Wire contract
 
-- Service: `<namespace>.<Namespace>Service`
-- Method: `/<namespace>.<Namespace>Service/<fn_name>`
+Service/method names are `@adhd/apigen-engine-naming`'s `project(op).grpc`
+projection (`allSegs = [namespace, ...path]`):
+
+- Package: dotted, snake_cased, every `allSegs` segment except the last (e.g. `myapi.my_api`)
+- Service: Pascal-cased second-to-last segment — the "file" segment (e.g. `MyApi`)
+- Method: Pascal-cased last segment — the "export" segment (e.g. `AddDecimal`)
+- Full path: `/<package>.<Service>/<Method>` (e.g. `/myapi.my_api.MyApi/AddDecimal`)
 - Request: typed sub-message per function (`message Data { string amount = 1; }`)
 - Response: `string data = 1` (JSON-encoded result)
+
+Streaming operations (`streaming: true`) are explicitly rejected with a clear
+error at startup — gRPC natively supports streaming, but implementing it here
+is a documented, tracked deferral, out of scope for this plugin today.
 
 ### Logical-type canon (never use `google.protobuf.Timestamp`)
 
