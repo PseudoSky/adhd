@@ -332,4 +332,23 @@ describe('query / report', () => {
     const exported = await client.exportJson(ctx, { repo: REPO, family: 'BUG-EXPORT' });
     expect(exported).toHaveLength(1);
   });
+
+  it('migrationStatus reports the live config value, not a hardcoded default (MIGRATION.md §4.4)', async () => {
+    const notStarted = await client.migrationStatus(ctx);
+    expect(notStarted.phase).toBe('not-started');
+    expect(notStarted.toolIsAuthoritative).toBe(false);
+    expect(notStarted.description).toContain('not-started');
+
+    const prev = process.env['ADHD_BACKLOG_MIGRATION_PHASE'];
+    try {
+      process.env['ADHD_BACKLOG_MIGRATION_PHASE'] = 'phase-3';
+      const phase3Ctx: BacklogCtx = { store: tmp.store, env: buildBacklogEnv({ scope: 'project', adhdRoot: tmp.dir }) };
+      const authoritative = await client.migrationStatus(phase3Ctx);
+      expect(authoritative.phase).toBe('phase-3');
+      expect(authoritative.toolIsAuthoritative).toBe(true);
+    } finally {
+      if (prev === undefined) delete process.env['ADHD_BACKLOG_MIGRATION_PHASE'];
+      else process.env['ADHD_BACKLOG_MIGRATION_PHASE'] = prev;
+    }
+  });
 });

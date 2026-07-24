@@ -129,4 +129,20 @@ describe('scope isolation — real Environment instances, real temp filesystem r
       else process.env['ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS'] = prev;
     }
   });
+
+  it('migration.phase defaults to not-started and is overridable via ADHD_BACKLOG_MIGRATION_PHASE (MIGRATION.md §4.4)', async () => {
+    const prev = process.env['ADHD_BACKLOG_MIGRATION_PHASE'];
+    try {
+      delete process.env['ADHD_BACKLOG_MIGRATION_PHASE'];
+      const defaultEnv = buildBacklogEnv({ scope: 'project', adhdRoot: projectDirA });
+      expect(defaultEnv.config.migration.phase).toBe('not-started');
+
+      process.env['ADHD_BACKLOG_MIGRATION_PHASE'] = 'phase-3';
+      const overriddenEnv = buildBacklogEnv({ scope: 'project', adhdRoot: projectDirB });
+      expect(overriddenEnv.config.migration.phase).toBe('phase-3');
+    } finally {
+      if (prev === undefined) delete process.env['ADHD_BACKLOG_MIGRATION_PHASE'];
+      else process.env['ADHD_BACKLOG_MIGRATION_PHASE'] = prev;
+    }
+  });
 });

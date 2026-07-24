@@ -362,3 +362,17 @@ export interface AuditTrailResult {
   history: AuditTrailEntry[];
   supersessionChain?: { supersedes?: string; supersededBy?: string };
 }
+
+// ============================================================================
+// MIGRATION.md §4.4 — migration-state signal (queried, never hardcoded prose)
+// ============================================================================
+
+export type MigrationPhase = 'not-started' | 'phase-1' | 'phase-2' | 'phase-3' | 'phase-4' | 'phase-5' | 'complete';
+
+export interface MigrationStatusResult {
+  phase: MigrationPhase;
+  /** One-line human-readable meaning of `phase`, e.g. "phase-2: BACKLOG.md is still authoritative; the tool is shadow-running in parity-check mode." */
+  description: string;
+  /** True once the graph (not hand-edited markdown) is authoritative — phase-3 and later. */
+  toolIsAuthoritative: boolean;
+}
