@@ -406,6 +406,14 @@
       "paths": [
         "packages/apigen/python/apigen_python/grpc_server.py"
       ]
+    },
+    {
+      "id": "py-grpc-serve-split.3",
+      "phase": "phase-3",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-grpc:test",
+      "expect": "exit0"
     }
   ]
 }
