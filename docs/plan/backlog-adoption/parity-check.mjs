@@ -83,13 +83,15 @@ try {
     const livePath = join(REPO_ROOT, entry.sourcePath);
     const oracle = toMap(legacyJson(livePath));
 
-    let items = runCli(['list-items', '--filter', JSON.stringify(entry.filter)]);
-    if (entry.rootOnly) {
-      // §2.2: root BACKLOG.md's projection is repo-only items -- drop
-      // anything that also carries a projectPath/plan (owned by another
-      // projection's filter row).
-      items = items.filter((it) => !it.projectPath && !it.plan);
-    }
+    // §2.2: root BACKLOG.md's projection is items OWNED by root (real,
+    // server-side `filter.importedFrom` — see `DEBT-BACKLOG-IMPORT-SCOPE-
+    // CROSSFILE-001`/`model.ts`'s `BacklogFilter.importedFrom`). This used
+    // to be a client-side `!it.projectPath && !it.plan` post-filter, which
+    // wrongly excluded a root-owned item the moment ANY other file
+    // cross-referenced it (e.g. a plan file attaching `plan` to a root
+    // item) — the row's own `filter` object now encodes ownership directly,
+    // so no post-filtering is needed here at all.
+    const items = runCli(['list-items', '--filter', JSON.stringify(entry.filter)]);
     const renderedMap = toMap(items.map((it) => ({ id: it.humanId, status: it.status, priority: it.priority })));
 
     const divergences = diffMaps(oracle, renderedMap);

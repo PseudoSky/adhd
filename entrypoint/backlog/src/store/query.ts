@@ -22,6 +22,7 @@ function nodeFilterFromBacklogFilter(filter: BacklogFilter): NodeFilter {
   if (filter.family) metadata['family'] = filter.family;
   if (filter.priority) metadata['priority'] = filter.priority;
   if (filter.plan) metadata['plan'] = filter.plan;
+  if (filter.importedFrom) metadata['importedFrom'] = filter.importedFrom;
   if (filter.assignee) metadata['assignee'] = filter.assignee;
   if (filter.claimedBy) metadata['claimedBy'] = filter.claimedBy;
   if (filter.status && filter.status !== 'open' && filter.status !== 'closed') {
