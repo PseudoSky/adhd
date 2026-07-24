@@ -116,6 +116,16 @@
       "paths": [
         "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts"
       ]
+    },
+    {
+      "id": "fastify-adapter.4",
+      "phase": "phase-1",
+      "tier": 1,
+      "kind": "absent",
+      "pattern": "resolveRoute",
+      "paths": [
+        "packages/apigen/apigen-plugin-api-fastify/src/lib/route-projection.ts"
+      ]
     }
   ]
 }
