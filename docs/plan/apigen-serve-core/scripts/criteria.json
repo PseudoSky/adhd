@@ -453,6 +453,16 @@
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts"
       ]
+    },
+    {
+      "id": "fastify-adapter.8",
+      "phase": "phase-1",
+      "tier": 1,
+      "kind": "absent",
+      "pattern": "buildInvokerForPackage",
+      "paths": [
+        "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts"
+      ]
     }
   ]
 }
