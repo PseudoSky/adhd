@@ -6,28 +6,51 @@ protobuf descriptors **in memory** (no .proto files written to disk) by
 building per-method typed ``FileDescriptorProto`` objects from the operation's
 JSON-Schema input descriptor.
 
-Usage:
+Usage (apigen-serve-core py-grpc-serve-split — two-phase extract/serve split):
     python3 -m apigen_python.grpc_server \\
         --module <path.py> \\
         --namespace <ns> \\
-        --port <p>
+        --port <p> \\
+        --plan-file <plan.json>
 
-Service layout:
-    package  = <namespace>
-    service  = <Namespace>Service    (namespace capitalised, e.g. pkg → PkgService)
-    method   = <fn_name>             (snake_case, matching the Python function)
+    This server no longer self-extracts, and no longer derives its own
+    package/service/method names. `--plan-file` is REQUIRED and points to a
+    JSON file of the shape `{"operations": [...Operation dicts, exactly what
+    `apigen_python.extractor --emit-json` emits...], "grpc": {"<opId>":
+    {"package": "<dotted.package>", "service": "<PascalService>", "method":
+    "<PascalMethod>"}}}`, produced by the TS `py-grpc` plugin's two-phase
+    spawn: (1) spawn `apigen_python.extractor --emit-json` in a short-lived
+    process to get `Operation[]`, (2) call the REAL
+    `@adhd/apigen-engine-naming` `project(op).grpc` on each op — the SAME
+    canonical projector every other transport (fastify/express/mcp/cli) uses
+    — (3) spawn THIS server with the result. See
+    `packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts`.
 
-    Example: namespace='pkg', fn='add_decimal'
-        → full method path:  pkg.PkgService/add_decimal
+Service layout (apigen-engine-naming's `project(op).grpc` rule — computed
+TS-side and injected via `--plan-file`; this module contains no Python port
+of the formula):
+    package  = dotted, snake_cased, all path segments except the method
+    service  = Pascal-cased "file" segment (second-to-last of [namespace, ...path])
+    method   = Pascal-cased "export" segment (last of [namespace, ...path])
+
+    Example: namespace='pkg', source file 'grpc_api.py', fn='add_decimal'
+        → package: 'pkg.grpc_api', service: 'GrpcApi', method: 'AddDecimal'
+        → full method path:  pkg.grpc_api.GrpcApi/AddDecimal
         → grpcurl call:
             grpcurl -plaintext \\
               -d '{"data":{"amount":"123.456"}}' \\
-              localhost:8950 pkg.PkgService/add_decimal
+              localhost:50051 pkg.grpc_api.GrpcApi/AddDecimal
+
+    A single server process serves exactly one Python source file, so every
+    operation it exposes shares the same "file" path segment — and therefore
+    the same projected package + service — by construction; `_build_state()`
+    asserts this invariant rather than silently picking one when the
+    injected plan ever disagreed (it never should for a single-module server).
 
 Wire contract (canonical apigen logical-type tenet):
     Request message per method (generated from JSON-Schema input descriptor):
-        message <fn_name>Request {
-            <fn_name>Request.Data data = 1;
+        message <Method>Request {
+            <Method>Request.Data data = 1;
             message Data {
                 string  <param1> = 1;  // string for decimal/date-time/uuid/str
                 int64   <param2> = 2;  // integer JSON type
@@ -36,7 +59,7 @@ Wire contract (canonical apigen logical-type tenet):
             }
         }
     Response message:
-        message <fn_name>Response {
+        message <Method>Response {
             string data = 1;   // JSON-encoded result (string, decimal, RFC3339, etc.)
         }
 
@@ -50,6 +73,13 @@ Wire contract (canonical apigen logical-type tenet):
       number     → double proto field
       boolean    → bool proto field
 
+Streaming (deferred scope — [fix:pygrpc-streaming-deferral]):
+    gRPC natively supports streaming, but this transport does not implement
+    it yet. `_build_state()` rejects any injected operation with
+    `streaming: true` with a clear `ValueError` rather than silently
+    mishandling it as a unary call. Implementing real gRPC streaming is
+    tracked separately and out of scope for this split.
+
 Reflection:
     grpc_reflection v1alpha is enabled unconditionally so grpcurl can list,
     describe, and call methods without a local .proto file.
@@ -60,7 +90,7 @@ Startup signal:
 
 What serve.ts needs to mount a gRPC host:
     - HTTP/2 front (gRPC is already HTTP/2 + length-prefixed framing)
-    - Route pattern: ``/<namespace>.<Namespace>Service/<fn_name>``
+    - Route pattern: ``/<package>.<Service>/<Method>``
     - Trailer-based error: ``grpc-status`` + ``grpc-message`` trailers
     - Metadata passthrough: ``x-adhd-*`` request metadata → envelope/ctx dict
     - No gatewayCode mapping — gRPC status codes are the canonical errors
@@ -89,7 +119,6 @@ if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
 from apigen_python.errors import ApiError, GRPC_CODE  # noqa: E402
-from apigen_python.extractor import extract_module    # noqa: E402
 from apigen_python.runtime import HostRequest, Runtime  # noqa: E402
 from apigen_python.validator import validate, ValidationError  # noqa: E402
 
@@ -226,21 +255,23 @@ def _json_type_to_proto_field_type(schema: dict[str, Any]) -> int:
 # ---------------------------------------------------------------------------
 # In-memory FileDescriptorProto construction
 #
-# Per-method typed messages for ergonomic grpcurl calls:
+# Per-method typed messages for ergonomic grpcurl calls, named from the
+# INJECTED plan's Pascal-cased `method` (never the raw Python function name):
 #
-#   message add_decimalRequest {
-#       add_decimalRequest.Data data = 1;
+#   message AddDecimalRequest {
+#       AddDecimalRequest.Data data = 1;
 #       message Data { string amount = 1; }
 #   }
-#   message add_decimalResponse { string data = 1; }
+#   message AddDecimalResponse { string data = 1; }
 #
 # grpcurl call:  -d '{"data":{"amount":"123.456"}}'
 # ---------------------------------------------------------------------------
 
 def _build_file_descriptor_proto(
-    namespace: str,
+    package: str,
     service_name: str,
     operations: list[dict[str, Any]],
+    grpc_map: dict[str, dict[str, str]],
 ) -> Any:
     """Build a FileDescriptorProto in memory for the given service.
 
@@ -249,9 +280,15 @@ def _build_file_descriptor_proto(
     ``string data = 1`` field carrying the JSON-encoded result.
 
     Args:
-        namespace:    Proto package name (e.g. "pkg").
-        service_name: gRPC service name (e.g. "PkgService").
-        operations:   List of operation dicts from the extractor.
+        package:      Proto package name — the plan's TS-computed
+                       `project(op).grpc.package` (e.g. "pkg.grpc_api"),
+                       shared by every op in a single-module server.
+        service_name: gRPC service name — the plan's TS-computed
+                       `project(op).grpc.service` (e.g. "GrpcApi").
+        operations:   List of operation dicts (from the injected plan).
+        grpc_map:     `{opId: {"package", "service", "method"}}` from the
+                       injected `--plan-file`, supplying each op's
+                       Pascal-cased method name.
 
     Returns:
         A ``google.protobuf.descriptor_pb2.FileDescriptorProto``.
@@ -259,18 +296,18 @@ def _build_file_descriptor_proto(
     from google.protobuf import descriptor_pb2  # type: ignore[import]
 
     file_proto = descriptor_pb2.FileDescriptorProto()
-    file_proto.name = f"{namespace}.proto"
-    file_proto.package = namespace
+    file_proto.name = f"{package}.proto"
+    file_proto.package = package
     file_proto.syntax = "proto3"
 
     for op in operations:
-        fn_name: str = op["path"][-1]["raw"]
+        method_name: str = grpc_map[op["id"]]["method"]
         input_schema: dict[str, Any] = op.get("input", {})
         input_props: dict[str, Any] = input_schema.get("properties", {})
 
         # --- Request message ---
         req_msg = file_proto.message_type.add()
-        req_msg.name = f"{fn_name}Request"
+        req_msg.name = f"{method_name}Request"
 
         # Nested `Data` sub-message with typed per-param fields.
         data_submsg = req_msg.nested_type.add()
@@ -290,11 +327,11 @@ def _build_file_descriptor_proto(
         data_field.number = 1
         data_field.label = descriptor_pb2.FieldDescriptorProto.LABEL_OPTIONAL
         data_field.type = descriptor_pb2.FieldDescriptorProto.TYPE_MESSAGE
-        data_field.type_name = f".{namespace}.{fn_name}Request.Data"
+        data_field.type_name = f".{package}.{method_name}Request.Data"
 
         # --- Response message ---
         resp_msg = file_proto.message_type.add()
-        resp_msg.name = f"{fn_name}Response"
+        resp_msg.name = f"{method_name}Response"
         resp_field = resp_msg.field.add()
         resp_field.name = "data"
         resp_field.number = 1
@@ -307,48 +344,51 @@ def _build_file_descriptor_proto(
     service = file_proto.service.add()
     service.name = service_name
     for op in operations:
-        fn_name = op["path"][-1]["raw"]
+        method_name = grpc_map[op["id"]]["method"]
         method = service.method.add()
-        method.name = fn_name
-        method.input_type = f".{namespace}.{fn_name}Request"
-        method.output_type = f".{namespace}.{fn_name}Response"
+        method.name = method_name
+        method.input_type = f".{package}.{method_name}Request"
+        method.output_type = f".{package}.{method_name}Response"
 
     return file_proto
 
 
 def _build_descriptor_pool(
-    namespace: str,
+    package: str,
     service_name: str,
     operations: list[dict[str, Any]],
+    grpc_map: dict[str, dict[str, str]],
 ) -> tuple[Any, dict[str, Any], dict[str, Any]]:
     """Build a DescriptorPool + message classes for all operations.
 
     Args:
-        namespace:    Proto package name.
-        service_name: gRPC service name.
-        operations:   Extracted operation descriptors.
+        package:      Proto package name (plan-computed).
+        service_name: gRPC service name (plan-computed).
+        operations:   Extracted operation descriptors (from the injected plan).
+        grpc_map:     `{opId: {"package", "service", "method"}}` from the
+                       injected `--plan-file`.
 
     Returns:
         (pool, req_classes, resp_classes) where:
           pool         — a DescriptorPool pre-populated with the generated file,
                          suitable for passing to enable_server_reflection.
-          req_classes  — {fn_name → Request message class}
-          resp_classes — {fn_name → Response message class}
+          req_classes  — {method_name → Request message class}
+          resp_classes — {method_name → Response message class}
     """
     from google.protobuf import descriptor_pool, message_factory  # type: ignore[import]
 
-    file_proto = _build_file_descriptor_proto(namespace, service_name, operations)
+    file_proto = _build_file_descriptor_proto(package, service_name, operations, grpc_map)
     pool = descriptor_pool.DescriptorPool()
     pool.Add(file_proto)
 
     req_classes: dict[str, Any] = {}
     resp_classes: dict[str, Any] = {}
     for op in operations:
-        fn_name = op["path"][-1]["raw"]
-        req_desc = pool.FindMessageTypeByName(f"{namespace}.{fn_name}Request")
-        resp_desc = pool.FindMessageTypeByName(f"{namespace}.{fn_name}Response")
-        req_classes[fn_name] = message_factory.GetMessageClass(req_desc)
-        resp_classes[fn_name] = message_factory.GetMessageClass(resp_desc)
+        method_name = grpc_map[op["id"]]["method"]
+        req_desc = pool.FindMessageTypeByName(f"{package}.{method_name}Request")
+        resp_desc = pool.FindMessageTypeByName(f"{package}.{method_name}Response")
+        req_classes[method_name] = message_factory.GetMessageClass(req_desc)
+        resp_classes[method_name] = message_factory.GetMessageClass(resp_desc)
 
     return pool, req_classes, resp_classes
 
@@ -369,8 +409,6 @@ def _msg_to_dict(msg: Any) -> dict[str, Any]:
     Returns:
         A plain Python dict with field names as keys and Python-native values.
     """
-    from google.protobuf import descriptor_pb2  # type: ignore[import]
-
     result: dict[str, Any] = {}
     for field in msg.DESCRIPTOR.fields:
         val = getattr(msg, field.name)
@@ -383,28 +421,40 @@ def _msg_to_dict(msg: Any) -> dict[str, Any]:
 
 # ---------------------------------------------------------------------------
 # Server state
+#
+# apigen-serve-core py-grpc-serve-split: package/service are no longer
+# derived here. The previous scheme built the service name by upper-casing
+# just the namespace's first character and lower-casing the rest, then
+# appending a fixed literal suffix, duplicated at (at least) two call sites,
+# and used the raw un-cased Python function identifier as the wire method
+# name everywhere else — an inline algorithm unrelated to
+# `@adhd/apigen-engine-naming`'s real gRPC projection. That whole scheme is
+# DELETED; `package`/`service_name` and each operation's wire `method` name
+# are now supplied by the injected `--plan-file` (`grpc_map`, TS-computed via
+# the real `project(op).grpc` — see the module docstring's "Service layout").
 # ---------------------------------------------------------------------------
 
 class _ServerState:
     """Immutable server configuration shared across all gRPC threads."""
 
     __slots__ = (
-        "namespace", "service_name", "runtime", "operations",
-        "op_map", "input_schema_map", "fn_names",
+        "package", "service_name", "runtime", "operations",
+        "op_map", "input_schema_map", "method_names",
         "req_classes", "resp_classes",
     )
 
     def __init__(
         self,
-        namespace: str,
+        package: str,
+        service_name: str,
         runtime: Runtime,
         operations: list[dict[str, Any]],
+        grpc_map: dict[str, dict[str, str]],
         req_classes: dict[str, Any],
         resp_classes: dict[str, Any],
     ) -> None:
-        self.namespace = namespace
-        # Service name: capitalise first letter.  "pkg" → "PkgService".
-        self.service_name = namespace.capitalize() + "Service"
+        self.package = package
+        self.service_name = service_name
         self.runtime = runtime
         self.operations = operations
         self.req_classes = req_classes
@@ -412,13 +462,13 @@ class _ServerState:
 
         self.op_map: dict[str, dict[str, Any]] = {}
         self.input_schema_map: dict[str, dict[str, Any]] = {}
-        self.fn_names: list[str] = []
+        self.method_names: list[str] = []
 
         for op in operations:
-            fn_name = op["path"][-1]["raw"]
-            self.op_map[fn_name] = op
-            self.input_schema_map[fn_name] = op.get("input", {})
-            self.fn_names.append(fn_name)
+            method_name = grpc_map[op["id"]]["method"]
+            self.op_map[method_name] = op
+            self.input_schema_map[method_name] = op.get("input", {})
+            self.method_names.append(method_name)
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +483,7 @@ class _ApigenGrpcHandler(grpc.GenericRpcHandler if _HAS_GRPC else object):  # ty
 
         grpcurl -plaintext \\
             -d '{"data":{"amount":"123.456"}}' \\
-            localhost:8950 pkg.PkgService/add_decimal
+            localhost:50051 pkg.grpc_api.GrpcApi/AddDecimal
 
     The ``data`` field of the request is a typed sub-message whose fields
     correspond to the function's parameters (all logical-type params use
@@ -445,7 +495,7 @@ class _ApigenGrpcHandler(grpc.GenericRpcHandler if _HAS_GRPC else object):  # ty
 
     def __init__(self, state: "_ServerState") -> None:
         self._state = state
-        self._full_service = f"{state.namespace}.{state.service_name}"
+        self._full_service = f"{state.package}.{state.service_name}"
 
     def service_name(self) -> str:
         return self._full_service
@@ -456,16 +506,16 @@ class _ApigenGrpcHandler(grpc.GenericRpcHandler if _HAS_GRPC else object):  # ty
         prefix = f"/{self._full_service}/"
         if not method.startswith(prefix):
             return None
-        fn_name = method[len(prefix):]
-        if fn_name not in self._state.op_map:
+        method_name = method[len(prefix):]
+        if method_name not in self._state.op_map:
             return None
 
-        req_cls = self._state.req_classes[fn_name]
-        resp_cls = self._state.resp_classes[fn_name]
-        fn_name_captured = fn_name
+        req_cls = self._state.req_classes[method_name]
+        resp_cls = self._state.resp_classes[method_name]
+        method_name_captured = method_name
 
         def _handle(request: Any, context: Any) -> Any:
-            result_json = self._dispatch(fn_name_captured, request, context)
+            result_json = self._dispatch(method_name_captured, request, context)
             resp = resp_cls()
             resp.data = result_json  # type: ignore[attr-defined]
             return resp
@@ -476,13 +526,13 @@ class _ApigenGrpcHandler(grpc.GenericRpcHandler if _HAS_GRPC else object):  # ty
             response_serializer=lambda r: r.SerializeToString(),
         )
 
-    def _dispatch(self, fn_name: str, request: Any, context: Any) -> str:
+    def _dispatch(self, method_name: str, request: Any, context: Any) -> str:
         """Extract params from the typed request → validate → invoke → encode.
 
         Args:
-            fn_name:  The Python function name (= gRPC method name).
-            request:  The decoded request proto message instance.
-            context:  The grpc.ServicerContext for abort/metadata.
+            method_name: The wire gRPC method name (plan-computed, Pascal-cased).
+            request:     The decoded request proto message instance.
+            context:     The grpc.ServicerContext for abort/metadata.
 
         Returns:
             JSON-encoded result string (placed in response ``data`` field).
@@ -510,7 +560,7 @@ class _ApigenGrpcHandler(grpc.GenericRpcHandler if _HAS_GRPC else object):  # ty
             pass
 
         # Pre-dispatch input validation (same gate as flask_server).
-        input_schema = self._state.input_schema_map.get(fn_name, {})
+        input_schema = self._state.input_schema_map.get(method_name, {})
         if input_schema:
             try:
                 validate(input_schema, data)
@@ -525,7 +575,7 @@ class _ApigenGrpcHandler(grpc.GenericRpcHandler if _HAS_GRPC else object):  # ty
         decoded_data = _decode_params(data, input_schema)
 
         host_req = HostRequest(
-            operation=self._state.op_map[fn_name],
+            operation=self._state.op_map[method_name],
             data=decoded_data,
             envelope=envelope,
             transport="grpc",
@@ -560,14 +610,15 @@ class ApigenGrpcServer:
     Each exported function becomes a unary gRPC method with fully typed
     request/response messages generated from its JSON-Schema input descriptor.
 
-    Method path:  ``/<namespace>.<Namespace>Service/<fn_name>``
+    Method path:  ``/<package>.<Service>/<Method>`` (plan-computed — see the
+    module docstring's "Service layout").
 
     grpcurl example::
 
         grpcurl -plaintext \\
             -d '{"data":{"amount":"123.456"}}' \\
-            localhost:8950 \\
-            pkg.PkgService/add_decimal
+            localhost:50051 \\
+            pkg.grpc_api.GrpcApi/AddDecimal
 
     Wire contract (canonical apigen tenet):
       All logical types keep their string wire form in the proto ``string``
@@ -579,6 +630,7 @@ class ApigenGrpcServer:
         self,
         module_path: str,
         namespace: str,
+        plan: dict[str, Any],
         host: str = "127.0.0.1",
         port: int = 50051,
         max_workers: int = 10,
@@ -590,20 +642,89 @@ class ApigenGrpcServer:
                 "Install with:  pip install grpcio grpcio-tools grpcio-reflection"
             )
         self._module_path = module_path
-        self._namespace = namespace
+        self._namespace = namespace  # informational only — package/service/method
+        # names are supplied by --plan-file (see _build_state()), never
+        # re-derived from `namespace` here.
+        self._plan = plan
         self._host = host
         self._port = port
         self._max_workers = max_workers
         self._server: Any = None
 
     def _build_state(self) -> "_ServerState":
-        """Load the module, extract operations, build descriptors + server state."""
-        ops = extract_module(self._module_path, namespace=self._namespace)
+        """Build descriptors + server state from the INJECTED `--plan-file` —
+        this server no longer self-extracts (apigen-serve-core
+        py-grpc-serve-split). `self._plan["operations"]` supplies the full
+        Operation[] (schema-bearing dicts, produced by
+        `apigen_python.extractor --emit-json` in a separate, short-lived
+        process — see plugin.ts's two-phase spawn) and
+        `self._plan["grpc"]` supplies each op's canonical
+        package/service/method, computed by the REAL
+        `@adhd/apigen-engine-naming` `project()` — never re-derived here.
+
+        The module is still loaded a SECOND time, independently, right here —
+        that load's only job is producing LIVE function references for the
+        runtime registry, which cannot cross a process boundary as data
+        (Python callables are not serialisable). This is unchanged from the
+        pre-split design and was confirmed safe by
+        `docs/apigen/proposals/py-extract-serve-split-findings.md` §1.2/§2.2.
+        """
+        ops: list[dict[str, Any]] = self._plan["operations"]
+        grpc_map: dict[str, dict[str, str]] = self._plan["grpc"]
         if not ops:
             raise ValueError(
-                f"No exportable operations found in {self._module_path!r}. "
-                "Ensure the module has public callable exports."
+                f"--plan-file for {self._module_path!r} carries zero "
+                "operations. Ensure the module has public callable exports."
             )
+
+        # gRPC-specific wrinkle (unchanged from pre-split design, confirmed
+        # by py-extract-serve-split-findings.md §2.2): only 'action'/
+        # 'constructor' kinds become gRPC methods; 'query' ops are dropped,
+        # falling back to all ops only if none qualify.
+        callable_ops = [op for op in ops if op.get("kind") in ("action", "constructor")]
+        if not callable_ops:
+            callable_ops = ops
+
+        # [fix:pygrpc-streaming-deferral] gRPC natively supports streaming,
+        # but this transport does not implement it. Reject explicitly rather
+        # than silently mishandling a streaming op as a plain unary call —
+        # this is a documented, already-tracked deferral, not a TODO here.
+        streaming_ops = [op for op in callable_ops if op.get("streaming")]
+        if streaming_ops:
+            ids = ", ".join(repr(op["id"]) for op in streaming_ops)
+            raise ValueError(
+                "apigen-py-grpc: streaming operations are not supported by "
+                f"this transport (deferred scope): {ids}. gRPC natively "
+                "supports streaming; implementing it here is out of scope "
+                "for the py-grpc-serve-split extract/serve split."
+            )
+
+        missing = [op["id"] for op in callable_ops if op["id"] not in grpc_map]
+        if missing:
+            raise ValueError(
+                f"apigen-py-grpc: --plan-file is missing a grpc entry for "
+                f"operation id(s) {missing!r} — the injected plan must "
+                f"cover every callable operation extract_module() (phase 1) "
+                f"produced, 1:1."
+            )
+
+        # A single server process serves exactly one Python source file, so
+        # every operation it exposes shares the same "file" path segment —
+        # and therefore the same projected package + service — by
+        # construction (see module docstring). Assert rather than silently
+        # pick one if that invariant were ever violated.
+        packages = {grpc_map[op["id"]]["package"] for op in callable_ops}
+        services = {grpc_map[op["id"]]["service"] for op in callable_ops}
+        if len(packages) != 1 or len(services) != 1:
+            raise ValueError(
+                "apigen-py-grpc: operations from a single module projected "
+                f"to multiple gRPC package/service pairs "
+                f"(packages={sorted(packages)!r}, services={sorted(services)!r}) "
+                "— a single server process can only host one file's worth "
+                "of gRPC package/service."
+            )
+        package = next(iter(packages))
+        service_name = next(iter(services))
 
         # Load the module to get live function references.
         # Register in sys.modules BEFORE exec_module (canonical importlib pattern)
@@ -623,7 +744,7 @@ class ApigenGrpcServer:
             raise
 
         registry: dict[str, Any] = {}
-        for op in ops:
+        for op in callable_ops:
             fn_name = op["path"][-1]["raw"]
             fn = getattr(mod, fn_name, None)
             if callable(fn):
@@ -631,36 +752,27 @@ class ApigenGrpcServer:
 
         runtime = Runtime(registry)
 
-        # Filter to only callable operations (skip kind=query for gRPC).
-        callable_ops = [op for op in ops if op.get("kind") in ("action", "constructor")]
-        if not callable_ops:
-            callable_ops = ops  # fall back to all ops
-
-        service_name = self._namespace.capitalize() + "Service"
         pool, req_classes, resp_classes = _build_descriptor_pool(
-            self._namespace, service_name, callable_ops
+            package, service_name, callable_ops, grpc_map
         )
 
         return _ServerState(
-            namespace=self._namespace,
+            package=package,
+            service_name=service_name,
             runtime=runtime,
             operations=callable_ops,
+            grpc_map=grpc_map,
             req_classes=req_classes,
             resp_classes=resp_classes,
         )
 
-    def _pool(self) -> Any:
-        """Return the DescriptorPool (used internally for reflection)."""
-        return self._state_pool
-
     def start(self) -> None:
         """Build state + descriptors, create the gRPC server, start serving."""
         state = self._build_state()
-        service_name = state.service_name
 
         # Re-build the pool for reflection (identical FileDescriptorProto).
         pool, _, _ = _build_descriptor_pool(
-            state.namespace, service_name, state.operations
+            state.package, state.service_name, state.operations, self._plan["grpc"]
         )
 
         handler = _ApigenGrpcHandler(state)
@@ -670,7 +782,7 @@ class ApigenGrpcServer:
         server.add_generic_rpc_handlers([handler])
 
         # Register reflection with our custom pool so grpcurl list/describe works.
-        service_names = [f"{state.namespace}.{service_name}"]
+        service_names = [f"{state.package}.{state.service_name}"]
         try:
             reflection.enable_server_reflection(service_names, server, pool=pool)
         except Exception as exc:
@@ -685,15 +797,15 @@ class ApigenGrpcServer:
         self._server = server
 
         # Print route summary to stderr (mirrors flask_server pattern).
-        ns = state.namespace
-        svc = service_name
+        pkg = state.package
+        svc = state.service_name
         print(
             f"apigen-py-grpc  listening on grpc://{self._host}:{self._port}",
             file=sys.stderr,
         )
-        print(f"  service: {ns}.{svc}", file=sys.stderr)
-        for fn_name in state.fn_names:
-            print(f"  method:  /{ns}.{svc}/{fn_name}", file=sys.stderr)
+        print(f"  service: {pkg}.{svc}", file=sys.stderr)
+        for method_name in state.method_names:
+            print(f"  method:  /{pkg}.{svc}/{method_name}", file=sys.stderr)
         sys.stderr.flush()
 
     def stop(self, grace: float = 2.0) -> None:
@@ -736,6 +848,7 @@ class ApigenGrpcServer:
 def build_server(
     module_path: str,
     namespace: str,
+    plan: dict[str, Any],
     host: str = "127.0.0.1",
     port: int = 50051,
 ) -> "ApigenGrpcServer":
@@ -743,7 +856,13 @@ def build_server(
 
     Args:
         module_path: Path to the ``.py`` source file (absolute or relative).
-        namespace:   The apigen namespace slug (used as the gRPC proto package).
+        namespace:   The apigen namespace slug (informational only — the
+                     served gRPC package/service/method names come from
+                     `plan["grpc"]`, never re-derived from this value).
+        plan:        The TS-computed serve plan (`{"operations": [...],
+                     "grpc": {"<opId>": {"package": str, "service": str,
+                     "method": str}}}`) — see the module docstring's
+                     "Usage" section.
         host:        Bind address (default ``127.0.0.1``).
         port:        TCP port (default ``50051``).
 
@@ -751,7 +870,7 @@ def build_server(
         An :class:`ApigenGrpcServer` instance ready to call ``.start()`` or
         ``.serve_forever()``.
     """
-    return ApigenGrpcServer(module_path, namespace, host=host, port=port)
+    return ApigenGrpcServer(module_path, namespace, plan, host=host, port=port)
 
 
 # ---------------------------------------------------------------------------
@@ -762,10 +881,12 @@ def _main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "apigen Python gRPC server — serves a .py module over gRPC.\n\n"
-            "Service layout:\n"
-            "  package: <namespace>\n"
-            "  service: <Namespace>Service\n"
-            "  methods: /<namespace>.<Namespace>Service/<fn_name>\n\n"
+            "Service layout (TS-computed via @adhd/apigen-engine-naming's\n"
+            "project().grpc and injected via --plan-file; apigen-serve-core\n"
+            "py-grpc-serve-split):\n"
+            "  package: <dotted, all path segments but the method>\n"
+            "  service: <Pascal file segment>\n"
+            "  methods: /<package>.<Service>/<PascalMethod>\n\n"
             "Wire encoding (canonical apigen tenet):\n"
             "  Request:  typed sub-message per function\n"
             "            date-time/decimal/uuid → string fields\n"
@@ -777,19 +898,38 @@ def _main() -> None:
             "grpcurl example:\n"
             "  grpcurl -plaintext \\\n"
             "    -d '{\"data\":{\"amount\":\"123.456\"}}' \\\n"
-            "    localhost:8950 pkg.PkgService/add_decimal\n"
+            "    localhost:50051 pkg.grpc_api.GrpcApi/AddDecimal\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--module", required=True, help="Path to the Python source module")
-    parser.add_argument("--namespace", required=True, help="Namespace slug (proto package name)")
+    parser.add_argument(
+        "--namespace", required=True,
+        help="Namespace slug (informational only; wire naming comes from --plan-file)",
+    )
     parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=50051, help="TCP port (default: 50051)")
+    parser.add_argument(
+        "--plan-file", required=True,
+        help=(
+            "Path to a JSON file: {\"operations\": [...Operation dicts, exactly "
+            "apigen_python.extractor --emit-json's output...], \"grpc\": "
+            "{\"<opId>\": {\"package\": str, \"service\": str, \"method\": str}}}. "
+            "REQUIRED — this server no longer self-extracts or re-derives "
+            "package/service/method (apigen-serve-core py-grpc-serve-split); "
+            "produced by the py-grpc TS plugin's two-phase spawn (extractor "
+            "--emit-json -> @adhd/apigen-engine-naming project() -> this flag)."
+        ),
+    )
     args = parser.parse_args()
+
+    with open(args.plan_file, "r", encoding="utf-8") as plan_fh:
+        plan = json.load(plan_fh)
 
     server = build_server(
         module_path=args.module,
         namespace=args.namespace,
+        plan=plan,
         host=args.host,
         port=args.port,
     )
