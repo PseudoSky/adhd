@@ -1,3 +1,20 @@
+## 0.1.4 (2026-07-24)
+
+
+### 🚀 Features
+
+- **apigen-plugin-cli-output:** migrate to TransportAdapter over OpPlan.cliFlags
+
+
+### 🩹 Fixes
+
+- **apigen-plugin-cli-output:** reword run.ts doc comments to avoid literal "project(" substring
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.3 (2026-07-23)
 
 

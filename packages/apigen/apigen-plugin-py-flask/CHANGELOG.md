@@ -1,3 +1,22 @@
+## 0.1.4 (2026-07-24)
+
+
+### 🚀 Features
+
+- **apigen-plugin-py-flask:** TS-computed-plan extract/serve split
+
+
+### 🩹 Fixes
+
+- **apigen:** guarantee py-flask/py-grpc test subprocess teardown
+
+- **apigen:** use ephemeral ports for py-flask/py-grpc test servers
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.3 (2026-07-23)
 
 

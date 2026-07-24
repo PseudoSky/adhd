@@ -1,3 +1,7 @@
+## 2.2.4 (2026-07-24)
+
+This was a version bump only for data-core-structures to align it with other projects, there were no code changes.
+
 ## 2.2.3 (2026-07-23)
 
 
