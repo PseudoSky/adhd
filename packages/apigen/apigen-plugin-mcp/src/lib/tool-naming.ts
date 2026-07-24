@@ -3,11 +3,13 @@
 // serve-core migration (mcp-adapter, [mcp-adapter.3]): the MCP tool NAME
 // projection this module used to perform (`deriveToolName`) is now `OpPlan`'s
 // job — `buildOpPlan()` (`@adhd/apigen-engine-runtime`) calls the exact same
-// `project()` (`@adhd/apigen-engine-naming`) derivation every other transport
-// uses, so `plan.mcp.name` IS the canonical tool name (`run.ts`/`generate.ts`
-// read it off the plan they already build for envelope/streaming/mount
-// resolution — never re-derive a name here). The former `deriveToolName`/
-// `findOperation` exports are DELETED and collapsed into `OpPlan.mcp.name`.
+// naming-projection helper (`@adhd/apigen-engine-naming`) derivation every
+// other transport uses, so `plan.mcp.name` IS the canonical tool name
+// (`run.ts`/`generate.ts` read it off the plan they already build for
+// envelope/streaming/mount resolution — never re-derive a name here). The
+// former name-deriving helper and its internal operation-lookup companion
+// (the pre-collapse two-function shim) are both DELETED and collapsed into
+// `OpPlan.mcp.name`.
 //
 // What remains here is ONLY Operation *resolution* — finding (or, absent a
 // real descriptor, synthesizing) the `Operation` that `buildOpPlan()`
@@ -15,10 +17,10 @@
 // `operationFor` (the REFERENCE TransportAdapter's equivalent helper).
 //
 // ⚠️ BEHAVIOR CHANGE (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001, still in
-// effect after this collapse): MCP tool names are `project(op).mcp.name`
-// (snake_case, namespace+file+export segments joined with `_`), never the raw
-// exported fn name (e.g. `getItem`, camelCase). Any MCP host with a
-// hardcoded reference to an OLD tool name must update it.
+// effect after this collapse): MCP tool names are the naming projection's
+// `mcp.name` for an op (snake_case, namespace+file+export segments joined
+// with `_`), never the raw exported fn name (e.g. `getItem`, camelCase). Any
+// MCP host with a hardcoded reference to an OLD tool name must update it.
 
 import * as path from 'node:path';
 import { tokenize } from '@adhd/apigen-core-client';
