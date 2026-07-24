@@ -4,7 +4,8 @@ const { existsSync } = require('node:fs');
 const { dirname, join } = require('node:path');
 const { hasBuildTarget, isPublishable } = require('./detect-target');
 function skip(p) { return p === '.' || p.startsWith('node_modules/') || p.includes('/node_modules/') || p.startsWith('dist/') || p.includes('/dist/') || p.startsWith('tmp/') || p.includes('/tmp/'); }
-exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) => {
+exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) =>
+{
   const projectRoot = dirname(pkgPath);
   if (skip(projectRoot)) return {};
   if (!existsSync(join(ctx.workspaceRoot, projectRoot, 'project.json'))) return {};
@@ -59,5 +60,18 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) => {
   // it. `dependsOn: ["build","assets"]` mirrors `version`'s own dist
   // freshness/doc-completeness requirement; `cache:false` because it reads
   // live registry state with no stable cache key.
-  return { projects: { [projectRoot]: { targets: {"version":{"executor":"@adhd/nx-build:version","dependsOn":["build","assets","^version"],"cache":false},"reconcile":{"executor":"@adhd/nx-build:reconcile","dependsOn":["build","assets"],"cache":false},"dist-manifest":{"executor":"@adhd/nx-build:manifest","dependsOn":["build","assets"],"cache":false},"verify-dist-load":{"executor":"@adhd/nx-build:verify","dependsOn":["build"],"cache":true},"publish-hygiene":{"executor":"@adhd/nx-build:hygiene","dependsOn":["dist-manifest"],"cache":true},"publish":{"executor":"@adhd/nx-build:publish","dependsOn":["dist-manifest","verify-dist-load","publish-hygiene"],"cache":false}} } } };
+  return {
+    projects: {
+      [projectRoot]: {
+        targets: {
+          "version": { "executor": "@adhd/nx-build:version", "dependsOn": ["build", "assets", "^version"], "cache": false },
+          "reconcile": { "executor": "@adhd/nx-build:reconcile", "dependsOn": ["build", "assets"], "cache": false },
+          "dist-manifest": { "executor": "@adhd/nx-build:manifest", "dependsOn": ["build", "assets"], "cache": false },
+          "verify-dist-load": { "executor": "@adhd/nx-build:verify", "dependsOn": ["build"], "cache": true },
+          "publish-hygiene": { "executor": "@adhd/nx-build:hygiene", "dependsOn": ["dist-manifest"], "cache": true },
+          "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["version", "dist-manifest", "verify-dist-load", "publish-hygiene"], "cache": false }
+        }
+      }
+    }
+  };
 }];
