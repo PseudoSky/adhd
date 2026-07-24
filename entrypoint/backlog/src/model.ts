@@ -250,6 +250,19 @@ export interface BacklogFilter {
    * independent of which OTHER files also cite the same id.
    */
   importedFrom?: string;
+  /**
+   * Repo-level projection selector (MIGRATION.md §2.2 "root BACKLOG.md =
+   * repo-only, no projectPath/plan"). When true, returns only items that carry
+   * NEITHER a `projectPath` NOR a `plan` — i.e. items owned by the repo root
+   * rather than a package or plan projection. Unlike the `importedFrom`
+   * workaround it does not depend on provenance, so a freshly tool-created
+   * repo-level item (which has no `importedFrom`) still appears in the root
+   * projection — the Phase-3 DoD ("a fresh create-item appears in the
+   * regenerated BACKLOG.md") requires this. Cross-referenced items that carry a
+   * `plan`/`projectPath` render in that plan/package projection instead, never
+   * duplicated into root.
+   */
+  rootLevel?: boolean;
   limit?: number;
   offset?: number;
 }
