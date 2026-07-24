@@ -81,11 +81,11 @@
       "end_ref": "a61e2c76ebc417745490a82f3327408554a4449e"
     },
     "audit-python": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-07-24T13:54:03.092Z",
-      "done_at": null,
+      "done_at": "2026-07-24T13:56:51.924Z",
       "start_ref": "d97a7694a1b2dc609167950ba48519a0e1fefeb4",
-      "end_ref": null
+      "end_ref": "409127791fb053d6837ed7502eeced2a09a21c95"
     },
     "audit-final": {
       "status": "pending",
@@ -263,6 +263,18 @@
       "audit_criteria_total": 59,
       "by": "plan-orchestrator",
       "note": "TS-computed-plan extract/serve split + naming reconciliation: grpc_server.py accepts injected --plan-file (reusing py-flask-serve-split's --emit-json extractor mode); divergent inline naming (namespace.capitalize()+Service + raw method names, 5 call sites: _ServerState.__init__, ApigenGrpcServer.start(), _build_file_descriptor_proto, _build_descriptor_pool, _ApigenGrpcHandler.service/__init__) replaced everywhere with the plan-injected grpc.package/service/method from the real project(). streaming:true ops explicitly rejected (ValueError, [fix:pygrpc-streaming-deferral], verified via live spawn never emitting ready). Guard: 14/14 tests green. Negative control proven RED->GREEN fresh this run (test asserts the full apply-patch/assert-red/revert/assert-green cycle). Companion fix: cross-host-response-envelope.spec.ts's startPyServer() updated for required --plan-file, plus 2 downstream regressions from the naming reconciliation fixed in the same commit (serve.spec.ts hardcoded old B.BService/method addresses now computed via project(); commands/serve.ts stale docstring). apigen-cli:test: 156/156 green incl cross-host (2/2). Both guards independently re-verified by orchestrator, consistent with committed HEAD. Session-limit interruption mid-dispatch: resumed the same executor from its intact uncommitted working-tree state rather than restarting; it re-verified everything fresh before committing. Bugs found+reported, not fixed: ~60+ leaked orphan grpc_server subprocesses from past test runs (teardown reliability issue, not blocking); a 3x-duplicated runExtractorEmitJson helper across py-flask/py-grpc plugin.ts + the cross-host test (Two-Use Refactor Rule candidate, blocked by py-flask's plugin.ts being read-only for this state); a pre-existing dead _pool()/_state_pool reference removed during the rewrite."
+    },
+    {
+      "ts": "2026-07-24T13:56:51.924Z",
+      "from": "audit-python",
+      "to": "audit-python",
+      "start_ref": "d97a7694a1b2dc609167950ba48519a0e1fefeb4",
+      "end_ref": "409127791fb053d6837ed7502eeced2a09a21c95",
+      "audit_exit": 0,
+      "audit_criteria_passed": 59,
+      "audit_criteria_total": 59,
+      "by": "plan-orchestrator",
+      "note": "Phase-3 audit gate: py-extract-preflight + py-flask-serve-split + py-grpc-serve-split all verified complete. All accumulated phase-1/2/3 criteria checked."
     }
   ],
   "amendment_log": [],
@@ -271,7 +283,7 @@
     "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
-  "current_state": "audit-python",
+  "current_state": "audit-final",
   "dod_provenance": {
     "confirmed_at": "2026-07-24T03:27:07.924Z",
     "by": "plan-orchestrator",
