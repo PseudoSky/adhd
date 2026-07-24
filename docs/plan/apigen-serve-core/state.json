@@ -53,10 +53,10 @@
       "end_ref": "59b6f4e3b9581673cea1ed1cfc0c6df138b781ae"
     },
     "audit-transports": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-24T09:43:14.456Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "80b47d48f70767367c9451769d9326f476c80070",
       "end_ref": null
     },
     "py-extract-preflight": {
