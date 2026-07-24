@@ -11,11 +11,11 @@
       "end_ref": "ab0c14f2017a74618e88cf7e4d35d57e74c389e4"
     },
     "parity-harness": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-07-24T04:10:58.309Z",
-      "done_at": null,
+      "done_at": "2026-07-24T04:19:28.518Z",
       "start_ref": "e00cffb70ee5f6df40b6241dbca034721d388fda",
-      "end_ref": null
+      "end_ref": "f11297bc74448419bfbedcb147a1e92a109b1451"
     },
     "fastify-adapter": {
       "status": "pending",
@@ -107,6 +107,18 @@
       "audit_criteria_total": 21,
       "by": "plan-orchestrator",
       "note": "Built OpPlan (buildOpPlan) resolving Operation+composed-schema into transport-complete plan (http/mcp/cli/grpc projection, params, envelope[], cliFlags Map w/ envVar per F2, streaming, isMount/mountHandler); TransportAdapter port (registerRoute/readCall/writeResult/writeError) per F1 corrected Promise<LayerResult> signatures; createPackageInvoker promoting UsePlugin/readUsePlugins/readUseOptions/adaptCoreLayer out of fastify (not yet deleted from fastify - later state); dispatchForPlan routing mount ops through the composed --use layer stack via a synthetic passthrough schema/fn entry (fix:mount-through-layers) while stamping Call.transport from plan.transport, tested against non-http transport (F3). All 23 new tests + full 180-test suite green; lint clean; build (type-check via vite-dts) green. No transport consumes these primitives yet."
+    },
+    {
+      "ts": "2026-07-24T04:19:28.518Z",
+      "from": "parity-harness",
+      "to": "parity-harness",
+      "start_ref": "e00cffb70ee5f6df40b6241dbca034721d388fda",
+      "end_ref": "f11297bc74448419bfbedcb147a1e92a109b1451",
+      "audit_exit": 7,
+      "audit_criteria_passed": 14,
+      "audit_criteria_total": 21,
+      "by": "plan-orchestrator",
+      "note": "Built captureGolden/assertParity/proveNegativeControl in src/test-support/parity-harness.ts, independent of serve-core primitives (no op-plan/dispatch-for-plan imports). Self-test spec drives a real node:http server via fetch (real consumer protocol) for captureGolden/assertParity, and a real ephemeral git repo under tmp/ for proveNegativeControl (real git apply / git apply -R cycle). Teeth: assertParity test mutates one recaptured field and asserts ParityMismatchError with only that fixture name reported; proveNegativeControl test asserts it itself throws (stayed GREEN) when a no-op runner fails to go red under the patch, and that the patch is still reverted via the finally-cleanup even on that failure path. Guard CI=true nx run apigen-engine-runtime:test green: 191/191 (180 pre-existing + 11 new). Lint green."
     }
   ],
   "amendment_log": [],
@@ -115,7 +127,7 @@
     "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
-  "current_state": "parity-harness",
+  "current_state": "fastify-adapter",
   "dod_provenance": {
     "confirmed_at": "2026-07-24T03:27:07.924Z",
     "by": "plan-orchestrator",
