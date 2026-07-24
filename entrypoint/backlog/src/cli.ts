@@ -27,6 +27,7 @@ import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore } from './store/graph-backlog-store.js';
 import { buildBacklogEnv } from './env.js';
 import { buildBacklogApigenPackage, requireRun } from './server.js';
+import { runInstallSkillCommand } from './install-skill.js';
 
 /**
  * Derives the internal command-path PREFIX every `client.ts` operation
@@ -124,6 +125,18 @@ export interface RunBacklogCliOpts {
  *   convention.
  */
 export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {}): Promise<void> {
+  const userArgvEarly = argv ?? process.argv.slice(2);
+  // `install-skill` (MIGRATION.md §4.2) is a PURE filesystem operation — copy
+  // the packaged `skill/SKILL.md` to a per-host path — not an apigen-
+  // dispatched `client.ts` export (it needs no store/ctx at all), so it is
+  // special-cased here, before ever building the apigen package/command
+  // table, exactly the way `cliPlugin.run()` itself special-cases `--help`/
+  // `-h` before consulting its own route table.
+  if (userArgvEarly[0] === 'install-skill') {
+    await runInstallSkillCommand(userArgvEarly.slice(1));
+    return;
+  }
+
   // Opened lazily, at most once, only if `getCtx()` is actually invoked (a
   // dispatched command reaching a real function) — never for `--help`,
   // no-args, an unknown command, or a bad-flag rejection, all of which `run()`
@@ -141,7 +154,7 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
 
   try {
     const { pkg, operations } = await buildBacklogApigenPackage(getCtx);
-    const userArgv = argv ?? process.argv.slice(2);
+    const userArgv = userArgvEarly;
     const prefix = resolveCommandPrefix(operations);
 
     await requireRun(cliPlugin)({
