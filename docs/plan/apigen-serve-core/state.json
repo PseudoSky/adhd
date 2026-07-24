@@ -53,11 +53,11 @@
       "end_ref": "59b6f4e3b9581673cea1ed1cfc0c6df138b781ae"
     },
     "audit-transports": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-07-24T09:43:14.456Z",
-      "done_at": null,
+      "done_at": "2026-07-24T09:48:16.338Z",
       "start_ref": "80b47d48f70767367c9451769d9326f476c80070",
-      "end_ref": null
+      "end_ref": "e7923805d04e371393a556329732670487db6bc7"
     },
     "py-extract-preflight": {
       "status": "complete",
@@ -215,6 +215,18 @@
       "audit_criteria_total": 59,
       "by": "plan-orchestrator",
       "note": "Phase-3 preflight spike (proposal §8.3), read-only research, zero source files touched. DECISION: SAFE -- extract_module() is a side-effect-neutral pure-data producer; its only process-global mutation (sys.modules entry) is read by nothing, including flask_server.py's own _build_state, which performs its own independent second module load and only ever consumes extract_module()'s output as plain-data (function names + JSON schema). Two-phase extract/serve split proceeds as designed; the only real gap found is a missing --plan entry point on _build_state, already explicitly Phase 3's (py-flask-serve-split's) job to add -- not a safety defect, no PLANNER-CLASS escalation needed. py-grpc shape recorded per criterion 3. Guard (grep -q '^DECISION:') passes. Fixed a second criteria.json regex bug along the way: py-extract-preflight.2's pattern '^DECISION:' used JS RegExp without the multiline flag, so '^' anchored to start-of-FILE not start-of-line -- permanently false-failing since DECISION: is on line 47, not line 1. Dropped the anchor (state's real guard already enforces the line-start requirement via grep, unaffected). Remaining accumulated phase-3 audit failures (py-flask-serve-split.*, py-grpc-serve-split.*) belong to not-yet-executed sibling states, not this one."
+    },
+    {
+      "ts": "2026-07-24T09:48:16.338Z",
+      "from": "audit-transports",
+      "to": "audit-transports",
+      "start_ref": "80b47d48f70767367c9451769d9326f476c80070",
+      "end_ref": "e7923805d04e371393a556329732670487db6bc7",
+      "audit_exit": 0,
+      "audit_criteria_passed": 44,
+      "audit_criteria_total": 44,
+      "by": "plan-orchestrator",
+      "note": "Phase-2 audit gate: express-adapter + mcp-adapter + cli-adapter all verified complete (44/44 phase-1+2 criteria). No new fixes needed at this gate itself (both criteria.json regex bugs and mcp-adapter's self-referential comment were already fixed while completing wave-3's own states)."
     }
   ],
   "amendment_log": [],
@@ -223,7 +235,7 @@
     "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
-  "current_state": "audit-transports",
+  "current_state": "py-flask-serve-split",
   "dod_provenance": {
     "confirmed_at": "2026-07-24T03:27:07.924Z",
     "by": "plan-orchestrator",
