@@ -21,13 +21,20 @@
  * `'close'` event.  We honour this via an `AbortController` that signals the
  * Layer harness stream to stop production cleanly (end path, not error — §11).
  *
- * Usage (inside a Fastify route handler for a streaming:true operation):
+ * serve-core migration (fastify-adapter): `sendStreamSse` is now WIRED LIVE —
+ * the `FastifyTransportAdapter.writeResult` (`./run.ts`) calls it whenever a
+ * dispatched op resolves to an `ApiStream` (`isApiStream(result)`), projecting
+ * a `streaming:true` op to SSE ([fix:streaming-wired], DEBT-APIGEN-SERVE-CORE-
+ * 002 fastify half). Before the migration this function had ZERO call sites and
+ * a streaming result was mis-serialized through `JSON.stringify`.
+ *
+ * Consumer path (in `run.ts`'s `writeResult`):
  *
  * ```ts
- * app.post('/svc/streamOp', (req, reply) => {
- *   const stream = invoke('streamOp', call, opts) as ApiStream<unknown>
- *   return sendStreamSse(stream, req, reply)
- * })
+ * if (isApiStream(result)) {
+ *   await sendStreamSse(result as ApiStream<unknown>, req, reply)
+ *   return
+ * }
  * ```
  */
 

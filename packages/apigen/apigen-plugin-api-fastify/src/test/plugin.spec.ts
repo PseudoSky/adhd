@@ -1145,9 +1145,7 @@ function parityGetThing(id: string): { id: string } {
   if (id === 'missing') throw new ApiError('not_found', 'no such thing');
   return { id };
 }
-let parityScheduleCalls = 0;
 function parityScheduleEvent(when: unknown): { ok: true; when: string } {
-  parityScheduleCalls += 1;
   return { ok: true, when: (when as Date).toISOString() };
 }
 
@@ -1344,7 +1342,6 @@ describe('[fastify-parity] TransportAdapter/OpPlan golden-snapshot parity gate',
   let driver: ParityDriver<HttpFixtureInput, HttpFixtureOutput>;
 
   beforeAll(async () => {
-    parityScheduleCalls = 0;
     controller = new AbortController();
     const port = await freePort();
     const runInput: RunInput = {
@@ -1464,5 +1461,24 @@ describe('[fastify-parity] TransportAdapter/OpPlan golden-snapshot parity gate',
     ) as GoldenSnapshot<HttpFixtureOutput>;
 
     assertParity(committed, recapture);
+  });
+
+  // [fastify-adapter.3] TEETH — streaming:true is served as LIVE SSE. This is a
+  // flagged behavior CHANGE ([inv:byte-identical] / [dod.5]), so it is NOT part
+  // of the byte-identical golden above; it is proven here by asserting the real
+  // fetch-driven server actually emits ordered SSE data frames. Reverting the
+  // `isApiStream(result)` branch in run.ts's writeResult (so a stream falls
+  // through to JSON.stringify) turns content-type to application/json and the
+  // frame assertion red — the negative control for the streaming half.
+  it('serves a streaming:true op as live SSE frames [1,2,3] (not mis-serialized JSON)', async () => {
+    const res = await fetch(`${baseUrl}/stream-pkg/stream-nums`, {
+      method: 'GET',
+    });
+    expect(res.ok).toBe(true);
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+    const frames = parseSseFramesParity(await res.text()).filter(
+      (f) => !f.event
+    );
+    expect(frames.map((f) => JSON.parse(f.data) as number)).toEqual([1, 2, 3]);
   });
 });
