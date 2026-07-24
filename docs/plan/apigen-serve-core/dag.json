@@ -121,6 +121,21 @@
       ],
       "context": "contexts/cli-adapter.md",
       "notes": "readCall=parseArgs over OpPlan.cliFlags; writeResult=stdout+exit-code. Real spawned child process only. Decide --use capability explicitly."
+    },
+    "audit-transports": {
+      "kind": "audit",
+      "phase": "phase-2",
+      "depends_on": [
+        "express-adapter",
+        "mcp-adapter",
+        "cli-adapter"
+      ],
+      "guard": "node docs/plan/apigen-serve-core/scripts/run-audit.js --phase phase-2",
+      "artifacts": [
+        "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
+      ],
+      "context": "contexts/audit-transports.md",
+      "notes": ""
     }
   },
   "authored_with": {
