@@ -22,7 +22,7 @@ You are an expert full-stack engineer operating within a high-scale **Nx Monorep
 - You never create folders in the repo root without human approval
 - You never chain file removals in bash commands
 - You never write fs removals within scripts relying on variables without human approval
-- You always write bugs discovered to the repo BACKLOG.md
+- You file, claim, transition, and resolve backlog items via the `backlog` CLI / `mcp__backlog__*` tools — never by hand-editing a `BACKLOG.md`. Every `BACKLOG.md` is now a generated projection of the global backlog graph (`@adhd/backlog`, migration phase-3); a hand edit is overwritten on the next render and rejected by the parity gate. Check `backlog migration-status` for the authoritative phase. (For this repo, this supersedes the global "store deferrals/bugs to BACKLOG.md" disclosure rule.)
 - You never declare bugs as "pre-existing"
 - After merging branches or worktrees, you always clean up the branch and write to the apropriate changelogs
 - You always update relevant docs to include surface features added (add to backlog if the docs do not exist)
@@ -271,6 +271,19 @@ See [PUBLISHING.md](./PUBLISHING.md) for the full version-bump, build, and publi
 
 - Use **Conventional Commits**: `feat(scope):`, `fix(scope):`, `refactor(scope):`.
 - Always include the library name as the scope (e.g., `feat(ui-primitives): add segmented-control`).
+
+## 🧵 13. Task Decomposition — when to fan out instead of looping in one context
+
+adhd's token spend is dominated by a single structural anti-pattern, not by expensive models or bad prompts: a subagent given a naturally decomposable job (fix N files, migrate N backlog entries, orchestrate N independent steps) looping internally over all N items in **one continuous dispatch** instead of forking. Four real examples from one session alone: `backlog-tool-fixer` (399 sequential tool calls → 155M tokens), `typescript-pro` (341 calls → 122M tokens), `backlog-migrator-2` (360 calls → 112M tokens), `apigen-orch` (304 calls → 104M tokens) — combined tool *output* for each was under 1MB, and turn-by-turn inspection shows `cache_read` tokens climbing every turn while each turn's actual new output stays flat: every turn re-pays to re-read the entire accumulated conversation history, so cumulative cost over N turns grows faster than linearly with N. A controlled A/B test (8 files, same task, same model, only the dispatch structure varied) measured this directly: one continuous 9-turn dispatch cost 1.13x what the same work cost split into 8 independent one-turn dispatches via `pipeline()` — the effect is negligible at ~10 turns and dominant at the 300-400 turn scale these production dispatches ran at. Full detail: BACKLOG DEBT items for monolithic-dispatch (token-cost driver) and parked-teammate idle gaps (wall-clock driver).
+
+**The rule:** before dispatching a Task/Agent for work that spans a list of independently-fixable items (files, tickets, migration targets, config entries, etc.), count the items first.
+
+- **≤5 items, or the item count genuinely can't be known upfront:** a single `Agent()`/Task dispatch is fine.
+- **>5 items, or you can already see the work is "the same fix repeated across a list":** use the `Workflow` tool's `pipeline()`/`parallel()` — one bounded `agent()` call per item — instead of a single dispatch that iterates internally. See the `Workflow` tool's own docstring for the pipeline-vs-barrier decision rule; default to `pipeline()`.
+- **If a dispatch you're running is already past ~100 sequential tool calls and you can see more of the same-shaped work ahead:** stop, report back the remaining item list to your orchestrator, and let it re-dispatch the rest as parallel work rather than continuing serially.
+- **Reserve Opus for judgment/architecture calls, not high-volume sweeps.** Running a 100+ call sweep on Opus stacks a 5x model-cost multiplier on top of the structural problem — decompose first, then pick the cheapest model that's sufficient per item.
+- **Don't park teammates.** An `in_process_teammate`/`SendMessage`-based agent that has finished its assigned work should be closed out (`TaskStop`) — not left idle waiting for the next assignment. A parked teammate that sits for hours between jobs inflates session wall-clock and forces a cache-cold re-prime on its next resume.
+- **Self-check periodically:** `scratch-claude-metadata flags <project>` (in `~/dev/ai/scratch/claude-metadata`) flags `MONOLITHIC_DISPATCH`, `IDLE_GAP`, `RETRY_LOOP`, `HIGH_ERROR_RATE`, and `HIGH_CHURN` against real session history — run it after a big orchestration to catch this before it compounds.
 
 ---
 
