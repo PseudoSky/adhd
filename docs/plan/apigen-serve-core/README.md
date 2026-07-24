@@ -29,3 +29,11 @@ Centralize the op->wire serve loop into OpPlan + createPackageInvoker + dispatch
   - entrypoint: `node docs/plan/apigen-serve-core/scripts/run-audit.js --phase final`
   - observable: `each adapter's negative-control criterion reports the mutate variant RED and the restored variant GREEN`
   - delivered-by: `fastify-adapter, express-adapter, mcp-adapter, cli-adapter`
+
+- `[dod.4]` **MCP composes createPackageInvoker/makeValidateLayer for the first time; malformed MCP tool input is rejected with invalid_argument (was silently accepted) — a flagged, tested behavior change closing BUG-APIGEN-SERVE-CORE-001. (behavioral)** — MCP composes createPackageInvoker/makeValidateLayer for the first time; malformed MCP tool input is rejected with invalid_argument (was silently accepted) — a flagged, tested behavior change closing BUG-APIGEN-SERVE-CORE-001..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test`
+  - observable: `a real @modelcontextprotocol/sdk client sending schema-violating input receives an invalid_argument error instead of a domain result`
+  - delivered-by: `mcp-adapter`
