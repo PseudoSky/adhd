@@ -27,7 +27,7 @@
  * defeat the point of an independent-of-the-refactor parity check.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, type ChildProcess } from 'node:child_process';
 import { isDeepStrictEqual } from 'node:util';
 
 // ---------------------------------------------------------------------------
@@ -247,4 +247,47 @@ function applyPatch(patchPath: string, cwd: string): void {
 
 function revertPatch(patchPath: string, cwd: string): void {
   execFileSync('git', ['apply', '-R', patchPath], { cwd, stdio: 'pipe' });
+}
+
+// ---------------------------------------------------------------------------
+// Shared subprocess teardown — killChildProcess
+// ---------------------------------------------------------------------------
+
+/**
+ * Bulletproof teardown for a spawned test server (`flask_server.py`,
+ * `grpc_server.py`, …): sends `SIGTERM`, waits for the process's real `exit`
+ * event, and escalates to `SIGKILL` if it hasn't exited within
+ * `gracefulTimeoutMs` (BUG-APIGEN-TEST-SUBPROCESS-TEARDOWN-LEAK-001).
+ *
+ * The bug this fixes: a bare `proc.kill('SIGTERM')` racing a `setTimeout`
+ * that resolves regardless of whether the process actually died leaves an
+ * unresponsive Python process running — it binds a fixed test port and
+ * survives to answer (with stale/pre-migration behavior) a later, unrelated
+ * test suite that happens to reuse the same port. Resolving here ONLY on the
+ * real `exit` event (never on a bare timer) plus the `SIGKILL` escalation
+ * guarantees the process is gone, and gone within a bounded deadline, before
+ * the caller proceeds.
+ *
+ * No-op if the process has already exited.
+ */
+export async function killChildProcess(
+  proc: ChildProcess,
+  gracefulTimeoutMs = 2000
+): Promise<void> {
+  if (proc.exitCode !== null || proc.signalCode !== null) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    let exited = false;
+    proc.once('exit', () => {
+      exited = true;
+      resolve();
+    });
+    proc.kill('SIGTERM');
+    setTimeout(() => {
+      if (!exited) {
+        proc.kill('SIGKILL');
+      }
+    }, gracefulTimeoutMs);
+  });
 }
