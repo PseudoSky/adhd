@@ -443,6 +443,16 @@
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts"
       ]
+    },
+    {
+      "id": "serve-core-primitives.9",
+      "phase": "phase-1",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "envVar",
+      "paths": [
+        "packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts"
+      ]
     }
   ]
 }

@@ -25,6 +25,7 @@
 - [serve-core-primitives.6] apigen-engine-runtime unit suite (incl. op-plan.spec) passes
 - [serve-core-primitives.7] UsePlugin/readUsePlugins/readUseOptions/adaptCoreLayer PROMOTED into createPackageInvoker (dod.13)
 - [serve-core-primitives.8] OpPlan carries a transport field for per-package stamping (F3/dod.14)
+- [serve-core-primitives.9] OpPlan.cliFlags carries envVar so parseArgs env-var fallback is not regressed (F2)
 ---
 
 ## Reservations
