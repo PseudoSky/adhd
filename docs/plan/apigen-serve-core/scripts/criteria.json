@@ -258,6 +258,16 @@
       "paths": [
         "packages/apigen/apigen-plugin-cli-output/src/lib/run.ts"
       ]
+    },
+    {
+      "id": "cli-adapter.2",
+      "phase": "phase-2",
+      "tier": 1,
+      "kind": "absent",
+      "pattern": "project(",
+      "paths": [
+        "packages/apigen/apigen-plugin-cli-output/src/lib/run.ts"
+      ]
     }
   ]
 }
