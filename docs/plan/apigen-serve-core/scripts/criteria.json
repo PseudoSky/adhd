@@ -224,6 +224,13 @@
       "paths": [
         "packages/apigen/apigen-plugin-mcp/src/lib/tool-naming.ts"
       ]
+    },
+    {
+      "id": "mcp-adapter.4",
+      "phase": "phase-2",
+      "tier": 1,
+      "kind": "exists",
+      "path": "packages/apigen/apigen-plugin-mcp/src/test/golden/mcp.snapshot.json"
     }
   ]
 }
