@@ -27,7 +27,7 @@
 
 ```text
 read_only:  ["packages/apigen/apigen-engine-naming/src/lib/naming.ts", "packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts", "packages/apigen/python/apigen_python/extractor.py", "packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts", "docs/apigen/proposals/py-extract-serve-split-findings.md"]
-mutates:    ["packages/apigen/python/apigen_python/grpc_server.py", "packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts", "packages/apigen/apigen-plugin-py-grpc/src/test/plugin.spec.ts", "packages/apigen/apigen-plugin-py-grpc/src/test/golden/py-grpc.snapshot.json"]
+mutates:    ["packages/apigen/python/apigen_python/grpc_server.py", "packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts", "packages/apigen/apigen-plugin-py-grpc/src/test/plugin.spec.ts", "packages/apigen/apigen-plugin-py-grpc/src/test/golden/py-grpc.snapshot.json", "docs/plan/apigen-serve-core/neg-control/py-grpc-serve-split.patch"]
 ```
 
 ---

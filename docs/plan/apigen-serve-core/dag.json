@@ -183,7 +183,8 @@
         "packages/apigen/python/apigen_python/grpc_server.py",
         "packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts",
         "packages/apigen/apigen-plugin-py-grpc/src/test/plugin.spec.ts",
-        "packages/apigen/apigen-plugin-py-grpc/src/test/golden/py-grpc.snapshot.json"
+        "packages/apigen/apigen-plugin-py-grpc/src/test/golden/py-grpc.snapshot.json",
+        "docs/plan/apigen-serve-core/neg-control/py-grpc-serve-split.patch"
       ],
       "context": "contexts/py-grpc-serve-split.md",
       "notes": "Reuse --emit-json extractor mode; inject TS-computed plan into grpc_server via --plan; delete its project() re-derivation. Scope confirmed by py-extract-preflight."
