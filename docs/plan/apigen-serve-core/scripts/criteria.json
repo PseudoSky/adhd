@@ -9,7 +9,8 @@
       "pattern": "createPackageInvoker",
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/index.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "serve-core-primitives.2",
@@ -19,7 +20,8 @@
       "pattern": "dispatchForPlan",
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/index.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "serve-core-primitives.3",
@@ -29,7 +31,8 @@
       "pattern": "OpPlan",
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/index.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "serve-core-primitives.4",
@@ -39,7 +42,8 @@
       "pattern": "TransportAdapter",
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/index.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "serve-core-primitives.5",
@@ -49,7 +53,8 @@
       "pattern": "cliFlags",
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "serve-core-primitives.6",
@@ -57,7 +62,8 @@
       "tier": 2,
       "kind": "command",
       "cmd": "CI=true ./node_modules/.bin/nx run apigen-engine-runtime:test",
-      "expect": "exit0"
+      "expect": "exit0",
+      "cwd": "repo-root"
     },
     {
       "id": "parity-harness.1",
@@ -67,7 +73,8 @@
       "pattern": "captureGolden",
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "parity-harness.2",
@@ -77,7 +84,8 @@
       "pattern": "assertParity",
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "parity-harness.3",
@@ -85,7 +93,8 @@
       "tier": 2,
       "kind": "command",
       "cmd": "CI=true ./node_modules/.bin/nx run apigen-engine-runtime:test",
-      "expect": "exit0"
+      "expect": "exit0",
+      "cwd": "repo-root"
     },
     {
       "id": "fastify-adapter.1",
@@ -95,7 +104,8 @@
       "pattern": "TransportAdapter",
       "paths": [
         "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "fastify-adapter.2",
@@ -105,7 +115,8 @@
       "pattern": "createPackageInvoker",
       "paths": [
         "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "fastify-adapter.3",
@@ -115,7 +126,8 @@
       "pattern": "sendStreamSse",
       "paths": [
         "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "fastify-adapter.4",
@@ -125,14 +137,16 @@
       "pattern": "resolveRoute",
       "paths": [
         "packages/apigen/apigen-plugin-api-fastify/src/lib/route-projection.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "fastify-adapter.5",
       "phase": "phase-1",
       "tier": 1,
       "kind": "exists",
-      "path": "packages/apigen/apigen-plugin-api-fastify/src/test/golden/fastify.snapshot.json"
+      "path": "packages/apigen/apigen-plugin-api-fastify/src/test/golden/fastify.snapshot.json",
+      "cwd": "repo-root"
     },
     {
       "id": "fastify-adapter.6",
@@ -140,7 +154,8 @@
       "tier": 3,
       "kind": "command",
       "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-api-fastify:test",
-      "expect": "exit0"
+      "expect": "exit0",
+      "cwd": "repo-root"
     },
     {
       "id": "fastify-adapter.7",
@@ -149,7 +164,8 @@
       "kind": "negative-control",
       "positive": "CI=true ./node_modules/.bin/nx run apigen-plugin-api-fastify:test",
       "mutate": "git apply docs/plan/apigen-serve-core/neg-control/fastify-adapter.patch",
-      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/fastify-adapter.patch"
+      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/fastify-adapter.patch",
+      "cwd": "repo-root"
     },
     {
       "id": "express-adapter.1",
@@ -159,7 +175,8 @@
       "pattern": "createPackageInvoker",
       "paths": [
         "packages/apigen/apigen-plugin-api-express/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "express-adapter.2",
@@ -169,14 +186,16 @@
       "pattern": "buildOperationIndex",
       "paths": [
         "packages/apigen/apigen-plugin-api-express/src/lib/route.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "express-adapter.3",
       "phase": "phase-2",
       "tier": 1,
       "kind": "exists",
-      "path": "packages/apigen/apigen-plugin-api-express/src/test/golden/express.snapshot.json"
+      "path": "packages/apigen/apigen-plugin-api-express/src/test/golden/express.snapshot.json",
+      "cwd": "repo-root"
     },
     {
       "id": "express-adapter.4",
@@ -184,7 +203,8 @@
       "tier": 3,
       "kind": "command",
       "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-api-express:test",
-      "expect": "exit0"
+      "expect": "exit0",
+      "cwd": "repo-root"
     },
     {
       "id": "express-adapter.5",
@@ -193,7 +213,8 @@
       "kind": "negative-control",
       "positive": "CI=true ./node_modules/.bin/nx run apigen-plugin-api-express:test",
       "mutate": "git apply docs/plan/apigen-serve-core/neg-control/express-adapter.patch",
-      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/express-adapter.patch"
+      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/express-adapter.patch",
+      "cwd": "repo-root"
     },
     {
       "id": "mcp-adapter.1",
@@ -203,7 +224,8 @@
       "pattern": "createPackageInvoker",
       "paths": [
         "packages/apigen/apigen-plugin-mcp/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "mcp-adapter.2",
@@ -213,7 +235,8 @@
       "pattern": "projectStreamMcp",
       "paths": [
         "packages/apigen/apigen-plugin-mcp/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "mcp-adapter.3",
@@ -223,14 +246,16 @@
       "pattern": "findOperation",
       "paths": [
         "packages/apigen/apigen-plugin-mcp/src/lib/tool-naming.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "mcp-adapter.4",
       "phase": "phase-2",
       "tier": 1,
       "kind": "exists",
-      "path": "packages/apigen/apigen-plugin-mcp/src/test/golden/mcp.snapshot.json"
+      "path": "packages/apigen/apigen-plugin-mcp/src/test/golden/mcp.snapshot.json",
+      "cwd": "repo-root"
     },
     {
       "id": "mcp-adapter.5",
@@ -238,7 +263,8 @@
       "tier": 3,
       "kind": "command",
       "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test",
-      "expect": "exit0"
+      "expect": "exit0",
+      "cwd": "repo-root"
     },
     {
       "id": "mcp-adapter.6",
@@ -247,7 +273,8 @@
       "kind": "negative-control",
       "positive": "CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test",
       "mutate": "git apply docs/plan/apigen-serve-core/neg-control/mcp-adapter.patch",
-      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/mcp-adapter.patch"
+      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/mcp-adapter.patch",
+      "cwd": "repo-root"
     },
     {
       "id": "cli-adapter.1",
@@ -257,7 +284,8 @@
       "pattern": "cliFlags",
       "paths": [
         "packages/apigen/apigen-plugin-cli-output/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "cli-adapter.2",
@@ -267,14 +295,16 @@
       "pattern": "project(",
       "paths": [
         "packages/apigen/apigen-plugin-cli-output/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "cli-adapter.3",
       "phase": "phase-2",
       "tier": 1,
       "kind": "exists",
-      "path": "packages/apigen/apigen-plugin-cli-output/src/test/golden/cli.snapshot.json"
+      "path": "packages/apigen/apigen-plugin-cli-output/src/test/golden/cli.snapshot.json",
+      "cwd": "repo-root"
     },
     {
       "id": "cli-adapter.4",
@@ -282,7 +312,8 @@
       "tier": 3,
       "kind": "command",
       "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-cli-output:test",
-      "expect": "exit0"
+      "expect": "exit0",
+      "cwd": "repo-root"
     },
     {
       "id": "cli-adapter.5",
@@ -291,14 +322,16 @@
       "kind": "negative-control",
       "positive": "CI=true ./node_modules/.bin/nx run apigen-plugin-cli-output:test",
       "mutate": "git apply docs/plan/apigen-serve-core/neg-control/cli-adapter.patch",
-      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/cli-adapter.patch"
+      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/cli-adapter.patch",
+      "cwd": "repo-root"
     },
     {
       "id": "py-extract-preflight.1",
       "phase": "phase-3",
       "tier": 1,
       "kind": "exists",
-      "path": "docs/apigen/proposals/py-extract-serve-split-findings.md"
+      "path": "docs/apigen/proposals/py-extract-serve-split-findings.md",
+      "cwd": "repo-root"
     },
     {
       "id": "py-extract-preflight.2",
@@ -308,7 +341,8 @@
       "pattern": "^DECISION:",
       "paths": [
         "docs/apigen/proposals/py-extract-serve-split-findings.md"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "py-extract-preflight.3",
@@ -318,7 +352,8 @@
       "pattern": "grpc_server",
       "paths": [
         "docs/apigen/proposals/py-extract-serve-split-findings.md"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "py-flask-serve-split.1",
@@ -328,7 +363,8 @@
       "pattern": "emit-json",
       "paths": [
         "packages/apigen/python/apigen_python/extractor.py"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "py-flask-serve-split.2",
@@ -338,7 +374,8 @@
       "pattern": "\\-\\-plan",
       "paths": [
         "packages/apigen/python/apigen_python/flask_server.py"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "py-flask-serve-split.3",
@@ -348,7 +385,8 @@
       "pattern": "_route_for_op",
       "paths": [
         "packages/apigen/python/apigen_python/flask_server.py"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "py-flask-serve-split.4",
@@ -358,7 +396,8 @@
       "pattern": "_http_verb",
       "paths": [
         "packages/apigen/python/apigen_python/flask_server.py"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "py-flask-serve-split.5",
@@ -368,7 +407,8 @@
       "pattern": "_is_primitive_only_input_schema",
       "paths": [
         "packages/apigen/python/apigen_python/flask_server.py"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "py-flask-serve-split.6",
@@ -376,7 +416,8 @@
       "tier": 3,
       "kind": "command",
       "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-flask:test",
-      "expect": "exit0"
+      "expect": "exit0",
+      "cwd": "repo-root"
     },
     {
       "id": "py-flask-serve-split.7",
@@ -385,7 +426,8 @@
       "kind": "negative-control",
       "positive": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-flask:test",
       "mutate": "git apply docs/plan/apigen-serve-core/neg-control/py-flask-serve-split.patch",
-      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/py-flask-serve-split.patch"
+      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/py-flask-serve-split.patch",
+      "cwd": "repo-root"
     },
     {
       "id": "py-grpc-serve-split.1",
@@ -395,7 +437,8 @@
       "pattern": "\\-\\-plan",
       "paths": [
         "packages/apigen/python/apigen_python/grpc_server.py"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "py-grpc-serve-split.2",
@@ -405,7 +448,8 @@
       "pattern": "_route_for",
       "paths": [
         "packages/apigen/python/apigen_python/grpc_server.py"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "py-grpc-serve-split.3",
@@ -413,7 +457,8 @@
       "tier": 3,
       "kind": "command",
       "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-grpc:test",
-      "expect": "exit0"
+      "expect": "exit0",
+      "cwd": "repo-root"
     },
     {
       "id": "py-grpc-serve-split.4",
@@ -422,7 +467,8 @@
       "kind": "negative-control",
       "positive": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-grpc:test",
       "mutate": "git apply docs/plan/apigen-serve-core/neg-control/py-grpc-serve-split.patch",
-      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/py-grpc-serve-split.patch"
+      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/py-grpc-serve-split.patch",
+      "cwd": "repo-root"
     },
     {
       "id": "serve-core-primitives.7",
@@ -432,7 +478,8 @@
       "pattern": "readUsePlugins",
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/lib/package-invoker.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "serve-core-primitives.8",
@@ -442,7 +489,8 @@
       "pattern": "transport",
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "serve-core-primitives.9",
@@ -452,7 +500,8 @@
       "pattern": "envVar",
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "fastify-adapter.8",
@@ -462,7 +511,8 @@
       "pattern": "buildInvokerForPackage",
       "paths": [
         "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "fastify-adapter.9",
@@ -472,7 +522,8 @@
       "pattern": "transport",
       "paths": [
         "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "express-adapter.6",
@@ -482,7 +533,8 @@
       "pattern": "buildInvokerForPackage",
       "paths": [
         "packages/apigen/apigen-plugin-api-express/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "mcp-adapter.7",
@@ -492,7 +544,8 @@
       "pattern": "usePlugins",
       "paths": [
         "packages/apigen/apigen-plugin-mcp/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "mcp-adapter.8",
@@ -502,7 +555,8 @@
       "pattern": "toolMetas",
       "paths": [
         "packages/apigen/apigen-plugin-mcp/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "cli-adapter.6",
@@ -512,7 +566,8 @@
       "pattern": "use",
       "paths": [
         "packages/apigen/apigen-plugin-cli-output/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "cli-adapter.7",
@@ -522,7 +577,8 @@
       "pattern": "APIGEN_",
       "paths": [
         "packages/apigen/apigen-plugin-cli-output/src/test/run-cli-integration.spec.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "py-grpc-serve-split.5",
@@ -532,7 +588,8 @@
       "pattern": "capitalize",
       "paths": [
         "packages/apigen/python/apigen_python/grpc_server.py"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "mcp-adapter.9",
@@ -542,14 +599,16 @@
       "pattern": "writeError",
       "paths": [
         "packages/apigen/apigen-plugin-mcp/src/lib/run.ts"
-      ]
+      ],
+      "cwd": "repo-root"
     },
     {
       "id": "mcp-adapter.10",
       "phase": "phase-2",
       "tier": 1,
       "kind": "exists",
-      "path": "packages/apigen/apigen-plugin-mcp/src/test/transport-http-parity.spec.ts"
+      "path": "packages/apigen/apigen-plugin-mcp/src/test/transport-http-parity.spec.ts",
+      "cwd": "repo-root"
     }
   ]
 }
