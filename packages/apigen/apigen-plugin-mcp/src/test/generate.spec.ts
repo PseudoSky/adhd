@@ -3,7 +3,19 @@ import { generate } from '../lib/generate';
 import { mcpPlugin } from '../lib/plugin';
 import type { Operation, PluginInput, RunInput, Segment } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
-import { deriveToolName } from '../lib/tool-naming';
+import { operationFor } from '../lib/tool-naming';
+
+/** Test-local stand-in for the old `deriveToolName` — mirrors generate.ts's
+ * own `operationFor(...) -> project(...).mcp.name` pipeline exactly, so these
+ * tests stay decoupled from generate.ts's internals while still computing the
+ * SAME expected value generate.ts derives internally via `buildOpPlan`. */
+function deriveToolName(
+  pkg: { id: string; importPath: string },
+  fnName: string,
+  operations?: Operation[]
+): string {
+  return project(operationFor(pkg, fnName, operations)).mcp.name;
+}
 
 // ---------- fixture ----------
 // Simple domain functions — schemas follow ComposedSchemas shape (data-wrapped).

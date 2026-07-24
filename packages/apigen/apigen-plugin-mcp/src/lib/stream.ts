@@ -45,6 +45,14 @@ export interface McpTextContent {
 export interface McpCallToolResult {
   content: McpTextContent[];
   isError?: boolean;
+  /**
+   * BUG-APIGEN-019 pairing: the tool's structured return value, matching the
+   * shape `buildMcpOutputSchema`/`wrapMcpStructuredContent`
+   * (`@adhd/apigen-engine-runtime`) computed for the SAME `output` fragment.
+   * Optional so a streamed result (which has no single "structured" value)
+   * can omit it entirely.
+   */
+  structuredContent?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------

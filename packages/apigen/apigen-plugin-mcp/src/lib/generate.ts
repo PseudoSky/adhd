@@ -3,10 +3,10 @@ import type {
   PluginInput,
   PluginOutput,
 } from '@adhd/apigen-core-client';
-import { buildToolDescription } from '@adhd/apigen-engine-runtime';
+import { buildOpPlan, buildToolDescription } from '@adhd/apigen-engine-runtime';
 import { generateStdioServer } from './templates/server-stdio.tpl';
 import { generateHttpServer } from './templates/server-http.tpl';
-import { deriveToolName } from './tool-naming';
+import { operationFor } from './tool-naming';
 
 /**
  * Generates the index.ts file that exports toolMetas, groupFns,
@@ -19,7 +19,7 @@ import { deriveToolName } from './tool-naming';
  * `entrypoint/apigen-cli`'s `orchestrateGenerate()`. When absent (e.g. a bare
  * `PluginInput` built directly by a test), tool names are derived
  * best-effort from `pkg.id`/`pkg.importPath`/`fnName` — see
- * `./tool-naming.ts`'s `deriveToolName` doc comment.
+ * `./tool-naming.ts`'s `operationFor` doc comment.
  */
 function generateIndex(
   packages: PluginInput['packages'],
@@ -38,21 +38,21 @@ function generateIndex(
   }
   lines.push(``);
   // BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001: keyed by the CANONICAL MCP
-  // tool name (`project(op).mcp.name` via ./tool-naming.ts), never the raw
-  // exported fn name — see tool-naming.ts module doc for the BEHAVIOR
-  // CHANGE this is. `fnName` is carried on each entry so the generated
-  // server.ts dispatches to the correct real function under the new name
-  // (see templates/server-*.tpl.ts).
+  // tool name — [mcp-adapter.3] collapsed the old `deriveToolName` shim into
+  // `buildOpPlan(...).mcp.name` (`@adhd/apigen-engine-runtime`), the SAME
+  // primitive `run()` builds its OpPlan table from, so generate-time and
+  // run-time tool names are guaranteed byte-identical for the same input.
+  // `fnName` is carried on each entry so the generated server.ts dispatches
+  // to the correct real function under the new name (see
+  // templates/server-*.tpl.ts).
   lines.push(
     `export const toolMetas: Record<string, { group: string; fnName: string; schema: unknown; description: string }> = {`
   );
   for (const pkg of packages) {
     for (const [fnName, fnSchema] of Object.entries(pkg.schemas)) {
-      const toolName = deriveToolName(
-        { id: pkg.id, importPath: pkg.importPath },
-        fnName,
-        operations
-      );
+      const op = operationFor({ id: pkg.id, importPath: pkg.importPath }, fnName, operations);
+      const plan = buildOpPlan({ op, schema: fnSchema, transport: 'mcp' });
+      const toolName = plan.mcp.name;
       // BUG-APIGEN-020: bake the tool description (user override + the
       // auto-generated data-envelope calling-convention note carried on
       // `fnSchema.input.description`, see composeSchemas) in at GENERATE
