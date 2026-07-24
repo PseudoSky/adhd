@@ -54,6 +54,7 @@ RUN_AUDIT = os.path.join(HERE, "run-audit.js")
 #   check("dod.12", ok, "CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test")
 #   check("dod.13")
 #   check("dod.14")
+#   check("dod.15", ok, "CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test")
 #
 # Which DoD clause is proven by which per-state criterion IDs. A dod PASSes iff
 # every supporting criterion PASSed in this run. dod.10 is special (live gate).
@@ -83,6 +84,7 @@ DOD_SUPPORT = {
     "dod.12": ["mcp-adapter.8", "mcp-adapter.5"],
     "dod.13": ["serve-core-primitives.7", "fastify-adapter.8", "express-adapter.6"],
     "dod.14": ["serve-core-primitives.8", "fastify-adapter.9"],
+    "dod.15": ["mcp-adapter.9", "mcp-adapter.10", "mcp-adapter.5"],
     # dod.10 is proven by DOD10_DIST_PACKAGES verify-dist-load + all command criteria.
 }
 
