@@ -196,6 +196,20 @@
       ],
       "context": "contexts/audit-python.md",
       "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "final",
+      "depends_on": [
+        "audit-transports",
+        "audit-python"
+      ],
+      "guard": "node docs/plan/apigen-serve-core/scripts/run-audit.js --phase final",
+      "artifacts": [
+        "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
     }
   },
   "authored_with": {
