@@ -19,6 +19,7 @@
 - [py-grpc-serve-split.1] grpc_server accepts the injected TS-computed --plan
 
 - [py-grpc-serve-split.2] grpc project() re-derivation deleted (exact symbol confirmed by py-extract-preflight)
+- [py-grpc-serve-split.3] py-grpc parity gate green vs real spawned Python gRPC server
 ---
 
 ## Reservations
