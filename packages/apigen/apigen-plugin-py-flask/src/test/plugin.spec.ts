@@ -18,18 +18,44 @@
  *      `project(op).http` — including a live-server positive check on the
  *      project()-derived route AND a negative control that the OLD flat
  *      `/<ns>/<fnName>` route now 404s.
+ *   8. [py-flask-serve-split] parity gate: a golden-snapshot recapture,
+ *      driven the same way (spawn + real fetch), against the two-phase
+ *      extract/serve split ([def:parity-gate]) — plus a negative control
+ *      proving the gate actually fails when the plumbing regresses.
  *
  * All waiting is event-driven (readline + latch), no sleep-based proofs.
+ *
+ * apigen-serve-core py-flask-serve-split: `startServer()` now builds a
+ * `--plan-file` (via `apigen_python.extractor --emit-json` + the REAL
+ * `project()`) before spawning `flask_server.py` — the server no longer
+ * accepts being spawned without one (see `flask_server.py`'s module
+ * docstring). `ensurePlan()` builds it once and caches it for every test in
+ * this file, since every `startServer()` call here uses the same
+ * FIXTURE_MODULE/NS pair.
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { describe, it, expect, afterEach, afterAll, beforeAll } from 'vitest';
+import {
+  spawn,
+  spawnSync,
+  type ChildProcessWithoutNullStreams,
+} from 'node:child_process';
 import * as readline from 'node:readline';
 import * as path from 'node:path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import { ensurePythonEnv } from '@adhd/apigen-python-env';
 import { tokenize } from '@adhd/apigen-core-client';
 import type { Operation, Segment, JSONSchema } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
+import {
+  captureGolden,
+  assertParity,
+  proveNegativeControl,
+  type GoldenFixture,
+  type GoldenSnapshot,
+  type ParityDriver,
+} from '@adhd/apigen-engine-runtime/test-support';
 
 // Managed interpreter — provisioned from apigen-python's own pyproject.toml,
 // exactly like the plugin's run() path. Never bare `python3`.
@@ -39,6 +65,86 @@ const FIXTURE_MODULE = path.resolve(__dirname, 'fixtures', 'test_api.py');
 const PORT = 49271; // deterministic high port, avoids clashes
 const NS = 'testapi';
 const BASE = `http://127.0.0.1:${PORT}`;
+
+// ---------------------------------------------------------------------------
+// --plan-file construction — apigen-serve-core py-flask-serve-split
+//
+// Mirrors `plugin.ts`'s own two-phase spawn EXACTLY (extractor --emit-json ->
+// real project() -> temp plan file) so these tests drive `flask_server.py`
+// through the SAME real consumer protocol a production `run()` call does,
+// not a hand-rolled substitute.
+// ---------------------------------------------------------------------------
+
+interface ServePlanRoute {
+  route: string;
+  verb: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+}
+
+function runExtractorEmitJson(
+  modulePath: string,
+  namespace: string
+): Promise<Operation[]> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(
+      PYENV.python,
+      ['-m', 'apigen_python.extractor', modulePath, '--namespace', namespace, '--emit-json'],
+      {
+        cwd: PYTHON_PKG_DIR,
+        env: { ...process.env, PYTHONPATH: PYTHON_PKG_DIR },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
+    let stdout = '';
+    let stderr = '';
+    proc.stdout?.on('data', (c: Buffer) => (stdout += c.toString()));
+    proc.stderr?.on('data', (c: Buffer) => (stderr += c.toString()));
+    proc.on('error', reject);
+    proc.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(`extractor --emit-json exited ${code}:\n${stderr}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout) as Operation[]);
+      } catch (err) {
+        reject(new Error(`extractor --emit-json produced invalid JSON: ${err}\n${stdout}`));
+      }
+    });
+  });
+}
+
+let cachedPlanPath: Promise<string> | undefined;
+
+/** Builds (once, cached) the `--plan-file` for FIXTURE_MODULE/NS via the REAL
+ * extractor + project() pipeline, exactly like plugin.ts's run(). */
+function ensurePlan(): Promise<string> {
+  if (!cachedPlanPath) {
+    cachedPlanPath = runExtractorEmitJson(FIXTURE_MODULE, NS).then((operations) => {
+      const routes: Record<string, ServePlanRoute> = {};
+      for (const op of operations) {
+        const { verb, route } = project(op).http;
+        routes[op.id] = { route, verb };
+      }
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-py-flask-test-plan-'));
+      const planPath = path.join(dir, 'plan.json');
+      fs.writeFileSync(planPath, JSON.stringify({ operations, routes }));
+      return planPath;
+    });
+  }
+  return cachedPlanPath;
+}
+
+afterAll(() => {
+  if (cachedPlanPath) {
+    void cachedPlanPath.then((p) => {
+      try {
+        fs.rmSync(path.dirname(p), { recursive: true, force: true });
+      } catch {
+        /* best-effort cleanup */
+      }
+    });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Route/verb parity helpers — BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001
@@ -124,7 +230,8 @@ interface LiveServer {
   stop(): Promise<void>;
 }
 
-async function startServer(): Promise<LiveServer> {
+async function startServer(port: number = PORT): Promise<LiveServer> {
+  const planPath = await ensurePlan();
   const proc = spawn(
     PYENV.python,
     [
@@ -135,7 +242,9 @@ async function startServer(): Promise<LiveServer> {
       '--namespace',
       NS,
       '--port',
-      String(PORT),
+      String(port),
+      '--plan-file',
+      planPath,
     ],
     {
       cwd: PYTHON_PKG_DIR,
@@ -445,4 +554,235 @@ describe('py-flask plugin — route/verb parity with project() (BUG-APIGEN-OPENA
       expect(logLine).toMatch(new RegExp(`^\\s*${verb}\\s+${route.replace(/[-/]/g, '\\$&')}$`));
     }
   });
+});
+
+// ===========================================================================
+// [py-flask-serve-split] serve-core extract/serve-split parity gate
+// ([def:parity-gate], docs/plan/apigen-serve-core/contexts/_shared.md)
+//
+// Drives a REAL live py-flask server the way a consumer does
+// ([def:real-consumer-protocol]: spawn + `fetch`) across a representative
+// fixture set (safe-GET-hoist, unsafe/array-input POST, session-envelope,
+// decimal/datetime round-trip, validation-failure, health, 404), and asserts
+// the recapture (through the two-phase extract/serve split) is byte-
+// identical to a committed golden snapshot captured against the
+// PRE-MIGRATION single-phase self-extracting server
+// ([inv:byte-identical]). py-flask has no streaming transport (unlike
+// fastify/mcp), so there is no separate streaming carve-out here.
+//
+// The golden snapshot is regenerated with `APIGEN_CAPTURE_GOLDEN=1` (the
+// standard snapshot-update escape hatch — the compare test itself always
+// runs unflagged, by default, in CI). Committed at
+// `src/test/golden/py-flask.snapshot.json` — captured against HEAD (the
+// pre-migration commit) via a real spawned subprocess + real HTTP, from a
+// throwaway git worktree, BEFORE this state's Python/TS changes were made.
+// ===========================================================================
+
+interface HttpFixtureInput {
+  method: 'GET' | 'POST';
+  /** Route path (already projected — e.g. `/testapi/test-api/echo-str`), no host. */
+  urlPath: string;
+  headers?: Record<string, string>;
+  body?: unknown;
+}
+
+interface HttpFixtureOutput {
+  status: number;
+  contentType: string | null;
+  body: string;
+}
+
+const PARITY_PORT = 49290; // distinct from PORT (49271) — its own server lifecycle
+const PARITY_GOLDEN_PATH = path.join(__dirname, 'golden', 'py-flask.snapshot.json');
+
+/** Route for `fnName` in the fixture module, with an empty input schema —
+ * route derivation depends only on namespace/path (see `routeFor` above). */
+function parityRoute(fnName: string): string {
+  return routeFor(pyOp(fnName, {}));
+}
+
+const parityFixtures: ReadonlyArray<GoldenFixture<HttpFixtureInput>> = [
+  {
+    // echo_str: primitive-only (string) input → GET-hoisted (FEAT-APIGEN-022).
+    name: 'safe-get',
+    input: { method: 'GET', urlPath: `${parityRoute('echo_str')}?msg=hello` },
+  },
+  {
+    // sum_ints: array (non-primitive) input → stays POST.
+    name: 'unsafe-post-array-input',
+    input: {
+      method: 'POST',
+      urlPath: parityRoute('sum_ints'),
+      headers: { 'content-type': 'application/json' },
+      body: { data: { values: [1, 2, 3] } },
+    },
+  },
+  {
+    // greet_with_ctx: x-adhd-session header forwarded to the ctx parameter.
+    name: 'session-envelope',
+    input: {
+      method: 'POST',
+      urlPath: parityRoute('greet_with_ctx'),
+      headers: { 'content-type': 'application/json', 'x-adhd-session': 'sess-parity' },
+      body: { data: { name: 'Alice' } },
+    },
+  },
+  {
+    name: 'decimal-roundtrip',
+    input: {
+      method: 'POST',
+      urlPath: parityRoute('double_decimal'),
+      headers: { 'content-type': 'application/json' },
+      body: { data: { amount: '123.456' } },
+    },
+  },
+  {
+    name: 'datetime-roundtrip',
+    input: {
+      method: 'POST',
+      urlPath: parityRoute('get_datetime'),
+      headers: { 'content-type': 'application/json' },
+      body: { data: { iso: '2024-01-15T12:34:56.789Z' } },
+    },
+  },
+  {
+    // wrong type for a decimal-formatted param -> 400 BEFORE the fn runs.
+    name: 'validation-failure',
+    input: {
+      method: 'POST',
+      urlPath: parityRoute('double_decimal'),
+      headers: { 'content-type': 'application/json' },
+      body: { data: { amount: 999 } },
+    },
+  },
+  {
+    name: 'health',
+    input: { method: 'GET', urlPath: '/_meta/health' },
+  },
+  {
+    name: 'not-found',
+    input: { method: 'GET', urlPath: '/testapi/test-api/does-not-exist' },
+  },
+];
+
+describe('[py-flask-parity] extract/serve-split golden-snapshot parity gate', () => {
+  let parityServer: LiveServer;
+  let driver: ParityDriver<HttpFixtureInput, HttpFixtureOutput>;
+
+  beforeAll(async () => {
+    parityServer = await startServer(PARITY_PORT);
+    const base = `http://127.0.0.1:${PARITY_PORT}`;
+    driver = {
+      async invoke(fixture: GoldenFixture<HttpFixtureInput>): Promise<HttpFixtureOutput> {
+        const { method, urlPath, headers, body } = fixture.input;
+        const res = await fetch(`${base}${urlPath}`, {
+          method,
+          headers,
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+        });
+        return {
+          status: res.status,
+          contentType: res.headers.get('content-type'),
+          body: await res.text(),
+        };
+      },
+    };
+  }, 20000);
+
+  afterAll(async () => {
+    await parityServer?.stop();
+  });
+
+  // [py-flask-serve-split.6] the parity gate. Recapture through the
+  // (post-migration) two-phase extract/serve split and assert deep-equality
+  // vs the committed pre-migration golden snapshot. FAILS if the migration
+  // regresses any fixture. Regenerate the golden with APIGEN_CAPTURE_GOLDEN=1.
+  it('recapture deep-equals the committed golden snapshot', async () => {
+    const recapture = await captureGolden(driver, parityFixtures);
+
+    if (process.env['APIGEN_CAPTURE_GOLDEN'] === '1') {
+      fs.mkdirSync(path.dirname(PARITY_GOLDEN_PATH), { recursive: true });
+      fs.writeFileSync(
+        PARITY_GOLDEN_PATH,
+        JSON.stringify(recapture, null, 2) + '\n'
+      );
+      return;
+    }
+
+    if (!fs.existsSync(PARITY_GOLDEN_PATH)) {
+      throw new Error(
+        `[py-flask-parity] golden snapshot missing at ${PARITY_GOLDEN_PATH} — ` +
+          'regenerate with APIGEN_CAPTURE_GOLDEN=1 before comparing.'
+      );
+    }
+    const committed = JSON.parse(
+      fs.readFileSync(PARITY_GOLDEN_PATH, 'utf8')
+    ) as GoldenSnapshot<HttpFixtureOutput>;
+
+    assertParity(committed, recapture);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// [py-flask-serve-split.7] negative control ([inv:negative-control],
+// AGENTS.md §7 pt 2): a parity suite that has never been shown to fail is
+// not a gate.
+//
+// Patching `plugin.ts` on disk cannot affect an ALREADY-imported test
+// process (this same file's earlier tests already spawned servers via the
+// unmodified `plugin.ts`-equivalent flow) — so `runner` spawns a genuinely
+// FRESH `vitest` child process per check, which re-transforms the plugin's
+// source from disk from scratch every time. That is what makes the patch's
+// effect actually observable: RED means the freshly-spawned process's own
+// golden-parity check failed; GREEN means it passed.
+// ---------------------------------------------------------------------------
+
+function findRepoRoot(startDir: string): string {
+  let dir = startDir;
+  for (;;) {
+    if (fs.existsSync(path.join(dir, '.git'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      throw new Error(`findRepoRoot: no ".git" found walking up from ${startDir}`);
+    }
+    dir = parent;
+  }
+}
+
+describe('[py-flask-serve-split.7] negative control — the parity gate actually gates', () => {
+  it(
+    'applying neg-control/py-flask-serve-split.patch turns the golden-parity check RED; reverting turns it GREEN',
+    async () => {
+      const repoRoot = findRepoRoot(__dirname);
+      const patchPath = path.join(
+        repoRoot,
+        'docs/plan/apigen-serve-core/neg-control/py-flask-serve-split.patch'
+      );
+
+      function runGoldenParityCheckInFreshProcess(): void {
+        const result = spawnSync(
+          process.execPath,
+          [
+            path.join(repoRoot, 'node_modules/vitest/vitest.mjs'),
+            'run',
+            '--config',
+            path.join(repoRoot, 'packages/apigen/apigen-plugin-py-flask/vite.config.ts'),
+            '-t',
+            'recapture deep-equals the committed golden snapshot',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' }
+        );
+        if (result.status !== 0) {
+          throw new Error(
+            `golden-parity check failed (exit ${result.status}):\n${result.stdout}\n${result.stderr}`
+          );
+        }
+      }
+
+      await proveNegativeControl(runGoldenParityCheckInFreshProcess, patchPath, {
+        cwd: repoRoot,
+      });
+    },
+    60000
+  );
 });
