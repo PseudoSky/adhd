@@ -119,5 +119,17 @@
       "dod.9",
       "dod.10"
     ]
+  },
+  "interfaces_provenance": {
+    "confirmed_at": "2026-07-24T03:17:18.197Z",
+    "by": "plan-orchestrator",
+    "agent": "architect-reviewer",
+    "note": null,
+    "iface_ids": [
+      "op-plan",
+      "transport-adapter",
+      "create-package-invoker",
+      "dispatch-for-plan"
+    ]
   }
 }
