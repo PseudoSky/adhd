@@ -21,6 +21,7 @@
 - [py-flask-serve-split.2] flask_server accepts --plan (TS-computed route/verb triples)
 - [py-flask-serve-split.3] _route_for_op re-derivation deleted
 - [py-flask-serve-split.4] _http_verb re-derivation deleted
+- [py-flask-serve-split.5] _is_primitive_only_input_schema re-derivation deleted
 ---
 
 ## Reservations
