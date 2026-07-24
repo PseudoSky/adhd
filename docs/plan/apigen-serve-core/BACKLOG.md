@@ -22,3 +22,13 @@ the disclosure protocol. The epic + child decomposition live in the repo `BACKLO
 ### RISK-SERVE-CORE-PLAN-004 — verify-dist-load target may not exist for every consumer-loaded package
 - `[dod.10]` (audit-final) runs `verify-dist-load` for `apigen-engine-runtime` + the four TS plugins. If a target is not wired for a package, the audit reports a hard FAIL asking the executor to add it (AGENTS.md §5). Wiring any missing `verify-dist-load` target is in-scope for whichever adapter state ships that package.
 - Citations: [apigen-serve-core-planbuilder, claude (opus), apigen-serve-core, 1: docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py (verify_dist_load); 2: AGENTS.md §5]
+
+## Filed deferrals (review folds)
+
+### DEFER-APIGEN-SERVE-CORE-PYGRPC-STREAMING-001 — py-grpc does not serve streaming ops (scope boundary, not a capability verdict)
+- This epic's py-grpc extract/serve split (`FEAT-APIGEN-SERVE-CORE-009`) explicitly REJECTS `streaming:true` ops rather than serving them, matching CLI. gRPC natively supports server streaming and a consumer will want it — so this is a DOCUMENTED, tracked deferral (dod.5, [fix:pygrpc-streaming-deferral]), NOT a permanent no. Re-open as its own item to wire gRPC server-streaming through the injected plan once a consumer needs it.
+- Citations: [apigen-serve-core-planbuilder, claude (opus), apigen-serve-core, 1: docs/plan/apigen-serve-core/contexts/py-grpc-serve-split.md (Review folds); 2: docs/plan/apigen-serve-core/README.md dod.5]
+
+### DEFER-APIGEN-SERVE-CORE-CLI-USE-001 — cli-output `--use` capability (CONDITIONAL — file only if the executor declares cli `--use`-incapable)
+- `FEAT-APIGEN-SERVE-CORE-008` (cli-adapter) MUST resolve cli-output's `--use` capability (it has zero today): either ADD `--use` layer/mount support (consistent with fastify/express/mcp) — in which case this deferral is void — OR explicitly declare cli-output `--use`-incapable, in which case promote THIS item to the repo BACKLOG.md as a real open follow-up with the rationale. dod.11 forbids leaving it an unstated gap. Recorded here so the decision is never silent.
+- Citations: [apigen-serve-core-planbuilder, claude (opus), apigen-serve-core, 1: docs/plan/apigen-serve-core/contexts/cli-adapter.md (Review folds); 2: docs/plan/apigen-serve-core/README.md dod.11]
