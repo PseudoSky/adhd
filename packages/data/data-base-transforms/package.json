@@ -1,6 +1,6 @@
 {
   "name": "@adhd/data-base-transforms",
-  "version": "2.2.4",
+  "version": "2.2.5",
   "private": false,
   "publishConfig": {
     "access": "public"
