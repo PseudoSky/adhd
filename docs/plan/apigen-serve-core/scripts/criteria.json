@@ -414,6 +414,15 @@
       "kind": "command",
       "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-grpc:test",
       "expect": "exit0"
+    },
+    {
+      "id": "py-grpc-serve-split.4",
+      "phase": "phase-3",
+      "tier": 3,
+      "kind": "negative-control",
+      "positive": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-grpc:test",
+      "mutate": "git apply docs/plan/apigen-serve-core/neg-control/py-grpc-serve-split.patch",
+      "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/py-grpc-serve-split.patch"
     }
   ]
 }
