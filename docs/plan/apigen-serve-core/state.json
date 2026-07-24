@@ -297,9 +297,9 @@
   },
   "current_state": "audit-final",
   "dod_provenance": {
-    "confirmed_at": "2026-07-24T03:27:07.924Z",
+    "confirmed_at": "2026-07-24T15:33:52.600Z",
     "by": "plan-orchestrator",
-    "note": "dod.15 (MCP SSE + streaming-http transport preserve+harden; fixes BUG-APIGEN-MCP-STREAMING-HTTP-NO-ERROR-GUARD-001) added 2026-07-24 per direct user request 'make it also fix the mcp sse issues'; folded into mcp-adapter",
+    "note": null,
     "dod_ids": [
       "dod.1",
       "dod.2",
