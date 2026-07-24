@@ -32,7 +32,8 @@ const VITE_CONFIG_NAMES = [
  * @param {string} projectRoot
  * @returns {boolean}
  */
-function hasBuildTarget(workspaceRoot, projectRoot) {
+function hasBuildTarget(workspaceRoot, projectRoot)
+{
   const projectJsonPath = join(workspaceRoot, projectRoot, 'project.json');
   if (existsSync(projectJsonPath)) {
     try {
@@ -42,6 +43,7 @@ function hasBuildTarget(workspaceRoot, projectRoot) {
       }
     } catch {
       // fall through to the vite-config heuristic below
+      console.error("NO BUILD")
     }
   }
   return VITE_CONFIG_NAMES.some((name) =>
@@ -59,7 +61,8 @@ function hasBuildTarget(workspaceRoot, projectRoot) {
  * @param {string} projectRoot
  * @returns {boolean}
  */
-function isPublishable(workspaceRoot, projectRoot) {
+function isPublishable(workspaceRoot, projectRoot)
+{
   const pkgPath = join(workspaceRoot, projectRoot, 'package.json');
   if (!existsSync(pkgPath)) return false;
   try {
