@@ -277,4 +277,88 @@ describe('importFromMarkdown — diagnostics + provenance (real store)', () => {
     const item = await getItem(ctx, REPO_PROV, 'BUG-PROV-002');
     expect(item?.importedFrom).toBe(fixturePath);
   });
+
+  // BUG-BACKLOG-IMPORT-INSERT-ONLY-NO-UPDATE-001 — importFromMarkdown used to
+  // be pure INSERT-ONLY: re-importing an already-live humanId was a permanent
+  // no-op regardless of whether the SOURCE markdown had actually changed
+  // since the first import, so a status/body edit made directly in a
+  // `BACKLOG.md` file could never converge into the graph short of a full
+  // re-seed. These three tests pin the corrected upsert semantics.
+  describe('importFromMarkdown — upsert-on-reimport (BUG-BACKLOG-IMPORT-INSERT-ONLY-NO-UPDATE-001)', () => {
+    it('re-importing an UNCHANGED item is a true no-op (created:0, updated:0)', async () => {
+      const fixturePath = join(workDir, 'noop-fixture.md');
+      writeFileSync(fixturePath, ['### BUG-NOOP-001 — noop fixture', '', '**Status:** OPEN', '', 'original body, never touched.', ''].join('\n'), 'utf8');
+
+      const first = await importFromMarkdown(ctx, { path: fixturePath, repo: REPO_PROV });
+      expect(first.created).toBe(1);
+      expect(first.updated).toBe(0);
+
+      // Re-import the byte-identical file — nothing in the graph should move.
+      const second = await importFromMarkdown(ctx, { path: fixturePath, repo: REPO_PROV });
+      expect(second.created).toBe(0);
+      expect(second.updated).toBe(0);
+      expect(second.skippedDuplicates).toBe(1);
+
+      const item = await getItem(ctx, REPO_PROV, 'BUG-NOOP-001');
+      expect(item?.status).toBe('OPEN');
+      // `body` is the raw markdown between headers (including the
+      // `**Status:**` field line itself) — see `markdown.ts`'s `flush()` —
+      // so assert the sentinel substring, not exact equality.
+      expect(item?.body).toContain('original body, never touched.');
+    });
+
+    it('re-importing a CHANGED item (status + body + priority) updates the LIVE graph node', async () => {
+      const fixturePath = join(workDir, 'update-fixture.md');
+      writeFileSync(fixturePath, ['### BUG-UPDATE-001 — update fixture', '', '**Status:** OPEN', '', 'original body.', ''].join('\n'), 'utf8');
+
+      const first = await importFromMarkdown(ctx, { path: fixturePath, repo: REPO_PROV });
+      expect(first.created).toBe(1);
+      expect(first.updated).toBe(0);
+
+      // Mutate the SOURCE markdown as if the underlying bug had progressed
+      // (e.g. fixed + prioritized) directly in BACKLOG.md since the first
+      // import — the exact scenario the bug report describes.
+      writeFileSync(
+        fixturePath,
+        ['### BUG-UPDATE-001 — update fixture', '', '**Status:** FIXED', '', '**Priority:** HIGH', '', 'updated body reflecting the actual fix.', ''].join(
+          '\n'
+        ),
+        'utf8'
+      );
+
+      const second = await importFromMarkdown(ctx, { path: fixturePath, repo: REPO_PROV });
+      expect(second.created).toBe(0);
+      expect(second.updated).toBe(1);
+      expect(second.skippedDuplicates).toBe(1);
+
+      // Assert through the REAL consumer surfaces, not the internal patch —
+      // getItem (point lookup) AND listItems (the query path a consumer
+      // actually drives) must both reflect the refreshed graph node.
+      const item = await getItem(ctx, REPO_PROV, 'BUG-UPDATE-001');
+      expect(item?.status).toBe('FIXED');
+      expect(item?.priority).toBe('HIGH');
+      expect(item?.body).toContain('updated body reflecting the actual fix.');
+      expect(item?.body).not.toContain('original body.');
+
+      const listed = await listItems(ctx, { repo: REPO_PROV });
+      const listedItem = listed.find((i) => i.humanId === 'BUG-UPDATE-001');
+      expect(listedItem?.status).toBe('FIXED');
+      expect(listedItem?.priority).toBe('HIGH');
+    });
+
+    it('a THIRD re-import of the now-converged item is a no-op again (upsert settles, does not oscillate)', async () => {
+      const fixturePath = join(workDir, 'settle-fixture.md');
+      writeFileSync(fixturePath, ['### BUG-SETTLE-001 — settle fixture', '', '**Status:** OPEN', '', 'v1 body.', ''].join('\n'), 'utf8');
+
+      await importFromMarkdown(ctx, { path: fixturePath, repo: REPO_PROV });
+      writeFileSync(fixturePath, ['### BUG-SETTLE-001 — settle fixture', '', '**Status:** BLOCKED', '', 'v2 body.', ''].join('\n'), 'utf8');
+      const updateRun = await importFromMarkdown(ctx, { path: fixturePath, repo: REPO_PROV });
+      expect(updateRun.updated).toBe(1);
+
+      // Re-import the SAME v2 content again — must converge to a no-op.
+      const settleRun = await importFromMarkdown(ctx, { path: fixturePath, repo: REPO_PROV });
+      expect(settleRun.created).toBe(0);
+      expect(settleRun.updated).toBe(0);
+    });
+  });
 });
