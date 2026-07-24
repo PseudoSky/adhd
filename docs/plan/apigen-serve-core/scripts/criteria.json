@@ -329,6 +329,16 @@
       "paths": [
         "packages/apigen/python/apigen_python/extractor.py"
       ]
+    },
+    {
+      "id": "py-flask-serve-split.2",
+      "phase": "phase-3",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "\\-\\-plan",
+      "paths": [
+        "packages/apigen/python/apigen_python/flask_server.py"
+      ]
     }
   ]
 }
