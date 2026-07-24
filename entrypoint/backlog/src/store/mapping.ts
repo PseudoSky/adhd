@@ -61,9 +61,29 @@ export function computeContentHash(content: string): string {
  * characters passes through unchanged, still an implicit-AND bareword
  * query), and merely prevents the CRASH for the common case that hits one.
  */
+/**
+ * Strips every FTS5-syntax-significant character to a space before a title/
+ * grep term ever reaches `searchNodes`'s raw MATCH bind (dedupeScan and
+ * `queryItemNodes`'s grep path, BUG-BACKLOG-DEDUPE-FTS-SYNTAX-CRASH-001).
+ *
+ * The original fix (2026-07) only stripped the small set of characters found
+ * in the reported crash: `"():^*-`. `#` (an entirely ordinary character in a
+ * real title, e.g. "Fixes #123" or this file's own regression test) was
+ * discovered independently to ALSO crash `searchNodes` with `fts5: syntax
+ * error near "#"` — and probing FTS5's actual grammar directly (not
+ * guessing) turned up a much longer list that crashes the same way: `. { }
+ * ~ [ ] @ ! $ % & = < > ? / \ ; ,` — `{` is the most dangerous of these
+ * (`no such column: create` — it gets parsed as column-filter syntax rather
+ * than merely erroring, a correctness risk beyond a crash). A second
+ * whack-a-mole char-by-char addition would leave the same class of gap open
+ * for whatever punctuation mark comes up next, so this strips every
+ * character that is NOT a Unicode letter, number, underscore, or whitespace
+ * — the complete, non-enumerable-by-hand safe set for an FTS5 bareword
+ * query — rather than continuing to enumerate a denylist.
+ */
 export function sanitizeFtsQuery(text: string): string {
   return text
-    .replace(/["():^*]|-/g, ' ')
+    .replace(/[^\p{L}\p{N}_\s]/gu, ' ')
     .trim()
     .replace(/\s+/g, ' ');
 }
