@@ -1,0 +1,13 @@
+diff --git a/packages/apigen/apigen-plugin-mcp/src/lib/run.ts b/packages/apigen/apigen-plugin-mcp/src/lib/run.ts
+index a49d821c..69dd480b 100644
+--- a/packages/apigen/apigen-plugin-mcp/src/lib/run.ts
++++ b/packages/apigen/apigen-plugin-mcp/src/lib/run.ts
+@@ -237,7 +237,7 @@ class McpTransportAdapter implements TransportAdapter<McpRaw> {
+     // bindings (no per-request schema re-derivation).
+     const envelope: Record<string, unknown> = {};
+     for (const field of plan.envelope) {
+-      const value = raw.meta[field.mcpMetaKey];
++      const value = raw.meta[field.field];
+       if (value !== undefined) envelope[field.field] = value;
+     }
+     const domainArgs =
