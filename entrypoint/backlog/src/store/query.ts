@@ -9,6 +9,7 @@ import type { AuditTrailEntry, AuditTrailResult, BacklogFilter, BacklogItem, Dep
 import { BacklogItemNotFoundError, isTerminalStatus } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { BACKLOG_ITEM_TAG, buildNodeName, isLiveBacklogItemNode, sanitizeFtsQuery, toBacklogItem, type BacklogNodeMeta } from './mapping.js';
+import { queryAuditEvents } from './audit-log.js';
 
 const PRIORITY_RANK: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
@@ -276,6 +277,14 @@ export function auditTrail(store: GraphBacklogStore, repo: string, humanId: stri
   for (const note of item.notes) {
     history.push({ at: note.at, kind: 'note', detail: { by: note.by, text: note.text } });
   }
+  // DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001: real, persisted transition/claim
+  // events (audit-log.ts) — previously the ONLY entries `auditTrail` could
+  // ever produce were synthesized from durable fields (created/citations/
+  // notes), so every past status/claim change beyond the LATEST one was
+  // unrecoverable. Items created/transitioned before this fix landed simply
+  // have no events here yet (nothing to backfill from) — new activity from
+  // this point on is fully covered.
+  history.push(...queryAuditEvents(store, node.id));
   history.sort((a, b) => a.at.localeCompare(b.at));
 
   const chain = store.graph.getSupersessionChain(node.id);

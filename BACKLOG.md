@@ -1133,13 +1133,6 @@ These are the outstanding, non-release findings from the ENV-ADOPT-CLUSTERS(1) d
 - **Status:** OPEN (upstream `@adhd/apigen-core-client`) — mitigated locally in `@adhd/backlog` via the same `dereferenceSchema()` workaround.
 - Citations: [main, claude (sonnet-5), backlog-implementation, 1: packages/apigen/apigen-core-client/src/lib/extract.ts:654-700 (param hoisting) vs :677-714 (output, no hoisting); 2: packages/apigen/apigen-core-client/src/lib/compose-schemas.ts:187-217 (input-only definitions merge); 3: real extracted `createItem.output` for `entrypoint/backlog/dist/client.d.ts` showing a nested un-hoisted `definitions` under `properties.item`]
 
-### DEBT-BACKLOG-AUDIT-TRAIL-PARTIAL-001 — `@adhd/backlog`'s `auditTrail` derives history from durable fields only, not a full transition/claim event log
-- **Discovered:** 2026-07-22, implementing `entrypoint/backlog/src/store/query.ts`'s `auditTrail()`. SPEC.md §5.6 documents `AuditTrailEntry.kind` as including `'transition'`/`'claim'`, but the store persists no separate append-only event log — only the LATEST `status`/`claimedBy` and the full `notes`/`citations` arrays.
-- **Impact:** `auditTrail()` honestly returns a synthetic `created` entry + every real `note`/`citation` (with citations timestamped by `item.updatedAt` since `Citation` carries no `at` field of its own) + the real `getSupersessionChain()`-derived chain — it does NOT reconstruct a full history of every past status/claim change, since that data was never persisted.
-- **Fix direction:** if a full transition/claim history becomes a real requirement, add an explicit append-only event log (e.g. a dedicated `kind:'generic'` node per event, or a `DERIVED_FROM`-linked chain) written by `transitionStatusNode`/`claimItemNode` — a real schema/perf tradeoff not justified for v0.1 given no DoD clause requires it.
-- **Status:** OPEN — documented scope reduction, not a bug.
-- Citations: [main, claude (sonnet-5), backlog-implementation, 1: entrypoint/backlog/SPEC.md §5.6 AuditTrailEntry; 2: entrypoint/backlog/src/store/query.ts auditTrail()]
-
 ## `@adhd/backlog` RAG-SPEC design (session 2026-07-23 — architect-reviewer, RAG-SPEC.md authoring)
 
 ### DEBT-BACKLOG-AUTOLINK-DRYRUN-NO-CANDIDATES-001 — `@adhd/sox-analysis`'s `buildAutoLinks` dry-run mode discards its candidate list, returning only `void`
