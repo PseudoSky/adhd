@@ -15,9 +15,16 @@
 //     architecture is wired to pass `host` per-operation in the Descriptor, so
 //     adding a real extractor subprocess later (SPEC §13) is a drop-in.
 //   - Only the 'ts' host is implemented in v1/v2; other hosts will extend this.
-//   - `--use` plugins are accepted and stored but not dispatched in v1 (the
-//     runtime layer is a v2.x concern); the orchestrator validates the flag and
-//     passes the ids through so callers can prepare for it.
+//   - `--use` plugin SPECIFIERS (`OrchestratorOptions.usePlugins: string[]`)
+//     are accepted and stored but not dispatched here — layer/mount capability
+//     composition is a transport-level (`apigen-engine-runtime`) concern.
+//     `usePluginObjects` (the LOADED `Plugin[]`, threaded by the command
+//     layer) IS dispatched here, though: `buildDescriptor()` reduces each
+//     plugin's `envelope`/`layer.envelopeFields` capability into the composed
+//     schema's `x-apigen-envelope` §9.1 side-channel via
+//     `pluginsToEnvelopeMiddlewares()` (DEBT-APIGEN-ENVELOPE-CAPABILITY-
+//     UNWIRED-001) — schema composition has to happen before extraction
+//     output reaches any transport, so it can't be deferred like layer/mount.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -25,6 +32,7 @@ import {
   extract,
   composeSchemas,
   createExtractionSession,
+  pluginsToEnvelopeMiddlewares,
 } from '@adhd/apigen-core-client';
 import type {
   ExtractionSession,
@@ -34,6 +42,7 @@ import type {
   GeneratedSchemas,
   ExportMode,
   Logger,
+  Plugin,
   PluginInput,
   RunInput,
   OutputPlugin,
@@ -110,6 +119,18 @@ export interface OrchestratorOptions {
    * plugins).  Validated but not dispatched in v1 — wired through for v2.x.
    */
   usePlugins?: string[];
+  /**
+   * DEBT-APIGEN-ENVELOPE-CAPABILITY-UNWIRED-001: the LOADED `--use` plugin
+   * objects (as resolved by the command layer's `loadUsePlugins()`) — distinct
+   * from `usePlugins` above, which only carries the raw specifier strings.
+   * `buildDescriptor()` reduces these plugins' `envelope`/`layer.envelopeFields`
+   * capabilities into the composed schema's `x-apigen-envelope` §9.1
+   * side-channel via `pluginsToEnvelopeMiddlewares()`, so a `--use` plugin
+   * declaring `EnvelopeCapability` actually surfaces its field through a real
+   * transport instead of only through hand-built test schemas. Optional —
+   * omitted (or `[]`) means no `--use` plugin contributes an envelope field.
+   */
+  usePluginObjects?: Plugin[];
   /** Projection-override config (Tenet 1). */
   overrides?: OverrideConfig;
   /** Shared logger. */
@@ -367,7 +388,12 @@ export function opMatchesExportMode(op: Operation, mode: ExportMode): boolean {
 export async function buildDescriptor(
   opts: OrchestratorOptions
 ): Promise<OrchestratorDescriptor> {
-  const { sources, overrides = {}, logger } = opts;
+  const { sources, overrides = {}, logger, usePluginObjects = [] } = opts;
+  // DEBT-APIGEN-ENVELOPE-CAPABILITY-UNWIRED-001: reduce the loaded `--use`
+  // plugins' envelope-contributing capabilities ONCE, up front — every
+  // namespace's `composeSchemas()` call below merges the SAME set (a plugin
+  // loaded via `--use` applies across every source in this run).
+  const envelopeMiddlewares = pluginsToEnvelopeMiddlewares(usePluginObjects);
 
   if (sources.length === 0) {
     throw new Error(
@@ -514,7 +540,7 @@ export async function buildDescriptor(
           Object.keys(group.generated.schemas).length
         } action(s))`
       );
-      const schemas = composeSchemas(group.generated, [], {});
+      const schemas = composeSchemas(group.generated, envelopeMiddlewares, {});
       packageSchemas.set(group.namespace, {
         id: group.namespace,
         schemas,
