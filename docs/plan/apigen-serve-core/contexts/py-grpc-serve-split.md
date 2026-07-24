@@ -20,6 +20,7 @@
 
 - [py-grpc-serve-split.2] grpc project() re-derivation deleted (exact symbol confirmed by py-extract-preflight)
 - [py-grpc-serve-split.3] py-grpc parity gate green vs real spawned Python gRPC server
+- [py-grpc-serve-split.4] negative control: py-grpc regression turns parity RED, restore GREEN
 ---
 
 ## Reservations
