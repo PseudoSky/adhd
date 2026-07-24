@@ -29,7 +29,12 @@ import {
   readUseOptions,
   readUsePlugins,
 } from '@adhd/apigen-engine-runtime';
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type {
+  FastifyInstance,
+  FastifyReply,
+  FastifyRequest,
+  FastifyServerOptions,
+} from 'fastify';
 import Fastify from 'fastify';
 import { operationFor } from './route-projection';
 import { sendStreamSse } from './stream';
@@ -323,7 +328,12 @@ export async function run(input: RunInput): Promise<void> {
   // Use the shared pino instance as Fastify's logger so per-request logging is
   // native + consistent; fall back to a default stderr logger when absent.
   const logger = input.logger ?? createLogger();
-  const app = Fastify({ logger });
+  // Cast the options to the base `FastifyServerOptions` so `Fastify()` returns
+  // the default-generic `FastifyInstance` rather than one whose (invariant)
+  // logger generic is narrowed to the pino `Logger` type — which would not be
+  // assignable to the adapter's `FastifyInstance` field. The real pino instance
+  // is still passed and used at runtime; only the static type is widened.
+  const app = Fastify({ logger } as FastifyServerOptions);
 
   // Framework-level fallback error handler: catches errors Fastify raises
   // BEFORE a route handler runs (e.g. a malformed JSON body). Domain errors
