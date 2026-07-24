@@ -23,7 +23,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -163,6 +163,36 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     const res = runBin(['--help'], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
     expect(res.stdout).toContain('backlog client-d get-item');
+  });
+
+  it('--help and no-args NEVER create the backing SQLite store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001)', () => {
+    // The exact resolved path a real `--help`/no-args invocation would open,
+    // computed the same way `runBacklogCli` does (buildBacklogEnv with the
+    // identical scope/cwd/adhdRoot triple `runBin`'s spawned process sees via
+    // ADHD_BACKLOG_SCOPE=project + cwd=adhdRoot) — never opened directly here.
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-eager-open-'));
+    const expectedDbPath = buildBacklogEnv({ scope: 'project', cwd: adhdRoot, adhdRoot }).files.db;
+    expect(existsSync(expectedDbPath), 'sanity: no store should exist before the CLI ever runs').toBe(false);
+
+    const noArgs = runBin([], adhdRoot);
+    expect(noArgs.status, `stderr:\n${noArgs.stderr}`).toBe(0);
+    expect(existsSync(expectedDbPath), 'a bare no-args invocation must not create the store').toBe(false);
+
+    const help = runBin(['--help'], adhdRoot);
+    expect(help.status, `stderr:\n${help.stderr}`).toBe(0);
+    expect(existsSync(expectedDbPath), 'a --help invocation must not create the store').toBe(false);
+
+    const unknown = runBin(['totally-bogus-command'], adhdRoot);
+    expect(unknown.status).not.toBe(0);
+    expect(existsSync(expectedDbPath), 'an unrecognized command must not create the store either — it never reaches a real function').toBe(false);
+
+    // Sanity check the assertion itself has teeth: a command that DOES reach
+    // a real function (`list-items`, on an empty/nonexistent store) MUST
+    // create it — proving `expectedDbPath` is the right path and `existsSync`
+    // isn't just trivially false for an unrelated reason.
+    const real = runBin(['list-items', '--filter', '{}'], adhdRoot);
+    expect(real.status, `stderr:\n${real.stderr}`).toBe(0);
+    expect(existsSync(expectedDbPath), 'a real dispatched command must still open the store as before').toBe(true);
   });
 
   it('a PLAIN "get-item --repo … --human-id …" (bare, no manual namespace prefix) resolves — proves runBacklogCli prepends the namespace itself', async () => {
