@@ -11,7 +11,20 @@ import type {
 } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import { toOpenApi } from '@adhd/apigen-codegen-openapi';
+import { createStream } from '@adhd/apigen-engine-runtime';
+import {
+  captureGolden,
+  assertParity,
+} from '@adhd/apigen-engine-runtime/test-support';
+import type {
+  GoldenFixture,
+  GoldenSnapshot,
+  ParityDriver,
+} from '@adhd/apigen-engine-runtime/test-support';
+import { ApiError } from '@adhd/apigen-base-errors';
 import * as net from 'node:net';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 /** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */
 async function freePort(): Promise<number> {
@@ -1043,5 +1056,413 @@ describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] run() route/verb parity w
 describe('api-fastify plugin — language declaration', () => {
   it('explicitly declares language: "ts" (FAILS if declaration is dropped)', () => {
     expect(apiFastifyPlugin.language).toBe('ts');
+  });
+});
+
+// ===========================================================================
+// [fastify-parity] serve-core TransportAdapter/OpPlan parity gate
+// ([def:parity-gate], docs/plan/apigen-serve-core/contexts/_shared.md)
+//
+// This block is the acceptance mechanism for the fastify → TransportAdapter/
+// OpPlan migration (fastify-adapter state). It drives a REAL live Fastify
+// server the way a consumer does ([def:real-consumer-protocol]: HTTP → fetch)
+// across every proposal §6 fixture CLASS, and asserts the recapture is
+// byte-identical to a committed golden snapshot captured against the
+// pre-migration server ([inv:byte-identical]).
+//
+// Fixture classes covered:
+//   - safe/scalar (GET-hoist)                → `safe-get`
+//   - unsafe/mutating-scalar (dod.9)         → `unsafe-mutating-scalar`
+//     (the BUG-APIGEN-SAFE-OP-MUTATIONS-OVER-GET-001 shape — an UNSAFE op
+//     whose bare domain input is primitive-only is served over GET by
+//     FEAT-APIGEN-022's auto-hoist; pinned here to prove this refactor does
+//     NOT silently change it)
+//   - session/envelope                       → `session-envelope`
+//   - `--use` mount                          → `mount`
+//   - validation-failure (per class)         → `validation-failure`
+//   - domain ApiError (per class)            → `domain-apierror`
+//   - streaming:true                         → asserted SEPARATELY below.
+//     Streaming is one of the THREE explicitly-flagged behavior CHANGES this
+//     refactor makes ([inv:byte-identical]: "streaming now served/rejected
+//     instead of mis-serialized" [dod.5]). Pre-migration, run.ts had ZERO
+//     call sites for sendStreamSse (DEBT-APIGEN-SERVE-CORE-002) and
+//     mis-serialized an ApiStream via JSON.stringify. It is therefore NOT a
+//     byte-identical fixture; it is proven by the dedicated
+//     `[fastify-parity.streaming]` live-SSE test (the TEETH for criterion .3),
+//     not by the golden snapshot.
+//
+// The golden snapshot is regenerated with `APIGEN_CAPTURE_GOLDEN=1` (the
+// standard snapshot-update escape hatch — the compare test itself always runs
+// unflagged, by default, in CI). Committed at
+// `src/test/golden/fastify.snapshot.json`.
+// ===========================================================================
+
+/** The driver's per-fixture request description. */
+interface HttpFixtureInput {
+  method: 'GET' | 'POST';
+  /** Route path (already projected — e.g. `/safe-pkg/ping`), no host. */
+  urlPath: string;
+  headers?: Record<string, string>;
+  /** JSON request body (serialised by the driver). */
+  body?: unknown;
+}
+
+/** The byte-comparable result recorded per fixture. */
+interface HttpFixtureOutput {
+  status: number;
+  contentType: string | null;
+  /** Raw response body text — byte-faithful (`"pong"` vs bare `pong`, etc.). */
+  body: string;
+}
+
+const GOLDEN_PATH = path.join(__dirname, 'golden', 'fastify.snapshot.json');
+
+/** Parse SSE frames from a response body. Returns `{ event?, data }[]`. */
+function parseSseFramesParity(
+  body: string
+): Array<{ event?: string; data: string }> {
+  const frames: Array<{ event?: string; data: string }> = [];
+  for (const frame of body.split('\n\n').filter((f) => f.trim())) {
+    let event: string | undefined;
+    let data = '';
+    for (const line of frame.split('\n')) {
+      if (line.startsWith('event: ')) event = line.slice(7);
+      else if (line.startsWith('data: ')) data = line.slice(6);
+    }
+    if (data) frames.push({ ...(event ? { event } : {}), data });
+  }
+  return frames;
+}
+
+// ---------- parity domain fns (real in-process, no mocks) ----------
+function parityGetUser(userId: string): { id: string; name: string } {
+  return { id: userId, name: `User-${userId}` };
+}
+function paritySetFlag(value: string): string {
+  return `set:${value}`;
+}
+function parityGetThing(id: string): { id: string } {
+  if (id === 'missing') throw new ApiError('not_found', 'no such thing');
+  return { id };
+}
+let parityScheduleCalls = 0;
+function parityScheduleEvent(when: unknown): { ok: true; when: string } {
+  parityScheduleCalls += 1;
+  return { ok: true, when: (when as Date).toISOString() };
+}
+
+// ---------- parity composed schemas (data-wrapped, as ComposedSchemas) ----------
+const paritySafeSchema = {
+  ping: {
+    input: {
+      type: 'object',
+      properties: { data: { type: 'object', properties: {}, required: [] } },
+      required: ['data'],
+    },
+    output: { type: 'string' },
+    'x-apigen-safe': true,
+  },
+};
+
+const parityEnvelopeSchema = {
+  getUser: {
+    input: {
+      type: 'object',
+      properties: {
+        session: { type: 'string' },
+        data: {
+          type: 'object',
+          properties: { userId: { type: 'string' } },
+          required: ['userId'],
+        },
+      },
+      required: ['session', 'data'],
+    },
+    output: { type: 'object' },
+    'x-apigen-envelope': { session: 'auth' },
+  },
+};
+
+const parityMutateSchema = {
+  setFlag: {
+    input: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: { value: { type: 'string' } },
+          required: ['value'],
+        },
+      },
+      required: ['data'],
+    },
+    output: { type: 'string' },
+  },
+};
+
+const parityErrSchema = {
+  getThing: {
+    input: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id'],
+        },
+      },
+      required: ['data'],
+    },
+    output: { type: 'object' },
+  },
+};
+
+const paritySchedSchema = {
+  scheduleEvent: {
+    input: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: { when: { type: 'string', format: 'date-time' } },
+          required: ['when'],
+        },
+      },
+      required: ['data'],
+    },
+    output: {},
+  },
+};
+
+const parityStreamSchema = {
+  streamNums: {
+    input: {
+      type: 'object',
+      properties: { data: { type: 'object', properties: {}, required: [] } },
+      required: ['data'],
+    },
+    // schema-less passthrough so the ApiStream survives dispatch's encode seam.
+    output: {},
+    'x-apigen-safe': true,
+  },
+};
+
+// ---------- parity operations (real Operation[] — required for the two
+// class-defining fixtures whose behavior depends on Operation fields the
+// composed-schema-only synth path cannot carry: the mutating-scalar op's
+// primitive bare `input` (GET-hoist, dod.9) and the stream op's
+// `streaming:true`). The remaining packages resolve via the composed-schema
+// synth fallback, exactly as a no-`operations` run does. ----------
+const parityMutateOp: Operation = {
+  id: 'mutate-pkg/set-flag',
+  host: 'ts',
+  namespace: { raw: 'mutate-pkg', words: ['mutate', 'pkg'] },
+  path: [{ raw: 'setFlag', words: ['set', 'flag'] }],
+  kind: 'action',
+  async: false,
+  streaming: false,
+  // UNSAFE (mutating) — but the BARE domain input is primitive-only, so
+  // FEAT-APIGEN-022 hoists it to GET. This is the exact
+  // BUG-APIGEN-SAFE-OP-MUTATIONS-OVER-GET-001 shape (dod.9).
+  safe: false,
+  input: {
+    type: 'object',
+    properties: { value: { type: 'string' } },
+    required: ['value'],
+  },
+  output: { type: 'string' },
+  envelope: {},
+  typeText: null,
+};
+
+const parityStreamOp: Operation = {
+  id: 'stream-pkg/stream-nums',
+  host: 'ts',
+  namespace: { raw: 'stream-pkg', words: ['stream', 'pkg'] },
+  path: [{ raw: 'streamNums', words: ['stream', 'nums'] }],
+  kind: 'query',
+  async: false,
+  streaming: true,
+  safe: true,
+  input: { type: 'object', properties: {}, required: [] },
+  output: {},
+  envelope: {},
+  typeText: null,
+};
+
+/** The byte-identical fixture classes (streaming proven separately below). */
+const parityFixtures: ReadonlyArray<GoldenFixture<HttpFixtureInput>> = [
+  {
+    name: 'safe-get',
+    input: { method: 'GET', urlPath: '/safe-pkg/ping' },
+  },
+  {
+    // dod.9: unsafe/mutating op with a primitive-only bare input is GET-hoisted.
+    name: 'unsafe-mutating-scalar',
+    input: { method: 'GET', urlPath: '/mutate-pkg/set-flag?value=on' },
+  },
+  {
+    name: 'session-envelope',
+    input: {
+      method: 'POST',
+      urlPath: '/env-pkg/get-user',
+      headers: {
+        'content-type': 'application/json',
+        'x-auth-session': 'tok-abc',
+      },
+      body: { data: { userId: 'u99' } },
+    },
+  },
+  {
+    name: 'validation-failure',
+    input: {
+      method: 'POST',
+      urlPath: '/sched-pkg/schedule-event',
+      headers: { 'content-type': 'application/json' },
+      // 2099-02-30 is not a real calendar date → ajv date-time rejects it.
+      body: { data: { when: '2099-02-30T00:00:00.000Z' } },
+    },
+  },
+  {
+    name: 'domain-apierror',
+    input: {
+      method: 'POST',
+      urlPath: '/err-pkg/get-thing',
+      headers: { 'content-type': 'application/json' },
+      body: { data: { id: 'missing' } },
+    },
+  },
+  {
+    name: 'mount',
+    input: { method: 'GET', urlPath: '/_meta/health' },
+  },
+];
+
+describe('[fastify-parity] TransportAdapter/OpPlan golden-snapshot parity gate', () => {
+  let controller: AbortController;
+  let baseUrl: string;
+  let driver: ParityDriver<HttpFixtureInput, HttpFixtureOutput>;
+
+  beforeAll(async () => {
+    parityScheduleCalls = 0;
+    controller = new AbortController();
+    const port = await freePort();
+    const runInput: RunInput = {
+      packages: [
+        {
+          id: 'safe-pkg',
+          schemas: paritySafeSchema,
+          importPath: '@test/safe-pkg',
+          fns: { ping: () => 'pong' },
+        },
+        {
+          id: 'env-pkg',
+          schemas: parityEnvelopeSchema,
+          importPath: '@test/env-pkg',
+          fns: { getUser: (userId: unknown) => parityGetUser(userId as string) },
+        },
+        {
+          id: 'mutate-pkg',
+          schemas: parityMutateSchema,
+          importPath: '@test/mutate-pkg',
+          fns: { setFlag: (value: unknown) => paritySetFlag(value as string) },
+        },
+        {
+          id: 'err-pkg',
+          schemas: parityErrSchema,
+          importPath: '@test/err-pkg',
+          fns: { getThing: (id: unknown) => parityGetThing(id as string) },
+        },
+        {
+          id: 'sched-pkg',
+          schemas: paritySchedSchema,
+          importPath: '@test/sched-pkg',
+          fns: { scheduleEvent: (when: unknown) => parityScheduleEvent(when) },
+        },
+        {
+          id: 'stream-pkg',
+          schemas: parityStreamSchema,
+          importPath: '@test/stream-pkg',
+          fns: {
+            streamNums: () =>
+              createStream<number>({
+                produce: async function* () {
+                  yield 1;
+                  yield 2;
+                  yield 3;
+                },
+              }),
+          },
+        },
+      ],
+      operations: [parityMutateOp, parityStreamOp],
+      outputDir: '/tmp/out',
+      options: { port, usePlugins: [healthPlugin] },
+      signal: controller.signal,
+    };
+
+    run(runInput).catch(() => {
+      /* swallowed after abort */
+    });
+
+    baseUrl = `http://127.0.0.1:${port}`;
+    driver = {
+      async invoke(
+        fixture: GoldenFixture<HttpFixtureInput>
+      ): Promise<HttpFixtureOutput> {
+        const { method, urlPath, headers, body } = fixture.input;
+        const res = await fetch(`${baseUrl}${urlPath}`, {
+          method,
+          headers,
+          body: body !== undefined ? JSON.stringify(body) : undefined,
+        });
+        return {
+          status: res.status,
+          contentType: res.headers.get('content-type'),
+          body: await res.text(),
+        };
+      },
+    };
+
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      try {
+        const r = await fetch(`${baseUrl}/_meta/health`, { method: 'GET' });
+        if (r.status < 500) break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+  }, 15000);
+
+  afterAll(() => {
+    controller.abort();
+  });
+
+  // [fastify-adapter.6] — the parity gate. Recapture through the (post-
+  // migration) adapter-based server and assert deep-equality vs the committed
+  // pre-migration golden snapshot. FAILS if the migration regresses any
+  // fixture (missing/added/value-diverged) — assertParity reports the full
+  // blast radius. Regenerate the golden with APIGEN_CAPTURE_GOLDEN=1.
+  it('recapture deep-equals the committed golden snapshot', async () => {
+    const recapture = await captureGolden(driver, parityFixtures);
+
+    if (process.env['APIGEN_CAPTURE_GOLDEN'] === '1') {
+      fs.mkdirSync(path.dirname(GOLDEN_PATH), { recursive: true });
+      fs.writeFileSync(GOLDEN_PATH, JSON.stringify(recapture, null, 2) + '\n');
+      return;
+    }
+
+    if (!fs.existsSync(GOLDEN_PATH)) {
+      throw new Error(
+        `[fastify-parity] golden snapshot missing at ${GOLDEN_PATH} — ` +
+          'regenerate with APIGEN_CAPTURE_GOLDEN=1 before comparing.'
+      );
+    }
+    const committed = JSON.parse(
+      fs.readFileSync(GOLDEN_PATH, 'utf8')
+    ) as GoldenSnapshot<HttpFixtureOutput>;
+
+    assertParity(committed, recapture);
   });
 });
