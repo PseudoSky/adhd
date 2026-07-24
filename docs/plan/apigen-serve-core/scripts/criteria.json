@@ -523,6 +523,16 @@
       "paths": [
         "packages/apigen/apigen-plugin-cli-output/src/test/run-cli-integration.spec.ts"
       ]
+    },
+    {
+      "id": "py-grpc-serve-split.5",
+      "phase": "phase-3",
+      "tier": 1,
+      "kind": "absent",
+      "pattern": "capitalize",
+      "paths": [
+        "packages/apigen/python/apigen_python/grpc_server.py"
+      ]
     }
   ]
 }
