@@ -133,6 +133,14 @@
       "tier": 1,
       "kind": "exists",
       "path": "packages/apigen/apigen-plugin-api-fastify/src/test/golden/fastify.snapshot.json"
+    },
+    {
+      "id": "fastify-adapter.6",
+      "phase": "phase-1",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-api-fastify:test",
+      "expect": "exit0"
     }
   ]
 }
