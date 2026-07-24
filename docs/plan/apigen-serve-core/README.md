@@ -146,3 +146,5 @@ py-grpc-serve-split → audit-python → audit-final.
 - `DEBT-APIGEN-SERVE-CORE-011` (Phase 4: model `--source` as a source-plugin) is
   **PARKED** — not a schedulable state. Revisit only when a second real TS-side
   source kind lands. See its BACKLOG entry for the revisit condition.
+
+- `[dod.11]` **Every transport's --use capability (BOTH layer AND mount) is explicitly RESOLVED and DOCUMENTED, never left implicit: cli-output either gains --use or is declared --use-incapable WITH a filed follow-up BACKLOG item; mcp states whether it now hosts --use mount ops and pins it (dod.4 covers validate-layer composition, NOT the mount capability). (structural)** — Every transport's --use capability (BOTH layer AND mount) is explicitly RESOLVED and DOCUMENTED, never left implicit: cli-output either gains --use or is declared --use-incapable WITH a filed follow-up BACKLOG item; mcp states whether it now hosts --use mount ops and pins it (dod.4 covers validate-layer composition, NOT the mount capability)..
