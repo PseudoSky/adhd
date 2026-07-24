@@ -20,9 +20,9 @@
     "fastify-adapter": {
       "status": "complete",
       "started_at": "2026-07-24T04:25:21.430Z",
-      "done_at": "2026-07-24T07:53:04.993Z",
+      "done_at": "2026-07-24T07:56:16.251Z",
       "start_ref": "45bf8447a92e4a755e679e33f6819d656bdd4403",
-      "end_ref": "35f52230d3b623e12bbc8c32ffc660250dc58c3f"
+      "end_ref": "7ba740aa9164dd017bc25d5ee081497c12d4f6ac"
     },
     "audit-foundation": {
       "status": "pending",
@@ -131,6 +131,18 @@
       "audit_criteria_total": 21,
       "by": "plan-orchestrator",
       "note": "Migrated api-fastify to the reference TransportAdapter/OpPlan serve-core: run.ts implements TransportAdapter<FastifyRaw> consuming OpPlan+createPackageInvoker+dispatchForPlan; generate.ts renders from OpPlan; deleted resolveRoute/resolveOperation (collapsed into OpPlan, kept operationFor) and the buildInvokerForPackage block; wired sendStreamSse live (DEBT-002) + mount-through-layers (DEBT-004); transport stamped per-package. Parity gate GREEN (6 byte-identical fixture classes incl dod.9 mutating-scalar GET-hoist); neg-control RED->GREEN proven; SSE frames [1,2,3] asserted emitted. 56/56 fastify + all 7 affected projects green; build typechecks."
+    },
+    {
+      "ts": "2026-07-24T07:56:16.251Z",
+      "from": "audit-foundation",
+      "to": "fastify-adapter",
+      "start_ref": "45bf8447a92e4a755e679e33f6819d656bdd4403",
+      "end_ref": "7ba740aa9164dd017bc25d5ee081497c12d4f6ac",
+      "audit_exit": 0,
+      "audit_criteria_passed": 21,
+      "audit_criteria_total": 21,
+      "by": "plan-orchestrator",
+      "note": "Reference TransportAdapter/OpPlan migration complete. All 9 fastify-adapter.* criteria PASS (phase-1 fails=0). run.ts implements TransportAdapter<FastifyRaw> (readCall/writeResult/writeError/registerRoute) over OpPlan+createPackageInvoker+dispatchForPlan; generate.ts renders from OpPlan; resolveRoute/resolveOperation + buildInvokerForPackage block deleted (operationFor kept); sendStreamSse wired live (DEBT-002) + mount-through-layers (DEBT-004); transport stamped per-package. Parity gate GREEN across 6 byte-identical fixture classes incl dod.9 mutating-scalar GET-hoist; neg-control RED->GREEN proven (safe-get+unsafe-mutating-scalar diverge); SSE frames [1,2,3] asserted. 56/56 fastify + all 7 affected projects green; build typechecks (fixed a FastifyServerOptions logger-generic build error nx test missed)."
     }
   ],
   "amendment_log": [],
