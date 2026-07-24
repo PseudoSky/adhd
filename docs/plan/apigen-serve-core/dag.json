@@ -166,7 +166,8 @@
         "packages/apigen/python/apigen_python/flask_server.py",
         "packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts",
         "packages/apigen/apigen-plugin-py-flask/src/test/plugin.spec.ts",
-        "packages/apigen/apigen-plugin-py-flask/src/test/golden/py-flask.snapshot.json"
+        "packages/apigen/apigen-plugin-py-flask/src/test/golden/py-flask.snapshot.json",
+        "docs/plan/apigen-serve-core/neg-control/py-flask-serve-split.patch"
       ],
       "context": "contexts/py-flask-serve-split.md",
       "notes": "Two-phase extract/serve split: --emit-json extract mode; TS-side real project(); flask --plan; delete _route_for_op/_is_primitive_only_input_schema/_http_verb."
