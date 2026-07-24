@@ -182,6 +182,20 @@
       ],
       "context": "contexts/py-grpc-serve-split.md",
       "notes": "Reuse --emit-json extractor mode; inject TS-computed plan into grpc_server via --plan; delete its project() re-derivation. Scope confirmed by py-extract-preflight."
+    },
+    "audit-python": {
+      "kind": "audit",
+      "phase": "phase-3",
+      "depends_on": [
+        "py-flask-serve-split",
+        "py-grpc-serve-split"
+      ],
+      "guard": "node docs/plan/apigen-serve-core/scripts/run-audit.js --phase phase-3",
+      "artifacts": [
+        "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
+      ],
+      "context": "contexts/audit-python.md",
+      "notes": ""
     }
   },
   "authored_with": {
