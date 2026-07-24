@@ -78,6 +78,14 @@
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts"
       ]
+    },
+    {
+      "id": "parity-harness.3",
+      "phase": "phase-1",
+      "tier": 2,
+      "kind": "command",
+      "cmd": "CI=true ./node_modules/.bin/nx run apigen-engine-runtime:test",
+      "expect": "exit0"
     }
   ]
 }
