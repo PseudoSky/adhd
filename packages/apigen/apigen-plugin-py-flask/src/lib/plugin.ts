@@ -1,8 +1,18 @@
 /**
  * @adhd/apigen-plugin-py-flask — Python HTTP target for apigen.
  *
- * Serves a Python `.py` module over real HTTP by spawning
- * `python3 -m apigen_python.flask_server` as a subprocess.
+ * Serves a Python `.py` module over real HTTP via a TWO-PHASE spawn
+ * (apigen-serve-core `py-flask-serve-split`):
+ *
+ *   1. Spawn `python3 -m apigen_python.extractor --emit-json` (short-lived,
+ *      extract-only) and parse its stdout into `Operation[]`.
+ *   2. Call the REAL `@adhd/apigen-engine-naming` `project(op)` on each op —
+ *      the SAME canonical projector `api-fastify`/`api-express`/`mcp`/`cli`
+ *      all derive their routes from — to compute `{route, verb}` per op.
+ *   3. Serialize `{operations, routes}` to a temp JSON file and spawn
+ *      `python3 -m apigen_python.flask_server ... --plan-file <path>`; the
+ *      Python server builds its route table from this INJECTED plan instead
+ *      of self-extracting or re-deriving route/verb.
  *
  * Route contract (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 — byte-identical
  * to `@adhd/apigen-engine-naming`'s `project(op).http`, the SAME derivation the
@@ -12,18 +22,30 @@
  *   GET  /_meta/health  → {"status":"ok","host":"<ns>"}
  *   <route> = '/' + [namespace, ...path].map(toKebab).join('/')
  *
- * Unlike the TS-extraction plugins (api-fastify/api-express/mcp), this plugin
- * never sees an `Operation[]` on the TS side — `RunInput.operations` is
- * absent for non-TS-extraction run paths (the CLI's `run` command routes
+ * Before this split, `apigen_python/flask_server.py` carried a hand-
+ * maintained Python re-implementation of `project()`'s route/verb formula
+ * (`_route_for_op()` / `_http_verb()` / `_is_primitive_only_input_schema()`)
+ * because Python cannot import the TS package and there was no IPC channel
+ * to carry a TS-computed value across the process boundary. That channel is
+ * this file's two-phase spawn — the Python re-derivation was DELETED, not
+ * kept as a fallback (see `flask_server.py`'s module docstring).
+ *
+ * `--plan-file` wire format: a temp JSON FILE (`fs.mkdtemp` + `--plan-file
+ * <path>`), not a `--plan '<json>'` argv string. Chosen because (a) argv has
+ * a real, OS-dependent size ceiling (`ARG_MAX`) that a module with many
+ * operations and large JSON-Schema fragments can plausibly exceed, and (b)
+ * JSON containing quotes/backslashes round-trips through shell argv
+ * quoting unreliably across platforms, whereas a file has neither problem.
+ * This matches existing repo convention for TS↔Python subprocess IPC
+ * payloads (`@adhd/apigen-python-env`'s wheel-build temp dir,
+ * `fs.mkdtempSync(path.join(os.tmpdir(), …))`).
+ *
+ * Unlike the TS-extraction plugins (api-fastify/api-express/mcp), this
+ * plugin still never sees an `Operation[]` on `RunInput` — `RunInput.operations`
+ * is absent for non-TS-extraction run paths (the CLI's `run` command routes
  * `.py` sources straight to `plugin.run()` with an empty `schemas: {}`
- * package stub; see `entrypoint/apigen-cli/src/lib/commands/run.ts`). The
- * Python module's own extraction (`apigen_python.extractor.extract_module()`)
- * produces the SAME casing-neutral `{raw, words}` Segment shape as the TS
- * extractor, so the canonical route/verb derivation is reimplemented
- * byte-for-byte against that Segment structure in
- * `apigen_python/flask_server.py` (`_route_for_op()` / `_http_verb()`) rather
- * than computed here and interpolated — there is no TS-side Operation to call
- * `project()` on for this run path, and Python cannot import the TS package.
+ * package stub; see `entrypoint/apigen-cli/src/lib/commands/run.ts`).
+ * Instead, THIS plugin obtains `Operation[]` itself via phase 1 above.
  *
  * The Python server emits `{"ready":true}` on stdout immediately after
  * binding the port.  This plugin waits for that line (bounded to 10 s)
@@ -34,9 +56,13 @@
  */
 
 import * as readline from 'node:readline';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import type { OutputPlugin, RunInput } from '@adhd/apigen-core-client';
+import type { Operation, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 import { ensurePythonEnv } from '@adhd/apigen-python-env';
+import { project } from '@adhd/apigen-engine-naming';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -102,7 +128,89 @@ function waitForReady(
 }
 
 // ---------------------------------------------------------------------------
-// run() — spawn the Python HTTP server
+// Phase 1 — spawn `apigen_python.extractor --emit-json` (short-lived,
+// extract-only) and parse its stdout into Operation[].
+// ---------------------------------------------------------------------------
+
+/**
+ * One entry of the `--plan-file` payload's `routes` map — TS-computed via
+ * the real `project()`, never re-derived Python-side.
+ */
+interface ServePlanRoute {
+  route: string;
+  verb: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+}
+
+/** The `--plan-file` JSON payload `flask_server.py`'s `_build_state()` consumes. */
+interface ServePlan {
+  operations: Operation[];
+  routes: Record<string, ServePlanRoute>;
+}
+
+/**
+ * Runs `python -m apigen_python.extractor --emit-json` to completion and
+ * parses its stdout into `Operation[]` — phase 1 of the two-phase spawn
+ * (module docstring). This is a short-lived process: it exits as soon as
+ * extraction finishes, well before `flask_server` (phase 3) is spawned.
+ */
+function runExtractorEmitJson(
+  pyenv: ReturnType<typeof ensurePythonEnv>,
+  modulePath: string,
+  namespace: string
+): Promise<Operation[]> {
+  return new Promise<Operation[]>((resolve, reject) => {
+    const proc = spawn(
+      pyenv.python,
+      [
+        '-m',
+        'apigen_python.extractor',
+        modulePath,
+        '--namespace',
+        namespace,
+        '--emit-json',
+      ],
+      {
+        cwd: pyenv.pythonPkgDir,
+        env: { ...process.env, PYTHONPATH: pyenv.pythonPkgDir },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
+
+    let stdout = '';
+    let stderr = '';
+    proc.stdout?.on('data', (chunk: Buffer) => {
+      stdout += chunk.toString('utf8');
+    });
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8');
+    });
+    proc.on('error', reject);
+    proc.on('exit', (code) => {
+      if (code !== 0) {
+        reject(
+          new Error(
+            `py-flask: extractor --emit-json exited with code ${code}:\n${stderr}`
+          )
+        );
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout) as Operation[]);
+      } catch (err) {
+        reject(
+          new Error(
+            `py-flask: extractor --emit-json produced invalid JSON (${
+              (err as Error).message
+            }):\n${stdout}`
+          )
+        );
+      }
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// run() — two-phase spawn: extract-only, then project(), then serve.
 // ---------------------------------------------------------------------------
 
 async function run(input: RunInput): Promise<void> {
@@ -130,26 +238,59 @@ async function run(input: RunInput): Promise<void> {
   // apigen-python's own pyproject.toml, never the ambient PATH python.
   const pyenv = ensurePythonEnv({});
 
-  const proc = spawn(
-    pyenv.python,
-    [
-      '-m',
-      'apigen_python.flask_server',
-      '--module',
-      modulePath,
-      '--namespace',
-      namespace,
-      '--host',
-      String(host),
-      '--port',
-      String(port),
-    ],
-    {
-      cwd: pyenv.pythonPkgDir,
-      env: { ...process.env, PYTHONPATH: pyenv.pythonPkgDir },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }
-  ) as ChildProcessWithoutNullStreams;
+  // ---- Phase 1: extract-only subprocess -> Operation[] ----
+  const operations = await runExtractorEmitJson(pyenv, modulePath, namespace);
+
+  // ---- Phase 2: canonical route/verb via the REAL project() (never a
+  // Python re-derivation — BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001) ----
+  const routes: Record<string, ServePlanRoute> = {};
+  for (const op of operations) {
+    const projected = project(op);
+    routes[op.id] = { route: projected.http.route, verb: projected.http.verb };
+  }
+  const plan: ServePlan = { operations, routes };
+
+  // ---- Phase 3: write the plan to a temp file and spawn flask_server ----
+  // See module docstring for why a temp FILE, not a `--plan '<json>'` argv
+  // string, was chosen (ARG_MAX + shell-quoting risk).
+  const planDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'apigen-py-flask-plan-')
+  );
+  const planPath = path.join(planDir, 'plan.json');
+  fs.writeFileSync(planPath, JSON.stringify(plan));
+
+  const cleanupPlan = (): void => {
+    fs.rmSync(planDir, { recursive: true, force: true });
+  };
+
+  let proc: ChildProcessWithoutNullStreams;
+  try {
+    proc = spawn(
+      pyenv.python,
+      [
+        '-m',
+        'apigen_python.flask_server',
+        '--module',
+        modulePath,
+        '--namespace',
+        namespace,
+        '--host',
+        String(host),
+        '--port',
+        String(port),
+        '--plan-file',
+        planPath,
+      ],
+      {
+        cwd: pyenv.pythonPkgDir,
+        env: { ...process.env, PYTHONPATH: pyenv.pythonPkgDir },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }
+    ) as ChildProcessWithoutNullStreams;
+  } catch (err) {
+    cleanupPlan();
+    throw err;
+  }
 
   // Forward stderr from the Python process to our own stderr so the user
   // sees route logs.
@@ -158,8 +299,14 @@ async function run(input: RunInput): Promise<void> {
   });
 
   // Wait for the readiness signal before resolving — ensures callers (the CLI,
-  // tests, the gateway) can start sending requests immediately.
-  await waitForReady(proc);
+  // tests, the gateway) can start sending requests immediately. Only once
+  // the server has bound its port (and therefore already read --plan-file
+  // during _build_state()) is it safe to clean up the temp plan file.
+  try {
+    await waitForReady(proc);
+  } finally {
+    cleanupPlan();
+  }
 
   // Block until the signal fires (SIGINT/SIGTERM → controller.abort())
   // or the process exits unexpectedly.
