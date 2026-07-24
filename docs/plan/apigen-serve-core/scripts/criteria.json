@@ -299,6 +299,16 @@
       "tier": 1,
       "kind": "exists",
       "path": "docs/apigen/proposals/py-extract-serve-split-findings.md"
+    },
+    {
+      "id": "py-extract-preflight.2",
+      "phase": "phase-3",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "^DECISION:",
+      "paths": [
+        "docs/apigen/proposals/py-extract-serve-split-findings.md"
+      ]
     }
   ]
 }
