@@ -67,11 +67,11 @@
       "end_ref": "ca4af702f102a4661bfe014a33e87a26e39c9bcb"
     },
     "py-flask-serve-split": {
-      "status": "pending",
+      "status": "complete",
       "started_at": null,
-      "done_at": null,
+      "done_at": "2026-07-24T10:15:01.365Z",
       "start_ref": null,
-      "end_ref": null
+      "end_ref": "448f6a64a16cbdce189133aba936881381ea07d0"
     },
     "py-grpc-serve-split": {
       "status": "pending",
@@ -227,6 +227,18 @@
       "audit_criteria_total": 44,
       "by": "plan-orchestrator",
       "note": "Phase-2 audit gate: express-adapter + mcp-adapter + cli-adapter all verified complete (44/44 phase-1+2 criteria). No new fixes needed at this gate itself (both criteria.json regex bugs and mcp-adapter's self-referential comment were already fixed while completing wave-3's own states)."
+    },
+    {
+      "ts": "2026-07-24T10:15:01.365Z",
+      "from": "py-flask-serve-split",
+      "to": "py-flask-serve-split",
+      "start_ref": null,
+      "end_ref": "448f6a64a16cbdce189133aba936881381ea07d0",
+      "audit_exit": 6,
+      "audit_criteria_passed": 53,
+      "audit_criteria_total": 59,
+      "by": "plan-orchestrator",
+      "note": "Two-phase extract/serve split: extractor.py gained required --emit-json extract-only mode; plugin.ts run() is now a 3-phase spawn (extractor --emit-json -> Operation[] -> real @adhd/apigen-engine-naming project() per op -> temp plan-file -> flask_server.py --plan-file, chosen over an argv JSON string for ARG_MAX/quoting safety). flask_server.py's _route_for_op/_http_verb/_is_primitive_only_input_schema (+ private helpers) deleted; route_map now built from the injected plan. Golden snapshot captured pre-migration via a throwaway worktree against the unmodified HEAD server (8 fixture classes incl decimal/datetime round-trip). Negative control (hardcoded verb:'POST') proven RED->GREEN via proveNegativeControl against the real pyFlaskPlugin.run() entrypoint. Guard: 16/16 tests green (verified independently by orchestrator via fresh nx-reset run). Two bugs found+reported, not fixed (outside reservation / pre-existing): entrypoint/apigen-cli's cross-host-response-envelope.spec.ts startPyServer() spawns flask_server.py with pre-migration args (missing --plan-file, now required) -- will be folded into py-grpc-serve-split's dispatch; and python/run_tests.py's Flask live-test sections reference a stale fixture path, pre-existing, confirmed not in any nx-affected test path."
     }
   ],
   "amendment_log": [],
@@ -235,7 +247,7 @@
     "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
-  "current_state": "py-flask-serve-split",
+  "current_state": "py-grpc-serve-split",
   "dod_provenance": {
     "confirmed_at": "2026-07-24T03:27:07.924Z",
     "by": "plan-orchestrator",
