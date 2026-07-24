@@ -4,10 +4,10 @@
   "dag": "dag.json",
   "states": {
     "serve-core-primitives": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-24T03:34:11.754Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "430a7d5813787b0353459c8be2c504bf23144a52",
       "end_ref": null
     },
     "parity-harness": {
@@ -99,7 +99,7 @@
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
-    "version": "0.8.30",
+    "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
   "current_state": "serve-core-primitives",
