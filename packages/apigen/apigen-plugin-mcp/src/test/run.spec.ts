@@ -4,7 +4,19 @@ import { dispatch } from '@adhd/apigen-engine-runtime';
 import type { Operation, RunInput, Segment } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import { deriveToolName } from '../lib/tool-naming';
+import { ApiError } from '@adhd/apigen-base-errors';
 import * as net from 'node:net';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import {
+  captureGolden,
+  assertParity,
+  type GoldenFixture,
+  type GoldenSnapshot,
+  type ParityDriver,
+} from '@adhd/apigen-engine-runtime/test-support';
 
 /** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */
 async function freePort(): Promise<number> {
@@ -872,5 +884,327 @@ describe('[BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001] run() derives tool names 
         }
       })();
     expect(succeeded).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// [mcp-adapter] TransportAdapter/OpPlan golden-snapshot parity gate.
+//
+// [def:real-consumer-protocol]: driven by a REAL `@modelcontextprotocol/sdk`
+// `Client` over `StreamableHTTPClientTransport` against the real HTTP
+// endpoint `run()` starts — never plugin internals (AGENTS.md "Proving an
+// MCP server works").
+//
+// Fixture classes captured here are the BYTE-IDENTICAL set — unaffected by
+// the mcp-adapter migration: a normal call, a zero-arg call, a
+// session-envelope call, a domain-thrown `ApiError`, and the `tools/list`
+// projection (description/outputSchema). Three classes are DELIBERATELY
+// EXCLUDED from this golden set because the migration flags them as
+// intentional behavior CHANGES, proven separately with their own dedicated
+// (non-golden) tests instead:
+//   - malformed input:  pre-migration SUCCEEDS (no validation); post-
+//     migration REJECTS with `invalid_argument` (BUG-APIGEN-SERVE-CORE-001).
+//   - streaming:true:   pre-migration mis-serializes to `{}`; post-migration
+//     is genuinely projected via `projectStreamMcp` (DEBT-APIGEN-SERVE-CORE-002).
+//   - `--use` mount ops: mcp has ZERO mount support pre-migration; this is a
+//     wholly NEW capability post-migration (dod.11), not a byte-identical case.
+//
+// The golden snapshot is regenerated with `APIGEN_CAPTURE_GOLDEN=1` (the
+// standard snapshot-update escape hatch — the compare test itself always runs
+// unflagged, by default, in CI). Committed at
+// `src/test/golden/mcp.snapshot.json`.
+// ---------------------------------------------------------------------------
+
+function parityGetUser(userId: string): { id: string; name: string } {
+  return { id: userId, name: `User-${userId}` };
+}
+function parityListUsers(): string[] {
+  return ['alice', 'bob'];
+}
+function parityGetThing(id: string): { id: string } {
+  if (id === 'missing') throw new ApiError('not_found', 'no such thing');
+  return { id };
+}
+
+const paritySchema = {
+  getUser: {
+    input: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: { userId: { type: 'string' } },
+          required: ['userId'],
+        },
+      },
+      required: ['data'],
+    },
+    output: { type: 'object' },
+  },
+  listUsers: {
+    input: {
+      type: 'object',
+      properties: { data: { type: 'object', properties: {}, required: [] } },
+      required: ['data'],
+    },
+    output: { type: 'array', items: { type: 'string' } },
+  },
+};
+
+const parityEnvSchema = {
+  getUser: {
+    input: {
+      type: 'object',
+      properties: {
+        session: { type: 'string' },
+        data: {
+          type: 'object',
+          properties: { userId: { type: 'string' } },
+          required: ['userId'],
+        },
+      },
+      required: ['session', 'data'],
+    },
+    output: { type: 'object' },
+    'x-apigen-envelope': { session: 'auth' },
+  },
+};
+
+const parityErrSchema = {
+  getThing: {
+    input: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: { id: { type: 'string' } },
+          required: ['id'],
+        },
+      },
+      required: ['data'],
+    },
+    output: { type: 'object' },
+  },
+};
+
+const parityNamespaceSeg: Segment = { raw: 'parity-pkg', words: ['parity', 'pkg'] };
+function makeParityOp(exportName: string, exportWords: string[]): Operation {
+  return {
+    id: `parity-pkg/${exportName}`,
+    host: 'ts',
+    namespace: parityNamespaceSeg,
+    path: [{ raw: exportName, words: exportWords }],
+    kind: 'action',
+    async: false,
+    streaming: false,
+    safe: false,
+    input: {},
+    output: {},
+    envelope: {},
+    typeText: null,
+  };
+}
+const parityGetUserOp = makeParityOp('getUser', ['get', 'user']);
+const parityListUsersOp = makeParityOp('listUsers', ['list', 'users']);
+
+const parityEnvNamespaceSeg: Segment = {
+  raw: 'parity-env-pkg',
+  words: ['parity', 'env', 'pkg'],
+};
+const parityEnvGetUserOp: Operation = {
+  ...makeParityOp('getUser', ['get', 'user']),
+  id: 'parity-env-pkg/getUser',
+  namespace: parityEnvNamespaceSeg,
+};
+
+const parityErrNamespaceSeg: Segment = {
+  raw: 'parity-err-pkg',
+  words: ['parity', 'err', 'pkg'],
+};
+const parityGetThingOp: Operation = {
+  ...makeParityOp('getThing', ['get', 'thing']),
+  id: 'parity-err-pkg/getThing',
+  namespace: parityErrNamespaceSeg,
+};
+
+const parityGetUserName = project(parityGetUserOp).mcp.name;
+const parityListUsersName = project(parityListUsersOp).mcp.name;
+const parityEnvGetUserName = project(parityEnvGetUserOp).mcp.name;
+const parityGetThingName = project(parityGetThingOp).mcp.name;
+
+type McpFixtureInput =
+  | { kind: 'tools-list' }
+  | { kind: 'call'; toolName: string; args: Record<string, unknown> };
+
+interface McpFixtureOutput {
+  ok: boolean;
+  tools?: Array<{
+    name: string;
+    description?: string;
+    outputSchema?: unknown;
+  }>;
+  content?: unknown;
+  structuredContent?: unknown;
+  errorCode?: number;
+  errorMessage?: string;
+}
+
+const GOLDEN_PATH = path.join(__dirname, 'golden', 'mcp.snapshot.json');
+
+/** The byte-identical fixture classes (malformed/streaming/mount proven separately). */
+const parityFixtures: ReadonlyArray<GoldenFixture<McpFixtureInput>> = [
+  { name: 'tools-list', input: { kind: 'tools-list' } },
+  {
+    name: 'call-getUser',
+    input: {
+      kind: 'call',
+      toolName: parityGetUserName,
+      args: { data: { userId: 'u1' } },
+    },
+  },
+  {
+    name: 'call-listUsers',
+    input: { kind: 'call', toolName: parityListUsersName, args: { data: {} } },
+  },
+  {
+    name: 'call-session-envelope',
+    input: {
+      kind: 'call',
+      toolName: parityEnvGetUserName,
+      args: {
+        _meta: { 'x-auth-session': 'tok-abc' },
+        data: { userId: 'u-env' },
+      },
+    },
+  },
+  {
+    name: 'call-domain-apierror',
+    input: {
+      kind: 'call',
+      toolName: parityGetThingName,
+      args: { data: { id: 'missing' } },
+    },
+  },
+];
+
+describe('[mcp-adapter] TransportAdapter/OpPlan golden-snapshot parity gate', () => {
+  let controller: AbortController;
+  let baseUrl: string;
+  let client: Client;
+  let driver: ParityDriver<McpFixtureInput, McpFixtureOutput>;
+
+  beforeAll(async () => {
+    controller = new AbortController();
+    const port = await freePort();
+    const runInput: RunInput = {
+      packages: [
+        {
+          id: 'parity-pkg',
+          schemas: paritySchema,
+          importPath: '@test/parity-pkg',
+          fns: {
+            getUser: (userId: unknown) => parityGetUser(userId as string),
+            listUsers: () => parityListUsers(),
+          },
+        },
+        {
+          id: 'parity-env-pkg',
+          schemas: parityEnvSchema,
+          importPath: '@test/parity-env-pkg',
+          fns: { getUser: (userId: unknown) => parityGetUser(userId as string) },
+        },
+        {
+          id: 'parity-err-pkg',
+          schemas: parityErrSchema,
+          importPath: '@test/parity-err-pkg',
+          fns: { getThing: (id: unknown) => parityGetThing(id as string) },
+        },
+      ],
+      operations: [parityGetUserOp, parityListUsersOp, parityEnvGetUserOp, parityGetThingOp],
+      outputDir: '/tmp/out',
+      options: { transport: 'streaming-http', port },
+      signal: controller.signal,
+    };
+
+    run(runInput).catch(() => {
+      /* swallowed after abort */
+    });
+
+    baseUrl = `http://127.0.0.1:${port}/mcp`;
+
+    const deadline = Date.now() + 10000;
+    for (;;) {
+      try {
+        client = new Client({ name: 'mcp-adapter-parity', version: '1.0.0' });
+        const transport = new StreamableHTTPClientTransport(new URL(baseUrl));
+        await client.connect(transport);
+        break;
+      } catch {
+        if (Date.now() > deadline) throw new Error('server did not become ready in 10s');
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+
+    driver = {
+      async invoke(fixture: GoldenFixture<McpFixtureInput>): Promise<McpFixtureOutput> {
+        if (fixture.input.kind === 'tools-list') {
+          const { tools } = await client.listTools();
+          return {
+            ok: true,
+            tools: tools
+              .map((t) => ({
+                name: t.name,
+                description: t.description,
+                outputSchema: t.outputSchema,
+              }))
+              .sort((a, b) => a.name.localeCompare(b.name)),
+          };
+        }
+        try {
+          const result = await client.callTool({
+            name: fixture.input.toolName,
+            arguments: fixture.input.args,
+          });
+          return {
+            ok: true,
+            content: result.content,
+            structuredContent: result.structuredContent,
+          };
+        } catch (err) {
+          const e = err as { code?: number; message?: string };
+          return { ok: false, errorCode: e.code, errorMessage: e.message };
+        }
+      },
+    };
+  }, 15000);
+
+  afterAll(async () => {
+    await client?.close();
+    controller.abort();
+  });
+
+  // [mcp-adapter.4/.5] the parity gate. Recapture through the (post-migration)
+  // adapter-based server and assert deep-equality vs the committed
+  // pre-migration golden snapshot. Regenerate with APIGEN_CAPTURE_GOLDEN=1.
+  it('recapture deep-equals the committed golden snapshot', async () => {
+    const recapture = await captureGolden(driver, parityFixtures);
+
+    if (process.env['APIGEN_CAPTURE_GOLDEN'] === '1') {
+      fs.mkdirSync(path.dirname(GOLDEN_PATH), { recursive: true });
+      fs.writeFileSync(GOLDEN_PATH, JSON.stringify(recapture, null, 2) + '\n');
+      return;
+    }
+
+    if (!fs.existsSync(GOLDEN_PATH)) {
+      throw new Error(
+        `[mcp-adapter] golden snapshot missing at ${GOLDEN_PATH} — ` +
+          'regenerate with APIGEN_CAPTURE_GOLDEN=1 before comparing.'
+      );
+    }
+    const committed = JSON.parse(
+      fs.readFileSync(GOLDEN_PATH, 'utf8')
+    ) as GoldenSnapshot<McpFixtureOutput>;
+
+    assertParity(committed, recapture);
   });
 });
