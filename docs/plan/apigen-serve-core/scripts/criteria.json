@@ -386,6 +386,16 @@
       "positive": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-flask:test",
       "mutate": "git apply docs/plan/apigen-serve-core/neg-control/py-flask-serve-split.patch",
       "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/py-flask-serve-split.patch"
+    },
+    {
+      "id": "py-grpc-serve-split.1",
+      "phase": "phase-3",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "\\-\\-plan",
+      "paths": [
+        "packages/apigen/python/apigen_python/grpc_server.py"
+      ]
     }
   ]
 }
