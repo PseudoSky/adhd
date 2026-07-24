@@ -1,0 +1,13 @@
+diff --git a/packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts b/packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts
+index c11cbeca..9b2afc49 100644
+--- a/packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts
++++ b/packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts
+@@ -264,7 +264,7 @@ class FastifyTransportAdapter implements TransportAdapter<FastifyRaw> {
+     // encoded to a string) is byte-identical to the py-flask host — not a bare
+     // `text/plain` body. `undefined` (void op) becomes `null`.
+     reply.type('application/json');
+-    reply.send(JSON.stringify(result === undefined ? null : result));
++    reply.send(result === undefined ? null : result);
+   }
+ 
+   writeError(raw: FastifyRaw, err: unknown, _plan: OpPlan): void {
