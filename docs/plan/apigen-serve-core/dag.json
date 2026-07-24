@@ -25,6 +25,18 @@
       ],
       "context": "contexts/serve-core-primitives.md",
       "notes": "New serve-core primitives (OpPlan, createPackageInvoker, dispatchForPlan) + TransportAdapter port. Grounded in [iface:op-plan],[iface:transport-adapter],[iface:create-package-invoker],[iface:dispatch-for-plan]."
+    },
+    "parity-harness": {
+      "kind": "work",
+      "phase": "phase-1",
+      "depends_on": [],
+      "guard": "CI=true ./node_modules/.bin/nx run apigen-engine-runtime:test",
+      "artifacts": [
+        "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts",
+        "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.spec.ts"
+      ],
+      "context": "contexts/parity-harness.md",
+      "notes": "Shared golden-fixture parity harness (proposal §6): golden-capture + deep-equal re-capture + negative-control helpers, driving REAL consumer protocols."
     }
   },
   "authored_with": {
