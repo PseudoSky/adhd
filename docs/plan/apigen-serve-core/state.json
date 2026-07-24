@@ -32,10 +32,10 @@
       "end_ref": "206f7bc20158cb59c9db9d8e41a551e6168070aa"
     },
     "express-adapter": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-24T08:07:21.281Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "f603f8f32841ac75836dbd9d6d9f00f0a9be3b6a",
       "end_ref": null
     },
     "mcp-adapter": {
@@ -163,7 +163,7 @@
     "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
-  "current_state": "cli-adapter",
+  "current_state": "express-adapter",
   "dod_provenance": {
     "confirmed_at": "2026-07-24T03:27:07.924Z",
     "by": "plan-orchestrator",
