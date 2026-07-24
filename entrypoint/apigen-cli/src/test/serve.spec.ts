@@ -15,6 +15,39 @@ import {
   startServe,
   type Host,
 } from '../lib/commands/serve';
+import { tokenize, type Operation, type Segment } from '@adhd/apigen-core-client';
+import { project } from '@adhd/apigen-engine-naming';
+
+// ───────────────────────────────────────────────────────────────────────────
+// apigen-serve-core py-grpc-serve-split: the gRPC front-proxy fixture below
+// (`b.py`, namespace 'b') is addressed via the REAL
+// `@adhd/apigen-engine-naming` `project(op).grpc` — the previous inline
+// `namespace.capitalize()+"Service"`/raw-fn-name scheme this state deleted
+// (see `grpc_server.py`'s module docstring) is gone, so a hand-typed address
+// string here would silently drift from what the server actually serves.
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Full `<package>.<Service>/<Method>` gRPC address for `fnName` in the
+ * inline `b.py` fixture below (namespace 'b', file segment 'b'). */
+function grpcAddrForB(fnName: string): string {
+  const seg = (raw: string): Segment => ({ raw, words: tokenize(raw) });
+  const op: Operation = {
+    id: `b/b/${tokenize(fnName).join('-')}`,
+    host: 'python',
+    namespace: seg('b'),
+    path: [seg('b'), seg(fnName)],
+    kind: 'action',
+    async: false,
+    streaming: false,
+    safe: false,
+    input: {},
+    output: {},
+    envelope: {},
+    typeText: null,
+  };
+  const g = project(op).grpc;
+  return `${g.package}.${g.service}/${g.method}`;
+}
 
 // ───────────────────────────────────────────────────────────────────────────
 // Pure helpers — fast, deterministic, no spawning.
@@ -532,7 +565,7 @@ describe('[serve.live] real cross-language serve front', () => {
           '-d',
           JSON.stringify({ data: { amount: '123.456' } }),
           `127.0.0.1:${port}`,
-          'b.BService/add_decimal',
+          grpcAddrForB('add_decimal'),
         ]);
         // grpc-status 0 = OK
         expect(
@@ -551,7 +584,7 @@ describe('[serve.live] real cross-language serve front', () => {
           '-d',
           JSON.stringify({ data: { name: 'FrontProxy' } }),
           `127.0.0.1:${port}`,
-          'b.BService/greet',
+          grpcAddrForB('greet'),
         ]);
         expect(
           greetResult.status,
@@ -582,7 +615,7 @@ describe('[serve.live] real cross-language serve front', () => {
             '-d',
             JSON.stringify({ data: { amount: '1.0' } }),
             `127.0.0.1:${port}`,
-            'b.BService/add_decimal',
+            grpcAddrForB('add_decimal'),
           ],
           5000
         );

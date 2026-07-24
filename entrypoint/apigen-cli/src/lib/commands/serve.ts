@@ -1097,18 +1097,29 @@ function handleHttp1Request(
 
 /**
  * Handle a gRPC (HTTP/2) stream on the front, routing by namespace derived
- * from the `:path` pseudo-header (e.g. `/<ns>.<Ns>Service/<method>`).
+ * from the `:path` pseudo-header (e.g. `/<package>.<Service>/<Method>`,
+ * where `package`/`service`/`method` are `@adhd/apigen-engine-naming`'s
+ * `project(op).grpc` — apigen-serve-core py-grpc-serve-split; `grpc_server.py`
+ * previously computed these inline via an unrelated, divergent scheme,
+ * deleted by that split — see `grpc_server.py`'s module docstring).
  *
  * Special case: gRPC reflection requests (`/grpc.reflection.*`) are routed to
  * the first alive gRPC host.  grpcurl (and other tools) use reflection to look up
  * service descriptors before making calls; since our gRPC backends all run the
  * reflection service, routing reflection to the first alive gRPC host is correct.
  *
- * Unlike {@link handleHttp1Request}'s HTTP hosts, `apigen-plugin-py-grpc` uses
- * the RAW namespace verbatim as its gRPC package name (its own convention,
- * independent of `@adhd/apigen-engine-naming`'s kebab-casing) — so `byNamespaceRaw`
- * here is intentionally keyed by the host's raw namespace string, NOT
- * {@link httpNamespaceSegment}.
+ * `project(op).grpc.package` always LEADS with the snake_cased namespace
+ * segment (`grpcParts.slice(0, -1)`, where `grpcParts[0]` is always
+ * `toSnake(op.namespace)` — see `naming.ts`), regardless of how many further
+ * path segments follow it — so taking everything before the FIRST dot in the
+ * gRPC path still recovers the namespace correctly, independent of the
+ * naming reconciliation. Unlike {@link handleHttp1Request}'s HTTP hosts
+ * (kebab-cased via {@link httpNamespaceSegment}), the gRPC package's leading
+ * segment is snake_cased, not kebab-cased — so `byNamespaceRaw` here is
+ * intentionally keyed by the host's raw namespace string, NOT
+ * {@link httpNamespaceSegment} (snake_case and the raw namespace coincide
+ * for the common single-word-namespace case, e.g. "pkg"/"b", but would
+ * diverge for a multi-word namespace).
  *
  * @param byNamespaceRaw - Hosts keyed by their raw (un-kebabed) namespace.
  */
@@ -1118,11 +1129,13 @@ function handleH2Stream(
   byNamespaceRaw: Map<string, Host>,
   allHosts: Host[]
 ): void {
-  // Derive the namespace from the gRPC method path: /<ns>.<NsService>/<method>
-  // The gRPC path is: /<package>.<ServiceName>/<MethodName>
-  // Our namespace = the part before the first dot in the package name.
+  // Derive the namespace from the gRPC method path: /<package>.<Service>/<Method>
+  // `package`'s leading dotted segment is always the snake_cased namespace
+  // (see this function's docstring) — so the part before the first dot in
+  // the full path is the namespace, regardless of how many further package
+  // segments (file/module path) follow it.
   const grpcPath = (headers[':path'] as string | undefined) ?? '';
-  // e.g. "/b.BService/add_decimal" → ns = "b"
+  // e.g. "/b.b.B/AddDecimal" → ns = "b" (package "b.b", service "B")
   // e.g. "/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo" → ns = "grpc"
   const dotIdx = grpcPath.indexOf('.');
   let ns = '';
