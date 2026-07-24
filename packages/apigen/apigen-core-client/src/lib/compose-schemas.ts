@@ -2,10 +2,50 @@ import type { SchemaNode } from '@adhd/apigen-base-logical';
 import { validateSchemaRefs } from '@adhd/apigen-base-logical';
 import type { GeneratedSchemas, ComposedSchemas } from './types';
 import { isPrimitiveOnlyInputSchema } from './get-safety';
+import type { Plugin } from './plugin';
 
 interface SlimMiddleware {
   id: string;
   envelope?: Record<string, unknown>;
+}
+
+/**
+ * DEBT-APIGEN-ENVELOPE-CAPABILITY-UNWIRED-001: reduce a set of loaded `--use`
+ * plugins' envelope-contributing capabilities into the `SlimMiddleware[]`
+ * shape {@link composeSchemas} consumes (SPEC §9.1).
+ *
+ * Two capabilities contribute request-side envelope fields, and a plugin may
+ * declare either or both:
+ *   - `capabilities.envelope.request` — the dedicated `EnvelopeCapability`
+ *     (declares fields without wrapping the operation in a Layer).
+ *   - `capabilities.layer.envelopeFields` — a `LayerCapability`'s own "extra
+ *     fields I need on the request side" declaration (its doc comment: "merged
+ *     into the effective descriptor's envelope schema before serving begins").
+ *
+ * Both merge into ONE envelope map per plugin, keyed by the plugin's own `id`
+ * — the same `id` `composeSchemas()` stamps as the `x-apigen-envelope`
+ * pluginId, so `envelopeKey`/`envelopeCliFlag`/`envelopeEnvVar`
+ * (`@adhd/apigen-engine-naming`) bind to `x-<id>-<field>` /
+ * `--<id>-<field>` / `APIGEN_<ID>_<FIELD>` for the field's OWN plugin, not a
+ * hardcoded default.
+ *
+ * Plugins contributing neither capability are omitted (composeSchemas treats
+ * `envelope: undefined` as "no contribution", same as `false`-suppressed).
+ */
+export function pluginsToEnvelopeMiddlewares(
+  plugins: readonly Plugin[]
+): SlimMiddleware[] {
+  const middlewares: SlimMiddleware[] = [];
+  for (const plugin of plugins) {
+    const envelope: Record<string, unknown> = {
+      ...plugin.capabilities.layer?.envelopeFields,
+      ...plugin.capabilities.envelope?.request,
+    };
+    if (Object.keys(envelope).length > 0) {
+      middlewares.push({ id: plugin.id, envelope });
+    }
+  }
+  return middlewares;
 }
 
 /**
@@ -148,12 +188,19 @@ export function composeSchemas(
     // Only `false` suppresses — null/undefined/0 do not [inv:false-suppresses-middleware].
     const envelopeProperties: Record<string, unknown> = {};
     const envelopeRequired: string[] = [];
+    // DEBT-APIGEN-ENVELOPE-CAPABILITY-UNWIRED-001: which plugin owns each
+    // envelope field — stamped below as `x-apigen-envelope` so
+    // `op-plan.ts`'s `computeEnvelopeFields` binds `x-<pluginId>-<field>` /
+    // `--<pluginId>-<field>` / `APIGEN_<PLUGINID>_<FIELD>` to the field's
+    // OWN plugin instead of always falling back to the default `'adhd'`.
+    const envelopePluginIds: Record<string, string> = {};
 
     for (const mw of middlewares) {
       if (!mw.envelope) continue;
       if (fnOverrides[mw.id] === false) continue;
       for (const [key, schema] of Object.entries(mw.envelope)) {
         envelopeProperties[key] = schema;
+        envelopePluginIds[key] = mw.id;
         if (!envelopeRequired.includes(key)) envelopeRequired.push(key);
       }
     }
@@ -220,6 +267,13 @@ export function composeSchemas(
       // Carry the ctx-param flag through to dispatch (BUG-APIGEN-001).
       ...(fnSchema.hasCtx ? { hasCtx: true } : {}),
       'x-apigen-safe': safe,
+      // DEBT-APIGEN-ENVELOPE-CAPABILITY-UNWIRED-001: field → pluginId map,
+      // read by `op-plan.ts`'s `computeEnvelopeFields`. Omitted (not an empty
+      // object) when no middleware contributed an envelope field, matching
+      // `x-apigen-safe`'s own "absent means nothing to report" convention.
+      ...(Object.keys(envelopePluginIds).length > 0
+        ? { 'x-apigen-envelope': envelopePluginIds }
+        : {}),
     };
   }
 
