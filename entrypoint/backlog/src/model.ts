@@ -117,6 +117,8 @@ export interface BacklogItem {
   projectPath?: string;
   /** Plan slug this item is attached to, if any — e.g. "agent-registry-schema". */
   plan?: string;
+  /** Source markdown path this item was imported from, if any (DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001). */
+  importedFrom?: string;
   /** Durable ownership — who this item is assigned to (may differ from the active claimant). */
   assignee?: string;
   /** Ephemeral claim lease — see SPEC.md §5. */
@@ -197,6 +199,8 @@ export interface CreateItemInput {
   priority?: Priority;
   tags?: string[];
   plan?: string;
+  /** Source markdown path this item is being imported from, if any (DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001). */
+  importedFrom?: string;
   dedupeScan?: DedupeScanInput;
   /** Skip the dedupe gate and file anyway (planner override after reviewing candidates). */
   force?: boolean;
@@ -318,7 +322,24 @@ export interface ImportMarkdownInput {
   path: string;
   repo: string;
   projectPath?: string;
+  /** Plan slug to attach every imported item to (DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001) — replaces the post-import attachToPlan-per-id workaround. */
+  plan?: string;
+  /**
+   * Provenance path recorded on each imported node's `importedFrom` field
+   * (DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001). Defaults to `path` when
+   * omitted — the file actually read IS the source, so a caller only needs
+   * to set this explicitly when it differs (e.g. importing from a scratch
+   * copy but wanting the ORIGINAL path recorded).
+   */
+  sourcePath?: string;
   dryRun?: boolean;
+}
+
+/** A `##`/`###` header line that failed the strict `HEADER_RE` id pattern but looks like an attempted id (DEBT-BACKLOG-IMPORT-SILENT-DROP-001). */
+export interface MalformedHeaderInfo {
+  /** 1-based line number in the source file. */
+  line: number;
+  headerLine: string;
 }
 
 export interface ImportResult {
@@ -326,6 +347,8 @@ export interface ImportResult {
   created: number;
   skippedDuplicates: number;
   errors: Array<{ humanId: string; message: string }>;
+  /** Headers that look like a corrupted/typo'd id and were dropped instead of parsed — never silent (DEBT-BACKLOG-IMPORT-SILENT-DROP-001). */
+  malformedHeaders: MalformedHeaderInfo[];
 }
 
 export interface AuditTrailEntry {

@@ -82,6 +82,25 @@ describe('createItem / getItem / listItems', () => {
     expect(forced.item.humanId).not.toBe(first.item.humanId);
   });
 
+  it('createItem never crashes on a title containing FTS5-syntax-significant characters (BUG-BACKLOG-DEDUPE-FTS-SYNTAX-CRASH-001)', async () => {
+    // Regression guard: `dedupeScan` used to pass `input.title` RAW to
+    // `store.graph.searchNodes()`, which binds it directly as an FTS5 MATCH
+    // query — real, unremarkable English titles ("off-by-one", "fix: the
+    // thing") crashed `createItem` outright with a raw SqliteError instead
+    // of running the dedupe scan.
+    const titles = ['fix off-by-one error', 'title: with a colon', 'paren(thetical) note', 'quote" inside title'];
+    for (const title of titles) {
+      const result = await client.createItem(ctx, { family: 'BUG-FTS-SYNTAX', title, body: 'x', repo: REPO });
+      expect(result.created, `createItem must not throw for title: ${JSON.stringify(title)}`).toBe(true);
+    }
+  });
+
+  it('listItems({grep}) never crashes on a grep term containing FTS5-syntax-significant characters (BUG-BACKLOG-DEDUPE-FTS-SYNTAX-CRASH-001)', async () => {
+    await client.createItem(ctx, { family: 'BUG-GREP-SYNTAX', title: 'fix off-by-one error', body: 'x', repo: REPO });
+    const results = await client.listItems(ctx, { repo: REPO, grep: 'off-by-one' });
+    expect(results.length).toBeGreaterThan(0);
+  });
+
   it('two items with byte-identical title+body in the same repo never collapse into one node', async () => {
     // Regression guard for the content-hash collision deviation documented in
     // store/mapping.ts — without the uniqueness marker this would silently
@@ -120,6 +139,35 @@ describe('createItem / getItem / listItems', () => {
     expect(updated.title).toBe('new title');
     expect(updated.body).toBe('new body');
     expect(updated.projectPath).toBe('packages/foo');
+  });
+
+  it('updateItem re-indexes FTS content on a body edit — listItems({grep}) finds the NEW term (DEBT-BACKLOG-CONTENT-IMMUTABLE-001)', async () => {
+    // Regression guard: `updateItemNode` used to patch ONLY `metadata.body`,
+    // leaving the FTS-indexed `node.content` (set once at createItem time)
+    // stale — a grep for a term introduced by a post-create body edit would
+    // silently miss the item forever, until it was superseded.
+    const rareTermBefore = 'zzflibbertigibbet';
+    const rareTermAfter = 'wobblequartznine';
+    const created = await client.createItem(ctx, {
+      family: 'BUG-FTS',
+      title: 'fts resync fixture',
+      body: `mentions ${rareTermBefore} in the original body`,
+      repo: REPO,
+    });
+
+    const beforeEdit = await client.listItems(ctx, { repo: REPO, grep: rareTermBefore });
+    expect(beforeEdit.map((i) => i.humanId)).toContain(created.item.humanId);
+    const beforeEditNewTerm = await client.listItems(ctx, { repo: REPO, grep: rareTermAfter });
+    expect(beforeEditNewTerm.map((i) => i.humanId)).not.toContain(created.item.humanId);
+
+    // Body-only edit (title untouched) — isolates the FTS gap to `content`,
+    // since a title edit alone already updates `summary` (also FTS-indexed).
+    await client.updateItem(ctx, REPO, created.item.humanId, {
+      body: `mentions ${rareTermAfter} after the edit`,
+    });
+
+    const afterEdit = await client.listItems(ctx, { repo: REPO, grep: rareTermAfter });
+    expect(afterEdit.map((i) => i.humanId), 'grep for the NEW body term must find the item post-edit').toContain(created.item.humanId);
   });
 });
 

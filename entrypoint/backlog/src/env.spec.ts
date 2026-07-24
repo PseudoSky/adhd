@@ -113,4 +113,20 @@ describe('scope isolation — real Environment instances, real temp filesystem r
       else process.env['ADHD_ENV_SCOPE'] = prevGeneric;
     }
   });
+
+  it('db.busyTimeoutMs defaults to 5000 and is overridable via ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001)', async () => {
+    const prev = process.env['ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS'];
+    try {
+      delete process.env['ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS'];
+      const defaultEnv = buildBacklogEnv({ scope: 'project', adhdRoot: projectDirA });
+      expect(defaultEnv.config.db.busyTimeoutMs).toBe(5000);
+
+      process.env['ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS'] = '12345';
+      const overriddenEnv = buildBacklogEnv({ scope: 'project', adhdRoot: projectDirB });
+      expect(overriddenEnv.config.db.busyTimeoutMs).toBe(12345);
+    } finally {
+      if (prev === undefined) delete process.env['ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS'];
+      else process.env['ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS'] = prev;
+    }
+  });
 });

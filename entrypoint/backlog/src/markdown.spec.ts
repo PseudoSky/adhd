@@ -14,14 +14,14 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { openTmpStore, type TmpStore } from './test/helpers/tmp-store.js';
-import { importFromMarkdown, renderToMarkdown } from './client.js';
+import { getItem, importFromMarkdown, listItems, renderToMarkdown } from './client.js';
 import type { BacklogCtx } from './client.js';
 import { buildBacklogEnv } from './env.js';
 import {
   TERMINAL_STATUSES,
   type BacklogStatus,
 } from './model.js';
-import { normalizeLegacyStatus, parseBacklogMarkdown } from './markdown.js';
+import { normalizeLegacyStatus, parseBacklogMarkdown, parseBacklogMarkdownWithDiagnostics } from './markdown.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(HERE, '..', '..', '..');
@@ -154,5 +154,127 @@ describe('markdown round-trip — real BACKLOG.md, real legacy tool subprocess',
       expect(normalizeLegacyStatus(legacyItem.status), `${id} label round-trip`).toBe(status);
       expect(ownItem.terminal, `${id} openness agreement`).toBe(TERMINAL_STATUSES.has(status));
     });
+  });
+});
+
+describe('parseBacklogMarkdownWithDiagnostics — malformed id headers (DEBT-BACKLOG-IMPORT-SILENT-DROP-001)', () => {
+  // The exact negative control from the BACKLOG entry: a valid id header
+  // corrupted from hyphens to underscores, which fails `HEADER_RE` but still
+  // reads as an attempted id, not a narrative section heading.
+  const CORRUPTED_ID = 'DEBT_ENV_CLI_002';
+  const fixtureText = [
+    '### DEBT-ENV-CLI-001 — first real item',
+    '',
+    '**Status:** OPEN',
+    '',
+    'first body.',
+    '',
+    `### ${CORRUPTED_ID} — corrupted from DEBT-ENV-CLI-002`,
+    '',
+    '**Status:** OPEN',
+    '',
+    'second body — must not silently vanish.',
+    '',
+  ].join('\n');
+
+  it('surfaces the corrupted header in malformedHeaders instead of silently dropping it', () => {
+    const { items, malformedHeaders } = parseBacklogMarkdownWithDiagnostics(fixtureText);
+    expect(items.map((i) => i.id)).toEqual(['DEBT-ENV-CLI-001']);
+    expect(malformedHeaders).toHaveLength(1);
+    expect(malformedHeaders[0]?.headerLine).toContain(CORRUPTED_ID);
+    expect(malformedHeaders[0]?.line).toBe(7);
+  });
+
+  it('never flags real narrative section headings (only id-shaped tokens)', () => {
+    const narrativeText = [
+      '## Bugs',
+      '',
+      '### `@adhd/backlog` design (session notes)',
+      '',
+      '### Leak fixes — RESOLVED 2026-07-02',
+      '',
+      '### DEBT-REAL-001 — a genuine item',
+      '',
+      '**Status:** OPEN',
+      '',
+      'body.',
+      '',
+    ].join('\n');
+    const { items, malformedHeaders } = parseBacklogMarkdownWithDiagnostics(narrativeText);
+    expect(items.map((i) => i.id)).toEqual(['DEBT-REAL-001']);
+    expect(malformedHeaders).toHaveLength(0);
+  });
+
+  it('the legacy parseBacklogMarkdown export still silently drops the corrupted item (proves the diagnostic is genuinely new information)', () => {
+    const legacyParsed = parseBacklogMarkdown(fixtureText);
+    expect(legacyParsed).toHaveLength(1);
+    expect(legacyParsed.map((i) => i.id)).not.toContain(CORRUPTED_ID);
+  });
+});
+
+describe('importFromMarkdown — diagnostics + provenance (real store)', () => {
+  let tmp: TmpStore;
+  let ctx: BacklogCtx;
+  let workDir: string;
+  const REPO_PROV = 'PseudoSky/backlog-provenance-test';
+
+  beforeEach(() => {
+    tmp = openTmpStore('markdown-provenance-spec');
+    ctx = { store: tmp.store, env: buildBacklogEnv({ scope: 'project', adhdRoot: tmp.dir }) };
+    workDir = mkdtempSync(join(tmpdir(), 'backlog-provenance-'));
+  });
+
+  afterEach(() => {
+    tmp.cleanup();
+    rmSync(workDir, { recursive: true, force: true });
+  });
+
+  it('ImportResult.malformedHeaders surfaces a corrupted id header on a real import (DEBT-BACKLOG-IMPORT-SILENT-DROP-001)', async () => {
+    const fixturePath = join(workDir, 'malformed-header.md');
+    writeFileSync(
+      fixturePath,
+      ['### DEBT-ENV-CLI-001 — first real item', '', '**Status:** OPEN', '', 'first body.', '', '### DEBT_ENV_CLI_002 — corrupted', '', 'second body.', ''].join(
+        '\n'
+      ),
+      'utf8'
+    );
+
+    const result = await importFromMarkdown(ctx, { path: fixturePath, repo: REPO_PROV });
+    expect(result.parsed).toBe(1);
+    expect(result.created).toBe(1);
+    expect(result.malformedHeaders).toHaveLength(1);
+    expect(result.malformedHeaders[0]?.headerLine).toContain('DEBT_ENV_CLI_002');
+  });
+
+  it('importFromMarkdown attaches plan + records importedFrom provenance (DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001)', async () => {
+    const fixturePath = join(workDir, 'provenance-fixture.md');
+    writeFileSync(fixturePath, ['### BUG-PROV-001 — provenance fixture', '', '**Status:** OPEN', '', 'body text.', ''].join('\n'), 'utf8');
+
+    const result = await importFromMarkdown(ctx, {
+      path: fixturePath,
+      repo: REPO_PROV,
+      plan: 'my-plan-slug',
+      sourcePath: 'docs/plan/my-plan-slug/BACKLOG.md',
+    });
+    expect(result.created).toBe(1);
+
+    const item = await getItem(ctx, REPO_PROV, 'BUG-PROV-001');
+    expect(item?.plan).toBe('my-plan-slug');
+    expect(item?.importedFrom).toBe('docs/plan/my-plan-slug/BACKLOG.md');
+
+    // Plan attribution must also be queryable via the filtered-projection
+    // scope model (MIGRATION.md §2.2), not just stamped on metadata — this is
+    // what makes the previous `attachToPlan`-per-id workaround unnecessary.
+    const filtered = await listItems(ctx, { repo: REPO_PROV, plan: 'my-plan-slug' });
+    expect(filtered.map((i) => i.humanId)).toContain('BUG-PROV-001');
+  });
+
+  it('defaults importedFrom to the source path when sourcePath is omitted', async () => {
+    const fixturePath = join(workDir, 'default-provenance-fixture.md');
+    writeFileSync(fixturePath, ['### BUG-PROV-002 — default provenance fixture', '', '**Status:** OPEN', '', 'body text.', ''].join('\n'), 'utf8');
+
+    await importFromMarkdown(ctx, { path: fixturePath, repo: REPO_PROV });
+    const item = await getItem(ctx, REPO_PROV, 'BUG-PROV-002');
+    expect(item?.importedFrom).toBe(fixturePath);
   });
 });

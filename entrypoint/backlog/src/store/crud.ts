@@ -17,10 +17,12 @@ import {
   buildNodeContent,
   buildNodeName,
   buildTags,
+  computeContentHash,
   humanIdFamily,
   humanIdKind,
   importanceForPriority,
   isLiveBacklogItemNode,
+  sanitizeFtsQuery,
   toBacklogItem,
   type BacklogNodeMeta,
 } from './mapping.js';
@@ -28,12 +30,18 @@ import {
 function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateItemInput): BacklogItem[] {
   const candidates = new Map<number, NodeRecord>();
 
-  // 1. FTS over title + body — catches "same bug, different words".
-  for (const hit of store.graph.searchNodes(input.title, {
-    limit: 10,
-    filter: { tags: [BACKLOG_ITEM_TAG], namespace: repo },
-  })) {
-    if (isLiveBacklogItemNode(hit)) candidates.set(hit.id, hit);
+  // 1. FTS over title + body — catches "same bug, different words". Sanitized
+  // first (BUG-BACKLOG-DEDUPE-FTS-SYNTAX-CRASH-001) — an unsanitized title
+  // containing an FTS5-syntax-significant character (`-`, `:`, `(`, `)`, `"`)
+  // crashes `searchNodes` outright instead of returning candidates.
+  const ftsQuery = sanitizeFtsQuery(input.title);
+  if (ftsQuery) {
+    for (const hit of store.graph.searchNodes(ftsQuery, {
+      limit: 10,
+      filter: { tags: [BACKLOG_ITEM_TAG], namespace: repo },
+    })) {
+      if (isLiveBacklogItemNode(hit)) candidates.set(hit.id, hit);
+    }
   }
 
   // 2. Exact metadata match on symbol/path/errorText.
@@ -117,6 +125,7 @@ export function createItemNode(store: GraphBacklogStore, input: CreateItemInput)
   if (input.priority !== undefined) meta.priority = input.priority;
   if (input.projectPath !== undefined) meta.projectPath = input.projectPath;
   if (input.plan !== undefined) meta.plan = input.plan;
+  if (input.importedFrom !== undefined) meta.importedFrom = input.importedFrom;
   if (input.dedupeScan?.symbol !== undefined) meta.dedupeSymbol = input.dedupeScan.symbol;
   if (input.dedupeScan?.path !== undefined) meta.dedupePath = input.dedupeScan.path;
   if (input.dedupeScan?.errorText !== undefined) meta.dedupeErrorText = input.dedupeScan.errorText;
@@ -150,23 +159,34 @@ function requireItemNode(store: GraphBacklogStore, repo: string, humanId: string
 }
 
 /**
- * DEVIATION: `@adhd/sox-graph-store` exposes no primitive to update a node's
- * `content` column after creation (`touch()`'s `Partial<NodeMeta>` covers
+ * DEVIATION (mitigated — DEBT-BACKLOG-CONTENT-IMMUTABLE-001): `@adhd/sox-graph-store`
+ * exposes no PUBLIC primitive to update a node's `content` column after
+ * creation (`touch()`'s `Partial<NodeMeta>` covers
  * name/summary/topic/tags/importance/confidence/tExpires/metadata — never
  * `content`; verified against the real source). `title` updates the `summary`
  * column (source of truth for the API) AND `metadata.title`; `body` updates
- * ONLY `metadata.body` (source of truth for the API). The underlying FTS
- * `content` (set once at `createItem` time) therefore does not reflect a
- * later body edit — `listItems({ grep })` may miss a post-edit body term
- * until the item is superseded. Filed as DEBT-BACKLOG-CONTENT-IMMUTABLE-001.
+ * `metadata.body` (source of truth for the API). Below, a title/body change
+ * ALSO re-synchronizes the FTS-indexed `content`/`content_hash` columns
+ * directly via raw SQL on the store-owned `db` handle — the same DESIGN.md
+ * §14-sanctioned escape hatch `structure.ts`'s `removeDependencyNode` already
+ * uses for the one other gap (`edge` deletion) the `GraphBackend` API lacks.
+ * This is safe specifically because `fts_node_au` (the real schema's `AFTER
+ * UPDATE ON node` trigger — `~/dev/ai/sox-ecosystem/libs/data/graph/graph-store/
+ * src/index.ts`'s `FTS_TRIGGERS`) re-indexes `fts_node` automatically on
+ * ANY write to `node.content`/`name`/`summary`, so no separate FTS statement
+ * is needed here.
  */
 export function updateItemNode(store: GraphBacklogStore, repo: string, humanId: string, patch: UpdateItemInput): BacklogItem {
   const node = requireItemNode(store, repo, humanId);
+  let finalTitle = '';
+  let finalBody = '';
   mutateMetadata<BacklogNodeMeta>(store, node.id, (meta) => {
     const next: BacklogNodeMeta = { ...meta, updatedAt: new Date().toISOString() };
     if (patch.title !== undefined) next.title = patch.title;
     if (patch.body !== undefined) next.body = patch.body;
     if (patch.projectPath !== undefined) next.projectPath = patch.projectPath;
+    finalTitle = next.title;
+    finalBody = next.body;
     return next;
   });
   if (patch.title !== undefined || patch.tags !== undefined || patch.projectPath !== undefined) {
@@ -179,6 +199,12 @@ export function updateItemNode(store: GraphBacklogStore, repo: string, humanId: 
     }
     if (patch.projectPath !== undefined) touchPatch['projectPath'] = patch.projectPath;
     store.graph.touch(node.id, touchPatch);
+  }
+  if (patch.title !== undefined || patch.body !== undefined) {
+    const newContent = buildNodeContent(repo, humanId, finalTitle, finalBody);
+    store.db
+      .prepare(`UPDATE node SET content = ?, content_hash = ? WHERE rowid = ? AND t_invalid IS NULL`)
+      .run(newContent, computeContentHash(newContent), node.id);
   }
   const updated = store.graph.getNode(node.id);
   if (!updated) throw new BacklogItemNotFoundError(repo, humanId);

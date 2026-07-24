@@ -235,7 +235,7 @@ export async function buildBacklogApigenPackage(ctx: BacklogCtx): Promise<{
 export async function startBacklogServer(opts: StartOpts): Promise<void> {
   const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
   env.ensureDirs();
-  const store = openGraphBacklogStore(env.files.db);
+  const store = openGraphBacklogStore(env.files.db, env.config.db.busyTimeoutMs);
   const ctx: BacklogCtx = { store, env };
 
   const { pkg, operations } = await buildBacklogApigenPackage(ctx);

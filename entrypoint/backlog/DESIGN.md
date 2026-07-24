@@ -687,11 +687,8 @@ dependency anywhere — this will be the first consumer in this monorepo).
 
 ## 12. Concurrency & native-module gotchas
 
-- **Node ≥ 22** (per the task requirement) — flagged against this repo's CI, which is
-  currently pinned to Node 20 (`.github/workflows/ci.yml:26`,
-  `.github/workflows/pull-request.yml:25`). Filed as `DEBT-BACKLOG-CI-NODE22-001` in
-  `BACKLOG.md` alongside this design — CI must bump before `@adhd/backlog` can build/test
-  there.
+- **Node ≥ 22** — `.github/workflows/ci.yml` and `pull-request.yml`'s `test` job both pin
+  Node 22 (`DEBT-BACKLOG-CI-NODE22-001`, resolved).
 - **`better-sqlite3` is a native module** — a fresh `git worktree`/CI runner needs it
   rebuilt for the current Node ABI (standard monorepo gotcha, already true for every
   `packages/agent/*` package that depends on it).
@@ -699,6 +696,20 @@ dependency anywhere — this will be the first consumer in this monorepo).
   is, by construction, opened by many concurrent processes/agents/repos. Without WAL, a
   writer blocks all readers; without `busy_timeout`, a blocked `.immediate()` throws
   `SQLITE_BUSY` immediately instead of waiting out a brief contention window.
+- **Bounded busy-retry + configurable `busy_timeout`** (resolved,
+  `DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001`) — `store/immediate-retry.ts`'s
+  `withImmediateRetry` wraps every `.immediate()` call (`mutate-metadata.ts`, `ids.ts`)
+  in a bounded (5 attempts), jittered exponential backoff (20/40/80/160ms, capped at
+  500ms) that retries ONLY `SQLITE_BUSY`/`SQLITE_BUSY_TIMEOUT`/`SQLITE_BUSY_SNAPSHOT` —
+  never any other error, and never the semantic `'held'` claim-contention RESULT (a
+  normal return value, not an exception). `busy_timeout` itself is configurable via
+  `BacklogConfig.db.busyTimeoutMs` (`env.ts`, default 5000, env override
+  `ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS`) and threaded through
+  `openGraphBacklogStore(dbPath, busyTimeoutMs)`. **Gotcha (fixed, see `graph-backlog-
+  store.ts`'s comment):** `@adhd/sox-graph-store`'s `createGraphBackend(db)` constructor
+  unconditionally re-runs its own `PRAGMAS` (including a hardcoded `busy_timeout =
+  5000`) — setting the pragma BEFORE constructing the graph backend gets silently
+  clobbered back to 5000; it must be set AFTER.
 - **Single-writer-per-scope is NOT enforced at the DB layer** — WAL supports multiple
   writers serialized through SQLite's own locking, which is sufficient correctness-wise
   (that's the whole point of the CAS design in §4), but `@adhd/environment`'s

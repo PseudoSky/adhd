@@ -78,7 +78,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # >=22 required by @adhd/backlog's sox-graph-store/better-sqlite3@^12
+          # native-module toolchain (DEBT-BACKLOG-CI-NODE22-001) — this job's
+          # `nx affected -t lint/test/verify-dist-load` runs every affected
+          # project on this one runner, so the version here is the floor.
+          node-version: 22
 
       - name: Enable Corepack (pnpm)
         run: corepack enable

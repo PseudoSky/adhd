@@ -263,6 +263,8 @@ export interface CreateItemInput {
   priority?: Priority;
   tags?: string[];
   plan?: string;
+  /** Source markdown path this item is being imported from, if any (DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001). */
+  importedFrom?: string;
   dedupeScan?: DedupeScanInput;
   /** Skip the dedupe gate and file anyway (planner override after reviewing candidates). */
   force?: boolean;
@@ -467,13 +469,23 @@ export interface ImportMarkdownInput {
   path: string;
   repo: string;
   projectPath?: string;
+  /** Plan slug to attach every imported item to (DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001) — replaces the post-import attachToPlan-per-id workaround. */
+  plan?: string;
+  /** Provenance path recorded as each imported node's `importedFrom` field. Defaults to `path` when omitted. */
+  sourcePath?: string;
   dryRun?: boolean;
+}
+/** A `##`/`###` header that failed the strict id pattern but looks like an attempted id — surfaced instead of silently dropped (DEBT-BACKLOG-IMPORT-SILENT-DROP-001). */
+export interface MalformedHeaderInfo {
+  line: number;
+  headerLine: string;
 }
 export interface ImportResult {
   parsed: number;
   created: number;
   skippedDuplicates: number;
   errors: Array<{ humanId: string; message: string }>;
+  malformedHeaders: MalformedHeaderInfo[];
 }
 export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownInput): Promise<ImportResult>;
 
