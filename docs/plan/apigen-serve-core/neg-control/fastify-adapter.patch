@@ -1,8 +1,8 @@
 diff --git a/packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts b/packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts
-index c11cbeca..9b2afc49 100644
+index 10580b8b..b9cb86f9 100644
 --- a/packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts
 +++ b/packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts
-@@ -264,7 +264,7 @@ class FastifyTransportAdapter implements TransportAdapter<FastifyRaw> {
+@@ -269,7 +269,7 @@ class FastifyTransportAdapter implements TransportAdapter<FastifyRaw> {
      // encoded to a string) is byte-identical to the py-flask host — not a bare
      // `text/plain` body. `undefined` (void op) becomes `null`.
      reply.type('application/json');
