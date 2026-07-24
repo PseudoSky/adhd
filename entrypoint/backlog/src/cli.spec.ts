@@ -23,7 +23,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -300,5 +300,38 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     const lastLine = res.stderr.trim().split('\n').pop() ?? '';
     const body = JSON.parse(lastLine) as { code: string; message: string };
     expect(body.code).toBe('invalid_argument');
+  });
+
+  // `install-skill` (MIGRATION.md §4.2) is special-cased in `runBacklogCli`
+  // BEFORE the apigen package is even built — it needs no store at all, so a
+  // real-binary proof matters here specifically to confirm the special-case
+  // interception actually fires for the real spawned bin, not just the
+  // in-process `installSkill()` unit tests (`install-skill.spec.ts`).
+  // Deliberately `--scope project` ONLY — `--scope user` resolves the REAL
+  // machine home directory with no override, so it is exercised exclusively
+  // via `install-skill.spec.ts`'s `homeOverride`-isolated unit tests, never
+  // through a real spawned process here.
+  it('install-skill --host claude --scope project drops the packaged, currently-built SKILL.md under the given cwd — content-hash matches (MIGRATION.md §4.4 DoD)', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-install-skill-'));
+    const res = runBin(['install-skill', '--host', 'claude', '--scope', 'project'], adhdRoot);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    const body = JSON.parse(res.stdout.trim()) as { installed: Array<{ host: string; scope: string; path: string }> };
+    expect(body.installed).toHaveLength(1);
+    const installedPath = body.installed[0].path;
+    // `realpathSync` on both sides — on macOS, `/tmp`-family paths resolve
+    // through a `/private` symlink, and the child process's own
+    // `process.cwd()` (which `installSkill` uses for `--scope project`)
+    // returns the FULLY RESOLVED path, while `adhdRoot` here is the
+    // unresolved `mkdtempSync` path passed as `cwd` — a benign platform
+    // quirk, not a real divergence (both point at the identical directory).
+    expect(realpathSync(installedPath)).toBe(join(realpathSync(adhdRoot), '.claude', 'skills', 'backlog', 'SKILL.md'));
+    expect(existsSync(installedPath)).toBe(true);
+    const packagedSkillMd = readFileSync(join(HERE, '..', 'skill', 'SKILL.md'), 'utf8');
+    expect(readFileSync(installedPath, 'utf8')).toBe(packagedSkillMd);
+    // Never opened a real backlog store for this command (no `.adhd/backlog`
+    // data dir created) — proving the special-case truly bypasses
+    // `buildBacklogApigenPackage`/`getCtx` entirely, the same property
+    // `DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001`'s own test proves for `--help`.
+    expect(existsSync(join(adhdRoot, '.adhd', 'backlog'))).toBe(false);
   });
 });
