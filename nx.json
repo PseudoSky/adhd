@@ -1,5 +1,6 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "defaultBase": "main",
   "namedInputs": {
     "default": [
       "{projectRoot}/**/*",
@@ -131,8 +132,7 @@
     "@nx/vite:build": {
       "cache": true,
       "dependsOn": [
-        "^build",
-        "lint"
+        "^build"
       ],
       "inputs": [
         "production",
@@ -142,6 +142,7 @@
     "test": {
       "cache": true,
       "dependsOn": [
+        "lint",
         "^build"
       ],
       "inputs": [

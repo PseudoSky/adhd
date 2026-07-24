@@ -7,7 +7,7 @@
     "watch:test": "vitest watch --changed",
     "watch": "nx run-many --targets=build --configuration=development --all --watch",
     "build": "nx run-many --targets=build --configuration=production --all",
-    "release": "pnpm run build && npx nx run-many -t version && npx nx run-many -t publish",
+    "release": "pnpm nx run-many -t publish",
     "release:dry": "pnpm run build && ADHD_NX_VERSION_DRY_RUN=1 npx nx run-many -t version --dryRun && npx nx run-many -t publish --dryRun",
     "release:commit": "node tools/nx-plugins/build/executors/publish/release-commit.mjs",
     "release:commit:dry": "node tools/nx-plugins/build/executors/publish/release-commit.mjs --dry-run",
