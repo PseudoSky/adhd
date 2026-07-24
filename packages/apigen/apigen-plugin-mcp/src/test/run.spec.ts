@@ -38,6 +38,39 @@ function deriveToolName(
   return project(operationFor(pkg, fnName, operations)).mcp.name;
 }
 
+/**
+ * Both `run.spec.ts` and `transport-http-parity.spec.ts` apply the SAME
+ * `neg-control/mcp-adapter.patch` (two hunks, one file — see the negative
+ * control describe block's module doc below). Vitest runs separate test
+ * FILES concurrently by default, so without serialization two
+ * `proveNegativeControl` calls racing `git apply`/`git apply -R` against the
+ * same patch can collide ("patch does not apply" — already applied by the
+ * other file's in-flight check). This is a simple cross-process advisory
+ * lock (atomic `mkdir` as the exclusive-acquire primitive) so only one
+ * negative-control check runs at a time.
+ */
+async function withNegControlLock<T>(repoRoot: string, fn: () => Promise<T>): Promise<T> {
+  const lockPath = path.join(repoRoot, 'tmp', 'apigen-plugin-mcp', 'neg-control-run-ts.lock');
+  fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+  const deadline = Date.now() + 30000;
+  for (;;) {
+    try {
+      fs.mkdirSync(lockPath);
+      break;
+    } catch {
+      if (Date.now() > deadline) {
+        throw new Error(`withNegControlLock: timed out waiting for lock at ${lockPath}`);
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+  try {
+    return await fn();
+  } finally {
+    fs.rmSync(lockPath, { recursive: true, force: true });
+  }
+}
+
 /** Walk up from `startDir` to the nearest ancestor containing `.git` (the repo root). */
 function findRepoRoot(startDir: string): string {
   let dir = startDir;
@@ -1619,6 +1652,15 @@ describe('[mcp-adapter.8] dod.12 — toolMetas build count stays 1 across multip
 // re-transforms run.ts from disk from scratch every time. This is what makes
 // the patch's effect actually observable: RED means the freshly-spawned
 // process's own golden-parity check failed; GREEN means it passed.
+//
+// `neg-control/mcp-adapter.patch` carries TWO hunks in the SAME file
+// (documented choice — see `transport-http-parity.spec.ts`'s own negative
+// control, which reuses hunk 2): hunk 1 (this test's target) breaks the §9.1
+// envelope-key lookup so `call-session-envelope` fails validation; hunk 2
+// reverts the sse per-session `Server` fix, breaking a SECOND concurrent SSE
+// session's handshake. `git apply` applies both hunks together, but each
+// negative-control test only exercises the check its own hunk affects — the
+// other hunk is inert for that check.
 // ---------------------------------------------------------------------------
 
 describe('[mcp-adapter.6] negative control — the parity gate actually gates', () => {
@@ -1651,9 +1693,11 @@ describe('[mcp-adapter.6] negative control — the parity gate actually gates', 
         }
       }
 
-      await proveNegativeControl(runGoldenParityCheckInFreshProcess, patchPath, {
-        cwd: repoRoot,
-      });
+      await withNegControlLock(repoRoot, () =>
+        proveNegativeControl(runGoldenParityCheckInFreshProcess, patchPath, {
+          cwd: repoRoot,
+        })
+      );
     },
     60000
   );

@@ -1,5 +1,5 @@
 diff --git a/packages/apigen/apigen-plugin-mcp/src/lib/run.ts b/packages/apigen/apigen-plugin-mcp/src/lib/run.ts
-index a49d821c..69dd480b 100644
+index a49d821c..a2b61e7f 100644
 --- a/packages/apigen/apigen-plugin-mcp/src/lib/run.ts
 +++ b/packages/apigen/apigen-plugin-mcp/src/lib/run.ts
 @@ -237,7 +237,7 @@ class McpTransportAdapter implements TransportAdapter<McpRaw> {
@@ -11,3 +11,17 @@ index a49d821c..69dd480b 100644
        if (value !== undefined) envelope[field.field] = value;
      }
      const domainArgs =
+@@ -575,12 +575,12 @@ export async function run(input: RunInput): Promise<void> {
+     // instance at a time (see module doc's discovered-bug note); this also
+     // fixes the pre-migration single-shared-`Server` bug for free.
+     const sessions = new Map<string, SSEServerTransport>();
++    const server = createMcpServer(adapter, logger);
+ 
+     const httpServer = createServer(
+       guardHttpTransport(logger, async (req, res) => {
+         const url = req.url ?? '';
+         if (req.method === 'GET' && url === '/sse') {
+-          const server = createMcpServer(adapter, logger);
+           const sseTransport = new SSEServerTransport('/messages', res);
+           sessions.set(sseTransport.sessionId, sseTransport);
+           sseTransport.onclose = () => sessions.delete(sseTransport.sessionId);
