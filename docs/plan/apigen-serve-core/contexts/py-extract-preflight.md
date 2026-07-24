@@ -18,6 +18,7 @@
 
 - [py-extract-preflight.1] findings doc exists
 
+- [py-extract-preflight.2] records a DECISION line (extract_module import-time side-effect safety verdict, §8.3)
 ---
 
 ## Reservations
