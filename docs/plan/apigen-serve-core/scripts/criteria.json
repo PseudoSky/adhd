@@ -339,6 +339,16 @@
       "paths": [
         "packages/apigen/python/apigen_python/flask_server.py"
       ]
+    },
+    {
+      "id": "py-flask-serve-split.3",
+      "phase": "phase-3",
+      "tier": 1,
+      "kind": "absent",
+      "pattern": "_route_for_op",
+      "paths": [
+        "packages/apigen/python/apigen_python/flask_server.py"
+      ]
     }
   ]
 }
