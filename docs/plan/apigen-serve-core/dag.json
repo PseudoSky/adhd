@@ -3,7 +3,8 @@
   "title": "apigen transport-neutral serve-core + thin adapters",
   "plan_kind": "brownfield",
   "phases": [
-    "phase-1"
+    "phase-1",
+    "phase-2"
   ],
   "terminal": "done",
   "nodes": {},
