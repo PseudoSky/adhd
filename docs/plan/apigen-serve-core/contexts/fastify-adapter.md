@@ -1,4 +1,4 @@
-# fastify-adapter — STATE_NAME
+# fastify-adapter — api-fastify reference TransportAdapter migration
 
 **Phase:** phase-1 · **Kind:** work · **Depends on:** serve-core-primitives, parity-harness · **Guard:** `CI=true ./node_modules/.bin/nx run apigen-plugin-api-fastify:test`
 
@@ -6,7 +6,7 @@
 
 ## Goal
 
-<What is true after this state that was not true before?>
+`api-fastify` is a `TransportAdapter` consuming `OpPlan`; the `route-projection` shim is gone; the dead `sendStreamSse` is wired live for `streaming:true` ops; `--use` mount ops carry full fidelity through `dispatchForPlan`'s mount branch; the fastify [def:parity-gate] is green with a recorded [inv:negative-control].
 
 ---
 
@@ -32,6 +32,24 @@
 read_only:  ["packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts", "packages/apigen/apigen-engine-runtime/src/lib/package-invoker.ts", "packages/apigen/apigen-engine-runtime/src/lib/dispatch-for-plan.ts", "packages/apigen/apigen-engine-runtime/src/lib/transport-adapter.ts", "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts", "packages/apigen/apigen-engine-naming/src/lib/naming.ts", "packages/apigen/apigen-core-client/src/lib/plugin.ts"]
 mutates:    ["packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts", "packages/apigen/apigen-plugin-api-fastify/src/lib/generate.ts", "packages/apigen/apigen-plugin-api-fastify/src/lib/route-projection.ts", "packages/apigen/apigen-plugin-api-fastify/src/lib/stream.ts", "packages/apigen/apigen-plugin-api-fastify/src/test/plugin.spec.ts", "packages/apigen/apigen-plugin-api-fastify/src/test/golden/fastify.snapshot.json", "docs/plan/apigen-serve-core/neg-control/fastify-adapter.patch"]
 ```
+
+---
+
+## Semantic Distillation
+
+The REFERENCE adapter — it exercises the whole port surface (full `--use` composition + the only working streaming projection). Folds `DEBT-APIGEN-SERVE-CORE-004` (mount fidelity: today `MountRoute{route,handler}` at `run.ts:172-175` and `collectMountRoutes` hardcode `{method:'GET',text:'',params:[]}` at `run.ts:189-210,378-392`) and the fastify half of `DEBT-APIGEN-SERVE-CORE-002` (streaming: `stream.ts:76-148` has zero call sites). Deletes the byte-identical `buildInvokerForPackage` block (`run.ts:91-166`) in favor of `createPackageInvoker`. Applies [fix:mount-through-layers] and [fix:streaming-wired].
+
+---
+
+## Contract Promise
+
+**modified:** `run.ts` (becomes the adapter), `generate.ts` (renders framework source FROM `OpPlan`, not a re-derivation), `stream.ts` (`sendStreamSse` now called from `writeResult`). **deleted:** `resolveRoute`/`resolveOperation` from `route-projection.ts` (collapsed into `OpPlan`). **added:** committed pre-migration `golden/fastify.snapshot.json` + `neg-control/fastify-adapter.patch`.
+
+---
+
+## Commit points
+
+(1) CAPTURE + COMMIT `golden/fastify.snapshot.json` against the CURRENT `run.ts` BEFORE any migration edit; (2) after migration + parity green; (3) after `neg-control/fastify-adapter.patch` recorded RED→GREEN. Post-guard: `feat(apigen-plugin-api-fastify): migrate to TransportAdapter/OpPlan serve-core`.
 
 ---
 

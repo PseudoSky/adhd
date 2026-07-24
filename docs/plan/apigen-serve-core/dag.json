@@ -36,7 +36,7 @@
         "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.spec.ts"
       ],
       "context": "contexts/parity-harness.md",
-      "notes": "Shared golden-fixture parity harness (proposal §6): golden-capture + deep-equal re-capture + negative-control helpers, driving REAL consumer protocols."
+      "notes": "Shared golden-fixture parity harness (proposal \u00a76): golden-capture + deep-equal re-capture + negative-control helpers, driving REAL consumer protocols."
     },
     "fastify-adapter": {
       "kind": "work",
@@ -64,7 +64,7 @@
       "depends_on": [
         "fastify-adapter"
       ],
-      "guard": "node docs/plan/apigen-serve-core/scripts/run-audit.js --phase phase-1",
+      "guard": "python3 docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py --phase phase-1",
       "artifacts": [
         "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
       ],
@@ -134,7 +134,7 @@
         "mcp-adapter",
         "cli-adapter"
       ],
-      "guard": "node docs/plan/apigen-serve-core/scripts/run-audit.js --phase phase-2",
+      "guard": "python3 docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py --phase phase-2",
       "artifacts": [
         "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
       ],
@@ -147,12 +147,12 @@
       "depends_on": [
         "audit-foundation"
       ],
-      "guard": "grep -q '^DECISION:' docs/apigen/proposals/py-extract-serve-split-findings.md",
+      "guard": "python3 docs/plan/apigen-serve-core/scripts/check-preflight.py",
       "artifacts": [
         "docs/apigen/proposals/py-extract-serve-split-findings.md"
       ],
       "context": "contexts/py-extract-preflight.md",
-      "notes": "SPIKE (proposal §8.3): verify extractor.py has no import-time side effects tied to serving; read py-grpc run/grpc_server shape. Records DECISION: line gating Phase 3."
+      "notes": "SPIKE (proposal \u00a78.3): verify extractor.py has no import-time side effects tied to serving; read py-grpc run/grpc_server shape. Records DECISION: line gating Phase 3."
     },
     "py-flask-serve-split": {
       "kind": "work",
@@ -196,7 +196,7 @@
         "py-flask-serve-split",
         "py-grpc-serve-split"
       ],
-      "guard": "node docs/plan/apigen-serve-core/scripts/run-audit.js --phase phase-3",
+      "guard": "python3 docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py --phase phase-3",
       "artifacts": [
         "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
       ],
@@ -210,7 +210,7 @@
         "audit-transports",
         "audit-python"
       ],
-      "guard": "node docs/plan/apigen-serve-core/scripts/run-audit.js --phase final",
+      "guard": "python3 docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py --phase final",
       "artifacts": [
         "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
       ],
@@ -223,5 +223,10 @@
     "version": "0.8.30",
     "hash": "836ff34f0a74"
   },
-  "goal": "Centralize the op->wire serve loop into OpPlan + createPackageInvoker + dispatchForPlan + a TransportAdapter port in apigen-engine-runtime; migrate every transport (fastify, express, mcp, cli, py-flask, py-grpc) onto it under a byte-identical parity gate"
+  "goal": "Centralize the op->wire serve loop into OpPlan + createPackageInvoker + dispatchForPlan + a TransportAdapter port in apigen-engine-runtime; migrate every transport (fastify, express, mcp, cli, py-flask, py-grpc) onto it under a byte-identical parity gate",
+  "demo": {
+    "source": "demo/DEMO.md",
+    "validate": null,
+    "package_artifact": "packages/apigen/apigen-plugin-api-fastify/src/test/plugin.spec.ts"
+  }
 }
