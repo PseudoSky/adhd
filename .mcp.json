@@ -19,6 +19,11 @@
         "ADHD_AGENT_REGISTRY_DB_PATH": "${HOME}/.adhd/agent-mcp/registry.db",
         "DOTENV_CONFIG_PATH": "${HOME}/.adhd/.env"
       }
+    },
+    "backlog": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["entrypoint/backlog/dist/index.js", "serve", "--transport", "mcp"]
     }
   }
 }
