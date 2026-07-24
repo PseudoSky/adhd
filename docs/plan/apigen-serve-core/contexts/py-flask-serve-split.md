@@ -23,7 +23,7 @@ _No criteria yet._
 ## Reservations
 
 ```text
-read_only:  []
+read_only:  ["packages/apigen/apigen-engine-naming/src/lib/naming.ts", "packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts", "docs/apigen/proposals/py-extract-serve-split-findings.md"]
 mutates:    ["packages/apigen/python/apigen_python/extractor.py", "packages/apigen/python/apigen_python/flask_server.py", "packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts", "packages/apigen/apigen-plugin-py-flask/src/test/plugin.spec.ts", "packages/apigen/apigen-plugin-py-flask/src/test/golden/py-flask.snapshot.json"]
 ```
 
