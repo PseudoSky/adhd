@@ -45,3 +45,5 @@ Centralize the op->wire serve loop into OpPlan + createPackageInvoker + dispatch
   - entrypoint: `CI=true ./node_modules/.bin/nx run-many -t test -p apigen-plugin-api-fastify,apigen-plugin-mcp,apigen-plugin-cli-output`
   - observable: `fastify streaming fixture yields SSE frames; mcp yields progressive content; cli/py streaming fixture returns an explicit rejection`
   - delivered-by: `fastify-adapter, mcp-adapter, cli-adapter`
+
+- `[dod.6]` **The express undefined->null response-encoding gap (DEBT-APIGEN-SERVE-CORE-003) is closed via the shared adapter writeResult, pinned by a void-return-op fixture flagged as an intentional, tested behavior change. (structural)** — The express undefined->null response-encoding gap (DEBT-APIGEN-SERVE-CORE-003) is closed via the shared adapter writeResult, pinned by a void-return-op fixture flagged as an intentional, tested behavior change..
