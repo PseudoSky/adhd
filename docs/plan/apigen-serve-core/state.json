@@ -11,10 +11,10 @@
       "end_ref": "ab0c14f2017a74618e88cf7e4d35d57e74c389e4"
     },
     "parity-harness": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-24T04:10:58.309Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "e00cffb70ee5f6df40b6241dbca034721d388fda",
       "end_ref": null
     },
     "fastify-adapter": {
