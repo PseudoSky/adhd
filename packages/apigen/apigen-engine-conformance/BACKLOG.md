@@ -5,7 +5,10 @@ Package-scoped log. Repo-wide context lives in the root [BACKLOG.md](../../../BA
 
 ## Fixed
 
-### BUG-APIGEN-018 — `apigen-conformance:build` failed with TS1343 (`import.meta` under module=commonjs) — RESOLVED 2026-07-02
+### BUG-APIGEN-045 — `apigen-conformance:build` failed with TS1343 (`import.meta` under module=commonjs) — RESOLVED 2026-07-02
+
+(Renumbered from BUG-APIGEN-018, whose id was reused by a distinct apigen-cli bug that a
+prior supersede tombstoned as BUG-APIGEN-044 — `DEBT-BACKLOG-DUPLICATE-ID-INSOURCE-001`.)
 
 `gate.ts`'s `main()` used `import.meta.url` for its ESM path fallback, but the package
 type-checks under `module: commonjs`, where TypeScript rejects the syntax outright —

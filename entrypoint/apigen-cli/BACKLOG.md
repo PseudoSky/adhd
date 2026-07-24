@@ -5,7 +5,10 @@ Package-scoped log. Repo-wide context lives in the root [BACKLOG.md](../../BACKL
 
 ## Fixed
 
-### PERF-APIGEN-001 (orchestrator side) — RESOLVED 2026-07-02
+### PERF-APIGEN-002 (orchestrator side) — RESOLVED 2026-07-02
+
+(Renumbered from PERF-APIGEN-001, which collided with the distinct apigen-core-client
+item of the same id — `DEBT-BACKLOG-DUPLICATE-ID-INSOURCE-001`.)
 
 `buildDescriptor()` now creates ONE `ExtractionSession` per run, threads it through
 `extractSource` and the step-5 `generateSchemas` composition loop (previously a second
@@ -29,7 +32,11 @@ set by a previous `startServe` in the same process is not treated as a user over
 - `serve.ts` gRPC proxy sessions: 60s idle eviction + `unref()` so cached h2c sessions
   neither linger after silent backend death nor hold the event loop open.
 
-### DEBT-APIGEN-LINT-001 — `@nx/dependency-checks` false-positive on `decimal.js` — FIXED 2026-07-18
+### DEBT-APIGEN-LINT-003 — `@nx/dependency-checks` false-positive on `decimal.js` — FIXED 2026-07-18
+
+(Renumbered from DEBT-APIGEN-LINT-001, which collided with the distinct apigen-core-client
+item of the same id — `DEBT-BACKLOG-DUPLICATE-ID-INSOURCE-001`. This is the apigen-cli-side
+`package.json` fix; the core-client-side fix keeps DEBT-APIGEN-LINT-001.)
 
 `nx run apigen-cli:lint` (and transitively `:build`/`:test`) failed with
 "decimal.js package is not used by apigen-cli project" — the dependency IS
