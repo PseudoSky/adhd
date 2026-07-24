@@ -32,11 +32,11 @@
       "end_ref": "206f7bc20158cb59c9db9d8e41a551e6168070aa"
     },
     "express-adapter": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-07-24T08:07:21.281Z",
-      "done_at": null,
+      "done_at": "2026-07-24T09:07:04.287Z",
       "start_ref": "f603f8f32841ac75836dbd9d6d9f00f0a9be3b6a",
-      "end_ref": null
+      "end_ref": "8bbe8dbe9936cbd336e9f64583bad5b53d34c3c0"
     },
     "mcp-adapter": {
       "status": "in_progress",
@@ -155,6 +155,18 @@
       "audit_criteria_total": 21,
       "by": "plan-orchestrator",
       "note": "Phase-1 audit gate: verified serve-core-primitives + parity-harness + fastify-adapter criteria all green via run-audit.js --phase phase-1; no fixes needed, audit script already correct from authoring."
+    },
+    {
+      "ts": "2026-07-24T09:07:04.287Z",
+      "from": "py-extract-preflight",
+      "to": "express-adapter",
+      "start_ref": "f603f8f32841ac75836dbd9d6d9f00f0a9be3b6a",
+      "end_ref": "8bbe8dbe9936cbd336e9f64583bad5b53d34c3c0",
+      "audit_exit": 2,
+      "audit_criteria_passed": 42,
+      "audit_criteria_total": 44,
+      "by": "plan-orchestrator",
+      "note": "api-express collapses onto the shared adapter fastify established: composes createPackageInvoker (deletes local byte-identical buildInvokerForPackage/readUsePlugins/readUseOptions/adaptCoreLayer block, dod.13); route.ts's buildOperationIndex/resolveRoute shim removed. DEBT-APIGEN-SERVE-CORE-003 closed via shared writeResult (undefined->null, was previously empty-body 200 pre-migration per measured reality, not 204 as originally assumed -- flagged behavior change pinned by a void-return fixture). Parity gate green (golden/express.snapshot.json committed pre-migration); negative control proven RED->GREEN twice. Guard: 45/45 tests green (verified independently by orchestrator, not from executor prose). Self-verified no apigen-cli build-coupling and no mcp-adapter bleed-through (apigen-cli:test 156/156)."
     }
   ],
   "amendment_log": [],
@@ -163,7 +175,7 @@
     "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
-  "current_state": "py-extract-preflight",
+  "current_state": "express-adapter",
   "dod_provenance": {
     "confirmed_at": "2026-07-24T03:27:07.924Z",
     "by": "plan-orchestrator",
