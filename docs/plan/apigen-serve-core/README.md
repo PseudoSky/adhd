@@ -21,3 +21,11 @@ Centralize the op->wire serve loop into OpPlan + createPackageInvoker + dispatch
   - entrypoint: `CI=true ./node_modules/.bin/nx run-many -t test -p apigen-plugin-api-fastify,apigen-plugin-api-express,apigen-plugin-mcp,apigen-plugin-cli-output`
   - observable: `all four transports' parity specs pass; each asserts deep-equality against its committed golden snapshot`
   - delivered-by: `fastify-adapter, express-adapter, mcp-adapter, cli-adapter`
+
+- `[dod.3]` **Each transport migration has a recorded negative control: reverting the migration (or injecting a one-line regression) turns that transport's parity suite RED, and restoring turns it GREEN. (behavioral)** — Each transport migration has a recorded negative control: reverting the migration (or injecting a one-line regression) turns that transport's parity suite RED, and restoring turns it GREEN..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `node docs/plan/apigen-serve-core/scripts/run-audit.js --phase final`
+  - observable: `each adapter's negative-control criterion reports the mutate variant RED and the restored variant GREEN`
+  - delivered-by: `fastify-adapter, express-adapter, mcp-adapter, cli-adapter`
