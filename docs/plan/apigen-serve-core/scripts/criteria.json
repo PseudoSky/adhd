@@ -513,6 +513,16 @@
       "paths": [
         "packages/apigen/apigen-plugin-cli-output/src/lib/run.ts"
       ]
+    },
+    {
+      "id": "cli-adapter.7",
+      "phase": "phase-2",
+      "tier": 2,
+      "kind": "present",
+      "pattern": "APIGEN_",
+      "paths": [
+        "packages/apigen/apigen-plugin-cli-output/src/test/run-cli-integration.spec.ts"
+      ]
     }
   ]
 }
