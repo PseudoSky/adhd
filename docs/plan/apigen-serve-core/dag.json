@@ -24,7 +24,15 @@
         "packages/apigen/apigen-engine-runtime/src/lib/op-plan.spec.ts"
       ],
       "context": "contexts/serve-core-primitives.md",
-      "notes": "New serve-core primitives (OpPlan, createPackageInvoker, dispatchForPlan) + TransportAdapter port. Grounded in [iface:op-plan],[iface:transport-adapter],[iface:create-package-invoker],[iface:dispatch-for-plan]."
+      "notes": "New serve-core primitives (OpPlan, createPackageInvoker, dispatchForPlan) + TransportAdapter port. Grounded in [iface:op-plan],[iface:transport-adapter],[iface:create-package-invoker],[iface:dispatch-for-plan].",
+      "changes": {
+        "adds_set_members": [
+          "OpPlan",
+          "TransportAdapter",
+          "createPackageInvoker",
+          "dispatchForPlan"
+        ]
+      }
     },
     "parity-harness": {
       "kind": "work",
@@ -36,7 +44,7 @@
         "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.spec.ts"
       ],
       "context": "contexts/parity-harness.md",
-      "notes": "Shared golden-fixture parity harness (proposal \u00a76): golden-capture + deep-equal re-capture + negative-control helpers, driving REAL consumer protocols."
+      "notes": "Shared golden-fixture parity harness (proposal §6): golden-capture + deep-equal re-capture + negative-control helpers, driving REAL consumer protocols."
     },
     "fastify-adapter": {
       "kind": "work",
@@ -56,7 +64,13 @@
         "docs/plan/apigen-serve-core/neg-control/fastify-adapter.patch"
       ],
       "context": "contexts/fastify-adapter.md",
-      "notes": "Reference TransportAdapter migration. Fold DEBT-004 mount fidelity + wire dead sendStreamSse live. Parity gate + negative control."
+      "notes": "Reference TransportAdapter migration. Fold DEBT-004 mount fidelity + wire dead sendStreamSse live. Parity gate + negative control.",
+      "changes": {
+        "deletes": [
+          "resolveRoute",
+          "resolveOperation"
+        ]
+      }
     },
     "audit-foundation": {
       "kind": "audit",
@@ -87,7 +101,12 @@
         "docs/plan/apigen-serve-core/neg-control/express-adapter.patch"
       ],
       "context": "contexts/express-adapter.md",
-      "notes": "Collapse onto shared adapter; closes DEBT-003 (undefined->null). Void-return fixture pins the intentional change."
+      "notes": "Collapse onto shared adapter; closes DEBT-003 (undefined->null). Void-return fixture pins the intentional change.",
+      "changes": {
+        "deletes": [
+          "buildOperationIndex"
+        ]
+      }
     },
     "mcp-adapter": {
       "kind": "work",
@@ -102,11 +121,19 @@
         "packages/apigen/apigen-plugin-mcp/src/lib/tool-naming.ts",
         "packages/apigen/apigen-plugin-mcp/src/lib/stream.ts",
         "packages/apigen/apigen-plugin-mcp/src/test/run.spec.ts",
+        "packages/apigen/apigen-plugin-mcp/src/test/tool-naming.spec.ts",
+        "packages/apigen/apigen-plugin-mcp/src/test/generate.spec.ts",
         "packages/apigen/apigen-plugin-mcp/src/test/golden/mcp.snapshot.json",
         "docs/plan/apigen-serve-core/neg-control/mcp-adapter.patch"
       ],
       "context": "contexts/mcp-adapter.md",
-      "notes": "Fixes BUG-APIGEN-SERVE-CORE-001 (first-time validate-layer) + wires projectStreamMcp. malformed->invalid_argument is a flagged behavior change. Real @modelcontextprotocol/sdk client only."
+      "notes": "Fixes BUG-APIGEN-SERVE-CORE-001 (first-time validate-layer) + wires projectStreamMcp. malformed->invalid_argument is a flagged behavior change. Real @modelcontextprotocol/sdk client only.",
+      "changes": {
+        "deletes": [
+          "deriveToolName",
+          "findOperation"
+        ]
+      }
     },
     "cli-adapter": {
       "kind": "work",
@@ -152,7 +179,7 @@
         "docs/apigen/proposals/py-extract-serve-split-findings.md"
       ],
       "context": "contexts/py-extract-preflight.md",
-      "notes": "SPIKE (proposal \u00a78.3): verify extractor.py has no import-time side effects tied to serving; read py-grpc run/grpc_server shape. Records DECISION: line gating Phase 3."
+      "notes": "SPIKE (proposal §8.3): verify extractor.py has no import-time side effects tied to serving; read py-grpc run/grpc_server shape. Records DECISION: line gating Phase 3."
     },
     "py-flask-serve-split": {
       "kind": "work",
@@ -170,7 +197,14 @@
         "docs/plan/apigen-serve-core/neg-control/py-flask-serve-split.patch"
       ],
       "context": "contexts/py-flask-serve-split.md",
-      "notes": "Two-phase extract/serve split: --emit-json extract mode; TS-side real project(); flask --plan; delete _route_for_op/_is_primitive_only_input_schema/_http_verb."
+      "notes": "Two-phase extract/serve split: --emit-json extract mode; TS-side real project(); flask --plan; delete _route_for_op/_is_primitive_only_input_schema/_http_verb.",
+      "changes": {
+        "deletes": [
+          "_route_for_op",
+          "_is_primitive_only_input_schema",
+          "_http_verb"
+        ]
+      }
     },
     "py-grpc-serve-split": {
       "kind": "work",
