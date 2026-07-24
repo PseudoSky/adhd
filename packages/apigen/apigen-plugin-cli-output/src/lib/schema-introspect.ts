@@ -2,13 +2,30 @@ import { envelopeCliFlag, envelopeEnvVar } from '@adhd/apigen-engine-naming';
 import type { ComposedSchemas } from '@adhd/apigen-core-client';
 
 // ---------------------------------------------------------------------------
-// Shared schema-introspection helpers for the CLI plugin's two "consumers" of
-// a composed schema: `generate()` (emits a Commander program that hardcodes
-// flags at codegen time) and `run()` (parses live argv against the same
-// schema at dispatch time). Per AGENTS.md §8 "Two-Use Refactor Rule" — this
-// logic was duplicated verbatim between the two call sites; it now lives in
-// exactly one place so the generated CLI and the live `run()` path can never
-// silently drift on flag naming / typing.
+// Schema-introspection helpers for `generate()` — the STATIC codegen path
+// that emits a Commander program hardcoding flags at codegen time.
+//
+// serve-core migration (cli-adapter): this module used to be shared between
+// TWO consumers — `generate()` and the LIVE `run()` dispatch path — per
+// AGENTS.md §8 "Two-Use Refactor Rule". `run()` has since migrated onto the
+// transport-neutral `OpPlan` primitive (`@adhd/apigen-engine-runtime`'s
+// `buildOpPlan`/`OpPlan.cliFlags`/`OpPlan.envelope`), which resolves the
+// IDENTICAL flag-naming/typing/§9.1-envelope decisions this module computes,
+// just off `Operation`+composed-schema instead of composed-schema alone — see
+// `op-plan.ts`'s own doc comment ("F2: cliFlags values carry envVar? …
+// mirrors cli-output's FlagSpec"). `run.ts` no longer imports anything from
+// this file ([cli-adapter.1] — no re-derivation at dispatch time).
+//
+// `generate()` still needs these helpers verbatim: it renders TypeScript
+// SOURCE TEXT (`.option(...)` lines) from a bare composed schema with no
+// `Operation`/`buildOpPlan` involved, so it cannot consume `OpPlan.cliFlags`
+// (a runtime `Map`, not codegen-able source) directly. Keeping the flag/
+// envelope typing RULES here (kebab-casing, boolean/json detection, §9.1
+// binding) identical to `op-plan.ts`'s private `computeCliFlags`/
+// `computeEnvelopeFields` is what keeps the generated CLI and the live
+// `run()` dispatch path flag-for-flag compatible — a future state may migrate
+// `generate()` onto `buildOpPlan` too (using `PluginInput.operations`, per
+// BUG-APIGEN-024) to collapse this duplication entirely; out of scope here.
 // ---------------------------------------------------------------------------
 
 /** Loose JSON-Schema property shape — only what flag-typing decisions need. */
