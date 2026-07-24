@@ -126,6 +126,13 @@
       "paths": [
         "packages/apigen/apigen-plugin-api-fastify/src/lib/route-projection.ts"
       ]
+    },
+    {
+      "id": "fastify-adapter.5",
+      "phase": "phase-1",
+      "tier": 1,
+      "kind": "exists",
+      "path": "packages/apigen/apigen-plugin-api-fastify/src/test/golden/fastify.snapshot.json"
     }
   ]
 }
