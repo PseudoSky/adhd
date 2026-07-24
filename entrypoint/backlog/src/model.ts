@@ -346,6 +346,17 @@ export interface ImportResult {
   parsed: number;
   created: number;
   skippedDuplicates: number;
+  /**
+   * Of `skippedDuplicates` (an already-existing humanId), how many had a
+   * title/body/priority/status that DIFFERED from the graph's current copy
+   * and were refreshed to match the re-imported source
+   * (BUG-BACKLOG-IMPORT-INSERT-ONLY-NO-UPDATE-001 — re-importing used to be
+   * pure insert-only: a status/content change made directly in a
+   * `BACKLOG.md` file after the first import was silently never reflected
+   * in the graph on a later re-import). An unchanged existing item is a
+   * true no-op — never counted here.
+   */
+  updated: number;
   errors: Array<{ humanId: string; message: string }>;
   /** Headers that look like a corrupted/typo'd id and were dropped instead of parsed — never silent (DEBT-BACKLOG-IMPORT-SILENT-DROP-001). */
   malformedHeaders: MalformedHeaderInfo[];
