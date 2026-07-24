@@ -62,9 +62,9 @@
     "py-extract-preflight": {
       "status": "complete",
       "started_at": "2026-07-24T08:07:21.451Z",
-      "done_at": "2026-07-24T09:35:43.617Z",
+      "done_at": "2026-07-24T09:39:22.888Z",
       "start_ref": "fed039814474da4d290ccef90f0d811e6bdce9a9",
-      "end_ref": "9b5cacff5d755485a799332d6854d82b1c33eedd"
+      "end_ref": "ca4af702f102a4661bfe014a33e87a26e39c9bcb"
     },
     "py-flask-serve-split": {
       "status": "pending",
@@ -203,6 +203,18 @@
       "audit_criteria_total": 59,
       "by": "plan-orchestrator",
       "note": "Phase-3 preflight spike (proposal §8.3), read-only research, zero source files touched. DECISION: SAFE -- extract_module() is a side-effect-neutral pure-data producer; its only process-global mutation (sys.modules entry) is read by nothing, including flask_server.py's own _build_state, which performs its own independent second module load and only ever consumes extract_module()'s output as plain-data (function names + JSON schema). Two-phase extract/serve split proceeds as designed; the only real gap found is a missing --plan entry point on _build_state, already explicitly Phase 3's (py-flask-serve-split's) job to add -- not a safety defect, no PLANNER-CLASS escalation needed. py-grpc shape recorded per criterion 3. Guard (grep -q '^DECISION:') passes."
+    },
+    {
+      "ts": "2026-07-24T09:39:22.888Z",
+      "from": "audit-transports",
+      "to": "py-extract-preflight",
+      "start_ref": "fed039814474da4d290ccef90f0d811e6bdce9a9",
+      "end_ref": "ca4af702f102a4661bfe014a33e87a26e39c9bcb",
+      "audit_exit": 9,
+      "audit_criteria_passed": 50,
+      "audit_criteria_total": 59,
+      "by": "plan-orchestrator",
+      "note": "Phase-3 preflight spike (proposal §8.3), read-only research, zero source files touched. DECISION: SAFE -- extract_module() is a side-effect-neutral pure-data producer; its only process-global mutation (sys.modules entry) is read by nothing, including flask_server.py's own _build_state, which performs its own independent second module load and only ever consumes extract_module()'s output as plain-data (function names + JSON schema). Two-phase extract/serve split proceeds as designed; the only real gap found is a missing --plan entry point on _build_state, already explicitly Phase 3's (py-flask-serve-split's) job to add -- not a safety defect, no PLANNER-CLASS escalation needed. py-grpc shape recorded per criterion 3. Guard (grep -q '^DECISION:') passes. Fixed a second criteria.json regex bug along the way: py-extract-preflight.2's pattern '^DECISION:' used JS RegExp without the multiline flag, so '^' anchored to start-of-FILE not start-of-line -- permanently false-failing since DECISION: is on line 47, not line 1. Dropped the anchor (state's real guard already enforces the line-start requirement via grep, unaffected). Remaining accumulated phase-3 audit failures (py-flask-serve-split.*, py-grpc-serve-split.*) belong to not-yet-executed sibling states, not this one."
     }
   ],
   "amendment_log": [],
