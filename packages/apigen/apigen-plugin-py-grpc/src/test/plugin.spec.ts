@@ -74,8 +74,20 @@ const PYENV = ensurePythonEnv({ extras: ['grpc'] });
 const PYTHON_PKG_DIR = PYENV.pythonPkgDir;
 const FIXTURE_MODULE = path.resolve(__dirname, 'fixtures', 'grpc_api.py');
 const STREAMING_FIXTURE_MODULE = path.resolve(__dirname, 'fixtures', 'streaming_api.py');
-const PORT = 49381; // deterministic high port, avoids clashes
 const NS = 'pkg';
+// BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001: no fixed port. Every
+// `startServer()` call below requests an OS-assigned ephemeral port
+// (`--port 0`) and learns the actual bound port from the `{"ready":true,
+// "port":<n>}` stdout line — see `LiveServer.port`. `liveAddr()` reads it
+// off the currently-active `server` so concurrent runs of this suite (or of
+// py-grpc alongside py-flask) on the same shared checkout can never collide
+// on the same TCP port.
+function liveAddr(): string {
+  if (!server) {
+    throw new Error('py-grpc test: liveAddr() called with no active server');
+  }
+  return `localhost:${server.port}`;
+}
 
 // ---------------------------------------------------------------------------
 // --plan-file construction — apigen-serve-core py-grpc-serve-split
@@ -241,15 +253,24 @@ const SVC_ADDR = (() => {
 
 interface LiveServer {
   proc: ChildProcessWithoutNullStreams;
+  /**
+   * The ACTUAL bound port, read back from the `{"ready":true,"port":<n>}`
+   * stdout line (BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001) — never the
+   * requested port, since `startServer()` always requests ephemeral (0).
+   */
+  port: number;
   stderrLines: string[];
   stop(): Promise<void>;
 }
 
 /**
  * Spawns `apigen_python.grpc_server` with the given `--plan-file` and waits
- * for `{"ready":true}` — bounded to 10 s, event-driven.
+ * for `{"ready":true,"port":<n>}` — bounded to 10 s, event-driven.
+ *
+ * @param port - TCP port to request. Defaults to `0` (OS-assigned ephemeral
+ *   — BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001).
  */
-async function startServerWithPlan(planPath: string, port: number): Promise<LiveServer> {
+async function startServerWithPlan(planPath: string, port = 0): Promise<LiveServer> {
   const proc = spawn(
     PYENV.python,
     [
@@ -278,7 +299,7 @@ async function startServerWithPlan(planPath: string, port: number): Promise<Live
     process.stderr.write(line + '\n');
   });
 
-  await new Promise<void>((resolve, reject) => {
+  const boundPort = await new Promise<number>((resolve, reject) => {
     const rl = readline.createInterface({ input: proc.stdout });
     let done = false;
     const timer = setTimeout(() => {
@@ -300,7 +321,7 @@ async function startServerWithPlan(planPath: string, port: number): Promise<Live
           done = true;
           clearTimeout(timer);
           rl.close();
-          resolve();
+          resolve(msg['port'] as number);
         }
       } catch {
         /* non-JSON line — keep waiting */
@@ -317,6 +338,7 @@ async function startServerWithPlan(planPath: string, port: number): Promise<Live
 
   return {
     proc,
+    port: boundPort,
     stderrLines,
     async stop() {
       // Awaits the REAL exit event (SIGTERM, escalating to SIGKILL if it
@@ -328,7 +350,7 @@ async function startServerWithPlan(planPath: string, port: number): Promise<Live
   };
 }
 
-async function startServer(port: number = PORT): Promise<LiveServer> {
+async function startServer(port = 0): Promise<LiveServer> {
   const planPath = await ensurePlan();
   return startServerWithPlan(planPath, port);
 }
@@ -398,14 +420,14 @@ afterEach(async () => {
 describe('py-grpc plugin — LIVE gRPC server', () => {
   it('grpcurl list → the project()-derived service appears', async () => {
     server = await startServer();
-    const result = grpcurl([`localhost:${PORT}`, 'list']);
+    const result = grpcurl([liveAddr(), 'list']);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(SVC_ADDR);
   });
 
   it('grpcurl describe → project()-derived methods AddDecimal, Greet listed', async () => {
     server = await startServer();
-    const result = grpcurl([`localhost:${PORT}`, 'describe', SVC_ADDR]);
+    const result = grpcurl([liveAddr(), 'describe', SVC_ADDR]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(project(ADD_DECIMAL_OP).grpc.method);
     expect(result.stdout).toContain(project(GREET_OP).grpc.method);
@@ -414,7 +436,7 @@ describe('py-grpc plugin — LIVE gRPC server', () => {
   it('[decimal] add_decimal "123.456" → "123.457" exact decimal string', async () => {
     server = await startServer();
     // Send amount as decimal string — canonical wire for Decimal
-    const result = grpcCall(`localhost:${PORT}`, grpcAddrFor(ADD_DECIMAL_OP), {
+    const result = grpcCall(liveAddr(), grpcAddrFor(ADD_DECIMAL_OP), {
       data: { amount: '123.456' },
     });
     expect(result.exitCode).toBe(0);
@@ -437,7 +459,7 @@ describe('py-grpc plugin — LIVE gRPC server', () => {
 
   it('[decimal] add_decimal "0.1" → "0.101" (float would give 0.10100000...001)', async () => {
     server = await startServer();
-    const result = grpcCall(`localhost:${PORT}`, grpcAddrFor(ADD_DECIMAL_OP), {
+    const result = grpcCall(liveAddr(), grpcAddrFor(ADD_DECIMAL_OP), {
       data: { amount: '0.1' },
     });
     expect(result.exitCode).toBe(0);
@@ -457,7 +479,7 @@ describe('py-grpc plugin — LIVE gRPC server', () => {
 
   it('[string] greet "World" → "Hello, World!" plain string round-trip', async () => {
     server = await startServer();
-    const result = grpcCall(`localhost:${PORT}`, grpcAddrFor(GREET_OP), {
+    const result = grpcCall(liveAddr(), grpcAddrFor(GREET_OP), {
       data: { name: 'World' },
     });
     expect(result.exitCode).toBe(0);
@@ -470,7 +492,7 @@ describe('py-grpc plugin — LIVE gRPC server', () => {
   it('[envelope] x-adhd-session metadata forwarded to ctx parameter', async () => {
     server = await startServer();
     const result = grpcCall(
-      `localhost:${PORT}`,
+      liveAddr(),
       grpcAddrFor(GREET_WITH_CTX_OP),
       { data: { name: 'Alice' } },
       { 'x-adhd-session': 'sess-abc' }
@@ -489,7 +511,7 @@ describe('py-grpc plugin — LIVE gRPC server', () => {
     // runtime → server returns gRPC error.
     //
     // We test the observable: non-zero exit code (some gRPC error, not success).
-    const result = grpcCall(`localhost:${PORT}`, grpcAddrFor(ADD_DECIMAL_OP), { data: {} });
+    const result = grpcCall(liveAddr(), grpcAddrFor(ADD_DECIMAL_OP), { data: {} });
     expect(result.exitCode).not.toBe(0);
     // The error must not be a connection error — it must be a gRPC-level error
     expect(result.stderr).not.toContain('connection refused');
@@ -499,7 +521,7 @@ describe('py-grpc plugin — LIVE gRPC server', () => {
     server = await startServer();
     const g = project(ADD_DECIMAL_OP).grpc;
     const result = grpcurl([
-      `localhost:${PORT}`,
+      liveAddr(),
       'describe',
       `${g.package}.${g.method}Request.Data`,
     ]);
@@ -533,7 +555,7 @@ describe('py-grpc plugin — naming reconciliation with project() (py-grpc-serve
 
   it('LIVE: the server answers at the project()-derived address, and the OLD divergent address is now UNIMPLEMENTED', async () => {
     server = await startServer();
-    const addr = `localhost:${PORT}`;
+    const addr = liveAddr();
 
     // Positive: the project()-derived address works.
     const ok = grpcCall(addr, grpcAddrFor(ADD_DECIMAL_OP), { data: { amount: '1.000' } });
@@ -582,7 +604,12 @@ describe('py-grpc plugin — streaming deferral ([fix:pygrpc-streaming-deferral]
         '--namespace',
         NS,
         '--port',
-        '49382',
+        // 0 (ephemeral) — this server rejects the streaming op in
+        // _build_state(), BEFORE add_insecure_port() ever runs, so no port
+        // is ever actually bound; kept ephemeral for consistency
+        // (BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001) rather than as a fix
+        // for an actual collision risk here.
+        '0',
         '--plan-file',
         planPath,
       ],
@@ -661,7 +688,9 @@ interface GrpcFixtureOutput {
   decoded?: unknown;
 }
 
-const PARITY_PORT = 49480; // distinct from PORT (49381) — its own server lifecycle
+// BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001: no fixed PARITY_PORT — this
+// suite's own server (below) requests ephemeral port 0 and learns the
+// actual bound port via the `onListening` escape hatch.
 const PARITY_GOLDEN_PATH = path.join(__dirname, 'golden', 'py-grpc.snapshot.json');
 
 const parityFixtures: ReadonlyArray<GoldenFixture<GrpcFixtureInput>> = [
@@ -695,7 +724,7 @@ describe('[py-grpc-parity] extract/serve-split golden-snapshot parity gate', () 
   let controller: AbortController;
   let driver: ParityDriver<GrpcFixtureInput, GrpcFixtureOutput>;
   let runPromise: Promise<void>;
-  const addr = `localhost:${PARITY_PORT}`;
+  let addr: string;
 
   beforeAll(async () => {
     // Drive the REAL production entrypoint (`pyGrpcPlugin.run()`), NOT the
@@ -705,27 +734,42 @@ describe('[py-grpc-parity] extract/serve-split golden-snapshot parity gate', () 
     // the patch's effect to be observable (AGENTS.md §7 "drive the real
     // entrypoint, never a bypass").
     controller = new AbortController();
-    const runInput: RunInput = {
-      packages: [{ id: NS, schemas: {}, importPath: FIXTURE_MODULE }],
-      outputDir: '/tmp/out',
-      options: { port: PARITY_PORT, namespace: NS },
-      signal: controller.signal,
-    };
-    runPromise = pyGrpcPlugin.run(runInput).catch(() => {
-      /* swallowed after abort */
-    });
 
-    // Poll for readiness via `grpcurl list` — pyGrpcPlugin.run()'s own
-    // promise doesn't resolve until the process exits/aborts.
-    const deadline = Date.now() + 15000;
-    for (;;) {
-      const probe = grpcurl([addr, 'list']);
-      if (probe.exitCode === 0) break;
-      if (Date.now() > deadline) {
-        throw new Error('[py-grpc-parity] server did not become ready within 15s');
-      }
-      await new Promise((r) => setTimeout(r, 100));
-    }
+    // BUG-APIGEN-TEST-FIXED-PORT-COLLISION-001: request an OS-assigned
+    // ephemeral port (0) and learn the real one via `onListening` — the
+    // production `RunInput`/`OutputPlugin` types are untouched; `options` is
+    // already an untyped bag and `onListening` is plugin.ts's own escape
+    // hatch (see its module docstring). `onListening` fires only after
+    // plugin.ts's own `waitForReady()` has already parsed the server's
+    // `{"ready":true}` line, so by the time `portPromise` resolves the
+    // server is genuinely accepting connections — no separate grpcurl-poll
+    // loop is needed.
+    const portPromise = new Promise<number>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error('[py-grpc-parity] server did not report a bound port within 15s'));
+      }, 15000);
+      const runInput: RunInput = {
+        packages: [{ id: NS, schemas: {}, importPath: FIXTURE_MODULE }],
+        outputDir: '/tmp/out',
+        options: {
+          port: 0,
+          namespace: NS,
+          onListening: (port: number) => {
+            clearTimeout(timer);
+            resolve(port);
+          },
+        },
+        signal: controller.signal,
+      };
+      runPromise = pyGrpcPlugin.run(runInput).catch((err: unknown) => {
+        // If the process died before reporting readiness, surface that as
+        // the portPromise rejection reason instead of waiting out the timer.
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      });
+    });
+    const boundPort = await portPromise;
+    addr = `localhost:${boundPort}`;
 
     driver = {
       async invoke(fixture: GoldenFixture<GrpcFixtureInput>): Promise<GrpcFixtureOutput> {
