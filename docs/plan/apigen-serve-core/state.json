@@ -102,5 +102,22 @@
     "version": "0.8.30",
     "hash": "836ff34f0a74"
   },
-  "current_state": "serve-core-primitives"
+  "current_state": "serve-core-primitives",
+  "dod_provenance": {
+    "confirmed_at": "2026-07-24T03:17:18.125Z",
+    "by": "plan-orchestrator",
+    "note": "DoD (dod.1-14) confirmed by team-lead 2026-07-23: all 10 original clauses faithful, +3 additions (dod.11 --use capability, dod.12 mcp toolMetas hoist, dod.5 py-grpc streaming deferral) folded",
+    "dod_ids": [
+      "dod.1",
+      "dod.2",
+      "dod.3",
+      "dod.4",
+      "dod.5",
+      "dod.6",
+      "dod.7",
+      "dod.8",
+      "dod.9",
+      "dod.10"
+    ]
+  }
 }
