@@ -39,11 +39,11 @@
       "end_ref": "8bbe8dbe9936cbd336e9f64583bad5b53d34c3c0"
     },
     "mcp-adapter": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-07-24T08:07:21.365Z",
-      "done_at": null,
+      "done_at": "2026-07-24T09:34:18.727Z",
       "start_ref": "ef642fa2f83c4b07ca224d02befe056c19920ff5",
-      "end_ref": null
+      "end_ref": "0f77d10088c326943dcfedc6de12fa7b698aabce"
     },
     "cli-adapter": {
       "status": "complete",
@@ -179,6 +179,18 @@
       "audit_criteria_total": 44,
       "by": "plan-orchestrator",
       "note": "cli-output migrated to TransportAdapter: readCall is pure argv-walking over OpPlan.cliFlags (kebab flags, --no- negation, JSON-typed flags, env-var fallback per F2); inline project() call removed; streaming:true explicitly rejected; --use capability decision resolved+documented. Parity gate green via a real spawned child process against the built entrypoint/apigen-cli binary (incl. flag-edge + help path); negative control proven RED->GREEN. Guard: 70/70 tests green (verified independently by orchestrator). Fixed a malformed criteria.json regex along the way (cli-adapter.2's absent-pattern 'project(' was an unescaped, uncompilable regex causing a permanent false-FAIL regardless of code state; escaped to 'project\\\\(' in criteria.json, unrelated to any executor's code)."
+    },
+    {
+      "ts": "2026-07-24T09:34:18.727Z",
+      "from": "cli-adapter",
+      "to": "mcp-adapter",
+      "start_ref": "ef642fa2f83c4b07ca224d02befe056c19920ff5",
+      "end_ref": "0f77d10088c326943dcfedc6de12fa7b698aabce",
+      "audit_exit": 0,
+      "audit_criteria_passed": 44,
+      "audit_criteria_total": 44,
+      "by": "plan-orchestrator",
+      "note": "mcp migrated to TransportAdapter, gaining validate-layer + --use + hardened HTTP transports for the FIRST time (not a collapse-onto-existing-shape): composes createPackageInvoker+makeValidateLayer (closes BUG-APIGEN-SERVE-CORE-001, malformed input now rejects invalid_argument -- flagged breaking change); projectStreamMcp wired live (DEBT-002 mcp half); toolMetas hoisted out of the per-request streaming-http path (dod.12, build-count-stays-1 test); tool-naming findOperation shim removed, collapsed into OpPlan.mcp.name; both sse+streaming-http transports route handler errors through the adapter writeError guard (BUG-APIGEN-MCP-STREAMING-HTTP-NO-ERROR-GUARD-001, dod.15); real SSE+StreamableHTTP client transport parity spec added. Parity gate green via a real @modelcontextprotocol/sdk client incl. malformed-input case; negative controls proven RED->GREEN. Guard: 85/85 tests green (verified independently by orchestrator via fresh nx-reset run). Fixed a self-referential doc-comment audit-blocker along the way (tool-naming.ts's own comment contained the literal banned substrings 'findOperation'/'project(' it was supposed to prove absent; reworded, no code change)."
     }
   ],
   "amendment_log": [],
@@ -187,7 +199,7 @@
     "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
-  "current_state": "cli-adapter",
+  "current_state": "audit-transports",
   "dod_provenance": {
     "confirmed_at": "2026-07-24T03:27:07.924Z",
     "by": "plan-orchestrator",
