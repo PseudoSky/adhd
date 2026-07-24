@@ -25,11 +25,11 @@
       "end_ref": "7ba740aa9164dd017bc25d5ee081497c12d4f6ac"
     },
     "audit-foundation": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-07-24T08:01:28.054Z",
-      "done_at": null,
+      "done_at": "2026-07-24T08:02:05.593Z",
       "start_ref": "583a0d94f3accd36b000feca0a46df5bf6b79722",
-      "end_ref": null
+      "end_ref": "206f7bc20158cb59c9db9d8e41a551e6168070aa"
     },
     "express-adapter": {
       "status": "pending",
@@ -143,6 +143,18 @@
       "audit_criteria_total": 21,
       "by": "plan-orchestrator",
       "note": "Reference TransportAdapter/OpPlan migration complete. All 9 fastify-adapter.* criteria PASS (phase-1 fails=0). run.ts implements TransportAdapter<FastifyRaw> (readCall/writeResult/writeError/registerRoute) over OpPlan+createPackageInvoker+dispatchForPlan; generate.ts renders from OpPlan; resolveRoute/resolveOperation + buildInvokerForPackage block deleted (operationFor kept); sendStreamSse wired live (DEBT-002) + mount-through-layers (DEBT-004); transport stamped per-package. Parity gate GREEN across 6 byte-identical fixture classes incl dod.9 mutating-scalar GET-hoist; neg-control RED->GREEN proven (safe-get+unsafe-mutating-scalar diverge); SSE frames [1,2,3] asserted. 56/56 fastify + all 7 affected projects green; build typechecks (fixed a FastifyServerOptions logger-generic build error nx test missed)."
+    },
+    {
+      "ts": "2026-07-24T08:02:05.593Z",
+      "from": "audit-foundation",
+      "to": "audit-foundation",
+      "start_ref": "583a0d94f3accd36b000feca0a46df5bf6b79722",
+      "end_ref": "206f7bc20158cb59c9db9d8e41a551e6168070aa",
+      "audit_exit": 0,
+      "audit_criteria_passed": 21,
+      "audit_criteria_total": 21,
+      "by": "plan-orchestrator",
+      "note": "Phase-1 audit gate: verified serve-core-primitives + parity-harness + fastify-adapter criteria all green via run-audit.js --phase phase-1; no fixes needed, audit script already correct from authoring."
     }
   ],
   "amendment_log": [],
@@ -151,7 +163,7 @@
     "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
-  "current_state": "audit-foundation",
+  "current_state": "express-adapter",
   "dod_provenance": {
     "confirmed_at": "2026-07-24T03:27:07.924Z",
     "by": "plan-orchestrator",
