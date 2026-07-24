@@ -13,3 +13,11 @@ Centralize the op->wire serve loop into OpPlan + createPackageInvoker + dispatch
 ## Definition of Done
 
 - `[dod.1]` **OpPlan, createPackageInvoker, dispatchForPlan, and the TransportAdapter port exist in apigen-engine-runtime and are exported from its index; the 4 duplicated TS route/tool shim call sites collapse into OpPlan construction (route-projection resolveRoute/resolveOperation, express route.ts resolveRoute/buildOperationIndex, mcp tool-naming deriveToolName/findOperation, and cli-output's inline project() call are gone). (structural)** — OpPlan, createPackageInvoker, dispatchForPlan, and the TransportAdapter port exist in apigen-engine-runtime and are exported from its index; the 4 duplicated TS route/tool shim call sites collapse into OpPlan construction (route-projection resolveRoute/resolveOperation, express route.ts resolveRoute/buildOperationIndex, mcp tool-naming deriveToolName/findOperation, and cli-output's inline project() call are gone)..
+
+- `[dod.2]` **Every TS transport (fastify, express, mcp, cli) is a TransportAdapter consuming OpPlan and passes its parity gate: a pre-migration golden capture of the live server/CLI deep-equals the post-migration capture, driven through the REAL consumer protocol. (behavioral)** — Every TS transport (fastify, express, mcp, cli) is a TransportAdapter consuming OpPlan and passes its parity gate: a pre-migration golden capture of the live server/CLI deep-equals the post-migration capture, driven through the REAL consumer protocol..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `CI=true ./node_modules/.bin/nx run-many -t test -p apigen-plugin-api-fastify,apigen-plugin-api-express,apigen-plugin-mcp,apigen-plugin-cli-output`
+  - observable: `all four transports' parity specs pass; each asserts deep-equality against its committed golden snapshot`
+  - delivered-by: `fastify-adapter, express-adapter, mcp-adapter, cli-adapter`
