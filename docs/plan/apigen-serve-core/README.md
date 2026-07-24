@@ -12,4 +12,4 @@ Centralize the op->wire serve loop into OpPlan + createPackageInvoker + dispatch
 
 ## Definition of Done
 
-_No DoD clauses yet — author them with `plan-scaffold.js add-dod`._
+- `[dod.1]` **OpPlan, createPackageInvoker, dispatchForPlan, and the TransportAdapter port exist in apigen-engine-runtime and are exported from its index; the 4 duplicated TS route/tool shim call sites collapse into OpPlan construction (route-projection resolveRoute/resolveOperation, express route.ts resolveRoute/buildOperationIndex, mcp tool-naming deriveToolName/findOperation, and cli-output's inline project() call are gone). (structural)** — OpPlan, createPackageInvoker, dispatchForPlan, and the TransportAdapter port exist in apigen-engine-runtime and are exported from its index; the 4 duplicated TS route/tool shim call sites collapse into OpPlan construction (route-projection resolveRoute/resolveOperation, express route.ts resolveRoute/buildOperationIndex, mcp tool-naming deriveToolName/findOperation, and cli-output's inline project() call are gone)..
