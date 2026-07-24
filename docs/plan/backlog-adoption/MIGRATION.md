@@ -1,6 +1,6 @@
 # Backlog Tool Adoption & Migration Plan
 
-**Slug:** `backlog-adoption` · **Status:** DRAFT (not yet executed) · **Authored:** 2026-07-23
+**Slug:** `backlog-adoption` · **Status:** Phases 1–2 EXECUTED (2026-07-24, real global store); Phase 3 BLOCKED on §5 · **Authored:** 2026-07-23
 **Owner:** _unassigned_ · **Target tool:** `@adhd/backlog@0.0.1` (published)
 
 Migrate this repo — and eventually every repo on the machine — from hand-edited
@@ -8,10 +8,19 @@ markdown `BACKLOG.md` files to the graph-backed, multi-agent, cross-repo
 `@adhd/backlog` tool as the **source of truth**, with `BACKLOG.md` demoted to a
 generated, git-visible *projection* of the graph.
 
-This is a migration **plan**, not an executed migration. Nothing here has run.
-The tool is built, published, and its markdown interop is round-trip-proven; it
-is **not adopted** — the disclosure rules in `AGENTS.md` still mandate editing
-`BACKLOG.md` by hand.
+**Execution status (2026-07-24):** Phase 1 (seed import) and Phase 2 (shadow
+parity-check) below have been run for real against the machine's `global`-scope
+store (`~/.adhd/backlog/production/data/backlog.db`) — 192 items imported from
+14 of this repo's markdown sources (idempotency and export-count proven; see
+`projection-manifest.json`/`parity-check.mjs`, committed alongside this file).
+`packages/apigen/**` was deliberately excluded this run (a separate,
+concurrent apigen orchestration owns that tree) and must be imported in a
+follow-up pass. **Phase 3 (write-path cut-over) is still BLOCKED** — all four
+gating blockers in §5 remain OPEN in the repo-root `BACKLOG.md` as of this
+execution — so `BACKLOG.md` (root, per-plan, per-package) remains the
+authoritative source and the disclosure rules in `AGENTS.md` are UNCHANGED:
+continue hand-editing `BACKLOG.md` by hand until Phase 3 is explicitly
+executed.
 
 ---
 
