@@ -149,6 +149,23 @@
       ],
       "context": "contexts/py-extract-preflight.md",
       "notes": "SPIKE (proposal §8.3): verify extractor.py has no import-time side effects tied to serving; read py-grpc run/grpc_server shape. Records DECISION: line gating Phase 3."
+    },
+    "py-flask-serve-split": {
+      "kind": "work",
+      "phase": "phase-3",
+      "depends_on": [
+        "py-extract-preflight"
+      ],
+      "guard": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-flask:test",
+      "artifacts": [
+        "packages/apigen/python/apigen_python/extractor.py",
+        "packages/apigen/python/apigen_python/flask_server.py",
+        "packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts",
+        "packages/apigen/apigen-plugin-py-flask/src/test/plugin.spec.ts",
+        "packages/apigen/apigen-plugin-py-flask/src/test/golden/py-flask.snapshot.json"
+      ],
+      "context": "contexts/py-flask-serve-split.md",
+      "notes": "Two-phase extract/serve split: --emit-json extract mode; TS-side real project(); flask --plan; delete _route_for_op/_is_primitive_only_input_schema/_http_verb."
     }
   },
   "authored_with": {
