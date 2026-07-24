@@ -46,8 +46,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { ensurePythonEnv } from '@adhd/apigen-python-env';
 import { tokenize } from '@adhd/apigen-core-client';
-import type { Operation, Segment, JSONSchema } from '@adhd/apigen-core-client';
+import type { Operation, RunInput, Segment, JSONSchema } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
+import { pyFlaskPlugin } from '../lib/plugin';
 import {
   captureGolden,
   assertParity,
@@ -666,12 +667,45 @@ const parityFixtures: ReadonlyArray<GoldenFixture<HttpFixtureInput>> = [
 ];
 
 describe('[py-flask-parity] extract/serve-split golden-snapshot parity gate', () => {
-  let parityServer: LiveServer;
+  let controller: AbortController;
   let driver: ParityDriver<HttpFixtureInput, HttpFixtureOutput>;
 
   beforeAll(async () => {
-    parityServer = await startServer(PARITY_PORT);
+    // Drive the REAL production entrypoint (`pyFlaskPlugin.run()`), NOT the
+    // test-local `startServer()` spawn helper the earlier LIVE-server blocks
+    // use — the negative control below patches `plugin.ts`'s two-phase spawn
+    // itself, so the parity gate must actually exercise that code path for
+    // the patch's effect to be observable (a gate that bypasses the thing it
+    // patches would stay GREEN no matter what — AGENTS.md §7 "drive the real
+    // entrypoint, never a bypass").
+    controller = new AbortController();
     const base = `http://127.0.0.1:${PARITY_PORT}`;
+    const runInput: RunInput = {
+      packages: [{ id: NS, schemas: {}, importPath: FIXTURE_MODULE }],
+      outputDir: '/tmp/out',
+      options: { port: PARITY_PORT, namespace: NS },
+      signal: controller.signal,
+    };
+    pyFlaskPlugin.run(runInput).catch(() => {
+      /* swallowed after abort */
+    });
+
+    // Poll for readiness — pyFlaskPlugin.run()'s own promise doesn't resolve
+    // until the process exits/aborts, so wait on the real health endpoint.
+    const deadline = Date.now() + 15000;
+    for (;;) {
+      try {
+        const res = await fetch(`${base}/_meta/health`);
+        if (res.status < 500) break;
+      } catch {
+        /* not listening yet */
+      }
+      if (Date.now() > deadline) {
+        throw new Error('[py-flask-parity] server did not become ready within 15s');
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+
     driver = {
       async invoke(fixture: GoldenFixture<HttpFixtureInput>): Promise<HttpFixtureOutput> {
         const { method, urlPath, headers, body } = fixture.input;
@@ -689,8 +723,8 @@ describe('[py-flask-parity] extract/serve-split golden-snapshot parity gate', ()
     };
   }, 20000);
 
-  afterAll(async () => {
-    await parityServer?.stop();
+  afterAll(() => {
+    controller.abort();
   });
 
   // [py-flask-serve-split.6] the parity gate. Recapture through the
