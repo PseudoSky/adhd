@@ -148,3 +148,11 @@ py-grpc-serve-split → audit-python → audit-final.
   source kind lands. See its BACKLOG entry for the revisit condition.
 
 - `[dod.11]` **Every transport's --use capability (BOTH layer AND mount) is explicitly RESOLVED and DOCUMENTED, never left implicit: cli-output either gains --use or is declared --use-incapable WITH a filed follow-up BACKLOG item; mcp states whether it now hosts --use mount ops and pins it (dod.4 covers validate-layer composition, NOT the mount capability). (structural)** — Every transport's --use capability (BOTH layer AND mount) is explicitly RESOLVED and DOCUMENTED, never left implicit: cli-output either gains --use or is declared --use-incapable WITH a filed follow-up BACKLOG item; mcp states whether it now hosts --use mount ops and pins it (dod.4 covers validate-layer composition, NOT the mount capability)..
+
+- `[dod.12]` **The MCP tool table (toolMetas) is computed ONCE at startup from OpPlan, not rebuilt on every request in streaming-http mode (the latent perf defect at apigen-plugin-mcp/src/lib/run.ts:269-276) — an observable, tested clause so it cannot silently regress. (behavioral)** — The MCP tool table (toolMetas) is computed ONCE at startup from OpPlan, not rebuilt on every request in streaming-http mode (the latent perf defect at apigen-plugin-mcp/src/lib/run.ts:269-276) — an observable, tested clause so it cannot silently regress..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test`
+  - observable: `the mcp server builds its tool table once at startup; a test asserting the build count stays 1 across multiple CallTool requests passes`
+  - delivered-by: `mcp-adapter`
