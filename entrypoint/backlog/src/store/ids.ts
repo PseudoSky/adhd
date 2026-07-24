@@ -18,7 +18,7 @@
  */
 import type { NodeRecord } from '@adhd/sox-graph-store';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
-import { BACKLOG_ITEM_TAG, type BacklogNodeMeta } from './mapping.js';
+import { BACKLOG_ITEM_TAG, isLiveBacklogItemNode, type BacklogNodeMeta } from './mapping.js';
 import { withImmediateRetry } from './immediate-retry.js';
 
 function computeNextHumanId(store: GraphBacklogStore, repo: string, family: string): string {
@@ -38,8 +38,23 @@ function computeNextHumanId(store: GraphBacklogStore, repo: string, family: stri
 }
 
 function findLiveByHumanId(store: GraphBacklogStore, repo: string, humanId: string): NodeRecord | null {
+  // BUG-BACKLOG-IMPORT-TOMBSTONE-BLOCKS-RECREATE-001: this is the authoritative
+  // in-transaction existence check `createItemNode` relies on to decide
+  // create-vs-idempotent-noop. It MUST agree with `findItemNode`
+  // (query.ts) — which filters `isLiveBacklogItemNode` — or the two disagree:
+  // a soft-deleted (invalidated) node with this humanId made this function
+  // return the TOMBSTONE, so the insert short-circuited to created:false, but
+  // every downstream lookup (`updateItemNode`→`requireItemNode`→`findItemNode`)
+  // then failed with "backlog item not found" because those DO filter dead
+  // nodes — leaving a real markdown item (e.g. a distinct bug reusing an id a
+  // prior supersede/merge tombstoned) permanently unimportable. A soft-deleted
+  // id must read as ABSENT here so re-import resurrects it as a fresh live node.
   const nodes = store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: repo, metadata: { humanId } });
-  return nodes.find((n) => (n.metadata as Partial<BacklogNodeMeta> | undefined)?.humanId === humanId) ?? null;
+  return (
+    nodes.find(
+      (n) => isLiveBacklogItemNode(n) && (n.metadata as Partial<BacklogNodeMeta> | undefined)?.humanId === humanId,
+    ) ?? null
+  );
 }
 
 /**

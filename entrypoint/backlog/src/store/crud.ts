@@ -197,6 +197,7 @@ export function updateItemNode(store: GraphBacklogStore, repo: string, humanId: 
     if (patch.title !== undefined) next.title = patch.title;
     if (patch.body !== undefined) next.body = patch.body;
     if (patch.projectPath !== undefined) next.projectPath = patch.projectPath;
+    if (patch.importedFrom !== undefined) next.importedFrom = patch.importedFrom;
     finalTitle = next.title;
     finalBody = next.body;
     return next;

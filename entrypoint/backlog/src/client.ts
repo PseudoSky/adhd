@@ -335,6 +335,18 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
         const patch: UpdateItemInput = {};
         if (existing.title !== item.title) patch.title = item.title;
         if (existing.body !== item.body) patch.body = item.body;
+        // BUG-BACKLOG-IMPORT-OWNERSHIP-NOT-BACKFILLED-001: line 332 treats a
+        // legacy row whose `importedFrom` was never stamped (created before
+        // the provenance field existed) as "let this import claim ownership
+        // going forward" — but the owning branch never actually WROTE the
+        // stamp, so such rows stayed `importedFrom===undefined` permanently
+        // and the ownership-based root projection filter
+        // (`{importedFrom:'BACKLOG.md'}`, MIGRATION.md §2.2) could never see
+        // them (142 of 147 root items were invisible pre-fix). Backfill the
+        // stamp ONCE here, and only when unset — an already-owned row's
+        // provenance stays immutable (the isOwningImport guard already
+        // requires `existing.importedFrom === sourcePath` in that case).
+        if (existing.importedFrom === undefined) patch.importedFrom = sourcePath;
         // Symmetric with `plan` below (BUG-BACKLOG-IMPORT-PROJECTPATH-STALE-001,
         // part of DEBT-BACKLOG-IMPORT-SCOPE-CROSSFILE-001) — previously the
         // upsert diff refreshed title/body/priority/status/plan but had NO
