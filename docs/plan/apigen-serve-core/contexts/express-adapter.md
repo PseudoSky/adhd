@@ -22,6 +22,7 @@
 - [express-adapter.3] committed express golden snapshot exists
 - [express-adapter.4] express parity gate green incl. void-return-op fixture pinning undefined->null (DEBT-003)
 - [express-adapter.5] negative control: express regression turns parity RED, restore GREEN
+- [express-adapter.6] express collapses onto createPackageInvoker; local invoker block deleted (dod.13)
 ---
 
 ## Reservations
