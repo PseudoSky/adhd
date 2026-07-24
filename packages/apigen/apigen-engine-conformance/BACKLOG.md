@@ -1,11 +1,6 @@
-# BACKLOG — @adhd/apigen-conformance
-
-Package-scoped log. Repo-wide context lives in the root [BACKLOG.md](../../../BACKLOG.md)
-(§ _Extraction performance + memory-leak work (2026-07-02)_).
-
-## Fixed
-
 ### BUG-APIGEN-045 — `apigen-conformance:build` failed with TS1343 (`import.meta` under module=commonjs) — RESOLVED 2026-07-02
+
+**Status:** RESOLVED
 
 (Renumbered from BUG-APIGEN-018, whose id was reused by a distinct apigen-cli bug that a
 prior supersede tombstoned as BUG-APIGEN-044 — `DEBT-BACKLOG-DUPLICATE-ID-INSOURCE-001`.)
@@ -16,12 +11,4 @@ the build target could not compile at all. Replaced with a `findWorkspaceRoot()`
 (to the first ancestor containing `nx.json`) from `__dirname`/cwd. Verified:
 `npx nx run apigen-conformance:build` exit 0.
 
-### `runPythonMatrix` now uses the managed interpreter — 2026-07-02
-
-Was `spawnSync('python3', …)` from PATH; now resolves through
-`@adhd/apigen-python-env`'s `ensurePythonEnv()` (venv provisioned from
-`apigen-python`'s own pyproject), guaranteeing the ≥3.11 runtime the package declares.
-
-## Open
-
-_(none)_
+**Citations:** [/Users/nix/dev/node/adhd/packages/apigen/apigen-engine-conformance/BACKLOG.md]
