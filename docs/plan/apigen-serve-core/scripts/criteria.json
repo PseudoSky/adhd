@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "serve-core-primitives.1",
+      "phase": "phase-1",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "createPackageInvoker",
+      "paths": [
+        "packages/apigen/apigen-engine-runtime/src/index.ts"
+      ]
+    }
+  ]
+}
