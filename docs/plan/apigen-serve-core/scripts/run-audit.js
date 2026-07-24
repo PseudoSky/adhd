@@ -168,7 +168,18 @@ function phaseOrder(criteria) {
 
 function accumulatedPhases(criteria, phase) {
   const order = phaseOrder(criteria);
-  if (phase === undefined || phase === null || phase === "") return new Set(order);
+  // "final" is this plan's own dag.json phase-sentinel for its terminal audit
+  // state (audit_apigen-serve-core.py's CLI already treats it as "all phases"
+  // internally, translating "final" -> "" before calling this runner). But
+  // state-transition.js's OWN direct invocation of this vendored runner (used
+  // for the DoD-line/criteria-parsing pass, independent of the dag.json guard
+  // command) forwards node.phase verbatim -- so a bare "--phase final" reaches
+  // here too, and "final" is not a declared phase in criteria.json. Treat it
+  // identically to "" (all declared phases) rather than throwing, so both
+  // invocation paths agree on what "final" selects.
+  if (phase === undefined || phase === null || phase === "" || phase === "final") {
+    return new Set(order);
+  }
   const idx = order.indexOf(phase);
   if (idx === -1) {
     throw new Error(`criteria: --phase "${phase}" is not a declared phase (have: ${order.join(", ") || "<none>"})`);
