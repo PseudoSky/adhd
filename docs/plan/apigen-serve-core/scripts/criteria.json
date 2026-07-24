@@ -493,6 +493,16 @@
       "paths": [
         "packages/apigen/apigen-plugin-mcp/src/lib/run.ts"
       ]
+    },
+    {
+      "id": "mcp-adapter.8",
+      "phase": "phase-2",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "toolMetas",
+      "paths": [
+        "packages/apigen/apigen-plugin-mcp/src/lib/run.ts"
+      ]
     }
   ]
 }

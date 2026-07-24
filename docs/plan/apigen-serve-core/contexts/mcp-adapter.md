@@ -24,6 +24,7 @@
 - [mcp-adapter.5] mcp parity gate green via real @modelcontextprotocol/sdk client, incl. malformed->invalid_argument case
 - [mcp-adapter.6] negative control: mcp regression turns parity RED, restore GREEN
 - [mcp-adapter.7] mcp composes --use layer/mount via createPackageInvoker (dod.11)
+- [mcp-adapter.8] toolMetas computed once at startup, hoisted out of the per-request streaming-http handler (dod.12)
 ---
 
 ## Reservations
