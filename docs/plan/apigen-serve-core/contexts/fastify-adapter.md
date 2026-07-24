@@ -19,6 +19,7 @@
 - [fastify-adapter.1] fastify run.ts implements the TransportAdapter port
 
 - [fastify-adapter.2] fastify composes the shared createPackageInvoker
+- [fastify-adapter.3] sendStreamSse wired live for streaming:true ops (DEBT-002 fastify half)
 ---
 
 ## Reservations
