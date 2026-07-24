@@ -252,7 +252,70 @@ estimates, not byte-proxy fallback).
   unfixed bugs directly instead.
 - Status: dispatched, awaiting completion.
 
+### py-flask-serve-split completion — FOURTH instance of the self-referential-comment audit bug
+
+First `--complete` attempt (44→53/59 after fixing the first 2 regexes
+system-wide): still failed on `py-flask-serve-split.3/.4/.5` (absent
+`_route_for_op`/`_http_verb`/`_is_primitive_only_input_schema` in
+`flask_server.py`). Root-caused: the executor's own module-docstring
+migration note legitimately explains what was deleted and names the
+deleted functions — same class of bug as cli-adapter.2/mcp-adapter.3, but
+this time rewording the comment would make good documentation worse, so
+I fixed the CRITERIA instead: scoped all three patterns from the bare
+identifier to `def <name>` (an actual function definition), which is
+immune to prose references. Verified via direct grep: no `def
+_route_for_op`/`def _http_verb`/`def _is_primitive_only_input_schema`
+remain; only migration-note comments reference the names. Re-ran
+`--complete`: 56/59, all 3 remaining fails are `py-grpc-serve-split.*`
+(not yet run) — completed clean. `done_at` recorded, telemetry
+~145k/19k/70 forwarded.
+
+py-flask-serve-split's executor also reported (not filed to BACKLOG.md
+per current policy — reported to `main` below) two bugs:
+1. **Cross-state regression**: `flask_server.py`'s `--plan-file` is now
+   REQUIRED; `entrypoint/apigen-cli/src/test/integration/cross-host-
+   response-envelope.spec.ts`'s `startPyServer()` (~L300-324) spawns it
+   with the OLD pre-migration args (no `--plan-file`) → argparse error.
+   Risk: `apigen-cli:test` + `audit-final`'s `dod.10` (`nx affected -t
+   test`). Team-lead independently confirmed this. **Folded into
+   py-grpc-serve-split's dispatch** as a companion fix (additional
+   reserved file, own commit) rather than a separate dispatch — small,
+   thematically adjacent (same two-phase-spawn pattern).
+2. **Pre-existing bug** (not from this session): `python/run_tests.py`'s
+   Flask live-test sections reference a stale fixture path
+   (`packages/apigen/plugins/py-flask/...`, real path is
+   `packages/apigen/apigen-plugin-py-flask/...`). Confirmed via search:
+   `run_tests.py` is invoked by NO `project.json` target and NO CI
+   workflow — not in `nx affected -t test`'s path, so it cannot fail
+   `audit-final`'s gate. Logged here for later; not fixing now (report-
+   only per team-lead's framing since it predates this session).
+
+## Wave 5 — py-grpc-serve-split (+ companion fix)
+
+- **Proactively fixed 2 more stale/wrong criteria BEFORE dispatch** (per
+  the context.md's own explicit warning: "amend criterion
+  py-grpc-serve-split.2's pattern if it differs from `_route_for`" — it
+  does, materially). `py-extract-preflight`'s findings doc had ALREADY
+  traced the real divergent naming to 5 inline call sites, all deriving
+  from `namespace.capitalize() + "Service"` — `grpc_server.py` has NO
+  function named `_route_for` at all, so criterion `.2`'s original
+  pattern could only ever trivially pass (a check that can't fail is not
+  a gate). Repointed `.2` to the structural signature `\+ "Service"`.
+  Also hardened `.5` from the bare word `capitalize` to the call-
+  expression `capitalize\(\)`, proactively avoiding a FOURTH instance of
+  the self-referential-comment bug before the executor could trip it.
+- Dispatched to python-pro (sonnet): the main py-grpc two-phase-split +
+  naming-reconciliation work (mirroring py-flask-serve-split's just-
+  shipped pattern almost mechanically per the findings doc's own
+  verdict), PLUS the cross-host-response-envelope.spec.ts companion fix
+  as an additional reserved file with its own commit. Prompt leaned
+  heavily on py-extract-preflight's findings doc as the authoritative,
+  line-numbered source (told the executor it OVERRIDES the plan's
+  context.md where they'd conflict) plus py-flask's just-committed
+  plugin.ts as the mechanical reference pattern.
+- Status: dispatched, awaiting completion.
+
 ## Next
 
-Wave 5 (`py-grpc-serve-split`, depends on py-flask-serve-split), wave 6
-(`audit-python`), wave 7 (`audit-final`) — pending wave-4 completion.
+Wave 6 (`audit-python`), wave 7 (`audit-final`) — pending wave-5
+completion.
