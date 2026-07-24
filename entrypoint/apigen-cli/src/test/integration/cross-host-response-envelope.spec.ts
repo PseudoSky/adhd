@@ -26,9 +26,19 @@
 // Architecture:
 //   - TS host: spawned via the BUILT CLI (`node dist/…/cli/index.js run
 //     --type api-fastify`) so this drives the REAL bundled artifact.
-//   - Python host: spawned via `python3 -m apigen_python.flask_server`
-//     directly (same subprocess path as the CLI's py-flask plugin uses) with
-//     PYTHONPATH pointing at packages/apigen/python.
+//   - Python host: `apigen_python.flask_server`'s `--plan-file` argument is
+//     now REQUIRED (apigen-serve-core py-flask-serve-split) — the server no
+//     longer self-extracts or re-derives route/verb. `startPyServer()` does
+//     the SAME two-phase spawn `apigen-plugin-py-flask/src/lib/plugin.ts`'s
+//     `run()` does: (1) spawn `apigen_python.extractor --emit-json` (bare
+//     `python3`, PYTHONPATH pointing at packages/apigen/python) to get
+//     `Operation[]`, (2) call the REAL `@adhd/apigen-engine-naming`
+//     `project(op).http` per op to compute `{route, verb}`, (3) write a temp
+//     `--plan-file` and spawn `apigen_python.flask_server` with it (in
+//     addition to the existing `--module`/`--namespace`/`--host`/`--port`
+//     args). This keeps the test self-contained (bare `python3`, not the
+//     managed venv `apigen-plugin-py-flask`'s own tests use) while matching
+//     the real production IPC contract byte-for-byte.
 //   - Fixture: a tiny shared TypeScript surface + the matching Python
 //     surface, both implementing `price(v: Decimal): Decimal` and
 //     `when(): datetime/Date` with known outputs for comparison.
@@ -44,6 +54,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as net from 'node:net';
 import * as readline from 'node:readline';
+import type { Operation } from '@adhd/apigen-core-client';
+import { project } from '@adhd/apigen-engine-naming';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -291,17 +303,92 @@ async function startTsServer(
   return server;
 }
 
+// ---------------------------------------------------------------------------
+// --plan-file construction — apigen-serve-core py-flask-serve-split
+//
+// `apigen_python.flask_server`'s `--plan-file` is REQUIRED now (the server no
+// longer self-extracts or re-derives route/verb). Mirrors
+// `apigen-plugin-py-flask/src/lib/plugin.ts`'s own two-phase spawn: (1) spawn
+// `apigen_python.extractor --emit-json` to get `Operation[]`, (2) call the
+// REAL `@adhd/apigen-engine-naming` `project(op).http` per op, (3) write a
+// temp plan file. Uses bare `python3` (not the managed venv), matching this
+// test file's existing `startPyServer()` convention — flask_server has no
+// grpcio-class dependency that would require the managed venv.
+// ---------------------------------------------------------------------------
+
+interface ServePlanRoute {
+  route: string;
+  verb: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+}
+
+function runExtractorEmitJson(
+  modulePath: string,
+  namespace: string
+): Promise<Operation[]> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(
+      'python3',
+      ['-m', 'apigen_python.extractor', modulePath, '--namespace', namespace, '--emit-json'],
+      {
+        cwd: PYTHON_PKG_DIR,
+        env: { ...process.env, PYTHONPATH: PYTHON_PKG_DIR },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }
+    );
+    let stdout = '';
+    let stderr = '';
+    proc.stdout?.on('data', (c: Buffer) => (stdout += c.toString()));
+    proc.stderr?.on('data', (c: Buffer) => (stderr += c.toString()));
+    proc.on('error', reject);
+    proc.on('exit', (code) => {
+      if (code !== 0) {
+        reject(new Error(`extractor --emit-json exited ${code}:\n${stderr}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout) as Operation[]);
+      } catch (err) {
+        reject(new Error(`extractor --emit-json produced invalid JSON: ${err}\n${stdout}`));
+      }
+    });
+  });
+}
+
+/**
+ * Builds a `--plan-file` for `modulePath`/`namespace` via the REAL extractor
+ * + `project()` pipeline — the SAME pipeline `apigen-plugin-py-flask/src/
+ * lib/plugin.ts`'s `run()` uses. Returns the temp file's path; the caller is
+ * responsible for removing the containing temp dir once the server is up
+ * (the server has already read the file by the time it signals ready).
+ */
+async function buildFlaskPlanFile(modulePath: string, namespace: string): Promise<string> {
+  const operations = await runExtractorEmitJson(modulePath, namespace);
+  const routes: Record<string, ServePlanRoute> = {};
+  for (const op of operations) {
+    const { verb, route } = project(op).http;
+    routes[op.id] = { route, verb };
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-xhost-plan-'));
+  const planPath = path.join(dir, 'plan.json');
+  fs.writeFileSync(planPath, JSON.stringify({ operations, routes }));
+  return planPath;
+}
+
 /**
  * Spawn the Python py-flask server directly via `python3 -m
  * apigen_python.flask_server`. The CLI's py-flask plugin does the same
- * thing internally; spawning directly keeps the test self-contained and
- * avoids the round-trip through the CLI's run-v1 path for a .py source.
+ * two-phase spawn internally (extractor `--emit-json` -> real `project()` ->
+ * `--plan-file`); spawning directly keeps the test self-contained and avoids
+ * the round-trip through the CLI's run-v1 path for a .py source.
  */
 async function startPyServer(
   fixturePath: string,
   port: number,
   ns: string
 ): Promise<LiveServer> {
+  const planPath = await buildFlaskPlanFile(fixturePath, ns);
+  const planDir = path.dirname(planPath);
+
   const proc = spawn(
     'python3',
     [
@@ -315,6 +402,8 @@ async function startPyServer(
       '127.0.0.1',
       '--port',
       String(port),
+      '--plan-file',
+      planPath,
     ],
     {
       cwd: PYTHON_PKG_DIR,
@@ -327,7 +416,14 @@ async function startPyServer(
     /* suppress */
   });
 
-  await waitForPythonReady(proc, 15_000);
+  try {
+    await waitForPythonReady(proc, 15_000);
+  } finally {
+    // Safe to remove once the server is ready (or has failed to become
+    // ready) — flask_server.py reads --plan-file synchronously during
+    // _build_state(), before it ever emits {"ready": true}.
+    fs.rmSync(planDir, { recursive: true, force: true });
+  }
 
   const server: LiveServer = {
     port,
