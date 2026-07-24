@@ -9,7 +9,24 @@
     "final"
   ],
   "terminal": "done",
-  "nodes": {},
+  "nodes": {
+    "serve-core-primitives": {
+      "kind": "work",
+      "phase": "phase-1",
+      "depends_on": [],
+      "guard": "CI=true ./node_modules/.bin/nx run apigen-engine-runtime:test",
+      "artifacts": [
+        "packages/apigen/apigen-engine-runtime/src/lib/op-plan.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/package-invoker.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/dispatch-for-plan.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/transport-adapter.ts",
+        "packages/apigen/apigen-engine-runtime/src/index.ts",
+        "packages/apigen/apigen-engine-runtime/src/lib/op-plan.spec.ts"
+      ],
+      "context": "contexts/serve-core-primitives.md",
+      "notes": "New serve-core primitives (OpPlan, createPackageInvoker, dispatchForPlan) + TransportAdapter port. Grounded in [iface:op-plan],[iface:transport-adapter],[iface:create-package-invoker],[iface:dispatch-for-plan]."
+    }
+  },
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.30",

@@ -2,12 +2,21 @@
   "schema_version": 2,
   "title": "apigen transport-neutral serve-core + thin adapters",
   "dag": "dag.json",
-  "states": {},
+  "states": {
+    "serve-core-primitives": {
+      "status": "pending",
+      "started_at": null,
+      "done_at": null,
+      "start_ref": null,
+      "end_ref": null
+    }
+  },
   "transition_log": [],
   "amendment_log": [],
   "authored_with": {
     "plugin": "workflow",
     "version": "0.8.30",
     "hash": "836ff34f0a74"
-  }
+  },
+  "current_state": "serve-core-primitives"
 }
