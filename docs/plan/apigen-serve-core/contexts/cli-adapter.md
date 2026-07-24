@@ -23,6 +23,7 @@
 - [cli-adapter.4] cli parity gate green via real spawned child process (argv in, stdout+exit out)
 - [cli-adapter.5] negative control: cli regression turns parity RED, restore GREEN
 - [cli-adapter.6] cli --use capability decision resolved+documented in code/comment (dod.11); if incapable, a follow-up is filed
+- [cli-adapter.7] cli parity fixture includes an env-var-fallback envelope case (F2)
 ---
 
 ## Reservations
