@@ -22,6 +22,7 @@
 - [serve-core-primitives.3] OpPlan type exported from apigen-engine-runtime index
 - [serve-core-primitives.4] TransportAdapter port exported from apigen-engine-runtime index
 - [serve-core-primitives.5] OpPlan carries the precomputed cliFlags table (proposal §3a)
+- [serve-core-primitives.6] apigen-engine-runtime unit suite (incl. op-plan.spec) passes
 ---
 
 ## Reservations
