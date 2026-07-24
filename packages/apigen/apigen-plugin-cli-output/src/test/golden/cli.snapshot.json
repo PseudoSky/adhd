@@ -1,0 +1,77 @@
+{
+  "safe-scalar": {
+    "stdout": "{\"id\":\"42\",\"title\":\"Item 42\",\"includeArchived\":false}\n",
+    "stderr": "",
+    "code": 0
+  },
+  "unsafe-mutating": {
+    "stdout": "{\"deleted\":true,\"id\":\"9\"}\n",
+    "stderr": "",
+    "code": 0
+  },
+  "json-array-param": {
+    "stdout": "[\"a\",\"b\"]\n",
+    "stderr": "",
+    "code": 0
+  },
+  "boolean-flag-on": {
+    "stdout": "{\"id\":\"1\",\"title\":\"Item 1\",\"includeArchived\":true}\n",
+    "stderr": "",
+    "code": 0
+  },
+  "boolean-flag-negated": {
+    "stdout": "{\"id\":\"1\",\"title\":\"Item 1\",\"includeArchived\":false}\n",
+    "stderr": "",
+    "code": 0
+  },
+  "session-envelope-flag": {
+    "stdout": "{\"ok\":true}\n",
+    "stderr": "",
+    "code": 0
+  },
+  "session-envelope-env-fallback": {
+    "stdout": "{\"ok\":true}\n",
+    "stderr": "",
+    "code": 0
+  },
+  "validation-failure-missing-required": {
+    "stdout": "",
+    "stderr": "{\"code\":\"invalid_argument\",\"message\":\"Validation failed: /data must have required property 'id'\",\"details\":[{\"instancePath\":\"/data\",\"schemaPath\":\"#/properties/data/required\",\"keyword\":\"required\",\"params\":{\"missingProperty\":\"id\"},\"message\":\"must have required property 'id'\"}]}\n",
+    "code": 2
+  },
+  "domain-apierror": {
+    "stdout": "",
+    "stderr": "{\"code\":\"not_found\",\"message\":\"no such thing\"}\n",
+    "code": 4
+  },
+  "invalid-json-value": {
+    "stdout": "",
+    "stderr": "{\"code\":\"invalid_argument\",\"message\":\"Invalid JSON for --tags: Unexpected token 'o', \\\"not-json\\\" is not valid JSON\"}\n",
+    "code": 2
+  },
+  "unknown-flag": {
+    "stdout": "",
+    "stderr": "{\"code\":\"invalid_argument\",\"message\":\"Unknown option: --bogus. Available: --id, --include-archived\"}\n",
+    "code": 2
+  },
+  "unknown-command": {
+    "stdout": "",
+    "stderr": "{\"code\":\"not_found\",\"message\":\"Unknown command: harness nope\\n\\nAvailable commands:\\n\\n  harness boom\\n  harness delete-item  { id: string }\\n  harness get-item  { id: string, includeArchived?: boolean }\\n  harness list-items  { tags?: string[] }\\n  harness stream-nums\\n  harness who-am-i\"}\n",
+    "code": 4
+  },
+  "help-listing-empty-argv": {
+    "stdout": "Available commands:\n\n  harness boom\n  harness delete-item  { id: string }\n  harness get-item  { id: string, includeArchived?: boolean }\n  harness list-items  { tags?: string[] }\n  harness stream-nums\n  harness who-am-i\n",
+    "stderr": "",
+    "code": 0
+  },
+  "help-flag": {
+    "stdout": "Available commands:\n\n  harness boom\n  harness delete-item  { id: string }\n  harness get-item  { id: string, includeArchived?: boolean }\n  harness list-items  { tags?: string[] }\n  harness stream-nums\n  harness who-am-i\n",
+    "stderr": "",
+    "code": 0
+  },
+  "per-command-help": {
+    "stdout": "harness get-item  { id: string, includeArchived?: boolean }\n",
+    "stderr": "",
+    "code": 0
+  }
+}
