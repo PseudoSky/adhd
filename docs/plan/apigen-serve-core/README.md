@@ -66,6 +66,7 @@ vocabulary — these terms appear in DoD clauses as that consumer's outcomes:
   - then: the call rejects with invalid_argument instead of reaching the domain fn
   - entrypoint: `CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test`
   - observable: `a real @modelcontextprotocol/sdk client sending schema-violating input receives an invalid_argument error instead of a domain result`
+  - negative-control: `git apply docs/plan/apigen-serve-core/neg-control/mcp-adapter.patch` (perturbs the mcp validate/adapter path) must flip `CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test` RED; `git apply -R` restores GREEN
   - delivered-by: `mcp-adapter`
 - `[dod.5]` **Streaming is wired live: a streaming:true op emits SSE frames over fastify and progressive content over MCP; CLI, py-flask, and py-grpc explicitly reject a streaming op rather than silently mis-serializing an AsyncIterable. (behavioral)**
   - given: a package exposing a streaming:true op
@@ -73,6 +74,7 @@ vocabulary — these terms appear in DoD clauses as that consumer's outcomes:
   - then: fastify yields SSE frames, mcp progressive content, cli/py an explicit rejection
   - entrypoint: `CI=true ./node_modules/.bin/nx run-many -t test -p apigen-plugin-api-fastify,apigen-plugin-mcp,apigen-plugin-cli-output`
   - observable: `fastify streaming fixture yields SSE frames; mcp yields progressive content; cli/py streaming fixture returns an explicit rejection`
+  - negative-control: `git apply docs/plan/apigen-serve-core/neg-control/fastify-adapter.patch` (perturbs the streaming write path) must flip the fastify parity suite RED; `git apply -R` restores GREEN
   - delivered-by: `fastify-adapter, mcp-adapter, cli-adapter`
 - `[dod.6]` **The express undefined→null response-encoding gap (DEBT-APIGEN-SERVE-CORE-003) is closed via the shared adapter writeResult, pinned by a void-return-op fixture flagged as an intentional, tested behavior change. (structural)**
   - delivered-by: `express-adapter`
@@ -84,6 +86,7 @@ vocabulary — these terms appear in DoD clauses as that consumer's outcomes:
   - then: py-flask + py-grpc parity is green and the re-derivation functions are gone
   - entrypoint: `CI=true ./node_modules/.bin/nx run-many -t test -p apigen-plugin-py-flask,apigen-plugin-py-grpc`
   - observable: `py-flask + py-grpc parity specs pass against real spawned servers, and grep shows the three re-derivation functions removed from flask_server.py/grpc_server.py`
+  - negative-control: `git apply docs/plan/apigen-serve-core/neg-control/py-flask-serve-split.patch` (perturbs the injected-plan route map) must flip the py-flask parity suite RED; `git apply -R` restores GREEN
   - delivered-by: `py-flask-serve-split, py-grpc-serve-split, py-extract-preflight`
 - `[dod.9]` **OUT OF SCOPE, pinned unchanged: BUG-APIGEN-SAFE-OP-MUTATIONS-OVER-GET-001 (GET-hoist of unsafe scalar-input ops) and BUG-APIGEN-CLI-SERVE-FRONT-PROXY-DOUBLE-SEGMENT-001 behave exactly as before this refactor — each has a parity fixture proving the current behavior is preserved, and neither is closed by this epic. (structural)**
   - delivered-by: `fastify-adapter, cli-adapter`
