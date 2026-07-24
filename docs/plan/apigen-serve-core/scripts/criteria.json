@@ -86,6 +86,16 @@
       "kind": "command",
       "cmd": "CI=true ./node_modules/.bin/nx run apigen-engine-runtime:test",
       "expect": "exit0"
+    },
+    {
+      "id": "fastify-adapter.1",
+      "phase": "phase-1",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "TransportAdapter",
+      "paths": [
+        "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts"
+      ]
     }
   ]
 }
