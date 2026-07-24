@@ -104,9 +104,9 @@
   },
   "current_state": "serve-core-primitives",
   "dod_provenance": {
-    "confirmed_at": "2026-07-24T03:17:18.125Z",
+    "confirmed_at": "2026-07-24T03:27:07.924Z",
     "by": "plan-orchestrator",
-    "note": "DoD (dod.1-14) confirmed by team-lead 2026-07-23: all 10 original clauses faithful, +3 additions (dod.11 --use capability, dod.12 mcp toolMetas hoist, dod.5 py-grpc streaming deferral) folded",
+    "note": "dod.15 (MCP SSE + streaming-http transport preserve+harden; fixes BUG-APIGEN-MCP-STREAMING-HTTP-NO-ERROR-GUARD-001) added 2026-07-24 per direct user request 'make it also fix the mcp sse issues'; folded into mcp-adapter",
     "dod_ids": [
       "dod.1",
       "dod.2",
