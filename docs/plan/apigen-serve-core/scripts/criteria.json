@@ -369,6 +369,14 @@
       "paths": [
         "packages/apigen/python/apigen_python/flask_server.py"
       ]
+    },
+    {
+      "id": "py-flask-serve-split.6",
+      "phase": "phase-3",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-flask:test",
+      "expect": "exit0"
     }
   ]
 }

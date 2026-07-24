@@ -22,6 +22,7 @@
 - [py-flask-serve-split.3] _route_for_op re-derivation deleted
 - [py-flask-serve-split.4] _http_verb re-derivation deleted
 - [py-flask-serve-split.5] _is_primitive_only_input_schema re-derivation deleted
+- [py-flask-serve-split.6] py-flask parity gate green vs real spawned Python HTTP server
 ---
 
 ## Reservations
