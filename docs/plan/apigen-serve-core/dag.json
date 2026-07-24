@@ -166,6 +166,22 @@
       ],
       "context": "contexts/py-flask-serve-split.md",
       "notes": "Two-phase extract/serve split: --emit-json extract mode; TS-side real project(); flask --plan; delete _route_for_op/_is_primitive_only_input_schema/_http_verb."
+    },
+    "py-grpc-serve-split": {
+      "kind": "work",
+      "phase": "phase-3",
+      "depends_on": [
+        "py-flask-serve-split"
+      ],
+      "guard": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-grpc:test",
+      "artifacts": [
+        "packages/apigen/python/apigen_python/grpc_server.py",
+        "packages/apigen/apigen-plugin-py-grpc/src/lib/plugin.ts",
+        "packages/apigen/apigen-plugin-py-grpc/src/test/plugin.spec.ts",
+        "packages/apigen/apigen-plugin-py-grpc/src/test/golden/py-grpc.snapshot.json"
+      ],
+      "context": "contexts/py-grpc-serve-split.md",
+      "notes": "Reuse --emit-json extractor mode; inject TS-computed plan into grpc_server via --plan; delete its project() re-derivation. Scope confirmed by py-extract-preflight."
     }
   },
   "authored_with": {
