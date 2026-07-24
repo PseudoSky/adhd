@@ -14,10 +14,11 @@
   ],
   "dependencies": {
     "@adhd/apigen-python-env": "^0.1.0",
-    "@adhd/apigen-core-client": "0.1.2"
+    "@adhd/apigen-core-client": "0.1.2",
+    "@adhd/apigen-engine-naming": "0.1.3"
   },
   "devDependencies": {
-    "@adhd/apigen-engine-naming": "0.1.2"
+    "@adhd/apigen-engine-runtime": "0.1.2"
   },
   "publishConfig": {
     "access": "public"

@@ -9,8 +9,19 @@ dicts that match the canonical §4 JSON shape:
   envelope ({} — middleware is TS-side only for now), typeText (None).
 
 Usage (subprocess / CLI):
-    python -m apigen_python.extractor <module_file_or_path> [--namespace <ns>]
+    python -m apigen_python.extractor <module_file_or_path> --emit-json [--namespace <ns>]
     → JSON array on stdout
+
+`--emit-json` is REQUIRED (apigen-serve-core py-flask-serve-split /
+py-extract-serve-split-findings.md §1.4): this CLI is now a stable, two-phase
+subprocess-protocol contract the TS `py-flask`/`py-grpc` plugins spawn as
+phase 1 (extract-only) before computing route/verb via the REAL
+`@adhd/apigen-engine-naming` `project()` and re-spawning `flask_server`/
+`grpc_server` with the result (`--plan-file`). Requiring the flag explicitly
+— rather than making JSON-on-stdout the silent, implicit default — means a
+future non-JSON output mode (e.g. a human-readable tree) can be added to
+this CLI later without silently changing what the two-phase callers depend
+on.
 
 Rules:
 - Every exported name (not starting with '_') that is callable → kind='action'.
@@ -541,6 +552,17 @@ def _main() -> None:
     parser.add_argument(
         "--namespace", "-n", default=None,
         help="Namespace slug (default: normalised file stem)"
+    )
+    parser.add_argument(
+        "--emit-json", action="store_true", required=True,
+        help=(
+            "Required. Emit the extracted Operation[] as JSON on stdout. "
+            "This is the stable extract-only half of the apigen-serve-core "
+            "two-phase extract/serve protocol (see module docstring) — "
+            "required rather than implicit so this CLI's default behavior "
+            "is never silently relied upon by a caller that didn't ask for "
+            "it."
+        ),
     )
     args = parser.parse_args()
 

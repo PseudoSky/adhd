@@ -5,11 +5,23 @@ Runs each exported Python function as a real HTTP endpoint, mirroring the
 TypeScript ``api-fastify`` plugin's route shape, validation contract, and
 logical-type wire encoding.
 
-Usage:
+Usage (apigen-serve-core py-flask-serve-split — two-phase extract/serve split):
     python3 -m apigen_python.flask_server \\
         --module <path.py> \\
         --namespace <ns> \\
-        --port <p>
+        --port <p> \\
+        --plan-file <plan.json>
+
+    This server no longer self-extracts or derives its own route/verb table.
+    `--plan-file` is REQUIRED and points to a JSON file of the shape
+    `{"operations": [...Operation dicts, exactly what `apigen_python.extractor
+    --emit-json` emits...], "routes": {"<opId>": {"route": "<path>", "verb":
+    "GET"|"POST"}}}`, produced by the TS `py-flask` plugin's two-phase spawn:
+    (1) spawn `apigen_python.extractor --emit-json` in a short-lived process
+    to get `Operation[]`, (2) call the REAL `@adhd/apigen-engine-naming`
+    `project(op).http` on each op — the SAME canonical projector every other
+    transport (fastify/express/mcp/cli) uses — (3) spawn THIS server with the
+    result. See `packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts`.
 
 Route contract (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 — byte-identical to
 `@adhd/apigen-engine-naming`'s `project(op).http`, the SAME derivation used by the
@@ -17,18 +29,18 @@ Route contract (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 — byte-identical to
     POST <route>        body: {"data": {<param>: <value>, …}}
     GET  /_meta/health  → {"status": "ok", "host": "<ns>"}
 
-    <route> = "/" + kebab(namespace) + "/" + kebab(pathSeg) + "/" + …
-    (every §4 Segment — namespace AND each path segment, e.g. the file segment
-    plus the export-name segment — is independently kebab-cased and joined
-    with "/"; see `_route_for_op()` below). This is a pure re-derivation of
-    `project()`'s algorithm against the Segment `words` the extractor already
-    produces (`_seg()`), NOT a call into the TS package — Python cannot import
-    `@adhd/apigen-engine-naming`, so the SAME shared algorithm is reimplemented here
-    from the identical Segment structure.
-
-    Verb is GET when the operation is `safe` OR its input is "primitive-only"
-    per FEAT-APIGEN-022 (`_is_primitive_only_input_schema()` mirrors
-    `@adhd/apigen-core-client`'s `isPrimitiveOnlyInputSchema()`); otherwise POST.
+    <route>/<verb> are computed ONCE, TS-side, by the REAL `project()` and
+    injected via `--plan-file` (see "Usage" above) — this module no longer
+    contains a Python port of that algorithm. Previously (pre apigen-serve-
+    core py-flask-serve-split) `_route_for_op()`/`_http_verb()`/
+    `_is_primitive_only_input_schema()` reimplemented `project()`'s formula
+    byte-for-byte against the Segment `words` the extractor produces, because
+    Python cannot import the TS package and there was no IPC channel to carry
+    TS-computed values across the process boundary. That channel now exists
+    (the two-phase extractor `--emit-json` → `project()` → `--plan-file`
+    pipeline), so the Python re-derivation was deleted rather than kept as a
+    redundant fallback — one algorithm, one place, byte-identical by
+    construction instead of by manual synchronization.
 
 Validation:
     Input is validated BEFORE dispatch. Malformed input → HTTP 400
@@ -80,7 +92,6 @@ if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
 from apigen_python.errors import ApiError, HTTP_STATUS  # noqa: E402
-from apigen_python.extractor import extract_module  # noqa: E402
 from apigen_python.runtime import HostRequest, Runtime  # noqa: E402
 from apigen_python.validator import validate, ValidationError  # noqa: E402
 
@@ -233,88 +244,6 @@ def _extract_envelope(
 
 
 # ---------------------------------------------------------------------------
-# HTTP route + verb — BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001
-#
-# Byte-identical re-derivation of `@adhd/apigen-engine-naming`'s `project(op).http`
-# (route) and the FEAT-APIGEN-022 GET-hoist rule it applies for verb — see the
-# module docstring's "Route contract" section for the full rationale. Python
-# cannot import the TS package, so both algorithms are reimplemented here
-# against the SAME Segment (`{"raw", "words"}`) structures `extract_module()`
-# already builds via `_seg()`, which is itself documented as mirroring the TS
-# tokeniser exactly.
-# ---------------------------------------------------------------------------
-
-def _kebab(seg: dict[str, Any]) -> str:
-    """Kebab-case a §4 Segment — mirrors apigen-naming's `toKebab()`."""
-    return "-".join(seg["words"])
-
-
-def _route_for_op(op: dict[str, Any]) -> str:
-    """Canonical HTTP route for an operation.
-
-    Mirrors `@adhd/apigen-engine-naming`'s `project(op).http.route`:
-    `'/' + [namespace, ...path].map(toKebab).join('/')`. Every segment
-    (namespace AND each path segment) is independently kebab-cased — this is
-    what api-fastify/openapi/mcp all derive from, and what this server must
-    match byte-for-byte.
-    """
-    segs = [op["namespace"], *op["path"]]
-    return "/" + "/".join(_kebab(s) for s in segs)
-
-
-_PRIMITIVE_TYPES = {"string", "number", "boolean", "integer"}
-
-
-def _is_primitive_only_input_schema(input_schema: dict[str, Any] | None) -> bool:
-    """Port of `@adhd/apigen-core-client`'s `isPrimitiveOnlyInputSchema()`
-    (FEAT-APIGEN-022) — structural check over a bare domain-input JSON Schema.
-
-    Returns True iff every declared property is a "properly typed primitive"
-    (string/number/boolean/integer, optionally unioned with null), including
-    the vacuous zero-property case. Absence of a `properties` key entirely
-    (as opposed to an explicit empty object) returns False.
-    """
-    if not isinstance(input_schema, dict):
-        return False
-    if "properties" not in input_schema:
-        return False
-    properties = input_schema["properties"]
-    if not isinstance(properties, dict):
-        return False
-    return all(_is_primitive_property_schema(p) for p in properties.values())
-
-
-def _is_primitive_property_schema(prop_schema: Any) -> bool:
-    if not isinstance(prop_schema, dict):
-        return False
-    if "$ref" in prop_schema:
-        return False
-    if prop_schema.get("oneOf") or prop_schema.get("anyOf") or prop_schema.get("allOf"):
-        return False
-
-    type_ = prop_schema.get("type")
-    if isinstance(type_, str):
-        return type_ in _PRIMITIVE_TYPES
-    if isinstance(type_, list):
-        return all(t in _PRIMITIVE_TYPES or t == "null" for t in type_)
-
-    enum = prop_schema.get("enum")
-    if isinstance(enum, list) and len(enum) > 0:
-        return all(isinstance(v, (str, int, float, bool)) for v in enum)
-
-    return False
-
-
-def _http_verb(op: dict[str, Any]) -> str:
-    """Return 'GET' when safe OR primitive-only-input (FEAT-APIGEN-022),
-    else 'POST' — mirrors `@adhd/apigen-engine-naming`'s `project()` default-verb rule.
-    """
-    if op.get("safe", False) or _is_primitive_only_input_schema(op.get("input")):
-        return "GET"
-    return "POST"
-
-
-# ---------------------------------------------------------------------------
 # JSON serialisation helper — handles non-standard types gracefully
 # ---------------------------------------------------------------------------
 
@@ -327,7 +256,24 @@ def _json_dumps(obj: Any) -> str:
 
 # ---------------------------------------------------------------------------
 # Server state — built once on startup, shared across request threads
+#
+# apigen-serve-core py-flask-serve-split: route + verb are no longer derived
+# here. `_route_for_op()` / `_http_verb()` / `_is_primitive_only_input_schema()`
+# (formerly here, a hand-maintained Python port of `@adhd/apigen-engine-naming`'s
+# `project(op).http`) are DELETED — see the module docstring's "Route
+# contract" section. `routes` is the TS-computed `{opId: {route, verb}}` map
+# injected via `--plan-file`.
 # ---------------------------------------------------------------------------
+
+class _RouteEntry:
+    """One resolved route: the operation it dispatches to + its TS-computed verb."""
+
+    __slots__ = ("op", "verb")
+
+    def __init__(self, op: dict[str, Any], verb: str) -> None:
+        self.op = op
+        self.verb = verb
+
 
 class _ServerState:
     """Immutable server configuration shared across all request threads."""
@@ -339,20 +285,30 @@ class _ServerState:
         namespace: str,
         runtime: Runtime,
         operations: list[dict[str, Any]],
+        routes: dict[str, dict[str, str]],
     ) -> None:
         self.namespace = namespace
         self.runtime = runtime
         self.operations = operations
-        # Map canonical HTTP route (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001:
-        # `_route_for_op()`, byte-identical to apigen-naming's project().http.route)
-        # → operation descriptor, for O(1) request dispatch. The operation's
-        # `input` dict IS the inner param schema directly (no data-wrapper in the
-        # extractor's output — that wrapper is a TS-side composition artifact;
-        # the Python runtime receives bare params), so no separate schema map
-        # is needed alongside this.
-        self.route_map: dict[str, dict[str, Any]] = {}
+        # Map canonical HTTP route → _RouteEntry(op, verb), for O(1) request
+        # dispatch. `routes[op["id"]]` supplies BOTH the route and the verb,
+        # computed TS-side by the REAL `@adhd/apigen-engine-naming` `project()`
+        # (BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001) — not re-derived here.
+        # The operation's `input` dict IS the inner param schema directly (no
+        # data-wrapper in the extractor's output — that wrapper is a TS-side
+        # composition artifact; the Python runtime receives bare params), so
+        # no separate schema map is needed alongside this.
+        self.route_map: dict[str, _RouteEntry] = {}
         for op in operations:
-            self.route_map[_route_for_op(op)] = op
+            entry = routes.get(op["id"])
+            if entry is None:
+                raise ValueError(
+                    f"apigen-py-flask: --plan-file is missing a routes entry "
+                    f"for operation id {op['id']!r} — the injected plan must "
+                    f"cover every operation extract_module() (phase 1) "
+                    f"produced, 1:1."
+                )
+            self.route_map[entry["route"]] = _RouteEntry(op=op, verb=entry["verb"])
 
 
 # ---------------------------------------------------------------------------
@@ -502,12 +458,13 @@ class _ApigenHandler(BaseHTTPRequestHandler):
             return
 
         state: _ServerState = self.server.state  # type: ignore[attr-defined]
-        op = state.route_map.get(path_only)
-        if op is not None:
-            if _http_verb(op) == "GET":
-                self._handle_safe_get(op)
+        entry = state.route_map.get(path_only)
+        if entry is not None:
+            if entry.verb == "GET":
+                self._handle_safe_get(entry.op)
                 return
-            # Known route but wrong verb (POST-only operation).
+            # Known route but wrong verb (POST-only operation, per the
+            # TS-computed --plan-file verb — see _ServerState's doc comment).
             self._send_error(405, "invalid_argument", f"use POST for {path_only}")
             return
 
@@ -521,9 +478,9 @@ class _ApigenHandler(BaseHTTPRequestHandler):
         path_only = parsed.path
 
         state: _ServerState = self.server.state  # type: ignore[attr-defined]
-        op = state.route_map.get(path_only)
-        if op is not None:
-            self._handle_post(op)
+        entry = state.route_map.get(path_only)
+        if entry is not None:
+            self._handle_post(entry.op)
             return
 
         self._send_error(404, "not_found", f"no route for POST {path_only}")
@@ -559,23 +516,41 @@ class ApigenFlaskServer:
         self,
         module_path: str,
         namespace: str,
+        plan: dict[str, Any],
         host: str = "127.0.0.1",
         port: int = 8000,
     ) -> None:
         self._module_path = module_path
         self._namespace = namespace
+        self._plan = plan
         self._host = host
         self._port = port
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
 
     def _build_state(self) -> _ServerState:
-        """Load the module, extract operations, and build the server state."""
-        ops = extract_module(self._module_path, namespace=self._namespace)
+        """Build the server state from the INJECTED `--plan-file` — this
+        server no longer self-extracts (apigen-serve-core py-flask-serve-
+        split). `self._plan["operations"]` supplies the full Operation[]
+        (schema-bearing dicts, produced by `apigen_python.extractor
+        --emit-json` in a separate, short-lived process — see plugin.ts's
+        two-phase spawn) and `self._plan["routes"]` supplies the per-op
+        canonical route/verb, computed by the REAL `@adhd/apigen-engine-naming`
+        `project()` — never re-derived here.
+
+        The module is still loaded a SECOND time, independently, right here —
+        that load's only job is producing LIVE function references for the
+        runtime registry, which cannot cross a process boundary as data
+        (Python callables are not serialisable). This is unchanged from the
+        pre-split design and was confirmed safe by
+        `docs/apigen/proposals/py-extract-serve-split-findings.md` §1.2/§1.4.
+        """
+        ops: list[dict[str, Any]] = self._plan["operations"]
+        routes: dict[str, dict[str, str]] = self._plan["routes"]
         if not ops:
             raise ValueError(
-                f"No exportable operations found in {self._module_path!r}. "
-                "Ensure the module has public callable exports."
+                f"--plan-file for {self._module_path!r} carries zero "
+                "operations. Ensure the module has public callable exports."
             )
 
         # Load the module to get live function references.
@@ -608,6 +583,7 @@ class ApigenFlaskServer:
             namespace=self._namespace,
             runtime=runtime,
             operations=ops,
+            routes=routes,
         )
 
     def start(self) -> None:
@@ -621,15 +597,13 @@ class ApigenFlaskServer:
         httpd.state = state  # type: ignore[attr-defined]
         self._httpd = httpd
 
-        # Log the registered routes to stderr — canonical route (parity with
-        # apigen-naming's project().http.route; BUG-APIGEN-OPENAPI-ROUTE-PATH-
-        # MISMATCH-001), not the old `/<ns>/<lastSegmentRaw>` shape.
+        # Log the registered routes to stderr — canonical route/verb, TS-
+        # computed via the injected --plan-file (BUG-APIGEN-OPENAPI-ROUTE-
+        # PATH-MISMATCH-001), not re-derived here.
         print(f"apigen-py-flask  listening on http://{self._host}:{self._port}", file=sys.stderr)
         print(f"  GET  /_meta/health", file=sys.stderr)
-        for op in state.operations:
-            route = _route_for_op(op)
-            verb = _http_verb(op)
-            print(f"  {verb:<4} {route}", file=sys.stderr)
+        for route, entry in state.route_map.items():
+            print(f"  {entry.verb:<4} {route}", file=sys.stderr)
         sys.stderr.flush()
 
         self._thread = threading.Thread(
@@ -672,6 +646,7 @@ class ApigenFlaskServer:
 def build_server(
     module_path: str,
     namespace: str,
+    plan: dict[str, Any],
     host: str = "127.0.0.1",
     port: int = 8000,
 ) -> ApigenFlaskServer:
@@ -680,6 +655,9 @@ def build_server(
     Args:
         module_path: Path to the ``.py`` source file (absolute or relative).
         namespace:   The apigen namespace slug (used as the route prefix).
+        plan:        The TS-computed serve plan (`{"operations": [...],
+                     "routes": {"<opId>": {"route": str, "verb": "GET"|"POST"}}}`)
+                     — see the module docstring's "Usage" section.
         host:        Bind address (default ``127.0.0.1``).
         port:        TCP port (default ``8000``).
 
@@ -687,7 +665,7 @@ def build_server(
         An :class:`ApigenFlaskServer` instance ready to call ``.start()`` or
         ``.serve_forever()``.
     """
-    return ApigenFlaskServer(module_path, namespace, host=host, port=port)
+    return ApigenFlaskServer(module_path, namespace, plan, host=host, port=port)
 
 
 # ---------------------------------------------------------------------------
@@ -698,11 +676,12 @@ def _main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "apigen Python HTTP server — serves a .py module over HTTP.\n\n"
-            "Routes (byte-identical to @adhd/apigen-engine-naming's project().http —\n"
-            "BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001):\n"
+            "Routes (TS-computed via @adhd/apigen-engine-naming's project().http and\n"
+            "injected via --plan-file — BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001 /\n"
+            "apigen-serve-core py-flask-serve-split):\n"
             "  GET  /_meta/health  → {status, host}\n"
             "  POST <route>        → body {data: {<params>}} → result\n"
-            "  GET  <route>        → query-string (safe OR primitive-only-input ops)\n"
+            "  GET  <route>        → query-string (per the injected plan's verb)\n"
             "  <route> = /<kebab-namespace>/<kebab-pathSeg>/…  (multi-segment)\n\n"
             "Startup: emits {ready: true} on stdout once the server is up."
         )
@@ -723,11 +702,27 @@ def _main() -> None:
         "--port", type=int, default=8000,
         help="TCP port (default: 8000)"
     )
+    parser.add_argument(
+        "--plan-file", required=True,
+        help=(
+            "Path to a JSON file: {\"operations\": [...Operation dicts, exactly "
+            "apigen_python.extractor --emit-json's output...], \"routes\": "
+            "{\"<opId>\": {\"route\": \"<path>\", \"verb\": \"GET\"|\"POST\"}}}. "
+            "REQUIRED — this server no longer self-extracts or re-derives "
+            "route/verb (apigen-serve-core py-flask-serve-split); produced by "
+            "the py-flask TS plugin's two-phase spawn (extractor --emit-json "
+            "-> @adhd/apigen-engine-naming project() -> this flag)."
+        ),
+    )
     args = parser.parse_args()
+
+    with open(args.plan_file, "r", encoding="utf-8") as plan_fh:
+        plan = json.load(plan_fh)
 
     server = build_server(
         module_path=args.module,
         namespace=args.namespace,
+        plan=plan,
         host=args.host,
         port=args.port,
     )
