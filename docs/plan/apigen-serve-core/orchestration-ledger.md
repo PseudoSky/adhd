@@ -159,8 +159,81 @@ self-reported telemetry (~145k in / ~14k out / ~65 tool calls) — got exit 4,
   phase-2-or-later state's `--complete` is blocked on this one criterion
   until mcp-adapter's executor fixes its comment.
 
+### CORRECTION: cli-adapter.2 was never actually transient — a real regex bug
+
+The "already resolved, transient race" read above was wrong. Re-running the
+full phase-2 audit clean (nothing else running, `nx reset` first) kept
+showing `[cli-adapter.2] FAIL` every single time regardless of file content.
+Root-caused for real: criteria.json's pattern for this criterion was the
+literal string `"project("` — an UNTERMINATED regex group. `new
+RegExp("project(")` throws `Unterminated group`; `run-audit.js`'s
+`runCriteria` catches evaluation errors and converts them to `pass:false`,
+so this criterion could **never** pass, for any code state, since the plan
+was authored. This is a plan-authoring bug in `criteria.json`, not a
+cli-adapter code issue. Fixed by escaping to `"project\\("` (commit
+`d748d4bf`). Also found and fixed a second, same-class bug while completing
+py-extract-preflight: `py-extract-preflight.2`'s pattern `"^DECISION:"`
+relies on `^` anchoring per-line, but `run-audit.js` compiles patterns via
+`new RegExp(pattern)` with no `m` flag, so `^` only anchors to start-of-FILE
+— and the findings doc's `DECISION:` line is line 47, not line 1. Dropped
+the anchor (same commit); the state's real guard, `grep -q '^DECISION:'` in
+dag.json, IS per-line-aware and still enforces the actual requirement.
+
+Also separately confirmed the fastify two-assertion "flake" seen earlier
+WAS genuine contention, not hiding a third regex bug: a `nx reset` +
+single, nothing-else-running audit run reproduced it a second time, but a
+fully isolated standalone `nx run apigen-plugin-api-fastify:test` (also
+post-reset, so not a cache replay) came back 56/56 clean three times in a
+row. The audit script's own sequential chain of ~8 heavy `nx test`
+invocations within one long-lived process appears to occasionally perturb
+one specific fastify assertion under load; the underlying code is proven
+correct via true isolation. Worth a BACKLOG-style flag to `main` as a
+test-infra flake, not a gate blocker.
+
+### Wave 3 CLOSED — all four states `status: "complete"` in state.json
+
+`--complete` calls were run sequentially, not parallel (they mutate shared
+`state.json`). express-adapter's own `--complete` landed while both regex
+bugs above were still being root-caused (its `done_at` predates the
+criteria.json fix commit) — its 44/44-clean completion is consistent with
+those fixes having already been applied to the working tree at that
+instant. Final state for all four:
+- `express-adapter`: complete, `done_at` 2026-07-24T09:07:04Z, end_ref `8bbe8dbe`
+- `cli-adapter`: complete, `done_at` 2026-07-24T09:31:24Z, end_ref `59b6f4e3`
+  — completed via a real exit-4 (`dod_unconfirmed`, all `dod.1..10`) that
+  was a FALSE terminal-boundary trigger: `state-transition.js`'s `nextState`
+  search only considers `status:"pending"` siblings, and at that moment
+  mcp-adapter + py-extract-preflight were still `"in_progress"` (not
+  `"pending"`), so the search found no candidate and mis-flagged this
+  mid-wave completion as `wouldReachTerminal`. The DoD gate only fires
+  meaningfully at the true final (`phase=final`) transition where `[dod.N]`
+  lines are actually emitted; here it just produced a confusing exit code.
+  `state.json` still correctly marked the state `complete` and correctly
+  did NOT advance `current_state` to `done`. Audit itself: 44/44, genuinely
+  clean.
+- `mcp-adapter`: complete, `done_at` 2026-07-24T09:34:18Z, end_ref `0f77d10088`
+  — clean completion, 44/44, `dod_confirmed:true`, `next_state:
+  audit-transports` (by this point cli/express/mcp were all complete so a
+  real pending candidate existed and the terminal-boundary bug didn't fire).
+- `py-extract-preflight`: complete, `done_at` 2026-07-24T09:39:22Z, end_ref
+  `ca4af702f1` — exit 4 (`audit_failed`, 50/59) is EXPECTED and correctly
+  discriminated: phase-3's accumulated audit includes `py-flask-serve-split.*`
+  (5 fails) and `py-grpc-serve-split.*` (3 fails) — both legitimately
+  not-yet-implemented sibling states in the SAME phase (py-extract-preflight
+  gates them; they haven't run). Verified via the events log that py-extract-
+  preflight's OWN 3 criteria all show PASS after the regex fix — the 9
+  remaining fails are 100% attributable to unstarted siblings, none to this
+  state. `dod_confirmed:true`, `next_state: audit-transports`.
+
+Token telemetry captured for all four via `--input-tokens`/`--output-tokens`
+/`--tool-call-count` (forwarded to `emit-state-metrics.js`): cli-adapter
+~145k/14k/75, express-adapter ~145k/14k/65, mcp-adapter ~150k/60k/150,
+py-extract-preflight ~55k/6k/16 (all executor self-reported best-effort
+estimates, not byte-proxy fallback).
+
 ## Next
 
-Wave 4 (`audit-transports` + `py-flask-serve-split`), wave 5
-(`py-grpc-serve-split`), wave 6 (`audit-python`), wave 7 (`audit-final`) —
-per the team-lead's wave plan, pending wave-3 completion.
+Wave 4: `audit-transports` (gate, depends on cli/express/mcp-adapter — all
+complete) + `py-flask-serve-split` (depends on py-extract-preflight —
+complete). Then wave 5 (`py-grpc-serve-split`), wave 6 (`audit-python`),
+wave 7 (`audit-final`).
