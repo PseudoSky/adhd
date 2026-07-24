@@ -52,7 +52,8 @@
         "packages/apigen/apigen-plugin-api-fastify/src/lib/route-projection.ts",
         "packages/apigen/apigen-plugin-api-fastify/src/lib/stream.ts",
         "packages/apigen/apigen-plugin-api-fastify/src/test/plugin.spec.ts",
-        "packages/apigen/apigen-plugin-api-fastify/src/test/golden/fastify.snapshot.json"
+        "packages/apigen/apigen-plugin-api-fastify/src/test/golden/fastify.snapshot.json",
+        "docs/plan/apigen-serve-core/neg-control/fastify-adapter.patch"
       ],
       "context": "contexts/fastify-adapter.md",
       "notes": "Reference TransportAdapter migration. Fold DEBT-004 mount fidelity + wire dead sendStreamSse live. Parity gate + negative control."
