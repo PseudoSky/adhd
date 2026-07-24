@@ -68,6 +68,16 @@
       "paths": [
         "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts"
       ]
+    },
+    {
+      "id": "parity-harness.2",
+      "phase": "phase-1",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "assertParity",
+      "paths": [
+        "packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts"
+      ]
     }
   ]
 }
