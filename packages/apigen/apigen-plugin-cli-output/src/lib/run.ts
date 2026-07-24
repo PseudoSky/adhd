@@ -1,33 +1,73 @@
 import type {
   RunInput,
   Operation,
+  MountedOperation,
   ComposedSchemas,
 } from '@adhd/apigen-core-client';
 import {
-  createInvoker,
-  makeValidateLayer,
   createLogger,
-  describeParams,
-  needsEnvelopeField,
-  LayerContext,
+  buildOpPlan,
+  createPackageInvoker,
+  dispatchForPlan,
+  readUseOptions,
+  readUsePlugins,
+  isApiStream,
 } from '@adhd/apigen-engine-runtime';
-import type { Call as RuntimeCall, Logger } from '@adhd/apigen-engine-runtime';
-import { project } from '@adhd/apigen-engine-naming';
+import type {
+  Call as RuntimeCall,
+  Logger,
+  OpPlan,
+  OpPlanCliFlag,
+  ParamInfo,
+  TransportAdapter,
+  InvokeOptions,
+  LayerResult,
+  UseOptions,
+  UsePlugin,
+} from '@adhd/apigen-engine-runtime';
 import { ApiError, isApiError, CLI_EXIT_CODE } from '@adhd/apigen-base-errors';
-import {
-  envelopeBindings,
-  isJsonTypedProp,
-  isBooleanTypedProp,
-  dataSchemaProps,
-  kebabCase,
-} from './schema-introspect';
 
 // ---------------------------------------------------------------------------
-// run() — execute the CLI plugin's surface LIVE, in-process, one shot.
+// run() — serve-core migration (cli-adapter).
 //
-// Mirrors `apigen-plugin-mcp`/`apigen-plugin-api-fastify`'s `run.ts`: read
-// `input.packages[].{fns,schemas}`, compose the validate-Layer around
-// `dispatch` via `createInvoker`, resolve one call, print the JSON result.
+// `cli-output` is now a `TransportAdapter<CliRawCall>` ([iface:transport-
+// adapter]) consuming `OpPlan` ([iface:op-plan]) exactly like the fastify
+// reference adapter (`apigen-plugin-api-fastify/src/lib/run.ts`):
+//
+//   - `buildOpPlan` resolves EVERY transport-facing fact for a command
+//     (nested kebab `cli.path`, the precomputed `--flag` table `cliFlags`,
+//     §9.1 envelope bindings, `streaming`) ONCE, at wiring time. The former
+//     hand-rolled `buildFlagTable`/`FlagSpec` ([cli-adapter.1] — DELETED, see
+//     below) and the direct `project(op).cli.path` call ([cli-adapter.2] —
+//     DELETED) are both gone; `readCall` is pure argv-walking over
+//     `plan.cliFlags`.
+//   - `createPackageInvoker` composes the `--use` layer stack + validate-
+//     Layer ONCE per package (dod.11 — see below).
+//   - `dispatchForPlan` fills in `operation`/`ctx` and stamps
+//     `Call.transport` from `plan.transport` (F3 [fix:transport-stamping] —
+//     stamped `'cli'` below, never inferred).
+//
+// [fix:use-capability-explicit] (dod.11) — RESOLVED: cli-output previously
+// had ZERO `--use` capability. This migration ADDS it, consistent with
+// fastify/express: both the `layer` capability (an auth/logging `--use`
+// plugin now wraps every CLI dispatch, mount or source op alike) and the
+// `mount` capability (a `--use health`-style plugin's `MountedOperation`s are
+// now resolvable AND dispatchable as ordinary nested CLI commands — e.g.
+// `--use health` mounts `meta health`). This was a deliberate choice over
+// declaring cli-output `--use`-incapable: `dispatchForPlan`'s mount branch
+// and `buildOpPlan`'s cli-path/cliFlags projection already work uniformly for
+// ANY `Operation` (mounted or extracted) with zero CLI-specific mount
+// plumbing needed — unlike fastify, a CLI mount command needs no route-
+// collision handling or special URL preservation (there is no pre-migration
+// CLI mount behavior to stay byte-identical to), so the marginal cost of
+// adding real support was near zero. See this state's report for the
+// decision record.
+//
+// [fix:streaming-wired]: CLI explicit REJECTS a `streaming:true` op (never
+// silently `JSON.stringify`s an `AsyncIterable` into `{}`) — a flagged,
+// reviewed behavior CHANGE from the pre-migration CLI (which had no
+// streaming awareness at all and would have silently mis-serialized one).
+//
 // Unlike a server transport, a CLI invocation is one-shot — it dispatches
 // exactly one command then resolves; it does not wait on `input.signal`
 // (there is no long-lived listener to tear down), though an
@@ -36,31 +76,28 @@ import {
 // execute after cancellation was requested).
 // ---------------------------------------------------------------------------
 
-/** One resolvable CLI command: a package's function reached under a nested kebab path. */
-interface CommandEntry {
+/**
+ * One resolvable CLI command: a package's function reached under a nested
+ * kebab path, plus its fully-resolved `OpPlan` ([iface:op-plan]) — the single
+ * source of truth for its `cli.path`/`cliFlags`/`envelope`/`streaming` facts.
+ */
+export interface CommandEntry {
   pkgId: string;
   fnName: string;
   schema: ComposedSchemas[string];
-  /** Ordered kebab command segments, e.g. `['backlog', 'get-item']` (SPEC §5 `project().cli.path`). */
+  /** Ordered kebab command segments, e.g. `['backlog', 'get-item']` (`plan.cli.path`). */
   cliPath: string[];
-}
-
-/**
- * A single known `--flag` for one command, resolved ahead of parsing so the
- * argv walker never has to guess whether a bare `--foo` is boolean or
- * value-taking (SPEC §9.1 / generated-CLI parity — see generate.ts).
- */
-interface FlagSpec {
-  /** The domain param name or envelope field name in camelCase. */
-  camelKey: string;
-  kind: 'domain' | 'envelope';
-  valueKind: 'boolean' | 'json' | 'string';
-  /** (envelope only) APIGEN_<PLUGINID>_<FIELD> fallback when the flag is absent. */
-  envVar?: string;
+  /**
+   * The resolved `OpPlan` for this command — carries the precomputed
+   * `--flag` table (`cliFlags`), §9.1 envelope bindings, and `streaming`.
+   * `readCall`/dispatch consume this instead of re-deriving anything from
+   * `schema` directly ([cli-adapter.1]).
+   */
+  plan: OpPlan;
 }
 
 // ---------------------------------------------------------------------------
-// argv resolution
+// argv resolution — unchanged surface (pure helpers, no OpPlan involvement).
 // ---------------------------------------------------------------------------
 
 /**
@@ -112,13 +149,50 @@ export function resolveArgv(options: Record<string, unknown>): string[] {
 // ---------------------------------------------------------------------------
 
 /**
+ * Synthesizes a minimal `Operation` for `buildOpPlan()` when no matching real
+ * `Operation` is available (`RunInput.operations` omitted, or the pkg/fn pair
+ * has no corresponding merged Operation — e.g. a unit test that constructs
+ * `RunInput` directly without extraction). ONLY used to resolve
+ * envelope/cliFlags/streaming off the composed schema; `namespace`/`path` are
+ * deliberately collapsed to a SINGLE untokenized segment carrying the bare
+ * `fnName` verbatim (`path: []`) so `buildOpPlan`'s `project()`-derived
+ * `cli.path` degrades to the exact legacy flat `[fnName]` command (never
+ * kebab-cased/namespaced) this fallback has always produced — see
+ * `buildCommandTable`'s "falls back to a flat [fnName] command" contract,
+ * proven by `run.spec.ts`.
+ */
+function synthesizeOperation(
+  fnName: string,
+  schema: ComposedSchemas[string]
+): Operation {
+  return {
+    id: fnName,
+    host: 'ts',
+    namespace: { raw: fnName, words: [fnName] },
+    path: [],
+    kind: 'action',
+    async: false,
+    streaming: false,
+    safe: (schema['x-apigen-safe'] as boolean | undefined) ?? false,
+    input: schema.input ?? {},
+    output: schema.output ?? {},
+    envelope: {},
+    typeText: null,
+  };
+}
+
+/**
  * Builds the routing table for every dispatchable function across every
  * package. Prefers the naming authority's `project(op).cli.path` (nested
- * kebab segments, namespace-qualified — SPEC §5) whenever a matching
- * {@link Operation} is available; falls back to the bare function name when
- * `input.operations` doesn't carry a matching entry (e.g. a unit test that
- * constructs `RunInput` directly without extraction, or any future non-TS
- * run path — see `RunInput.operations`'s doc comment).
+ * kebab segments, namespace-qualified — SPEC §5), resolved via `buildOpPlan`
+ * ([iface:op-plan]) rather than calling `project()` directly here
+ * ([cli-adapter.2] — no inline `project()` call), whenever a matching
+ * {@link Operation} is available; falls back to a synthesized single-segment
+ * `[fnName]` `Operation` ({@link synthesizeOperation}) when `input.operations`
+ * doesn't carry a matching entry (e.g. a unit test that constructs `RunInput`
+ * directly without extraction, or any future non-TS run path — see
+ * `RunInput.operations`'s doc comment). Either way, `buildOpPlan` resolves
+ * `cliFlags`/envelope/streaming ONCE here — never re-derived at dispatch time.
  */
 export function buildCommandTable(
   input: Pick<RunInput, 'packages' | 'operations'>
@@ -133,13 +207,17 @@ export function buildCommandTable(
   const commands = new Map<string, CommandEntry>();
   for (const pkg of input.packages) {
     for (const [fnName, schema] of Object.entries(pkg.schemas)) {
-      const op = opsByKey.get(`${pkg.id}:${fnName}`);
-      const cliPath = op ? project(op).cli.path : [fnName];
+      const op =
+        opsByKey.get(`${pkg.id}:${fnName}`) ??
+        synthesizeOperation(fnName, schema);
+      const plan = buildOpPlan({ op, schema, transport: 'cli' });
+      const cliPath = plan.cli.path;
       commands.set(cliPath.join(' '), {
         pkgId: pkg.id,
         fnName,
         schema,
         cliPath,
+        plan,
       });
     }
   }
@@ -151,11 +229,16 @@ export function buildCommandTable(
  * kebab command matching). Only tokens before the first `-`-prefixed flag
  * are eligible path segments — everything from there on is `rest` (the
  * flags to parse for this command).
+ *
+ * Generic over the entry type so the SAME longest-prefix algorithm serves
+ * both `buildCommandTable`'s pure `Map<string, CommandEntry>` (unit-tested
+ * directly) and `run()`'s live dispatch table (`Map<string, CliRoute>`,
+ * regular ops + `--use` mount ops combined).
  */
-export function matchCommand(
+export function matchCommand<T>(
   argv: string[],
-  commands: Map<string, CommandEntry>
-): { entry: CommandEntry; rest: string[] } | null {
+  commands: Map<string, T>
+): { entry: T; rest: string[] } | null {
   let end = 0;
   while (end < argv.length && !argv[end].startsWith('-')) end++;
   for (let len = end; len >= 1; len--) {
@@ -165,62 +248,28 @@ export function matchCommand(
   return null;
 }
 
-/** Human-readable command listing, derived from the live command table (never hardcoded). */
-export function formatUsage(commands: Map<string, CommandEntry>): string {
+/** `name?: type` summary text for a plan's domain params — mirrors the former `describeParams(schema).text`, sourced from the already-resolved `plan.params` (no schema re-derivation). */
+function paramsText(params: ParamInfo[] | undefined): string {
+  if (!params || params.length === 0) return '';
+  return params
+    .map((p) => `${p.name}${p.required ? '' : '?'}: ${p.type}`)
+    .join(', ');
+}
+
+/** Human-readable command listing, derived from the live OpPlan-keyed route table (never hardcoded). */
+function formatUsage(routes: Map<string, CliRoute>): string {
   const lines = ['Available commands:', ''];
-  const sorted = [...commands.entries()].sort(([a], [b]) => a.localeCompare(b));
-  for (const [key, entry] of sorted) {
-    const { text } = describeParams(entry.schema);
+  const sorted = [...routes.entries()].sort(([a], [b]) => a.localeCompare(b));
+  for (const [key, { plan }] of sorted) {
+    const text = paramsText(plan.params);
     lines.push(`  ${key}${text ? `  { ${text} }` : ''}`);
   }
   return lines.join('\n');
 }
 
 // ---------------------------------------------------------------------------
-// Flag table + argv → {data:{...}} / envelope mapping (generated-CLI parity)
+// Argv → {data:{...}} / envelope mapping — pure argv-walking over OpPlan.cliFlags
 // ---------------------------------------------------------------------------
-
-/**
- * Builds the known `--flag` table for one command's schema: domain params
- * (kebab-cased) plus §9.1 envelope bindings, exactly the same flag-naming
- * rules `generate.ts` bakes into the emitted Commander program (via the
- * shared `./schema-introspect` helpers) — so a live `run()` invocation and
- * the equivalent generated CLI accept identical flags for identical schemas.
- *
- * Deliberately does NOT enforce "required" here — that's the validate-Layer's
- * job (SPEC §6), run **after** this table only decides flag *shape* (boolean
- * vs value vs JSON), so malformed/missing input is rejected by the single
- * canonical validation path instead of a bespoke CLI-only check.
- */
-export function buildFlagTable(schema: ComposedSchemas[string]): Map<string, FlagSpec> {
-  const flags = new Map<string, FlagSpec>();
-  const { props } = dataSchemaProps(schema);
-  for (const param of Object.keys(props)) {
-    const prop = props[param];
-    let valueKind: FlagSpec['valueKind'] = 'string';
-    if (isBooleanTypedProp(prop)) valueKind = 'boolean';
-    else if (isJsonTypedProp(prop)) valueKind = 'json';
-    flags.set(kebabCase(param), { camelKey: param, kind: 'domain', valueKind });
-  }
-
-  const bindings = envelopeBindings(schema as Record<string, unknown>);
-  for (const b of bindings) {
-    const flagName = b.flag.replace(/^--/, '');
-    flags.set(flagName, {
-      camelKey: b.field,
-      kind: 'envelope',
-      valueKind: 'string',
-      envVar: b.envVar,
-    });
-  }
-  // Legacy backwards-compat path (generate.ts parity): a 'session' envelope
-  // field with no explicit x-apigen-envelope binding still gets a plain
-  // `--session` flag (no env-var fallback — that's the §9.1 binding's job).
-  if (needsEnvelopeField(schema, 'session') && !bindings.some((b) => b.field === 'session')) {
-    flags.set('session', { camelKey: 'session', kind: 'envelope', valueKind: 'string' });
-  }
-  return flags;
-}
 
 /** Thrown by {@link parseArgs} for any argv shape the flag table can't explain. */
 function usageError(message: string): ApiError {
@@ -232,12 +281,16 @@ function usageError(message: string): ApiError {
  * — the same split `dispatch()` expects. Supports `--flag value`,
  * `--flag=value`, bare boolean `--flag`, and `--no-flag` negation for any
  * boolean-typed flag (domain or envelope). Array/object-typed domain params
- * are JSON.parse'd from their raw string value (BUG-APIGEN-031 parity — see
- * `./schema-introspect`'s `isJsonTypedProp` doc comment).
+ * are JSON.parse'd from their raw string value (BUG-APIGEN-031 parity).
+ *
+ * [cli-adapter.1]: `flags` is always `plan.cliFlags` — the precomputed
+ * `OpPlan` flag table (`@adhd/apigen-engine-runtime`). This function does NOT
+ * derive flag shape/typing itself; it only WALKS argv against a table someone
+ * else resolved.
  */
 export function parseArgs(
   rest: string[],
-  flags: Map<string, FlagSpec>
+  flags: Map<string, OpPlanCliFlag>
 ): { domainArgs: Record<string, unknown>; envelope: Record<string, unknown> } {
   const domainArgs: Record<string, unknown> = {};
   const envelope: Record<string, unknown> = {};
@@ -327,6 +380,105 @@ function reportFailure(err: unknown): void {
 }
 
 // ---------------------------------------------------------------------------
+// CliTransportAdapter — the cli `TransportAdapter` port implementation.
+// ---------------------------------------------------------------------------
+
+/** The transport-native carrier the cli adapter marshals to/from: the matched command's remaining (post-command) argv tokens. */
+export interface CliRawCall {
+  rest: string[];
+}
+
+/** One registered command: its `OpPlan` plus the dispatch closure bound to it (`(call) => dispatchForPlan(plan, invoke, call, opts)`). */
+interface CliRoute {
+  plan: OpPlan;
+  dispatch: (call: Omit<RuntimeCall, 'operation' | 'ctx'>) => Promise<LayerResult>;
+}
+
+/**
+ * The cli `TransportAdapter` ([iface:transport-adapter]). `readCall` is pure
+ * argv-walking over `plan.cliFlags` ([cli-adapter.1]); `writeResult` is
+ * stdout + `undefined→null` JSON (BUG-APIGEN-015 parity with the HTTP
+ * transports); `writeError` is stderr JSON + `process.exitCode` (§9
+ * `CLI_EXIT_CODE`).
+ *
+ * Unlike fastify/express (a long-lived listening server dispatching many
+ * requests through ONE `registerRoute`-populated router), a CLI invocation is
+ * one-shot: `registerRoute` is called once per resolvable command at wiring
+ * time (`run()`, below), then exactly one matched command is read/dispatched/
+ * written before the process exits.
+ */
+class CliTransportAdapter implements TransportAdapter<CliRawCall> {
+  private readonly routes = new Map<string, CliRoute>();
+
+  constructor(private readonly signal?: AbortSignal) {}
+
+  registerRoute(
+    plan: OpPlan,
+    dispatch: (call: Omit<RuntimeCall, 'operation' | 'ctx'>) => Promise<LayerResult>
+  ): void {
+    this.routes.set(plan.cli.path.join(' '), { plan, dispatch });
+  }
+
+  /** All registered commands (regular ops + `--use` mounts) — consumed by `run()`'s longest-prefix matcher + usage listing. */
+  routeTable(): Map<string, CliRoute> {
+    return this.routes;
+  }
+
+  readCall(raw: CliRawCall, plan: OpPlan): Omit<RuntimeCall, 'operation' | 'ctx'> {
+    const { domainArgs, envelope } = parseArgs(raw.rest, plan.cliFlags);
+    return { domainArgs, envelope, signal: this.signal };
+  }
+
+  writeResult(_raw: CliRawCall, result: LayerResult, plan: OpPlan): void {
+    // [fix:streaming-wired] defense-in-depth: `run()` already rejects a
+    // `plan.streaming` command before ever dispatching it, but a stray
+    // AsyncIterable reaching here (e.g. a `--use` mount handler that streams
+    // despite the plan saying otherwise) must never be silently
+    // `JSON.stringify`'d into `{}` — surface it as a clear, actionable error.
+    if (isApiStream(result)) {
+      throw new ApiError(
+        'invalid_argument',
+        `Command "${plan.cli.path.join(' ')}" produced a streaming result, which is not supported over the cli transport.`
+      );
+    }
+    // BUG-APIGEN-015 parity: `undefined` (a void op) becomes `null` — canonical
+    // JSON, never the bare word `undefined` (not valid JSON output on a wire).
+    console.log(JSON.stringify(result === undefined ? null : result));
+  }
+
+  writeError(_raw: CliRawCall, err: unknown, _plan: OpPlan): void {
+    reportFailure(err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// `--use` mount collection (dod.11) — mirrors fastify's
+// `collectMountedOperations`, filtered to plugins that expose a mount to the
+// `'cli'` transport (a `MountedOperation.transports` filter that omits `'cli'`
+// is honored, matching HTTP's own `'http'` filter).
+// ---------------------------------------------------------------------------
+
+function collectMountedCliOperations(
+  usePlugins: UsePlugin[],
+  useOptions: UseOptions,
+  host: string,
+  operations: Operation[]
+): MountedOperation[] {
+  const result: MountedOperation[] = [];
+  const descriptor = { host, operations: operations as unknown[] };
+  for (const plugin of usePlugins) {
+    const cap = plugin.capabilities?.mount;
+    if (!cap) continue;
+    const ops = cap.operations(descriptor, useOptions[plugin.id]);
+    for (const op of ops) {
+      if (op.transports && !op.transports.includes('cli')) continue;
+      result.push(op as unknown as MountedOperation);
+    }
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // run()
 // ---------------------------------------------------------------------------
 
@@ -347,14 +499,86 @@ export async function run(input: RunInput): Promise<void> {
   // in the common case, but a programmatic caller could still pass one).
   if (argv[0] === '--') argv = argv.slice(1);
 
+  const usePlugins = readUsePlugins(input.options);
+  const useOptions = readUseOptions(input.options);
+  const adapter = new CliTransportAdapter(input.signal);
+
+  // Resolve every op's OpPlan ONCE (buildCommandTable), then compose ONE
+  // `--use`-aware invoker per package (BUG-APIGEN-009 / dod.11) and register
+  // each resolved command on the adapter.
   const commands = buildCommandTable(input);
+  const byPkg = new Map<string, CommandEntry[]>();
+  for (const entry of commands.values()) {
+    const list = byPkg.get(entry.pkgId);
+    if (list) list.push(entry);
+    else byPkg.set(entry.pkgId, [entry]);
+  }
+  for (const pkg of input.packages) {
+    const entries = byPkg.get(pkg.id);
+    if (!entries || entries.length === 0) continue;
+    if (!pkg.fns) {
+      throw new Error(`apigen-plugin-cli-output: package "${pkg.id}" has no functions`);
+    }
+    const pkgFns = pkg.fns;
+
+    // `dispatchForPlan` dispatches by `plan.op.id` (and the validate-Layer
+    // keys `schemas` by `call.operation.id`), so the package's fn-name-keyed
+    // `fns`/`schemas` are remapped to be keyed by `plan.op.id` (matching the
+    // fastify/express reference adapters) — for a synthesized fallback op
+    // this is simply `fnName` itself (see `synthesizeOperation`).
+    const schemasByOpId: ComposedSchemas = {};
+    const fnsByOpId: Record<string, (...args: unknown[]) => unknown> = {};
+    for (const entry of entries) {
+      schemasByOpId[entry.plan.op.id] = entry.schema;
+      fnsByOpId[entry.plan.op.id] = pkgFns[entry.fnName];
+    }
+
+    const invoke = createPackageInvoker(schemasByOpId, usePlugins);
+    const invokeOpts: InvokeOptions = {
+      fns: fnsByOpId,
+      createClient: pkg.createClient,
+      schemas: schemasByOpId,
+    };
+
+    for (const entry of entries) {
+      adapter.registerRoute(entry.plan, (call) =>
+        dispatchForPlan(entry.plan, invoke, call, invokeOpts)
+      );
+    }
+  }
+
+  // [fix:use-capability-explicit] (dod.11) — `--use` mount ops (e.g. `--use
+  // health`) are now real, dispatchable CLI commands, flowing through the
+  // SAME composed `--use` invoker as source ops ([fix:mount-through-layers]).
+  const mountHost = input.packages[0]?.id ?? 'ts';
+  const mountedOps = collectMountedCliOperations(
+    usePlugins,
+    useOptions,
+    mountHost,
+    input.operations ?? []
+  );
+  if (mountedOps.length > 0) {
+    const mountInvoke = createPackageInvoker({}, usePlugins);
+    const mountInvokeOpts: InvokeOptions = { fns: {}, schemas: {} };
+    for (const mountedOp of mountedOps) {
+      // F3 [fix:transport-stamping]: stamp 'cli' here — the mechanism
+      // (`dispatchForPlan` reading `plan.transport` back) is generic; never a
+      // hardcoded literal downstream.
+      const plan = buildOpPlan({ op: mountedOp, transport: 'cli' });
+      adapter.registerRoute(plan, (call) =>
+        dispatchForPlan(plan, mountInvoke, call, mountInvokeOpts)
+      );
+    }
+  }
+
+  const routes = adapter.routeTable();
 
   if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h') {
-    console.log(formatUsage(commands));
+    console.log(formatUsage(routes));
     return;
   }
 
-  const match = matchCommand(argv, commands);
+  const match = matchCommand(argv, routes);
   if (!match) {
     // Distinct from a bad-flag `usageError` (invalid_argument, CLI_EXIT_CODE
     // 2) — an unrecognized command maps to `not_found` (CLI_EXIT_CODE 4),
@@ -363,58 +587,42 @@ export async function run(input: RunInput): Promise<void> {
     reportFailure(
       new ApiError(
         'not_found',
-        `Unknown command: ${argv.join(' ')}\n\n${formatUsage(commands)}`
+        `Unknown command: ${argv.join(' ')}\n\n${formatUsage(routes)}`
       )
     );
     return;
   }
-  const { entry, rest } = match;
+  const { entry: route, rest } = match;
+  const { plan, dispatch } = route;
+  const commandLabel = plan.cli.path.join(' ');
 
   if (rest.includes('--help') || rest.includes('-h')) {
-    const { text } = describeParams(entry.schema);
-    console.log(`${entry.cliPath.join(' ')}${text ? `  { ${text} }` : ''}`);
+    const text = paramsText(plan.params);
+    console.log(`${commandLabel}${text ? `  { ${text} }` : ''}`);
     return;
   }
 
+  const raw: CliRawCall = { rest };
   try {
-    const pkg = input.packages.find((p) => p.id === entry.pkgId);
-    if (!pkg) {
-      throw new Error(`apigen-plugin-cli-output: package "${entry.pkgId}" not found`);
+    // [fix:streaming-wired]: CLI explicitly REJECTS a `streaming:true` op —
+    // never silently `JSON.stringify`s an `AsyncIterable` into `{}`.
+    if (plan.streaming) {
+      throw new ApiError(
+        'invalid_argument',
+        `Command "${commandLabel}" is a streaming operation and is not supported over the cli transport (DEBT-APIGEN-SERVE-CORE-002 cli half).`
+      );
     }
-    if (!pkg.fns) {
-      throw new Error(`apigen-plugin-cli-output: package "${entry.pkgId}" has no functions`);
-    }
 
-    const flags = buildFlagTable(entry.schema);
-    const { domainArgs, envelope } = parseArgs(rest, flags);
-
-    // BUG-APIGEN-009: validate-Layer is innermost (the only Layer here), so
-    // malformed input is rejected — as ApiError{invalid_argument} — before
-    // the target function is ever called. [inv:dispatch-single-path]
-    const invoke = createInvoker([makeValidateLayer(pkg.schemas)]);
-    const call: RuntimeCall = {
-      operation: { id: entry.fnName },
-      ctx: new LayerContext(),
-      envelope,
-      domainArgs,
-      signal: input.signal,
-    };
-
+    // BUG-APIGEN-009: validate-Layer runs before the target function is ever
+    // called — malformed input is rejected as ApiError{invalid_argument}.
+    // [inv:dispatch-single-path]
+    const call = await adapter.readCall(raw, plan);
     const start = Date.now();
-    const result = await invoke(entry.fnName, call, {
-      fns: pkg.fns,
-      createClient: pkg.createClient,
-      schemas: pkg.schemas,
-    });
-    logger.info(
-      { command: entry.cliPath.join(' '), ms: Date.now() - start },
-      `→ ${entry.cliPath.join(' ')}`
-    );
-    // `undefined` (a void op) becomes `null` — canonical JSON, never the bare
-    // word `undefined` (which is not valid JSON output on a wire).
-    console.log(JSON.stringify(result === undefined ? null : result));
+    const result = await dispatch(call);
+    await adapter.writeResult(raw, result, plan);
+    logger.info({ command: commandLabel, ms: Date.now() - start }, `→ ${commandLabel}`);
   } catch (err) {
-    logger.error({ command: entry.cliPath.join(' '), err }, `✗ ${entry.cliPath.join(' ')}`);
-    reportFailure(err);
+    logger.error({ command: commandLabel, err }, `✗ ${commandLabel}`);
+    await adapter.writeError(raw, err, plan);
   }
 }

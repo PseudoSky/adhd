@@ -51,6 +51,13 @@ const JSON_PARSE_ARG_HELPER = [
   `}`,
 ].join('\n')
 
+// serve-core migration (cli-adapter): `generate()` renders static TypeScript
+// SOURCE TEXT from a bare composed schema (no live `Operation`/`OpPlan`
+// available at codegen time), so it keeps consuming `./schema-introspect`'s
+// flag/envelope helpers directly rather than `OpPlan.cliFlags` — see that
+// module's header comment for why, and why the two must be kept in sync.
+// The LIVE `run()` path (this package's other consumer of these decisions)
+// has migrated onto `@adhd/apigen-engine-runtime`'s `buildOpPlan` instead.
 export function generate(input: PluginInput): PluginOutput {
   const cliName = (input.options['name'] as string) ?? 'cli';
   const version = (input.options['version'] as string) ?? '0.1.0';
