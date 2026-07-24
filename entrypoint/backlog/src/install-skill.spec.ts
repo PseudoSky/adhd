@@ -9,11 +9,21 @@
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { installSkill } from './install-skill.js';
 
-const REAL_SKILL_MD = readFileSync(join(process.cwd(), 'skill', 'SKILL.md'), 'utf8');
+// BUG-BACKLOG-INSTALL-SKILL-SPEC-CWD-001: `process.cwd()` only resolves
+// `skill/SKILL.md` when a shell happens to have `cd`'d into this package
+// directory first — the real `nx test backlog` gate (the `@nx/vite:test`
+// executor) runs with the WORKSPACE ROOT as cwd, so this constant threw
+// ENOENT under the official verification command every time, even though a
+// manually-`cd`'d `vitest run` masked it. Resolve relative to THIS file
+// instead (`install-skill.ts`'s own `packagedSkillMdPath()` already uses the
+// identical `dirname(fileURLToPath(import.meta.url))` pattern) — correct
+// regardless of the caller's cwd.
+const REAL_SKILL_MD = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'skill', 'SKILL.md'), 'utf8');
 
 describe('installSkill (MIGRATION.md §4.2)', () => {
   let tmp: string;

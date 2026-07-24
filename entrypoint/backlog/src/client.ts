@@ -256,7 +256,7 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
   // the ORIGINAL path recorded as provenance (DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001).
   const sourcePath = input.sourcePath ?? input.path;
 
-  const result: ImportResult = { parsed: items.length, created: 0, skippedDuplicates: 0, errors: [], malformedHeaders };
+  const result: ImportResult = { parsed: items.length, created: 0, skippedDuplicates: 0, updated: 0, errors: [], malformedHeaders };
   if (input.dryRun) return result;
 
   for (const item of items) {
@@ -293,8 +293,55 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
           ...(requiresReason(item.status) ? { reason: `imported from markdown at status ${item.status}` } : {}),
         });
       }
-      if (created.created) result.created += 1;
-      else result.skippedDuplicates += 1;
+      if (created.created) {
+        result.created += 1;
+        continue;
+      }
+      result.skippedDuplicates += 1;
+
+      // BUG-BACKLOG-IMPORT-INSERT-ONLY-NO-UPDATE-001: an already-live
+      // humanId used to be a pure no-op forever, even when the SOURCE
+      // markdown's title/body/priority/status had genuinely changed since
+      // the first import (e.g. a bug got fixed and its status/body updated
+      // directly in BACKLOG.md) — a re-import could never converge the
+      // graph with the live file short of a full re-seed. Diff against the
+      // CURRENT graph copy and refresh only what actually changed; an
+      // unchanged item stays a true no-op (never touches the store).
+      const existing = created.duplicateCandidates[0] ?? created.item;
+      let changed = false;
+
+      const patch: UpdateItemInput = {};
+      if (existing.title !== item.title) patch.title = item.title;
+      if (existing.body !== item.body) patch.body = item.body;
+      if (Object.keys(patch).length > 0) {
+        updateItemNode(ctx.store, input.repo, item.humanId, patch);
+        changed = true;
+      }
+
+      if (item.priority !== undefined && existing.priority !== item.priority) {
+        setPriorityNode(ctx.store, input.repo, item.humanId, item.priority);
+        changed = true;
+      }
+
+      if (existing.status !== item.status) {
+        transitionStatusNode(ctx.store, input.repo, item.humanId, item.status, {
+          by: 'system:importFromMarkdown',
+          ...(requiresCitation(item.status) ? { citations: [{ file: input.path }] } : {}),
+          ...(requiresReason(item.status) ? { reason: `re-imported from markdown at status ${item.status}` } : {}),
+        });
+        changed = true;
+      }
+
+      // Idempotent (writeEdge upserts on the same src/dst/rel triple) —
+      // safe to re-assert on every re-import, including an otherwise
+      // unchanged item, so an item's plan attachment is never permanently
+      // missed just because it was first imported before `input.plan` was set.
+      if (input.plan !== undefined && existing.plan !== input.plan) {
+        attachToPlanNode(ctx.store, input.repo, item.humanId, input.plan);
+        changed = true;
+      }
+
+      if (changed) result.updated += 1;
     } catch (err) {
       result.errors.push({ humanId: item.humanId, message: err instanceof Error ? err.message : String(err) });
     }
