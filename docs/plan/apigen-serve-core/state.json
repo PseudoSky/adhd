@@ -46,11 +46,11 @@
       "end_ref": null
     },
     "cli-adapter": {
-      "status": "in_progress",
+      "status": "complete",
       "started_at": "2026-07-24T08:07:21.185Z",
-      "done_at": null,
+      "done_at": "2026-07-24T09:31:24.039Z",
       "start_ref": "1891776cd571d5d06487bb691adcca90bc77f4bd",
-      "end_ref": null
+      "end_ref": "59b6f4e3b9581673cea1ed1cfc0c6df138b781ae"
     },
     "audit-transports": {
       "status": "pending",
@@ -167,6 +167,18 @@
       "audit_criteria_total": 44,
       "by": "plan-orchestrator",
       "note": "api-express collapses onto the shared adapter fastify established: composes createPackageInvoker (deletes local byte-identical buildInvokerForPackage/readUsePlugins/readUseOptions/adaptCoreLayer block, dod.13); route.ts's buildOperationIndex/resolveRoute shim removed. DEBT-APIGEN-SERVE-CORE-003 closed via shared writeResult (undefined->null, was previously empty-body 200 pre-migration per measured reality, not 204 as originally assumed -- flagged behavior change pinned by a void-return fixture). Parity gate green (golden/express.snapshot.json committed pre-migration); negative control proven RED->GREEN twice. Guard: 45/45 tests green (verified independently by orchestrator, not from executor prose). Self-verified no apigen-cli build-coupling and no mcp-adapter bleed-through (apigen-cli:test 156/156)."
+    },
+    {
+      "ts": "2026-07-24T09:31:24.039Z",
+      "from": "express-adapter",
+      "to": "cli-adapter",
+      "start_ref": "1891776cd571d5d06487bb691adcca90bc77f4bd",
+      "end_ref": "59b6f4e3b9581673cea1ed1cfc0c6df138b781ae",
+      "audit_exit": 0,
+      "audit_criteria_passed": 44,
+      "audit_criteria_total": 44,
+      "by": "plan-orchestrator",
+      "note": "cli-output migrated to TransportAdapter: readCall is pure argv-walking over OpPlan.cliFlags (kebab flags, --no- negation, JSON-typed flags, env-var fallback per F2); inline project() call removed; streaming:true explicitly rejected; --use capability decision resolved+documented. Parity gate green via a real spawned child process against the built entrypoint/apigen-cli binary (incl. flag-edge + help path); negative control proven RED->GREEN. Guard: 70/70 tests green (verified independently by orchestrator). Fixed a malformed criteria.json regex along the way (cli-adapter.2's absent-pattern 'project(' was an unescaped, uncompilable regex causing a permanent false-FAIL regardless of code state; escaped to 'project\\\\(' in criteria.json, unrelated to any executor's code)."
     }
   ],
   "amendment_log": [],
@@ -175,7 +187,7 @@
     "version": "0.8.29",
     "hash": "836ff34f0a74"
   },
-  "current_state": "express-adapter",
+  "current_state": "cli-adapter",
   "dod_provenance": {
     "confirmed_at": "2026-07-24T03:27:07.924Z",
     "by": "plan-orchestrator",
