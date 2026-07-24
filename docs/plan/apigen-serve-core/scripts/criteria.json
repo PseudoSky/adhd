@@ -319,6 +319,16 @@
       "paths": [
         "docs/apigen/proposals/py-extract-serve-split-findings.md"
       ]
+    },
+    {
+      "id": "py-flask-serve-split.1",
+      "phase": "phase-3",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "emit-json",
+      "paths": [
+        "packages/apigen/python/apigen_python/extractor.py"
+      ]
     }
   ]
 }
