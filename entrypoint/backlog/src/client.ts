@@ -43,7 +43,7 @@ import { toBacklogItem, type BacklogNodeMeta } from './store/mapping.js';
 import { claimItemNode, releaseClaimNode, renewClaimNode } from './store/claim.js';
 import { addCitationNode, appendNoteNode, archiveTerminalItems, resolveItemNode, startWorkNode, transitionStatusNode } from './store/lifecycle.js';
 import { addDependencyNode, assignItemNode, attachToPlanNode, linkRelatedNode, mergeItemsNode, removeDependencyNode, setPriorityNode, splitItemNode, supersedeItemNode } from './store/structure.js';
-import { buildChangelogSection, parseBacklogMarkdown, renderItemsToMarkdown, toImportItems } from './markdown.js';
+import { buildChangelogSection, parseBacklogMarkdownWithDiagnostics, renderItemsToMarkdown, toImportItems } from './markdown.js';
 import { readFileSync } from 'node:fs';
 
 /** The one type apigen special-cases via the `ctx-name-only` invariant. */
@@ -233,10 +233,14 @@ export async function attachToPlan(ctx: BacklogCtx, repo: string, humanId: strin
 
 export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownInput): Promise<ImportResult> {
   const text = readFileSync(input.path, 'utf8');
-  const parsed = parseBacklogMarkdown(text);
+  const { items: parsed, malformedHeaders } = parseBacklogMarkdownWithDiagnostics(text);
   const items = toImportItems(parsed);
+  // Defaults to `path` (the file actually read) — a caller only needs to set
+  // `sourcePath` explicitly when importing from a scratch copy but wanting
+  // the ORIGINAL path recorded as provenance (DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001).
+  const sourcePath = input.sourcePath ?? input.path;
 
-  const result: ImportResult = { parsed: items.length, created: 0, skippedDuplicates: 0, errors: [] };
+  const result: ImportResult = { parsed: items.length, created: 0, skippedDuplicates: 0, errors: [], malformedHeaders };
   if (input.dryRun) return result;
 
   for (const item of items) {
@@ -248,9 +252,18 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
         body: item.body,
         repo: input.repo,
         ...(input.projectPath !== undefined ? { projectPath: input.projectPath } : {}),
+        ...(input.plan !== undefined ? { plan: input.plan } : {}),
+        importedFrom: sourcePath,
         ...(item.priority !== undefined ? { priority: item.priority } : {}),
         force: true,
       });
+      if (created.created && input.plan !== undefined) {
+        // `attachToPlan` also writes the `MEMBER_OF` edge to the plan node
+        // (createItemNode's `plan` above only stamps the `metadata.plan`
+        // field) — both are needed for `renderToMarkdown({plan})`'s
+        // filtered-projection scope model (MIGRATION.md §2.2).
+        attachToPlanNode(ctx.store, input.repo, item.humanId, input.plan);
+      }
       if (created.created && item.status !== 'OPEN') {
         // createItem always starts OPEN (SPEC.md §4.2 rule 1) — apply the
         // parsed status as a follow-up transition so import is idempotent

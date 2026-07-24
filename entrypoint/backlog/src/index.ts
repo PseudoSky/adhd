@@ -69,10 +69,11 @@ export {
   detectStatus,
   normalizeLegacyStatus,
   parseBacklogMarkdown,
+  parseBacklogMarkdownWithDiagnostics,
   renderItemsToMarkdown,
   toImportItems,
 } from './markdown.js';
-export type { ParsedImportItem, ParsedMarkdownItem } from './markdown.js';
+export type { ParsedImportItem, ParsedMarkdownItem, ParseWithDiagnosticsResult } from './markdown.js';
 
 export * from './model.js';
 

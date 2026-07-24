@@ -123,7 +123,7 @@ export interface RunBacklogCliOpts {
 export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {}): Promise<void> {
   const env = buildBacklogEnv({ scope: opts.scope, adhdRoot: opts.adhdRoot, cwd: opts.cwd });
   env.ensureDirs();
-  const store = openGraphBacklogStore(env.files.db);
+  const store = openGraphBacklogStore(env.files.db, env.config.db.busyTimeoutMs);
 
   try {
     const ctx: BacklogCtx = { store, env };

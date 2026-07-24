@@ -16,9 +16,16 @@
  * escalates to a write lock. `BEGIN IMMEDIATE` acquires the RESERVED lock at
  * transaction start, so a second process's own `.immediate()` call blocks
  * (up to `busy_timeout`) rather than interleaving (DESIGN.md §3).
+ *
+ * The `.immediate()` call is wrapped in `withImmediateRetry` (bounded,
+ * jittered exponential backoff on `SQLITE_BUSY`/`SQLITE_BUSY_TIMEOUT` only —
+ * DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001) so a blocked write that outlasts
+ * one `busy_timeout` window gets a few more chances before the caller (a
+ * one-shot CLI process, or an MCP/HTTP request) sees a crash.
  */
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import type { BacklogNodeMeta } from './mapping.js';
+import { withImmediateRetry } from './immediate-retry.js';
 
 export class NotFoundError extends Error {
   constructor(public readonly nodeId: number) {
@@ -32,14 +39,16 @@ export function mutateMetadata<M = BacklogNodeMeta>(
   nodeId: number,
   updater: (current: M) => M
 ): M {
-  return store.db
-    .transaction(() => {
-      const node = store.graph.getNode(nodeId);
-      if (!node || node.tInvalid) throw new NotFoundError(nodeId);
-      const current = (node.metadata ?? {}) as M;
-      const next = updater(current);
-      store.graph.touch(nodeId, { metadata: next as Record<string, unknown> });
-      return next;
-    })
-    .immediate();
+  return withImmediateRetry(() =>
+    store.db
+      .transaction(() => {
+        const node = store.graph.getNode(nodeId);
+        if (!node || node.tInvalid) throw new NotFoundError(nodeId);
+        const current = (node.metadata ?? {}) as M;
+        const next = updater(current);
+        store.graph.touch(nodeId, { metadata: next as Record<string, unknown> });
+        return next;
+      })
+      .immediate()
+  );
 }

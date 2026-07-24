@@ -8,7 +8,7 @@ import { Environment } from '@adhd/environment';
 import type { EnvironmentOptions, EnvironmentSpec, Scope } from '@adhd/environment-base-spec';
 
 export interface BacklogConfig {
-  readonly db: { readonly path: string | undefined };
+  readonly db: { readonly path: string | undefined; readonly busyTimeoutMs: number };
   readonly logging: { readonly level: string };
 }
 
@@ -29,6 +29,14 @@ export const backlogEnvironmentSpec: EnvironmentSpec<BacklogConfig> = {
       type: 'string',
       env: 'ADHD_BACKLOG_DATABASE_PATH',
       description: 'SQLite backlog-graph DB path. Unset ⇒ falls back to env.files.db under the resolved scope root.',
+    },
+    'db.busyTimeoutMs': {
+      type: 'integer',
+      env: 'ADHD_BACKLOG_DATABASE_BUSY_TIMEOUT_MS',
+      default: 5000,
+      description:
+        'SQLite `busy_timeout` (ms) each write waits for a contended lock before retrying (DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001). ' +
+        'Raise this when scaling toward more concurrent agents writing the same global-scope store.',
     },
     'logging.level': {
       type: 'string',

@@ -22,12 +22,14 @@ export interface TmpStore {
 /**
  * Opens a real backlog store at a fresh temp path under `tmp/backlog/`.
  * `name` is a human-readable prefix (usually the test file's name) — the
- * actual directory is made unique via `mkdtempSync`.
+ * actual directory is made unique via `mkdtempSync`. `busyTimeoutMs` defaults
+ * to `openGraphBacklogStore`'s own default (5000); tests exercising
+ * DEBT-BACKLOG-CONCURRENCY-BUSY-RETRY-001 pass a short override.
  */
-export function openTmpStore(name: string): TmpStore {
+export function openTmpStore(name: string, busyTimeoutMs?: number): TmpStore {
   const dir = mkdtempSync(join(ensureTmpRoot(), `${name}-`));
   const dbPath = join(dir, 'backlog.db');
-  const store = openGraphBacklogStore(dbPath);
+  const store = busyTimeoutMs === undefined ? openGraphBacklogStore(dbPath) : openGraphBacklogStore(dbPath, busyTimeoutMs);
   return {
     store,
     dbPath,
