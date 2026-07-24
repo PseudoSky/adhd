@@ -18,6 +18,7 @@
 
 - [serve-core-primitives.1] createPackageInvoker exported from apigen-engine-runtime index
 
+- [serve-core-primitives.2] dispatchForPlan exported from apigen-engine-runtime index
 ---
 
 ## Reservations
