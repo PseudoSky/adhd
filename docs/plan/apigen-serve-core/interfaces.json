@@ -1,1 +1,11 @@
-{}
+{
+  "op-plan": {
+    "interface": "OpPlan",
+    "shape": "interface OpPlan { op: Operation; http:{verb:HttpVerb;route:string}; mcp:{name:string}; cli:{path:string[]}; grpc:{package:string;service:string;method:string}; params?: ParamInfo[]; envelope: Array<{field:string;pluginId:string;httpHeader:string;mcpMetaKey:string;cliFlag:string;envVar:string}>; cliFlags: Map<string,{camelKey:string;kind:'domain'|'envelope';valueKind:'boolean'|'json'|'string'}>; streaming:boolean; isMount:boolean; mountHandler?:(call:Call)=>unknown|Promise<unknown>|AsyncIterable<unknown> }  // computed once per op; envelope[] and cliFlags derived from the composed input schema (proposal §3a)",
+    "provenance": "vendored-source",
+    "confidence": "vendored",
+    "resolved_version": "git:fb491d52",
+    "source": "packages/apigen/apigen-engine-naming/src/lib/naming.ts:94-177 (TransportProjection/project); apigen-engine-runtime/src/lib/describe-params.ts (ParamInfo); apigen-core-client/src/lib/plugin.ts:359-375 (MountedOperation)",
+    "audit_check": "serve-core-primitives.3"
+  }
+}
