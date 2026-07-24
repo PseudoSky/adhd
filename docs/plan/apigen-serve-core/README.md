@@ -37,3 +37,11 @@ Centralize the op->wire serve loop into OpPlan + createPackageInvoker + dispatch
   - entrypoint: `CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test`
   - observable: `a real @modelcontextprotocol/sdk client sending schema-violating input receives an invalid_argument error instead of a domain result`
   - delivered-by: `mcp-adapter`
+
+- `[dod.5]` **Streaming is wired live: a streaming:true op emits SSE frames over fastify and progressive content over MCP; CLI, py-flask, and py-grpc explicitly reject a streaming op rather than silently mis-serializing an AsyncIterable. (behavioral)** — Streaming is wired live: a streaming:true op emits SSE frames over fastify and progressive content over MCP; CLI, py-flask, and py-grpc explicitly reject a streaming op rather than silently mis-serializing an AsyncIterable..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `CI=true ./node_modules/.bin/nx run-many -t test -p apigen-plugin-api-fastify,apigen-plugin-mcp,apigen-plugin-cli-output`
+  - observable: `fastify streaming fixture yields SSE frames; mcp yields progressive content; cli/py streaming fixture returns an explicit rejection`
+  - delivered-by: `fastify-adapter, mcp-adapter, cli-adapter`
