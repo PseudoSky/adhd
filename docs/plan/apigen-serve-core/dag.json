@@ -83,7 +83,8 @@
         "packages/apigen/apigen-plugin-api-express/src/lib/generate.ts",
         "packages/apigen/apigen-plugin-api-express/src/lib/route.ts",
         "packages/apigen/apigen-plugin-api-express/src/test/route-parity.spec.ts",
-        "packages/apigen/apigen-plugin-api-express/src/test/golden/express.snapshot.json"
+        "packages/apigen/apigen-plugin-api-express/src/test/golden/express.snapshot.json",
+        "docs/plan/apigen-serve-core/neg-control/express-adapter.patch"
       ],
       "context": "contexts/express-adapter.md",
       "notes": "Collapse onto shared adapter; closes DEBT-003 (undefined->null). Void-return fixture pins the intentional change."
