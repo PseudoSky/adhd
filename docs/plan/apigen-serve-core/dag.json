@@ -56,6 +56,19 @@
       ],
       "context": "contexts/fastify-adapter.md",
       "notes": "Reference TransportAdapter migration. Fold DEBT-004 mount fidelity + wire dead sendStreamSse live. Parity gate + negative control."
+    },
+    "audit-foundation": {
+      "kind": "audit",
+      "phase": "phase-1",
+      "depends_on": [
+        "fastify-adapter"
+      ],
+      "guard": "node docs/plan/apigen-serve-core/scripts/run-audit.js --phase phase-1",
+      "artifacts": [
+        "docs/plan/apigen-serve-core/scripts/audit_apigen-serve-core.py"
+      ],
+      "context": "contexts/audit-foundation.md",
+      "notes": ""
     }
   },
   "authored_with": {
