@@ -23,7 +23,11 @@ jobs:
       - name: Install Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # >=22 required by @adhd/backlog's sox-graph-store/better-sqlite3@^12
+          # native-module toolchain (DEBT-BACKLOG-CI-NODE22-001) — `nx affected`
+          # runs every project's targets in this one job/runner, so the whole
+          # workflow's Node version is the floor for every project it touches.
+          node-version: 22
 
       - name: Enable Corepack (pnpm)
         run: corepack enable

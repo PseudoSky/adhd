@@ -8,7 +8,7 @@ import type { NodeFilter, NodeRecord } from '@adhd/sox-graph-store';
 import type { AuditTrailEntry, AuditTrailResult, BacklogFilter, BacklogItem, DependencyGraph, StatsScope, TopoOrderResult } from '../model.js';
 import { BacklogItemNotFoundError, isTerminalStatus } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
-import { BACKLOG_ITEM_TAG, buildNodeName, isLiveBacklogItemNode, toBacklogItem, type BacklogNodeMeta } from './mapping.js';
+import { BACKLOG_ITEM_TAG, buildNodeName, isLiveBacklogItemNode, sanitizeFtsQuery, toBacklogItem, type BacklogNodeMeta } from './mapping.js';
 
 const PRIORITY_RANK: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
@@ -44,7 +44,12 @@ function applyOpenClosedFilter(items: BacklogItem[], filter: BacklogFilter): Bac
 export function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter = {}): NodeRecord[] {
   if (filter.grep) {
     const nodeFilter = nodeFilterFromBacklogFilter({ ...filter, grep: undefined });
-    const hits = store.graph.searchNodes(filter.grep, {
+    // Sanitized — same FTS5-syntax-crash guard as crud.ts's dedupeScan
+    // (BUG-BACKLOG-DEDUPE-FTS-SYNTAX-CRASH-001): an unsanitized `grep` term
+    // containing `-`/`:`/`(`/`)`/`"` crashes `searchNodes` outright.
+    const ftsQuery = sanitizeFtsQuery(filter.grep);
+    if (!ftsQuery) return [];
+    const hits = store.graph.searchNodes(ftsQuery, {
       limit: filter.limit ?? 1000,
       filter: nodeFilter,
     });

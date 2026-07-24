@@ -7,7 +7,7 @@
  * (store/lifecycle.ts + client.ts) can compose this without a layering
  * violation (store/* never depends on markdown.ts).
  */
-import type { BacklogFilter, BacklogItem, BacklogStatus, Citation, Priority } from './model.js';
+import type { BacklogFilter, BacklogItem, BacklogStatus, Citation, MalformedHeaderInfo, Priority } from './model.js';
 
 // ── An item header is a `##`/`###` line whose first token is an ID: starts
 //    uppercase, has ≥1 hyphenated segment, and contains a digit — ported
@@ -125,10 +125,37 @@ export interface ParsedMarkdownItem {
   body: string;
 }
 
+/**
+ * Narrow, high-precision heuristic for "this header was TRYING to be an id
+ * header and failed `HEADER_RE`" vs. "this is a legitimate narrative section
+ * heading" (e.g. `## Bugs`, `` ## `@adhd/backlog` design (session ...) ``,
+ * `### Leak fixes — RESOLVED 2026-07-02` — all real headers from this repo's
+ * own BACKLOG.md files, none of which should ever be flagged). A real id
+ * (`HEADER_RE`) is upper-hyphen-segmented; a corrupted one (the negative
+ * control this was filed from: `DEBT-ENV-CLI-002` -> `DEBT_ENV_CLI_002`)
+ * still reads as a single, unspaced, uppercase-with-separators TOKEN — so
+ * checking just the header's FIRST WHITESPACE-DELIMITED TOKEN for
+ * "all-caps/digits/hyphens/underscores, with at least one digit or
+ * underscore" catches the id-shaped-but-malformed case while a prose heading
+ * (lowercase words, or backtick/`@`-prefixed) never matches.
+ */
+const MALFORMED_ID_TOKEN_RE = /^[A-Z][A-Z0-9_-]*$/;
+
+function looksLikeAttemptedId(headerText: string): boolean {
+  const firstToken = headerText.trim().split(/\s+/)[0] ?? '';
+  return MALFORMED_ID_TOKEN_RE.test(firstToken) && /[0-9_]/.test(firstToken);
+}
+
+export interface ParseWithDiagnosticsResult {
+  items: ParsedMarkdownItem[];
+  malformedHeaders: MalformedHeaderInfo[];
+}
+
 /** Ported (structure preserved) from tools/util/backlog.mjs:106-155 (`parse`). */
-export function parseBacklogMarkdown(text: string): ParsedMarkdownItem[] {
+function parseBacklogMarkdownInternal(text: string): ParseWithDiagnosticsResult {
   const lines = text.split('\n');
   const items: ParsedMarkdownItem[] = [];
+  const malformedHeaders: MalformedHeaderInfo[] = [];
   let cur:
     | (Omit<ParsedMarkdownItem, 'status' | 'open' | 'terminal' | 'priority' | 'body'> & { bodyLines: string[] })
     | null = null;
@@ -171,6 +198,14 @@ export function parseBacklogMarkdown(text: string): ParsedMarkdownItem[] {
         bodyLines: [],
       };
     } else if (isAnyHeader) {
+      // This header failed `HEADER_RE` — before dropping it (the previous
+      // behavior), check whether it LOOKS like a corrupted/typo'd id rather
+      // than a legitimate narrative section heading, and surface it instead
+      // of silently vanishing (DEBT-BACKLOG-IMPORT-SILENT-DROP-001).
+      const headerText = line.replace(/^#{2,3}\s+/, '');
+      if (looksLikeAttemptedId(headerText)) {
+        malformedHeaders.push({ line: i + 1, headerLine: line });
+      }
       flush();
       cur = null;
     } else if (cur) {
@@ -178,7 +213,22 @@ export function parseBacklogMarkdown(text: string): ParsedMarkdownItem[] {
     }
   });
   flush();
-  return items;
+  return { items, malformedHeaders };
+}
+
+/** Ported (structure preserved) from tools/util/backlog.mjs:106-155 (`parse`). */
+export function parseBacklogMarkdown(text: string): ParsedMarkdownItem[] {
+  return parseBacklogMarkdownInternal(text).items;
+}
+
+/**
+ * Same parse as {@link parseBacklogMarkdown}, plus `malformedHeaders` — every
+ * `##`/`###` line that looks like a corrupted/typo'd id header and was
+ * dropped instead of parsed into an item (DEBT-BACKLOG-IMPORT-SILENT-DROP-001).
+ * `importFromMarkdown` (client.ts) uses this to populate `ImportResult.malformedHeaders`.
+ */
+export function parseBacklogMarkdownWithDiagnostics(text: string): ParseWithDiagnosticsResult {
+  return parseBacklogMarkdownInternal(text);
 }
 
 // ============================================================================

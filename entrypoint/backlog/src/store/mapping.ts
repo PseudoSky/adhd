@@ -20,6 +20,7 @@
  * primitive as claims) so this can never happen — negligible FTS noise, zero
  * loss-of-data risk. Filed as DEBT-BACKLOG-CONTENT-HASH-COLLISION-001.
  */
+import { createHash } from 'node:crypto';
 import type { NodeRecord } from '@adhd/sox-graph-store';
 import type { BacklogItem, BacklogStatus, Citation, Note, Priority } from '../model.js';
 
@@ -27,6 +28,45 @@ export const BACKLOG_ITEM_TAG = 'backlog-item';
 export const BACKLOG_PLAN_TAG = 'backlog-plan';
 export const BACKLOG_ASSIGNEE_TAG = 'backlog-assignee';
 const CONTENT_MARKER_PREFIX = 'adhd-backlog:';
+
+/**
+ * Mirrors `@adhd/sox-graph-store`'s PRIVATE (unexported) `hashContent()`
+ * (`sha256(content.trim().toLowerCase())`) exactly. Needed only by
+ * `updateItemNode` (crud.ts), which writes `node.content`/`node.content_hash`
+ * directly via raw SQL (DESIGN.md §14's sanctioned escape hatch for the one
+ * gap `touch()` doesn't cover — DEBT-BACKLOG-CONTENT-IMMUTABLE-001) and must
+ * keep `content_hash` consistent with the `content` it just wrote, exactly as
+ * `writeNode()` would have. If upstream ever changes its normalization, this
+ * copy must change with it — there is no shared primitive to import instead.
+ */
+export function computeContentHash(content: string): string {
+  return createHash('sha256').update(content.trim().toLowerCase()).digest('hex');
+}
+
+/**
+ * `@adhd/sox-graph-store`'s `searchNodes(query)` binds `query` DIRECTLY as an
+ * FTS5 `MATCH` argument, parsed by FTS5's own boolean/column-filter query
+ * grammar — NOT a plain-text search. `searchNodes`'s own `query.replace(/"/g,
+ * '""')` cannot make this safe for arbitrary text: doubling an EXISTING `"`
+ * always yields an EVEN number of quote characters in the output, so a
+ * caller can never end up with a validly single-quoted phrase this way
+ * (verified empirically — wrapping a title in quotes before calling
+ * `searchNodes` still throws). A title containing a bare `-`, `:`, `(`, `)`,
+ * or `"` (all real English titles — "off-by-one", "fix: the thing" — not
+ * edge cases) crashes `createItemNode`'s dedupe scan outright with a raw
+ * `SqliteError`, since `force:true` (the only path that SKIPS the dedupe
+ * scan) is not the default. `dedupeScan` (crud.ts) uses this to strip every
+ * FTS5-syntax-significant character to a space before searching — this is
+ * BEHAVIOR-PRESERVING for the already-working case (a title with no special
+ * characters passes through unchanged, still an implicit-AND bareword
+ * query), and merely prevents the CRASH for the common case that hits one.
+ */
+export function sanitizeFtsQuery(text: string): string {
+  return text
+    .replace(/["():^*]|-/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
 
 /**
  * The JSON shape persisted in `node.meta` (DESIGN.md §2.2/§4.1). Every
@@ -46,6 +86,8 @@ export interface BacklogNodeMeta {
   repo: string;
   projectPath?: string;
   plan?: string;
+  /** Source markdown path this item was imported from, if any (DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001). */
+  importedFrom?: string;
   assignee?: string;
   claimedBy?: string;
   claimedAt?: string;
@@ -121,6 +163,7 @@ export function toBacklogItem(node: NodeRecord): BacklogItem {
     repo: meta.repo ?? node.namespace,
     projectPath: meta.projectPath,
     plan: meta.plan,
+    importedFrom: meta.importedFrom,
     assignee: meta.assignee,
     claimedBy: meta.claimedBy,
     claimedAt: meta.claimedAt,
