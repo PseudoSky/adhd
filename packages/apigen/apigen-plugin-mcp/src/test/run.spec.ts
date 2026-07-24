@@ -1,22 +1,56 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { run } from '../lib/run';
+import { run, __toolTableBuildCount } from '../lib/run';
 import { dispatch } from '@adhd/apigen-engine-runtime';
-import type { Operation, RunInput, Segment } from '@adhd/apigen-core-client';
+import type { UsePlugin } from '@adhd/apigen-engine-runtime';
+import type {
+  MountedOperation,
+  Operation,
+  RunInput,
+  Segment,
+} from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
-import { deriveToolName } from '../lib/tool-naming';
+import { operationFor } from '../lib/tool-naming';
 import { ApiError } from '@adhd/apigen-base-errors';
 import * as net from 'node:net';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import {
   captureGolden,
   assertParity,
+  proveNegativeControl,
   type GoldenFixture,
   type GoldenSnapshot,
   type ParityDriver,
 } from '@adhd/apigen-engine-runtime/test-support';
+
+/** Test-local stand-in for the deleted `deriveToolName` — mirrors run.ts's own
+ * `operationFor(...) -> buildOpPlan(...).mcp.name` pipeline (here via
+ * `project()` directly, decoupled from run.ts's internals) so these tests
+ * compute the SAME expected value run.ts derives internally. */
+function deriveToolName(
+  pkg: { id: string; importPath: string },
+  fnName: string,
+  operations?: Operation[]
+): string {
+  return project(operationFor(pkg, fnName, operations)).mcp.name;
+}
+
+/** Walk up from `startDir` to the nearest ancestor containing `.git` (the repo root). */
+function findRepoRoot(startDir: string): string {
+  let dir = startDir;
+  for (;;) {
+    if (fs.existsSync(path.join(dir, '.git'))) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      throw new Error(`findRepoRoot: no ".git" found walking up from ${startDir}`);
+    }
+    dir = parent;
+  }
+}
 
 /** Bind a TCP server to port 0, record the OS-assigned port, close it, return that port. */
 async function freePort(): Promise<number> {
@@ -1207,4 +1241,421 @@ describe('[mcp-adapter] TransportAdapter/OpPlan golden-snapshot parity gate', ()
 
     assertParity(committed, recapture);
   });
+});
+
+// ---------------------------------------------------------------------------
+// [mcp-adapter.1] BUG-APIGEN-SERVE-CORE-001 — validate-Layer composition.
+//
+// ⚠️ FLAGGED BREAKING BEHAVIOR CHANGE: malformed input now REJECTS with
+// `ApiError{code:'invalid_argument'}` (surfaced to a real MCP client as a
+// JSON-RPC error whose message is the validate-Layer's own "Validation
+// failed: ..." text) BEFORE the target function is ever called. Pre-
+// migration this same call would have reached `dispatch()` directly and
+// EITHER run the domain fn with `undefined`/garbage args (silently
+// "succeeding") or thrown a completely different, uncontrolled error —
+// never a controlled, pre-dispatch `invalid_argument` rejection. This is
+// intentional and required (dod.4/dod.9), not a regression.
+// ---------------------------------------------------------------------------
+
+describe('[mcp-adapter.1] BUG-APIGEN-SERVE-CORE-001 — malformed input is rejected pre-dispatch', () => {
+  let controller: AbortController;
+  let client: Client;
+  let calls = 0;
+
+  const malformedSchema = {
+    getUser: {
+      input: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'object',
+            properties: { userId: { type: 'string' } },
+            required: ['userId'],
+          },
+        },
+        required: ['data'],
+      },
+      output: { type: 'object' },
+    },
+  };
+  const malformedNamespaceSeg: Segment = {
+    raw: 'malformed-pkg',
+    words: ['malformed', 'pkg'],
+  };
+  const malformedGetUserOp: Operation = {
+    id: 'malformed-pkg/getUser',
+    host: 'ts',
+    namespace: malformedNamespaceSeg,
+    path: [{ raw: 'getUser', words: ['get', 'user'] }],
+    kind: 'action',
+    async: false,
+    streaming: false,
+    safe: false,
+    input: {},
+    output: {},
+    envelope: {},
+    typeText: null,
+  };
+  const malformedToolName = project(malformedGetUserOp).mcp.name;
+
+  beforeAll(async () => {
+    controller = new AbortController();
+    const port = await freePort();
+    const runInput: RunInput = {
+      packages: [
+        {
+          id: 'malformed-pkg',
+          schemas: malformedSchema,
+          importPath: '@test/malformed-pkg',
+          fns: {
+            getUser: (userId: unknown) => {
+              calls++;
+              return getUser(userId as string);
+            },
+          },
+        },
+      ],
+      operations: [malformedGetUserOp],
+      outputDir: '/tmp/out',
+      options: { transport: 'streaming-http', port },
+      signal: controller.signal,
+    };
+    run(runInput).catch(() => {
+      /* swallowed after abort */
+    });
+
+    const deadline = Date.now() + 10000;
+    for (;;) {
+      try {
+        client = new Client({ name: 'mcp-adapter-malformed', version: '1.0.0' });
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
+        );
+        break;
+      } catch {
+        if (Date.now() > deadline) throw new Error('server did not become ready in 10s');
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+  }, 15000);
+
+  afterAll(async () => {
+    await client?.close();
+    controller.abort();
+  });
+
+  it('a REAL sdk client callTool() with missing required "userId" REJECTS (does not silently succeed)', async () => {
+    calls = 0;
+    await expect(
+      client.callTool({ name: malformedToolName, arguments: { data: {} } })
+    ).rejects.toThrow();
+    // Short-circuit proof (§8.1 rule 1 / BUG-APIGEN-009): the domain fn must
+    // NEVER be reached when validation fails — this is what distinguishes a
+    // genuine pre-dispatch `invalid_argument` rejection from the target fn
+    // itself throwing (or silently running on garbage input, the OLD
+    // behavior).
+    expect(calls).toBe(0);
+  });
+
+  it('the rejection surfaces the validate-Layer\'s own message text (the invalid_argument ApiError, not a generic/unknown-tool error)', async () => {
+    calls = 0;
+    let thrown: unknown;
+    try {
+      await client.callTool({ name: malformedToolName, arguments: { data: {} } });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeDefined();
+    expect((thrown as Error).message).toContain('Validation failed');
+    expect((thrown as Error).message).toContain('userId');
+    expect(calls).toBe(0);
+  });
+
+  it('[negative control] a WELL-FORMED call to the SAME tool succeeds and DOES reach the fn — proves the rejection above is validation-specific, not a broken tool registration', async () => {
+    calls = 0;
+    const result = await client.callTool({
+      name: malformedToolName,
+      arguments: { data: { userId: 'u-ok' } },
+    });
+    expect(calls).toBe(1);
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(JSON.parse(content[0].text)).toEqual(getUser('u-ok'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// dod.11 / [mcp-adapter.7] — mcp composes `--use` layer AND mount capability
+// via `createPackageInvoker`, for the FIRST time. A wholly NEW mcp
+// capability (mcp had zero `--use` support pre-migration).
+// ---------------------------------------------------------------------------
+
+describe('[mcp-adapter.7] dod.11 — mcp composes --use layer + mount via createPackageInvoker', () => {
+  let controller: AbortController;
+  let client: Client;
+  let layerCallLog: string[];
+
+  const useSchema = {
+    getUser: {
+      input: {
+        type: 'object',
+        properties: {
+          data: {
+            type: 'object',
+            properties: { userId: { type: 'string' } },
+            required: ['userId'],
+          },
+        },
+        required: ['data'],
+      },
+      output: { type: 'object' },
+    },
+  };
+  const useNamespaceSeg: Segment = { raw: 'use-pkg', words: ['use', 'pkg'] };
+  const useGetUserOp: Operation = {
+    id: 'use-pkg/getUser',
+    host: 'ts',
+    namespace: useNamespaceSeg,
+    path: [{ raw: 'getUser', words: ['get', 'user'] }],
+    kind: 'action',
+    async: false,
+    streaming: false,
+    safe: false,
+    input: {},
+    output: {},
+    envelope: {},
+    typeText: null,
+  };
+  const useGetUserToolName = project(useGetUserOp).mcp.name;
+
+  /** A tiny `--use` plugin exercising BOTH the `layer` and `mount` capabilities
+   * `createPackageInvoker` composes. The layer logs every op.id it wraps
+   * (source AND mount) — proving `dispatchForPlan`'s mount branch routes
+   * through the SAME composed layer stack as source ops
+   * ([fix:mount-through-layers], mirrored from fastify). The mount
+   * contributes a `status` tool with no composed schema at all. */
+  const statusMountOp: MountedOperation = {
+    id: '_meta/status',
+    host: 'ts',
+    namespace: { raw: 'meta', words: ['meta'] },
+    path: [{ raw: 'status', words: ['status'] }],
+    kind: 'query',
+    async: false,
+    streaming: false,
+    safe: true,
+    input: {},
+    output: { type: 'object' },
+    envelope: {},
+    typeText: null,
+    transports: ['mcp'],
+    handler: () => ({ status: 'ok' }),
+  };
+
+  function makeLoggingUsePlugin(log: string[]): UsePlugin {
+    return {
+      id: 'logging-use',
+      capabilities: {
+        layer: {
+          layer: async (call: unknown, next: () => Promise<unknown>) => {
+            log.push((call as { operation: { id: string } }).operation.id);
+            return next();
+          },
+        },
+        mount: {
+          operations: () => [statusMountOp],
+        },
+      },
+    };
+  }
+
+  beforeAll(async () => {
+    layerCallLog = [];
+    controller = new AbortController();
+    const port = await freePort();
+    const runInput: RunInput = {
+      packages: [
+        {
+          id: 'use-pkg',
+          schemas: useSchema,
+          importPath: '@test/use-pkg',
+          fns: { getUser: (userId: unknown) => getUser(userId as string) },
+        },
+      ],
+      operations: [useGetUserOp],
+      outputDir: '/tmp/out',
+      options: {
+        transport: 'streaming-http',
+        port,
+        usePlugins: [makeLoggingUsePlugin(layerCallLog)],
+      },
+      signal: controller.signal,
+    };
+    run(runInput).catch(() => {
+      /* swallowed after abort */
+    });
+
+    const deadline = Date.now() + 10000;
+    for (;;) {
+      try {
+        client = new Client({ name: 'mcp-adapter-use', version: '1.0.0' });
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
+        );
+        break;
+      } catch {
+        if (Date.now() > deadline) throw new Error('server did not become ready in 10s');
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+  }, 15000);
+
+  afterAll(async () => {
+    await client?.close();
+    controller.abort();
+  });
+
+  it('the mount op (_meta/status) is registered as a real MCP tool (tools/list)', async () => {
+    const { tools } = await client.listTools();
+    const names = tools.map((t) => t.name);
+    expect(names).toContain('meta_status');
+  });
+
+  it('callTool(_meta/status mount) dispatches to the mount handler and returns its value', async () => {
+    const result = await client.callTool({ name: 'meta_status', arguments: {} });
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(JSON.parse(content[0].text)).toEqual({ status: 'ok' });
+  });
+
+  it('the --use LAYER wraps a normal source-op call (layer log records the op.id)', async () => {
+    layerCallLog.length = 0;
+    await client.callTool({
+      name: useGetUserToolName,
+      arguments: { data: { userId: 'u-layer' } },
+    });
+    expect(layerCallLog).toContain(useGetUserOp.id);
+  });
+
+  it('[fix:mount-through-layers] the --use LAYER ALSO wraps the mount call (dispatchForPlan mount branch flows through the SAME composed invoker)', async () => {
+    layerCallLog.length = 0;
+    await client.callTool({ name: 'meta_status', arguments: {} });
+    expect(layerCallLog).toContain('_meta/status');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// dod.12 / [mcp-adapter.8] — toolMetas hoist regression guard: the (expensive)
+// tool table must be built EXACTLY ONCE per `run()` invocation, never
+// per-request. Pre-migration, `streaming-http` mode rebuilt the ENTIRE tool
+// table (fresh `Server` + full OpPlan/description/outputSchema re-derivation)
+// on every single request.
+// ---------------------------------------------------------------------------
+
+describe('[mcp-adapter.8] dod.12 — toolMetas build count stays 1 across multiple CallTool requests', () => {
+  it('__toolTableBuildCount increases by exactly 1 for one run(), regardless of request volume', async () => {
+    const before = __toolTableBuildCount.count;
+    const controller = new AbortController();
+    const port = await freePort();
+    const runInput: RunInput = {
+      packages: [
+        {
+          id: 'hoist-pkg',
+          schemas: testSchema,
+          importPath: '@test/hoist-pkg',
+          fns: testFns,
+        },
+      ],
+      outputDir: '/tmp/out',
+      options: { transport: 'streaming-http', port },
+      signal: controller.signal,
+    };
+    run(runInput).catch(() => {
+      /* swallowed after abort */
+    });
+
+    let client: Client | undefined;
+    const deadline = Date.now() + 10000;
+    for (;;) {
+      try {
+        client = new Client({ name: 'mcp-adapter-hoist', version: '1.0.0' });
+        await client.connect(
+          new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
+        );
+        break;
+      } catch {
+        if (Date.now() > deadline) throw new Error('server did not become ready in 10s');
+        await new Promise((r) => setTimeout(r, 50));
+      }
+    }
+
+    try {
+      // Build count is pinned immediately after run() starts listening — a
+      // per-request rebuild would already show up as > before+1 here.
+      expect(__toolTableBuildCount.count).toBe(before + 1);
+
+      const toolName = deriveToolName({ id: 'hoist-pkg', importPath: '@test/hoist-pkg' }, 'getUser');
+      // MULTIPLE CallTool requests against the SAME stateless streaming-http
+      // server (each streaming-http request gets its own fresh `Server`
+      // instance per the SDK's stateless-mode contract — but that per-request
+      // `createMcpServer()` call must NOT re-invoke the expensive
+      // `buildToolTable()`).
+      for (let i = 0; i < 5; i++) {
+        await client.callTool({ name: toolName, arguments: { data: { userId: `u${i}` } } });
+      }
+
+      expect(__toolTableBuildCount.count).toBe(before + 1);
+    } finally {
+      await client.close();
+      controller.abort();
+    }
+  }, 15000);
+});
+
+// ---------------------------------------------------------------------------
+// [mcp-adapter.6] negative control ([inv:negative-control], AGENTS.md §7 pt
+// 2): a parity suite that has never been shown to fail is not a gate.
+//
+// Patching `run.ts` on disk cannot affect an ALREADY-imported, already-
+// running server within this same test process (editing a .ts source file
+// does not hot-reload code a prior `import` already evaluated) — so `runner`
+// here spawns a genuinely FRESH `vitest` child process per check, which
+// re-transforms run.ts from disk from scratch every time. This is what makes
+// the patch's effect actually observable: RED means the freshly-spawned
+// process's own golden-parity check failed; GREEN means it passed.
+// ---------------------------------------------------------------------------
+
+describe('[mcp-adapter.6] negative control — the parity gate actually gates', () => {
+  it(
+    'applying neg-control/mcp-adapter.patch turns the golden-parity check RED; reverting turns it GREEN',
+    async () => {
+      const repoRoot = findRepoRoot(__dirname);
+      const patchPath = path.join(
+        repoRoot,
+        'docs/plan/apigen-serve-core/neg-control/mcp-adapter.patch'
+      );
+
+      function runGoldenParityCheckInFreshProcess(): void {
+        const result = spawnSync(
+          process.execPath,
+          [
+            path.join(repoRoot, 'node_modules/vitest/vitest.mjs'),
+            'run',
+            '--config',
+            path.join(repoRoot, 'packages/apigen/apigen-plugin-mcp/vite.config.ts'),
+            '-t',
+            'recapture deep-equals the committed golden snapshot',
+          ],
+          { cwd: repoRoot, encoding: 'utf8' }
+        );
+        if (result.status !== 0) {
+          throw new Error(
+            `golden-parity check failed (exit ${result.status}):\n${result.stdout}\n${result.stderr}`
+          );
+        }
+      }
+
+      await proveNegativeControl(runGoldenParityCheckInFreshProcess, patchPath, {
+        cwd: repoRoot,
+      });
+    },
+    60000
+  );
 });
