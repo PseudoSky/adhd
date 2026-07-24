@@ -19,6 +19,7 @@
 - [express-adapter.1] express composes the shared createPackageInvoker (deletes duplicated block)
 
 - [express-adapter.2] express route.ts buildOperationIndex shim removed
+- [express-adapter.3] committed express golden snapshot exists
 ---
 
 ## Reservations
