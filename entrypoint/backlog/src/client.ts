@@ -310,32 +310,69 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
       const existing = created.duplicateCandidates[0] ?? created.item;
       let changed = false;
 
-      const patch: UpdateItemInput = {};
-      if (existing.title !== item.title) patch.title = item.title;
-      if (existing.body !== item.body) patch.body = item.body;
-      if (Object.keys(patch).length > 0) {
-        updateItemNode(ctx.store, input.repo, item.humanId, patch);
-        changed = true;
+      // DEBT-BACKLOG-IMPORT-SCOPE-CROSSFILE-001: a humanId can legitimately
+      // be repeated across files two ways — (a) the SAME file re-importing
+      // its own content (title/body/priority/status/projectPath all belong
+      // to that file, refresh them all), or (b) a DIFFERENT file
+      // cross-referencing an id whose canonical content/scope lives
+      // elsewhere (a plan file citing a root-BACKLOG.md item, or a package
+      // file citing another package's finding) — a cross-reference must
+      // never clobber the OWNING file's title/body/projectPath (confirmed
+      // this session: without this guard, re-importing a plan-file's
+      // shorter pointer entry AFTER its root BACKLOG.md counterpart
+      // permanently overwrote the root item's richer title/body on every
+      // pass). Ownership is "whichever file's import first created this
+      // node" (`existing.importedFrom`, stamped once at create time and
+      // never touched by an update — DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001
+      // — so ownership survives regardless of later re-import order/drift).
+      // `existing.importedFrom` can be unset only for an item created
+      // before that provenance field existed; treat that as "no recorded
+      // owner yet" and let this import claim ownership going forward,
+      // matching the pre-existing (unguarded) behavior for such legacy rows.
+      const isOwningImport = existing.importedFrom === undefined || existing.importedFrom === sourcePath;
+
+      if (isOwningImport) {
+        const patch: UpdateItemInput = {};
+        if (existing.title !== item.title) patch.title = item.title;
+        if (existing.body !== item.body) patch.body = item.body;
+        // Symmetric with `plan` below (BUG-BACKLOG-IMPORT-PROJECTPATH-STALE-001,
+        // part of DEBT-BACKLOG-IMPORT-SCOPE-CROSSFILE-001) — previously the
+        // upsert diff refreshed title/body/priority/status/plan but had NO
+        // branch for `projectPath` at all, so an item's scope stuck
+        // permanently at whichever file happened to import it FIRST, ever,
+        // even after its canonical write-up relocated to a different
+        // package's BACKLOG.md.
+        if (input.projectPath !== undefined && existing.projectPath !== input.projectPath) {
+          patch.projectPath = input.projectPath;
+        }
+        if (Object.keys(patch).length > 0) {
+          updateItemNode(ctx.store, input.repo, item.humanId, patch);
+          changed = true;
+        }
+
+        if (item.priority !== undefined && existing.priority !== item.priority) {
+          setPriorityNode(ctx.store, input.repo, item.humanId, item.priority);
+          changed = true;
+        }
+
+        if (existing.status !== item.status) {
+          transitionStatusNode(ctx.store, input.repo, item.humanId, item.status, {
+            by: 'system:importFromMarkdown',
+            ...(requiresCitation(item.status) ? { citations: [{ file: input.path }] } : {}),
+            ...(requiresReason(item.status) ? { reason: `re-imported from markdown at status ${item.status}` } : {}),
+          });
+          changed = true;
+        }
       }
 
-      if (item.priority !== undefined && existing.priority !== item.priority) {
-        setPriorityNode(ctx.store, input.repo, item.humanId, item.priority);
-        changed = true;
-      }
-
-      if (existing.status !== item.status) {
-        transitionStatusNode(ctx.store, input.repo, item.humanId, item.status, {
-          by: 'system:importFromMarkdown',
-          ...(requiresCitation(item.status) ? { citations: [{ file: input.path }] } : {}),
-          ...(requiresReason(item.status) ? { reason: `re-imported from markdown at status ${item.status}` } : {}),
-        });
-        changed = true;
-      }
-
-      // Idempotent (writeEdge upserts on the same src/dst/rel triple) —
-      // safe to re-assert on every re-import, including an otherwise
-      // unchanged item, so an item's plan attachment is never permanently
-      // missed just because it was first imported before `input.plan` was set.
+      // Plan attachment is deliberately NOT gated by ownership — a
+      // cross-referencing file's entire purpose is to declare "this item
+      // also belongs to my plan", so a non-owning import must still be able
+      // to attach it. Idempotent (writeEdge upserts on the same src/dst/rel
+      // triple) — safe to re-assert on every re-import, including an
+      // otherwise unchanged item, so an item's plan attachment is never
+      // permanently missed just because it was first imported before
+      // `input.plan` was set.
       if (input.plan !== undefined && existing.plan !== input.plan) {
         attachToPlanNode(ctx.store, input.repo, item.humanId, input.plan);
         changed = true;

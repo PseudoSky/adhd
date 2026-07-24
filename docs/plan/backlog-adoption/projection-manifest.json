@@ -2,7 +2,7 @@
   "$schema": "MIGRATION.md §2.2 — one row per existing markdown BACKLOG.md location, the {sourcePath, filter} pair Phase 2/3's render step iterates. repo is always PseudoSky/adhd (this repo's stable git-remote-derived slug).",
   "repo": "PseudoSky/adhd",
   "entries": [
-    { "sourcePath": "BACKLOG.md", "filter": { "repo": "PseudoSky/adhd" }, "rootOnly": true },
+    { "sourcePath": "BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "importedFrom": "BACKLOG.md" }, "rootOnly": true },
     { "sourcePath": "docs/plan/adhd-environment/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "plan": "adhd-environment" } },
     { "sourcePath": "docs/plan/agent-final/superseded/agent-registry-migration/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "plan": "agent-registry-migration" } },
     { "sourcePath": "docs/plan/agent-mcp-authoring/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "plan": "agent-mcp-authoring" } },

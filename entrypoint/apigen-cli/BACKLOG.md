@@ -44,7 +44,9 @@ applied; this lint issue was pre-existing and unrelated to that fix). Fixed
 by moving `decimal.js` from `dependencies` to `devDependencies` in
 `package.json` — `nx run apigen-cli:lint` now passes clean.
 
-### BUG-APIGEN-018 — `vite.config.ts`'s `copyDefaultTsconfig` plugin wrote to the wrong `dist/` path — FIXED 2026-07-19
+### BUG-APIGEN-044 — `vite.config.ts`'s `copyDefaultTsconfig` plugin wrote to the wrong `dist/` path — FIXED 2026-07-19
+
+**Renumbered 2026-07-24** from `BUG-APIGEN-018` (a cross-file id collision with `packages/apigen/apigen-engine-conformance/BACKLOG.md`'s unrelated TS1343 fix — see `BUG-BACKLOG-CROSSFILE-ID-COLLISION-001`, CHANGELOG.md) to the next free id, `BUG-APIGEN-044`, so each real, distinct, already-resolved bug keeps its own identity.
 
 **Where:** `entrypoint/apigen-cli/vite.config.ts:10` — `const OUT_DIR = path.resolve(__dirname, '../../dist/apigen-cli');`, used by the custom `copyDefaultTsconfig()` plugin (lines 13-22) and duplicated at `build.outDir` (line 39).
 
