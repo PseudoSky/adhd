@@ -18,10 +18,10 @@
       "end_ref": "f11297bc74448419bfbedcb147a1e92a109b1451"
     },
     "fastify-adapter": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-24T04:25:21.430Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "45bf8447a92e4a755e679e33f6819d656bdd4403",
       "end_ref": null
     },
     "audit-foundation": {
