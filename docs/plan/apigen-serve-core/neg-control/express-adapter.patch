@@ -1,0 +1,13 @@
+diff --git a/packages/apigen/apigen-plugin-api-express/src/lib/run.ts b/packages/apigen/apigen-plugin-api-express/src/lib/run.ts
+index b8082c8a..c16fd85f 100644
+--- a/packages/apigen/apigen-plugin-api-express/src/lib/run.ts
++++ b/packages/apigen/apigen-plugin-api-express/src/lib/run.ts
+@@ -220,7 +220,7 @@ class ExpressTransportAdapter implements TransportAdapter<ExpressRaw> {
+     // measurement — NOT the `204` the original backlog entry assumed).
+     // Every non-void result is otherwise serialized by `res.json` exactly as
+     // before this migration — no behavior change for any other fixture.
+-    res.json(result === undefined ? null : result);
++    res.json(result);
+   }
+ 
+   writeError(raw: ExpressRaw, err: unknown, _plan: OpPlan): void {
