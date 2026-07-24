@@ -1,23 +1,6 @@
-# BACKLOG — @adhd/apigen-cli
+### BUG-APIGEN-016 — (serve side) — bare `python3` spawns — RESOLVED 2026-07-02
 
-Package-scoped log. Repo-wide context lives in the root [BACKLOG.md](../../BACKLOG.md)
-(§ _Extraction performance + memory-leak work (2026-07-02)_).
-
-## Fixed
-
-### PERF-APIGEN-002 (orchestrator side) — RESOLVED 2026-07-02
-
-(Renumbered from PERF-APIGEN-001, which collided with the distinct apigen-core-client
-item of the same id — `DEBT-BACKLOG-DUPLICATE-ID-INSOURCE-001`.)
-
-`buildDescriptor()` now creates ONE `ExtractionSession` per run, threads it through
-`extractSource` and the step-5 `generateSchemas` composition loop (previously a second
-full ts-morph Project per source), and disposes it in `finally`. Guard:
-`src/test/perf.spec.ts` (descriptor deep-equality across cached runs, heap flatness
-with real gc, warm-run bound) — runs by default in the forks pool with `--expose-gc`.
-Bench: `npx nx run apigen-cli:bench` (fixtures under `tmp/apigen/bench`).
-
-### BUG-APIGEN-016 (serve side) — bare `python3` spawns — RESOLVED 2026-07-02
+**Status:** RESOLVED
 
 `serve` pre-provisions the managed interpreter via `@adhd/apigen-python-env` before
 spawning Python hosts (first-time venv build no longer eats the per-host ready budget)
@@ -25,49 +8,11 @@ and pins children via `APIGEN_PYTHON`. A user-supplied `APIGEN_PYTHON` is respec
 set by a previous `startServe` in the same process is not treated as a user override
 (extras may need widening — see `_managedPython` in `src/lib/commands/serve.ts`).
 
-### Leak fixes — RESOLVED 2026-07-02
-
-- `resolve-tsconfig.ts`: `builtinTsconfigPath()` memoized — no more one mkdtemp per call
-  in long-running serve/watch.
-- `serve.ts` gRPC proxy sessions: 60s idle eviction + `unref()` so cached h2c sessions
-  neither linger after silent backend death nor hold the event loop open.
-
-### DEBT-APIGEN-LINT-003 — `@nx/dependency-checks` false-positive on `decimal.js` — FIXED 2026-07-18
-
-(Renumbered from DEBT-APIGEN-LINT-001, which collided with the distinct apigen-core-client
-item of the same id — `DEBT-BACKLOG-DUPLICATE-ID-INSOURCE-001`. This is the apigen-cli-side
-`package.json` fix; the core-client-side fix keeps DEBT-APIGEN-LINT-001.)
-
-`nx run apigen-cli:lint` (and transitively `:build`/`:test`) failed with
-"decimal.js package is not used by apigen-cli project" — the dependency IS
-genuinely used by test fixtures under a tsconfig-excluded `src/test/**` path,
-which `@nx/dependency-checks`'s static scan doesn't see. Same root cause as
-`apigen-core-client/BACKLOG.md` DEBT-APIGEN-LINT-001 (full detail there).
-Filed + fixed 2026-07-18 during BUG-APIGEN-CORE-002 verification (discovered
-while confirming `entrypoint/apigen-cli`'s test suite still passes after the
-apigen-core-client re-export fix — all 113 tests pass once the
-build-then-test workaround documented in `apigen-core-client/BACKLOG.md` is
-applied; this lint issue was pre-existing and unrelated to that fix). Fixed
-by moving `decimal.js` from `dependencies` to `devDependencies` in
-`package.json` — `nx run apigen-cli:lint` now passes clean.
-
-### BUG-APIGEN-044 — `vite.config.ts`'s `copyDefaultTsconfig` plugin wrote to the wrong `dist/` path — FIXED 2026-07-19
-
-**Renumbered 2026-07-24** from `BUG-APIGEN-018` (a cross-file id collision with `packages/apigen/apigen-engine-conformance/BACKLOG.md`'s unrelated TS1343 fix — see `BUG-BACKLOG-CROSSFILE-ID-COLLISION-001`, CHANGELOG.md) to the next free id, `BUG-APIGEN-044`, so each real, distinct, already-resolved bug keeps its own identity.
-
-**Where:** `entrypoint/apigen-cli/vite.config.ts:10` — `const OUT_DIR = path.resolve(__dirname, '../../dist/apigen-cli');`, used by the custom `copyDefaultTsconfig()` plugin (lines 13-22) and duplicated at `build.outDir` (line 39).
-
-**Observed:** Every build left a stray `dist/apigen-cli/` directory at the repo root, containing only `default-tsconfig.json` — while the real build output (matching `project.json`'s `outputPath`) correctly landed at `dist/entrypoint/apigen-cli/`, which never received that file. `path.resolve(__dirname, '../../dist/apigen-cli')` was wrong for a package whose actual source root is `entrypoint/apigen-cli/` — two levels up from `vite.config.ts` is the repo root, so the string was missing the `entrypoint/` segment. Nx's `@nx/vite:build` executor overrides the *main bundle's* output location via `project.json`, which is why `index.js`/`index.mjs`/`package.json` landed in the correct place regardless — but `copyDefaultTsconfig()`'s `closeBundle()` hook does its own raw `fs.mkdirSync`/`fs.copyFileSync` against the independently-computed (wrong) `OUT_DIR`, bypassing that override entirely.
-
-**Impact was low severity, self-mitigated, but the intended optimization had likely never worked:** `resolve-tsconfig.ts`'s `builtinTsconfigPath()` checks three candidate paths for the shipped asset (`dir/default-tsconfig.json`, `dir/lib/default-tsconfig.json`, `dir/../default-tsconfig.json`); confirmed via `find`, none existed in the real output before this fix. All three misses fell through to writing an inlined copy of the same JSON (`BUILTIN_DEFAULT`) to a fresh `mkdtempSync` temp file, memoized once per process. So correctness was preserved for real consumers — they just always paid the temp-file-write cost every process instead of reading the pre-shipped asset, and every local/CI build littered a stray directory at the repo root. `entrypoint/apigen-cli/src/lib/default-tsconfig.json` (the source file being copied) dates to 2026-07-02, predating this session — this had likely been silently broken since the plugin was written.
-
-**Fix:** changed `OUT_DIR` (both the plugin's and `build.outDir`'s value) to `path.resolve(__dirname, '../../dist/entrypoint/apigen-cli')`, matching `project.json`'s actual `outputPath`. Deleted the stray `dist/apigen-cli/` directory this bug had been creating.
-
-**Verified:** clean rebuild (`nx reset` + `nx run apigen-cli:build`) no longer creates `dist/apigen-cli/` at all, and `dist/entrypoint/apigen-cli/default-tsconfig.json` is now present. Full `apigen-cli` test suite still green (113/113).
-
-Citations: [self-verified 2026-07-19: `entrypoint/apigen-cli/vite.config.ts:10,39`; `ls dist/apigen-cli/` (pre-fix) → only `default-tsconfig.json` present; `find dist/entrypoint/apigen-cli -iname "*tsconfig*"` (pre-fix) → no match, (post-fix) → `default-tsconfig.json` present; `entrypoint/apigen-cli/src/lib/resolve-tsconfig.ts:35-48` (three-candidate fallback + temp-file mitigation); `git log -1 --format=%ad -- entrypoint/apigen-cli/src/lib/default-tsconfig.json` → 2026-07-02]
+**Citations:** [/Users/nix/dev/node/adhd/entrypoint/apigen-cli/BACKLOG.md]
 
 ### FEAT-APIGEN-023 — Zero-parameter, zero-envelope operations no longer require an empty `data: {}` (or full envelope) in the published schema — FIXED 2026-07-20
+
+**Status:** FIXED
 
 **Requested:** 2026-07-19 by the user, directly. **Ask:** a route/tool/command with
 no parameters shouldn't require a caller to send `data`, a body, an envelope, etc.
@@ -134,9 +79,11 @@ ask/analysis: `apigen-engine-runtime/src/lib/api-package.ts:61`,
 `entrypoint/apigen-cli/src/lib/pipeline.ts:42`,
 `entrypoint/apigen-cli/src/lib/orchestrator.ts:355`]
 
-## Open
+**Citations:** [/Users/nix/dev/node/adhd/entrypoint/apigen-cli/BACKLOG.md]
 
 ### BUG-APIGEN-041 — `--use <path>` crashes for any plugin dist that transitively depends on `@adhd/apigen-core-client`; builtin slugs unaffected — NOT FIXABLE AT RUNTIME
+
+**Status:** UNKNOWN
 
 **Reported:** live user testing, post-merge: `--use dist/packages/apigen/apigen-plugin-openapi/index.js` crashes.
 
@@ -175,6 +122,8 @@ register the plugin in `BUILTIN_USE_PLUGINS` in `run.ts` instead of using `--use
 ---
 
 ### BUG-APIGEN-042 — the generated OpenAPI doc's paths don't match the API plugins' actual served routes; architectural misalignment between `toOpenApi` and HTTP route registration — TRIAGED
+
+**Status:** UNKNOWN
 
 **Reported:** live user testing, post-merge.
 
@@ -240,6 +189,8 @@ mapping injection (option 1).
 ---
 
 ### BUG-APIGEN-043 — auto-hoisted GET endpoints log a body-envelope statement instead of an accurate query-parameter statement — TRIAGED (parts 1,2 resolved; part 3 is a feature request)
+
+**Status:** RESOLVED
 
 **Reported:** live user testing, post-merge, after FEAT-APIGEN-022's
 auto-hoist-to-GET fix landed.
@@ -328,7 +279,11 @@ change in two files (express and fastify `run.ts`).
 
 ---
 
-### BUG-APIGEN-040 (Open, filed not fixed, HIGH) — `apigen-plugin-mcp`'s `run()` never validates input against the generated schema before dispatch — bad input crashes as an uncaught exception instead of a clean rejection
+**Citations:** [/Users/nix/dev/node/adhd/entrypoint/apigen-cli/BACKLOG.md]
+
+### BUG-APIGEN-040 — (Open, filed not fixed, HIGH) — `apigen-plugin-mcp`'s `run()` never validates input against the generated schema before dispatch — bad input crashes as an uncaught exception instead of a clean rejection
+
+**Status:** FIXED
 
 **Discovered:** 2026-07-20, verifying (at the user's request) whether "the api
 type plugins actually validate inputs" after this session's BUG-APIGEN-
@@ -399,7 +354,11 @@ suites), 3 cases as described above, not committed]
 
 ---
 
-### BUG-APIGEN-038 (Open, filed not fixed) — `buildNominalSchema`/`buildUnionSchema` (class-based nominal/union schema builders) are not wired into the real `extract()`/`composeSchemas()` pipeline for any function parameter
+**Citations:** [/Users/nix/dev/node/adhd/entrypoint/apigen-cli/BACKLOG.md]
+
+### BUG-APIGEN-038 — (Open, filed not fixed) — `buildNominalSchema`/`buildUnionSchema` (class-based nominal/union schema builders) are not wired into the real `extract()`/`composeSchemas()` pipeline for any function parameter
+
+**Status:** FIXED
 
 **Discovered:** 2026-07-20, while fixing BUG-APIGEN-030 (AJV strict-mode
 crash on `x-apigen-logical`/`discriminator`, see CHANGELOG.md — the fix
@@ -466,7 +425,105 @@ repo-wide grep for `buildNominalSchema(`);
 currently-reachable `x-apigen-logical:"union"` producer, inline TS unions
 only)]
 
+**Citations:** [/Users/nix/dev/node/adhd/entrypoint/apigen-cli/BACKLOG.md]
+
+### BUG-APIGEN-031 — `generate --type cli` output silently mishandles array-typed params: crashes or returns a wrong value instead of the real result
+
+**Status:** OPEN
+
+**Discovered:** 2026-07-19, during `generate`-mode output verification of `apigen-cli` (`cli` and
+`jsonschema` plugins) against `/Users/nix/dev/ai/sox-ecosystem/libs/memory-core/src/index.ts`
+(140 extracted / 130 composed operations — both plugin outputs correctly reflect all 130, so
+this is unrelated to the v1-extraction-dropped-reexports class of bug).
+
+**Observed:** the generated `cli.ts`'s `mean` and `percentile` commands (both take a plain
+`number[]` param — `latency-stats.ts:17,27`) do not work correctly when actually invoked with
+real array input, despite `--help` and static inspection looking correct:
+
+```
+$ tsx cli.ts mean --arr '[2,4,6]'
+TypeError: arr.reduce is not a function
+    at Object.mean (.../latency-stats.ts:29:14)
+    at dispatch (apigen-engine-runtime/src/lib/dispatch.ts:157:31)
+
+$ tsx cli.ts percentile --sorted '[10,20,30,40,50]' --p 0.5
+"3"                          # WRONG — percentile([10,20,30,40,50], 0.5) is 30
+```
+
+The `percentile` case is the dangerous one: it does not crash, it silently returns a
+plausible-looking but wrong answer. `sorted` never gets parsed into an array — the raw
+argv string `"[10,20,30,40,50]"` (16 chars) is passed straight through, so
+`idx = Math.ceil(16 * 0.5) - 1 = 7` and `"[10,20,30,40,50]"[7]` happens to be the character
+`'3'` — coincidence, not correctness. (Confirmed by first testing with `[1,2,3,4,5]` →
+`p50=3`, which is *also* the correct answer for the real array, i.e. a false-positive trap;
+re-running with an array whose string-index-7 doesn't match its true p50 exposed the bug.)
+
+**Root cause, traced end to end:**
+1. `apigen-plugin-cli-output/src/lib/generate.ts:181-197` emits one Commander `.option`/
+   `.requiredOption` per domain param with no type-aware parsing — every flag value Commander
+   captures is the bare argv string.
+2. `generate.ts:199-203` builds `domainArgs` directly from `opts[paramName]` — no
+   `JSON.parse` (or any parse) is ever applied to array/object-typed param values before they
+   reach dispatch.
+3. `apigen-engine-runtime/src/lib/dispatch.ts:84-87` (`decodeArg`) hands the still-a-string
+   wire value to `_transcoder.decode(wire, node)` unconditionally.
+4. `apigen-base-logical/src/lib/runmode.ts:190-193` — the transcoder's own array branch:
+   ```ts
+   if (schemaType === 'array') {
+     if (!Array.isArray(wire)) {
+       return wire;          // ← silent passthrough, no parse/coerce, no error
+     }
+   ```
+   A non-array `wire` (the CLI's raw string) is returned unchanged instead of being parsed or
+   rejected. This line is correct/necessary for `run`-mode HTTP transports (Express/Fastify
+   already deliver a real parsed array from a JSON body — `Array.isArray(wire)` is true there),
+   but it means the `cli` plugin — the one caller whose "wire" value is *always* a raw argv
+   string — gets no array coercion anywhere in the pipeline. `object`-typed domain params
+   share the identical code path (`runmode.ts`'s object branch has no coercion path either)
+   and are very likely equally broken, though not independently re-verified with a live
+   object-typed param this session (scalar `string`/`number`/`boolean` params ARE handled
+   correctly — Commander's own string capture plus the transcoder's scalar codecs round-trip
+   fine, confirmed via `percentile --p 0.5` correctly reaching `Math.ceil(sorted.length * 0.5)`
+   with `p` as a real number).
+
+**Impact:** every generated-`cli`-output command whose schema has an `array`- or (likely)
+`object`-typed domain param is broken for real use — either a hard crash (arrays walked with
+`.map`/`.reduce`/etc.) or a silently wrong answer (arrays consumed via indexing, e.g.
+`sorted[idx]`, since JS strings support numeric indexing). Scalar-only commands are unaffected.
+Not the same bug as BUG-APIGEN-030 (AJV `x-apigen-logical` strict-mode crash, HTTP dispatch
+transport only) — this reproduces in `generate --type cli`'s own standalone output with no
+HTTP/AJV layer involved at all, and no `x-apigen-logical` hint on either affected param.
+
+**Suggested fix:** `apigen-plugin-cli-output/src/lib/generate.ts` should `JSON.parse` (or emit
+code that does so at runtime) any argv value destined for an `array`- or `object`-typed domain
+param before constructing `domainArgs`, OR `runmode.ts:190-193`'s passthrough should be
+tightened so a non-array `wire` for an `array`-typed node is treated as a decode error (or is
+itself JSON.parsed when it's a string) rather than silently passed through — whichever fix is
+chosen must not regress the `run`-mode HTTP transports, which correctly rely on the current
+passthrough when `wire` is already a real array.
+
+**Status:** OPEN. Verified identical on `main` (`packages/apigen/apigen-engine-runtime/src/lib/
+dispatch.ts` and `packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts` are byte-
+identical between `main` and the `fix/apigen-v1-retirement` worktree at `80e1df8d`) — this is
+pre-existing, not introduced by the v1-retirement change. Scope: `apigen-plugin-cli-output`
+(`generate.ts`), `apigen-base-logical` (`runmode.ts` array/object decode branches).
+
+Citations: [session 2026-07-19, self-verified: repro run via `node dist/entrypoint/apigen-cli/
+index.js generate --source .../memory-core/src/index.ts --type cli --out-dir <scratch>` then
+`tsx cli.ts mean --arr '[2,4,6]'` and `tsx cli.ts percentile --sorted '[10,20,30,40,50]' --p
+0.5`, both against `fix/apigen-v1-retirement`@`80e1df8d`;
+`packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts:181-197,199-231` (full read);
+`packages/apigen/apigen-engine-runtime/src/lib/dispatch.ts:62-87,120-159` (full read);
+`packages/apigen/apigen-base-logical/src/lib/runmode.ts:162-220` (full read);
+`/Users/nix/dev/ai/sox-ecosystem/libs/memory-core/src/latency-stats.ts:17,27` (`percentile`/
+`mean` real signatures); `diff` of `dispatch.ts` and `generate.ts` between `main` and the
+`fix/apigen-v1-retirement` worktree → byte-identical, confirming pre-existing on `main`]
+
+**Citations:** [/Users/nix/dev/node/adhd/entrypoint/apigen-cli/BACKLOG.md]
+
 ### BUG-APIGEN-037 — `py-flask`/`py-grpc` are unconditional eager imports; unpublished on npm, so an installed CLI never reaches argument parsing — MEDIUM
+
+**Status:** OPEN
 
 **Discovered:** 2026-07-20, while fixing FEAT-APIGEN-019 (CLI plugin discoverability; see
 CHANGELOG). Deferred out of that fix — scope there was deriving `--type` help/error/list text
@@ -505,7 +562,9 @@ optional), `entrypoint/apigen-cli/vite.config.ts:1-50` (standalone-bundle rollup
 (comment explaining static-vs-dynamic-import bundling constraint for `--use` plugins);
 `npm view @adhd/apigen-plugin-py-flask`/`@adhd/apigen-plugin-py-grpc` → both 404]
 
-### BUG-APIGEN-039 (Open, filed not fixed, low-severity, follow-up to BUG-APIGEN-034) — `opMatchesExportMode()`'s "known residual limitation" now also covers anonymous default exports (Shape 4 anon sub-case + Shape 5), not just named default functions
+### BUG-APIGEN-039 — (Open, filed not fixed, low-severity, follow-up to BUG-APIGEN-034) — `opMatchesExportMode()`'s "known residual limitation" now also covers anonymous default exports (Shape 4 anon sub-case + Shape 5), not just named default functions
+
+**Status:** OPEN
 
 **Discovered:** 2026-07-20, while fixing BUG-APIGEN-033 (anonymous default-export dispatch
 crash) in the same session/branch. BUG-APIGEN-034's CHANGELOG entry already documents, as an
@@ -557,6 +616,8 @@ sub-case (this session's BUG-APIGEN-033 fix, `buildActionOp` calls with `'defaul
 ---
 
 ### BUG-APIGEN-032 — `generate --type api-express`/`api-fastify` `-registry` output emits invalid TypeScript for any hyphenated package name (unsanitized identifier splice)
+
+**Status:** OPEN
 
 **Discovered:** 2026-07-19, by an agent independently verifying `generate-registry`/
 `run-registry` (multi-package discovery/serving) against the `entrypoint/apigen-cli/src/test/
@@ -637,3 +698,61 @@ api-express --packages-dir entrypoint/apigen-cli/src/test/fixtures/registry --ou
 --tag api` against `fix/apigen-v1-retirement`@`80e1df8d`, `esbuild` syntax-check on the emitted
 `routes.ts` and on a minimal 1-line repro]
 
+### BUG-APIGEN-044 — `vite.config.ts`'s `copyDefaultTsconfig` plugin wrote to the wrong `dist/` path — FIXED 2026-07-19
+
+**Status:** FIXED
+
+**Renumbered 2026-07-24** from `BUG-APIGEN-018` (a cross-file id collision with `packages/apigen/apigen-engine-conformance/BACKLOG.md`'s unrelated TS1343 fix — see `BUG-BACKLOG-CROSSFILE-ID-COLLISION-001`, CHANGELOG.md) to the next free id, `BUG-APIGEN-044`, so each real, distinct, already-resolved bug keeps its own identity.
+
+**Where:** `entrypoint/apigen-cli/vite.config.ts:10` — `const OUT_DIR = path.resolve(__dirname, '../../dist/apigen-cli');`, used by the custom `copyDefaultTsconfig()` plugin (lines 13-22) and duplicated at `build.outDir` (line 39).
+
+**Observed:** Every build left a stray `dist/apigen-cli/` directory at the repo root, containing only `default-tsconfig.json` — while the real build output (matching `project.json`'s `outputPath`) correctly landed at `dist/entrypoint/apigen-cli/`, which never received that file. `path.resolve(__dirname, '../../dist/apigen-cli')` was wrong for a package whose actual source root is `entrypoint/apigen-cli/` — two levels up from `vite.config.ts` is the repo root, so the string was missing the `entrypoint/` segment. Nx's `@nx/vite:build` executor overrides the *main bundle's* output location via `project.json`, which is why `index.js`/`index.mjs`/`package.json` landed in the correct place regardless — but `copyDefaultTsconfig()`'s `closeBundle()` hook does its own raw `fs.mkdirSync`/`fs.copyFileSync` against the independently-computed (wrong) `OUT_DIR`, bypassing that override entirely.
+
+**Impact was low severity, self-mitigated, but the intended optimization had likely never worked:** `resolve-tsconfig.ts`'s `builtinTsconfigPath()` checks three candidate paths for the shipped asset (`dir/default-tsconfig.json`, `dir/lib/default-tsconfig.json`, `dir/../default-tsconfig.json`); confirmed via `find`, none existed in the real output before this fix. All three misses fell through to writing an inlined copy of the same JSON (`BUILTIN_DEFAULT`) to a fresh `mkdtempSync` temp file, memoized once per process. So correctness was preserved for real consumers — they just always paid the temp-file-write cost every process instead of reading the pre-shipped asset, and every local/CI build littered a stray directory at the repo root. `entrypoint/apigen-cli/src/lib/default-tsconfig.json` (the source file being copied) dates to 2026-07-02, predating this session — this had likely been silently broken since the plugin was written.
+
+**Fix:** changed `OUT_DIR` (both the plugin's and `build.outDir`'s value) to `path.resolve(__dirname, '../../dist/entrypoint/apigen-cli')`, matching `project.json`'s actual `outputPath`. Deleted the stray `dist/apigen-cli/` directory this bug had been creating.
+
+**Verified:** clean rebuild (`nx reset` + `nx run apigen-cli:build`) no longer creates `dist/apigen-cli/` at all, and `dist/entrypoint/apigen-cli/default-tsconfig.json` is now present. Full `apigen-cli` test suite still green (113/113).
+
+Citations: [self-verified 2026-07-19: `entrypoint/apigen-cli/vite.config.ts:10,39`; `ls dist/apigen-cli/` (pre-fix) → only `default-tsconfig.json` present; `find dist/entrypoint/apigen-cli -iname "*tsconfig*"` (pre-fix) → no match, (post-fix) → `default-tsconfig.json` present; `entrypoint/apigen-cli/src/lib/resolve-tsconfig.ts:35-48` (three-candidate fallback + temp-file mitigation); `git log -1 --format=%ad -- entrypoint/apigen-cli/src/lib/default-tsconfig.json` → 2026-07-02]
+
+**Citations:** [/Users/nix/dev/node/adhd/entrypoint/apigen-cli/BACKLOG.md]
+
+### PERF-APIGEN-002 — (orchestrator side) — RESOLVED 2026-07-02
+
+**Status:** RESOLVED
+
+(Renumbered from PERF-APIGEN-001, which collided with the distinct apigen-core-client
+item of the same id — `DEBT-BACKLOG-DUPLICATE-ID-INSOURCE-001`.)
+
+`buildDescriptor()` now creates ONE `ExtractionSession` per run, threads it through
+`extractSource` and the step-5 `generateSchemas` composition loop (previously a second
+full ts-morph Project per source), and disposes it in `finally`. Guard:
+`src/test/perf.spec.ts` (descriptor deep-equality across cached runs, heap flatness
+with real gc, warm-run bound) — runs by default in the forks pool with `--expose-gc`.
+Bench: `npx nx run apigen-cli:bench` (fixtures under `tmp/apigen/bench`).
+
+**Citations:** [/Users/nix/dev/node/adhd/entrypoint/apigen-cli/BACKLOG.md]
+
+### DEBT-APIGEN-LINT-003 — `@nx/dependency-checks` false-positive on `decimal.js` — FIXED 2026-07-18
+
+**Status:** FIXED
+
+(Renumbered from DEBT-APIGEN-LINT-001, which collided with the distinct apigen-core-client
+item of the same id — `DEBT-BACKLOG-DUPLICATE-ID-INSOURCE-001`. This is the apigen-cli-side
+`package.json` fix; the core-client-side fix keeps DEBT-APIGEN-LINT-001.)
+
+`nx run apigen-cli:lint` (and transitively `:build`/`:test`) failed with
+"decimal.js package is not used by apigen-cli project" — the dependency IS
+genuinely used by test fixtures under a tsconfig-excluded `src/test/**` path,
+which `@nx/dependency-checks`'s static scan doesn't see. Same root cause as
+`apigen-core-client/BACKLOG.md` DEBT-APIGEN-LINT-001 (full detail there).
+Filed + fixed 2026-07-18 during BUG-APIGEN-CORE-002 verification (discovered
+while confirming `entrypoint/apigen-cli`'s test suite still passes after the
+apigen-core-client re-export fix — all 113 tests pass once the
+build-then-test workaround documented in `apigen-core-client/BACKLOG.md` is
+applied; this lint issue was pre-existing and unrelated to that fix). Fixed
+by moving `decimal.js` from `dependencies` to `devDependencies` in
+`package.json` — `nx run apigen-cli:lint` now passes clean.
+
+**Citations:** [/Users/nix/dev/node/adhd/entrypoint/apigen-cli/BACKLOG.md]

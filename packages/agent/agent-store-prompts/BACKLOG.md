@@ -1,32 +1,26 @@
-# @adhd/agent-registry — BACKLOG
+### NB-1 — `nx typecheck` fails (repo-wide tsconfig, pre-existing)
 
-Tracked, non-blocking follow-ups. Surfaced by the code-review sign-off (`docs/plan/agent-registry-schema/review.md`, VERDICT: APPROVED). None block the schema package merge — the real ship gates (`nx build`, `nx test`) are green.
-
-## NB-1 — `nx typecheck` fails (repo-wide tsconfig, pre-existing)
+**Status:** UNKNOWN
 
 - **What:** `nx typecheck agent-registry` fails. The reviewer verified the **identical failure reproduces on the sibling `agent-mcp` package** — an inherited copy-paste tsconfig convention across `packages/ai/*`, not introduced by agent-registry.
 - **Investigation:** the reviewer's suggested one-line fix (`"composite": true` in `tsconfig.lib.json`) is **insufficient** — adding it surfaced 13 further typecheck errors (and `build` already passes without it), so it was reverted. This is a real cross-cutting cleanup, not a leaf fix.
 - **Impact:** none on shipping (build + test pass; `build` invokes `tsconfig.lib.json` directly and compiles clean). Affects the `typecheck` target only.
 - **Action:** route as a **repo-wide `packages/ai/*` tsconfig/typecheck cleanup** (align `composite`/project-references config across the AI packages, resolve the 13 errors at root). Do NOT fix agent-registry in isolation — it diverges from `agent-mcp` and the others.
 
-## NB-2 — stale comment in `packages/agent/agent-store-prompts/src/seed/index.ts`
+### NB-2 — stale comment in `packages/agent/agent-store-prompts/src/seed/index.ts`
+
+**Status:** UNKNOWN
 
 - **What:** a comment describes behavior that has since changed; the actual code behavior is still correct.
 - **Impact:** cosmetic / documentation only.
 - **Action:** update the comment to match the current implementation.
 
-## NB-3 — `docs/plan/agent-registry-schema/decisions.md` ↔ code prose drift (context_rules merge location)
+### NB-3 — `docs/plan/agent-registry-schema/decisions.md` ↔ code prose drift (context_rules merge location)
+
+**Status:** UNKNOWN
 
 - **What:** `docs/plan/agent-registry-schema/decisions.md` Decision 3 prose can read as if `resolveComposition` already merges free-standing `context_rules`, but the code correctly defers the rules∪junction merge to `@adhd/agent-compiler` (per the per-state plan). Code is right; the contract prose is ambiguous.
 - **Impact:** risk that an `agent-compiler` author skips implementing the union, expecting the registry to have done it.
 - **Action:** add a one-line clarification in `docs/plan/agent-registry-schema/decisions.md` (and/or the `agent-compiler` plan's context) stating the merge lives in the compiler, not `resolveComposition`.
 
 ---
-
-## Revalidation (2026-07-04) — verified against current source
-
-| Item | Status | Notes |
-|------|--------|-------|
-| NB-1 — `nx typecheck` fails | **CHANGED (scope narrowed)** | No longer repo-wide. Only `agent-store-prompts` fails (14 TS6306 errors, missing `"composite": true`). `agent-engine-compiler` passes clean now. The issue is isolated to this package. |
-| NB-2 — stale comment in `packages/agent/agent-store-prompts/src/seed/index.ts` | **STILL OPEN** | Lines 6-9 claim "direct INSERT OR IGNORE for components" but actual code (lines 64-107) uses read-before-write (SELECT + conditional INSERT). No `INSERT OR IGNORE` exists anywhere in the file. |
-| NB-3 — decisions.md prose drift | **STILL OPEN** | Decision 3 at `docs/plan/agent-registry-schema/decisions.md` still says `resolveComposition` does the ∪ merge. Actual code only handles junction rows. No clarifying note added to either decisions.md. The only "(later)" hint is an inline source comment at `packages/agent/agent-store-prompts/src/store/composition-store.ts:56`. |

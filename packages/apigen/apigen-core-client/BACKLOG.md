@@ -1,11 +1,6 @@
-# BACKLOG — @adhd/apigen-core
-
-Package-scoped log. Repo-wide context lives in the root [BACKLOG.md](../../../BACKLOG.md)
-(§ _Extraction performance + memory-leak work (2026-07-02)_).
-
-## Fixed
-
 ### BUG-APIGEN-CORE-002 — extract()/extractClasses() never followed re-exports (`export { x } from './module.js'`)
+
+**Status:** FIXED
 
 - **Where:** `src/lib/extract.ts` (Shape 1/2/3 walkers + the "Shape 1b" renamed-export
   block) and `src/lib/extract-classes.ts` (`for (const cls of sf.getClasses())`).
@@ -54,7 +49,11 @@ Package-scoped log. Repo-wide context lives in the root [BACKLOG.md](../../../BA
   exported alias.
 - **Status:** FIXED 2026-07-18.
 
+**Citations:** [/Users/nix/dev/node/adhd/packages/apigen/apigen-core-client/BACKLOG.md]
+
 ### BUG-APIGEN-CORE-003 — buildSchema OOMs on a large real-world re-export barrel (>20GB, never completes) — FIXED 2026-07-18
+
+**Status:** FIXED
 
 - **Where:** `src/lib/schema-builders/ts-json-schema.ts` (`buildSchema` /
   `buildSchemaUncached`) and `src/lib/extraction-session.ts`
@@ -163,27 +162,11 @@ Package-scoped log. Repo-wide context lives in the root [BACKLOG.md](../../../BA
   `apigen-cli` 113/113.
 - **Status:** FIXED 2026-07-18.
 
-### PERF-APIGEN-001 — redundant TypeScript program builds — RESOLVED 2026-07-02
-
-- `extract()` / `generateSchemas()` / `extractClasses()` each built a fresh ts-morph
-  `Project` per call (~1–2s each; the orchestrator built ~2 per source per run) and the
-  ts-json-schema-generator cache grew a new ~100–200MB entry on every file edit, forever.
-- Fixed by `src/lib/extraction-session.ts`: a shared per-run `ExtractionSession`
-  (optional `session` on `ExtractOptions` / `GenerateSchemasOptions` /
-  `ExtractClassesOptions`; created+disposed internally when absent) plus a bounded
-  persistent tier (LRU-capped generators via `APIGEN_PROGRAM_CACHE`, default 8, `0`
-  disables; version-checked persistent Project + schema maps, refreshed on edit).
-- Measured: cold 37.4s → 7.4s, warm → 6–11ms (6 files × 10 fns); core suite 64.6s → 8.4s.
-- Guards: `src/test/extraction-session.spec.ts` (work counts; proven red under a
-  negative control), `apigen-cli`'s `src/test/perf.spec.ts` (consumer outcome).
-
-### Deliberate non-change: per-parameter `buildSchema` loops stay sequential
-
-`buildSchema` is synchronous CPU work under an async signature — `Promise.all` gains
-nothing and would race morph-walk's shared-SourceFile probe aliases. Do not "optimize"
-these loops with concurrency.
+**Citations:** [/Users/nix/dev/node/adhd/packages/apigen/apigen-core-client/BACKLOG.md]
 
 ### BUG-APIGEN-CORE-005 — v1 extraction pipeline retired entirely (v1 was still the CLI default despite BUG-APIGEN-CORE-002 fixing v2); orchestrator's own Step 5 was ALSO still calling the buggy v1 extractor — FIXED 2026-07-19
+
+**Status:** FIXED
 
 - **Where:** `src/lib/generate-schemas.ts` (`generateSchemas()`, DELETED),
   `src/lib/extractors/{named,default-export,named-object}.ts` (DELETED),
@@ -314,7 +297,11 @@ these loops with concurrency.
   correct real responses (200, real data), not 404s.
 - **Status:** FIXED 2026-07-19.
 
+**Citations:** [/Users/nix/dev/node/adhd/packages/apigen/apigen-core-client/BACKLOG.md]
+
 ### BUG-APIGEN-CORE-004 — `isSerializableType()`'s textual allow-list doesn't recognize `Record<K,V>` (or other generic utility-type wrappers), causing false-negative skips on legitimately serializable consts — FIXED 2026-07-20
+
+**Status:** FIXED
 
 - **Where (was):** `src/lib/extract.ts:822-837` (line numbers as of the
   filing commit; `isSerializableType(typeText: string)`), a purely textual
@@ -381,38 +368,11 @@ these loops with concurrency.
   new), zero regressions.
 - **Status:** FIXED 2026-07-20.
 
-## Open
-
-### DEBT-APIGEN-LINT-001 — `@nx/dependency-checks` false-positive: `decimal.js` only used by `src/test/**` fixtures — FIXED 2026-07-18
-
-- **Where:** `packages/apigen/apigen-core-client/package.json` and
-  `entrypoint/apigen-cli/package.json` (both declared `decimal.js`
-  in `dependencies`) — blocked `nx run <project>:lint` (and therefore
-  `nx run <project>:build`/`:test`, which depend on `lint`) with "package is
-  not used by project".
-- **Symptom:** `decimal.js` IS genuinely imported (`src/test/fixtures/decimal-nested.ts:18-19`,
-  real `import Decimal from 'decimal.js'` / `import { Decimal as D2 }`) — but
-  `apigen-core-client/tsconfig.lib.json:9-14` (and the equivalent in
-  `apigen-cli`) excludes `src/test/**` from the lib's own compiled source
-  set, so `@nx/dependency-checks`'s static import-scan (which follows the
-  lib tsconfig's `include`) never sees the fixture's import and flags the
-  declared dependency as unused. Confirmed pre-existing and unrelated to
-  BUG-APIGEN-CORE-002/003's changes — untouched package.json, decimal.js
-  usage untouched, reproduces on a clean worktree.
-- **Why it matters:** blocked running `nx build`/`nx test` cleanly for these
-  2 projects without `--skip-nx-cache`-style workarounds or bypassing nx
-  entirely (raw `vite build`/`vitest run`); surfaced only as
-  `Warning: command "eslint ." exited with non-zero status code` +
-  `NX Running target … failed`, easy to mistake for a real regression.
-- **Fix:** moved `decimal.js` from `dependencies` to `devDependencies` in
-  both `package.json`s — semantically correct (it's genuinely test-only,
-  never imported by shipped `src/lib/**` code) and `@nx/dependency-checks`
-  scans `devDependencies` against the broader (test-inclusive) tsconfig, so
-  the fixture import is now visible. `nx run apigen-core-client:lint` and
-  `nx run apigen-cli:lint` both pass clean.
-- **Status:** FIXED 2026-07-18.
+**Citations:** [/Users/nix/dev/node/adhd/packages/apigen/apigen-core-client/BACKLOG.md]
 
 ### DEBT-APIGEN-LINT-002 — `apigen-engine-runtime` package.json has no `pnpm-lock.yaml` importer entry at all
+
+**Status:** OPEN
 
 - **Where:** `packages/apigen/apigen-engine-runtime/package.json`
   (`ajv`, `ajv-formats` — both genuinely imported in real, non-test source:
@@ -470,20 +430,68 @@ these loops with concurrency.
 
 ### DEBT-APIGEN-CACHE-001 — persistent cache versions the ENTRY file only
 
+**Status:** UNKNOWN
+
 A type imported from another file that changes (entry file untouched) is not detected —
 same invalidation semantics the generator cache always had. Fix direction: include the
 program's referenced-files set in the version stamp.
 
 ### DEFER-APIGEN-PERF-001 — worker_threads parallel extraction (stretch)
 
+**Status:** UNKNOWN
+
 Per-source fan-out across workers for multi-source cold runs. Deferred: bundled-CLI
 worker-entry complexity vs. modest gains now that warm runs are ~free.
 
 ---
 
-## Revalidation (2026-07-04) — verified against current source
+### PERF-APIGEN-001 — redundant TypeScript program builds — RESOLVED 2026-07-02
 
-| Item | Status | Notes |
-|------|--------|-------|
-| DEBT-APIGEN-CACHE-001 | **STILL OPEN** | `persistentSchemasFor()` uses single `entry.version` stamp only (packages/apigen/apigen-core-client/src/lib/extraction-session.ts:133-145). Inline comment at packages/apigen/apigen-core-client/src/lib/extraction-session.ts:121-124 acknowledges the debt. No referenced-files set in any version stamp. Test does not cover cross-file import change. |
-| DEFER-APIGEN-PERF-001 | **STILL OPEN** | Zero matches for `worker_threads`/`Worker` in `src/`. No implementation exists. |
+**Status:** RESOLVED
+
+- `extract()` / `generateSchemas()` / `extractClasses()` each built a fresh ts-morph
+  `Project` per call (~1–2s each; the orchestrator built ~2 per source per run) and the
+  ts-json-schema-generator cache grew a new ~100–200MB entry on every file edit, forever.
+- Fixed by `src/lib/extraction-session.ts`: a shared per-run `ExtractionSession`
+  (optional `session` on `ExtractOptions` / `GenerateSchemasOptions` /
+  `ExtractClassesOptions`; created+disposed internally when absent) plus a bounded
+  persistent tier (LRU-capped generators via `APIGEN_PROGRAM_CACHE`, default 8, `0`
+  disables; version-checked persistent Project + schema maps, refreshed on edit).
+- Measured: cold 37.4s → 7.4s, warm → 6–11ms (6 files × 10 fns); core suite 64.6s → 8.4s.
+- Guards: `src/test/extraction-session.spec.ts` (work counts; proven red under a
+  negative control), `apigen-cli`'s `src/test/perf.spec.ts` (consumer outcome).
+
+**Citations:** [/Users/nix/dev/node/adhd/packages/apigen/apigen-core-client/BACKLOG.md]
+
+### DEBT-APIGEN-LINT-001 — `@nx/dependency-checks` false-positive: `decimal.js` only used by `src/test/**` fixtures — FIXED 2026-07-18
+
+**Status:** FIXED
+
+- **Where:** `packages/apigen/apigen-core-client/package.json` and
+  `entrypoint/apigen-cli/package.json` (both declared `decimal.js`
+  in `dependencies`) — blocked `nx run <project>:lint` (and therefore
+  `nx run <project>:build`/`:test`, which depend on `lint`) with "package is
+  not used by project".
+- **Symptom:** `decimal.js` IS genuinely imported (`src/test/fixtures/decimal-nested.ts:18-19`,
+  real `import Decimal from 'decimal.js'` / `import { Decimal as D2 }`) — but
+  `apigen-core-client/tsconfig.lib.json:9-14` (and the equivalent in
+  `apigen-cli`) excludes `src/test/**` from the lib's own compiled source
+  set, so `@nx/dependency-checks`'s static import-scan (which follows the
+  lib tsconfig's `include`) never sees the fixture's import and flags the
+  declared dependency as unused. Confirmed pre-existing and unrelated to
+  BUG-APIGEN-CORE-002/003's changes — untouched package.json, decimal.js
+  usage untouched, reproduces on a clean worktree.
+- **Why it matters:** blocked running `nx build`/`nx test` cleanly for these
+  2 projects without `--skip-nx-cache`-style workarounds or bypassing nx
+  entirely (raw `vite build`/`vitest run`); surfaced only as
+  `Warning: command "eslint ." exited with non-zero status code` +
+  `NX Running target … failed`, easy to mistake for a real regression.
+- **Fix:** moved `decimal.js` from `dependencies` to `devDependencies` in
+  both `package.json`s — semantically correct (it's genuinely test-only,
+  never imported by shipped `src/lib/**` code) and `@nx/dependency-checks`
+  scans `devDependencies` against the broader (test-inclusive) tsconfig, so
+  the fixture import is now visible. `nx run apigen-core-client:lint` and
+  `nx run apigen-cli:lint` both pass clean.
+- **Status:** FIXED 2026-07-18.
+
+**Citations:** [/Users/nix/dev/node/adhd/packages/apigen/apigen-core-client/BACKLOG.md]

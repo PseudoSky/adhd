@@ -1,11 +1,8 @@
-# agent-registry-migration — BACKLOG
-
-Plan-local DEBT/finding ledger. Source of truth for items scoped to this migration
-(the root `BACKLOG.md` is de-duplicated of plan-owned items).
-
-## Findings
-
 ### MIG-PROVIDER-001 — the dispatch subsystem is a SECOND, un-migrated provider surface that must fold into the canonical provider + agent systems
+
+**Status:** OPEN
+**Plan:** agent-registry-migration
+
 **Discovered:** 2026-07-16, while proving whether `dispatch-cli run --no-dry-run` can dispatch to DeepSeek end-to-end (it could not).
 
 **The surface:** `@adhd/dispatch-base-spec` carries its **own** provider representation, entirely parallel to the canonical `@adhd/agent-core-provider` provider system this plan seeds (`seed-provider-registry`):
