@@ -74,10 +74,10 @@
       "end_ref": "5f116cb48fc82744502601c29ec2e9bafcc3eb75"
     },
     "py-grpc-serve-split": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-24T10:23:48.785Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "1a468cde7c9f50a1cd4258960e809cb853e11f32",
       "end_ref": null
     },
     "audit-python": {
