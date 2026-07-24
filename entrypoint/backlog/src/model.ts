@@ -217,6 +217,14 @@ export interface UpdateItemInput {
   body?: string;
   tags?: string[];
   projectPath?: string;
+  /**
+   * Provenance owner of this item (the source-file path that authored it).
+   * Only ever set to BACKFILL a legacy row whose `importedFrom` was never
+   * stamped (created before the provenance field existed) — see
+   * `importFromMarkdown`'s owning-import branch. An already-stamped owner is
+   * immutable and must never be reassigned via this patch.
+   */
+  importedFrom?: string;
 }
 
 export interface BacklogFilter {
