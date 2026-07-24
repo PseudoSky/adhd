@@ -42,6 +42,22 @@ function applyOpenClosedFilter(items: BacklogItem[], filter: BacklogFilter): Bac
   return items;
 }
 
+/**
+ * MIGRATION.md §2.2 root projection: keep only repo-level nodes — those with
+ * neither a `projectPath` nor a `plan`. Applied at the NodeRecord layer so BOTH
+ * `listItems` and `renderToMarkdown` (which map nodes independently) inherit it.
+ * A metadata scan, not an indexed column filter, because it is an ABSENCE test
+ * (two fields simultaneously unset) that `NodeFilter`'s AND-of-equals cannot
+ * express. See `BacklogFilter.rootLevel`.
+ */
+function applyRootLevelFilter(nodes: NodeRecord[], filter: BacklogFilter): NodeRecord[] {
+  if (!filter.rootLevel) return nodes;
+  return nodes.filter((n) => {
+    const m = n.metadata as Partial<BacklogNodeMeta> | undefined;
+    return !m?.projectPath && !m?.plan;
+  });
+}
+
 /** Raw NodeRecord query — used internally where the full node (not just the mapped BacklogItem) is needed. */
 export function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter = {}): NodeRecord[] {
   if (filter.grep) {
@@ -55,7 +71,7 @@ export function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter =
       limit: filter.limit ?? 1000,
       filter: nodeFilter,
     });
-    let live = hits.filter(isLiveBacklogItemNode);
+    let live = applyRootLevelFilter(hits.filter(isLiveBacklogItemNode), filter);
     if (filter.offset) live = live.slice(filter.offset);
     return live;
   }
@@ -63,7 +79,7 @@ export function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter =
   if (filter.limit !== undefined) nodeFilter.limit = filter.limit;
   if (filter.offset !== undefined) nodeFilter.offset = filter.offset;
   const nodes = store.graph.queryNodes(nodeFilter);
-  return nodes.filter(isLiveBacklogItemNode);
+  return applyRootLevelFilter(nodes.filter(isLiveBacklogItemNode), filter);
 }
 
 export function listItems(store: GraphBacklogStore, filter: BacklogFilter = {}): BacklogItem[] {
