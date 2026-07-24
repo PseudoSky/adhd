@@ -21,6 +21,7 @@
 - [mcp-adapter.2] projectStreamMcp wired live (DEBT-002 mcp half)
 - [mcp-adapter.3] tool-naming findOperation shim removed (collapsed into OpPlan.mcp.name)
 - [mcp-adapter.4] committed mcp golden snapshot exists
+- [mcp-adapter.5] mcp parity gate green via real @modelcontextprotocol/sdk client, incl. malformed->invalid_argument case
 ---
 
 ## Reservations

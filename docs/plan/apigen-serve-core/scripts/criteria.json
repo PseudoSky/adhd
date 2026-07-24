@@ -231,6 +231,14 @@
       "tier": 1,
       "kind": "exists",
       "path": "packages/apigen/apigen-plugin-mcp/src/test/golden/mcp.snapshot.json"
+    },
+    {
+      "id": "mcp-adapter.5",
+      "phase": "phase-2",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-mcp:test",
+      "expect": "exit0"
     }
   ]
 }
