@@ -275,6 +275,14 @@
       "tier": 1,
       "kind": "exists",
       "path": "packages/apigen/apigen-plugin-cli-output/src/test/golden/cli.snapshot.json"
+    },
+    {
+      "id": "cli-adapter.4",
+      "phase": "phase-2",
+      "tier": 3,
+      "kind": "command",
+      "cmd": "CI=true ./node_modules/.bin/nx run apigen-plugin-cli-output:test",
+      "expect": "exit0"
     }
   ]
 }
