@@ -292,6 +292,13 @@
       "positive": "CI=true ./node_modules/.bin/nx run apigen-plugin-cli-output:test",
       "mutate": "git apply docs/plan/apigen-serve-core/neg-control/cli-adapter.patch",
       "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/cli-adapter.patch"
+    },
+    {
+      "id": "py-extract-preflight.1",
+      "phase": "phase-3",
+      "tier": 1,
+      "kind": "exists",
+      "path": "docs/apigen/proposals/py-extract-serve-split-findings.md"
     }
   ]
 }
