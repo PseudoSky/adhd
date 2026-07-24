@@ -1718,3 +1718,15 @@ render round-trip / parity-check.mjs must run in CI and FAIL the build on any ha
 **Status:** OPEN
 
 phase-3 disclosure flip was scoped to adhd AGENTS.md. migration.phase is global (one store); the global Tenant-0 disclosure rule and other repos BACKLOG.md files should be rolled over deliberately (import + install-skill across repos) per MIGRATION.md Phase 6.
+
+### BUG-BACKLOG-CLI-NOT-ON-PATH-001 — backlog CLI not on $PATH — documented invocation unusable by a fresh agent
+
+**Status:** OPEN
+
+A fresh agent asked to use the backlog tool cannot run the documented backlog command (it is not on $PATH); it must invoke node entrypoint/backlog/dist/index.js directly. AGENTS.md phase-3 disclosure tells agents to file/read via the backlog CLI, but there is no discoverable backlog binary. Fix: add a bin shim / global link (or a repo wrapper), or update the disclosure to the real invocation.
+
+### BUG-BACKLOG-MCP-NOT-LOADABLE-001 — mcp__backlog__* tools not loadable in a fresh (sub)agent session
+
+**Status:** OPEN
+
+A fresh subagent could not load any mcp__backlog__* tools despite .mcp.json wiring the backlog server (599faa78). The phase-3 disclosure names mcp__backlog__* as an authoritative path, but it is unavailable to agents — likely the server needs the built artifact/reload or subagents do not inherit the backlog MCP. Verify the .mcp.json entry spawns the built server and that mcp__backlog__create_item resolves in a fresh session (Phase-4 DoD).
