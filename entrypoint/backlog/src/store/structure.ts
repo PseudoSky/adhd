@@ -9,7 +9,7 @@ import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { findItemNode } from './query.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import { createItemNode } from './crud.js';
-import { allocateHumanId } from './ids.js';
+import { allocateHumanIdAndInsert } from './ids.js';
 import {
   BACKLOG_ASSIGNEE_TAG,
   BACKLOG_PLAN_TAG,
@@ -70,38 +70,44 @@ export function supersedeItemNode(store: GraphBacklogStore, repo: string, oldHum
   // into content/meta up front) and `graph.supersede()` is the SOLE minting
   // path (DESIGN.md §14 — never hand-roll the SUPERSEDES edge), so this does
   // not go through `createItemNode` at all (that would mint a second,
-  // throwaway node).
-  const humanId = newInput.idOverride ?? allocateHumanId(store, repo, newInput.family);
-  const kind = humanIdKind(humanId);
-  const family = humanIdFamily(humanId);
+  // throwaway node). Allocation + the actual `supersede()` mint run in ONE
+  // `.immediate()` transaction (`allocateHumanIdAndInsert`) — same
+  // BUG-BACKLOG-CONCURRENT-ID-ALLOCATION-RACE-001 fix `createItemNode`
+  // applies, closing the identical TOCTOU window here.
   const nowIso = new Date().toISOString();
-  const newMeta: BacklogNodeMeta = {
-    humanId,
-    kind,
-    family,
-    title: newInput.title,
-    body: newInput.body,
-    status: 'OPEN',
-    repo,
-    citations: [],
-    notes: [],
-    createdAt: nowIso,
-    updatedAt: nowIso,
-  };
-  if (newInput.priority !== undefined) newMeta.priority = newInput.priority;
-  if (newInput.projectPath !== undefined) newMeta.projectPath = newInput.projectPath;
-  if (newInput.plan !== undefined) newMeta.plan = newInput.plan;
+  let humanId = '';
+  const newId = allocateHumanIdAndInsert(store, repo, newInput.family, newInput.idOverride, (resolvedHumanId) => {
+    humanId = resolvedHumanId;
+    const kind = humanIdKind(humanId);
+    const family = humanIdFamily(humanId);
+    const newMeta: BacklogNodeMeta = {
+      humanId,
+      kind,
+      family,
+      title: newInput.title,
+      body: newInput.body,
+      status: 'OPEN',
+      repo,
+      citations: [],
+      notes: [],
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    if (newInput.priority !== undefined) newMeta.priority = newInput.priority;
+    if (newInput.projectPath !== undefined) newMeta.projectPath = newInput.projectPath;
+    if (newInput.plan !== undefined) newMeta.plan = newInput.plan;
 
-  const newId = store.graph.supersede(old.id, buildNodeContent(repo, humanId, newInput.title, newInput.body), {
-    kind: 'generic',
-    name: buildNodeName(repo, humanId),
-    summary: newInput.title,
-    tags: ['backlog-item', kind, family, ...(newInput.tags ?? [])],
-    namespace: repo,
-    importance: importanceForPriority(newInput.priority),
-    confidence: 'confirmed',
-    ...(newInput.projectPath !== undefined ? { projectPath: newInput.projectPath } : {}),
-    metadata: newMeta as unknown as Record<string, unknown>,
+    return store.graph.supersede(old.id, buildNodeContent(repo, humanId, newInput.title, newInput.body), {
+      kind: 'generic',
+      name: buildNodeName(repo, humanId),
+      summary: newInput.title,
+      tags: ['backlog-item', kind, family, ...(newInput.tags ?? [])],
+      namespace: repo,
+      importance: importanceForPriority(newInput.priority),
+      confidence: 'confirmed',
+      ...(newInput.projectPath !== undefined ? { projectPath: newInput.projectPath } : {}),
+      metadata: newMeta as unknown as Record<string, unknown>,
+    });
   });
 
   mutateMetadata<BacklogNodeMeta>(store, old.id, (meta) => {

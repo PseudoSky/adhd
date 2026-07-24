@@ -9,7 +9,7 @@ import type { NodeRecord } from '@adhd/sox-graph-store';
 import type { BacklogItem, CreateItemInput, CreateItemResult, UpdateItemInput } from '../model.js';
 import { BacklogItemNotFoundError } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
-import { allocateHumanId } from './ids.js';
+import { allocateHumanIdAndInsert } from './ids.js';
 import { findItemNode } from './query.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import {
@@ -91,6 +91,12 @@ export function createItemNode(store: GraphBacklogStore, input: CreateItemInput)
   // humanId WITHIN one source file (the legacy tool's own `stats` command
   // documents that real `BACKLOG.md` files do contain duplicate ids) as a
   // dedupe candidate instead of silently minting a second, id-colliding node.
+  //
+  // This is a SPECULATIVE fast-path check only (cheap early-out so a known
+  // duplicate never runs the dedupe scan below for nothing) — the
+  // AUTHORITATIVE check is the one inside `allocateHumanIdAndInsert`'s own
+  // `.immediate()` transaction below, which is the one actually safe under
+  // concurrency (BUG-BACKLOG-CONCURRENT-ID-ALLOCATION-RACE-001).
   if (input.idOverride) {
     const existing = findItemNode(store, input.repo, input.idOverride);
     if (existing) {
@@ -104,47 +110,53 @@ export function createItemNode(store: GraphBacklogStore, input: CreateItemInput)
     return { item: duplicateCandidates[0], created: false, duplicateCandidates };
   }
 
-  const humanId = input.idOverride ?? allocateHumanId(store, input.repo, input.family);
-  const kind = humanIdKind(humanId);
-  const family = humanIdFamily(humanId);
-  const nowIso = new Date().toISOString();
+  return allocateHumanIdAndInsert(store, input.repo, input.family, input.idOverride, (humanId, existingAtCommit) => {
+    if (existingAtCommit) {
+      const existingItem = toBacklogItem(existingAtCommit);
+      return { item: existingItem, created: false, duplicateCandidates: [existingItem] };
+    }
 
-  const meta: BacklogNodeMeta = {
-    humanId,
-    kind,
-    family,
-    title: input.title,
-    body: input.body,
-    status: 'OPEN',
-    repo: input.repo,
-    citations: [],
-    notes: [],
-    createdAt: nowIso,
-    updatedAt: nowIso,
-  };
-  if (input.priority !== undefined) meta.priority = input.priority;
-  if (input.projectPath !== undefined) meta.projectPath = input.projectPath;
-  if (input.plan !== undefined) meta.plan = input.plan;
-  if (input.importedFrom !== undefined) meta.importedFrom = input.importedFrom;
-  if (input.dedupeScan?.symbol !== undefined) meta.dedupeSymbol = input.dedupeScan.symbol;
-  if (input.dedupeScan?.path !== undefined) meta.dedupePath = input.dedupeScan.path;
-  if (input.dedupeScan?.errorText !== undefined) meta.dedupeErrorText = input.dedupeScan.errorText;
+    const kind = humanIdKind(humanId);
+    const family = humanIdFamily(humanId);
+    const nowIso = new Date().toISOString();
 
-  const nodeId = store.graph.writeNode(buildNodeContent(input.repo, humanId, input.title, input.body), {
-    kind: 'generic',
-    name: buildNodeName(input.repo, humanId),
-    summary: input.title,
-    tags: buildTags(kind, family, input.tags),
-    namespace: input.repo,
-    importance: importanceForPriority(input.priority),
-    confidence: 'confirmed',
-    ...(input.projectPath !== undefined ? { projectPath: input.projectPath } : {}),
-    metadata: meta as unknown as Record<string, unknown>,
+    const meta: BacklogNodeMeta = {
+      humanId,
+      kind,
+      family,
+      title: input.title,
+      body: input.body,
+      status: 'OPEN',
+      repo: input.repo,
+      citations: [],
+      notes: [],
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+    if (input.priority !== undefined) meta.priority = input.priority;
+    if (input.projectPath !== undefined) meta.projectPath = input.projectPath;
+    if (input.plan !== undefined) meta.plan = input.plan;
+    if (input.importedFrom !== undefined) meta.importedFrom = input.importedFrom;
+    if (input.dedupeScan?.symbol !== undefined) meta.dedupeSymbol = input.dedupeScan.symbol;
+    if (input.dedupeScan?.path !== undefined) meta.dedupePath = input.dedupeScan.path;
+    if (input.dedupeScan?.errorText !== undefined) meta.dedupeErrorText = input.dedupeScan.errorText;
+
+    const nodeId = store.graph.writeNode(buildNodeContent(input.repo, humanId, input.title, input.body), {
+      kind: 'generic',
+      name: buildNodeName(input.repo, humanId),
+      summary: input.title,
+      tags: buildTags(kind, family, input.tags),
+      namespace: input.repo,
+      importance: importanceForPriority(input.priority),
+      confidence: 'confirmed',
+      ...(input.projectPath !== undefined ? { projectPath: input.projectPath } : {}),
+      metadata: meta as unknown as Record<string, unknown>,
+    });
+
+    const node = store.graph.getNode(nodeId);
+    if (!node) throw new Error(`backlog: writeNode returned an id that does not resolve: ${nodeId}`);
+    return { item: toBacklogItem(node), created: true, duplicateCandidates: [] };
   });
-
-  const node = store.graph.getNode(nodeId);
-  if (!node) throw new Error(`backlog: writeNode returned an id that does not resolve: ${nodeId}`);
-  return { item: toBacklogItem(node), created: true, duplicateCandidates: [] };
 }
 
 export function getItemNode(store: GraphBacklogStore, repo: string, humanId: string): BacklogItem | null {

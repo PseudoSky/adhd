@@ -88,7 +88,23 @@ describe('createItem / getItem / listItems', () => {
     // query — real, unremarkable English titles ("off-by-one", "fix: the
     // thing") crashed `createItem` outright with a raw SqliteError instead
     // of running the dedupe scan.
-    const titles = ['fix off-by-one error', 'title: with a colon', 'paren(thetical) note', 'quote" inside title'];
+    const titles = [
+      'fix off-by-one error',
+      'title: with a colon',
+      'paren(thetical) note',
+      'quote" inside title',
+      // Found independently (not in the original report) while building the
+      // MIGRATION.md §3.3 20-writer scale test — a title containing `#`
+      // (e.g. this test's own "scale create #7"-shaped titles, or a real
+      // "Fixes #123" reference) crashed the same way the original report's
+      // characters did. Probing FTS5's actual grammar turned up a much
+      // longer list of characters with the identical failure mode —
+      // `sanitizeFtsQuery` was widened from a denylist to a Unicode-aware
+      // allowlist (letters/numbers/underscore/whitespace only) rather than
+      // patched character-by-character again.
+      'issue #123 reference',
+      'a.b{c}d~e[f]g@h!i$j%k&l=m<n>o?p/q\\r;s,t',
+    ];
     for (const title of titles) {
       const result = await client.createItem(ctx, { family: 'BUG-FTS-SYNTAX', title, body: 'x', repo: REPO });
       expect(result.created, `createItem must not throw for title: ${JSON.stringify(title)}`).toBe(true);
