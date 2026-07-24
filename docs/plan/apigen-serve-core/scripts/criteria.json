@@ -445,7 +445,7 @@
       "phase": "phase-3",
       "tier": 1,
       "kind": "absent",
-      "pattern": "_route_for",
+      "pattern": "\\+ \"Service\"",
       "paths": [
         "packages/apigen/python/apigen_python/grpc_server.py"
       ],
@@ -585,7 +585,7 @@
       "phase": "phase-3",
       "tier": 1,
       "kind": "absent",
-      "pattern": "capitalize",
+      "pattern": "capitalize\\(\\)",
       "paths": [
         "packages/apigen/python/apigen_python/grpc_server.py"
       ],
