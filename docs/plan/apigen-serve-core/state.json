@@ -88,10 +88,10 @@
       "end_ref": "409127791fb053d6837ed7502eeced2a09a21c95"
     },
     "audit-final": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-24T13:58:37.727Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "9df31bb9e95783d41cc51bc86c49ef9b5f7918a8",
       "end_ref": null
     }
   },
