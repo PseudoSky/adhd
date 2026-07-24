@@ -160,6 +160,16 @@
       "paths": [
         "packages/apigen/apigen-plugin-api-express/src/lib/run.ts"
       ]
+    },
+    {
+      "id": "express-adapter.2",
+      "phase": "phase-2",
+      "tier": 1,
+      "kind": "absent",
+      "pattern": "buildOperationIndex",
+      "paths": [
+        "packages/apigen/apigen-plugin-api-express/src/lib/route.ts"
+      ]
     }
   ]
 }
