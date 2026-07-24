@@ -2,16 +2,15 @@
 // resolving the canonical `Operation` behind a served/generated
 // `(pkgId, fnName)` pair.
 //
-// serve-core migration (fastify-adapter): the route+verb PROJECTION that
-// `resolveRoute()` used to perform is now `OpPlan`'s job — `buildOpPlan()`
+// serve-core migration (fastify-adapter): the route+verb PROJECTION this
+// module used to perform is now `OpPlan`'s job — `buildOpPlan()`
 // (`@adhd/apigen-engine-runtime`) calls the exact same
 // `project()`/`@adhd/apigen-engine-naming` derivation the OpenAPI plugin uses,
 // so served + generated routes stay byte-identical to the OpenAPI spec's
 // `paths`. This module therefore no longer projects at all; it only resolves
 // the `Operation` (real or synthesized) that `buildOpPlan()` consumes. The
-// former `resolveRoute`/`resolveOperation` exports were DELETED and collapsed
-// into `OpPlan` ([fastify-adapter.4], contract: "route-projection resolveRoute
-// shim removed").
+// former projection + operation-lookup exports were DELETED and collapsed
+// into `OpPlan` ([fastify-adapter.4]); only `operationFor` below remains.
 
 import { tokenize } from '@adhd/apigen-core-client';
 import type { Operation, Segment } from '@adhd/apigen-core-client';
