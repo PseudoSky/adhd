@@ -81,10 +81,10 @@
       "end_ref": "a61e2c76ebc417745490a82f3327408554a4449e"
     },
     "audit-python": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-24T13:54:03.092Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "d97a7694a1b2dc609167950ba48519a0e1fefeb4",
       "end_ref": null
     },
     "audit-final": {
