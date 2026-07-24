@@ -18,6 +18,7 @@
 
 - [cli-adapter.1] cli readCall walks OpPlan.cliFlags (no re-derivation)
 
+- [cli-adapter.2] inline project() call removed from cli run.ts
 ---
 
 ## Reservations
