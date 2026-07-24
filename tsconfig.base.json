@@ -95,6 +95,9 @@
       "@adhd/apigen-engine-runtime": [
         "./packages/apigen/apigen-engine-runtime/src/index.ts"
       ],
+      "@adhd/apigen-engine-runtime/test-support": [
+        "./packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts"
+      ],
       "@adhd/apigen-generator-nx": [
         "./packages/apigen/apigen-generator-nx/src/index.ts"
       ],
