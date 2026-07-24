@@ -1,0 +1,14 @@
+{
+  "schema_version": 2,
+  "title": "apigen transport-neutral serve-core + thin adapters",
+  "plan_kind": "brownfield",
+  "phases": [],
+  "terminal": "done",
+  "nodes": {},
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.30",
+    "hash": "836ff34f0a74"
+  },
+  "goal": "Centralize the op->wire serve loop into OpPlan + createPackageInvoker + dispatchForPlan + a TransportAdapter port in apigen-engine-runtime; migrate every transport (fastify, express, mcp, cli, py-flask, py-grpc) onto it under a byte-identical parity gate"
+}
