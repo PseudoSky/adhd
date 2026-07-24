@@ -64,3 +64,27 @@ export {
   wrapMcpStructuredContent,
 } from './lib/mcp-output-schema';
 export type { McpOutputAdapter } from './lib/mcp-output-schema';
+
+// ---------------------------------------------------------------------------
+// serve-core primitives ([iface:op-plan], [iface:transport-adapter],
+// [iface:create-package-invoker], [iface:dispatch-for-plan]) — transport-
+// neutral OpPlan resolution + the TransportAdapter port. No transport
+// consumes these yet; the fastify/express/mcp/cli/py-* adapter states
+// migrate onto them (and DELETE their duplicated equivalents) later.
+// ---------------------------------------------------------------------------
+export { buildOpPlan } from './lib/op-plan';
+export type {
+  OpPlan,
+  BuildOpPlanInput,
+  OpPlanEnvelopeField,
+  OpPlanCliFlag,
+} from './lib/op-plan';
+export type { TransportAdapter } from './lib/transport-adapter';
+export {
+  createPackageInvoker,
+  readUsePlugins,
+  readUseOptions,
+  adaptCoreLayer,
+} from './lib/package-invoker';
+export type { UsePlugin, UseOptions } from './lib/package-invoker';
+export { dispatchForPlan } from './lib/dispatch-for-plan';
