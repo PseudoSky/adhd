@@ -53,9 +53,9 @@ import { sendStreamSse } from './stream';
 //                             here — [fastify-adapter.4]).
 //   - `createPackageInvoker`— composes the `--use` layer stack + validate-Layer
 //                             ONCE per package. Absorbs the byte-identical
-//                             `buildInvokerForPackage`/`readUsePlugins`/
-//                             `readUseOptions`/`adaptCoreLayer` block that used
-//                             to live in THIS file ([fix:invoker-promotion] /
+//                             invoker-composition block (use-plugin reading +
+//                             core-layer adaptation) that used to live in THIS
+//                             file — now DELETED here ([fix:invoker-promotion] /
 //                             [fastify-adapter.8]).
 //   - `dispatchForPlan`     — branches source-op vs `--use` mount op; the mount
 //                             branch flows through the SAME composed `--use`
