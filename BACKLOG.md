@@ -1634,7 +1634,7 @@ The worktree context also means Nx cache is not shared (`DEBT-NX-WORKTREE-CACHE-
 
 ### DEBT-BACKLOG-DUPLICATE-ID-INSOURCE-001 — root `BACKLOG.md` and `entrypoint/apigen-cli/BACKLOG.md` each reuse the same human ID across two DISTINCT headers, violating "dedupe before filing"; `importFromMarkdown` keeps only the first occurrence with no visibility into the dropped one
 
-**Status:** MIXED
+**Status:** RESOLVED
 
 - **Discovered:** 2026-07-24, executing `backlog-adoption` MIGRATION.md Phase 1. A pre-import scan for cross-file/same-file duplicate IDs across all 14 markdown sources imported this session found 17 distinct IDs reused more than once; the overwhelming majority are the EXPECTED, intentional pattern of a plan-scoped `docs/plan/<slug>/BACKLOG.md` cross-referencing an ID whose full content lives in root `BACKLOG.md` (exactly as `docs/plan/backlog-adoption/BACKLOG.md`'s own header states: "Each ID here is the authoritative entry in the repo-root `BACKLOG.md`"). Two are NOT that pattern — they are the same ID reused for what reads as two DIFFERENT real entries within the SAME file:
   1. `FEAT-WORKSPACE-001` appears at `BACKLOG.md:253` ("workspace-standards base generator + custom workspace lint") and again at `BACKLOG.md:281` ("reframed: agent-optimized, core/adapter split (2026-06-26)") — different titles, different bodies, same id, same file.
@@ -1643,6 +1643,9 @@ The worktree context also means Nx cache is not shared (`DEBT-NX-WORKTREE-CACHE-
 - **Fix direction (two independent tracks):** (a) **markdown hygiene** (this repo, not the tool) — a human/agent should triage both cases and either merge the second header's content into the first (per `CLAUDE.md`'s global "Content Updating & Correction Protocol" — overwrite in place, don't leave two headers) or renumber the second occurrence to a fresh id if it is genuinely a distinct, still-open item; (b) **tool robustness** — `ImportResult`'s `skippedDuplicates` count could be upgraded to a `skipped: Array<{humanId, reason, droppedTitle}>` list so a human doesn't have to re-derive which content was dropped by hand, as this investigation had to.
 - **Status:** OPEN. Not blocking Phase 1/2 (both graph copies are internally consistent single-item snapshots); should be resolved before Phase 3 cut-over demotes these markdown files to generated projections, since after cut-over the SECOND occurrence's content would have no path back into the graph at all once the hand-edited file is regenerated over it.
 - Citations: [main, claude (sonnet-5), backlog-adoption-migration, 1: BACKLOG.md:253 and BACKLOG.md:281 (two `FEAT-WORKSPACE-001` headers, same file); 2: entrypoint/apigen-cli/BACKLOG.md:460 and entrypoint/apigen-cli/BACKLOG.md:605 (two `BUG-APIGEN-031` headers, same file); 3: entrypoint/backlog/src/store/crud.ts (`createItemNode`'s `idOverride` existing-check comment); 4: live import run this session — `docs/plan/backlog-adoption` Phase 1 seed, `BACKLOG.md` reported `{"parsed":150,"created":148,"skippedDuplicates":2,...}`, `entrypoint/apigen-cli/BACKLOG.md` reported `{"parsed":15,"created":14,"skippedDuplicates":1,...}`]
+
+**Citations:** [entrypoint/apigen-cli/BACKLOG.md]
+- Note (main, 2026-07-24T20:39:48.262Z): [transition to RESOLVED] resolved via renumbers commit c247677b
 
 ### DEBT-APIGEN-ENVELOPE-CAPABILITY-UNWIRED-001 — `EnvelopeCapability` (§9.1 envelope side-channel) is declared on the v2 `Plugin` interface but has ZERO real production producer
 
@@ -1697,3 +1700,21 @@ The worktree context also means Nx cache is not shared (`DEBT-NX-WORKTREE-CACHE-
 - Citations: [main, claude (sonnet-5), backlog-adoption-migration, 1: entrypoint/backlog/src/markdown.ts:94 (`detectStatus`'s capture regex); 2: tools/util/backlog.mjs:87 (byte-identical regex, disproving the "legacy tool is more lenient" claim); 3: direct Node repro this session — `classifyStatus("OPEN (containment fix applied 2026-07-18; root cause — the")` → `{label:'OPEN', open:true}`; 4: packages/apigen/apigen-engine-runtime/BACKLOG.md:20-27 (the status-less cross-reference stub that was actually clobbering the canonical `OPEN` status)]
 
 **Citations:** [/Users/nix/dev/node/adhd/BACKLOG.md]
+
+### DEBT-BACKLOG-RENDER-DROPS-IDLESS-001 — render drops id-less entries
+
+**Status:** OPEN
+
+renderToMarkdown emits only items with a parseable human-id. Id-less headers (EventBus handler leak, Leak fixes) are never imported and vanish on render; pre-render text preserved in git. Fix: mint synthetic ids on import or harvest id-less resolved notes to CHANGELOG before render.
+
+### DEBT-BACKLOG-PARITY-GATE-BLOCKING-001 — promote backlog parity-check to a blocking CI gate (Phase-3 step 2)
+
+**Status:** OPEN
+
+render round-trip / parity-check.mjs must run in CI and FAIL the build on any hand-edit to a BACKLOG.md projection that diverges from the graph. The render safety-gate exists (render-projections.mjs aborts on divergence) but is not yet wired as a blocking CI job.
+
+### DEBT-BACKLOG-DISCLOSURE-GLOBAL-ROLLOUT-001 — Phase-6: roll backlog-tool disclosure to global agent doc + import other repos
+
+**Status:** OPEN
+
+phase-3 disclosure flip was scoped to adhd AGENTS.md. migration.phase is global (one store); the global Tenant-0 disclosure rule and other repos BACKLOG.md files should be rolled over deliberately (import + install-skill across repos) per MIGRATION.md Phase 6.
