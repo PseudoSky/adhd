@@ -423,6 +423,16 @@
       "positive": "CI=true ./node_modules/.bin/nx run apigen-plugin-py-grpc:test",
       "mutate": "git apply docs/plan/apigen-serve-core/neg-control/py-grpc-serve-split.patch",
       "restore": "git apply -R docs/plan/apigen-serve-core/neg-control/py-grpc-serve-split.patch"
+    },
+    {
+      "id": "serve-core-primitives.7",
+      "phase": "phase-1",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "readUsePlugins",
+      "paths": [
+        "packages/apigen/apigen-engine-runtime/src/lib/package-invoker.ts"
+      ]
     }
   ]
 }
