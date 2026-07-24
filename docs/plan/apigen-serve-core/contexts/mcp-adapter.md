@@ -66,3 +66,12 @@ Fixes BUG-APIGEN-SERVE-CORE-001 (first-time validate-layer) + wires projectStrea
 - **[fix:use-capability-explicit] (dod.11):** mcp gains `--use` layer AND mount composition via `createPackageInvoker` (GO §8.1) — state explicitly that mcp now hosts `--use` mount ops and pin it. dod.4 covers validate-layer composition; this is the SEPARATE mount capability.
 - **[fix:mcp-toolmeta-hoist] (dod.12):** the tool table / `toolMetas` is computed ONCE at startup from `OpPlan`, NOT rebuilt per request in streaming-http mode (`run.ts:269-276`). Add a test asserting the build count stays 1 across multiple CallTool requests.
 - Stamp `plan.transport = 'mcp'` per [fix:transport-stamping] — a hardcoded `'http'` in `dispatchForPlan` would mis-tag mcp mount provenance.
+
+## MCP SSE / streaming-http transport (dod.15 — folded per user request)
+
+The migration must PRESERVE and HARDEN mcp's HTTP-serving transports (`run.ts:212-288`), which are UNTESTED today (no SSE/StreamableHTTP driving test in `src/test/`):
+
+- **`BUG-APIGEN-MCP-STREAMING-HTTP-NO-ERROR-GUARD-001` (fix here):** the `streaming-http` handler (`run.ts:269-276`) has NO try/catch, unlike the `sse` handler (`run.ts:243-249`) that wraps its body precisely so "a handler rejection [does not] become an unhandled rejection that tears down the whole server." Route BOTH transports' handler errors through the adapter's `writeError` so a rejection in `connect()`/`handleRequest()` can never crash the process.
+- **SSE lifecycle to preserve:** GET `/sse` handshake (`SSEServerTransport`, per-connection), POST `/messages` session routing by `sessionId`, `onclose` session-map cleanup, and the "do NOT call `start()` twice — the SDK throws and crashes the process" invariant (`run.ts:213-262`).
+- **Per-request rebuild:** streaming-http rebuilds the FULL server per request (`buildMcpServer` at `run.ts:270`); only the stateless `StreamableHTTPServerTransport` instance is legitimately per-request — the tool table / `toolMetas` hoist is [fix:mcp-toolmeta-hoist] (dod.12).
+- **Parity gate (new `transport-http-parity.spec.ts`):** drive a REAL SSE client + a REAL StreamableHTTP client through handshake, sessionId-routed POST, a graceful-error case that asserts NO teardown (a SECOND request on the same server still succeeds), and abort/shutdown — with a negative control (`neg-control/mcp-adapter.patch` removes the guard / breaks the handshake → RED).
