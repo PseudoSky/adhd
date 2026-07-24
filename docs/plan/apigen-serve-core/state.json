@@ -25,10 +25,10 @@
       "end_ref": "7ba740aa9164dd017bc25d5ee081497c12d4f6ac"
     },
     "audit-foundation": {
-      "status": "pending",
-      "started_at": null,
+      "status": "in_progress",
+      "started_at": "2026-07-24T08:01:28.054Z",
       "done_at": null,
-      "start_ref": null,
+      "start_ref": "583a0d94f3accd36b000feca0a46df5bf6b79722",
       "end_ref": null
     },
     "express-adapter": {
