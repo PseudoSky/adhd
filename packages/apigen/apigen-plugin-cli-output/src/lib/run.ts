@@ -38,8 +38,8 @@ import { ApiError, isApiError, CLI_EXIT_CODE } from '@adhd/apigen-base-errors';
 //     (nested kebab `cli.path`, the precomputed `--flag` table `cliFlags`,
 //     §9.1 envelope bindings, `streaming`) ONCE, at wiring time. The former
 //     hand-rolled `buildFlagTable`/`FlagSpec` ([cli-adapter.1] — DELETED, see
-//     below) and the direct `project(op).cli.path` call ([cli-adapter.2] —
-//     DELETED) are both gone; `readCall` is pure argv-walking over
+//     below) and the direct naming-authority projection call ([cli-adapter.2]
+//     — DELETED) are both gone; `readCall` is pure argv-walking over
 //     `plan.cliFlags`.
 //   - `createPackageInvoker` composes the `--use` layer stack + validate-
 //     Layer ONCE per package (dod.11 — see below).
@@ -155,7 +155,7 @@ export function resolveArgv(options: Record<string, unknown>): string[] {
  * `RunInput` directly without extraction). ONLY used to resolve
  * envelope/cliFlags/streaming off the composed schema; `namespace`/`path` are
  * deliberately collapsed to a SINGLE untokenized segment carrying the bare
- * `fnName` verbatim (`path: []`) so `buildOpPlan`'s `project()`-derived
+ * `fnName` verbatim (`path: []`) so `buildOpPlan`'s naming-authority-derived
  * `cli.path` degrades to the exact legacy flat `[fnName]` command (never
  * kebab-cased/namespaced) this fallback has always produced — see
  * `buildCommandTable`'s "falls back to a flat [fnName] command" contract,
@@ -183,10 +183,10 @@ function synthesizeOperation(
 
 /**
  * Builds the routing table for every dispatchable function across every
- * package. Prefers the naming authority's `project(op).cli.path` (nested
- * kebab segments, namespace-qualified — SPEC §5), resolved via `buildOpPlan`
- * ([iface:op-plan]) rather than calling `project()` directly here
- * ([cli-adapter.2] — no inline `project()` call), whenever a matching
+ * package. Prefers the naming authority's nested-kebab cli path projection
+ * (namespace-qualified — SPEC §5), resolved via `buildOpPlan` ([iface:op-plan])
+ * rather than calling the naming-authority projector directly here
+ * ([cli-adapter.2] — no inline projection call), whenever a matching
  * {@link Operation} is available; falls back to a synthesized single-segment
  * `[fnName]` `Operation` ({@link synthesizeOperation}) when `input.operations`
  * doesn't carry a matching entry (e.g. a unit test that constructs `RunInput`
