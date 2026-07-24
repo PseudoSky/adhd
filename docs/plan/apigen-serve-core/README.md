@@ -49,3 +49,11 @@ Centralize the op->wire serve loop into OpPlan + createPackageInvoker + dispatch
 - `[dod.6]` **The express undefined->null response-encoding gap (DEBT-APIGEN-SERVE-CORE-003) is closed via the shared adapter writeResult, pinned by a void-return-op fixture flagged as an intentional, tested behavior change. (structural)** — The express undefined->null response-encoding gap (DEBT-APIGEN-SERVE-CORE-003) is closed via the shared adapter writeResult, pinned by a void-return-op fixture flagged as an intentional, tested behavior change..
 
 - `[dod.7]` **The --use mount-metadata loss (DEBT-APIGEN-SERVE-CORE-004) is fixed: mount ops carry full kind/safe/input/text through OpPlan and flow through dispatchForPlan's mount branch (the lossy MountRoute/collectMountRoutes bottleneck is deleted); the mount-through-use-layers decision is resolved and documented. (structural)** — The --use mount-metadata loss (DEBT-APIGEN-SERVE-CORE-004) is fixed: mount ops carry full kind/safe/input/text through OpPlan and flow through dispatchForPlan's mount branch (the lossy MountRoute/collectMountRoutes bottleneck is deleted); the mount-through-use-layers decision is resolved and documented..
+
+- `[dod.8]` **py-flask and py-grpc serve from a TS-computed plan via a two-phase extract/serve split; the Python project() re-derivation (_route_for_op/_is_primitive_only_input_schema/_http_verb) is deleted; parity is green against the real spawned Python server. (behavioral)** — py-flask and py-grpc serve from a TS-computed plan via a two-phase extract/serve split; the Python project() re-derivation (_route_for_op/_is_primitive_only_input_schema/_http_verb) is deleted; parity is green against the real spawned Python server..
+  - given: <preconditions the consumer is in>
+  - when: <the consumer performs the interaction>
+  - then: <the consumer observes the result that proves success>
+  - entrypoint: `CI=true ./node_modules/.bin/nx run-many -t test -p apigen-plugin-py-flask,apigen-plugin-py-grpc`
+  - observable: `py-flask + py-grpc parity specs pass against real spawned servers, and grep shows the three re-derivation functions removed from flask_server.py/grpc_server.py`
+  - delivered-by: `py-flask-serve-split, py-grpc-serve-split`
