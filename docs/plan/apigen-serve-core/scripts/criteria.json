@@ -96,6 +96,16 @@
       "paths": [
         "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts"
       ]
+    },
+    {
+      "id": "fastify-adapter.2",
+      "phase": "phase-1",
+      "tier": 1,
+      "kind": "present",
+      "pattern": "createPackageInvoker",
+      "paths": [
+        "packages/apigen/apigen-plugin-api-fastify/src/lib/run.ts"
+      ]
     }
   ]
 }

@@ -18,6 +18,7 @@
 
 - [fastify-adapter.1] fastify run.ts implements the TransportAdapter port
 
+- [fastify-adapter.2] fastify composes the shared createPackageInvoker
 ---
 
 ## Reservations
