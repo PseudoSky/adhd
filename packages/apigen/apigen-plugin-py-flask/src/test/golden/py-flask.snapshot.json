@@ -1,0 +1,42 @@
+{
+  "safe-get": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": "\"hello\""
+  },
+  "unsafe-post-array-input": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": "6"
+  },
+  "session-envelope": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": "\"Hello Alice! session=sess-parity\""
+  },
+  "decimal-roundtrip": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": "\"246.912\""
+  },
+  "datetime-roundtrip": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": "\"2024-01-15T12:34:56.789Z\""
+  },
+  "validation-failure": {
+    "status": 400,
+    "contentType": "application/json",
+    "body": "{\"code\": \"invalid_argument\", \"message\": \"input validation failed: Value does not satisfy schema (minimal validator): {'amount': 999}\"}"
+  },
+  "health": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": "{\"status\": \"ok\", \"host\": \"testapi\"}"
+  },
+  "not-found": {
+    "status": 404,
+    "contentType": "application/json",
+    "body": "{\"code\": \"not_found\", \"message\": \"no route for GET /testapi/test-api/does-not-exist\"}"
+  }
+}
