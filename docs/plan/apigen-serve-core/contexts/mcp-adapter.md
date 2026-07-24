@@ -26,6 +26,7 @@
 - [mcp-adapter.7] mcp composes --use layer/mount via createPackageInvoker (dod.11)
 - [mcp-adapter.8] toolMetas computed once at startup, hoisted out of the per-request streaming-http handler (dod.12)
 - [mcp-adapter.9] both HTTP transports (sse + streaming-http) route handler errors through the adapter writeError guard — streaming-http no longer lacks the try/catch the sse path has (BUG-...-NO-ERROR-GUARD-001, dod.15)
+- [mcp-adapter.10] real SSE-client + StreamableHTTP-client transport parity spec exists (handshake, session routing, graceful-error-no-teardown, abort) — dod.15
 ---
 
 ## Reservations
