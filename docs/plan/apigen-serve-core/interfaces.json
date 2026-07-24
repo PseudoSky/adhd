@@ -25,5 +25,14 @@
     "resolved_version": "git:fb491d52",
     "source": "packages/apigen/apigen-engine-runtime/src/lib/invoke.ts:133-209 (InvokeFn/createInvoker/InvokeOptions); apigen-plugin-api-fastify/src/lib/run.ts:91-166 (duplicated block absorbed)",
     "audit_check": "serve-core-primitives.1"
+  },
+  "dispatch-for-plan": {
+    "interface": "dispatchForPlan",
+    "shape": "function dispatchForPlan(plan: OpPlan, invoke: InvokeFn, call: Omit<Call,'operation'|'ctx'>, opts: InvokeOptions): Promise<unknown> | AsyncIterable<unknown>  // one place for the mount-vs-source branch (isMount?mountHandler(call):dispatch via fn table) and streaming-vs-scalar shape (isApiStream); returns the existing union, never a new streaming-incompatible signature",
+    "provenance": "vendored-source",
+    "confidence": "vendored",
+    "resolved_version": "git:fb491d52",
+    "source": "packages/apigen/apigen-engine-runtime/src/lib/invoke.ts:94-102,152-156 (LayerResult/InvokeFn); apigen-engine-runtime/src/lib/stream.ts (isApiStream)",
+    "audit_check": "serve-core-primitives.2"
   }
 }
