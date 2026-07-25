@@ -69,7 +69,7 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) =>
           "dist-manifest": { "executor": "@adhd/nx-build:manifest", "dependsOn": ["build", "assets"], "cache": false },
           "verify-dist-load": { "executor": "@adhd/nx-build:verify", "dependsOn": ["build"], "cache": true },
           "publish-hygiene": { "executor": "@adhd/nx-build:hygiene", "dependsOn": ["dist-manifest"], "cache": true },
-          "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["version", "dist-manifest", "verify-dist-load", "publish-hygiene"], "cache": false }
+          "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", "^test", "version", "dist-manifest", "verify-dist-load", "publish-hygiene"], "cache": false }
         }
       }
     }
