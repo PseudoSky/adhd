@@ -175,9 +175,112 @@ function writeChangelogEntry(context, projectRoot, version, dryRun, rec) {
 }
 
 /**
+ * STALE-GRAPH FIX (correctness — see the `dependsOn: [..., "^version"]` note
+ * above): `syncInternalDeps`/`checkInternalDeps` (the `deps` plugin's
+ * sync-deps executors) delegate to the REAL `@nx/dependency-checks` ESLint
+ * rule, which resolves each internal `@adhd/*` dependency's "correct"
+ * version through NX'S OWN PROJECT GRAPH. That graph is computed ONCE, up
+ * front, for the whole `nx run-many -t version` invocation and is never
+ * refreshed mid-run — so if a dependency's OWN `version` task already
+ * bumped its `package.json` earlier in THIS SAME run (guaranteed by the
+ * `^version` topological ordering above), the graph the ESLint rule
+ * consults can still report that dependency's PRE-bump version, producing
+ * a false `versionMismatch` against a dependent that's actually already
+ * correct — or silently leaving a genuinely stale range unfixed.
+ *
+ * The filesystem, unlike the in-memory graph snapshot, is always current by
+ * the time this runs (that's exactly what `^version` guarantees). This
+ * function re-reconciles every declared internal `@adhd/*` range directly
+ * against each dependency's ON-DISK `package.json`, bypassing the cached
+ * graph entirely, as a correctness pass layered ON TOP of
+ * `syncInternalDeps`/`checkInternalDeps` — never replacing them. Those
+ * still own missing/obsolete-dependency detection and external
+ * (non-`@adhd/*`) version-mismatch checks, neither of which has a
+ * mid-run-staleness problem (an external package never gets bumped by this
+ * same `run-many`), so they're deliberately left on `@nx/dependency-checks`.
+ *
+ * @param {import('@nx/devkit').ExecutorContext} context
+ * @param {boolean} dryRun never writes; only logs what would change
+ * @returns {{success: boolean}}
+ */
+function reconcileInternalRangesFromDisk(context, dryRun) {
+  const projectRoot = context.projectsConfigurations.projects[context.projectName].root;
+  const pkgPath = join(context.root, projectRoot, 'package.json');
+  let raw;
+  try {
+    raw = readFileSync(pkgPath, 'utf8');
+  } catch (err) {
+    console.error(`version: [internal-range] could not read ${pkgPath}: ${err.message}`);
+    return { success: false };
+  }
+  let pkg;
+  try {
+    pkg = JSON.parse(raw);
+  } catch (err) {
+    console.error(`version: [internal-range] could not parse ${pkgPath}: ${err.message}`);
+    return { success: false };
+  }
+
+  const depFields = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
+  const desiredRanges = new Map(); // depName -> desired range string
+  for (const field of depFields) {
+    const deps = pkg[field];
+    if (!deps) continue;
+    for (const [depName, currentRange] of Object.entries(deps)) {
+      if (!depName.startsWith('@adhd/') || desiredRanges.has(depName)) continue;
+      const depProjectName = depName.slice('@adhd/'.length);
+      const depProject = context.projectsConfigurations.projects[depProjectName];
+      if (!depProject) continue; // not a workspace project — leave whatever's there alone
+      const depPkgPath = join(context.root, depProject.root, 'package.json');
+      let depVersion;
+      try {
+        depVersion = JSON.parse(readFileSync(depPkgPath, 'utf8')).version;
+      } catch {
+        continue; // dependency has no readable on-disk package.json — nothing to reconcile against
+      }
+      if (!depVersion) continue;
+      const prefix = /^[\^~]/.test(currentRange) ? currentRange[0] : '^';
+      desiredRanges.set(depName, `${prefix}${depVersion}`);
+    }
+  }
+
+  let next = raw;
+  let changed = false;
+  for (const [depName, desiredRange] of desiredRanges) {
+    const escaped = depName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`("${escaped}"\\s*:\\s*")[^"]*(")`, 'g');
+    const updated = next.replace(pattern, (match, pre, post) => {
+      const already = match.slice(pre.length, match.length - post.length);
+      if (already === desiredRange) return match;
+      changed = true;
+      console.error(
+        `version: [internal-range] ${dryRun ? 'would fix' : 'fixing'} ${context.projectName}'s "${depName}" ` +
+        `${already} -> ${desiredRange} (direct on-disk read, bypassing cached project graph)`
+      );
+      return `${pre}${desiredRange}${post}`;
+    });
+    next = updated;
+  }
+
+  if (!changed) return { success: true };
+  if (dryRun) return { success: true };
+
+  try {
+    writeFileSync(pkgPath, next);
+  } catch (err) {
+    console.error(`version: [internal-range] FAILED to write ${pkgPath}: ${err.message}`);
+    return { success: false };
+  }
+  return { success: true };
+}
+
+/**
  * Reconcile THIS package's own declared internal `@adhd/*` dependency ranges
  * to the current workspace versions of those dependencies, by delegating to
- * the `deps` plugin's sync (fix) / check (read-only) executors.
+ * the `deps` plugin's sync (fix) / check (read-only) executors, THEN
+ * re-reconciling internal ranges directly from disk (see
+ * `reconcileInternalRangesFromDisk` above) to correct for the ESLint rule's
+ * cached-project-graph staleness during a multi-project `version` run.
  *
  * `dryRun`: reconciliation writes a file, so a dry run must never apply it —
  * delegate to the read-only check instead, purely for visibility, and never
@@ -191,9 +294,12 @@ async function reconcileOwnInternalRanges(context, dryRun) {
   if (dryRun) {
     console.error('version: [dry-run] checking internal @adhd/* range drift (sync-deps-check, not applying)…');
     await checkInternalDeps({}, context);
-    return { success: true };
+    const disk = reconcileInternalRangesFromDisk(context, true);
+    return { success: disk.success };
   }
-  return syncInternalDeps({}, context);
+  const synced = await syncInternalDeps({}, context);
+  const disk = reconcileInternalRangesFromDisk(context, false);
+  return { success: synced.success && disk.success };
 }
 
 function sh(cmd, args, opts = {}) {
@@ -356,4 +462,4 @@ module.exports.default = run;
 // (same require-cache entry, same absolute file), proving reuse rather than
 // a duplicated reimplementation. Not used by Nx (which only calls the
 // default export).
-module.exports.__internals = { reconcileOwnInternalRanges, syncInternalDeps, checkInternalDeps, lastChangelogCommit, writeChangelogEntry };
+module.exports.__internals = { reconcileOwnInternalRanges, reconcileInternalRangesFromDisk, syncInternalDeps, checkInternalDeps, lastChangelogCommit, writeChangelogEntry };

@@ -37,35 +37,31 @@ const path = require('node:path');
 const ALLOWLIST_PRAGMA = /pragma:\s*allowlist secret/i;
 
 /**
- * Modes. The SAME rule table runs locally and in CI, so a commit that passes the
+ * Modes. The SAME rule table runs locally and in CI (and now the
+ * `source:secret-scan` nx target both wrap), so a commit that passes the
  * hook cannot fail differently on a PR.
  *
  *   (none) | --staged      scan the git index              (pre-commit)
  *   --range <base> <head>  scan the diff base..head        (CI on a PR)
  *   --all                  scan every tracked file         (audit / backfill)
+ *
+ * @param {string[]} argv arguments after the script name, e.g. `process.argv.slice(2)`
  */
-const MODE = (() => {
-  const a = process.argv.slice(2);
+function parseMode(argv) {
+  const a = argv;
   if (a.length === 0 || a[0] === '--staged') return { kind: 'staged' };
   if (a[0] === '--all') return { kind: 'all' };
   if (a[0] === '--range') {
     if (!a[1] || !a[2]) {
-      console.error('usage: check-no-credentials.js --range <base> <head>');
-      process.exit(2);
+      return { kind: 'error', message: 'usage: check-no-credentials.js --range <base> <head>' };
     }
     return { kind: 'range', base: a[1], head: a[2] };
   }
-  console.error(`unknown argument: ${a[0]}`);
-  console.error('usage: check-no-credentials.js [--staged | --range <base> <head> | --all]');
-  process.exit(2);
-})();
-
-/**
- * CI sets this. A missing `gitleaks` binary then becomes a HARD FAILURE instead
- * of a quiet downgrade to pattern-only scanning: a scanner that isn't there must
- * never be indistinguishable from a scanner that found nothing.
- */
-const REQUIRE_GITLEAKS = process.env.SECRET_SCAN_REQUIRE_GITLEAKS === '1';
+  return {
+    kind: 'error',
+    message: `unknown argument: ${a[0]}\nusage: check-no-credentials.js [--staged | --range <base> <head> | --all]`,
+  };
+}
 
 /** Files that must never be committed, matched against the repo-relative path. */
 const FORBIDDEN_PATHS = [
@@ -169,12 +165,12 @@ function git(args) {
 }
 
 /** Candidate (non-deleted) paths for the active mode. */
-function candidatePaths() {
-  if (MODE.kind === 'staged') {
+function candidatePaths(mode) {
+  if (mode.kind === 'staged') {
     return git(['diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z']).split('\0').filter(Boolean);
   }
-  if (MODE.kind === 'range') {
-    return git(['diff', '--name-only', '--diff-filter=ACMR', '-z', MODE.base, MODE.head])
+  if (mode.kind === 'range') {
+    return git(['diff', '--name-only', '--diff-filter=ACMR', '-z', mode.base, mode.head])
       .split('\0')
       .filter(Boolean);
   }
@@ -194,15 +190,15 @@ function sanitize(buf) {
  * for staged/range mode. Reading the worktree would let a staged secret hide
  * behind an unstaged edit.
  */
-function contentAt(p) {
-  if (MODE.kind === 'all') {
+function contentAt(mode, p) {
+  if (mode.kind === 'all') {
     try {
       return sanitize(fs.readFileSync(p));
     } catch {
       return null;
     }
   }
-  const rev = MODE.kind === 'staged' ? `:0:${p}` : `${MODE.head}:${p}`;
+  const rev = mode.kind === 'staged' ? `:0:${p}` : `${mode.head}:${p}`;
   const r = spawnSync('git', ['show', rev], { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 });
   if (r.status !== 0) return null;
   return sanitize(r.stdout);
@@ -214,12 +210,12 @@ function contentAt(p) {
  * ambiguous — we key on its log line instead and escalate a tool error to exit 2
  * rather than mistaking it for a finding (or, worse, for a pass).
  */
-function runGitleaks(repoRoot) {
+function runGitleaks(mode, repoRoot) {
   const args = ['git', '--redact', '--no-banner'];
   const cfg = path.join(repoRoot, '.gitleaks.toml');
   if (fs.existsSync(cfg)) args.push('--config', cfg);
-  if (MODE.kind === 'staged') args.push('--staged');
-  else if (MODE.kind === 'range') args.push('--log-opts', `${MODE.base}..${MODE.head}`);
+  if (mode.kind === 'staged') args.push('--staged');
+  else if (mode.kind === 'range') args.push('--log-opts', `${mode.base}..${mode.head}`);
 
   const gl = spawnSync('gitleaks', args, { encoding: 'utf8' });
 
@@ -232,19 +228,41 @@ function runGitleaks(repoRoot) {
   return { ran: true, leaks: false };
 }
 
-function main() {
+/**
+ * Run the scan and return the intended process exit code — never calls
+ * `process.exit` itself, so it is safe to `require()` and call in-process
+ * (e.g. from the `@adhd/nx-secret-scan:scan` executor) without tearing down
+ * the host process. Only the `require.main === module` guard at the bottom
+ * of this file converts the return value into a real `process.exit`.
+ *
+ * @param {string[]} [argv] arguments after the script name, e.g. `['--staged']`
+ * @returns {number} 0 = clean, 1 = blocked, 2 = the check itself could not run
+ */
+function main(argv = process.argv.slice(2)) {
+  const mode = parseMode(argv);
+  if (mode.kind === 'error') {
+    console.error(mode.message);
+    return 2;
+  }
+
+  // CI (and any caller) sets this. A missing `gitleaks` binary then becomes a
+  // HARD FAILURE instead of a quiet downgrade to pattern-only scanning: a
+  // scanner that isn't there must never be indistinguishable from a scanner
+  // that found nothing.
+  const requireGitleaks = process.env.SECRET_SCAN_REQUIRE_GITLEAKS === '1';
+
   let repoRoot;
   let paths;
   try {
     repoRoot = git(['rev-parse', '--show-toplevel']).trim();
-    paths = candidatePaths();
+    paths = candidatePaths(mode);
   } catch (e) {
     console.error(`✖ secret-scan: cannot read git state — refusing to pass.\n  ${e.message}`);
-    process.exit(2);
+    return 2;
   }
   if (paths.length === 0) {
     console.log('✓ secret-scan: nothing to scan.');
-    process.exit(0);
+    return 0;
   }
 
   const findings = [];
@@ -266,7 +284,7 @@ function main() {
     // scanner flags itself and can never be committed.
     if (posixEq(p, '.githooks/check-no-credentials.js')) continue;
     if (posixEq(p, '.gitleaks.toml')) continue;
-    const content = contentAt(p);
+    const content = contentAt(mode, p);
     if (content === null) continue;
 
     const lines = content.split('\n');
@@ -285,18 +303,18 @@ function main() {
   }
 
   // ── 3. gitleaks — authoritative when present ──────────────────────────────
-  const gl = runGitleaks(repoRoot);
+  const gl = runGitleaks(mode, repoRoot);
 
   if (gl.toolError) {
     console.error('\n✖ secret-scan: gitleaks failed to run — refusing to pass.\n');
     console.error(gl.toolError.replace(/^/gm, '  '));
     console.error('\n  A scanner that errored is NOT a scanner that found nothing.\n');
-    process.exit(2);
+    return 2;
   }
-  if (!gl.ran && REQUIRE_GITLEAKS) {
+  if (!gl.ran && requireGitleaks) {
     console.error('\n✖ secret-scan: gitleaks is REQUIRED here but is not installed.');
     console.error('  Hard failure by design — a missing scanner must never look like a pass.\n');
-    process.exit(2);
+    return 2;
   }
   if (gl.leaks) {
     findings.push({ file: '(gitleaks)', line: 0, rule: 'gitleaks', why: 'gitleaks flagged the scanned revision' });
@@ -313,7 +331,7 @@ function main() {
     console.error('  If a match is genuinely not a secret, append this to the line:');
     console.error('      pragma: allowlist secret');
     console.error('  Emergency bypass (leaves the secret in history): git commit --no-verify\n');
-    process.exit(1);
+    return 1;
   }
 
   if (!gl.ran) {
@@ -321,14 +339,21 @@ function main() {
     console.warn('  Install for full coverage:  brew install gitleaks');
   }
   console.log(
-    `✓ secret-scan: no credentials in ${paths.length} file(s) [${MODE.kind}]` +
+    `✓ secret-scan: no credentials in ${paths.length} file(s) [${mode.kind}]` +
       (gl.ran ? ' (gitleaks + built-in rules)' : ' (built-in rules only)'),
   );
-  process.exit(0);
+  return 0;
 }
 
 function posixEq(p, target) {
   return p.split(path.sep).join('/') === target;
 }
 
-main();
+module.exports = { main };
+
+// Only run as a CLI when invoked directly (`node check-no-credentials.js ...`)
+// — not when `require()`d in-process (e.g. by the `@adhd/nx-secret-scan:scan`
+// executor, or a test).
+if (require.main === module) {
+  process.exit(main());
+}

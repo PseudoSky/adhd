@@ -1,6 +1,16 @@
 #!/usr/bin/env node
 /**
- * scripts/release-publish.mjs
+ * tools/nx-plugins/build/executors/publish/release-publish.mjs
+ * (moved here from the former `scripts/release-publish.mjs` — see PUBLISHING.md
+ * for every reference to this path, all now corrected to point here.)
+ *
+ * NOTE: this wraps the now-RETIRED `nx release publish` / `nx-release-publish`
+ * target model. The CURRENT pipeline (`pnpm release` → `nx run-many -t publish`,
+ * the custom `@adhd/nx-build:publish` executor — see `../../plugin.js` and
+ * PUBLISHING.md's "Workflow" section) does not call this script; `package.json`'s
+ * `release` script invokes `nx run-many -t publish` directly. This file remains
+ * only for the "Retired: the former `nx release` workflow" doc section's
+ * historical commands — do not wire new callers to it.
  *
  * THE canonical entry point for publishing this workspace's packages. Replaces
  * calling `npx nx release publish` directly — see PUBLISHING.md.
@@ -35,8 +45,9 @@
  * THE FIX: never call `nx release publish` with `--projects` directly. This
  * script is the one place that decides how to invoke the real publish, and it
  * always routes through a mechanism proven (by the reproduction above and by
- * this script's own negative-control test, see
- * scripts/test/release-publish-gate.spec.mjs) to honor dependsOn:
+ * this script's own negative-control test — no such test currently exists in
+ * this repo, a gap; see BACKLOG.md DEBT-BUILD-RELEASE-PUBLISH-NO-TEST-001) to
+ * honor dependsOn:
  *
  *   - `--projects=<list>` given  -> `npx nx run-many -t nx-release-publish
  *     --projects=<list>` (run-many always expands dependsOn; nx release's own
@@ -51,9 +62,9 @@
  * Every other flag (--dry-run, --specifier, etc.) is passed through unchanged.
  *
  * Usage (mirrors `nx release publish`):
- *   node scripts/release-publish.mjs --dry-run
- *   node scripts/release-publish.mjs --dry-run --projects=apigen-plugin-mcp,apigen-plugin-openapi
- *   node scripts/release-publish.mjs
+ *   node tools/nx-plugins/build/executors/publish/release-publish.mjs --dry-run
+ *   node tools/nx-plugins/build/executors/publish/release-publish.mjs --dry-run --projects=apigen-plugin-mcp,apigen-plugin-openapi
+ *   node tools/nx-plugins/build/executors/publish/release-publish.mjs
  *
  * Exit code: propagates the underlying nx command's exit code unchanged. A
  * failed build/test/verify-dist-load gate means this exits non-zero and NOTHING

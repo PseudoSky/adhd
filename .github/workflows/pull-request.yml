@@ -7,10 +7,11 @@ on:
 
 jobs:
   # Credential gate. The pre-commit hook is local-only and trivially bypassed
-  # (`git commit --no-verify`, or a clone that never ran `yarn`), so the hook is
-  # fast feedback — THIS job is the enforcement boundary. It runs the exact same
-  # scanner (.githooks/check-no-credentials.js) the hook does, so a commit cannot
-  # pass locally and fail differently here.
+  # (`git commit --no-verify`, or a clone that never ran `pnpm install`), so the
+  # hook is fast feedback — THIS job is the enforcement boundary. It runs the
+  # same scanner via the same nx target the hook does
+  # (`@adhd/nx-secret-scan:scan`, wrapping `.githooks/check-no-credentials.js`),
+  # so a commit cannot pass locally and fail differently here.
   secret-scan:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
@@ -22,7 +23,13 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
+
+      - name: Enable Corepack (pnpm)
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install
 
       - name: Install gitleaks (pinned + checksum-verified)
         env:
@@ -49,9 +56,9 @@ jobs:
           # A missing/broken scanner is a HARD failure in CI, never a silent pass.
           SECRET_SCAN_REQUIRE_GITLEAKS: '1'
         run: |
-          node .githooks/check-no-credentials.js \
-            --range "${{ github.event.pull_request.base.sha }}" \
-                    "${{ github.event.pull_request.head.sha }}"
+          CI=true npx nx run @adhd/source:secret-scan --mode=range \
+            --base="${{ github.event.pull_request.base.sha }}" \
+            --head="${{ github.event.pull_request.head.sha }}"
 
   test:
     runs-on: ubuntu-latest
