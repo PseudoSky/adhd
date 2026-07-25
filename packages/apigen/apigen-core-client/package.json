@@ -1,12 +1,12 @@
 {
   "name": "@adhd/apigen-core-client",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "dependencies": {
     "ts-morph": "^23.0.0",
     "ts-json-schema-generator": "^2.3.0",
     "pino": "10.3.1",
     "typescript": "^6.0.3",
-    "@adhd/apigen-base-logical": "0.0.5"
+    "@adhd/apigen-base-logical": "^0.0.6"
   },
   "devDependencies": {
     "zod": "*",
