@@ -83,7 +83,7 @@ function fileSegFromImportPath(importPath: string): Segment {
  * `ComposedSchemas`).
  */
 export function operationFor(
-  pkg: { id: string; importPath: string },
+  pkg: { id: string; importPath: string; dropFileSegment?: boolean },
   fnName: string,
   operations?: Operation[]
 ): Operation {
@@ -106,12 +106,18 @@ export function operationFor(
     return real;
   }
 
-  // Best-effort fallback — see doc comment above.
+  // Best-effort fallback — see doc comment above. Honors `pkg.dropFileSegment`
+  // (mirroring `extract.ts`'s `ExtractOptions.dropFileSegment`) so this
+  // synthesized path never diverges from the real extractor's for a source
+  // whose file segment is dropped.
+  const exportSeg = makeSeg(fnName);
   return {
     id: `${pkg.id}/${fnName}`,
     host: 'ts',
     namespace: makeSeg(pkg.id),
-    path: [fileSegFromImportPath(pkg.importPath), makeSeg(fnName)],
+    path: pkg.dropFileSegment
+      ? [exportSeg]
+      : [fileSegFromImportPath(pkg.importPath), exportSeg],
     kind: 'action',
     async: false,
     streaming: false,

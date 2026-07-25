@@ -1212,9 +1212,23 @@ export function createFrontServer(hosts: Host[]): http.Server {
 
   if (!hasGrpcHosts) {
     // No gRPC hosts — use a plain HTTP/1.1 server (simpler, no peeking needed).
-    return http.createServer((req, res) => {
+    const server = http.createServer((req, res) => {
       handleHttp1Request(req, res, byNamespaceHttp, hosts);
     });
+    const origClose = server.close.bind(server);
+    server.close = ((cb?: (err?: Error) => void) => {
+      // BUG-APIGEN-CLI-SERVE-SIGKILL-001: Node's `Server.close()` callback
+      // only fires once every open connection has ENDED — a single lingering
+      // keep-alive client (a plain `fetch()`, a browser tab, our own
+      // readiness-check probe) otherwise makes `close()` — and therefore
+      // `shutdown()` in `startServe()` below — hang forever, which is why
+      // Ctrl-C could never terminate `serve`. `closeAllConnections()` (Node
+      // 18.2+) force-destroys every socket, active or idle, so `close()`
+      // always resolves promptly.
+      server.closeAllConnections();
+      return origClose(cb);
+    }) as typeof server.close;
+    return server;
   }
 
   // Mixed HTTP/1.1 + gRPC setup: we need to peek the first bytes of each
@@ -1241,6 +1255,22 @@ export function createFrontServer(hosts: Host[]): http.Server {
     /* suppress internal http2 errors */
   });
 
+  // BUG-APIGEN-CLI-SERVE-SIGKILL-001: `rawServer`/`h2Server` are a bare
+  // `net.Server`/`http2.Server` — neither has http.Server's built-in
+  // `closeAllConnections()`, and both close() methods only fire their
+  // callback once every open connection/session ends on its own. A single
+  // lingering client (a keep-alive HTTP/1.1 socket or a persistent h2c/gRPC
+  // session — exactly what this front proxies) otherwise hangs `close()`
+  // forever, which hangs `shutdown()` in `startServe()` below, which is why
+  // Ctrl-C could never terminate `serve`. Track every accepted socket/session
+  // so shutdown can force them closed instead of waiting on the client.
+  const rawSockets = new Set<net.Socket>();
+  const h2Sessions = new Set<http2.ServerHttp2Session>();
+  h2Server.on('session', (session) => {
+    h2Sessions.add(session);
+    session.once('close', () => h2Sessions.delete(session));
+  });
+
   // The "public" server is actually a raw TCP server that peeks and routes.
   // We return httpServer as the nominal handle (for .listen/.close/address()),
   // but we wire the actual TCP accept logic through the raw net.Server.
@@ -1248,6 +1278,8 @@ export function createFrontServer(hosts: Host[]): http.Server {
   const rawServer = net.createServer();
 
   rawServer.on('connection', (socket: net.Socket) => {
+    rawSockets.add(socket);
+    socket.once('close', () => rawSockets.delete(socket));
     socket.once('error', () => socket.destroy());
 
     // Peek the first 3 bytes to determine the protocol without consuming them.
@@ -1306,6 +1338,20 @@ export function createFrontServer(hosts: Host[]): http.Server {
 
   httpServer.close = ((cb?: (err?: Error) => void) => {
     h2Server.close();
+    // Force-terminate every lingering h2 session and raw socket BEFORE
+    // asking rawServer to close, so its callback fires promptly instead of
+    // waiting on a client that never disconnects (see the tracking comment
+    // above `rawSockets`/`h2Sessions`).
+    for (const session of h2Sessions) {
+      try {
+        session.destroy();
+      } catch {
+        /* already closed */
+      }
+    }
+    for (const socket of rawSockets) {
+      socket.destroy();
+    }
     return rawServer.close(cb);
   }) as typeof httpServer.close;
 
@@ -1342,6 +1388,17 @@ export async function startServe(opts: {
   mounts?: Record<string, string>;
   cliPath?: string;
   log?: (msg: string) => void;
+  // BUG-APIGEN-CLI-SERVE-SIGKILL-001: `startServe()` spawns host children
+  // well before it resolves (python provisioning, per-host readiness waits,
+  // front listen()). Without a way to see `hosts` before that point, a
+  // caller can only install signal handlers AFTER `await startServe(...)`
+  // returns — leaving a window where a signal arriving mid-startup hits
+  // Node's default disposition (immediate termination, no handler yet
+  // registered) and orphans whatever host children had already spawned.
+  // Invoked as soon as the (mutable, in-place-updated) `hosts` array exists,
+  // so a caller can register handlers that can kill in-flight hosts even
+  // before `shutdown()` exists.
+  onHostsCreated?: (hosts: Host[]) => void;
 }): Promise<{
   hosts: Host[];
   front: http.Server;
@@ -1350,6 +1407,7 @@ export async function startServe(opts: {
   const log = opts.log ?? ((m: string) => process.stderr.write(`${m}\n`));
   const cliPath = opts.cliPath ?? selfCliPath();
   const hosts = resolveHosts(opts.sources, opts.mounts ?? {});
+  opts.onHostsCreated?.(hosts);
 
   // Pre-provision the managed Python interpreter BEFORE spawning any Python
   // host: a first-time venv bootstrap (pip install of apigen-python[grpc])
@@ -1419,8 +1477,35 @@ export async function startServe(opts: {
     torn = true;
     log('[serve] shutting down — killing children…');
     destroyAllGrpcSessions();
-    await new Promise<void>((resolve) => front.close(() => resolve()));
-    await killAll(hosts);
+
+    // BUG-APIGEN-CLI-SERVE-SIGKILL-001: `killAll(hosts)` used to run only
+    // AFTER `front.close()` resolved. If closing the front ever hung (it
+    // could, before the socket-tracking fix above — and a future regression
+    // could reintroduce that), every host child stayed alive the whole time,
+    // and if something eventually gave up and SIGKILLed this process, none
+    // of them were ever told to die: pure orphans. Close the front and kill
+    // every host CONCURRENTLY, and cap the whole thing with a hard deadline
+    // so a stuck close can never again starve child cleanup — belt-and-
+    // suspenders on top of the close() fix, not a substitute for it.
+    const closeFront = new Promise<void>((resolve) =>
+      front.close(() => resolve())
+    );
+    let deadlineTimer: NodeJS.Timeout | undefined;
+    const deadline = new Promise<void>((resolve) => {
+      deadlineTimer = setTimeout(resolve, 5000);
+      deadlineTimer.unref?.();
+    });
+    await Promise.race([
+      Promise.all([closeFront, killAll(hosts)]),
+      deadline,
+    ]);
+    if (deadlineTimer) clearTimeout(deadlineTimer);
+
+    // Last-resort sweep: if the deadline won the race, force down anything
+    // still alive so nothing outlives this process.
+    for (const h of hosts) {
+      if (h.alive) h.child?.kill('SIGKILL');
+    }
     log('[serve] all children terminated');
   };
 
@@ -1450,18 +1535,54 @@ export function registerServeCommand(program: Command): void {
     .action(
       async (opts: { source: string[]; port: number; mount: string[] }) => {
         const mounts = parseMounts(opts.mount);
-        const { shutdown } = await startServe({
-          sources: opts.source,
-          port: opts.port,
-          mounts,
-        });
 
+        // BUG-APIGEN-CLI-SERVE-SIGKILL-001: register signal handlers BEFORE
+        // `startServe()` resolves, not after. `startServe()` spawns host
+        // children early (python provisioning, per-host readiness waits,
+        // front listen() can all take real time) — a signal that arrived
+        // during that window used to have NO handler registered yet, hit
+        // Node's default disposition (immediate termination), and orphaned
+        // whatever host children had already spawned. `hostsRef`/`frontRef`
+        // are populated as soon as they exist (via `onHostsCreated` and the
+        // resolved result respectively) so `onSignal` can always reach
+        // whatever has been created so far, no matter when it fires.
+        const state: {
+          hosts: Host[];
+          front?: http.Server;
+          shutdown?: () => Promise<void>;
+        } = { hosts: [] };
         let shuttingDown = false;
+
+        const teardown = async (): Promise<void> => {
+          if (state.shutdown) {
+            await state.shutdown();
+            return;
+          }
+          // Signal fired before `startServe()` finished — no `shutdown`
+          // closure exists yet. Kill whatever has already spawned directly.
+          if (state.front) {
+            const front = state.front;
+            await new Promise<void>((resolve) => front.close(() => resolve()));
+          }
+          await killAll(state.hosts);
+        };
+
         const onSignal = (sig: string) => {
           if (shuttingDown) return;
           shuttingDown = true;
           process.stderr.write(`\n[serve] received ${sig}\n`);
-          shutdown()
+          // Absolute last resort: `teardown()`/`shutdown()` already bound
+          // themselves internally, but this catches any future regression
+          // that makes the returned promise never settle — Ctrl-C (or a
+          // closed terminal's SIGHUP) must never be able to hang this process.
+          const forceExit = setTimeout(() => {
+            process.stderr.write(
+              '[serve] shutdown exceeded deadline — forcing exit\n'
+            );
+            process.exit(1);
+          }, 8000);
+          forceExit.unref?.();
+          teardown()
             .then(() => process.exit(0))
             .catch((err) => {
               process.stderr.write(`[serve] shutdown error: ${err}\n`);
@@ -1470,6 +1591,12 @@ export function registerServeCommand(program: Command): void {
         };
         process.on('SIGINT', () => onSignal('SIGINT'));
         process.on('SIGTERM', () => onSignal('SIGTERM'));
+        // A closed terminal sends SIGHUP to the foreground process group;
+        // without a handler Node's default disposition terminates this
+        // process immediately — before `shutdown()` ever runs — which is
+        // exactly how host children were left orphaned (BUG-APIGEN-CLI-
+        // SERVE-SIGKILL-001). Route it through the same graceful, bounded path.
+        process.on('SIGHUP', () => onSignal('SIGHUP'));
         process.on('uncaughtException', (err) => {
           onSignal('SIGTERM');
           setImmediate(() => {
@@ -1482,6 +1609,23 @@ export function registerServeCommand(program: Command): void {
             throw reason;
           });
         });
+
+        const { hosts, front, shutdown } = await startServe({
+          sources: opts.source,
+          port: opts.port,
+          mounts,
+          onHostsCreated: (h) => {
+            state.hosts = h;
+          },
+        });
+        state.hosts = hosts;
+        state.front = front;
+        state.shutdown = shutdown;
+        // If a signal already fired while we were still starting up, don't
+        // leave the now-fully-started server running — tear it down now.
+        if (shuttingDown) {
+          await shutdown();
+        }
         // Keep the process alive; the front server's open handle does this.
       }
     );

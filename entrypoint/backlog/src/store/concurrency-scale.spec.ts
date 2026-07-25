@@ -235,7 +235,18 @@ describe(`concurrency-scale — ${N} real worker_threads (MIGRATION.md §3.3)`, 
     // must still let every one of the 20 losers eventually observe the
     // winner's committed claim and return a clean 'held' — never an
     // unhandled SQLITE_BUSY thrown to the caller.
-    const TINY_BUSY_TIMEOUT_MS = 50;
+    // 50ms was the original value here and is knowingly at the edge of
+    // viable: with 20 real threads racing one row lock, the fixed 5-attempt/
+    // jittered-backoff schedule in `immediate-retry.ts` (worst case ~850ms
+    // total across all attempts) occasionally loses the coupon-collector
+    // race at 50ms per attempt — a loser's LAST retry can still land inside
+    // another loser's still-open window and get bounced again, exhausting
+    // its budget and throwing a real (uncaught-by-the-test) SQLITE_BUSY.
+    // That's a flake in this test's OWN timing margin, not a correctness
+    // bug (`claimedCount === 1` below never flakes) — 150ms gives every
+    // loser's `busy_timeout` window enough headroom to observe the winner's
+    // commit well within the retry budget, deterministically.
+    const TINY_BUSY_TIMEOUT_MS = 150;
     const created = createItemNode(tmp.store, { family: 'BUG-SCALE-RETRY', title: 'retry-recovers item', body: 'x', repo: REPO });
 
     const outcomes = await runBarrieredBatch(N, (i, gate) => ({

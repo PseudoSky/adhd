@@ -17,9 +17,9 @@
  * qualified command table) get a direct unit-level check too — not because
  * unit-testing beats spawning, but because the whole point of these two
  * helpers is to encode an empirically-verified, otherwise-invisible fact
- * (the exact shape of the real command table, INCLUDING the `client-d`
- * file-segment — see the note below) as a literal, load-bearing assertion
- * that fails loudly the moment that fact ever changes.
+ * (the exact shape of the real command table — see the note below) as a
+ * literal, load-bearing assertion that fails loudly the moment that fact
+ * ever changes.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
@@ -69,34 +69,24 @@ function runBin(args: string[], cwd: string): SpawnResult {
 // question this package's task spec called out explicitly ("Confirm the
 // exact behavior … and prove it with a test — do not assume").
 //
-// FINDING (not an assumption): the real internal command-table prefix is
-// TWO segments, `['backlog', 'client-d']`, NOT the single `['backlog']`
-// segment a naive reading of "the extraction namespace is 'backlog'" would
-// suggest. `@adhd/apigen-core-client`'s `extract()` unconditionally builds
-// every operation's `path` as `[fileSegment, exportSegment]`
-// (`extract.ts`: `const opPath: Segment[] = [fileSeg, exportSeg]`), and
-// `fileSegment` is derived from the EXTRACTED file's own name
-// (`normalizeFileName('client.d.ts')` → `'client-d'`). `server.ts`'s
-// `extractClientOperations()` always points extraction at the BUILT
-// `client.d.ts` (a deliberate workaround for a separate apigen bug — see
-// that function's own doc comment), so this file-segment is unavoidable
-// today. `@adhd/apigen-plugin-cli-output`'s `buildCommandTable()` is the
-// ONLY transport that consults `project(op).cli.path` (namespace + full
-// `path`, i.e. INCLUDING the file segment) for its routing keys — HTTP
-// (`apigen-plugin-api-fastify`) and MCP (`apigen-plugin-mcp`) also happen to
-// use the canonical projector post-BUG-BACKLOG-CANONICAL-NAMING-CLIENT-D-
-// SEGMENT-001 (see BACKLOG.md), so `/backlog/client-d/get-item` and
-// `backlog_client_d_get_item` leak the same segment on those transports too
-// — but the CLI is the only transport where THIS package controls the
-// user-facing surface (a human types the argv), so `runBacklogCli` hides it.
+// FINDING (not an assumption): the real internal command-table prefix is the
+// single segment `['backlog']`. `server.ts`'s `extractClientOperations()`
+// calls `extract({ …, dropFileSegment: true })`, so every operation's `path`
+// is just `[exportSegment]` — no `client.d.ts`-derived file segment (that
+// used to leak as `'client-d'` into every transport's name before
+// BUG-BACKLOG-CANONICAL-NAMING-CLIENT-D-SEGMENT-001 was fixed by adding
+// `ExtractOptions.dropFileSegment` to `@adhd/apigen-core-client`). Safe here
+// specifically because every `client.ts` export is extracted from this ONE
+// file — a genuine same-name collision across files would still be caught
+// at extract time by `checkCollisions` (`@adhd/apigen-engine-naming`).
 describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (empirically verified, not assumed)', () => {
-  it('resolveCommandPrefix derives the REAL two-segment internal prefix from live operations', async () => {
+  it('resolveCommandPrefix derives the REAL single-segment internal prefix from live operations', async () => {
     const { operations } = await buildBacklogApigenPackage({} as BacklogCtx);
     const prefix = resolveCommandPrefix(operations);
-    expect(prefix).toEqual(['backlog', 'client-d']);
+    expect(prefix).toEqual(['backlog']);
   });
 
-  it('every client.ts operation shares the identical prefix (one source file ⇒ one uniform file-segment)', async () => {
+  it('every client.ts operation shares the identical prefix (one source file, flat path ⇒ one uniform prefix)', async () => {
     const { operations } = await buildBacklogApigenPackage({} as BacklogCtx);
     const actions = operations.filter((op) => op.kind === 'action');
     expect(actions.length).toBeGreaterThan(10); // sanity: client.ts exports many operations
@@ -107,9 +97,8 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
   });
 
   it('prefixCommand prepends the real prefix to a BARE user command (what a human actually types)', () => {
-    expect(prefixCommand(['get-item', '--repo', 'x', '--human-id', 'y'], ['backlog', 'client-d'])).toEqual([
+    expect(prefixCommand(['get-item', '--repo', 'x', '--human-id', 'y'], ['backlog'])).toEqual([
       'backlog',
-      'client-d',
       'get-item',
       '--repo',
       'x',
@@ -119,20 +108,19 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
   });
 
   it('prefixCommand is idempotent — an already-fully-prefixed argv is NEVER double-prefixed', () => {
-    expect(prefixCommand(['backlog', 'client-d', 'get-item'], ['backlog', 'client-d'])).toEqual([
+    expect(prefixCommand(['backlog', 'get-item'], ['backlog'])).toEqual([
       'backlog',
-      'client-d',
       'get-item',
     ]);
   });
 
   it('prefixCommand leaves a leading --help/-h flag untouched (never shadows run()\'s own top-level --help short-circuit)', () => {
-    expect(prefixCommand(['--help'], ['backlog', 'client-d'])).toEqual(['--help']);
-    expect(prefixCommand(['-h'], ['backlog', 'client-d'])).toEqual(['-h']);
+    expect(prefixCommand(['--help'], ['backlog'])).toEqual(['--help']);
+    expect(prefixCommand(['-h'], ['backlog'])).toEqual(['-h']);
   });
 
   it('prefixCommand leaves empty argv untouched', () => {
-    expect(prefixCommand([], ['backlog', 'client-d'])).toEqual([]);
+    expect(prefixCommand([], ['backlog'])).toEqual([]);
   });
 });
 
@@ -153,16 +141,16 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-noargs-'));
     const res = runBin([], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    expect(res.stdout).toContain('backlog client-d get-item');
-    expect(res.stdout).toContain('backlog client-d create-item');
-    expect(res.stdout).toContain('backlog client-d list-items');
+    expect(res.stdout).toContain('backlog get-item');
+    expect(res.stdout).toContain('backlog create-item');
+    expect(res.stdout).toContain('backlog list-items');
   });
 
   it('--help exits 0 with the identical usage listing', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-help-'));
     const res = runBin(['--help'], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
-    expect(res.stdout).toContain('backlog client-d get-item');
+    expect(res.stdout).toContain('backlog get-item');
   });
 
   it('--help and no-args NEVER create the backing SQLite store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001)', () => {
@@ -212,9 +200,9 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     );
     closeGraphBacklogStore(seedStore);
 
-    // Deliberately BARE — no `backlog`/`client-d` prefix typed by the
-    // "user" here, exactly like a real `backlog get-item …` invocation
-    // arrives at this process as `process.argv.slice(2)`.
+    // Deliberately BARE — no `backlog` prefix typed by the "user" here,
+    // exactly like a real `backlog get-item …` invocation arrives at this
+    // process as `process.argv.slice(2)`.
     const res = runBin(['get-item', '--repo', repo, '--human-id', seeded.item.humanId], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
     const parsed = JSON.parse(res.stdout.trim()) as { humanId: string; title: string; repo: string };
@@ -223,7 +211,7 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     expect(parsed.repo).toBe(repo);
   });
 
-  it('a fully-prefixed "backlog client-d get-item …" ALSO resolves — proves prefixCommand is idempotent at the real dispatch, not just in the unit test', async () => {
+  it('a fully-prefixed "backlog get-item …" ALSO resolves — proves prefixCommand is idempotent at the real dispatch, not just in the unit test', async () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-getitem-prefixed-'));
     const repo = 'PseudoSky/cli-test-prefixed';
 
@@ -236,7 +224,7 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     );
     closeGraphBacklogStore(seedStore);
 
-    const res = runBin(['backlog', 'client-d', 'get-item', '--repo', repo, '--human-id', seeded.item.humanId], adhdRoot);
+    const res = runBin(['backlog', 'get-item', '--repo', repo, '--human-id', seeded.item.humanId], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
     const parsed = JSON.parse(res.stdout.trim()) as { humanId: string };
     expect(parsed.humanId).toBe(seeded.item.humanId);
