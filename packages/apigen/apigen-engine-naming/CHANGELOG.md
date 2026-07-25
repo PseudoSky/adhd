@@ -1,3 +1,20 @@
+## 0.1.5 (2026-07-25)
+
+
+### 🩹 Fixes
+
+- **apigen,backlog:** killable serve, configurable namespace, flaky test + log spam
+
+
+### 🔥 Performance
+
+- **test:** bound vitest thread pools to curb CPU oversubscription (DEBT-TEST-CPU-OVERSUBSCRIBED-001)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.4 (2026-07-24)
 
 This was a version bump only for apigen-engine-naming to align it with other projects, there were no code changes.
