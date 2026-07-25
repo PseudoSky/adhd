@@ -1,13 +1,3 @@
-### RISK-SERVE-CORE-PLAN-001 — shared parity-harness cross-package test-only export mechanism unresolved
-
-**Status:** RESOLVED
-**Plan:** apigen-serve-core
-
-- The parity harness is authored in `apigen-engine-runtime/src/test-support/` and imported by four other plugins' spec files. The exact export plumbing (a `@adhd/apigen-engine-runtime/testing` subpath export vs. a deep relative import vs. a tiny dedicated test-support entry) is left to the `parity-harness` executor within its reservation. Must NOT bloat the shipped `apigen-engine-runtime` public `index.ts` (production build inputs exclude tests, but a public subpath export would ship). Decide in `parity-harness`; if a new package turns out warranted, it MUST go through `npx nx g @adhd/workspace-codegen-nx:<tier> --group apigen` (never hand-created).
-- Citations: [apigen-serve-core-planbuilder, claude (opus), apigen-serve-core, 1: docs/plan/apigen-serve-core/contexts/parity-harness.md; 2: docs/apigen/proposals/transport-serve-core-refactor.md §6]
-
-**Citations:** [/Users/nix/dev/node/adhd/docs/plan/apigen-serve-core/BACKLOG.md]
-
 ### RISK-SERVE-CORE-PLAN-002 — py-grpc run/serve shape unverified until the preflight spike
 
 **Status:** UNKNOWN

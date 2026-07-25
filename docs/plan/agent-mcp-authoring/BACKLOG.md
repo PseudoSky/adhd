@@ -208,59 +208,6 @@
 
 ---
 
-### AMA-018 — FIXED: plan told the executor to pass a `FileSystemModelCache`
-
-**Status:** FIXED
-**Plan:** agent-mcp-authoring
-
-- `contexts/embedding-substrate.md`, `decisions.md`, `contexts/_shared.md` all instructed the executor to "pass a `FileSystemModelCache`" for CI model caching.
-- **`FileSystemModelCache` is never used by `createEmbeddingProvider` or `FastembedProvider`.** It appears only as a re-export (`index.ts:124`); the `ModelCache` interface (`index.ts:111-120`) has no implementation wired into any code path. Verified by grep across `src/`.
-- Reality: the factory resolves a **`cacheDir` string** — `config.options.cacheDir` → `SOX_EMBED_CACHE_DIR` → `$XDG_CACHE_HOME/sox/models` → `~/.cache/sox/models` (`index.ts:162-165`) — and the worker calls `FlagEmbedding.init({model, cacheDir, showDownloadProgress:false})` after `fs.mkdirSync` (`embedWorker.ts:138-160`).
-- **Status:** FIXED in all three files.
-
-**Citations:** [/Users/nix/dev/node/adhd/docs/plan/agent-mcp-authoring/BACKLOG.md]
-
-### AMA-019 — FIXED: plan omitted that the factory eagerly downloads + warms the model
-
-**Status:** FIXED
-**Plan:** agent-mcp-authoring
-
-- `createFastembedProvider` `await`s `provider.embedSingle('warmup')` **before returning** (`index.ts:167-174`). Constructing the embedder downloads a ~110M-param ONNX model and runs an inference.
-- Consequence the plan never stated: a `beforeEach` that builds a provider re-runs warmup per test. Must build once (module scope / `beforeAll`).
-- **Nested, conflicting timeouts:** the outer warmup wrapper defaults to **180 000 ms** (`index.ts:204-207`) but the worker-init promise is bounded at **60 000 ms** (`fastembed.ts:102-105`). Both read `SOX_EMBED_WARMUP_TIMEOUT_MS`. The **inner 60 s** is what a cold download must beat → `Fastembed worker init timed out after 60000ms`.
-- **Status:** FIXED — documented in a new "Real-provider behaviour" table.
-
-**Citations:** [/Users/nix/dev/node/adhd/docs/plan/agent-mcp-authoring/BACKLOG.md]
-
-### AMA-020 — FIXED: `isDeterministic === false` was never stated as the provider's own contract
-
-**Status:** FIXED
-**Plan:** agent-mcp-authoring
-
-- Empirically confirmed: `new FastembedProvider('bge-base-en-v1.5',768,…).metadata` → `{"isDeterministic":false,…}`. `RemoteProvider` likewise (`remote.ts:21`).
-- The plan's content-hash gating decision was right, but justified as a hedge ("raw output need not be bit-identical") rather than as the provider's declared contract. A test asserting two `embedSingle` calls return identical vectors would be asserting something the provider explicitly does not promise.
-- **Status:** FIXED.
-
-**Citations:** [/Users/nix/dev/node/adhd/docs/plan/agent-mcp-authoring/BACKLOG.md]
-
-### AMA-021 — FIXED: behaviours that change how the test must be written
-
-**Status:** FIXED
-**Plan:** agent-mcp-authoring
-
-All now recorded in `embedding-substrate.md`:
-- **`warmUp()` is a no-op** on both providers (`fastembed.ts:229-234`, `remote.ts:78-80`).
-- **`role` is ignored** by `FastembedProvider.embedSingle(text, _role?)` (`fastembed.ts:163`) — no asymmetric document/query encoding.
-- **Vectors are L2-normalised** on every path (`toFloat32Normalised`, `meanPool` re-normalises) → `cosine` ≡ dot product.
-- **Chunk-then-mean-pool, no truncation:** `estimateTokens = ceil(len/4)`, `maxTokens = 512` → content over ~2048 chars is split on whitespace, embedded per chunk, mean-pooled, re-normalised. Real component bodies exceed this, so it is the **normal** path. `[embedding-substrate.1]`'s fixture must use realistic-length content.
-- **ONNX runs in a worker thread** (`worker.unref()`), specifically so `onnxruntime-node` never shares a thread with `better-sqlite3` + `sqlite-vec` — which `@adhd/agent-store-prompts` uses. Gate the test on exit code, never stdout.
-- **Network dependency:** the `embedding-substrate` guard now downloads a model on a cold cache. Per the repo's "live testing is mandatory" rule this does NOT qualify for an env-flag gate; it must fail loudly, never self-skip.
-- **Status:** FIXED.
-
----
-
-**Citations:** [/Users/nix/dev/node/adhd/docs/plan/agent-mcp-authoring/BACKLOG.md]
-
 ### AMA-D6-FLIP — remaining Option-A reconciliation (decision recorded in decisions.md §D6; artifacts still encode Option B) — Open (2026-07-11)
 
 **Status:** UNKNOWN

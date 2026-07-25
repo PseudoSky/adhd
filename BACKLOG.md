@@ -1632,21 +1632,6 @@ The worktree context also means Nx cache is not shared (`DEBT-NX-WORKTREE-CACHE-
 - **Status:** OPEN. Worked around for this migration's Phase 1 execution; the workaround does not scale to a real Phase-3 write path where agents call `createItem`/CLI directly rather than through a one-time import script.
 - Citations: [main, claude (sonnet-5), backlog-adoption-migration, 1: docs/plan/backlog-adoption/MIGRATION.md:138-142 (§2.2 mapping table intro sentence); 2: docs/plan/backlog-adoption/MIGRATION.md:638 (§1 Phase 1 step 3, "record the source path on each node"); 3: entrypoint/backlog/src/model.ts:317-322 (`ImportMarkdownInput` — no `plan`/`sourcePath` field); 4: entrypoint/backlog/src/client.ts:234-274 (`importFromMarkdown` — `plan` never read from `input`, no provenance write)]
 
-### DEBT-BACKLOG-DUPLICATE-ID-INSOURCE-001 — root `BACKLOG.md` and `entrypoint/apigen-cli/BACKLOG.md` each reuse the same human ID across two DISTINCT headers, violating "dedupe before filing"; `importFromMarkdown` keeps only the first occurrence with no visibility into the dropped one
-
-**Status:** RESOLVED
-
-- **Discovered:** 2026-07-24, executing `backlog-adoption` MIGRATION.md Phase 1. A pre-import scan for cross-file/same-file duplicate IDs across all 14 markdown sources imported this session found 17 distinct IDs reused more than once; the overwhelming majority are the EXPECTED, intentional pattern of a plan-scoped `docs/plan/<slug>/BACKLOG.md` cross-referencing an ID whose full content lives in root `BACKLOG.md` (exactly as `docs/plan/backlog-adoption/BACKLOG.md`'s own header states: "Each ID here is the authoritative entry in the repo-root `BACKLOG.md`"). Two are NOT that pattern — they are the same ID reused for what reads as two DIFFERENT real entries within the SAME file:
-  1. `FEAT-WORKSPACE-001` appears at `BACKLOG.md:253` ("workspace-standards base generator + custom workspace lint") and again at `BACKLOG.md:281` ("reframed: agent-optimized, core/adapter split (2026-06-26)") — different titles, different bodies, same id, same file.
-  2. `BUG-APIGEN-031` appears at `entrypoint/apigen-cli/BACKLOG.md:460` and again at `:605`, both under seemingly the same title text, in the same file.
-- **Impact:** `createItemNode`'s `idOverride` hard-existence-check (`crud.ts` — "must never mint a SECOND node claiming an already-live humanId") correctly treats the SECOND occurrence of each as a duplicate and skips it (`skippedDuplicates`, confirmed in this session's real import run) — so no data is silently lost from the *file* (the markdown itself is untouched and remains the source of truth until Phase 3), but the graph's copy of `FEAT-WORKSPACE-001` only reflects the FIRST occurrence's title/body; the "reframed" follow-up content at `:281` is not represented in the graph at all, and `ImportResult.errors`/`skippedDuplicates` gives a bare count with no indication of WHICH content was dropped or why (compounds `DEBT-BACKLOG-IMPORT-SILENT-DROP-001` above).
-- **Fix direction (two independent tracks):** (a) **markdown hygiene** (this repo, not the tool) — a human/agent should triage both cases and either merge the second header's content into the first (per `CLAUDE.md`'s global "Content Updating & Correction Protocol" — overwrite in place, don't leave two headers) or renumber the second occurrence to a fresh id if it is genuinely a distinct, still-open item; (b) **tool robustness** — `ImportResult`'s `skippedDuplicates` count could be upgraded to a `skipped: Array<{humanId, reason, droppedTitle}>` list so a human doesn't have to re-derive which content was dropped by hand, as this investigation had to.
-- **Status:** OPEN. Not blocking Phase 1/2 (both graph copies are internally consistent single-item snapshots); should be resolved before Phase 3 cut-over demotes these markdown files to generated projections, since after cut-over the SECOND occurrence's content would have no path back into the graph at all once the hand-edited file is regenerated over it.
-- Citations: [main, claude (sonnet-5), backlog-adoption-migration, 1: BACKLOG.md:253 and BACKLOG.md:281 (two `FEAT-WORKSPACE-001` headers, same file); 2: entrypoint/apigen-cli/BACKLOG.md:460 and entrypoint/apigen-cli/BACKLOG.md:605 (two `BUG-APIGEN-031` headers, same file); 3: entrypoint/backlog/src/store/crud.ts (`createItemNode`'s `idOverride` existing-check comment); 4: live import run this session — `docs/plan/backlog-adoption` Phase 1 seed, `BACKLOG.md` reported `{"parsed":150,"created":148,"skippedDuplicates":2,...}`, `entrypoint/apigen-cli/BACKLOG.md` reported `{"parsed":15,"created":14,"skippedDuplicates":1,...}`]
-
-**Citations:** [entrypoint/apigen-cli/BACKLOG.md]
-- Note (main, 2026-07-24T20:39:48.262Z): [transition to RESOLVED] resolved via renumbers commit c247677b
-
 ### DEBT-APIGEN-ENVELOPE-CAPABILITY-UNWIRED-001 — `EnvelopeCapability` (§9.1 envelope side-channel) is declared on the v2 `Plugin` interface but has ZERO real production producer
 
 **Status:** OPEN
@@ -1689,18 +1674,6 @@ The worktree context also means Nx cache is not shared (`DEBT-NX-WORKTREE-CACHE-
 - **Status:** OPEN — blocks Phase 3 `renderToMarkdown` cutover for the 3 affected rows listed above.
 - Citations: [main, claude (sonnet-5), backlog-adoption-migration, 1: entrypoint/backlog/src/client.ts:276-282 (`attachToPlanNode` called whenever plan differs, on every re-import); 2: entrypoint/backlog/src/client.ts:310-344 (upsert diff patch — no `projectPath` branch); 3: live node inspection this session, `~/.adhd/backlog/production/data/backlog.db`: `AMA-010`/`AMA-011`/`SOX-DOC-001` all carry `plan:'agent-mcp-authoring'` despite being root-scoped write-ups; `PERF-APIGEN-001`/`BUG-APIGEN-018` carry stale `projectPath:'entrypoint/apigen-cli'`; 4: docs/plan/backlog-adoption/parity-check.mjs output this session]
 
-### DEBT-BACKLOG-STATUS-MULTILINE-PAREN-001 — MISDIAGNOSED, no fix needed: `DEBT-APIGEN-LINT-002`'s status-mismatch was the cross-file scope-clobber bug, not a classifier parsing gap
-
-**Status:** RESOLVED
-
-- **Original claim (2026-07-24, retracted same day):** hypothesized `markdown.ts`'s `detectStatus`/`classifyStatus` mis-parsed a `**Status:** OPEN (…)` value whose parenthetical wraps across physical lines, diverging from `tools/util/backlog.mjs`.
-- **Retraction, verified by direct testing:** `detectStatus`'s capture regex (`/^\s*-?\s*\*\*Status:\*?\*?\s*([^\n]+)/im`) does truncate at the first `\n` — but `classifyStatus` matches `has('open')` as a case-insensitive SUBSTRING test, and `OPEN` is the very first word, well before the wrap point — direct Node repro confirms it correctly returns `{label:'OPEN', open:true}` from the truncated capture. Worse for the original claim: `tools/util/backlog.mjs:87` uses the byte-identical regex (`markdown.ts`'s own doc comment says "ported verbatim") — there is no lenient/strict divergence between the two parsers here at all; "loosen the classifier to match the legacy tool's more lenient behavior" was factually wrong, since the legacy tool has the exact same truncation.
-- **Real root cause (same class as `DEBT-BACKLOG-IMPORT-SCOPE-CROSSFILE-001`):** `DEBT-APIGEN-LINT-002`'s canonical write-up (`packages/apigen/apigen-core-client/BACKLOG.md:415-469`, real `**Status:** OPEN`) is cross-referenced by a status-less pointer stub in `packages/apigen/apigen-engine-runtime/BACKLOG.md:20-27` ("See … for full detail", no `**Status:**` line at all). `detectStatus` correctly falls back to `UNKNOWN` for that pointer stub in isolation — the bug was that `importFromMarkdown`'s pre-fix upsert let the LATER-imported cross-reference file's `UNKNOWN` clobber the canonical file's `OPEN` on every re-import (manifest processes `apigen-engine-runtime` after `apigen-core-client`). Fixed by `DEBT-BACKLOG-IMPORT-SCOPE-CROSSFILE-001`'s sourcePath-ownership gate (`client.ts`'s `isOwningImport` check) — a non-owning cross-reference import no longer touches `status` at all.
-- **Status:** RESOLVED (no classifier change) — see `DEBT-BACKLOG-IMPORT-SCOPE-CROSSFILE-001`'s fix. Not moved to CHANGELOG.md as a "fix" since no code changed for this item specifically; kept here as a correction record so a future agent doesn't re-attempt the same (already-disproven) classifier change.
-- Citations: [main, claude (sonnet-5), backlog-adoption-migration, 1: entrypoint/backlog/src/markdown.ts:94 (`detectStatus`'s capture regex); 2: tools/util/backlog.mjs:87 (byte-identical regex, disproving the "legacy tool is more lenient" claim); 3: direct Node repro this session — `classifyStatus("OPEN (containment fix applied 2026-07-18; root cause — the")` → `{label:'OPEN', open:true}`; 4: packages/apigen/apigen-engine-runtime/BACKLOG.md:20-27 (the status-less cross-reference stub that was actually clobbering the canonical `OPEN` status)]
-
-**Citations:** [/Users/nix/dev/node/adhd/BACKLOG.md]
-
 ### DEBT-BACKLOG-RENDER-DROPS-IDLESS-001 — render drops id-less entries
 
 **Status:** OPEN
@@ -1730,3 +1703,12 @@ A fresh agent asked to use the backlog tool cannot run the documented backlog co
 **Status:** OPEN
 
 A fresh subagent could not load any mcp__backlog__* tools despite .mcp.json wiring the backlog server (599faa78). The phase-3 disclosure names mcp__backlog__* as an authoritative path, but it is unavailable to agents — likely the server needs the built artifact/reload or subagents do not inherit the backlog MCP. Verify the .mcp.json entry spawns the built server and that mcp__backlog__create_item resolves in a fresh session (Phase-4 DoD).
+
+### DEBT-TEST-CPU-OVERSUBSCRIBED-001 — running the test suite consumes ~200% CPU (oversubscribed vitest/worker parallelism)
+
+**Status:** RESOLVED
+
+Running tests pins ~200% CPU. Likely vitest pool/thread parallelism plus real worker_threads tests (e.g. backlog concurrency-scale spawns 20 worker_threads) with no maxWorkers/poolOptions cap, oversubscribing cores. Bound test concurrency (vitest poolOptions.maxThreads / maxForks, or per-project caps) so the suite does not saturate the machine, and verify CPU stays bounded.
+
+**Citations:** [tools/vite-plugins/vitest-pool-defaults.mjs]
+- Note (main, 2026-07-25T01:33:31.929Z): [transition to RESOLVED] fixed in 91ddcf7a: shared vitest-pool-defaults caps 45 previously-unbounded thread pools (clamp(ceil(cores/3),2,4)), curbing cross-project oversubscription under nx parallel. Residual single-suite spike is concurrency-scale.spec.ts spawning 20 real worker_threads by design (CAS-race proof per MIGRATION.md 3.3) - intentional, not lowered.

@@ -1,15 +1,3 @@
-### BUG-APIGEN-CLI-001 — cli-output generator emits invalid TS identifiers for hyphenated source dirs
-
-**Status:** FIXED
-
-- **Where:** `@adhd/apigen-plugin-cli-output` (`packages/apigen/plugins/cli`), generated `cli.ts`.
-- **Symptom:** the namespace identifier is derived verbatim from the source directory name; a hyphenated dir (`tmp/dispatch-cli-spike/api.ts`) generates `import * as dispatch-cli-spike_ns from …` — a TypeScript parse error (`Expected "from" but found "-"`). Found 2026-07-02 during the dispatch CLI spike; reproduced, then confirmed working from a hyphen-free dir (`tmp/dispatchcli`).
-- **Why it matters:** repo convention mandates hyphenated package names, so any in-repo consumer following convention hits this on first use.
-- **Fix direction:** sanitize the derived namespace to a valid identifier (camelCase or `_` for `-`) in the cli-output plugin's codegen; add a generation test with a hyphenated source dir that spawns the generated CLI (`--help`, exit code) rather than only asserting on the emitted text.
-- **Status:** FIXED (2026-07-06) — `sanitizeIdentifier()` called at both import-namespace (line 96) and fn-table (line 122) emission sites in `packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts`. Import path uses correct `@adhd/apigen-engine-runtime`. All 3 hyphenated-namespace tests + all 19 plugin tests pass.
-
-**Citations:** [/Users/nix/dev/node/adhd/packages/apigen/BACKLOG.md]
-
 ### DEBT-APIGEN-CLI-002 — generated cli.ts imports the source module by absolute path
 
 **Status:** OPEN
@@ -20,41 +8,8 @@
 - **Status:** OPEN.
 - **Note:** Confirmed still present 2026-07-02 in dispatch-cli's generated artifact (machine-absolute import of src/api.ts).
 
-### BUG-APIGEN-CORE-001 — zod-contaminated $ref resolution corrupts unrelated primitive schemas (runtime crash in generated surfaces)
+### BUG-APIGEN-PLUGIN-PROJECTJSON-TSCONFIG-001 — 4 apigen-plugin-* build targets 500 when run from a non-root cwd (missing tsConfig in project.json)
 
-**Status:** FIXED
+**Status:** OPEN
 
-- **Where:** packages/apigen/core (schema extraction) and/or packages/apigen/logical (src/lib/runmode.ts encodeNode/$ref resolution).
-- **Symptom:** when an apigen `source:` file transitively imports anything using zod (e.g. @adhd/dispatch-orchestrator's AgentMcpRunner → @modelcontextprotocol/sdk), ts-json-schema-generator's whole-file extraction registers zod-derived declarations into the shared definitions registry in a way that corrupts unrelated primitive entries — generated commands then crash at first invocation with `[apigen-logical] $ref "#/definitions/boolean" cannot be resolved in run-mode without a descriptor root` (also seen for "#/definitions/number"). Even functions whose own signatures never touch zod types are corrupted (dispatch-cli's calibrate, returning a simple local interface, crashes; only eligible/status — whose type graphs never reach the MCP SDK — work).
-- **Why it matters:** general, silent at generate-time, runtime-crash at first use — any future source file with a transitive zod dependency hits it.
-- **Fix direction:** isolate/namespace zod-internal definitions during extraction (or filter them from the shared registry), and make runmode's encodeNode fail at GENERATE time (loud) rather than run time when a $ref cannot resolve.
-- **Status:** FIXED (2026-07-06). Two-layer defense:
-  1. **Skip Path 1 for zod-importing files** — `sourceFileHasZodImport()` detects zod imports in the source file (`ts-json-schema.ts:335-353`). When present, `buildSchemaUncached` skips Path 1 (ts-json-schema-generator, which produces corrupted output with `skipTypeCheck`) and falls directly to Path 2 (morph-walk, which resolves types correctly via ts-morph). Memoized per SourceFile in `InternalExtractionSession.zodImportCache`.
-  2. **Schema-level defense for non-zod Path 1 schemas** — `filterZodDefinitions()` enhanced with recursive `stripZodRefsRecursive()` pass that removes any remaining `$ref` entries pointing to zod-named definitions, even when nested inside properties/items/oneOf/etc. `validateSchemaRefs()` then fails at **generate time** (not runtime) if any dangling `$ref` survives the filter.
-  3. Test regression: `zod-contamination.ts` fixture + 3 new tests in `ts-json-schema.spec.ts` verify zod definitions stripped, no dangling $ref, and teeth-test for generate-time validation. All 211 tests pass.
-
-**Citations:** [/Users/nix/dev/node/adhd/packages/apigen/BACKLOG.md]
-
-### DEBT-APIGEN-CLI-003 — cli-output isBoolean codegen misses anyOf-wrapped optional booleans
-
-**Status:** FIXED
-
-- **Where:** packages/apigen/plugins/cli src/lib/generate.ts (isBoolean detection).
-- **Symptom:** `flag?: boolean` extracts as `anyOf: [null, boolean, boolean]` (note the duplicate boolean arm — possibly a separate ts-json-schema-generator artifact worth a look), which the strict `schemaProps[param]?.type === 'boolean'` check never matches, so the plugin emits a value-taking `--flag <flag>` instead of a presence-only boolean flag. Workaround: declare a default value (`flag = true`) instead of `?`.
-- **Fix direction:** extend isBoolean detection to recognize anyOf nodes whose non-null members are all boolean.
-- **Status:** FIXED (2026-07-06) — `isBooleanParam()` helper at `packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts:140-149` descends into `anyOf`, extracting non-null members and checking they're all boolean.
-
-**Citations:** [/Users/nix/dev/node/adhd/packages/apigen/BACKLOG.md]
-
-### DEBT-APIGEN-CLI-004 — cli-output cannot express boolean false (no --no-<flag> negation)
-
-**Status:** FIXED
-
-- **Where:** packages/apigen/plugins/cli src/lib/generate.ts (boolean flag codegen).
-- **Symptom:** even a clean boolean param only projects to a presence-only `--flag` (true or undefined) — false is unreachable through the generated CLI; Commander supports `--no-<flag>` natively and dispatch-cli's hand-written bin/cli.ts demonstrates it.
-- **Fix direction:** when a boolean param defaults to true, emit `--no-<flag>`.
-- **Status:** FIXED (2026-07-06) — `packages/apigen/apigen-plugin-cli-output/src/lib/generate.ts:188-191` emits `--no-<flag>` when `default === true`.
-
----
-
-**Citations:** [/Users/nix/dev/node/adhd/packages/apigen/BACKLOG.md]
+Running vitest/build from entrypoint/backlog (not repo root) 500s on 4 sibling apigen-plugin-* build targets because their project.json build target omits an explicit tsConfig and relies on a cwd-relative path. Add explicit tsConfig paths so targets resolve regardless of invocation cwd. Surfaced by fix-flaky-spam during backlog test runs.
