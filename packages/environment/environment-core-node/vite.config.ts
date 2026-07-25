@@ -4,6 +4,7 @@ import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 
+import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 export default defineConfig({
   root: __dirname,
   cacheDir:
@@ -56,6 +57,7 @@ export default defineConfig({
   },
 
   test: {
+    poolOptions: vitestPoolOptions,
     globals: true,
     cache: {
       dir: '../../../node_modules/.vitest',

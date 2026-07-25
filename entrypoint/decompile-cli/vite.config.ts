@@ -2,6 +2,7 @@
 import { defineConfig } from 'vite';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 
+import { vitestPoolOptions } from '../../tools/vite-plugins/vitest-pool-defaults.mjs';
 export default defineConfig({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/entrypoint/decompile-cli',
@@ -14,6 +15,7 @@ export default defineConfig({
   // several `@nx/js:tsc`-built packages (e.g. agent-store-prompts) that
   // still run their `test` target through `@nx/vite:test`.
   test: {
+    poolOptions: vitestPoolOptions,
     globals: true,
     cache: {
       dir: '../../node_modules/.vitest',

@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 
+import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 const repoRoot = path.resolve(__dirname, '../../..');
 
 export default defineConfig({
@@ -12,6 +13,7 @@ export default defineConfig({
   plugins: [nxViteTsPaths()],
 
   test: {
+    poolOptions: vitestPoolOptions,
     globals: true,
     cache: { dir: path.join(repoRoot, 'node_modules/.vitest') },
     environment: 'node',

@@ -2,6 +2,7 @@
 import { defineConfig } from 'vite';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 
+import { vitestPoolOptions } from '../../tools/vite-plugins/vitest-pool-defaults.mjs';
 export default defineConfig({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/entrypoint/environment-cli',
@@ -9,6 +10,7 @@ export default defineConfig({
   plugins: [nxViteTsPaths()],
 
   test: {
+    poolOptions: vitestPoolOptions,
     globals: true,
     cache: {
       dir: '../../node_modules/.vitest',
