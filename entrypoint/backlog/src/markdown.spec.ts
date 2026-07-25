@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { openTmpStore, type TmpStore } from './test/helpers/tmp-store.js';
-import { getItem, importFromMarkdown, listItems, renderToMarkdown } from './client.js';
+import { archiveResolved, createItem, getItem, importFromMarkdown, listItems, renderToMarkdown, transitionStatus } from './client.js';
 import type { BacklogCtx } from './client.js';
 import { buildBacklogEnv } from './env.js';
 import {
@@ -483,6 +483,52 @@ describe('importFromMarkdown — diagnostics + provenance (real store)', () => {
       expect(second.updated).toBe(1);
       const item = await getItem(ctx, REPO_PROV, 'BUG-LEGACYOWNER-001');
       expect(item?.status).toBe('FIXED');
+    });
+  });
+
+  describe('archiveResolved exclusion — renderToMarkdown vs listItems({excludeArchived}) (BUG-BACKLOG-RENDER-VERIFY-ARCHIVED-MISMATCH-001)', () => {
+    const REPO_ARCHIVE = 'PseudoSky/adhd-archive-test';
+
+    it('a resolved+archived item is absent from renderToMarkdown AND from listItems({excludeArchived:true}) — the render-projections/parity-check verify comparison this bug fixed', async () => {
+      const open = await createItem(ctx, { family: 'BUG-ARCHIVETEST', title: 'stays open', body: 'body', repo: REPO_ARCHIVE });
+      const resolved = await createItem(ctx, { family: 'BUG-ARCHIVETEST', title: 'gets resolved', body: 'body', repo: REPO_ARCHIVE });
+      expect(open.created).toBe(true);
+      expect(resolved.created).toBe(true);
+
+      await transitionStatus(ctx, REPO_ARCHIVE, resolved.item.humanId, 'RESOLVED', {
+        by: 'test',
+        citations: [{ file: 'markdown.spec.ts' }],
+      });
+
+      // Before archival: both plain `listItems` and `renderToMarkdown` still
+      // see both items (RESOLVED is terminal but not yet archived).
+      const beforeArchive = await listItems(ctx, { repo: REPO_ARCHIVE, excludeArchived: true });
+      expect(beforeArchive.map((it) => it.humanId).sort()).toEqual(
+        [open.item.humanId, resolved.item.humanId].sort()
+      );
+
+      const archiveResult = await archiveResolved(ctx, { repo: REPO_ARCHIVE });
+      expect(archiveResult.archivedCount).toBe(1);
+
+      // `renderToMarkdown` ALWAYS excludes archived items — this is the
+      // "render" side of the comparison the fixed scripts perform.
+      const rendered = await renderToMarkdown(ctx, { repo: REPO_ARCHIVE });
+      expect(rendered).toContain(open.item.humanId);
+      expect(rendered).not.toContain(resolved.item.humanId);
+
+      // `listItems` WITHOUT `excludeArchived` still surfaces the archived
+      // item — proving the divergence this bug's fix closes: a naive
+      // `list-items --filter {repo}` graph-side comparison would report a
+      // false `extra-in-render` against the render output above.
+      const rawList = await listItems(ctx, { repo: REPO_ARCHIVE });
+      expect(rawList.map((it) => it.humanId)).toContain(resolved.item.humanId);
+
+      // `listItems({excludeArchived: true})` is the fix: it now reproduces
+      // renderToMarkdown's exact item set, which is exactly what
+      // render-projections.mjs/parity-check.mjs's graph-side `list-items`
+      // call passes today.
+      const excludingArchived = await listItems(ctx, { repo: REPO_ARCHIVE, excludeArchived: true });
+      expect(excludingArchived.map((it) => it.humanId)).toEqual([open.item.humanId]);
     });
   });
 });
