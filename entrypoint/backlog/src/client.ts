@@ -43,7 +43,7 @@ import { writeMigrationPhase } from './migration-admin.js';
 import type { GraphBacklogStore } from './store/graph-backlog-store.js';
 import { createItemNode, getItemNode, softDeleteItemNode, updateItemNode } from './store/crud.js';
 import { auditTrail as auditTrailNode, blockers as blockersNode, computeStats, dependencyGraph as dependencyGraphNode, listItems as listItemsNode, queryItemNodes, readyItems as readyItemsNode, spotlight as spotlightNode, staleClaims as staleClaimsNode, topoOrder as topoOrderNode } from './store/query.js';
-import { toBacklogItem, type BacklogNodeMeta } from './store/mapping.js';
+import { toBacklogItem } from './store/mapping.js';
 import { claimItemNode, releaseClaimNode, renewClaimNode } from './store/claim.js';
 import { addCitationNode, appendNoteNode, archiveTerminalItems, resolveItemNode, startWorkNode, transitionStatusNode } from './store/lifecycle.js';
 import { addDependencyNode, assignItemNode, attachToPlanNode, linkRelatedNode, mergeItemsNode, removeDependencyNode, setPriorityNode, splitItemNode, supersedeItemNode } from './store/structure.js';
@@ -398,10 +398,19 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
   return result;
 }
 
-/** Excludes archived items (SPEC.md §5.4 archiveResolved) — see markdown.ts's renderItemsToMarkdown doc comment. */
+/**
+ * Excludes archived items (SPEC.md §5.4 archiveResolved) — see markdown.ts's
+ * renderItemsToMarkdown doc comment. Archival exclusion goes through
+ * `BacklogFilter.excludeArchived` (query.ts's `applyExcludeArchivedFilter`)
+ * rather than a private scan here, so a caller comparing this output
+ * against `listItems`/`queryItemNodes` for the SAME filter (e.g.
+ * `render-projections.mjs`'s round-trip verify) can reproduce this exact
+ * item set by passing `{ ...filter, excludeArchived: true }` themselves —
+ * see BUG-BACKLOG-RENDER-VERIFY-ARCHIVED-MISMATCH-001.
+ */
 export async function renderToMarkdown(ctx: BacklogCtx, filter?: BacklogFilter): Promise<string> {
-  const nodes = queryItemNodes(ctx.store, filter ?? {});
-  let items = nodes.filter((n) => !(n.metadata as Partial<BacklogNodeMeta> | undefined)?.archivedAt).map(toBacklogItem);
+  const nodes = queryItemNodes(ctx.store, { ...filter, excludeArchived: true });
+  let items = nodes.map(toBacklogItem);
   if (filter?.status === 'open') items = items.filter((it) => !isTerminalStatus(it.status));
   else if (filter?.status === 'closed') items = items.filter((it) => isTerminalStatus(it.status));
   return renderItemsToMarkdown(items);

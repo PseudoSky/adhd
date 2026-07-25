@@ -263,6 +263,19 @@ export interface BacklogFilter {
    * duplicated into root.
    */
   rootLevel?: boolean;
+  /**
+   * Drops items with `metadata.archivedAt` set (BACKLOG-adoption's
+   * `archiveResolved` — SPEC.md §5.4). `renderToMarkdown` always applies
+   * this internally (a markdown projection never shows archived rows), but
+   * `listItems`/`queryItemNodes` do NOT default to it — auditing/reporting
+   * consumers legitimately need to see archived items too. A caller that
+   * needs to reproduce `renderToMarkdown`'s exact item set through
+   * `listItems` (e.g. `render-projections.mjs`/`parity-check.mjs` verifying
+   * a rendered projection against the graph's own view of the same filter —
+   * BUG-BACKLOG-RENDER-VERIFY-ARCHIVED-MISMATCH-001) must set this
+   * explicitly; otherwise the two queries diverge on every archived row.
+   */
+  excludeArchived?: boolean;
   limit?: number;
   offset?: number;
 }

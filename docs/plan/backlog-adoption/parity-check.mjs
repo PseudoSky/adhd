@@ -91,7 +91,15 @@ try {
     // cross-referenced it (e.g. a plan file attaching `plan` to a root
     // item) — the row's own `filter` object now encodes ownership directly,
     // so no post-filtering is needed here at all.
-    const items = runCli(['list-items', '--filter', JSON.stringify(entry.filter)]);
+    // `oracle` is parsed from the LIVE markdown file, which — once rendered
+    // via `render-projections.mjs` — reflects `renderToMarkdown`'s
+    // always-exclude-archived view (client.ts). Plain `list-items` does not
+    // exclude archived by default (it's a generic query other consumers
+    // legitimately use to see archived rows too), so without
+    // `excludeArchived: true` here every archived item shows up as a false
+    // `extra-in-render` divergence the moment the live file has been
+    // re-rendered post-archival (BUG-BACKLOG-RENDER-VERIFY-ARCHIVED-MISMATCH-001).
+    const items = runCli(['list-items', '--filter', JSON.stringify({ ...entry.filter, excludeArchived: true })]);
     const renderedMap = toMap(items.map((it) => ({ id: it.humanId, status: it.status, priority: it.priority })));
 
     const divergences = diffMaps(oracle, renderedMap);
