@@ -6,7 +6,7 @@ An MCP (Model Context Protocol) server exposing a bounded, supervised agent runt
 
 `@adhd/agent-mcp` is an MCP server that:
 
-- **Runs agents as stateful processes** — each agent maintains conversation history, executes tools, and interacts with model providers (OpenAI, Anthropic, DeepSeek, Gemini)
+- **Runs agents as stateful processes** — each agent maintains conversation history, executes tools, and interacts with model providers (Anthropic, OpenAI, and OpenAI-compatible endpoints such as DeepSeek via an explicit `baseURL` override — see [Providers and credentials](#providers-and-credentials) below)
 - **Enforces runtime policies** — maximum delegation depth, token/cost budgets, filesystem scope, network allowlist, tool deny/allow filters
 - **Persists state locally** — SQLite-backed storage for agents, sessions, messages, and execution traces
 - **Exposes a tool-call interface** — MCP clients call tools like `agent_create`, `task`, `result`, `task_cancel` to interact with the runtime
@@ -47,13 +47,38 @@ This starts a JSON-RPC server over stdio. Configure in your MCP host (e.g., Clau
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ADHD_AGENT_PROVIDER` | `anthropic` | LLM provider: `anthropic`, `openai`, `deepseek`, `gemini` |
+| `ADHD_AGENT_PROVIDER` | `anthropic` | Provider *type* for the server-wide default agent: `anthropic`, `openai`, or `claudecli` (see [Providers and credentials](#providers-and-credentials)) |
 | `ADHD_AGENT_MODEL` | `claude-opus-4-1` | Model identifier for the provider |
 | `ADHD_AGENT_CONTEXT_LIMIT` | `0` | Max context size in tokens; 0 = no limit (enforce only at provider ceiling) |
 | `ADHD_AGENT_MAX_TOOL_LOOPS` | `50` | Max tool-call iterations per task |
 | `ADHD_AGENT_MAX_DEPTH` | `3` | Max delegation depth (agent → child → grandchild) |
-| `ANTHROPIC_API_KEY` | (required) | Anthropic API credential if using Anthropic provider |
-| `OPENAI_API_KEY` | (required) | OpenAI API credential if using OpenAI provider |
+
+## Providers and credentials
+
+`@adhd/agent-mcp` supports three provider `type`s (`packages/agent/agent-engine-orchestrator/src/validation/agent.ts`):
+
+| `type` | Needs a credential env var? | Notes |
+|---|---|---|
+| `anthropic` | Yes — `ADHD_AGENT_ANTHROPIC_SECRET` | Accepts either a `claude setup-token` OAuth token (`sk-ant-oat...`) or a console.anthropic.com API key (`sk-ant-api...`) — the provider branches on the prefix automatically. |
+| `openai` | Yes — `ADHD_AGENT_OPENAI_SECRET` | Also the type to use for any OpenAI-*compatible* endpoint (e.g. DeepSeek): set `env.base_url` / `ADHD_AGENT_OPENAI_BASE_URL` to the provider's URL. DeepSeek additionally has its own default names, `ADHD_AGENT_DEEPSEEK_SECRET` / `ADHD_AGENT_DEEPSEEK_BASE_URL` / `ADHD_AGENT_DEEPSEEK_MODEL`, but they must be passed explicitly as an agent's `env.secret`/`env.base_url` override — there is no separate `"deepseek"` provider `type`. |
+| `claudecli` | No | Shells out to the already-authenticated `claude` CLI on the host instead of calling an API directly — nothing to configure here. Use this to avoid provider-credential wiring entirely. |
+
+**The bare SDK-style names `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` are never read anywhere in this codebase.** Only the `ADHD_AGENT_<PROVIDER>_SECRET` names above are honored.
+
+**Gemini is not implemented.** There is no `gemini` provider `type`, no Gemini provider adapter, and no `GOOGLE_API_KEY`/Gemini credential path — despite having appeared in older versions of this document.
+
+### Provider credentials are NOT part of the `@adhd/environment` config cascade
+
+Most of agent-mcp's configuration (`db`, `logging`, `queue`, `server`, `transport`, `sse`, `plugins`) resolves through `@adhd/environment`'s file-based cascade (code defaults → global → project → env var), documented in `src/config.ts`. **Provider-credential env vars are deliberately excluded from that cascade** — they are not declared fields of `AgentMcpConfig` at all. They resolve purely from `process.env` on the agent-mcp server process itself, at the moment an agent is constructed, and never from a config file (`.adhd/agent-mcp/config.json` or any namespace/scope file).
+
+Practically: whatever process spawns the agent-mcp server (an MCP host, a shell, `.mcp.json`) must already have `ADHD_AGENT_ANTHROPIC_SECRET` (or the sibling `_OPENAI_`/`_DEEPSEEK_` names) set in *its own* environment before spawning — a config file cannot supply it.
+
+### Known gap: this repo's `.mcp.json` does not forward provider credentials
+
+The `agent-mcp` entry in this repo's own `.mcp.json` only forwards `ADHD_ENV_SCOPE`, `ADHD_AGENT_CONFIG`, and `ADHD_AGENT_REGISTRY_DB_PATH` in its `env` block — there is no `ADHD_AGENT_ANTHROPIC_SECRET` (or other provider secret) passthrough, and nothing derives one from an existing Claude Code OAuth token. A real `task` call against an `anthropic`- or `openai`-type agent spawned this way currently fails with `No credential for <provider>; set ADHD_AGENT_<PROVIDER>_SECRET` unless the variable happens to already be set in the environment that launched the MCP host. This is a known, tracked gap (backlog `agent-mcp-001` in the `adhd` repo) — there is no config-file-based fix, since credentials are deliberately excluded from the cascade (above). Until it's closed, either:
+
+- export the relevant `ADHD_AGENT_<PROVIDER>_SECRET` in the shell/session that launches your MCP host before it spawns `agent-mcp`, or
+- use a `claudecli`-type agent, which needs no credential env var at all (see the table above).
 
 ### Example: Create and run an agent task (via MCP client)
 

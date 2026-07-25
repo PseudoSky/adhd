@@ -82,7 +82,7 @@ async function runEphemeralTask(
 
   deps.taskStore.create({
     id: taskId,
-    sessionId: null,
+    sessionId: ephemeralSessionId,
     isEphemeral: true,
     prompt: input.prompt,
     parentTaskId: callerContext?.taskId,

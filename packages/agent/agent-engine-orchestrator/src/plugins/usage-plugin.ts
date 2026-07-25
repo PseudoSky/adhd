@@ -2,12 +2,14 @@ import { eq, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 
 import { taskUsageTable } from "@adhd/agent-store-runtime";
+import { estimateCostUsd } from "@adhd/agent-core-provider";
 import { nowIso } from '../utils/timestamps.js';
 import type { EngineLogger } from '../interfaces.js';
 import type {
   IHookRegistry,
   Plugin,
   PostModelResponsePayload,
+  PostToolCallPayload,
   TaskStartPayload,
   TaskCompletedPayload,
   TaskFailedPayload,
@@ -58,6 +60,7 @@ export class UsagePlugin implements Plugin {
     hooks.register('post:model_response', (payload) =>
       this.onModelResponse(payload)
     );
+    hooks.register('post:tool_call', (payload) => this.onToolCall(payload));
     hooks.register('task:completed', (payload) => this.onTerminal(payload));
     hooks.register('task:failed', (payload) => this.onTerminal(payload));
     hooks.register('task:cancelled', (payload) => this.onTerminal(payload));
@@ -86,7 +89,7 @@ export class UsagePlugin implements Plugin {
 
   private onModelResponse(payload: PostModelResponsePayload): void {
     try {
-      const { executionContext, tokenUsage, toolCallCount } = payload;
+      const { executionContext, tokenUsage, toolCallCount, computeMs } = payload;
       const taskId = executionContext.taskId;
       const acc = this.accumulators.get(taskId);
 
@@ -103,6 +106,18 @@ export class UsagePlugin implements Plugin {
       }
 
       const provider = executionContext.agentDefinition.provider;
+      const model =
+        acc?.model ?? (('model' in provider && provider.model) || 'default');
+
+      // est_cost_usd: linear/additive, so valid to compute per-turn and sum. null
+      // (never 0) when the model has no rate-card entry — never report an unknown
+      // model's cost as $0.
+      const turnCost = estimateCostUsd(model, {
+        uncachedInputTokens: tokenUsage?.uncachedInputTokens ?? 0,
+        cacheReadTokens: tokenUsage?.cacheReadTokens ?? 0,
+        cacheCreationTokens: tokenUsage?.cacheCreationTokens ?? 0,
+        outputTokens,
+      });
 
       this.db
         .insert(taskUsageTable)
@@ -111,9 +126,7 @@ export class UsagePlugin implements Plugin {
           rootTaskId: acc?.rootTaskId ?? null,
           agentName: acc?.agentName ?? executionContext.agentName,
           providerType: acc?.providerType ?? provider.type,
-          model:
-            acc?.model ??
-            (('model' in provider && provider.model) || 'default'),
+          model,
           inputTokens,
           outputTokens,
           toolCallCount: toolCalls,
@@ -129,6 +142,11 @@ export class UsagePlugin implements Plugin {
           // First call for this task: its input IS the peak so far.
           peakContextTokens: inputTokens,
           peakContextAt: 1,
+          // CUMULATIVE Σ turn compute_ms (DESIGN.md §6) — this call's is the first.
+          computeMs,
+          // First call for this task: whatever cost this turn produced (or NULL if
+          // the model is unrecognized — never 0).
+          ...(turnCost !== null ? { estCostUsd: turnCost } : {}),
           createdAt: nowIso(),
         })
         .onConflictDoUpdate({
@@ -161,11 +179,41 @@ export class UsagePlugin implements Plugin {
             peakContextAt: sql`CASE WHEN ${inputTokens} > COALESCE(${
               taskUsageTable.peakContextTokens
             }, 0) THEN ${taskUsageTable.modelCalls} + 1 ELSE ${taskUsageTable.peakContextAt} END`,
+            // CUMULATIVE Σ turn compute_ms — always additive, no special case (DESIGN.md §6).
+            computeMs: sql`COALESCE(${taskUsageTable.computeMs}, 0) + ${computeMs}`,
+            // Additive when this turn priced; forced NULL once ANY turn's model has no
+            // rate-card entry — a partial sum would silently understate true cost, and
+            // NULL is the only value that can't be misread as "this task cost $X".
+            estCostUsd:
+              turnCost !== null
+                ? sql`COALESCE(${taskUsageTable.estCostUsd}, 0) + ${turnCost}`
+                : sql`NULL`,
           },
         })
         .run();
     } catch (err) {
       this.logger.error({ err }, 'UsagePlugin: post:model_response handler failed');
+    }
+  }
+
+  private onToolCall(payload: PostToolCallPayload): void {
+    try {
+      const { executionContext, estResultTokens } = payload;
+      const taskId = executionContext.taskId;
+
+      // A TOOL_CALL's post:tool_call can only ever fire for a task that already
+      // has a task_usage row — a model must have responded with a tool call
+      // first (which fires post:model_response / the INSERT) before any tool
+      // executes. So this is always an UPDATE, never an insert-or-update.
+      this.db
+        .update(taskUsageTable)
+        .set({
+          estToolResultTokens: sql`COALESCE(${taskUsageTable.estToolResultTokens}, 0) + ${estResultTokens}`,
+        })
+        .where(eq(taskUsageTable.taskId, taskId))
+        .run();
+    } catch (err) {
+      this.logger.error({ err }, 'UsagePlugin: post:tool_call handler failed');
     }
   }
 

@@ -50,3 +50,6 @@ export { seed, seedProviders, seedModels, seedBindings } from './seed/index.js';
 export { SEEDED_PROVIDER_IDS } from './seed/index.js';
 export { MODEL_ROWS, SEEDED_MODEL_IDS } from './seed/index.js';
 export { BINDING_ROWS } from './seed/index.js';
+
+export { RATE_CARD, estimateCostUsd } from './pricing/rate-card.js';
+export type { ModelRate } from './pricing/rate-card.js';

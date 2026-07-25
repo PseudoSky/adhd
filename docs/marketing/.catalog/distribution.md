@@ -1,7 +1,7 @@
 # Distribution: @adhd Monorepo Scope
 
 **Scope**: adhd monorepo (root)
-**Public Packages**: 50 total (49 publishable libraries + 5 CLI/server entrypoints)
+**Public Packages**: 54 published to npm (@adhd scope)
 **Package Registry**: npm (@adhd scope)
 **GitHub Repository**: https://github.com/PseudoSky/adhd
 
@@ -10,141 +10,179 @@
 ### Source Repository
 - **URL**: https://github.com/PseudoSky/adhd
 - **Branch**: main (default)
-- **Sync Status**: 
-  - Last Local Commit: `28888998c0a68e2712d06b89ed1602e0c6aab3c4` (2026-07-22T16:08:33-05:00)
+- **Sync Status**:
+  - Last Local Commit: `9eb4f22c335091074e97f0075ef594649cba38b0` (2026-07-24T20:58:13-05:00)
   - GitNexus Index: Up-to-date
   - Remote Status: Unknown (not checked from this scope)
 
-### Build + Publish Command
+### Build + Publish Commands
 ```bash
-pnpm run build                    # compile all packages to dist/
-npx nx run-many -t version        # bump versions (changed-only, tags)
-npx nx run-many -t publish        # publish to npm
+pnpm run build                                    # compile all packages to dist/
+CI=true npx nx run-many -t version                # bump versions (changed-only)
+CI=true npx nx run-many -t publish                # publish to npm
 ```
 
 **Gated by**:
-- `pnpm run build` success (all packages compile)
-- `npx nx affected -t test` success (changed packages pass tests)
-- Manual code review approval (AGENTS.md: "must not push without human approval")
-- CI/CD pipeline (if configured — not verified in this scope assessment)
-
-**Per PUBLISHING.md**:
-- Version bumping via `nx release` (not manual `package.json` edits)
-- Changed-only versioning (only packages with dist/ changes get bumped)
-- Test+Lint gates before publish
-- Post-publish smoke tests per package (documented in PUBLISHING.md §post-publish checklist)
+- `pnpm run build` success
+- `npx nx run-many -t test` success
+- `npx nx run-many -t lint` success
+- Human code review
+- Per-project: `publish` dependsOn `test`, `^test`, `version`, `dist-manifest`, `verify-dist-load`, `publish-hygiene`
 
 ### Distribution Channels
 
-| Channel | Type | Status | Freshness | Notes |
-|---------|------|--------|-----------|-------|
-| npm registry | Package Registry | ACTIVE | Last public release unknown | `@adhd/<package-name>` scoped packages |
-| GitHub Releases | Release artifacts | UNKNOWN | Not assessed | May contain built bundles, changelogs |
-| GitHub Packages | Package Registry | UNKNOWN | Not assessed | May mirror npm registry |
-| npm tarball (local) | Snapshot | CURRENT | v0.4.0 (per package.json) | Workspace version 0.4.0 |
+| Channel | Type | Status | Freshness |
+|---------|------|--------|-----------|
+| npm registry | Package Registry | ACTIVE | All 54 packages published (latest ~2026-07-23 via `published-state.json`) |
+| GitHub Releases | Release artifacts | UNKNOWN | Not assessed |
+| GitHub Packages | Package Registry | UNKNOWN | Not assessed |
 
-**Problem**: Cannot determine actual npm publish status (last-published dates, current SemVer versions on npm) without network access or npm cli inspection. These would normally be obtained via `npm info @adhd/agent-mcp` for each package.
+### Individual Package Status (from published-state.json)
 
-### Individual Package Status (Known from package.json)
+All 54 packages are published to npm under @adhd scope. Versions per published-state.json:
 
-#### Recent/High-Profile Packages (v0.0.1 or v2.1.x)
-| Package | Version | Tier | Last Updated | npm? |
-|---------|---------|------|--------------|------|
-| @adhd/agent-mcp | 2.1.2 | entrypoint | 2026-07-22 | UNKNOWN |
-| @adhd/agent-core-env | 0.0.1 | core | 2026-07-22 (NEW) | UNKNOWN |
-| @adhd/environment | 0.0.1 | core | 2026-07-22 | UNKNOWN |
-| @adhd/apigen-cli | 0.1.1 | entrypoint | recent | UNKNOWN |
-| @adhd/dispatch-cli | 0.0.1 | entrypoint | recent | UNKNOWN |
-| @adhd/workspace-codegen-nx | ? | core | recent | UNKNOWN |
+#### Agent Family (12 packages)
+| Package | Version | 
+|---------|---------|
+| @adhd/agent-base-types | 2.1.5 |
+| @adhd/agent-core-env | 0.0.4 |
+| @adhd/agent-core-policy | 2.1.6 |
+| @adhd/agent-core-provider | 2.1.6 |
+| @adhd/agent-engine-compiler | 2.1.5 |
+| @adhd/agent-engine-orchestrator | 2.1.5 |
+| @adhd/agent-generator-plugin | 0.0.4 |
+| @adhd/agent-mcp | 2.1.4 |
+| @adhd/agent-plugin-budget | 0.0.6 |
+| @adhd/agent-plugin-sanitize | 0.0.4 |
+| @adhd/agent-store-prompts | 2.1.4 |
+| @adhd/agent-store-runtime | 2.1.5 |
+| @adhd/agent-store-tools | 2.1.6 |
 
-**Notes**:
-- Version scheme: `major.minor.patch` for stable (2.x), `0.x.y` for early (0.1.x, 0.0.x)
-- All packages exist locally; publish status not verifiable from this assessment
+#### Apigen Ecosystem (20 packages)
+| Package | Version |
+|---------|---------|
+| @adhd/apigen-base-errors | 0.1.5 |
+| @adhd/apigen-base-logical | 0.0.5 |
+| @adhd/apigen-base-schema | 0.1.4 |
+| @adhd/apigen-base-types | 0.0.4 |
+| @adhd/apigen-cli | 0.1.4 |
+| @adhd/apigen-codegen-openapi | 0.1.6 |
+| @adhd/apigen-core-client | 0.1.4 |
+| @adhd/apigen-engine-conformance | 0.1.4 |
+| @adhd/apigen-engine-gateway | 0.1.5 |
+| @adhd/apigen-engine-naming | 0.1.4 |
+| @adhd/apigen-engine-runtime | 0.1.4 |
+| @adhd/apigen-generator-nx | 0.0.4 |
+| @adhd/apigen-plugin-api-express | 0.1.4 |
+| @adhd/apigen-plugin-api-fastify | 0.1.5 |
+| @adhd/apigen-plugin-cli-output | 0.1.5 |
+| @adhd/apigen-plugin-health | 0.1.6 |
+| @adhd/apigen-plugin-jsonschema | 0.1.5 |
+| @adhd/apigen-plugin-logger | 0.1.6 |
+| @adhd/apigen-plugin-mcp | 0.1.5 |
+| @adhd/apigen-plugin-openapi | 0.1.6 |
+| @adhd/apigen-plugin-py-flask | 0.1.5 |
+| @adhd/apigen-plugin-py-grpc | 0.1.5 |
+| @adhd/apigen-python-env | 0.1.4 |
+
+#### Backlog (1 package)
+| Package | Version |
+|---------|---------|
+| @adhd/backlog | 0.0.2 |
+
+#### Dispatch Family (6 packages)
+| Package | Version |
+|---------|---------|
+| @adhd/dispatch-base-spec | 0.0.5 |
+| @adhd/dispatch-base-types | 0.0.4 |
+| @adhd/dispatch-cli | 0.0.4 |
+| @adhd/dispatch-core-client | 0.0.5 |
+| @adhd/dispatch-core-optimizer | 0.0.5 |
+| @adhd/dispatch-orchestrator | 0.0.4 |
+| @adhd/dispatch-serializer-json | 0.0.5 |
+
+#### Environment Family (3 packages)
+| Package | Version |
+|---------|---------|
+| @adhd/environment | 0.0.3 |
+| @adhd/environment-base-spec | 0.0.5 |
+| @adhd/environment-builder | 0.0.4 |
+
+#### Data Family (3 packages)
+| Package | Version |
+|---------|---------|
+| @adhd/data-base-transforms | 2.2.5 |
+| @adhd/data-core-structures | 2.2.4 |
+| @adhd/data-query-engine | 2.2.4 |
+
+#### Workspace Family (2 packages)
+| Package | Version |
+|---------|---------|
+| @adhd/workspace-base-tools | 0.0.4 |
+| @adhd/workspace-codegen-nx | 0.0.4 |
+
+#### Other
+| Package | Version |
+|---------|---------|
+| @adhd/decompile-cli | 0.1.11 |
+| @adhd/ui-react-base-hooks | 2.2.4 |
 
 ### CI/CD Integration
-**Status**: Not assessed in this catalog
+**Status**: Not fully assessed in this catalog
+
+Known:
+- `.github/workflows/ci.yml` — CI pipeline, node-version 22
+- `.github/workflows/pull-request.yml` — PR checks, node-version 22 for test job
+- Pre-commit hook at `.githooks/pre-commit` — lint gating + secret-scan
+- Secret-scan is a whole-repo nx task (`@adhd/nx-secret-scan`)
 
 Unknown:
-- GitHub Actions workflows (exists? triggers? gates?)
-- Remote cache (Nx Cloud connected? status?)
-- Automated publish (on tag push? manual trigger?)
-- Smoke test automation (post-publish verification)
-
-**Action Item**: Review .github/workflows/ for actual CI/CD pipeline documentation.
-
-### Pre-Publish Verification
-
-**Gating** (per AGENTS.md, PUBLISHING.md):
-1. `pnpm run build` — All packages compile to dist/
-2. `npx nx affected -t test` — Changed packages pass tests
-3. `npx nx affected -t lint` — No lint errors
-4. Human code review (required per AGENTS.md)
-5. Smoke test (e.g., `npx apigen-cli --help` returns exit 0)
-
-**Status**: These gates exist in code/docs but execution status unknown (nx project graph currently broken).
+- Automated publish triggers (on tag push? manual?)
+- Post-publish smoke test automation
+- Nx Cloud remote cache status
 
 ## Freshness & Staleness Tracking
 
 ### Last Catalog Run
-- **SHA**: 28888998c0a68e2712d06b89ed1602e0c6aab3c4
-- **Timestamp**: 2026-07-22T16:08:33-05:00
-- **Git Log**: `feat(agent-core-env): shared registry-DB resolver + DI kills import-time DB-open side effect`
-- **Changes Since**: TBD (run `git rev-list --count 28888998c0a68e2712d06b89ed1602e0c6aab3c4..HEAD` to track commits since)
+- **SHA**: 9eb4f22c335091074e97f0075ef594649cba38b0
+- **Timestamp**: 2026-07-24T20:58:13-05:00
+- **Git Log**: `docs(changelog): record backlog render/archive verify fix`
+- **Changes Since Prior Catalog** (28888998c0a68e2712d06b89ed1602e0c6aab3c4):
+  - **Commits**: 269
+  - **New package**: @adhd/backlog (entrypoint/backlog) — 0.0.2
+  - **New package**: apigen-python-env (packages/apigen/python-env) — 0.1.4
+  - **New tools**: tools/nx-plugins/{build,deps,assets,test,secret-scan,lib} — 6 plugin directories
+  - **Published-state cache**: published-state.json (54 packages)
 
-### Packages Changed Recently
-From git status at start of this catalog run:
-- Modified: 11 package.json files (version bumps, dependency edits)
-- Modified: 7 README.md files (docs updates)
-- Added: 4 new doc directories (docs/agent-mcp/agent-mcp-chat-gateway/, docs/agent-mcp/mcp-env/, docs/agent/, docs/plan/*)
-- Deleted: ~200 files (old plan artifacts from docs/plan/agent-final/superseded/*)
+### Publish Hygiene
 
-**Implication**: Recent churn suggests active development; not appropriate for stable release until changes are tested and merged.
+The workspace has a comprehensive publish hygiene system:
+1. `version` task: cache-driven bump decision (published-state.json)
+2. `reconcile` task: integrity-gated cache backfill from npm
+3. `publish-hygiene` task: npm-pack allowlist + declared-entry gate
+4. `verify-dist-load` task: proves dist/ loads as a consumer would
+5. `publish` task: cache-check before publish, write-through on success
 
-## Publish Hygiene Checks
+### Known Issues (from codebase)
+1. **BUG-DISPATCH-PUBLISH-001**: Import specifier divergence (tsconfig paths != package.json name) — FIXED for apigen-family (BUG-APIGEN-NAMING-IMPORT-SPECIFIER-DIVERGENCE-001, 37 files)
+2. **BUG-AgentMCP-001**: Same issue in agent-mcp — RESOLVED (tsconfig.base.json cleaned)
+3. **NX cache caveat**: `--skip-nx-cache` creates stale dist — documented in AGENTS.md §5
+4. **Release commit**: Opt-in `pnpm release:commit` — not automatic (deliberate)
 
-### Known Checks (from codebase)
-`pnpm run check:publish-hygiene` → `nx run @adhd/source:check-publish-hygiene`
+### Deployment Considerations
 
-**Details**: Unknown without reading the implementation. Likely includes:
-- No `devDependencies` in published packages
-- No relative paths in imports (use @adhd/ scoped paths)
-- No sensitive files in dist/
-- Version consistency across package family (e.g., agent-* all v2.1.2)
-
-### Issues Documented (from AGENTS.md, memory)
-1. **BUG-DISPATCH-PUBLISH-001**: Import specifier divergence (tsconfig paths != package.json name) breaks publish
-2. **BUG-AGENTMCP-001**: Same issue in agent-mcp
-3. **NX cache issue**: `--skip-nx-cache` creates stale dist/ artifacts published as current (AGENTS.md §5)
-
-**Status**: These are documented to watch for; unknown if all are resolved.
-
-## Deployment Considerations
-
-### Node Target
-- **Requires**: Node.js 18+ (assumed, not verified)
-- **Package managers**: pnpm (per AGENTS.md "default every JS/TS project to pnpm")
+- **Requires**: Node.js 22+ (CI pinned)
+- **Package manager**: pnpm (default, per AGENTS.md)
 - **Entrypoints** (need dist/ in PATH or bin/ symlink):
-  - @adhd/agent-mcp (server, requires --ADHD_AGENT_MCP_STARTUP flags)
-  - @adhd/apigen-cli (CLI, `apigen` command)
-  - @adhd/dispatch-cli (CLI, `dispatch` command)
-  - @adhd/decompile-cli (CLI, `decompile` command)
-  - @adhd/environment-cli (CLI, planned, not yet built)
+  - @adhd/backlog (`backlog` command, 34 ops)
+  - @adhd/agent-mcp (MCP server)
+  - @adhd/apigen-cli (`apigen` command, 6 subcommands)
+  - @adhd/dispatch-cli (`dispatch` command, 7 subcommands)
+  - @adhd/decompile-cli (`decompile` command)
+  - @adhd/environment-cli (planned, not built)
 
-### Environment/Configuration
-- Controlled via @adhd/environment cascade (code defaults → system → global ~/.adhd → project .adhd/ → local *.local → env vars)
-- No setup.sh or post-install scripts (assumed; not verified)
-- Database persistence: per-package (agent-mcp → ~/.adhd/agent-mcp/, apigen per config, etc.)
-
-### Multi-Instance Collision Handling
-- **agent-mcp**: Derives SSE port per instance (instanceId), prevents port collisions
-- **apigen-plugin-mcp**: Also uses environment for per-instance port binding
-- **dispatch-cli**: No documented multi-instance handling
-
-## Open Questions (for steward/publisher)
-
-1. Is the monorepo currently published to npm? If yes, what are the last-published dates per package?
-2. What is the post-publish smoke test procedure per PUBLISHING.md?
-3. Is GitHub Actions CI/CD configured? What gates publish?
-4. Why does `nx list` fail with "project graph" error? Blocks verify of all capabilities.
-5. Are there unpublished/local-only packages (private:true except ui-react-base-storybook)?
-
+- **Configuration**: @adhd/environment cascade (code defaults → system → global → project → env vars)
+- **Database**: Per-package SQLite stores under `~/.adhd/`:
+  - agent-mcp: `~/.adhd/agent-mcp/`
+  - agent-registry: `~/.adhd/agent-registry/` (via agent-core-env)
+  - backlog: `~/.adhd/backlog/` (configurable via env)

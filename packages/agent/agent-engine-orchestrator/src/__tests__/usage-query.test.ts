@@ -51,6 +51,9 @@ CREATE TABLE IF NOT EXISTS task_usage (
     reasoning_tokens INTEGER,
     peak_context_tokens INTEGER,
     peak_context_at INTEGER,
+    compute_ms INTEGER,
+    est_tool_result_tokens INTEGER,
+    est_cost_usd REAL,
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_task_usage_root_task_id ON task_usage (root_task_id);

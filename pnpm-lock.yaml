@@ -59,6 +59,9 @@ importers:
       fastify:
         specifier: ^4.0.0
         version: 4.29.1
+      gpt-tokenizer:
+        specifier: ^3.4.0
+        version: 3.4.0
       json-to-ast:
         specifier: ^2.1.0
         version: 2.1.0
@@ -809,6 +812,9 @@ importers:
       '@adhd/agent-base-types':
         specifier: ^2.1.0
         version: link:../agent-base-types
+      '@adhd/agent-core-provider':
+        specifier: ^2.1.0
+        version: link:../agent-core-provider
       '@adhd/agent-engine-compiler':
         specifier: ^2.1.0
         version: link:../agent-engine-compiler
@@ -830,6 +836,9 @@ importers:
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@types/better-sqlite3@7.6.13)(better-sqlite3@12.10.0)
+      gpt-tokenizer:
+        specifier: ^3.4.0
+        version: 3.4.0
       openai:
         specifier: ^4.29.0
         version: 4.104.0(zod@4.4.3)
@@ -16307,6 +16316,10 @@ packages:
       p-cancelable: 2.1.1
       responselike: 2.0.1
     dev: true
+
+  /gpt-tokenizer@3.4.0:
+    resolution: {integrity: sha512-wxFLnhIXTDjYebd9A9pGl3e31ZpSypbpIJSOswbgop5jLte/AsZVDvjlbEuVFlsqZixVKqbcoNmRlFDf6pz/UQ==}
+    dev: false
 
   /graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}

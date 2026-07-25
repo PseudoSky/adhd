@@ -45,7 +45,7 @@ export { agentTool, sessionList, sessionClose, sessionClear } from './tools/sess
 export type { SessionDeps } from './tools/session.js';
 export { taskTool, taskList, taskCancel, taskResume, resultTool, enqueueExistingTask } from './tools/task.js';
 export type { TaskDeps } from './tools/task.js';
-export { usageQuery, buildTaskUsageReport } from './tools/usage.js';
+export { usageQuery, usageQueryByGrain, buildTaskUsageReport } from './tools/usage.js';
 export type { Database, UsageQueryResult, TaskUsageRow } from './tools/usage.js';
 
 // ── Plugins ───────────────────────────────────────────────────────────────────
