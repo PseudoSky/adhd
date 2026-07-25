@@ -10,6 +10,7 @@ import { createRequire } from 'node:module';
 import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { performance } from 'node:perf_hooks';
 
 const require = createRequire(import.meta.url);
 const {
@@ -18,9 +19,39 @@ const {
   readMetrics,
   appendMetricRecord,
   MetricsRecorder,
+  getMaxCpuPercent,
+  checkCpuGuard,
   withMetrics,
   __internals,
 } = require('./metrics.js');
+
+/** Synchronous, deterministic CPU-bound loop — no timers/sleeps, so the
+ * elapsed CPU time it produces is real, not an artifact of scheduling. */
+function busyLoopMs(ms) {
+  const end = Date.now() + ms;
+  let x = 1;
+  while (Date.now() < end) x = Math.sqrt(x) + 1;
+  return x;
+}
+
+/** Run `fn` with the given env vars set, restoring the previous values (or
+ * absence) afterward — used by the CPU-guard tests below. */
+async function withEnv(vars, fn) {
+  const prev = {};
+  for (const k of Object.keys(vars)) prev[k] = process.env[k];
+  try {
+    for (const [k, v] of Object.entries(vars)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+    return await fn();
+  } finally {
+    for (const k of Object.keys(vars)) {
+      if (prev[k] === undefined) delete process.env[k];
+      else process.env[k] = prev[k];
+    }
+  }
+}
 
 function makeRoot() {
   return mkdtempSync(join(tmpdir(), 'metrics-'));
@@ -357,6 +388,187 @@ test('withMetrics overhead: 100 sequential no-op invocations complete fast (faci
     // regression guard against the facility itself becoming the bottleneck
     // it's supposed to be measuring, not a tight perf assertion.
     assert.ok(elapsed < 3000, `100 withMetrics calls took ${elapsed}ms — the facility itself must stay cheap`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// CPU GUARD (FEAT-NXMETRICS-CPU-GUARD-001)
+// ---------------------------------------------------------------------------
+
+test('getMaxCpuPercent: defaults to DEFAULT_MAX_CPU_PCT when unset', async () => {
+  await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: undefined }, () => {
+    assert.equal(getMaxCpuPercent(), __internals.DEFAULT_MAX_CPU_PCT);
+  });
+});
+
+test('getMaxCpuPercent: honors an explicit override', async () => {
+  await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: '42' }, () => {
+    assert.equal(getMaxCpuPercent(), 42);
+  });
+});
+
+test('getMaxCpuPercent: non-numeric override falls back to the default rather than disabling silently', async () => {
+  await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: 'not-a-number' }, () => {
+    assert.equal(getMaxCpuPercent(), __internals.DEFAULT_MAX_CPU_PCT);
+  });
+});
+
+test('checkCpuGuard: throws naming the task, project, measured %, and threshold when tripped', async () => {
+  await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: '50', ADHD_NX_METRICS_CPU_MODE: undefined }, () => {
+    assert.throws(
+      () => checkCpuGuard('secret-scan', { projectName: '@adhd/x' }, 187.3),
+      (err) =>
+        /secret-scan/.test(err.message) &&
+        /@adhd\/x/.test(err.message) &&
+        /187\.3/.test(err.message) &&
+        /50/.test(err.message)
+    );
+  });
+});
+
+test('checkCpuGuard: does not throw when the measurement is within budget', async () => {
+  await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: '300' }, () => {
+    assert.doesNotThrow(() => checkCpuGuard('secret-scan', {}, 90));
+  });
+});
+
+test('checkCpuGuard: exactly at the threshold does not trip (strictly-greater-than semantics)', async () => {
+  await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: '100' }, () => {
+    assert.doesNotThrow(() => checkCpuGuard('t', {}, 100));
+  });
+});
+
+test('checkCpuGuard: ADHD_NX_METRICS_MAX_CPU_PCT=0 disables the guard entirely', async () => {
+  await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: '0' }, () => {
+    assert.doesNotThrow(() => checkCpuGuard('t', {}, 999999));
+  });
+});
+
+test('checkCpuGuard: ADHD_NX_METRICS_CPU_MODE=warn downgrades a trip to console.warn, never throws', async () => {
+  await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: '10', ADHD_NX_METRICS_CPU_MODE: 'warn' }, () => {
+    const calls = [];
+    const origWarn = console.warn;
+    console.warn = (msg) => calls.push(msg);
+    try {
+      assert.doesNotThrow(() => checkCpuGuard('t', {}, 500));
+      assert.equal(calls.length, 1);
+      assert.ok(/CPU guard tripped/.test(calls[0]));
+    } finally {
+      console.warn = origWarn;
+    }
+  });
+});
+
+test('MetricsRecorder.measureCpuPercent: reflects real process.cpuUsage() delta for a CPU-bound loop', () => {
+  const rec = new MetricsRecorder('t', {});
+  const t0 = performance.now();
+  busyLoopMs(30);
+  const pct = rec.measureCpuPercent(performance.now() - t0);
+  // A single-threaded synchronous busy loop should consume close to (but at
+  // most, allowing for scheduler noise, not wildly over) one core's worth of
+  // CPU over its own wall-clock window.
+  assert.ok(pct > 20, `busy loop should show meaningfully non-zero CPU%, got ${pct}`);
+  assert.ok(pct < 200, `single-threaded loop should not appear to use multiple cores, got ${pct}`);
+});
+
+test('MetricsRecorder.measureCpuPercent: an idle task shows near-zero CPU%', async () => {
+  const rec = new MetricsRecorder('t', {});
+  const t0 = performance.now();
+  await new Promise((r) => setTimeout(r, 30));
+  const pct = rec.measureCpuPercent(performance.now() - t0);
+  assert.ok(pct < 20, `idle wait should show near-zero CPU%, got ${pct}`);
+});
+
+test('withMetrics + CPU GUARD teeth test: a busy-loop task TRIPS the guard under a low threshold and FAILS (throws)', async () => {
+  const root = makeRoot();
+  try {
+    await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: '1' }, async () => {
+      await assert.rejects(
+        () =>
+          withMetrics('busy-task', { root, projectName: '@adhd/busy' }, async () => {
+            busyLoopMs(30);
+            return { success: true };
+          }),
+        /CPU guard tripped for task "busy-task" \(@adhd\/busy\)/
+      );
+    });
+    // The trip is recorded too: success:false with the offending cpuPercent captured.
+    const { records } = readMetrics(root);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].success, false);
+    assert.ok(records[0].cpuPercent > 1, 'the recorded cpuPercent must be the one that tripped the guard');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('withMetrics + CPU GUARD negative control: the SAME busy-loop task PASSES at the default threshold', async () => {
+  const root = makeRoot();
+  try {
+    await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: undefined }, async () => {
+      const result = await withMetrics('busy-task', { root, projectName: '@adhd/busy' }, async () => {
+        busyLoopMs(30);
+        return { success: true };
+      });
+      assert.equal(result.success, true);
+    });
+    const { records } = readMetrics(root);
+    assert.equal(records[0].success, true);
+    assert.ok(typeof records[0].cpuPercent === 'number' && records[0].cpuPercent >= 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('withMetrics + CPU GUARD: a normal (non-CPU-bound) task never trips, even measured', async () => {
+  const root = makeRoot();
+  try {
+    const result = await withMetrics('sync-deps', { root }, async () => {
+      await new Promise((r) => setTimeout(r, 20));
+      return { success: true };
+    });
+    assert.equal(result.success, true);
+    const { records } = readMetrics(root);
+    assert.ok(records[0].cpuPercent < 50, `idle task should record low cpuPercent, got ${records[0].cpuPercent}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('withMetrics + CPU GUARD: the guard runs even when ADHD_NX_METRICS=0 disables recording', async () => {
+  const root = makeRoot();
+  try {
+    await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: '1', ADHD_NX_METRICS: '0' }, async () => {
+      await assert.rejects(
+        () =>
+          withMetrics('busy-task', { root }, async () => {
+            busyLoopMs(30);
+            return { success: true };
+          }),
+        /CPU guard tripped/
+      );
+    });
+    assert.equal(existsSync(metricsPath(root)), false, 'recording stays off; the guard is independent of it');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('withMetrics + CPU GUARD: a thrown task error is NOT masked by the guard — original error wins', async () => {
+  const root = makeRoot();
+  try {
+    await withEnv({ ADHD_NX_METRICS_MAX_CPU_PCT: '1' }, async () => {
+      await assert.rejects(
+        () =>
+          withMetrics('busy-task', { root }, async () => {
+            busyLoopMs(30);
+            throw new Error('the real task failed');
+          }),
+        /the real task failed/
+      );
+    });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -48,6 +48,11 @@ const FILE_NAME = 'metrics.json';
 const MAX_RECORDS = 5000;
 const MAX_RECORDS_KEEP = 2000;
 
+/** Default `ADHD_NX_METRICS_MAX_CPU_PCT` — generous enough that a task using
+ * a couple of cores' worth of in-process parallelism (e.g. worker_threads)
+ * doesn't false-trip, but tight enough to catch a genuinely runaway task. */
+const DEFAULT_MAX_CPU_PCT = 300;
+
 function metricsPath(root) {
   return join(root, FILE_NAME);
 }
@@ -120,6 +125,8 @@ class MetricsRecorder {
     this.project = (context && context.projectName) || null;
     this._start = performance.now();
     this._lastCheckpoint = this._start;
+    this._cpuUsageStart = process.cpuUsage();
+    this.cpuPercent = 0;
     this.phases = {};
     this.subprocessCount = 0;
     this.subprocessMs = 0;
@@ -203,6 +210,21 @@ class MetricsRecorder {
     this.networkCalls.push(label);
   }
 
+  /**
+   * Measure this task's own CPU consumption (`process.cpuUsage()` delta
+   * since construction) as a percentage of the given wall-clock duration.
+   * Self-process only — see the CPU GUARD note on {@link withMetrics}.
+   *
+   * @param {number} wallMs elapsed wall-clock ms since construction
+   * @returns {number} CPU percent (can exceed 100 across multiple threads/cores)
+   */
+  measureCpuPercent(wallMs) {
+    const delta = process.cpuUsage(this._cpuUsageStart);
+    const cpuMs = (delta.user + delta.system) / 1000;
+    this.cpuPercent = wallMs > 0 ? round((cpuMs / wallMs) * 100) : 0;
+    return this.cpuPercent;
+  }
+
   /** @param {boolean} success @param {number} durationMs @returns {object} */
   toRecord(success, durationMs) {
     for (const key of Object.keys(this.subprocessByCommand)) {
@@ -214,6 +236,7 @@ class MetricsRecorder {
       t: new Date().toISOString(),
       success,
       durationMs: round(durationMs),
+      cpuPercent: this.cpuPercent,
       phases: this.phases,
       subprocess: {
         count: this.subprocessCount,
@@ -226,6 +249,44 @@ class MetricsRecorder {
 }
 
 /**
+ * Resolve the configured CPU-guard threshold from `ADHD_NX_METRICS_MAX_CPU_PCT`.
+ * Falls back to {@link DEFAULT_MAX_CPU_PCT} when unset or non-numeric.
+ * `0` (or any value `<= 0`) means "disabled".
+ *
+ * @returns {number}
+ */
+function getMaxCpuPercent() {
+  const raw = process.env.ADHD_NX_METRICS_MAX_CPU_PCT;
+  if (raw === undefined || raw === '') return DEFAULT_MAX_CPU_PCT;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : DEFAULT_MAX_CPU_PCT;
+}
+
+/**
+ * Check a measured CPU percentage against the configured guard and either
+ * throw (default `error` mode) or `console.warn` (`ADHD_NX_METRICS_CPU_MODE=warn`)
+ * when it's tripped. A no-op when the guard is disabled (`maxPct <= 0`) or
+ * the measurement is within budget.
+ *
+ * @param {string} taskName
+ * @param {{projectName?: string}} [context]
+ * @param {number} cpuPercent
+ * @throws {Error} when tripped and mode is not `warn`
+ */
+function checkCpuGuard(taskName, context, cpuPercent) {
+  const maxPct = getMaxCpuPercent();
+  if (maxPct <= 0 || cpuPercent <= maxPct) return;
+  const project = context && context.projectName ? ` (${context.projectName})` : '';
+  const message = `metrics: CPU guard tripped for task "${taskName}"${project}: measured ${cpuPercent.toFixed(1)}% CPU, exceeds ADHD_NX_METRICS_MAX_CPU_PCT=${maxPct}%`;
+  const mode = (process.env.ADHD_NX_METRICS_CPU_MODE || 'error').toLowerCase();
+  if (mode === 'warn') {
+    console.warn(message);
+    return;
+  }
+  throw new Error(message);
+}
+
+/**
  * Wrap an executor's real work with metrics recording.
  *
  * `fn(rec)` receives a fresh {@link MetricsRecorder} and must return (or
@@ -235,6 +296,24 @@ class MetricsRecorder {
  *
  * Set `ADHD_NX_METRICS=0` to disable recording entirely (still runs `fn`
  * normally — a pure escape hatch, never required for correctness).
+ *
+ * CPU GUARD (FEAT-NXMETRICS-CPU-GUARD-001): `withMetrics` also measures the
+ * task's own CPU consumption — `process.cpuUsage()` delta over the task's
+ * wall-clock duration, expressed as a percentage (can exceed 100% when the
+ * task uses multiple threads/cores, e.g. `worker_threads`). This is
+ * IN-PROCESS CPU only: a task that mostly blocks on a spawned subprocess
+ * (`execFileSync`/`spawnSync`) shows near-0% here even if the child is
+ * pegging a core, because the OS accounts a child's CPU separately from the
+ * waiting parent — there is no portable, dependency-free way to reliably
+ * read a child's rusage across macOS/Linux, so that case is intentionally
+ * out of scope for this guard (in-process CPU-heavy work like `secret-scan`
+ * is the target). When the measured percentage exceeds
+ * `ADHD_NX_METRICS_MAX_CPU_PCT` (default {@link DEFAULT_MAX_CPU_PCT}), the
+ * task FAILS by default — `withMetrics` throws, naming the task, project,
+ * measured %, and threshold. Set `ADHD_NX_METRICS_MAX_CPU_PCT=0` to disable
+ * the guard entirely, or `ADHD_NX_METRICS_CPU_MODE=warn` to downgrade a trip
+ * to a `console.warn` instead of a failure. The guard runs independently of
+ * `ADHD_NX_METRICS` (recording can be off while the guard stays on).
  *
  * @template T
  * @param {string} taskName
@@ -250,9 +329,16 @@ async function withMetrics(taskName, context, fn) {
   try {
     const result = await fn(rec);
     success = result && typeof result === 'object' && 'success' in result ? !!result.success : true;
+    rec.measureCpuPercent(performance.now() - overallStart);
+    // The guard runs even when ADHD_NX_METRICS=0 disables recording — it's
+    // a correctness check on the task, not part of the perf log.
+    checkCpuGuard(taskName, context, rec.cpuPercent);
     return result;
   } catch (err) {
     success = false;
+    // A guard trip (or the real task's own throw) both land here; either
+    // way record the CPU reading we have so far before rethrowing.
+    rec.measureCpuPercent(performance.now() - overallStart);
     throw err;
   } finally {
     if (!disabled) {
@@ -269,12 +355,15 @@ async function withMetrics(taskName, context, fn) {
 
 module.exports = {
   FILE_NAME,
+  DEFAULT_MAX_CPU_PCT,
   metricsPath,
   lockPath,
   readMetrics,
   writeMetricsAtomic,
   appendMetricRecord,
   MetricsRecorder,
+  getMaxCpuPercent,
+  checkCpuGuard,
   withMetrics,
-  __internals: { MAX_RECORDS, MAX_RECORDS_KEEP, round },
+  __internals: { MAX_RECORDS, MAX_RECORDS_KEEP, round, DEFAULT_MAX_CPU_PCT },
 };
