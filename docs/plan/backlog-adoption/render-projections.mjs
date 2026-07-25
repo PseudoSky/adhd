@@ -101,7 +101,19 @@ try {
     //    is about to REPLACE. This proves the render is a faithful
     //    id/status/priority reflection of the graph, independent of the
     //    formatting `renderItemsToMarkdown` chose.
-    const graphItems = runCli(['list-items', '--filter', JSON.stringify(entry.filter)]);
+    //
+    //    `renderToMarkdown` ALWAYS excludes archived items
+    //    (client.ts's doc comment on `renderToMarkdown`), but plain
+    //    `list-items` does not — it's a generic query other consumers
+    //    legitimately use to see archived rows too. Without
+    //    `excludeArchived: true` here, every row with at least one archived
+    //    item (e.g. right after `archive-resolved`) reported a false
+    //    `extra-in-render`/`missing-from-render` divergence and aborted the
+    //    ENTIRE run with zero files written
+    //    (BUG-BACKLOG-RENDER-VERIFY-ARCHIVED-MISMATCH-001) — pass the same
+    //    exclusion so this comparison's graph-side matches what `render`
+    //    actually emits.
+    const graphItems = runCli(['list-items', '--filter', JSON.stringify({ ...entry.filter, excludeArchived: true })]);
     const graphMap = toMap(graphItems.map((it) => ({ id: it.humanId, status: it.status, priority: it.priority })));
 
     const scratchPath = join(workDir, `${entry.sourcePath.replace(/[/\\]/g, '__')}.md`);

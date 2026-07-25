@@ -58,6 +58,18 @@ function applyRootLevelFilter(nodes: NodeRecord[], filter: BacklogFilter): NodeR
   });
 }
 
+/**
+ * See `BacklogFilter.excludeArchived`'s doc comment — applied at the
+ * NodeRecord layer (same as `applyRootLevelFilter`) so both `listItems` and
+ * `renderToMarkdown` (which independently map nodes) share one
+ * archived-exclusion implementation instead of `renderToMarkdown`
+ * re-implementing its own `!metadata.archivedAt` scan.
+ */
+function applyExcludeArchivedFilter(nodes: NodeRecord[], filter: BacklogFilter): NodeRecord[] {
+  if (!filter.excludeArchived) return nodes;
+  return nodes.filter((n) => !(n.metadata as Partial<BacklogNodeMeta> | undefined)?.archivedAt);
+}
+
 /** Raw NodeRecord query — used internally where the full node (not just the mapped BacklogItem) is needed. */
 export function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter = {}): NodeRecord[] {
   if (filter.grep) {
@@ -71,7 +83,7 @@ export function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter =
       limit: filter.limit ?? 1000,
       filter: nodeFilter,
     });
-    let live = applyRootLevelFilter(hits.filter(isLiveBacklogItemNode), filter);
+    let live = applyExcludeArchivedFilter(applyRootLevelFilter(hits.filter(isLiveBacklogItemNode), filter), filter);
     if (filter.offset) live = live.slice(filter.offset);
     return live;
   }
@@ -79,7 +91,7 @@ export function queryItemNodes(store: GraphBacklogStore, filter: BacklogFilter =
   if (filter.limit !== undefined) nodeFilter.limit = filter.limit;
   if (filter.offset !== undefined) nodeFilter.offset = filter.offset;
   const nodes = store.graph.queryNodes(nodeFilter);
-  return applyRootLevelFilter(nodes.filter(isLiveBacklogItemNode), filter);
+  return applyExcludeArchivedFilter(applyRootLevelFilter(nodes.filter(isLiveBacklogItemNode), filter), filter);
 }
 
 export function listItems(store: GraphBacklogStore, filter: BacklogFilter = {}): BacklogItem[] {
