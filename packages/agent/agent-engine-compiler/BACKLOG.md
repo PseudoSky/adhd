@@ -1,14 +1,3 @@
-### BUG-CLI-001 — : Pre-existing TS2352 in compile.ts (FIXED in compile-cli state)
-
-**Status:** FIXED
-
-**File:** `src/compile.ts` line 251 (prior state's output)
-**Root cause:** `emitToolsForProvider(...)` returns `EmittedTool[]`; `EmittedServerSideTool` lacks an index signature, making the direct `as StructuredTool[]` cast fail tsc.
-**Fix applied:** Double-cast via `unknown` — `as unknown as StructuredTool[]`. Runtime safe: all `EmittedTool` shapes are plain objects.
-**Status:** Fixed in commit `75125d2`.
-
-**Citations:** [/Users/nix/dev/node/adhd/packages/agent/agent-engine-compiler/BACKLOG.md]
-
 ### DEBT-CLI-001 — : @adhd symlinks in dist/ created by test beforeAll
 
 **Status:** UNKNOWN
