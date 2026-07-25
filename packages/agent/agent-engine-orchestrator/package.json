@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-engine-orchestrator",
-  "version": "2.1.5",
+  "version": "2.1.6",
   "description": "Agent engine orchestrator — providers, clients, tools, plugins, and validation extracted from agent-mcp",
   "type": "module",
   "publishConfig": {
@@ -21,10 +21,10 @@
     "typecheck": "tsc -p tsconfig.lib.json --noEmit"
   },
   "dependencies": {
-    "@adhd/agent-base-types": "^2.1.0",
-    "@adhd/agent-core-provider": "^2.1.0",
-    "@adhd/agent-store-prompts": "^2.1.0",
-    "@adhd/agent-store-runtime": "^2.1.0",
+    "@adhd/agent-base-types": "^2.1.5",
+    "@adhd/agent-core-provider": "^2.1.7",
+    "@adhd/agent-store-prompts": "^2.1.5",
+    "@adhd/agent-store-runtime": "^2.1.6",
     "@anthropic-ai/sdk": "^0.96.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "better-sqlite3": "12.10.0",
@@ -37,7 +37,7 @@
     "zod": "4.4.3"
   },
   "peerDependencies": {
-    "@adhd/agent-engine-compiler": "^2.1.0"
+    "@adhd/agent-engine-compiler": "^2.1.6"
   },
   "peerDependenciesMeta": {
     "@adhd/agent-engine-compiler": {

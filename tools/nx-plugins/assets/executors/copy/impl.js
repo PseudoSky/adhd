@@ -15,23 +15,35 @@
  * In-tree ({projectRoot}/dist), never the old workspace-root dist/{projectRoot} — per
  * the pnpm/in-source-dist migration.
  */
-const { existsSync, mkdirSync, copyFileSync, readFileSync, chmodSync, statSync } = require('node:fs');
+const { existsSync, mkdirSync, copyFileSync, cpSync, readFileSync, chmodSync, statSync } = require('node:fs');
 const { join, dirname, basename } = require('node:path');
 const { withMetrics } = require('../../../lib/metrics');
-async function run(options, context) {
-  return withMetrics('assets-copy', context, async (rec) => {
+async function run(options, context)
+{
+  return withMetrics('assets-copy', context, async (rec) =>
+  {
     const projRoot = context.projectsConfigurations.projects[context.projectName].root;
     const src = join(context.root, projRoot);
     const out = join(src, 'dist');
     if (!existsSync(out)) { console.error('assets: no dist for ' + context.projectName + ' (build first)'); return { success: false }; }
     const pkg = existsSync(join(src, 'package.json')) ? JSON.parse(readFileSync(join(src, 'package.json'), 'utf8')) : {};
-    const files = ['README.md', 'CHANGELOG.md', ...(Array.isArray(pkg.assets) ? pkg.assets : [])];
+    const files = ['README.md', 'CHANGELOG.md', 'llms.txt', 'drizzle', ...(Array.isArray(pkg.assets) ? pkg.assets : [])];
     for (const f of files) {
       const from = join(src, f);
       if (!existsSync(from)) continue;
       const to = join(out, basename(f));
       mkdirSync(dirname(to), { recursive: true });
-      copyFileSync(from, to);
+      if (statSync(from).isDirectory()) {
+        // Directory asset (e.g. a top-level "drizzle" migrations folder) — the build's own
+        // tsc "assets" glob may already have copied it into dist under the same name, so this
+        // is a deliberate, idempotent re-sync rather than a redundant no-op: cpSync recursively
+        // overwrites file-for-file instead of copyFileSync's file-only semantics, which throws
+        // EISDIR the moment the destination is a directory (BUG: agent-store-tools/agent-mcp
+        // publish both have a top-level "drizzle" dir and failed here before this fix).
+        cpSync(from, to, { recursive: true });
+      } else {
+        copyFileSync(from, to);
+      }
       console.log('asset ' + f + ' -> ' + projRoot + '/dist/' + basename(f));
     }
     rec.phase('copyAssets');
