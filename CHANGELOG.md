@@ -1,5 +1,9 @@
 ## Unreleased
 
+### Added — CPU-usage guard in the `withMetrics` nx-plugin monitoring layer (FEAT-NXMETRICS-CPU-GUARD-001) (2026-07-25)
+
+`tools/nx-plugins/lib/metrics.js`'s `withMetrics` now measures self-process CPU% over each task's wall time and **fails the task** when it exceeds `ADHD_NX_METRICS_MAX_CPU_PCT` (default `300`; `0` disables; `ADHD_NX_METRICS_CPU_MODE=warn` downgrades to a warning). Every `metrics.json` record gains a `cpuPercent` field and is still written with `success:false` on a trip; a genuine task error always wins over the guard. All existing consumers (`deps/{sync,check}`, `build/hygiene`, `secret-scan/scan`) inherit it for free. Teeth: 38/38 tests incl. a real busy-loop trip and a default-threshold negative control. Commit `7b02ca77`. **Files:** `tools/nx-plugins/lib/metrics.js` (+ spec).
+
 ### Fixed — test suite oversubscribed CPU: unbounded vitest thread pools bounded (DEBT-TEST-CPU-OVERSUBSCRIBED-001) (2026-07-25)
 
 45 of 56 `vite.config.ts` had no `pool`/`poolOptions`, so vitest's default `threads` pool sized itself to `os.cpus().length` PER project — and Nx runs project `test` targets concurrently, so N projects × up to 10 threads each multiplicatively oversubscribed the machine. **Fix:** new shared `tools/vite-plugins/vitest-pool-defaults.mjs` (`maxThreads = clamp(ceil(cores/3), 2, 4)`) wired into the 45 previously-unbounded configs (the other 11 already self-bounded via `pool:'forks'`+`fileParallelism:false`). Measured `nx test backlog` at 207% avg CPU before. The residual single-suite spike is `concurrency-scale.spec.ts` intentionally spawning 20 real `worker_threads` to prove the 20-writer CAS race (MIGRATION.md §3.3) — by design, not lowered. Also confirmed repeat-command caching is correct post-fix (`nx test backlog` 88s→0.97s, 16/16 cached; no e2e targets exist). Commit `91ddcf7a`. **Files:** `tools/vite-plugins/vitest-pool-defaults.mjs` + 45 `vite.config.ts` + 10 `.eslintrc.json`.
