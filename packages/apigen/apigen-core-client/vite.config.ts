@@ -5,6 +5,7 @@ import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs';
 
+import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 const repoRoot = path.resolve(__dirname, '../../..');
 
 export default defineConfig({
@@ -45,6 +46,7 @@ export default defineConfig({
   },
 
   test: {
+    poolOptions: vitestPoolOptions,
     globals: true,
     cache: {
       dir: path.join(repoRoot, 'node_modules/.vitest'),
