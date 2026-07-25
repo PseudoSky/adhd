@@ -1,8 +1,10 @@
 # Documentation Operations Log
 
-**Date**: 2026-07-22  
-**Scope**: adhd monorepo (root)  
-**Basis**: doc-cartographer ground truth + change inventory  
+**Date**: 2026-07-24  
+**Scope**: adhd monorepo (root) — RELEASE.md + cartographer iterations  
+**Basis**: doc-cartographer (3 iterations), CHANGELOG.md, capabilities.json
+
+---  
 **Target**: Correct docs to reflect session changes (registry-DB fixes, SSE port contention, agent-core-env, versioning pipeline, env specs)
 
 > ⚠️ **HISTORICAL** — This file documents the steward's work from the first iteration (2026-07-22). The catalog has since been re-run (2026-07-24, iter-2). The "Nx Project Graph Broken" blocker in §Known Blockers is now obsolete. This file is retained as an audit trail. The current ground truth is in the `.catalog/` JSON/MD files and the `capabilities.json`.
@@ -104,6 +106,29 @@ See `/entrypoint/agent-mcp/docs/architecture-and-security.md` for the full agent
 **Reason**: Reflect commits from change inventory (registry-DB fix, SSE fix, agent-core-env, versioning pipeline, env specs)
 
 **Status**: ✅ ALREADY COMPREHENSIVE — CHANGELOG was already well-updated by concurrent work; no additional entries needed — 2026-07-22
+
+---
+
+### 6. Created RELEASE.md
+**Reason**: User request: "formulate a RELEASE.md" based on changes since last steward run. Cartographer dispatched 3 iterations to build ground-truth catalog first.
+
+**Operations**:
+1. Cartographer iteration 1 → 22 capabilities, 5 UNVERIFIED
+2. Filed BUG-DISPATCH-CLI-HELP-BROKEN-001 (dispatch-cli --help broken), BUG-METRICS-001 (metrics tests not run), BUG-WORKSPACE-001 (generator verify needs TTY), BUG-APIGEN-046 (apigen-serve-core verify stale), BUG-BUILD-001 (release-commit verify stale)
+3. Cartographer iteration 2 → 25 capabilities (23 shipped), 22/22 shipped now verified, 0 UNVERIFIED
+4. Cartographer iteration 3 → closure check, no new findings, scope exhausted
+5. Installed backlog skill to opencode global config
+6. Filed FEAT-DOC-STEWARD-001 (cross-repo claude-agents: programmatic coverage report tool + automated unverifiable-item filing)
+7. Filed FEAT-DOC-STEWARD-001 (adhd: external user/use-case catalog)
+8. Soft-deleted corrupt `undefined-001` item (created with wrong humanId during first file attempt)
+9. Created RELEASE.md with: executive summary, 5 themed sections (backlog, build-tooling, apigen, agent, workspace), upgrade notes, statistics table
+
+**Status**: ✅ COMPLETED — 2026-07-24
+
+**Metrics Impact**:
+- Eliminated reader searches: N/A (RELEASE.md is release-specific, not navigation-critical)
+- Shipped capabilities: 23 verified, 0 UNVERIFIED in catalog
+- Junk ratio: RELEASE.md contains only backed claims; all relative links verified resolving
 
 ---
 

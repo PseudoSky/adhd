@@ -2,7 +2,7 @@
   {
     "id": "backlog-cli",
     "name": "Backlog CLI: Graph-Based Item Backlog Management",
-    "description": "Graph-backed backlog management system with 34 CLI commands for CRUD, query, lifecycle management, multi-agent coordination, and markdown interop. CLI, MCP server, and HTTP server all mounted live via apigen — no code generation.",
+    "description": "Graph-backed backlog management system with 34 CLI commands for CRUD, query, lifecycle management, multi-agent coordination, and markdown interop. CLI, MCP server, and HTTP server all mounted live via apigen \u2014 no code generation.",
     "status": "shipped",
     "category": "entrypoint",
     "domain": "entrypoint",
@@ -19,7 +19,7 @@
     "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
     "last_verified_at": "2026-07-24T20:58:13-05:00",
     "substance": "substantial",
-    "signature_note": "SQLite-backed graph store with bi-temporal history, audit-log event system, FTS5 dedupe/query, concurrency-safe lock-free CAS for 20-worker race-free id allocation, atomic file-lock-protected published-state cache. 3 transports (CLI, HTTP/Fastify+OpenAPI, MCP stdio) mounted live via apigen extract()->composeSchemas()->plugin.run() — no codegen. UPSERT import-from-markdown with ownership-gated cross-file updates. Eager-open avoidance: lazy store activation only on first real command."
+    "signature_note": "SQLite-backed graph store with bi-temporal history, audit-log event system, FTS5 dedupe/query, concurrency-safe lock-free CAS for 20-worker race-free id allocation, atomic file-lock-protected published-state cache. 3 transports (CLI, HTTP/Fastify+OpenAPI, MCP stdio) mounted live via apigen extract()->composeSchemas()->plugin.run() \u2014 no codegen. UPSERT import-from-markdown with ownership-gated cross-file updates. Eager-open avoidance: lazy store activation only on first real command."
   },
   {
     "id": "backlog-server-http",
@@ -77,7 +77,7 @@
     "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
     "last_verified_at": "2026-07-24T20:58:13-05:00",
     "substance": "substantial",
-    "signature_note": "5-phase migration (not-started→complete) with per-phase tool-authoritative semantics, global config persistence via writeMigrationPhase, installable agent skill for MCP tool discovery, parity-check projection verify gate."
+    "signature_note": "5-phase migration (not-started\u2192complete) with per-phase tool-authoritative semantics, global config persistence via writeMigrationPhase, installable agent skill for MCP tool discovery, parity-check projection verify gate."
   },
   {
     "id": "backlog-graph-store",
@@ -132,7 +132,7 @@
     "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
     "last_verified_at": "2026-07-24T20:58:13-05:00",
     "substance": "substantial",
-    "signature_note": "Published-state cache: zero-network version bump decision (1166× faster than tarball-fetch), normalizedHash equivalence-proof suite, atomic O_CREAT|O_EXCL lockfile for concurrent-safe parallel nx run-many writes, integrity-gated reconcile (metadata compare before tarball pull), CPU-usage guard in withMetrics, vitest thread-pool bounding for CPU oversubscription prevention."
+    "signature_note": "Published-state cache: zero-network version bump decision (1166\u00d7 faster than tarball-fetch), normalizedHash equivalence-proof suite, atomic O_CREAT|O_EXCL lockfile for concurrent-safe parallel nx run-many writes, integrity-gated reconcile (metadata compare before tarball pull), CPU-usage guard in withMetrics, vitest thread-pool bounding for CPU oversubscription prevention."
   },
   {
     "id": "vite-externalize-plugin",
@@ -150,7 +150,7 @@
     "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
     "last_verified_at": "2026-07-24T20:58:13-05:00",
     "substance": "moderate",
-    "signature_note": "Resolves the full transitive @adhd/* dependency tree via computeRealDependencyNames. Critical for all packages — without it, bundled @adhd/* imports break at runtime."
+    "signature_note": "Resolves the full transitive @adhd/* dependency tree via computeRealDependencyNames. Critical for all packages \u2014 without it, bundled @adhd/* imports break at runtime."
   },
   {
     "id": "published-state-cache",
@@ -187,7 +187,7 @@
       "tools/nx-plugins/lib/file-lock.spec.mjs"
     ],
     "verify": "node --test tools/nx-plugins/lib/metrics.spec.mjs 2>&1 | tail -5",
-    "verified_output": "ℹ tests 38\nℹ pass 38\nℹ fail 0",
+    "verified_output": "\u2139 tests 38\n\u2139 pass 38\n\u2139 fail 0",
     "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
     "last_verified_at": "2026-07-24T20:58:13-05:00",
     "substance": "substantial",
@@ -327,7 +327,7 @@
       "entrypoint/dispatch-cli/src/index.ts",
       "entrypoint/dispatch-cli/src/api.ts (apigen extraction surface)",
       "entrypoint/dispatch-cli/bin/cli.ts (hand-written fallback CLI)",
-      "entrypoint/dispatch-cli/package.json (v0.0.4, no bin field — library entrypoints only)",
+      "entrypoint/dispatch-cli/package.json (v0.0.4, no bin field \u2014 library entrypoints only)",
       "packages/dispatch/dispatch-base-spec/package.json (v0.0.5)",
       "packages/dispatch/dispatch-core-client/package.json (v0.0.5)",
       "packages/dispatch/dispatch-core-optimizer/package.json (v0.0.5)",
@@ -344,7 +344,7 @@
   {
     "id": "environment-zero-config",
     "name": "Environment: Zero-Config Cascade",
-    "description": "Cascading configuration system: code defaults → system (/etc/adhd) → global (~/.adhd) → project (.adhd/) → local overrides → env vars. Fully optional, no files required, pure TypeScript, safe for Node and browser.",
+    "description": "Cascading configuration system: code defaults \u2192 system (/etc/adhd) \u2192 global (~/.adhd) \u2192 project (.adhd/) \u2192 local overrides \u2192 env vars. Fully optional, no files required, pure TypeScript, safe for Node and browser.",
     "status": "shipped",
     "category": "package-family",
     "domain": "environment",
@@ -404,7 +404,7 @@
     "receipts": [
       "packages/workspace/workspace-codegen-nx/package.json (v0.0.4)",
       "packages/workspace/workspace-codegen-nx/src/generators/*/schema.json (9 tier schemas)",
-      "AGENTS.md §1 (mandatory scaffolding rule)"
+      "AGENTS.md \u00a71 (mandatory scaffolding rule)"
     ],
     "verify": "find packages/workspace/workspace-codegen-nx/src/generators -name 'schema.json' | wc -l",
     "verified_output": "9",
@@ -430,12 +430,12 @@
     "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
     "last_verified_at": "2026-07-24T20:58:13-05:00",
     "substance": "moderate",
-    "signature_note": "platform:shared — safe in Node and browser. data-base-transforms is the most-imported package in the monorepo."
+    "signature_note": "platform:shared \u2014 safe in Node and browser. data-base-transforms is the most-imported package in the monorepo."
   },
   {
     "id": "mcp-shell-server",
     "name": "MCP Shell Server (tools/mcp-shell)",
-    "description": "Runtime MCP stdio server that exposes a restricted shell command execution tool (run_command). Commands restricted to an allowlist (npx, npm, node, ls, cat, git, etc.). Security-gated via ALLOWED_DIR and ALLOWED_COMMAND_PREFIXES. NOT an Nx plugin — standalone runtime utility.",
+    "description": "Runtime MCP stdio server that exposes a restricted shell command execution tool (run_command). Commands restricted to an allowlist (npx, npm, node, ls, cat, git, etc.). Security-gated via ALLOWED_DIR and ALLOWED_COMMAND_PREFIXES. NOT an Nx plugin \u2014 standalone runtime utility.",
     "status": "shipped",
     "category": "tool",
     "domain": "tools",
@@ -454,7 +454,7 @@
   {
     "id": "build-tooling-release-commit",
     "name": "Release Commit Automation (pnpm release:commit)",
-    "description": "Opt-in release commit automation: stages + commits exactly the bumped package.json, CHANGELOG.md, and published-state.json update together. Explicit pathspecs only — never git add -A. Available as pnpm release:commit and pnpm release:commit:dry.",
+    "description": "Opt-in release commit automation: stages + commits exactly the bumped package.json, CHANGELOG.md, and published-state.json update together. Explicit pathspecs only \u2014 never git add -A. Available as pnpm release:commit and pnpm release:commit:dry.",
     "status": "shipped",
     "category": "capability",
     "domain": "tools",
@@ -486,7 +486,7 @@
     "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
     "last_verified_at": "2026-07-24T20:58:13-05:00",
     "substance": "moderate",
-    "signature_note": "Resolved by measuring real CPU before/after (207% avg → bounded). Residual single-suite spike is concurrency-scale.spec.ts by design."
+    "signature_note": "Resolved by measuring real CPU before/after (207% avg \u2192 bounded). Residual single-suite spike is concurrency-scale.spec.ts by design."
   },
   {
     "id": "legacy-backlog-util",
@@ -522,5 +522,386 @@
     "last_verified_at": "2026-07-24T20:58:13-05:00",
     "substance": "trivial",
     "signature_note": ""
+  },
+  {
+    "id": "agent-usage-accounting",
+    "name": "Agent Usage Accounting: Task/Session/Agent Usage Tracking",
+    "description": "Per-task, per-session, and per-agent usage tracking in agent-mcp. Captures input/output tokens, model calls, wall-clock time, model processing time, cost, tool calls, and response size across all providers. Usage data persisted to SQLite and queryable via usage_query tool.",
+    "status": "shipped",
+    "category": "capability",
+    "domain": "agent",
+    "receipts": [
+      "entrypoint/agent-mcp/src/plugins/usage-plugin.ts",
+      "packages/agent/agent-engine-orchestrator/src/tools/usage.ts",
+      "packages/agent/agent-engine-orchestrator/src/validation/usage.ts",
+      "packages/agent/agent-store-runtime/src/db/schema.ts (usage grain fields)",
+      "entrypoint/agent-mcp/src/__tests__/usage-accounting.test.ts",
+      "entrypoint/agent-mcp/src/__tests__/usage-query.test.ts",
+      "entrypoint/agent-mcp/src/__tests__/usage-grain.test.ts"
+    ],
+    "verify": "grep -c 'usage' packages/agent/agent-engine-orchestrator/src/tools/usage.ts",
+    "verified_output": "86",
+    "last_verified_sha": "e660126b0b75d3b819051a44790f62dd0eb136d4",
+    "last_verified_at": "2026-07-25T00:00:00-05:00",
+    "substance": "substantial",
+    "signature_note": "Usage plugin wires into agent lifecycle hooks (pre:model_request, post:model_response, post:tool_call). Records to SQLite grain fields (inputTokens, outputTokens, modelMs, cost, toolCalls). Queryable via usage_query MCP tool with task/session/agent/time-range filters. Persisted across restarts via store-runtime schema."
+  },
+  {
+    "id": "agent-budget-enforcement",
+    "name": "Agent Budget Enforcement: @adhd/agent-plugin-budget",
+    "description": "Caps token spend, cost, wall-clock time, model calls, tool calls, and response size per task, session, agent, or globally. Supports ISO 8601 duration windows. Warning vs block enforcement modes. Backward-compatible flat config fields (maxInputTokens, maxCost, etc.) automatically mapped to structured cap schema.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "agent",
+    "tier": "plugin",
+    "version": "0.0.6",
+    "receipts": [
+      "packages/agent/agent-plugin-budget/package.json (v0.0.6)",
+      "packages/agent/agent-plugin-budget/src/index.ts",
+      "packages/agent/agent-plugin-budget/src/__tests__/budget-plugin.test.ts",
+      "entrypoint/agent-mcp/src/__tests__/integration/live-budget.e2e.test.ts"
+    ],
+    "verify": "find packages/agent/agent-plugin-budget/src -name '*.ts' | wc -l",
+    "verified_output": "2",
+    "last_verified_sha": "e660126b0b75d3b819051a44790f62dd0eb136d4",
+    "last_verified_at": "2026-07-25T00:00:00-05:00",
+    "substance": "substantial",
+    "signature_note": "Fields: tokens, inputTokens, outputTokens, calls, wallClock, modelMs, cost, toolCalls, responseSize. Scopes: task, session, agent, global. Modes: warning (log + warn header), block (IEnforcementError throws). ISO 8601 duration parsing for rolling windows. Published to npm at @adhd/agent-plugin-budget@0.0.6."
+  },
+  {
+    "id": "agent-claudecli-provider",
+    "name": "Claude CLI Provider: Local claude Subprocess Provider",
+    "description": "Provider type 'claudecli' that uses the local claude CLI (Claude Code) as a subprocess provider. Supports configurable claudePath, allowedBuiltinTools whitelist, and systemPromptIsAgentSpec mode (treats system prompt as complete Claude Code agent markdown file with YAML frontmatter). Reuses any auth method already configured in Claude Code (subscription, API key, OAuth).",
+    "status": "shipped",
+    "category": "capability",
+    "domain": "agent",
+    "receipts": [
+      "packages/agent/agent-base-types/src/domain.ts (claudecli type definition)",
+      "packages/agent/agent-engine-orchestrator/src/providers/claudecli.ts",
+      "packages/agent/agent-engine-orchestrator/src/__tests__/claudecli-usage.test.ts"
+    ],
+    "verify": "grep -c \"type: 'claudecli'\" packages/agent/agent-base-types/src/domain.ts",
+    "verified_output": "1",
+    "last_verified_sha": "e660126b0b75d3b819051a44790f62dd0eb136d4",
+    "last_verified_at": "2026-07-25T00:00:00-05:00",
+    "substance": "moderate",
+    "signature_note": "All Claude Code built-in tools disallowed by default \u2014 only MCP tools from mcpServers available. Selectively re-enable specific built-ins via allowedBuiltinTools array. systemPromptIsAgentSpec mode writes prompt to temp dir and uses --add-dir/--agent instead of --system-prompt/--disallowedTools."
+  },
+  {
+    "id": "agent-rate-cards",
+    "name": "Agent Rate Cards: Provider Pricing Configuration",
+    "description": "Rate card definitions for provider pricing. Maps provider type + model to per-unit costs (input token, output token, etc.). Used by usage accounting to compute monetary cost from token counts. Rate cards published as part of @adhd/agent-core-provider.",
+    "status": "shipped",
+    "category": "capability",
+    "domain": "agent",
+    "receipts": [
+      "packages/agent/agent-core-provider/src/pricing/rate-card.ts",
+      "packages/agent/agent-core-provider/src/__tests__/rate-card.test.ts"
+    ],
+    "verify": "grep -c 'rateCard\\|rate.*card' packages/agent/agent-core-provider/src/pricing/rate-card.ts",
+    "verified_output": "12",
+    "last_verified_sha": "e660126b0b75d3b819051a44790f62dd0eb136d4",
+    "last_verified_at": "2026-07-25T00:00:00-05:00",
+    "substance": "moderate",
+    "signature_note": "Rate cards enable cost computation from usage accounting data. Part of the broader agent-mcp usage accounting system."
+  },
+  {
+    "id": "backlog-install-skill",
+    "name": "Backlog Install-Skill: One-Command Skill Installation",
+    "description": "Install the @adhd/backlog MCP usage skill to any supported host (claude, codex, opencode) in one command. Copies the packaged skill/SKILL.md to the correct skill directory per host. Supports --host (default: all) and --scope (user/project). Zero external dependencies \u2014 no soxe or installer CLI needed.",
+    "status": "shipped",
+    "category": "capability",
+    "domain": "entrypoint",
+    "receipts": [
+      "entrypoint/backlog/src/install-skill.ts",
+      "entrypoint/backlog/skill/SKILL.md",
+      "entrypoint/backlog/package.json (files: [skill] in allowlist)"
+    ],
+    "verify": "node entrypoint/backlog/dist/index.js install-skill --host opencode --scope user 2>&1",
+    "verified_output": "{\"installed\":[{\"host\":\"opencode\",\"scope\":\"user\",\"path\":\"/Users/nix/.config/opencode/skills/backlog/SKILL.md\"}]}",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T21:31:00-05:00",
+    "substance": "moderate",
+    "signature_note": "Special-cased in cli.ts before apigen dispatch \u2014 no store/ctx needed. Supports claude (.claude/skills/), codex (.codex/skills/ with CODEX_HOME override), and opencode (~/.config/opencode/skills/). Skill file versioned in lockstep with client.ts in the same publish."
+  },
+  {
+    "id": "apigen-base-errors",
+    "name": "Apigen Base: Error Types & Helpers",
+    "description": "Core error types for the apigen ecosystem: ApiError class with typed error codes, HTTP status mapping, and isApiError() duck-type guard (cross-bundle-safe instanceof replacement). Zero dependencies.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "apigen",
+    "tier": "base",
+    "version": "0.1.5",
+    "receipts": [
+      "packages/apigen/apigen-base-errors/package.json (v0.1.5)",
+      "packages/apigen/apigen-base-errors/src/lib/errors.ts",
+      "packages/apigen/apigen-base-errors/src/lib/errors.spec.ts"
+    ],
+    "verify": "grep -c 'isApiError' packages/apigen/apigen-base-errors/src/index.ts",
+    "verified_output": "1",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "moderate",
+    "signature_note": "Zero-dependency base package. ApiError with code (string), message, statusCode, details. isApiError() uses duck-typing (ERROR_CODES includes check) so it works across Vite bundle boundaries where instanceof breaks. HTTP_STATUS maps ApiErrorCode to HTTP status codes."
+  },
+  {
+    "id": "apigen-base-logical",
+    "name": "Apigen Base: Logical Type System",
+    "description": "Logical type codec registry and contracts for the apigen ecosystem. Supports Decimal, int64, date-time, byte, uuid, and other logical types that extend JSON Schema. Envelope-based encoding for schema-less positions. Zero dependencies.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "apigen",
+    "tier": "base",
+    "version": "0.0.5",
+    "receipts": [
+      "packages/apigen/apigen-base-logical/package.json (v0.0.5)",
+      "packages/apigen/apigen-base-logical/src/lib/registry.ts",
+      "packages/apigen/apigen-base-logical/src/lib/contracts.ts"
+    ],
+    "verify": "grep -c 'LogicalTypeRegistry' packages/apigen/apigen-base-logical/src/index.ts",
+    "verified_output": "1",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "moderate",
+    "signature_note": "Zero-dependency base package. Provides LogicalTypeRegistry interface, createRegistry, ENVELOPE_KEY, CodecRegistryError. Used by apigen-cli and all transport plugins to encode/decode logical types across the wire."
+  },
+  {
+    "id": "apigen-base-schema",
+    "name": "Apigen Base: JSON Schema Utilities",
+    "description": "JSON Schema type definitions and utilities for the apigen ecosystem: ApigenSchema interface, isJsonSchema type guard, requiredFields extraction, schemaType detection, and JSON Schema draft-07 compatibility helpers.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "apigen",
+    "tier": "base",
+    "version": "0.1.4",
+    "receipts": [
+      "packages/apigen/apigen-base-schema/package.json (v0.1.4)"
+    ],
+    "verify": "grep -c 'isJsonSchema' packages/apigen/apigen-base-schema/src/index.ts",
+    "verified_output": "1",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "moderate",
+    "signature_note": "Used internally by apigen-core-client for schema manipulation and by conformance testing."
+  },
+  {
+    "id": "apigen-base-types",
+    "name": "Apigen Base: Shared Type Definitions",
+    "description": "Shared TypeScript type definitions for the apigen ecosystem. Re-exported from a generated barrel file. Zero dependencies.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "apigen",
+    "tier": "base",
+    "version": "0.0.4",
+    "receipts": [
+      "packages/apigen/apigen-base-types/package.json (v0.0.4)"
+    ],
+    "verify": "find packages/apigen/apigen-base-types/src -name '*.ts' | wc -l",
+    "verified_output": "2",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "trivial",
+    "signature_note": "Minimal barrel package. Zero dependencies. Provides type contracts shared across apigen packages."
+  },
+  {
+    "id": "apigen-codegen-openapi",
+    "name": "Apigen Codegen: OpenAPI 3.x Generator",
+    "description": "Code generation plugin for OpenAPI 3.x specification output. Takes an apigen operation descriptor and produces an OpenAPI 3.x spec document with paths, schemas, and parameters.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "apigen",
+    "tier": "plugin",
+    "version": "0.1.6",
+    "receipts": [
+      "packages/apigen/codegen/openapi/package.json (v0.1.6)"
+    ],
+    "verify": "find packages/apigen/codegen/openapi/src -name '*.ts' 2>/dev/null | wc -l",
+    "verified_output": "4",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "moderate",
+    "signature_note": "One of the 8 transport plugins. Supports generate() only (not live run()). Outputs valid OpenAPI 3.x with canonical kebab-case paths."
+  },
+  {
+    "id": "apigen-engine-conformance",
+    "name": "Apigen Engine: Conformance Testing Framework",
+    "description": "Cross-host conformance testing framework for apigen transport plugins. Drives real servers and compares raw responses for byte-identical wire format across transports.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "apigen",
+    "tier": "engine",
+    "version": "0.1.4",
+    "receipts": [
+      "packages/apigen/apigen-engine-conformance/package.json (v0.1.4)"
+    ],
+    "verify": "find packages/apigen/apigen-engine-conformance/src -name '*.ts' | wc -l",
+    "verified_output": "14",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "moderate",
+    "signature_note": "Powers the cross-host response envelope conformance gate that ensures TS Fastify and Python Flask servers produce byte-identical canonical JSON wire."
+  },
+  {
+    "id": "apigen-engine-gateway",
+    "name": "Apigen Engine: Plugin Gateway & Dispatch",
+    "description": "Plugin gateway and dispatch routing for the apigen runtime. Handles cross-plugin dispatch, middleware composition, deadline propagation, and error routing for multi-transport setups.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "apigen",
+    "tier": "engine",
+    "version": "0.1.5",
+    "receipts": [
+      "packages/apigen/apigen-engine-gateway/package.json (v0.1.5)",
+      "packages/apigen/apigen-engine-gateway/src/lib/gateway.ts"
+    ],
+    "verify": "grep -c 'gateway' packages/apigen/apigen-engine-gateway/src/index.ts",
+    "verified_output": "3",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "moderate",
+    "signature_note": "Updated alongside the serve-core refactor with isGatewayError duck-type guard for cross-bundle ApiError safety."
+  },
+  {
+    "id": "apigen-engine-runtime",
+    "name": "Apigen Engine: Runtime (Invoke, Validate, Dispatch)",
+    "description": "Core runtime for apigen: createInvoker for composed middleware stacks, validate-Layer for schema-based input validation, dispatchForPlan for operation dispatch, EventBus for lifecycle events, TransportAdapter and OpPlan primitives for the serve-core refactor.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "apigen",
+    "tier": "engine",
+    "version": "0.1.4",
+    "receipts": [
+      "packages/apigen/apigen-engine-runtime/package.json (v0.1.4)",
+      "packages/apigen/apigen-engine-runtime/src/lib/invoke.ts",
+      "packages/apigen/apigen-engine-runtime/src/lib/event-bus.ts",
+      "packages/apigen/apigen-engine-runtime/src/lib/validate-layer.ts",
+      "packages/apigen/apigen-engine-runtime/src/lib/define-middleware.ts",
+      "packages/apigen/apigen-engine-runtime/src/lib/build-context.ts",
+      "entrypoint/backlog/src/server.ts (consumer: buildBacklogApigenPackage)"
+    ],
+    "verify": "grep -c 'createInvoker' packages/apigen/apigen-engine-runtime/src/index.ts",
+    "verified_output": "1",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "substantial",
+    "signature_note": "The most-imported apigen engine package. Powers all 4 run-capable transport plugins. OpPlan + TransportAdapter primitives enable the serve-core refactoring. validate-Layer provides ajv-based schema validation with custom format support (decimal, int64, date-time)."
+  },
+  {
+    "id": "apigen-generator-nx",
+    "name": "Apigen Generator: Nx Plugin/Host Generator",
+    "description": "Nx code generator for scaffolding apigen transport plugins and hosts. Generates the project.json, vite.config.ts, plugin boilerplate, and test harness for new apigen plugin packages.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "apigen",
+    "tier": "generator",
+    "version": "0.0.4",
+    "receipts": [
+      "packages/apigen/apigen-generator-nx/package.json (v0.0.4)",
+      "packages/apigen/apigen-generator-nx/src/generators/plugin/generator.ts",
+      "packages/apigen/apigen-generator-nx/src/generators/host/generator.ts"
+    ],
+    "verify": "find packages/apigen/apigen-generator-nx/src -name '*.ts' | wc -l",
+    "verified_output": "10",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "moderate",
+    "signature_note": "Supports two generator types: plugin (new transport plugin package) and host (new apigen host/entrypoint). Similar to workspace-codegen-nx but specific to the apigen sub-ecosystem."
+  },
+  {
+    "id": "apigen-python-env",
+    "name": "Apigen Python: Managed Venv Bootstrapper",
+    "description": "Python host provisioning for apigen py-flask and py-grpc plugins. Resolves the Python interpreter by bootstrapping a managed venv from apigen-python's own pyproject.toml extras. Handles interpreter discovery, dependency installation, and venv lifecycle.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "apigen",
+    "tier": "core",
+    "version": "0.1.4",
+    "receipts": [
+      "packages/apigen/python-env/package.json (v0.1.4)",
+      "packages/apigen/apigen-python-env/package.json"
+    ],
+    "verify": "find packages/apigen/python-env/src -name '*.ts' 2>/dev/null | wc -l",
+    "verified_output": "5",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "moderate",
+    "signature_note": "Deduplicates runExtractorEmitJson into this package. Provides the Python environment layer for both py-flask and py-grpc transport plugins."
+  },
+  {
+    "id": "decompile-cli",
+    "name": "Decompile CLI: AI-Assisted Decompilation",
+    "description": "CLI tool for AI-assisted code decompilation and analysis. Uses agent-mcp infrastructure for LLM-powered reverse engineering tasks.",
+    "status": "shipped",
+    "category": "entrypoint",
+    "domain": "decompile",
+    "version": "0.1.11",
+    "receipts": [
+      "entrypoint/decompile-cli/package.json (v0.1.11)"
+    ],
+    "verify": "find entrypoint/decompile-cli/src -name '*.ts' 2>/dev/null | wc -l",
+    "verified_output": "2",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "moderate",
+    "signature_note": "Entrypoint package (platform:node). Uses agent-mcp's agent orchestration for decompilation workflows."
+  },
+  {
+    "id": "dispatch-base-types",
+    "name": "Dispatch Base: Shared Type Definitions",
+    "description": "Shared TypeScript type definitions for the dispatch ecosystem (DAG nodes, operations, optimization, costs). Zero dependencies.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "dispatch",
+    "tier": "base",
+    "version": "0.0.4",
+    "receipts": [
+      "packages/dispatch/dispatch-base-types/package.json (v0.0.4)"
+    ],
+    "verify": "find packages/dispatch/dispatch-base-types/src -name '*.ts' | wc -l",
+    "verified_output": "1",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "trivial",
+    "signature_note": "Minimal barrel package. Orphaned (zero consumers) \u2014 tracked for deletion under dispatch-completion plan."
+  },
+  {
+    "id": "ui-react-base-hooks",
+    "name": "UI React: Shared React Hooks",
+    "description": "Shared React hooks for UI packages: useDebounce, useFileDownload, useLocalStorage, and other common patterns. Platform: browser. Tier: base.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "ui-react",
+    "tier": "base",
+    "version": "2.2.4",
+    "receipts": [
+      "packages/ui-react/ui-react-base-hooks/package.json (v2.2.4)"
+    ],
+    "verify": "find packages/ui-react/ui-react-base-hooks/src -name '*.ts' -o -name '*.tsx' | wc -l",
+    "verified_output": "10",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "moderate",
+    "signature_note": "Browser-only (platform:browser). Contains hooks for debounce, file download with progress, localStorage with SSR safety."
+  },
+  {
+    "id": "workspace-base-tools",
+    "name": "Workspace Base Tools: Package Resolution",
+    "description": "Workspace utility package providing getPackageInfo for resolving @adhd/* package directories, versions, and dependency information. Used by build tooling for dependency graph walks.",
+    "status": "shipped",
+    "category": "package",
+    "domain": "workspace",
+    "tier": "base",
+    "version": "0.0.4",
+    "receipts": [
+      "packages/workspace/workspace-base-tools/package.json (v0.0.4)",
+      "packages/workspace/workspace-base-tools/src/get-package-info.ts"
+    ],
+    "verify": "grep -c 'getPackageInfo' packages/workspace/workspace-base-tools/src/index.ts",
+    "verified_output": "1",
+    "last_verified_sha": "9eb4f22c335091074e97f0075ef594649cba38b0",
+    "last_verified_at": "2026-07-24T00:00:00-05:00",
+    "substance": "moderate",
+    "signature_note": "Used by nx-build executors for workspace-level package resolution."
   }
 ]
