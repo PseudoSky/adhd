@@ -22,6 +22,8 @@ export interface PostModelResponsePayload {
   stopReason: string;
   toolCallCount: number;
   tokenUsage?: TokenUsage;
+  /** MODEL_RESPONSE.created_at − MODEL_REQUEST.created_at for this turn's model call. */
+  computeMs: number;
 }
 export interface PreToolCallPayload {
   executionContext: ExecutionContext;
@@ -36,6 +38,11 @@ export interface PostToolCallPayload {
   toolInput: unknown;
   result: unknown;
   isError: boolean;
+  /**
+   * Token estimate for the FULL, untruncated tool result (tokenized before the
+   * 500-char truncation applied to the stored `task_events.TOOL_RESULT.result` summary).
+   */
+  estResultTokens: number;
 }
 export interface MessageAppendedPayload {
   executionContext: ExecutionContext;

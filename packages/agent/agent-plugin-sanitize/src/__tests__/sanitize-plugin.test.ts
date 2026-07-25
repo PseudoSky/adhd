@@ -25,6 +25,7 @@ function makePayload(
     toolInput: { agent_name: 'researcher' },
     result: 'hello world',
     isError: false,
+    estResultTokens: 0,
     ...overrides,
   };
 }

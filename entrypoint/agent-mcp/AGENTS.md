@@ -42,35 +42,39 @@ The server exposes these MCP tools:
 
 ### Configuration: Environment Variables
 
-These env vars must be set before starting the server:
+These env vars configure the server-wide default agent and provider credentials:
 
 | Variable | Type | Example | Required |
 |---|---|---|---|
-| `ADHD_AGENT_PROVIDER` | string | `anthropic` | Yes |
-| `ADHD_AGENT_MODEL` | string | `claude-opus-4-1` | Yes |
+| `ADHD_AGENT_PROVIDER` | string | `anthropic` | Yes (has a code default of `anthropic`) |
+| `ADHD_AGENT_MODEL` | string | `claude-opus-4-1` | Yes (has a code default) |
 | `ADHD_AGENT_CONTEXT_LIMIT` | number | `0` (default, disabled) | No |
-| `ANTHROPIC_API_KEY` | string | (credential) | If provider=anthropic |
-| `OPENAI_API_KEY` | string | (credential) | If provider=openai |
-| `DEEPSEEK_API_KEY` | string | (credential) | If provider=deepseek |
-| `GOOGLE_API_KEY` | string | (credential) | If provider=gemini |
+| `ADHD_AGENT_ANTHROPIC_SECRET` | string | `sk-ant-oat...` or `sk-ant-api...` | If provider type=`anthropic` (`config.ts` `PROVIDER_DEFAULTS`) |
+| `ADHD_AGENT_OPENAI_SECRET` | string | (credential) | If provider type=`openai` (also covers OpenAI-compatible endpoints) |
+| `ADHD_AGENT_DEEPSEEK_SECRET` | string | (credential) | Only if an `openai`-type agent explicitly overrides `env.secret`/`env.base_url` to point at DeepSeek — there is no separate `"deepseek"` provider type |
+
+**Not real:** `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `GOOGLE_API_KEY` (bare SDK-style names) are never read by this codebase — only the `ADHD_AGENT_<PROVIDER>_SECRET` names above are resolved, and only via `process.env` directly (see "Provider credentials are excluded from the config cascade" below). There is no Gemini support (`GOOGLE_API_KEY` implies a provider that does not exist in code).
+
+**Provider credentials are excluded from the `@adhd/environment` config cascade.** `AgentMcpConfig` (`src/config.ts`) declares only `db`, `logging`, `queue`, `server`, `transport`, `sse`, `plugins` as cascade-managed fields — no `providers`/secret field exists. Provider credentials resolve exclusively from `process.env` on the running server process, at agent-construction time, never from a config file layer (global/project/namespace). This repo's own `.mcp.json` entry for `agent-mcp` does not forward any `ADHD_AGENT_<PROVIDER>_SECRET` today — tracked as backlog `agent-mcp-001`.
 
 ### Database
 
-- **Location:** `~/.adhd/agent-mcp/agent-mcp.db` (SQLite, configurable via `ADHD_AGENT_DB_PATH`)
+- **Location:** zero-config default under the resolved scope root (never the repo tree), configurable via `ADHD_AGENT_DATABASE_PATH` (`src/config.ts` `"db.path"` field — falls back to `env.files.db` when unset)
 - **Tables:** `agents`, `sessions`, `messages`, `task_usage`, `migrations`
 - **Persistence:** All agents, conversations, and usage records persist across server restarts
 - **Migration:** `npm run db:migrate` (drizzle-kit auto-applied on server start as of 2.0.2)
 
 ### Providers (Supported Models)
 
-Tested and working:
+There are exactly three provider `type`s in code (`packages/agent/agent-engine-orchestrator/src/validation/agent.ts`: `anthropicProviderSchema`, `openaiProviderSchema`, `claudecliProviderSchema`). "DeepSeek" and "Gemini" are **not** separate provider types:
 
-| Provider | Models | Notes |
+| Provider `type` | Models | Notes |
 |---|---|---|
-| Anthropic | claude-opus-4-1, claude-sonnet-4 | Full JSON-schema tool support; cache-aware usage reporting |
-| OpenAI | gpt-4-turbo, gpt-4o, gpt-4o-mini | Full JSON-schema tool support; cache-aware usage reporting (2.0.2+) |
-| DeepSeek | deepseek-v4-flash, deepseek-v4-pro | Full JSON-schema tool support; cache-aware usage reporting (2.0.2+) |
-| Gemini | gemini-2.5-pro, gemini-2.5-flash | Function-calling support; cache-aware usage reporting (2.0.2+) |
+| `anthropic` | claude-opus-4-1, claude-sonnet-4 | Full JSON-schema tool support; cache-aware usage reporting; credential via `ADHD_AGENT_ANTHROPIC_SECRET` |
+| `openai` | gpt-4-turbo, gpt-4o, gpt-4o-mini, and any OpenAI-compatible model (e.g. DeepSeek's `deepseek-v4-flash`/`deepseek-v4-pro` via an explicit `env.base_url` override) | Full JSON-schema tool support; cache-aware usage reporting (2.0.2+); credential via `ADHD_AGENT_OPENAI_SECRET` (or `ADHD_AGENT_DEEPSEEK_SECRET` when overridden for DeepSeek) |
+| `claudecli` | Whatever the host's authenticated `claude` CLI supports | Subprocess-based; needs no provider-credential env var at all |
+
+**Not shipped:** a dedicated `"deepseek"` provider type, and Gemini support in any form (no provider adapter, no `GOOGLE_API_KEY`/credential path, no model recognized). Prior versions of this document listed both as supported; they were not verified against code and are corrected here.
 
 ### Token Accounting (2.0.2 Changes)
 

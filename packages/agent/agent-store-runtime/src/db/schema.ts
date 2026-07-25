@@ -1,6 +1,7 @@
 import {
     index,
     integer,
+    real,
     sqliteTable,
     text,
     uniqueIndex
@@ -161,6 +162,23 @@ export const taskUsageTable = sqliteTable(
         peakContextTokens: integer("peak_context_tokens"),
         // Which model call (1-based) hit that peak.
         peakContextAt: integer("peak_context_at"),
+        // CUMULATIVE Σ of per-turn model-call latency (MODEL_RESPONSE.created_at -
+        // MODEL_REQUEST.created_at) — turn-level compute time, distinct from the
+        // task-wall-clock `latencyMs` above (see DESIGN.md §6: the two answer
+        // different questions — "how long did the model think" vs "how long did
+        // the whole task take", and a turn-sum would undercount real duration by
+        // missing tool-exec/queueing gaps between calls).
+        computeMs: integer("compute_ms"),
+        // CUMULATIVE Σ of tokenized tool-result payloads, tokenized on the FULL
+        // result BEFORE the existing 500-char truncation applied to the stored
+        // `task_events.TOOL_RESULT.result` summary — tokenizing the truncated
+        // summary would undercount every large tool result.
+        estToolResultTokens: integer("est_tool_result_tokens"),
+        // CUMULATIVE Σ of estimated dollar cost from the rate-card module
+        // (agent-core-provider/src/pricing/rate-card.ts). NULL (never 0) once any
+        // turn's model has no rate-card entry — an unknown model's cost must never
+        // be silently reported as $0.
+        estCostUsd: real("est_cost_usd"),
         createdAt: text("created_at").notNull(),
     },
     (table) => [

@@ -6,6 +6,7 @@ import type {
   IToolWarning,
   PostToolCallPayload,
 } from '@adhd/agent-base-types';
+import { encode } from 'gpt-tokenizer';
 import { ToolError } from '../validation/errors.js';
 import { generateId } from '../utils/ids.js';
 import { nowIso } from '../utils/timestamps.js';
@@ -276,6 +277,11 @@ export class Orchestrator {
           ),
         ]);
 
+        // compute_ms capture: turn-level model-call latency, distinct from task
+        // wall-clock `latency_ms` (see DESIGN.md §6). Captured right before the
+        // MODEL_REQUEST event so it brackets exactly the provider.chat() call below.
+        const modelCallStartedAt = Date.now();
+
         taskStore.appendEvent({
           taskId,
           type: 'MODEL_REQUEST',
@@ -426,11 +432,14 @@ export class Orchestrator {
         if (providerResponse.usage?.inputTokens !== undefined) {
           lastReportedContext = providerResponse.usage.inputTokens;
         }
+        // compute_ms: MODEL_RESPONSE.created_at - MODEL_REQUEST.created_at for this turn.
+        const computeMs = Date.now() - modelCallStartedAt;
         await hooks.emit('post:model_response', {
           executionContext,
           stopReason: providerResponse.stopReason,
           toolCallCount: assistantMessage.toolCalls?.length ?? 0,
           tokenUsage: providerResponse.usage,
+          computeMs,
         });
         await hooks.emit('message:appended', {
           executionContext,
@@ -448,7 +457,15 @@ export class Orchestrator {
             outputTokens: providerResponse.usage?.outputTokens,
             cacheReadTokens: providerResponse.usage?.cacheReadTokens,
             cacheCreationTokens: providerResponse.usage?.cacheCreationTokens,
+            // Provider-normalized full-price input (NOT derived here — the provider
+            // layer already reconstructs this correctly per-provider, see
+            // anthropic.ts/openai.ts `uncached`). Needed at turn grain so
+            // usage_query's turn rows don't have to re-derive it from
+            // inputTokens - cacheReadTokens - cacheCreationTokens.
+            uncachedInputTokens: providerResponse.usage?.uncachedInputTokens,
+            reasoningTokens: providerResponse.usage?.reasoningTokens,
             rawUsage: providerResponse.rawUsage,
+            computeMs,
           },
         });
 
@@ -660,6 +677,15 @@ export class Orchestrator {
               );
             }
 
+            // Tokenize the FULL, untruncated result BEFORE the 500-char truncation
+            // below — tokenizing the already-truncated summary would undercount
+            // every large tool result (DESIGN.md §5).
+            const fullResultText =
+              typeof toolResult === 'string'
+                ? toolResult
+                : JSON.stringify(toolResult);
+            const toolCallEstResultTokens = encode(fullResultText).length;
+
             const resultSummary =
               typeof toolResult === 'string'
                 ? toolResult.slice(0, 500)
@@ -673,6 +699,7 @@ export class Orchestrator {
                 tool: qualifiedToolName,
                 isError,
                 result: resultSummary,
+                tool_call_est_result_tokens: toolCallEstResultTokens,
               },
             });
 
@@ -695,9 +722,10 @@ export class Orchestrator {
               toolInput: toolCall.arguments,
               result: toolResult,
               isError,
+              estResultTokens: toolCallEstResultTokens,
             });
 
-            return { toolCall, toolResult, isError };
+            return { toolCall, toolResult, isError, estResultTokens: toolCallEstResultTokens };
           })
         );
 
@@ -733,6 +761,9 @@ export class Orchestrator {
               toolInput: tc.arguments,
               result: toolResult,
               isError,
+              // Reuse the token estimate computed in Phase 2 (over the FULL,
+              // untruncated result) rather than re-tokenizing here.
+              estResultTokens: r.estResultTokens,
             };
             await hooks.emit('transform:tool_result', transformPayload);
             toolResult = transformPayload.result;
