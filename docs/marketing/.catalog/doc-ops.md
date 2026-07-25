@@ -5,6 +5,8 @@
 **Basis**: doc-cartographer ground truth + change inventory  
 **Target**: Correct docs to reflect session changes (registry-DB fixes, SSE port contention, agent-core-env, versioning pipeline, env specs)
 
+> ⚠️ **HISTORICAL** — This file documents the steward's work from the first iteration (2026-07-22). The catalog has since been re-run (2026-07-24, iter-2). The "Nx Project Graph Broken" blocker in §Known Blockers is now obsolete. This file is retained as an audit trail. The current ground truth is in the `.catalog/` JSON/MD files and the `capabilities.json`.
+
 ---
 
 ## Operations Executed

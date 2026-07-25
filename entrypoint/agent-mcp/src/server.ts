@@ -44,7 +44,7 @@ import {
   taskResume,
   resultTool,
 } from '@adhd/agent-engine-orchestrator';
-import { usageQuery, type Database } from '@adhd/agent-engine-orchestrator';
+import { usageQuery, usageQueryByGrain, type Database } from '@adhd/agent-engine-orchestrator';
 import {
   ToolError,
   assertEnvNamesAllowed,
@@ -126,6 +126,19 @@ function toMcpContent(value: unknown): {
       },
     ],
   };
+}
+
+/**
+ * `usage_query` dispatch (DEBT-AGENTMCP-ACCOUNTING-001, DESIGN.md §2-§4). `group_by`
+ * is the legacy aggregate-by-key shape and wins when supplied (it has no grain
+ * equivalent); otherwise the flattened grain-based response (`grain: 'session' |
+ * 'task' | 'turn'`, default `'task'`) is returned.
+ */
+function runUsageQuery(
+  db: Database,
+  input: z.infer<typeof taskUsageInputSchema>
+): ReturnType<typeof usageQuery> | ReturnType<typeof usageQueryByGrain> {
+  return input?.group_by ? usageQuery(db, input) : usageQueryByGrain(db, input);
 }
 
 export function toMcpInputSchema(
@@ -262,7 +275,20 @@ Only works when status is \`"pending"\` or \`"running"\`.
 
 ## Token usage and metrics
 
-Every model call is recorded in \`task_usage\`. Use \`usage_query\` to query it.
+Every model call is recorded in \`task_usage\` (and, per-call, in \`task_events\`). Use
+\`usage_query\` to query it.
+
+\`grain='session'|'task'|'turn'\` (default \`'task'\`) picks the aggregation unit — turn is
+one model call, task is the current per-task cumulative rollup, session sums every task
+in that session. Every grain returns the same flattened snake_case row shape
+(\`input_tokens\`, \`output_tokens\`, \`compute_ms\`, \`total_ms\`, \`est_cost_usd\`,
+\`context_size\`/\`context_size_at\`, etc.) plus a summed/maxed \`summary\` block, echoing
+\`grain\` back at the top level so a caller never has to infer what it got.
+
+Alternatively, set \`group_by='agent'|'model'|'provider'\` to aggregate by that dimension
+instead — a distinct, orthogonal legacy shape (one row per group with \`taskCount\`/
+\`completedCount\`/\`failedCount\`/\`cancelledCount\`/\`avgLatencyMs\`); \`group_by\` wins over
+\`grain\` if both are supplied.
 
 ---
 
@@ -344,8 +370,9 @@ export function createServer(deps: ServerDeps): Server {
       name: 'usage_query',
       description:
         'Query recorded token usage. Filters: task_id (returns full delegation subtree), root_task_id, agent_name, since (ISO-8601). ' +
-        "Set group_by='agent'|'model'|'provider' to aggregate by that dimension — returns one row per group with taskCount, completedCount, failedCount, cancelledCount, token totals, and avgLatencyMs, ordered by total token spend desc. " +
-        'Without group_by, returns raw task_usage rows ordered by created_at desc.',
+        "grain='session'|'task'|'turn' (default 'task') selects the aggregation unit — 'turn' is one model call, 'task' the current per-task cumulative rollup, 'session' sums every task in that session. " +
+        'Every grain returns the same flattened snake_case row shape (input_tokens, output_tokens, compute_ms, total_ms, est_cost_usd, context_size/context_size_at, etc.) plus a summed/maxed `summary` block. ' +
+        "Set group_by='agent'|'model'|'provider' instead to aggregate by that dimension (legacy shape: one row per group with taskCount/completedCount/failedCount/cancelledCount/avgLatencyMs) — group_by wins over grain when both are supplied.",
       inputSchema: toMcpInputSchema(taskUsageInputSchema),
     },
     {
@@ -401,7 +428,7 @@ export function createServer(deps: ServerDeps): Server {
           db: deps.db,
         });
       case 'usage_query':
-        return usageQuery(deps.db, taskUsageInputSchema.parse(args ?? {}));
+        return runUsageQuery(deps.db, taskUsageInputSchema.parse(args ?? {}));
       case 'guide':
         return USAGE_GUIDE;
       case 'task_list':
@@ -524,8 +551,9 @@ export function createServer(deps: ServerDeps): Server {
         name: 'usage_query',
         description:
           'Query recorded token usage. Filters: task_id (returns full delegation subtree), root_task_id, agent_name, since (ISO-8601). ' +
-          "Set group_by='agent'|'model'|'provider' to aggregate by that dimension — returns one row per group with taskCount, completedCount, failedCount, cancelledCount, token totals, and avgLatencyMs, ordered by total token spend desc. " +
-          'Without group_by, returns raw task_usage rows ordered by created_at desc.',
+          "grain='session'|'task'|'turn' (default 'task') selects the aggregation unit — 'turn' is one model call, 'task' the current per-task cumulative rollup, 'session' sums every task in that session. " +
+          'Every grain returns the same flattened snake_case row shape (input_tokens, output_tokens, compute_ms, total_ms, est_cost_usd, context_size/context_size_at, etc.) plus a summed/maxed `summary` block. ' +
+          "Set group_by='agent'|'model'|'provider' instead to aggregate by that dimension (legacy shape: one row per group with taskCount/completedCount/failedCount/cancelledCount/avgLatencyMs) — group_by wins over grain when both are supplied.",
         inputSchema: toMcpInputSchema(taskUsageInputSchema),
       },
       {
@@ -687,7 +715,7 @@ export function createServer(deps: ServerDeps): Server {
 
         case 'usage_query':
           return toMcpContent(
-            usageQuery(deps.db, taskUsageInputSchema.parse(args ?? {}))
+            runUsageQuery(deps.db, taskUsageInputSchema.parse(args ?? {}))
           );
 
         case 'guide':

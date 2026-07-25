@@ -948,6 +948,7 @@ describe('per-tool overrides', () => {
       toolInput: {},
       result,
       isError: false,
+      estResultTokens: 0,
     };
 
     await hooks.emit('transform:tool_result', payload);
@@ -986,6 +987,7 @@ describe('per-tool overrides', () => {
       toolInput: {},
       result,
       isError: false,
+      estResultTokens: 0,
     };
 
     await hooks.emit('transform:tool_result', payload);
@@ -1020,6 +1022,7 @@ describe('per-tool overrides', () => {
       toolInput: {},
       result,
       isError: false,
+      estResultTokens: 0,
     };
 
     await hooks.emit('transform:tool_result', payload);

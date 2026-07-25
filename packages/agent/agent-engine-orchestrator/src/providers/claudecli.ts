@@ -11,16 +11,51 @@ import type { LLMProvider, ProviderChatRequest, ProviderChatResponse } from "./t
 import type { McpServerConfig, ProviderConfig, Message } from "../validation/index.js";
 import { ToolError } from "../validation/errors.js";
 import type { EngineLogger, EngineConfig } from "../interfaces.js";
+import { normaliseAnthropicUsage } from "./anthropic.js";
 
 type ClaudeCliConfig = Extract<ProviderConfig, { type: "claudecli" }>;
 
 // ─── stream-json event shapes ────────────────────────────────────────────────
 
+/**
+ * Same normalised stop-reason mapping `anthropic.ts` uses — duplicated (not
+ * imported) since it's a private const there; this is the CLI's raw
+ * `stop_reason` on the terminal `result` event, same vocabulary as the SDK's
+ * `message.stop_reason` since claudecli ultimately drives the same models.
+ */
+const CLI_STOP_REASON: Record<string, string> = {
+    end_turn: "stop", max_tokens: "length", tool_use: "tool_calls",
+};
+
+/**
+ * The terminal `result` event on a `claude -p --output-format stream-json`
+ * run already carries a fully-aggregated `usage` object — cumulative across
+ * every internal turn/tool-call round-trip of that single `-p` invocation,
+ * computed by the CLI itself, in the same raw shape `anthropic.ts` already
+ * normalises via `normaliseAnthropicUsage`. Verified live against a real
+ * `claude -p ... --output-format stream-json` run (2026-07-25): the emitted
+ * `result` event included `usage: {input_tokens, output_tokens,
+ * cache_read_input_tokens, cache_creation_input_tokens, ...}` plus
+ * `total_cost_usd` and a per-model `modelUsage` breakdown. Previously this
+ * interface only declared `type`/`subtype`/`is_error`/`result`, so `usage`
+ * was silently dropped by `JSON.parse(...) as ClaudeStreamEvent` even though
+ * it was present on the wire — the root cause of agent-mcp's `usage_query`
+ * recording zero tokens for every `claudecli`-provider task (tracked as
+ * DEBT-AGENTMCP-ACCOUNTING-001 / see backlog item agent-mcp-001).
+ */
 interface ClaudeStreamResultEvent {
     type: "result";
     subtype: string;
     is_error: boolean;
     result?: string;
+    stop_reason?: string;
+    total_cost_usd?: number;
+    usage?: {
+        input_tokens: number;
+        output_tokens: number;
+        cache_read_input_tokens?: number | null;
+        cache_creation_input_tokens?: number | null;
+    };
 }
 
 interface ClaudeToolUseBlock {
@@ -324,6 +359,8 @@ export class ClaudeCliProvider implements LLMProvider {
             proc.on("error", (err) => { procError = err; });
 
             let finalResult = "";
+            let finalUsage: ClaudeStreamResultEvent["usage"];
+            let finalStopReason: string | undefined;
 
             for await (const line of rl) {
                 if (request.signal?.aborted) {
@@ -346,6 +383,8 @@ export class ClaudeCliProvider implements LLMProvider {
                         throw new Error(`PROVIDER_ERROR: claude CLI returned error: ${r.result ?? "(no message)"}`);
                     }
                     finalResult = r.result ?? "";
+                    finalUsage = r.usage;
+                    finalStopReason = r.stop_reason;
                     break;
                 }
 
@@ -422,7 +461,20 @@ export class ClaudeCliProvider implements LLMProvider {
                 createdAt: nowIso(),
             };
 
-            return { message, stopReason: "completed" };
+            const normalisedStopReason = CLI_STOP_REASON[finalStopReason ?? ""] ?? "unknown";
+
+            return {
+                message,
+                stopReason: "completed",
+                rawUsage: finalUsage,
+                usage: finalUsage
+                    ? normaliseAnthropicUsage(
+                        finalUsage,
+                        normalisedStopReason,
+                        this.config.server?.defaultMaxTokens ?? 0
+                    )
+                    : undefined,
+            };
         } finally {
             request.signal?.removeEventListener("abort", onAbort);
             rl.close();
