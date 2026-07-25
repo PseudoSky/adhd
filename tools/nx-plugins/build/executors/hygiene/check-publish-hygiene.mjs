@@ -98,11 +98,14 @@ function collectExpectedTargets(pkgJson) {
 
 /**
  * @param {string} projectRoot workspace-relative project root (dist is {projectRoot}/dist)
+ * @param {string} [repoRoot] test seam — defaults to the real, discovered
+ *   workspace root; a test may pass a fake one to exercise this against an
+ *   isolated sandbox without ever touching the real repo's package tree.
  */
-function checkPackage(projectRoot) {
-  const distDir = path.join(REPO_ROOT, projectRoot, 'dist');
+function checkPackage(projectRoot, repoRoot = REPO_ROOT) {
+  const distDir = path.join(repoRoot, projectRoot, 'dist');
   const pkgJsonPath = path.join(distDir, 'package.json');
-  const result = { name: projectRoot, distDir: path.relative(REPO_ROOT, distDir), ok: false, errors: [], totalFiles: 0, forbiddenHits: [], checkedTargets: [] };
+  const result = { name: projectRoot, distDir: path.relative(repoRoot, distDir), ok: false, errors: [], totalFiles: 0, forbiddenHits: [], checkedTargets: [] };
 
   if (!existsSync(distDir)) {
     result.errors.push(`built output missing: ${result.distDir} — run \`nx build\` (a missing build must fail, never pass).`);
@@ -147,13 +150,27 @@ function checkPackage(projectRoot) {
   return result;
 }
 
-function main() {
-  const args = process.argv.slice(2);
-  const asJson = args.includes('--json');
-  const projectRoots = args.filter((a) => !a.startsWith('--'));
+/**
+ * Run the check and return the intended process exit code (0 = clean).
+ * Never calls `process.exit` itself — BUILD-TOOLING-METRICS-001: this is the
+ * seam the `publish-hygiene` nx executor (`../impl.js`) calls IN-PROCESS
+ * instead of spawning a fresh `node check-publish-hygiene.mjs <projectRoot>`
+ * subprocess per project (mirrors `deps/eslint-check.mjs`'s `main()` seam —
+ * the one subprocess this still needs, `npm pack --dry-run` inside
+ * `checkPackage` above, is completely unchanged; only the OUTER
+ * wrapper-script subprocess is eliminated).
+ *
+ * @param {string[]} argv `[...projectRoots, '--json'?]`
+ * @param {{repoRoot?: string}} [opts] test seam — see `checkPackage`'s own
+ *   `repoRoot` param; a fake root exercises this against an isolated sandbox.
+ * @returns {number} 0 = clean, 1 = at least one violation (or missing build/manifest)
+ */
+export function main(argv = process.argv.slice(2), { repoRoot = REPO_ROOT } = {}) {
+  const asJson = argv.includes('--json');
+  const projectRoots = argv.filter((a) => !a.startsWith('--'));
   const roots = projectRoots.length > 0 ? projectRoots : DEFAULT_PACKAGE_ROOTS;
 
-  const results = roots.map(checkPackage);
+  const results = roots.map((root) => checkPackage(root, repoRoot));
   const anyFailed = results.some((r) => !r.ok);
 
   if (asJson) {
@@ -167,7 +184,12 @@ function main() {
     console.log('');
     console.log(anyFailed ? 'publish-hygiene check: FAILED' : 'publish-hygiene check: all packages clean');
   }
-  process.exit(anyFailed ? 1 : 0);
+  return anyFailed ? 1 : 0;
 }
 
-main();
+// Only run as a CLI when invoked directly (`node check-publish-hygiene.mjs ...`)
+// — not when imported in-process by the `publish-hygiene` executor.
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isMain) {
+  process.exit(main());
+}

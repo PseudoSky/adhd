@@ -1,6 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { builtinModules } from 'node:module';
-import { dirname, join } from 'node:path';
+import { computeRealDependencyNames } from '../nx-plugins/deps/compute-real-deps.js';
 
 /**
  * Returns the `build.rollupOptions.external` array a `platform:node` /
@@ -57,51 +56,14 @@ import { dirname, join } from 'node:path';
  * @returns {(string|RegExp)[]} value for `build.rollupOptions.external`.
  */
 export function externalizeRealDeps(packageJsonDir) {
-  const repoRoot = findRepoRoot(packageJsonDir);
-  const pathsMap = readTsPathsMap(repoRoot);
-
-  const realDepNames = new Set();
-  const visitedAdhdDirs = new Set();
-  const queue = [packageJsonDir];
-
-  while (queue.length > 0) {
-    const dir = queue.shift();
-    if (visitedAdhdDirs.has(dir)) continue;
-    visitedAdhdDirs.add(dir);
-
-    const pkgPath = join(dir, 'package.json');
-    if (!existsSync(pkgPath)) continue;
-    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-    const depNames = new Set([
-      ...Object.keys(pkg.dependencies ?? {}),
-      ...Object.keys(pkg.peerDependencies ?? {}),
-    ]);
-
-    for (const name of depNames) {
-      if (!name.startsWith('@adhd/')) {
-        realDepNames.add(name);
-        continue;
-      }
-      // @adhd/* dependency: bundle its source too, so walk into ITS deps —
-      // UNLESS the name doesn't resolve against tsconfig.base.json's `paths`
-      // map at all, which means it isn't actually an in-repo workspace
-      // package. `@adhd/sox-graph-store` (a real, externally-published npm
-      // package that happens to share the `@adhd/` npm scope — the first
-      // such case in this monorepo, entrypoint/backlog) is exactly this: it
-      // has no `tsconfig.base.json` path entry, so silently dropping it here
-      // (the prior behaviour) left it neither bundled-as-workspace-source nor
-      // externalized-as-a-real-dep — it fell through to rollup's default
-      // (bundle from node_modules), reproducing the exact __filename/
-      // perf_hooks-in-ESM failure class this whole utility exists to avoid.
-      // Treat an unresolvable `@adhd/*` name as a real external dependency.
-      const depDir = resolveAdhdPackageDir(name, pathsMap, repoRoot);
-      if (depDir) {
-        if (!visitedAdhdDirs.has(depDir)) queue.push(depDir);
-      } else {
-        realDepNames.add(name);
-      }
-    }
-  }
+  // The dependency-graph walk itself lives in `compute-real-deps.js` (plain
+  // CommonJS) — it's shared verbatim with each bundling package's
+  // `.eslintrc.cjs`, which auto-derives `@nx/dependency-checks`'
+  // `ignoredDependencies` from the SAME real-dep set this function
+  // externalizes. See that file's doc comment for why both consumers need
+  // the identical walk. This function's own behavior is unchanged: only the
+  // walk was extracted, not altered.
+  const realDepNames = computeRealDependencyNames(packageJsonDir);
 
   const externals = [];
   for (const name of realDepNames) {
@@ -115,37 +77,4 @@ export function externalizeRealDeps(packageJsonDir) {
 
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** Walk up from `startDir` until a `tsconfig.base.json` is found. */
-function findRepoRoot(startDir) {
-  let dir = startDir;
-  for (let i = 0; i < 10; i++) {
-    if (existsSync(join(dir, 'tsconfig.base.json'))) return dir;
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  throw new Error(
-    `externalizeRealDeps: could not find tsconfig.base.json walking up from ${startDir}`
-  );
-}
-
-/** `{ "@adhd/x": "./packages/.../src/index.ts", ... }` from tsconfig.base.json paths. */
-function readTsPathsMap(repoRoot) {
-  const tsconfig = JSON.parse(
-    readFileSync(join(repoRoot, 'tsconfig.base.json'), 'utf-8')
-  );
-  return tsconfig.compilerOptions?.paths ?? {};
-}
-
-/** Resolve an `@adhd/x` package name to its absolute package directory (containing package.json). */
-function resolveAdhdPackageDir(name, pathsMap, repoRoot) {
-  const targets = pathsMap[name];
-  if (!targets || targets.length === 0) return null;
-  // e.g. "./packages/apigen/apigen-core-client/src/index.ts" -> package dir
-  const srcIndexPath = targets[0].replace(/^\.\//, '');
-  const packageRelDir = srcIndexPath.replace(/\/src\/index\.tsx?$/, '');
-  const dir = join(repoRoot, packageRelDir);
-  return existsSync(join(dir, 'package.json')) ? dir : null;
 }

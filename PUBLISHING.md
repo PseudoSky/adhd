@@ -112,7 +112,7 @@ npx nx run apigen-cli:reconcile            # backfill/refresh just one package's
 
 - **`version`** (`dependsOn: [build, assets, ^version]`, inferred by `tools/nx-plugins/build/plugin.js`'s `createNodes`) bumps a package's SOURCE `version` **iff** it needs a new release: if the current version isn't on npm → a release is already *pending* → leave it; if it IS on npm → compare the built `dist` against the **published tarball** (ignoring the version field and internal `@adhd/*` ranges) → **changed → bump** (patch by default, `--bump=minor|major` to override), **identical → leave**. The `build` + `assets` dependencies ensure `dist/` is fresh AND doc-complete before comparison (a bare `build` alone doesn't include README/CHANGELOG — comparing it against an already-published tarball that has them would falsely register as "changed" every time); `^version` ensures all internal dependencies settle first. It writes the bump but does **not** commit (review `git diff`).
   - **`^version` — topological dependent-range sync (BUILD-TOOLING-VERSION-SYNC-DEPS-001):** `^version` runs a package's internal `@adhd/*` dependencies' `version` tasks FIRST, so by the time a package's own `version` task runs, every dependency it declares has already settled its version. After deciding its own bump (or not), `version`'s final step reconciles the package's declared internal `@adhd/*` ranges to that now-settled state — reusing the `deps` plugin's `sync-deps` (fix, real runs) / `sync-deps-check` (read-only, `--dryRun`) executors directly (see [`tools/nx-plugins/deps/README.md`](tools/nx-plugins/deps/README.md)), never a duplicated reimplementation. It writes **only that package's own** `package.json`. This never forces a cascade bump: `compare-published.js`'s `normalizeManifest` already strips internal `@adhd/*` ranges before diffing, so a range-only edit is invisible to the next run's change-detector — a caret range absorbs a dependency's bump at install time, and `dist-manifest` (above) already resolves published ranges independent of source-side sync order. This eliminates the manual `sync-deps` pass previously needed after a batch of bumps to keep dependents' declared ranges from drifting.
-- **`publish`** (`dependsOn: [dist-manifest, verify-dist-load, publish-hygiene]`) rebuilds anything `version` bumped (a version change invalidates its build cache), re-stamps its `dist/package.json` (internal `@adhd/*` ranges resolved to concrete versions from a live snapshot), and `npm publish`es the `dist` **iff** `name@version` isn't already on the registry. Already-published = no-op skip (no "cannot publish over", no republish).
+- **`publish`** (`dependsOn: [test, ^test, version, dist-manifest, verify-dist-load, publish-hygiene]`) runs this project's own tests and its dependencies' (`test`/`^test` — the gate that was missing before `pnpm release`'s `nx run-many -t publish` path was made to depend on it), rebuilds anything `version` bumped (a version change invalidates its build cache), re-stamps its `dist/package.json` (internal `@adhd/*` ranges resolved to concrete versions from a live snapshot), and `npm publish`es the `dist` **iff** `name@version` isn't already on the registry. Already-published = no-op skip (no "cannot publish over", no republish).
 
 Exit code is the gate: `0` = everything versioned/published or skipped; non-zero = a task failed (nx names the project).
 
@@ -192,7 +192,7 @@ npx nx release version             # execute (no --dry-run)
 > the wrapper below anyway so "which invocation is safe" lives in one place, not in
 > every engineer's memory.)
 >
-> **Always publish through `scripts/release-publish.mjs`** — it routes a `--projects=`
+> **Always publish through `tools/nx-plugins/build/executors/publish/release-publish.mjs`** — it routes a `--projects=`
 > call through `nx run-many -t nx-release-publish` (which DOES honor `dependsOn`,
 > proven both empirically and by the upstream issues above) and an unfiltered call
 > through plain `nx release publish` (proven safe). Every other flag passes through
@@ -200,11 +200,11 @@ npx nx release version             # execute (no --dry-run)
 > published.
 
 ```bash
-node scripts/release-publish.mjs --dry-run   # preview (full release set)
-node scripts/release-publish.mjs             # execute (no --dry-run)
+node tools/nx-plugins/build/executors/publish/release-publish.mjs --dry-run   # preview (full release set)
+node tools/nx-plugins/build/executors/publish/release-publish.mjs             # execute (no --dry-run)
 
-node scripts/release-publish.mjs --dry-run --projects=agent-mcp,apigen-cli   # selective preview
-node scripts/release-publish.mjs --projects=agent-mcp,apigen-cli            # selective execute
+node tools/nx-plugins/build/executors/publish/release-publish.mjs --dry-run --projects=agent-mcp,apigen-cli   # selective preview
+node tools/nx-plugins/build/executors/publish/release-publish.mjs --projects=agent-mcp,apigen-cli            # selective execute
 ```
 
 **What happens:** For each versioned project:
@@ -215,7 +215,7 @@ node scripts/release-publish.mjs --projects=agent-mcp,apigen-cli            # se
 - Git push of tags (if commit flag is enabled; currently set to `false` — manual push required)
 
 If any of `build`/`test`/`verify-dist-load` fails for any selected project,
-`scripts/release-publish.mjs` exits non-zero and **nothing is published** — that
+`tools/nx-plugins/build/executors/publish/release-publish.mjs` exits non-zero and **nothing is published** — that
 includes the projects that passed; nx's task graph fails the whole run rather than
 partially publishing.
 
@@ -226,7 +226,7 @@ To version/publish only changed packages in a specific domain:
 ```bash
 npx nx release patch --projects='agent-*' --dry-run
 npx nx release patch --projects='agent-*'
-node scripts/release-publish.mjs --projects='agent-*' --dry-run
+node tools/nx-plugins/build/executors/publish/release-publish.mjs --projects='agent-*' --dry-run
 ```
 
 ### 3. Single-package workflow (for leaf packages with no dependents)
@@ -236,7 +236,7 @@ To release one package without cascading:
 ```bash
 npx nx release patch --projects=<exact-project-name> --dry-run
 npx nx release patch --projects=<exact-project-name>
-node scripts/release-publish.mjs --dry-run
+node tools/nx-plugins/build/executors/publish/release-publish.mjs --dry-run
 ```
 
 For packages that depend on the one you just released, they are **not** automatically versioned. 
@@ -292,12 +292,12 @@ npm publish <projectRoot> --access public   # e.g. packages/agent/agent-base-typ
 > ever actually ran with affected libraries present, it would fail outright. It
 > gets **none** of the `verify-dist-load` gating this doc describes above. See
 > `BACKLOG.md` `BUG-CI-PUBLISH-STALE-TARGETS-001` — rewiring CI's `Publish` step to
-> call `node scripts/release-publish.mjs` is filed but not yet done (it's a live
+> call `node tools/nx-plugins/build/executors/publish/release-publish.mjs` is filed but not yet done (it's a live
 > npm-publishing job gated by the `NPM_TOKEN` secret; needs explicit human sign-off
 > before changing).
 >
 > **Until that's fixed, do not rely on CI to publish correctly.** Publish locally
-> via `node scripts/release-publish.mjs` (§2 above) and verify the dry-run output
+> via `node tools/nx-plugins/build/executors/publish/release-publish.mjs` (§2 above) and verify the dry-run output
 > yourself.
 
 This requires `NPM_TOKEN` to be set as a GitHub Actions secret using an **automation token** (no OTP required).
@@ -327,7 +327,7 @@ package-specific verification steps. Check there for the full smoke-test procedu
 
 ## Troubleshooting
 
-(Current pipeline — `@adhd/nx-build:version`/`:publish`, no git tags, `scripts/release-publish.mjs` and everything referencing `nx release`/`updateDependents`/tag deletion belongs to the retired workflow above, not this one.)
+(Current pipeline — `@adhd/nx-build:version`/`:publish`, no git tags, `tools/nx-plugins/build/executors/publish/release-publish.mjs` and everything referencing `nx release`/`updateDependents`/tag deletion belongs to the retired workflow above, not this one.)
 
 | Error | Fix |
 |---|---|

@@ -677,3 +677,98 @@ test('backfill failure (network error reconciling a cache miss) leaves version u
     rmSync(rootDir, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// STALE-GRAPH FIX — reconcileInternalRangesFromDisk (direct on-disk read,
+// bypassing the cached project graph the ESLint dependency-checks rule uses
+// during a multi-project `nx run-many -t version`)
+// ---------------------------------------------------------------------------
+
+test('reconciles an internal @adhd/* range directly from the dependency\'s on-disk package.json even when the (stale-graph-simulating) ESLint mock reports no drift', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    // pkg-a already bumped to 2.0.0 ON DISK (simulating its OWN `version`
+    // task having already run earlier in this same `run-many`, per the
+    // `^version` topological dependsOn), but pkg-b still declares the OLD
+    // range AND the mocked ESLint dependency-checks call reports zero
+    // drift (simulating its cached project graph still seeing pkg-a@1.0.0).
+    makeFiles(join(rootDir, 'packages/pkg-a'), { 'package.json': JSON.stringify({ name: '@adhd/pkg-a', version: '2.0.0' }, null, 2) });
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: { '@adhd/pkg-a': '^1.0.0' } };
+    const { pkgRoot, context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'x\n' },
+    });
+    // Register pkg-a in the SAME project graph pkg-b's context uses.
+    context.projectsConfigurations.projects['pkg-a'] = { root: 'packages/pkg-a' };
+
+    const { normalizedHash } = require('./compare-published.js');
+    writePublishedState(rootDir, {
+      '@adhd/pkg-b': { version: '1.0.0', normalizedHash: normalizedHash(join(pkgRoot, 'dist')), publishedIntegrity: 'sha512-whatever' },
+    });
+
+    const state = newState(); // eslintStatus 0 -> mock reports "no drift" (simulating a stale graph)
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true);
+    const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    assert.equal(
+      after.dependencies['@adhd/pkg-a'], '^2.0.0',
+      'the internal range must be corrected from pkg-a\'s ACTUAL on-disk version, even though the (stale-graph-simulating) ESLint mock reported no drift'
+    );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('dry run: reports the internal-range fix it would make but never writes package.json', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    makeFiles(join(rootDir, 'packages/pkg-a'), { 'package.json': JSON.stringify({ name: '@adhd/pkg-a', version: '2.0.0' }, null, 2) });
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: { '@adhd/pkg-a': '^1.0.0' } };
+    const { pkgRoot, context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'x\n' },
+    });
+    context.projectsConfigurations.projects['pkg-a'] = { root: 'packages/pkg-a' };
+    const before = readFileSync(join(pkgRoot, 'package.json'), 'utf8');
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
+    const result = await versionImpl({ dryRun: true }, context);
+    assert.equal(result.success, true);
+    const after = readFileSync(join(pkgRoot, 'package.json'), 'utf8');
+    assert.equal(after, before, 'dry run must never write the internal-range fix either');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('leaves an internal range untouched when the dependency is not a known workspace project (e.g. no on-disk package.json to trust)', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: { '@adhd/not-a-real-project': '^1.0.0' } };
+    const { pkgRoot, context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'x\n' },
+    });
+    const before = readFileSync(join(pkgRoot, 'package.json'), 'utf8');
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true);
+    const after = readFileSync(join(pkgRoot, 'package.json'), 'utf8');
+    assert.equal(after, before, 'no known on-disk project for the dep -> leave the declared range exactly as-is');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
