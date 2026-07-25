@@ -642,3 +642,84 @@ describe('[BUG-APIGEN-CORE-004] Record<K,V> and other generic-wrapper serializab
     warnSpy.mockRestore();
   });
 });
+
+// ---------------------------------------------------------------------------
+// ExtractOptions.dropFileSegment (BUG-BACKLOG-CANONICAL-NAMING-CLIENT-D-
+// SEGMENT-001): opt-in flag to omit the file-derived path segment so a
+// single-source extraction (e.g. backlog's `client.d.ts`) doesn't leak the
+// extraction FILENAME into every transport's command/tool name.
+// ---------------------------------------------------------------------------
+
+describe('extract — ExtractOptions.dropFileSegment', () => {
+  it('[extract.dropFileSegment.default] default (omitted) behavior is UNCHANGED — the file segment still leads path[0]', async () => {
+    const ops = await extract({ sourceFile: fixture('extract-named-fn.ts') });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'getUser');
+    expect(op).toBeDefined();
+    expect(op?.path.length).toBeGreaterThanOrEqual(2);
+    expect(op?.path[0]?.raw).toBe('extract-named-fn');
+  });
+
+  it('[extract.dropFileSegment.false] explicit `dropFileSegment: false` is identical to omitting it', async () => {
+    const ops = await extract({
+      sourceFile: fixture('extract-named-fn.ts'),
+      dropFileSegment: false,
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'getUser');
+    expect(op?.path[0]?.raw).toBe('extract-named-fn');
+  });
+
+  it('[extract.dropFileSegment.namedFn] `dropFileSegment: true` flattens a Shape-1 named-function op to a single-segment path', async () => {
+    const ops = await extract({
+      sourceFile: fixture('extract-named-fn.ts'),
+      dropFileSegment: true,
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'getUser');
+    expect(op).toBeDefined();
+    expect(op?.path).toHaveLength(1);
+    expect(op?.path[0]?.raw).toBe('getUser');
+    expect(op?.id).toBe('get-user');
+  });
+
+  it('[extract.dropFileSegment.namedObject] `dropFileSegment: true` still keeps the object-name segment for a Shape-3 named-object op — only the FILE segment is dropped', async () => {
+    const ops = await extract({
+      sourceFile: fixture('extract-named-object.ts'),
+      dropFileSegment: true,
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'getUser');
+    expect(op).toBeDefined();
+    // Path: [objectName, propName] — file segment dropped, object segment kept.
+    expect(op?.path.map((s) => s.raw)).toEqual(['userApi', 'getUser']);
+  });
+
+  it('[extract.dropFileSegment.cjs] `dropFileSegment: true` flattens a Shape-6 CJS op to a single-segment path', async () => {
+    const ops = await extract({
+      sourceFile: fixture('extract-cjs.ts'),
+      dropFileSegment: true,
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'ping');
+    expect(op).toBeDefined();
+    expect(op?.path).toHaveLength(1);
+  });
+
+  it('[extract.dropFileSegment.query] `dropFileSegment: true` flattens a kind:"query" op (buildQueryOp) to a single-segment path', async () => {
+    const ops = await extract({
+      sourceFile: fixture('extract-serializable-generics.ts'),
+      dropFileSegment: true,
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'SUPPORTED_SHAPES');
+    expect(op).toBeDefined();
+    expect(op?.kind).toBe('query');
+    expect(op?.path).toHaveLength(1);
+  });
+
+  it('[extract.dropFileSegment.namespace] the namespace segment is unaffected — id still includes it', async () => {
+    const ops = await extract({
+      sourceFile: fixture('extract-named-fn.ts'),
+      namespace: 'backlog',
+      dropFileSegment: true,
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'getUser');
+    expect(op?.path).toHaveLength(1);
+    expect(op?.id).toBe('backlog/get-user');
+  });
+});

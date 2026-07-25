@@ -11,6 +11,18 @@
 // argv: [dbAdhdRoot]
 const path = require('node:path');
 
+// This fixture is ONLY ever spawned by `StdioClientTransport` in a vitest
+// spec, but the SDK's default `getDefaultEnvironment()` (its own
+// `stdio.js`) inherits an intentionally narrow allowlist (HOME/LOGNAME/
+// PATH/SHELL/TERM/USER) — never the parent's full `process.env` — so
+// vitest's own `VITEST=true` never reaches this child process. Stamping it
+// here (before `startBacklogServer` builds a `RunInput.logger` via
+// `testSilentLogger()` in server.ts) is what silences this subprocess's
+// otherwise-real pino output during the test run — confirmed empirically:
+// without this line the tool-registration/tool-call log lines still appear
+// in the suite's stderr even though the in-process specs went quiet.
+process.env.VITEST = 'true';
+
 const distIndexPath = path.join(__dirname, '..', '..', '..', 'dist', 'index.js');
 const backlog = require(distIndexPath);
 

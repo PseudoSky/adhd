@@ -314,8 +314,35 @@ export function registerRunCommand(
         const sourceFile = path.resolve(opts.source);
 
         const controller = new AbortController();
-        process.on('SIGINT', () => controller.abort());
-        process.on('SIGTERM', () => controller.abort());
+        // BUG-APIGEN-CLI-RUN-SHUTDOWN-001: aborting the signal alone is not
+        // enough to guarantee this process ever exits. `plugin.run()` resolves
+        // only once its own server finishes closing (e.g. api-fastify's
+        // `run.ts` awaits `app.close()` on abort) — and Fastify/Express-style
+        // `close()` does not forcibly end lingering keep-alive sockets by
+        // default, so a single open client connection (including one held by
+        // `serve`'s own front↔host proxying) can hang that promise forever.
+        // `serve` spawns exactly this command as each host child (see
+        // orchestrator.ts `spawnHost`), so a hang here is what orphans those
+        // children when the parent `serve` process is eventually killed
+        // before ever sending them a follow-up SIGKILL. Bound the shutdown
+        // phase so this process always exits within a few seconds of a
+        // signal, independent of how the plugin's own server behaves.
+        let shuttingDown = false;
+        const onSignal = (sig: NodeJS.Signals): void => {
+          controller.abort();
+          if (shuttingDown) return;
+          shuttingDown = true;
+          const forceExit = setTimeout(() => {
+            process.stderr.write(
+              `[run] shutdown exceeded deadline after ${sig} — forcing exit\n`
+            );
+            process.exit(1);
+          }, 5000);
+          forceExit.unref?.();
+        };
+        process.on('SIGINT', () => onSignal('SIGINT'));
+        process.on('SIGTERM', () => onSignal('SIGTERM'));
+        process.on('SIGHUP', () => onSignal('SIGHUP'));
 
         const pluginLang = effectiveLanguage(plugin);
 

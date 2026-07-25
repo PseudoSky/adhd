@@ -53,6 +53,19 @@ export interface ExtractOptions {
    * words are derived from the raw string. Defaults to `''`.
    */
   namespace?: string;
+  /**
+   * When `true`, omits the file-derived path segment (normally the source
+   * file's basename, e.g. `client-d` from `client.d.ts`) from every
+   * operation's `path`. Default `false` (unchanged behavior — the file
+   * segment disambiguates same-named exports across multiple source files
+   * within one extraction run). Set this only when the source is a single,
+   * stable file whose name is an extraction artifact, not a meaningful
+   * namespace component (e.g. a generated `.d.ts`) — dropping it can cause
+   * two same-named exports from different files to collide; the hard
+   * extract-time collision guard (`@adhd/apigen-engine-naming`'s
+   * `checkCollisions`) still catches that.
+   */
+  dropFileSegment?: boolean;
   /** Absolute path to a tsconfig.json for type resolution. Optional. */
   tsconfig?: string;
   /**
@@ -88,14 +101,22 @@ async function extractWithSession(
   opts: ExtractOptions,
   session: InternalExtractionSession
 ): Promise<Operation[]> {
-  const { sourceFile: filePath, namespace = '', tsconfig } = opts;
+  const {
+    sourceFile: filePath,
+    namespace = '',
+    dropFileSegment = false,
+    tsconfig,
+  } = opts;
 
   const project = session.projectFor(tsconfig);
   const sf: SourceFile = session.sourceFileFor(filePath, tsconfig);
 
   const fileName = path.basename(filePath);
   // Per SPEC §5: strip extension; dots/underscores → hyphens.
+  // `fileSeg` is what actually lands in every op's `path` — `null` when the
+  // caller opted out via `dropFileSegment` (see ExtractOptions doc comment).
   const fileSegment = makeSeg(normalizeFileName(fileName));
+  const fileSeg: Segment | null = dropFileSegment ? null : fileSegment;
   const namespaceSeg = makeSeg(namespace);
 
   const ops: Operation[] = [];
@@ -171,7 +192,7 @@ async function extractWithSession(
           project,
           sf,
           namespaceSeg,
-          fileSegment,
+          fileSeg,
           exportedName,
           params,
           returnText,
@@ -222,7 +243,7 @@ async function extractWithSession(
           project,
           sf,
           namespaceSeg,
-          fileSegment,
+          fileSeg,
           exportedName,
           params,
           returnText,
@@ -253,9 +274,10 @@ async function extractWithSession(
         );
         const returnText = sig.getReturnType().getText();
 
-        // Path: [file, objectName, propName]
+        // Path: [file, objectName, propName] — file segment omitted when
+        // `dropFileSegment` is set (see `fileSeg` above).
         const propPath: Segment[] = [
-          fileSegment,
+          ...(fileSeg ? [fileSeg] : []),
           makeSeg(exportedName),
           makeSeg(propName),
         ];
@@ -287,7 +309,7 @@ async function extractWithSession(
           session
         );
         ops.push(
-          buildQueryOp(namespaceSeg, fileSegment, exportedName, schema)
+          buildQueryOp(namespaceSeg, fileSeg, exportedName, schema)
         );
       } else {
         // Non-serializable, non-callable — skip + warn
@@ -317,9 +339,9 @@ async function extractWithSession(
         // (it keys every function by its live `.name`, which it cannot
         // override). Naming the op anything else here is guaranteed to be
         // unresolvable at dispatch time no matter what `buildFnTable` does.
-        // `fileSegment` (via `buildActionOp`) still carries the per-file
-        // disambiguation in `op.path`/`id` — only the LEAF segment (the
-        // actual dispatch key, `op.path[op.path.length-1].raw`) must be
+        // `fileSeg` (via `buildActionOp`), when present, still carries the
+        // per-file disambiguation in `op.path`/`id` — only the LEAF segment
+        // (the actual dispatch key, `op.path[op.path.length-1].raw`) must be
         // `'default'` to match the runtime name exactly.
         const fnType = expr.getType();
         const sigs = fnType.getCallSignatures();
@@ -341,7 +363,7 @@ async function extractWithSession(
               project,
               sf,
               namespaceSeg,
-              fileSegment,
+              fileSeg,
               'default',
               params,
               returnText,
@@ -365,9 +387,10 @@ async function extractWithSession(
           // default-export.ts's object-property branch).
           const params = rawParamsSig(sig, exportAssign);
           const returnText = sig.getReturnType().getText();
-          // SPEC §5: default object → path=[file,"default",…keys]
+          // SPEC §5: default object → path=[file,"default",…keys] (file
+          // segment omitted when `dropFileSegment` is set).
           const propPath: Segment[] = [
-            fileSegment,
+            ...(fileSeg ? [fileSeg] : []),
             makeSeg('default'),
             makeSeg(propName),
           ];
@@ -411,7 +434,7 @@ async function extractWithSession(
             project,
             sf,
             namespaceSeg,
-            fileSegment,
+            fileSeg,
             symName,
             params,
             returnText,
@@ -436,7 +459,11 @@ async function extractWithSession(
       const params = rawParamsSig(sig);
       const returnText = sig.getReturnType().getText();
       // Synthesise stable id from filename + symbol — CJS module scope
-      const cjsPath: Segment[] = [fileSegment, makeSeg(propName)];
+      // (file segment omitted when `dropFileSegment` is set).
+      const cjsPath: Segment[] = [
+        ...(fileSeg ? [fileSeg] : []),
+        makeSeg(propName),
+      ];
       ops.push(
         await buildActionOpAtPath(
           project,
@@ -606,7 +633,7 @@ async function buildActionOp(
   project: Project,
   sf: SourceFile,
   ns: Segment,
-  fileSeg: Segment,
+  fileSeg: Segment | null,
   exportName: string,
   params: RawParam[],
   returnText: string,
@@ -615,7 +642,7 @@ async function buildActionOp(
   session?: InternalExtractionSession
 ): Promise<Operation> {
   const exportSeg = makeSeg(exportName);
-  const opPath: Segment[] = [fileSeg, exportSeg];
+  const opPath: Segment[] = fileSeg ? [fileSeg, exportSeg] : [exportSeg];
   return buildActionOpAtPath(
     project,
     sf,
@@ -724,12 +751,12 @@ async function buildActionOpAtPath(
 
 function buildQueryOp(
   ns: Segment,
-  fileSeg: Segment,
+  fileSeg: Segment | null,
   exportName: string,
   schema: Record<string, unknown>
 ): Operation {
   const exportSeg = makeSeg(exportName);
-  const opPath: Segment[] = [fileSeg, exportSeg];
+  const opPath: Segment[] = fileSeg ? [fileSeg, exportSeg] : [exportSeg];
   const id = buildId(ns, opPath);
   return {
     id,

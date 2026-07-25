@@ -311,6 +311,33 @@ describe('checkCollisions', () => {
     expect(ids).toContain('ns/file-beta');
   });
 
+  it('[naming.collision.dropFileSegment] two files extracted with dropFileSegment (single-segment path, no file disambiguator) that happen to share an export name → THROWS, never silent last-writer-wins', () => {
+    // Mirrors what `@adhd/apigen-core-client`'s `extract({ dropFileSegment:
+    // true })` produces for two DIFFERENT source files that both export a
+    // `createItem` — normally the file segment (e.g. `[itemsFile,
+    // 'createItem']` vs `[usersFile, 'createItem']`) disambiguates them;
+    // with it dropped both project to the bare single-segment path
+    // `[createItem]`, so they collide on every transport. This is the exact
+    // hazard `ExtractOptions.dropFileSegment`'s doc comment calls out —
+    // `checkCollisions` must still catch it as a hard extract-time error.
+    const fromFileA = op(
+      'ns/from-file-a/create-item',
+      seg('ns', ['ns']),
+      [seg('createItem', ['create', 'item'])],
+      false
+    );
+    const fromFileB = op(
+      'ns/from-file-b/create-item', // different id (different source file)
+      seg('ns', ['ns']),
+      [seg('createItem', ['create', 'item'])], // same flattened path → same projection
+      false
+    );
+
+    expect(() => checkCollisions([fromFileA, fromFileB])).toThrow(
+      CollisionDetectedError
+    );
+  });
+
   it('[naming.collision.6] negative-control: fix the collision (give distinct words) → no throw', () => {
     // Prove the test above is not vacuous: distinct words → no collision.
     const fixed1 = op(

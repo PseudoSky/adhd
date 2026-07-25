@@ -44,7 +44,7 @@ import * as clientMod from './client.js';
 import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
 import { buildBacklogEnv } from './env.js';
-import type { OutputPlugin, RunInput } from '@adhd/apigen-core-client';
+import type { Logger, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 
 /**
  * Guards a live-mount `plugin.run()` call. Exported (not local to this file)
@@ -59,6 +59,39 @@ import type { OutputPlugin, RunInput } from '@adhd/apigen-core-client';
 export function requireRun(plugin: OutputPlugin): (input: RunInput) => Promise<void> {
   if (!plugin.run) throw new Error(`@adhd/backlog: apigen plugin "${plugin.id}" declares no run() — cannot mount live`);
   return plugin.run;
+}
+
+/**
+ * Test-only `RunInput.logger` override (exported for `cli.ts`'s identical
+ * third-transport mount). Every one of the three apigen output plugins
+ * (`apigen-plugin-api-fastify`, `-mcp`, `-cli-output`) falls back to its own
+ * `createLogger()` — real pino, level `info`, writing jsonl to stderr —
+ * whenever `input.logger` is absent, which floods the console on every test
+ * run that actually mounts a transport (`server.spec.ts`, `server.mcp.spec.ts`,
+ * `serve.spec.ts`, and `cli.spec.ts`'s spawned-binary cases, since
+ * `spawnSync`'s `env: { ...process.env }` inherits vitest's own
+ * `VITEST=true`). None of those specs assert on log content — they assert
+ * status codes and response bodies — so under vitest this swaps in a no-op
+ * logger. `mcpPlugin`/`cliPlugin` only ever call `.info`/`.error` on it, but
+ * `apiFastifyPlugin` hands it straight to `Fastify({ logger })`, whose own
+ * `validateLogger` (`fastify/lib/logger.js`) REQUIRES the full pino surface
+ * (`info,error,debug,fatal,warn,trace,child`) or throws
+ * `FST_ERR_LOG_INVALID_LOGGER` — confirmed empirically, not guessed, by a
+ * first cut here that only stubbed `info`/`error` and blew up every
+ * `server.spec.ts` HTTP test with exactly that error. `child()` returns the
+ * same no-op instance (fastify calls it per-request to derive a child
+ * logger; a self-referencing no-op keeps every descendant silent too).
+ * Outside vitest (a real `backlog serve` or CLI invocation) this returns
+ * `undefined` and the real pino default logger is used, unchanged.
+ */
+export function testSilentLogger(): Logger | undefined {
+  if (!process.env['VITEST']) return undefined;
+  const noop = (): void => {
+    /* silenced under vitest — see doc comment above */
+  };
+  const silent: Record<string, unknown> = { info: noop, error: noop, debug: noop, fatal: noop, warn: noop, trace: noop };
+  silent['child'] = () => silent;
+  return silent as unknown as Logger;
 }
 
 export interface StartOpts {
@@ -173,7 +206,17 @@ async function extractClientOperations(): Promise<Operation[]> {
         `Run "nx build backlog" first (extract() needs the built .d.ts for type information).`
     );
   }
-  return extract({ sourceFile: clientDts, namespace: 'backlog' });
+  // `dropFileSegment: true` (`ExtractOptions`, `@adhd/apigen-core-client`):
+  // without it every op's `path` would unconditionally start with the
+  // `client.d.ts` extraction FILENAME artifact (`normalizeFileName` →
+  // `'client-d'`), leaking into every transport's name — `backlog client-d
+  // create-item` / `backlog_client_d_create_item` instead of the intended
+  // `backlog create-item` / `backlog_create_item`. Safe here because every
+  // `client.ts` export is extracted from this ONE file, so there is no
+  // cross-file name to disambiguate against; a genuine same-name collision
+  // would still be caught at extract time by `checkCollisions`
+  // (`@adhd/apigen-engine-naming`).
+  return extract({ sourceFile: clientDts, namespace: 'backlog', dropFileSegment: true });
 }
 
 /**
@@ -252,6 +295,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
   const ctx: BacklogCtx = { store, env };
 
   const { pkg, operations } = await buildBacklogApigenPackage(ctx);
+  const logger = testSilentLogger();
 
   const runs: Promise<void>[] = [];
   if (opts.transport === 'http' || opts.transport === 'both') {
@@ -262,6 +306,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
         options: { port: opts.port ?? 3300, host: opts.host ?? '127.0.0.1', usePlugins: [openapiPlugin] },
         signal: opts.signal,
         operations,
+        logger,
       })
     );
   }
@@ -273,6 +318,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
         options: { transport: 'stdio' },
         signal: opts.signal,
         operations,
+        logger,
       })
     );
   }

@@ -53,12 +53,15 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     await client.connect(transport);
 
     const tools = await client.listTools();
+    // Tool names are `backlog_<snake_export_name>` — `extractClientOperations()`
+    // (server.ts) extracts with `dropFileSegment: true`, so no `client.d.ts`
+    // extraction-artifact segment (`'client_d'`) leaks into the tool name.
     expect(tools.tools.map((t) => t.name)).toEqual(
-      expect.arrayContaining(['backlog_client_d_create_item', 'backlog_client_d_get_item', 'backlog_client_d_list_items'])
+      expect.arrayContaining(['backlog_create_item', 'backlog_get_item', 'backlog_list_items'])
     );
 
     const createResult = await client.callTool({
-      name: 'backlog_client_d_create_item',
+      name: 'backlog_create_item',
       arguments: { data: { input: { family: 'BUG-SERVECLI', title: 'created via serve cli', body: 'x', repo } } },
     });
     const createContent = createResult.content as Array<{ type: string; text: string }>;
@@ -66,7 +69,7 @@ describe('backlog serve --transport mcp — the REAL .mcp.json-wired command, re
     expect(created.item.humanId).toBe('BUG-SERVECLI-001');
 
     const getResult = await client.callTool({
-      name: 'backlog_client_d_get_item',
+      name: 'backlog_get_item',
       arguments: { data: { repo, humanId: created.item.humanId } },
     });
     const getContent = getResult.content as Array<{ type: string; text: string }>;

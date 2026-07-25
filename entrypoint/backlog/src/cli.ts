@@ -26,7 +26,7 @@ import { project } from '@adhd/apigen-engine-naming';
 import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore } from './store/graph-backlog-store.js';
 import { buildBacklogEnv } from './env.js';
-import { buildBacklogApigenPackage, requireRun } from './server.js';
+import { buildBacklogApigenPackage, requireRun, testSilentLogger } from './server.js';
 import { runInstallSkillCommand } from './install-skill.js';
 import { runServeCommand } from './serve.js';
 
@@ -37,33 +37,22 @@ import { runServeCommand } from './serve.js';
  * `project()`'s `cli.path = [namespace, ...path].map(toKebab)` —
  * `@adhd/apigen-engine-naming`'s `naming.ts`).
  *
- * NOT simply `['backlog']`. `extract()` (`@adhd/apigen-core-client`'s
- * `extract.ts`) unconditionally builds every operation's `path` as
- * `[fileSegment, exportSegment]`, where `fileSegment` is derived from the
- * EXTRACTED SOURCE FILE's own name (`normalizeFileName('client.d.ts')` →
- * `'client-d'` — strips one extension, then folds remaining `.`/`_` to `-`).
- * `server.ts`'s `extractClientOperations()` always points extraction at the
- * built `client.d.ts` (see that file's DEVIATION doc comment), so EVERY
- * `client.ts` export's real `cli.path` is
- * `['backlog', 'client-d', '<kebab-export-name>']` — confirmed empirically
- * (not assumed) by inspecting a real built `pkg`/`operations` pair; see
- * `cli.spec.ts`'s "command-prefix derivation" suite. The HTTP
- * (`apigen-plugin-api-fastify`) and MCP (`apigen-plugin-mcp`) transports
- * both route by bare `fnName` and never consult `project(op)` at all, so
- * this `client-d` segment is INVISIBLE on those two transports — it is
- * cli-output-specific, and would leak into every command a user types
- * (`backlog client-d get-item …`) if this file naively hardcoded a
- * single-segment `'backlog'` prefix instead of deriving the REAL prefix from
- * the live `operations` list.
+ * Currently simply `['backlog']`: `server.ts`'s `extractClientOperations()`
+ * calls `extract({ …, dropFileSegment: true })`, so every `client.ts`
+ * export's `path` is just `[exportSegment]` (no `client.d.ts`-derived
+ * `'client-d'` segment — see that call site's doc comment for why it's safe
+ * to drop here: one source file, no cross-file names to disambiguate), and
+ * `project(op).cli.path` is `['backlog', '<kebab-export-name>']`.
  *
- * Since every `client.ts` export shares the same namespace + same source
- * file, every operation's `cli.path` differs ONLY in its final (export)
- * segment — so the shared prefix is simply "everything but the last
- * segment" of any one operation's projected `cli.path`. Computed fresh from
- * `operations` on every call (never cached as a literal), so a future change
- * to the extraction source file name, or to `apigen-core-client`'s file-
- * segment derivation, can never silently desync this from the real command
- * table the way a hardcoded constant would.
+ * This is still derived from the live `operations` list rather than
+ * hardcoded, on purpose: since every `client.ts` export shares the same
+ * namespace + same source, every operation's `cli.path` differs ONLY in its
+ * final (export) segment, so the shared prefix is simply "everything but the
+ * last segment" of any one operation's projected `cli.path`. Computed fresh
+ * on every call (never cached as a literal) so a future change to the
+ * extraction call site (e.g. re-enabling the file segment, or adding a
+ * second source file) can never silently desync this from the real command
+ * table the way a hardcoded `['backlog']` constant would.
  */
 export function resolveCommandPrefix(operations: readonly Operation[]): string[] {
   const first = operations.find((op) => op.kind === 'action');
@@ -81,7 +70,7 @@ export function resolveCommandPrefix(operations: readonly Operation[]): string[]
  * user-typed argv, so `backlog get-item --repo … --human-id …` (what a
  * consumer actually types — the bin's own name is never part of `argv`)
  * resolves against the cli-output plugin's command table, which is keyed by
- * the FULL internal path (`['backlog', 'client-d', 'get-item']`).
+ * the FULL internal path (`['backlog', 'get-item']`).
  *
  * Idempotent / defensive:
  *  - Empty argv is returned unchanged — `run()` treats `argv.length === 0`
@@ -173,6 +162,7 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
       outputDir: '',
       options: { argv: prefixCommand(userArgv, prefix) },
       signal: opts.signal ?? new AbortController().signal,
+      logger: testSilentLogger(),
     });
   } finally {
     if (opened) closeGraphBacklogStore(opened.store);

@@ -54,19 +54,20 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
 
     const tools = await client.listTools();
     const toolNames = tools.tools.map((t) => t.name);
-    // Tool names are `backlog_client_d_<snake_export_name>`, NOT bare
+    // Tool names are `backlog_<snake_export_name>`, NOT bare
     // `listItems`/`createItem`/`getItem` — `apigen-plugin-mcp`'s canonical
-    // tool-name projection (commit a6e895e2, landed AFTER this package's
-    // original commit 1be78422) now names tools via
-    // `project(op).mcp.name` (namespace + file-segment + export-segment,
-    // snake_cased). See the matching note in server.spec.ts / BACKLOG
-    // BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001.
+    // tool-name projection names tools via `project(op).mcp.name` (namespace
+    // + path segments, snake_cased). `extractClientOperations()` (server.ts)
+    // extracts with `dropFileSegment: true`, so the `client.d.ts` extraction
+    // artifact (`'client_d'`, formerly BUG-APIGEN-OPENAPI-ROUTE-PATH-
+    // MISMATCH-001 / BUG-BACKLOG-CANONICAL-NAMING-CLIENT-D-SEGMENT-001) no
+    // longer appears in the tool name.
     expect(toolNames).toEqual(
-      expect.arrayContaining(['backlog_client_d_list_items', 'backlog_client_d_create_item', 'backlog_client_d_get_item'])
+      expect.arrayContaining(['backlog_list_items', 'backlog_create_item', 'backlog_get_item'])
     );
 
     const result = await client.callTool({
-      name: 'backlog_client_d_list_items',
+      name: 'backlog_list_items',
       arguments: { data: { filter: { repo, family: 'BUG-MCP' } } },
     });
     const content = result.content as Array<{ type: string; text: string }>;
@@ -85,9 +86,9 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
     await client.connect(transport);
 
     // See the tool-name note in the previous test — real tool names are
-    // `backlog_client_d_<snake_export_name>`, not bare `createItem`/`getItem`.
+    // `backlog_<snake_export_name>`, not bare `createItem`/`getItem`.
     const createResult = await client.callTool({
-      name: 'backlog_client_d_create_item',
+      name: 'backlog_create_item',
       arguments: { data: { input: { family: 'BUG-MCPCREATE', title: 'created via mcp', body: 'x', repo } } },
     });
     const createContent = createResult.content as Array<{ type: string; text: string }>;
@@ -95,7 +96,7 @@ describe('startBacklogServer — live MCP stdio mount, real @modelcontextprotoco
     expect(created.item.humanId).toBe('BUG-MCPCREATE-001');
 
     const getResult = await client.callTool({
-      name: 'backlog_client_d_get_item',
+      name: 'backlog_get_item',
       arguments: { data: { repo, humanId: created.item.humanId } },
     });
     const getContent = getResult.content as Array<{ type: string; text: string }>;
