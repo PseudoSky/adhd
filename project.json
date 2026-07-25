@@ -22,6 +22,10 @@
       "options": {
         "command": "node scripts/check-publish-hygiene.mjs"
       }
+    },
+    "secret-scan": {
+      "executor": "@adhd/nx-secret-scan:scan",
+      "options": {}
     }
   }
 }

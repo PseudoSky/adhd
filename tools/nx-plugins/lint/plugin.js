@@ -26,7 +26,7 @@
  * inference mechanism, not a change to the lint contract.
  */
 const { existsSync } = require('node:fs');
-const { dirname, join } = require('node:path');
+const { basename, dirname, join } = require('node:path');
 
 function skip(p) {
   return (
@@ -39,7 +39,13 @@ function skip(p) {
 }
 
 exports.createNodes = [
-  '**/.eslintrc.json',
+  // `.cjs` added alongside the original `.json` for projects whose
+  // `@nx/dependency-checks` `ignoredDependencies` must be COMPUTED, not
+  // hand-listed (see `entrypoint/backlog/.eslintrc.cjs`'s doc comment) — a
+  // plain `.eslintrc.json` can't run code, so those projects need a real
+  // (CommonJS) config module. Purely additive: every existing
+  // `.eslintrc.json` project is matched exactly as before.
+  '**/.eslintrc.{json,cjs}',
   (eslintrcPath, _opts, ctx) => {
     const projectRoot = dirname(eslintrcPath);
     if (skip(projectRoot)) return {};
@@ -65,7 +71,7 @@ exports.createNodes = [
               inputs: [
                 'default',
                 '{workspaceRoot}/.eslintrc.base.json',
-                `{projectRoot}/.eslintrc.json`,
+                `{projectRoot}/${basename(eslintrcPath)}`,
                 '{workspaceRoot}/.eslintignore',
                 '{workspaceRoot}/tools/eslint-rules/**/*',
                 { externalDependencies: ['eslint'] },

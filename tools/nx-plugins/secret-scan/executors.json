@@ -1,0 +1,9 @@
+{
+  "executors": {
+    "scan": {
+      "implementation": "./executors/scan/impl",
+      "schema": "./executors/scan/schema.json",
+      "description": "Whole-repo credential scan (.githooks/check-no-credentials.js), run in-process."
+    }
+  }
+}
