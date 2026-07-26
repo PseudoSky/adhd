@@ -76,6 +76,7 @@ const { spawnSync } = require('node:child_process');
 const { existsSync, readFileSync, writeFileSync, rmSync } = require('node:fs');
 const { join, relative } = require('node:path');
 const { bumpVersion, normalizedHash } = require('./compare-published');
+const { writeDistManifest } = require('../manifest/generate-manifest');
 const { readState, updatePublishedState } = require('../../lib/published-state');
 const { reconcilePackage, describeNetworkCalls } = require('../reconcile/reconcile-core');
 const { withMetrics } = require('../../../lib/metrics');
@@ -377,6 +378,21 @@ async function runVersion(options, context, rec) {
     console.error(`version: no built dist at ${relative(context.root, distDir)} — this target dependsOn build.`);
     return { success: false };
   }
+
+  // BUG-BUILD-PUBLISH-DISTMANIFEST-CLOBBERED-001: re-stamp dist/package.json
+  // BEFORE hashing it below — `dist-manifest` is a sibling of THIS task in
+  // `publish`'s dependsOn (both depend only on build+assets, neither on the
+  // other), and `@nx/js:tsc`'s `build` can (re)materialize its own un-rebased
+  // package.json into `distDir` after `dist-manifest` already ran once. If
+  // this task hashed that clobbered directory, `normalizedHash` would NEVER
+  // match the cache's published hash (the published tarball's manifest WAS
+  // correctly rebased) — producing a spurious "changed" verdict and an
+  // unbounded re-bump loop on every single `version`/`publish` invocation,
+  // even with zero real code changes. See generate-manifest.js's
+  // `writeDistManifest` doc comment for the full mechanism.
+  await writeDistManifest(context, pkgRoot, distDir);
+  rec.phase('writeDistManifest');
+
   const raw = readFileSync(srcPkgPath, 'utf8');
   const { name, version } = JSON.parse(raw);
   if (!name || !version) { console.error(`version: ${relative(context.root, srcPkgPath)} missing name/version.`); return { success: false }; }

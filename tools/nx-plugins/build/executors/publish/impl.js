@@ -41,6 +41,7 @@ const { spawnSync } = require('node:child_process');
 const { existsSync, readFileSync } = require('node:fs');
 const { join, relative } = require('node:path');
 const { normalizedHash } = require('../version/compare-published');
+const { writeDistManifest } = require('../manifest/generate-manifest');
 const { packLocalDir, tarballIntegrity } = require('../../lib/npm-registry');
 const { readState, updatePublishedState } = require('../../lib/published-state');
 const { withMetrics } = require('../../../lib/metrics');
@@ -93,14 +94,22 @@ async function writeThroughCache(root, name, version, distDir, workDir, rec) {
 async function run(options, context) {
   return withMetrics('publish', context, async (rec) => {
     const projectRoot = context.projectsConfigurations.projects[context.projectName].root;
-    const distDir = join(context.root, projectRoot, 'dist');
+    const pkgRoot = join(context.root, projectRoot);
+    const distDir = join(pkgRoot, 'dist');
     const distPkgPath = join(distDir, 'package.json');
 
     if (!existsSync(distPkgPath)) {
       console.error(`publish: no ${relative(context.root, distPkgPath)} — build + dist-manifest must run first (this target dependsOn them).`);
       return { success: false };
     }
-    const { name, version } = JSON.parse(readFileSync(distPkgPath, 'utf8'));
+
+    // BUG-BUILD-PUBLISH-DISTMANIFEST-CLOBBERED-001: re-stamp the dist manifest
+    // HERE, as the truly-last write before the real `npm publish` spawn below —
+    // see writeDistManifest's own doc comment (generate-manifest.js) for why
+    // `dependsOn: [..., "dist-manifest", ...]` ordering alone isn't sufficient.
+    const manifest = await writeDistManifest(context, pkgRoot, distDir);
+    rec.phase('writeDistManifest');
+    const { name, version } = manifest;
     if (!name || !version) {
       console.error(`publish: ${relative(context.root, distPkgPath)} has no name/version.`);
       return { success: false };

@@ -19,32 +19,10 @@
  * key), so it always re-runs and is authoritative over any manifest a prior
  * build step (e.g. vite `generatePackageJson`) may have emitted.
  */
-const { existsSync, readFileSync, writeFileSync, copyFileSync } = require('node:fs');
+const { existsSync } = require('node:fs');
 const { join, relative } = require('node:path');
-const { generateDistManifest } = require('./generate-manifest');
+const { writeDistManifest } = require('./generate-manifest');
 const { withMetrics } = require('../../../lib/metrics');
-
-/**
- * Build `{ "@adhd/x": "1.2.3", … }` from every project's source package.json.
- * @param {any} context nx executor context
- * @returns {Record<string,string>}
- */
-function buildVersionMap(context) {
-  const map = {};
-  const projects = context.projectsConfigurations?.projects || {};
-  for (const cfg of Object.values(projects)) {
-    const pkgPath = join(context.root, cfg.root, 'package.json');
-    if (!existsSync(pkgPath)) continue;
-    try {
-      const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-      if (pkg.name && pkg.version) map[pkg.name] = pkg.version;
-    } catch {
-      // A malformed sibling package.json must not resolve to a bogus range —
-      // skip it; the dep it would have resolved is left as-authored.
-    }
-  }
-  return map;
-}
 
 async function run(_options, context) {
   return withMetrics('dist-manifest', context, async (rec) => {
@@ -64,20 +42,12 @@ async function run(_options, context) {
       return { success: false };
     }
 
-    const sourcePkg = JSON.parse(readFileSync(srcPkgPath, 'utf8'));
-    rec.phase('read');
-    const versionMap = buildVersionMap(context);
-    rec.phase('buildVersionMap');
-    const manifest = generateDistManifest(sourcePkg, versionMap);
-    rec.phase('generateDistManifest');
-
-    writeFileSync(join(distDir, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
-
-    // Ship CHANGELOG.md from the dist root (publish-from-dist). README.md is
-    // already copied into dist by the build itself (tools/vite-plugins/copy-readme).
-    const srcChangelog = join(pkgRoot, 'CHANGELOG.md');
-    if (existsSync(srcChangelog)) copyFileSync(srcChangelog, join(distDir, 'CHANGELOG.md'));
-    rec.phase('write');
+    // Shared with `version` and `publish` (BUG-BUILD-PUBLISH-DISTMANIFEST-
+    // CLOBBERED-001) — this is not the only writer of dist/package.json
+    // anymore; it's the first of three call sites that all re-stamp it
+    // defensively, using the exact same generate-manifest.js logic.
+    const manifest = await writeDistManifest(context, pkgRoot, distDir);
+    rec.phase('writeDistManifest');
 
     console.log(
       `dist-manifest: ${manifest.name}@${manifest.version} -> ${relative(context.root, join(distDir, 'package.json'))}`

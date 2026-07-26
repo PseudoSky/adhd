@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-engine-compiler",
-  "version": "2.1.5",
+  "version": "2.1.10",
   "description": "Registry-family store for agent-compiler: drizzle-backed SQLite tables sharing the one registry database.",
   "type": "module",
   "publishConfig": {
@@ -28,11 +28,11 @@
   "dependencies": {
     "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2",
-    "@adhd/agent-store-prompts": "^2.1.0",
-    "@adhd/agent-store-tools": "^2.1.0",
-    "@adhd/agent-core-provider": "^2.1.0",
-    "@adhd/agent-core-policy": "^2.1.0",
-    "@adhd/agent-core-env": "0.0.4"
+    "@adhd/agent-store-prompts": "^2.1.7",
+    "@adhd/agent-store-tools": "^2.1.8",
+    "@adhd/agent-core-provider": "^2.1.9",
+    "@adhd/agent-core-policy": "^2.1.9",
+    "@adhd/agent-core-env": "^0.0.8"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

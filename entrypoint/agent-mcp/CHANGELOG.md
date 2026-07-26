@@ -1,3 +1,7 @@
+## 2.1.5 (2026-07-26)
+
+Ships proper usage accounting and budget enforcement, plus the claudecli provider usage fix (e660126b) — fixes BUG-MCP-PLUGIN-CONFIG-001 (the `@adhd/agent-plugin-budget` dependency was missing from `package.json`, so the config-driven `loadExternalPlugins()` path could never actually resolve/load it at runtime, even though the config plumbing itself was already correct). Also fixes BUG-RELEASE-UNINSTALLABLE-AGENTMCP-001 downstream: republishing `@adhd/agent-store-tools`, `@adhd/agent-engine-orchestrator`, and the `@adhd/agent-core-*`/`@adhd/agent-store-*` family at their now-settled versions makes every internal `@adhd/*` dependency range in this release resolve to a real published version.
+
 ## 2.1.4 (2026-07-24)
 
 This was a version bump only for agent-mcp to align it with other projects, there were no code changes.

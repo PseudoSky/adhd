@@ -1,3 +1,23 @@
+## 2.1.10 (2026-07-26)
+
+Re-publish fixing 2.1.9's own defects: an unsatisfiable `@adhd/agent-store-tools: ^2.1.9` dependency range (captured during a transient phantom-version-bump window on agent-store-tools that was later reverted — the real max published is 2.1.8) and a missing `README.md` in the published tarball (BUG-BUILD-ASSETS-CACHE-STALE-AFTER-CLEAN-001) — no code changes to this package itself.
+
+## 2.1.9 (2026-07-26)
+
+Re-publish fixing an empty (1-file) tarball at 2.1.8, caused by BUG-BUILD-PUBLISH-DISTMANIFEST-CLOBBERED-001 in the shared `@adhd/nx-build:publish`/`:version` executors (see tools/nx-plugins/build/executors/publish/impl.js and .../version/impl.js) — no code changes to this package itself.
+
+## 2.1.8 (2026-07-26)
+
+This was a version bump only for agent-engine-compiler to align it with other projects, there were no code changes.
+
+## 2.1.7 (2026-07-25)
+
+This was a version bump only for agent-engine-compiler to align it with other projects, there were no code changes.
+
+## 2.1.6 (2026-07-25)
+
+This was a version bump only for agent-engine-compiler to align it with other projects, there were no code changes.
+
 ## 2.1.5 (2026-07-24)
 
 This was a version bump only for agent-engine-compiler to align it with other projects, there were no code changes.

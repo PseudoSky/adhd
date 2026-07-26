@@ -77,8 +77,15 @@ function makeSpawnSyncMock(state) {
   };
 }
 
-function makeProject({ rootDir, name, projectRoot, distPkg }) {
+function makeProject({ rootDir, name, projectRoot, distPkg, srcPkg }) {
   const pkgRoot = join(rootDir, projectRoot);
+  // `publish` now re-stamps dist/package.json from the SOURCE manifest as its
+  // truly-last step before `npm publish` (BUG-BUILD-PUBLISH-DISTMANIFEST-
+  // CLOBBERED-001) — a real project always has both a source and dist
+  // package.json, so the fixture must too. Defaults to `distPkg`'s own shape
+  // (no bin/exports/files to rebase in these minimal fixtures, so the
+  // resulting dist manifest is identical either way).
+  makeFiles(pkgRoot, { 'package.json': JSON.stringify(srcPkg ?? distPkg, null, 2) });
   makeFiles(join(pkgRoot, 'dist'), { 'package.json': JSON.stringify(distPkg, null, 2), 'index.js': 'x\n' });
   const context = {
     root: rootDir,
@@ -193,6 +200,66 @@ test('--dryRun: never writes the cache, even on a "successful" (dry) npm publish
     const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
     assert.ok(publishCalls[0].args.includes('--dry-run'));
     assert.equal(existsSync(publishedStatePath(rootDir)), false, 'a dry run must never write published-state.json');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('BUG-BUILD-PUBLISH-DISTMANIFEST-CLOBBERED-001: publish re-stamps dist/package.json from source, even if a sibling task (build) clobbered it with an un-rebased copy first', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
+  try {
+    // Real source manifest: bin/exports point at ./dist/... (source-relative,
+    // as authored), files:["dist",...] (a source-root allowlist), and a real
+    // internal @adhd/* dependency range that must resolve to the sibling's
+    // CURRENT on-disk version.
+    const srcPkg = {
+      name: '@adhd/pkg-b',
+      version: '1.0.0',
+      files: ['dist', 'CHANGELOG.md'],
+      bin: { 'pkg-b': './dist/src/cli/run.js' },
+      exports: { '.': { types: './dist/src/index.d.ts', default: './dist/src/index.js' } },
+      dependencies: { '@adhd/pkg-dep': '^1.0.0' },
+      devDependencies: { typescript: '^5.0.0' },
+    };
+    // Simulates `@nx/js:tsc`'s OWN un-rebased package.json emission INSIDE
+    // dist/ (the exact corrupted shape observed on
+    // agent-engine-compiler@2.1.7/2.1.8: source `files` verbatim — a
+    // self-referential allowlist matching nothing once dist IS the package
+    // root — un-rebased `bin`/`exports`, and `devDependencies` still present).
+    const clobberedDistPkg = { ...srcPkg };
+    const { pkgRoot, distDir, context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', distPkg: clobberedDistPkg, srcPkg,
+    });
+    // A sibling project whose version has moved since `srcPkg` was authored —
+    // proves the re-stamp re-resolves internal ranges from a LIVE snapshot,
+    // not merely copying source's originally-authored range through.
+    makeFiles(join(rootDir, 'packages/pkg-dep'), { 'package.json': JSON.stringify({ name: '@adhd/pkg-dep', version: '1.2.0' }) });
+    context.projectsConfigurations.projects['pkg-dep'] = { root: 'packages/pkg-dep' };
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const publishImpl = loadFreshImpl();
+
+    const result = await publishImpl({}, context);
+    assert.equal(result.success, true);
+
+    // Negative control: if `publish` trusted the (clobbered) dist/package.json
+    // as-is instead of re-stamping it, EVERY assertion below would fail —
+    // this is exactly the shape that produced a 1-file (`package.json`-only)
+    // tarball in production, because npm's `files` allowlist pointed at a
+    // "dist" subdirectory that doesn't exist inside dist/ itself.
+    const finalDistPkg = JSON.parse(readFileSync(join(distDir, 'package.json'), 'utf8'));
+    assert.equal(finalDistPkg.files, undefined, 'source "files" allowlist must be stripped, not shipped verbatim into dist/package.json');
+    assert.deepEqual(finalDistPkg.bin, { 'pkg-b': 'src/cli/run.js' }, 'bin must be rebased dist-root-relative with no leading ./, not left as ./dist/...');
+    assert.equal(finalDistPkg.exports['.'].default, './src/index.js', 'exports must be rebased to dist-root-relative paths');
+    assert.equal(finalDistPkg.devDependencies, undefined, 'devDependencies must never ship');
+    assert.equal(finalDistPkg.dependencies['@adhd/pkg-dep'], '^1.2.0', 'internal @adhd/* range must resolve to the sibling\'s CURRENT on-disk version, not the originally-authored range');
+
+    // And the actual `npm publish` call must have been given the RE-STAMPED
+    // dist dir (publish reads name/version off the freshly written manifest).
+    const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
+    assert.equal(publishCalls.length, 1);
+    assert.ok(publishCalls[0].args.includes(distDir));
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }

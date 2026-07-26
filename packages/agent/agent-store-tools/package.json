@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-store-tools",
-  "version": "2.1.7",
+  "version": "2.1.8",
   "description": "Canonical tool and platform registry for agent runtimes — Drizzle-backed SQLite store",
   "type": "module",
   "publishConfig": {

@@ -161,10 +161,107 @@ function generateDistManifest(sourcePkg, versionMap) {
   return out;
 }
 
+const { existsSync: _existsSync, readFileSync: _readFileSync, writeFileSync: _writeFileSync, copyFileSync: _copyFileSync } = require('node:fs');
+const { join: _join } = require('node:path');
+
+/**
+ * Build `{ "@adhd/x": "1.2.3", … }` from every project's CURRENT source
+ * package.json — a live workspace version snapshot, independent of nx's
+ * project-graph cache (which is computed once up front and can go stale
+ * mid-run if a sibling's own `version` task already bumped it — see
+ * `reconcileInternalRangesFromDisk`'s doc comment in `../version/impl.js` for
+ * the identical staleness concern this addresses for a different consumer).
+ *
+ * @param {import('@nx/devkit').ExecutorContext} context
+ * @returns {Record<string,string>}
+ */
+function buildVersionMapFromDisk(context) {
+  const map = {};
+  for (const cfg of Object.values(context.projectsConfigurations?.projects || {})) {
+    const pkgPath = _join(context.root, cfg.root, 'package.json');
+    if (!_existsSync(pkgPath)) continue;
+    try {
+      const pkg = JSON.parse(_readFileSync(pkgPath, 'utf8'));
+      if (pkg.name && pkg.version) map[pkg.name] = pkg.version;
+    } catch {
+      // malformed sibling manifest — skip, leave whatever range was authored
+    }
+  }
+  return map;
+}
+
+/**
+ * Write the resolved dist-root manifest (+ CHANGELOG.md) to `{distDir}/package.json`,
+ * from the CURRENT source `package.json` and a live workspace version snapshot.
+ * The single, shared side-effecting entry point — `dist-manifest`, `version`,
+ * and `publish` all call THIS (never their own copy) so there is exactly one
+ * place that materializes a dist manifest to disk.
+ *
+ * WHY EVERY CALLER NEEDS THIS, NOT JUST `dist-manifest`
+ * (BUG-BUILD-PUBLISH-DISTMANIFEST-CLOBBERED-001): `dist-manifest` is a sibling
+ * of `build`/`test`/`version` in the `publish` task's `dependsOn` — nx
+ * guarantees all of them complete before `publish` runs, but NOT any relative
+ * order AMONG them. `@nx/js:tsc`'s `build` (with `clean:true`) unconditionally
+ * (re)writes its OWN minimal, un-rebased `dist/package.json` as a build
+ * output; if that happens to (re)materialize AFTER `dist-manifest` already
+ * ran once in the same or an earlier invocation, it silently clobbers the
+ * rebase — producing a `"files": ["dist", …]` manifest inside `dist/` itself
+ * (a self-referential allowlist matching nothing) that packs to a 1-file,
+ * `package.json`-only tarball (observed live: `agent-engine-compiler@2.1.7`/
+ * `2.1.8`). Both `version` (which hashes `distDir` to decide bump/no-bump)
+ * and `publish` (which packs `distDir`) read this SAME potentially-clobbered
+ * directory, so both must re-stamp it as their own truly-last write before
+ * they trust its content — re-stamping only inside `dist-manifest` is
+ * necessary but not sufficient, since nothing stops `build` running again
+ * afterward within the same overall release pass.
+ *
+ * ALSO re-runs `@adhd/nx-assets:copy` (README.md/CHANGELOG.md/`drizzle`/
+ * package.json-declared assets + bin chmod) as part of the SAME re-stamp
+ * (BUG-BUILD-ASSETS-CACHE-STALE-AFTER-CLEAN-001): `assets` is nx-cached
+ * (`cache: true`) independently of `build`'s own `clean:true` wipe of the
+ * SHARED `dist/` directory it writes into — nx's cache-hit decision for
+ * `assets` is keyed on `assets`'s own inputs (unchanged), not on whether
+ * `build` physically re-executed and deleted the directory `assets` last
+ * wrote into. Reproduced live: a fresh `build` (real recompile) followed by
+ * an `assets` "existing outputs match the cache, left as is" skip left
+ * `dist/README.md` permanently missing — which, hashed via `normalizedHash`,
+ * differs from the published tarball (which DOES have README.md) and
+ * produces an unbounded "changed" / re-bump loop with ZERO real code
+ * changes (observed live: agent-store-tools re-bumping 2.1.7 -> 2.1.8 ->
+ * 2.1.9 -> … on every single `version`/`publish` invocation). Re-running the
+ * real `assets` executor here — never a reimplementation — makes both bugs'
+ * fix share one call site: dist is guaranteed complete AND correctly
+ * manifested immediately before it's hashed or packed, regardless of what
+ * nx's own cache decided about `build`/`assets` earlier in the same pass.
+ *
+ * @param {import('@nx/devkit').ExecutorContext} context
+ * @param {string} pkgRoot absolute source project root
+ * @param {string} distDir absolute {projectRoot}/dist
+ * @returns {Promise<Record<string, any>>} the manifest that was written
+ */
+async function writeDistManifest(context, pkgRoot, distDir) {
+  // eslint-disable-next-line global-require -- lazy require avoids a
+  // module-load-order dependency between the assets and build nx plugins.
+  const assetsCopy = require('../../../assets/executors/copy/impl');
+  const assetsResult = await assetsCopy({}, context);
+  if (!assetsResult || assetsResult.success === false) {
+    throw new Error(`writeDistManifest: assets re-copy failed for ${context.projectName} — see assets-copy output above.`);
+  }
+  const sourcePkg = JSON.parse(_readFileSync(_join(pkgRoot, 'package.json'), 'utf8'));
+  const versionMap = buildVersionMapFromDisk(context);
+  const manifest = generateDistManifest(sourcePkg, versionMap);
+  _writeFileSync(_join(distDir, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
+  const srcChangelog = _join(pkgRoot, 'CHANGELOG.md');
+  if (_existsSync(srcChangelog)) _copyFileSync(srcChangelog, _join(distDir, 'CHANGELOG.md'));
+  return manifest;
+}
+
 module.exports = {
   generateDistManifest,
   rebaseDistPath,
   rebaseExports,
   rebaseBin,
   resolveInternalDeps,
+  buildVersionMapFromDisk,
+  writeDistManifest,
 };
