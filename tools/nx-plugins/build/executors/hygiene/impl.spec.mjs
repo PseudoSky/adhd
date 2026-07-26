@@ -130,6 +130,57 @@ test('end-to-end integration (real module, real npm pack --dry-run, no mocks): a
   }
 });
 
+test('end-to-end integration (real module, real npm pack --dry-run, no mocks): BUG-RELEASE-NX-RELEASE-PUBLISH-EMPTY-TARBALL-001 repro — a stale "files" field (relative to the WRONG packageRoot) that matches nothing FAILS on the empty-tarball guard, even though real code exists on disk', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'hygiene-impl-'));
+  try {
+    const projectRoot = 'packages/pkg-b';
+    const distDir = join(rootDir, projectRoot, 'dist');
+    mkdirSync(distDir, { recursive: true });
+    // Reproduces the live incident exactly: `dist-manifest` did NOT strip the
+    // source-root-relative "files":["dist", …] allowlist (as it's supposed
+    // to — see generate-manifest.js's "(4) Drops files" step) before this
+    // manifest was packed FROM the dist directory itself. Relative to
+    // packageRoot=dist/, "dist" matches nothing, so npm's `files` allowlist
+    // excludes the real `index.js` sitting right next to package.json — npm
+    // packs ONLY package.json. Verified empirically (real `npm pack
+    // --dry-run`, no mock) before writing this assertion.
+    writeFileSync(
+      join(distDir, 'package.json'),
+      JSON.stringify({ name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', files: ['dist', 'CHANGELOG.md'] })
+    );
+    writeFileSync(join(distDir, 'index.js'), 'module.exports = {};\n'); // real code IS on disk — npm's `files` field is what excludes it
+    const context = { root: rootDir, projectName: '@adhd/pkg-b', projectsConfigurations: { projects: { '@adhd/pkg-b': { root: projectRoot } } } };
+    const impl = loadFreshImpl(); // real __internals.runHygieneCheck — not overridden
+
+    const result = await impl({}, context);
+    assert.equal(result.success, false, 'an empty (package.json-only) tarball must fail even when the real code exists on disk');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('end-to-end integration (real module, real npm pack --dry-run, no mocks): empty-tarball guard fires even for a manifest with NO declared entry point at all (isolates the new assertion from the pre-existing "declared entry missing" check)', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'hygiene-impl-'));
+  try {
+    const projectRoot = 'packages/pkg-b';
+    const distDir = join(rootDir, projectRoot, 'dist');
+    mkdirSync(distDir, { recursive: true });
+    // No main/module/typings/exports declared at all — `collectExpectedTargets`
+    // returns nothing, so the PRE-EXISTING "declared entry missing" check has
+    // nothing to check. Only the new, unconditional empty-tarball guard can
+    // catch this shape.
+    writeFileSync(join(distDir, 'package.json'), JSON.stringify({ name: '@adhd/pkg-b', version: '1.0.0', files: ['dist'] }));
+    writeFileSync(join(distDir, 'index.js'), 'module.exports = {};\n');
+    const context = { root: rootDir, projectName: '@adhd/pkg-b', projectsConfigurations: { projects: { '@adhd/pkg-b': { root: projectRoot } } } };
+    const impl = loadFreshImpl();
+
+    const result = await impl({}, context);
+    assert.equal(result.success, false, 'a package.json-only tarball must fail even when it declares no entry point to check against');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
 test('end-to-end integration (real module, real npm pack --dry-run, no mocks): a clean package PASSES', async () => {
   const rootDir = mkdtempSync(join(tmpdir(), 'hygiene-impl-'));
   try {
