@@ -22,6 +22,20 @@ import { Environment } from "@adhd/environment";
 import type { EnvironmentSpec } from "@adhd/environment-base-spec";
 import type { EngineConfig } from "@adhd/agent-engine-orchestrator";
 
+import { loadEnvHierarchy } from "./utils/load-env.js";
+
+// BUG-MCP-CREDENTIALS-001: populate `process.env` from the `.env` file
+// hierarchy (`~/.adhd/.env` → `<cwd>/.adhd/.env` → `<cwd>/.env`) BEFORE the
+// `Environment` singleton below is constructed and BEFORE any
+// `getProviderConfig`/`resolveEnvName` call. Provider secrets
+// (`PROVIDER_DEFAULTS` below, plus any agent-declared `provider.env.secret`
+// name) are intentionally NOT `EnvironmentSpec` config fields — they are
+// resolved only by a live `process.env` read (`Environment#resolveEnvName`,
+// see `environment-core-node`) — so a file-cascade layer for them can only
+// come from populating `process.env` itself, exactly as this loader does.
+// See `utils/load-env.ts`'s header comment for the full history.
+loadEnvHierarchy();
+
 // ============================================================================
 // AgentMcpConfig — the resolved, nested `env.config` shape
 // ============================================================================

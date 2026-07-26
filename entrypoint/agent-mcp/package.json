@@ -31,6 +31,7 @@
     "@adhd/agent-core-policy": "^2.1.9",
     "@adhd/agent-plugin-budget": "^0.0.6",
     "@adhd/agent-core-env": "^0.0.8",
+    "dotenv": "17.4.2",
     "tslib": "^2.3.0"
   },
   "devDependencies": {
