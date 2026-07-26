@@ -255,6 +255,125 @@ test('cache HIT, unchanged: ZERO network calls (no npm/tar spawnSync at all), no
   }
 });
 
+test('BUG-BUILD-ASSETS-CACHE-STALE-AFTER-CLEAN-001: a dist/ MISSING README.md (as a stale `assets` cache-hit after a fresh `build` clean would leave it) is repaired before hashing, so an unchanged package does NOT spuriously bump', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const srcPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const README = '# pkg-b\n\nReal docs.\n';
+    // The published tarball DOES have README.md (assets ran correctly at
+    // publish time) — this is the cache's baseline.
+    const { generateDistManifest } = require('../manifest/generate-manifest.js');
+    const correctDistManifest = generateDistManifest(srcPkg, {});
+    const distFilesCorrect = { 'package.json': JSON.stringify(correctDistManifest), 'index.js': 'export const x = 1;\n', 'README.md': README };
+    const tmpCheck = mkdtempSync(join(tmpdir(), 'version-impl-hashcheck-'));
+    let publishedHash;
+    try {
+      makeFiles(tmpCheck, distFilesCorrect);
+      const { normalizedHash } = require('./compare-published.js');
+      publishedHash = normalizedHash(tmpCheck);
+    } finally {
+      rmSync(tmpCheck, { recursive: true, force: true });
+    }
+
+    // But the CURRENT on-disk dist is missing README.md — exactly the shape
+    // left behind when `build`'s `clean:true` wipes `dist/` and a stale
+    // `assets` cache-hit skips re-copying it.
+    const distFilesStale = { 'package.json': JSON.stringify(correctDistManifest), 'index.js': 'export const x = 1;\n' };
+    const { pkgRoot, context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg, distFiles: distFilesStale });
+    // The real source project root DOES have a README.md (assets re-copies FROM here).
+    makeFiles(pkgRoot, { 'README.md': README });
+    writePublishedState(rootDir, {
+      '@adhd/pkg-b': { version: '1.0.0', normalizedHash: publishedHash, publishedIntegrity: 'sha512-whatever' },
+    });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
+    assert.equal(existsSync(join(pkgRoot, 'dist', 'README.md')), false, 'sanity: dist starts WITHOUT README.md');
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true);
+    // Negative control: without repairing dist before hashing, README.md's
+    // absence would make `normalizedHash` differ from the published hash and
+    // spuriously bump a package with zero real code changes — forever, on
+    // every future run too (observed live: agent-store-tools 2.1.7 -> 2.1.8
+    // -> 2.1.9 -> … with "there were no code changes" on every entry).
+    assert.equal(existsSync(join(pkgRoot, 'dist', 'README.md')), true, 're-stamp must restore the missing README.md before hashing');
+    assert.equal(readFileSync(join(pkgRoot, 'dist', 'README.md'), 'utf8'), README);
+    const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    assert.equal(after.version, '1.0.0', 'a package with no real content change must NOT bump, even if dist was missing an asset before this run');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('BUG-BUILD-PUBLISH-DISTMANIFEST-CLOBBERED-001: a CORRUPTED dist/package.json (as `build` alone would leave it) is re-stamped before hashing, so an unchanged package does NOT spuriously bump', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    // Real source manifest — bin/exports source-relative, a "files" allowlist,
+    // devDependencies present, and an internal @adhd/* dependency.
+    const srcPkg = {
+      name: '@adhd/pkg-b',
+      version: '1.0.0',
+      files: ['dist', 'CHANGELOG.md'],
+      bin: { 'pkg-b': './dist/src/cli/run.js' },
+      exports: { '.': { types: './dist/src/index.d.ts', default: './dist/src/index.js' } },
+      dependencies: { '@adhd/pkg-dep': '^1.0.0' },
+      devDependencies: { typescript: '^5.0.0' },
+    };
+    // The CORRECT, dist-manifest'd shape (what a prior successful publish
+    // actually shipped and what the cache's normalizedHash was computed from).
+    const { generateDistManifest } = require('../manifest/generate-manifest.js');
+    const correctDistManifest = generateDistManifest(srcPkg, { '@adhd/pkg-dep': '1.0.0' });
+    const distFilesCorrect = { 'package.json': JSON.stringify(correctDistManifest), 'src/index.js': 'export const x = 1;\n' };
+
+    // Compute the cache's baseline against the CORRECT (un-corrupted) dist —
+    // this is what got published and cached last time.
+    const tmpCheck = mkdtempSync(join(tmpdir(), 'version-impl-hashcheck-'));
+    try {
+      makeFiles(tmpCheck, distFilesCorrect);
+      var { normalizedHash } = require('./compare-published.js');
+      var publishedHash = normalizedHash(tmpCheck);
+    } finally {
+      rmSync(tmpCheck, { recursive: true, force: true });
+    }
+
+    // But the ACTUAL on-disk dist right now is CORRUPTED — as `@nx/js:tsc`'s
+    // `build` (un-rebased bin/exports, source `files`, devDependencies still
+    // present) would leave it if it (re)ran after `dist-manifest` last time.
+    const clobberedDistManifest = { ...srcPkg };
+    const distFilesCorrupted = { 'package.json': JSON.stringify(clobberedDistManifest), 'src/index.js': 'export const x = 1;\n' };
+    const { pkgRoot, context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg, distFiles: distFilesCorrupted });
+    makeFiles(join(rootDir, 'packages/pkg-dep'), { 'package.json': JSON.stringify({ name: '@adhd/pkg-dep', version: '1.0.0' }) });
+    context.projectsConfigurations.projects['pkg-dep'] = { root: 'packages/pkg-dep' };
+    writePublishedState(rootDir, {
+      '@adhd/pkg-b': { version: '1.0.0', normalizedHash: publishedHash, publishedIntegrity: 'sha512-whatever' },
+    });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true);
+    // Negative control: without the re-stamp, `normalizedHash` would hash the
+    // CORRUPTED dist (files/bin/exports/devDependencies all differing from
+    // the published, correct shape) and see "changed" — spuriously bumping a
+    // package with ZERO real code changes, forever, on every future run too.
+    assert.deepEqual(networkCalls(state), [], 'a cache hit (after correct re-stamping) must never touch npm or tar');
+    const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    assert.equal(after.version, '1.0.0', 'a package with no real content change must NOT bump, even if dist was corrupted before this run');
+    // And the corruption itself must actually be fixed on disk, not merely worked around in-memory.
+    const distPkgNow = JSON.parse(readFileSync(join(pkgRoot, 'dist', 'package.json'), 'utf8'));
+    assert.equal(distPkgNow.files, undefined, 're-stamp must strip the source "files" allowlist');
+    assert.deepEqual(distPkgNow.bin, { 'pkg-b': 'src/cli/run.js' }, 're-stamp must rebase bin');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
 test('cache HIT, changed: ZERO network calls, still bumps correctly', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
   try {
