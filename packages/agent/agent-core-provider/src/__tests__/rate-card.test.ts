@@ -82,3 +82,42 @@ describe('estimateCostUsd', () => {
     expect(cost).toBeNull();
   });
 });
+
+/**
+ * agent-mcp-005 (backlog node 425) — real callers never pass a bare RATE_CARD key.
+ * usage-plugin.ts:~108 passes the agent's own `provider.model` config (whatever a human
+ * typed: "claude-haiku-4-5", "sonnet", "haiku", "claude-sonnet-5"); usage.ts:~584 passes
+ * `info.usage.model`, the provider-reported string (e.g. claudecli's dated snapshot id
+ * "claude-haiku-4-5-20251001"). Every one of these returned null before the fix — these
+ * assertions pin the exact real-world strings that failed in production.
+ */
+describe('estimateCostUsd — real-world model string normalization (agent-mcp-005)', () => {
+  const usage = {
+    uncachedInputTokens: 1_000,
+    cacheReadTokens: 2_000,
+    cacheCreationTokens: 500,
+    outputTokens: 300,
+  };
+
+  it.each([
+    ['claude-haiku-4-5-20251001', 'claude_haiku_4_5'], // provider-reported dated snapshot id
+    ['claude-haiku-4-5', 'claude_haiku_4_5'], // hyphenated human-typed config value
+    ['haiku', 'claude_haiku_4_5'], // bare family alias
+    ['sonnet', 'claude_sonnet_4_6'], // bare family alias -> newest *priced* sonnet entry
+    ['claude-sonnet-5', 'claude_sonnet_4_6'], // no verified claude_sonnet_5 rate yet; see rate-card.ts
+    ['opus', 'claude_opus_4_8'],
+    ['fable', 'claude_fable_5'],
+    ['anthropic/claude-haiku-4-5', 'claude_haiku_4_5'], // provider-prefixed form
+  ])('%s resolves to the %s rate-card entry, non-null and correct', (model, canonicalKey) => {
+    const cost = estimateCostUsd(model, usage);
+    const expected = estimateCostUsd(canonicalKey, usage);
+    expect(cost).not.toBeNull();
+    expect(expected).not.toBeNull();
+    expect(cost).toBeCloseTo(expected as number, 12);
+  });
+
+  it('a truly unknown model still returns null even after normalization is attempted', () => {
+    expect(estimateCostUsd('totally-made-up-model', usage)).toBeNull();
+    expect(estimateCostUsd('acme/totally-made-up-model-20260101', usage)).toBeNull();
+  });
+});
