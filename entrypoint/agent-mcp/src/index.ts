@@ -189,11 +189,21 @@ function verifyAgentEnvRefs(agents: AgentDefinition[]): void {
     }
 
     if (missing.length > 0) {
+        // BUG-MCP-CREDENTIALS-001: these are raw env-var-NAME references
+        // (provider.env.secret/base_url/model), resolved only via
+        // `Environment#resolveEnvName` (a live process.env read) — never via
+        // the `config.local.yaml` FieldSpec cascade, which only covers this
+        // spec's declared dot-path config fields (`transport.port`, etc.).
+        // The previous remediation text ("Set them in
+        // ~/.adhd/agent-mcp/production/config.local.yaml") was misleading:
+        // that file is real, but it has no mechanism to set an arbitrary
+        // env-var-name entry — only declared config fields. Point at the
+        // actual mechanism instead (utils/load-env.ts's `.env` hierarchy).
         logger.warn(
             { missingEnvVars: missing },
             "Startup warning: the following env vars are referenced in agent configs but are not set. " +
             "Tasks using those agents will fail at credential resolution. " +
-            "Set them in ~/.adhd/agent-mcp/production/config.local.yaml or the environment directly."
+            "Set them in ~/.adhd/.env (or <project>/.adhd/.env, <project>/.env), or export them in the environment directly."
         );
     }
     if (disallowed.length > 0) {
