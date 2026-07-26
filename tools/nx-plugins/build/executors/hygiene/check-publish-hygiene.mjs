@@ -131,6 +131,26 @@ function checkPackage(projectRoot, repoRoot = REPO_ROOT) {
   result.totalFiles = allFiles.length;
   const files = allFiles.filter((p) => !EXEMPT_PATH_TESTS.some((t) => t(p)));
 
+  // EMPTY-TARBALL GUARD (BUG-RELEASE-NX-RELEASE-PUBLISH-EMPTY-TARBALL-001):
+  // `@adhd/agent-engine-orchestrator@2.1.6` was published via the RETIRED
+  // `nx release publish` path as a tarball containing ONLY `package.json` —
+  // zero dist code — because the manifest packed from still declared
+  // `"files": ["dist", ...]`, which resolves to nothing once `dist/` IS the
+  // package root (`packageRoot: dist`). The per-target `declared entry
+  // present` checks below only fire when a package actually declares
+  // main/module/typings/exports; this check is unconditional and catches the
+  // same failure shape even for a manifest that (incorrectly) declares no
+  // entry points at all. `<= 1` allows exactly `package.json` alone through
+  // the count check only to distinguish it in the error message below —
+  // either way it is never a valid publish.
+  if (allFiles.length <= 1) {
+    result.errors.push(
+      `tarball contains ${allFiles.length} file(s) (${allFiles.join(', ') || 'none'}) — an installable package must ship its ` +
+        'built code, not just package.json. This is the exact shape of BUG-RELEASE-NX-RELEASE-PUBLISH-EMPTY-TARBALL-001 ' +
+        '(a stale "files" field, relative to the wrong packageRoot, matched nothing). Never publish this.'
+    );
+  }
+
   for (const { label, test } of FORBIDDEN_PATTERNS) {
     const hits = files.filter(test);
     if (hits.length > 0) result.forbiddenHits.push({ label, hits });
