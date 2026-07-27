@@ -1,8 +1,8 @@
 {
   "name": "@adhd/apigen-engine-naming",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "dependencies": {
-    "@adhd/apigen-core-client": "^0.1.5"
+    "@adhd/apigen-core-client": "^0.2.0"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

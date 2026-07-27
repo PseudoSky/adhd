@@ -1,10 +1,10 @@
 {
   "name": "@adhd/apigen-plugin-openapi",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "main": "./dist/index.js",
   "dependencies": {
-    "@adhd/apigen-core-client": "0.1.4",
-    "@adhd/apigen-codegen-openapi": "0.1.6"
+    "@adhd/apigen-core-client": "^0.2.0",
+    "@adhd/apigen-codegen-openapi": "^0.2.0"
   },
   "publishConfig": {
     "access": "public"

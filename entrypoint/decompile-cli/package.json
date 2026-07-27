@@ -1,6 +1,6 @@
 {
   "name": "@adhd/decompile-cli",
-  "version": "0.1.11",
+  "version": "0.2.0",
   "type": "module",
   "main": "./dist/src/index.js",
   "publishConfig": {
@@ -35,7 +35,7 @@
     "util": "0.12.5",
     "@babel/register": "7.29.7",
     "react": "18.2.0",
-    "@adhd/data-base-transforms": "2.2.5"
+    "@adhd/data-base-transforms": "^2.3.0"
   },
   "files": [
     "dist",

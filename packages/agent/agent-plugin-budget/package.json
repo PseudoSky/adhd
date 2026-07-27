@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-plugin-budget",
-  "version": "0.0.6",
+  "version": "0.1.0",
   "description": "Budget enforcement plugin for @adhd/agent-mcp — caps token spend, cost, wall-clock time, and model calls per task/session/agent",
   "type": "module",
   "publishConfig": {
@@ -21,7 +21,7 @@
     "CHANGELOG.md"
   ],
   "peerDependencies": {
-    "@adhd/agent-base-types": "*"
+    "@adhd/agent-base-types": "^2.2.0"
   },
   "dependencies": {
     "zod": "*"

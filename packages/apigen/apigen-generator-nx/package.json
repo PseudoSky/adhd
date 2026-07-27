@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-generator-nx",
-  "version": "0.0.4",
+  "version": "0.1.0",
   "dependencies": {
     "@nx/devkit": "*",
     "tslib": "^2.3.0"

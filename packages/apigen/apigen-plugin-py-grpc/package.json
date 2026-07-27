@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-plugin-py-grpc",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -13,9 +13,9 @@
     "protobuf"
   ],
   "dependencies": {
-    "@adhd/apigen-python-env": "^0.1.0",
-    "@adhd/apigen-core-client": "0.1.4",
-    "@adhd/apigen-engine-naming": "0.1.4"
+    "@adhd/apigen-python-env": "^0.2.0",
+    "@adhd/apigen-core-client": "^0.2.0",
+    "@adhd/apigen-engine-naming": "^0.2.0"
   },
   "publishConfig": {
     "access": "public"

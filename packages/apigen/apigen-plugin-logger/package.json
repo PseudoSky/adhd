@@ -1,10 +1,10 @@
 {
   "name": "@adhd/apigen-plugin-logger",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "main": "./dist/index.js",
   "dependencies": {
     "pino": "10.3.1",
-    "@adhd/apigen-core-client": "0.1.4"
+    "@adhd/apigen-core-client": "^0.2.0"
   },
   "publishConfig": {
     "access": "public"

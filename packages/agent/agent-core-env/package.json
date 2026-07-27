@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-core-env",
-  "version": "0.0.8",
+  "version": "0.1.0",
   "description": "Shared @adhd/environment-backed resolver for the agent-registry family's one shared SQLite file (agent-store-prompts/-tools, agent-core-policy/-provider, agent-engine-compiler) — resolveRegistryDbPath() + lazy openRegistryDb(), no import-time DB open.",
   "type": "module",
   "publishConfig": {
@@ -21,7 +21,7 @@
     "typecheck": "tsc -p tsconfig.lib.json --noEmit"
   },
   "dependencies": {
-    "@adhd/environment": "0.0.4",
+    "@adhd/environment": "^0.1.0",
     "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2"
   },
