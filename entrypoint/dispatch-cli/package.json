@@ -1,14 +1,14 @@
 {
   "name": "@adhd/dispatch-cli",
-  "version": "0.0.4",
+  "version": "0.1.0",
   "dependencies": {
-    "@adhd/dispatch-serializer-json": "0.0.5",
-    "@adhd/dispatch-orchestrator": "0.0.4",
+    "@adhd/dispatch-serializer-json": "^0.1.0",
+    "@adhd/dispatch-orchestrator": "^0.1.0",
     "@modelcontextprotocol/sdk": "1.29.0",
     "commander": "14.0.3",
-    "@adhd/dispatch-base-spec": "0.0.5",
-    "@adhd/dispatch-core-client": "0.0.5",
-    "@adhd/dispatch-core-optimizer": "0.0.5"
+    "@adhd/dispatch-base-spec": "^0.1.0",
+    "@adhd/dispatch-core-client": "^0.1.0",
+    "@adhd/dispatch-core-optimizer": "^0.1.0"
   },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
