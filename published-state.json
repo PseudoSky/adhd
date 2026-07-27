@@ -35,9 +35,9 @@
     "publishedIntegrity": "sha512-fA75u6jSXUkRIx0ptT+roSudLwRT8kb/M5m2aW+w1kxld22PgP7p4IDA5Nez4eOCNsk6zMg6D9Ylm3r9z+ycRQ=="
   },
   "@adhd/agent-mcp": {
-    "version": "2.2.0",
-    "normalizedHash": "sha256:adb25cba0d9a59ab794adc758bf89c3ef5e84c8b423f4271e7ddbb70de7051fd",
-    "publishedIntegrity": "sha512-R1RmXs9DubGxxfajPey7eqrAX+C7wUHqo+WaikI6SlBxlp8WijlpejovZ92kqYTGLGx3soJQuusTrgYpGKr1+A=="
+    "version": "2.2.1",
+    "normalizedHash": "sha256:3ecae7b32c04657cd49b6a163dab40f3a233c96bbfe454ae38f1b3a2dacc46c4",
+    "publishedIntegrity": "sha512-bXLNMS6DevT2FWysOdZ+Fk7RaeNOXKxQQI8ZBAb5+FOEUM6hhj2bKznPd8zQXbiz89hlyJb6uLwAV/ntWpFaXQ=="
   },
   "@adhd/agent-plugin-budget": {
     "version": "0.1.0",
