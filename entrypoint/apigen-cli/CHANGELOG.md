@@ -1,3 +1,15 @@
+## 0.1.5 (2026-07-25)
+
+
+### 🩹 Fixes
+
+- **apigen,backlog:** killable serve, configurable namespace, flaky test + log spam
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.4 (2026-07-24)
 
 

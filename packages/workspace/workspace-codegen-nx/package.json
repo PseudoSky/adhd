@@ -1,6 +1,6 @@
 {
   "name": "@adhd/workspace-codegen-nx",
-  "version": "0.0.4",
+  "version": "0.1.0",
   "description": "Nx generator for golden-path @adhd/workspace-* packages — base/core/engine/store/plugin/generator/entrypoint layers",
   "dependencies": {
     "@nx/devkit": "*",

@@ -1,6 +1,6 @@
 {
   "name": "@adhd/agent-store-runtime",
-  "version": "2.1.7",
+  "version": "2.2.0",
   "description": "Runtime state stores for sessions, tasks, and usage tracking — extracted from agent-mcp",
   "type": "module",
   "publishConfig": {
@@ -21,7 +21,7 @@
     "typecheck": "tsc -p tsconfig.lib.json --noEmit"
   },
   "dependencies": {
-    "@adhd/agent-base-types": "^2.1.5",
+    "@adhd/agent-base-types": "^2.2.0",
     "better-sqlite3": "12.10.0",
     "drizzle-orm": "0.45.2",
     "uuid": "14.0.0",

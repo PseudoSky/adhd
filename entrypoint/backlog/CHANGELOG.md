@@ -1,3 +1,17 @@
+## 0.0.3 (2026-07-25)
+
+
+### 🩹 Fixes
+
+- **apigen,backlog:** killable serve, configurable namespace, flaky test + log spam
+
+- **backlog:** match archived-item exclusion between render and its verify
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.0.2 (2026-07-24)
 
 

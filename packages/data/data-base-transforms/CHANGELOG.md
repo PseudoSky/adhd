@@ -1,3 +1,15 @@
+## 2.2.6 (2026-07-25)
+
+
+### 🔥 Performance
+
+- **test:** bound vitest thread pools to curb CPU oversubscription (DEBT-TEST-CPU-OVERSUBSCRIBED-001)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 2.2.5 (2026-07-24)
 
 This was a version bump only for data-base-transforms to align it with other projects, there were no code changes.
