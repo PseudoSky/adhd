@@ -101,11 +101,25 @@ async function main() {
     process.exit(2);
   }
 
-  // Publish-from-source model: the authoritative manifest is the package-ROOT
-  // package.json (main/module/exports → ./dist/…), and its entries resolve
-  // relative to the package root. So load the REAL built artifact under
-  // {projectRoot}/dist exactly as an installed consumer would (who gets the
-  // package-root manifest + a dist/ dir alongside it).
+  // BUG-007 FIX: publish-from-DIST model — the workspace ships each package
+  // from its BUILT `{projectRoot}/dist` directory, whose `package.json` is a
+  // separately RESOLVED, REBASED manifest (`dist-manifest` / `generate-
+  // manifest.js`'s `writeDistManifest`: entry paths rewritten dist-root-
+  // relative, internal `@adhd/*` ranges resolved to concrete versions). A
+  // real consumer's `node_modules/<pkg>` IS that dist directory — they never
+  // see the SOURCE root's package.json at all. The gate existed to prove the
+  // SHIPPED artifact loads; reading the source manifest here (as this used
+  // to) resolves main/module/exports/bin against the WRONG root and the
+  // WRONG (unrebased) paths — it happened to often still find the right file
+  // only because the source manifest's paths are literally `./dist/...` and
+  // get joined against the source root, coincidentally landing on the same
+  // absolute file the correctly-rebased dist manifest would resolve from
+  // its OWN root. That coincidence silently stops working the moment the
+  // DIST manifest disagrees with the source manifest (a bad rebase, a wrong
+  // `exports`/`bin` entry stamped by `dist-manifest`) — exactly the class of
+  // defect this gate is supposed to catch. Fixed: read `{dist}/package.json`
+  // and resolve every entry relative to `dist`, matching exactly what an
+  // installed consumer's `require`/`import` resolution sees.
   const pkgRoot = join(workspaceRoot, projectRoot);
   const builtDir = join(pkgRoot, 'dist');
   if (!existsSync(builtDir)) {
@@ -114,9 +128,14 @@ async function main() {
     );
     process.exit(2);
   }
-  const pkgJsonPath = join(pkgRoot, 'package.json');
+  const pkgJsonPath = join(builtDir, 'package.json');
   if (!existsSync(pkgJsonPath)) {
-    console.error(`verify-dist-load: no package.json at ${pkgJsonPath}.`);
+    console.error(
+      `verify-dist-load: no ${pkgJsonPath} — the dist directory exists but has no rebased manifest. Did ` +
+      `'dist-manifest' (generate-manifest.js's writeDistManifest) run? (this target must dependsOn a step ` +
+      `that materializes dist/package.json — a missing dist manifest is a real publish defect, never a ` +
+      `silent skip.)`
+    );
     process.exit(2);
   }
 
@@ -145,7 +164,12 @@ async function main() {
 
   let failures = 0;
   for (const entry of entries) {
-    const result = await verifyEntry(pkgRoot, entry, existenceOnly || entry.mode === 'exists');
+    // Entries come from the DIST manifest and are already dist-root-relative
+    // (e.g. "./index.js", not the source manifest's "./dist/index.js") — so
+    // they resolve against `builtDir`, exactly as a real consumer's
+    // `node_modules/<pkg>` resolution would (dist IS the package root once
+    // published).
+    const result = await verifyEntry(builtDir, entry, existenceOnly || entry.mode === 'exists');
     if (result.ok) {
       console.log(
         `✓ verify-dist-load: ${result.kind} (${result.file}) ${result.existenceOnly ? 'present (CLI/server entry — not executed)' : 'loaded cleanly'}`

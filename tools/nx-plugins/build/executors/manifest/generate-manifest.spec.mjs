@@ -12,9 +12,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
-const { generateDistManifest, rebaseDistPath, rebaseExports } = require('./generate-manifest.js');
+const { generateDistManifest, rebaseDistPath, rebaseExports, assertResolvedInternalDeps } = require('./generate-manifest.js');
 
 const MAP = {
   '@adhd/apigen-plugin-py-flask': '0.2.0',
@@ -144,6 +147,144 @@ test('preserves identity metadata (name, version, license, publishConfig, type)'
   assert.equal(out.type, 'module');
   assert.deepEqual(out.publishConfig, { access: 'public' });
   assert.equal(out.main, './index.js');
+});
+
+// ---------------------------------------------------------------------------
+// DEBT-002 #1 — assertResolvedInternalDeps: the post-resolution hazard gate
+// `writeDistManifest` runs before ever writing a manifest to disk.
+// ---------------------------------------------------------------------------
+
+test('assertResolvedInternalDeps: passes silently when every @adhd/* range resolved to a concrete caret version', () => {
+  const manifest = generateDistManifest(
+    { name: '@adhd/x', version: '1.0.0', dependencies: { '@adhd/apigen-core-client': 'workspace:*' } },
+    MAP
+  );
+  assert.doesNotThrow(() => assertResolvedInternalDeps(manifest, MAP));
+});
+
+// CONTRACT REFINEMENT (post-audit false positive): map ABSENCE alone is no
+// longer a hazard signal. `@adhd/*` is not an exclusively-internal scope —
+// `@adhd/sox-graph-store` is a real, independently-published external npm
+// package (0.3.0/0.5.0 on the registry) that happens to share the scope. A
+// concrete range on a name absent from the workspace map is exactly what a
+// legitimate external @adhd-scoped dependency looks like, and must pass
+// through untouched — see the dedicated test below.
+test('assertResolvedInternalDeps: a CONCRETE range on an @adhd/* name absent from the version map is ALLOWED (legitimate external @adhd-scoped package)', () => {
+  const manifest = { name: '@adhd/x', version: '1.0.0', dependencies: { '@adhd/sox-graph-store': '^0.3.0' } };
+  assert.doesNotThrow(
+    () => assertResolvedInternalDeps(manifest, MAP),
+    'a concrete range must never be flagged just because the name is not a workspace sibling'
+  );
+});
+
+test('assertResolvedInternalDeps: throws, naming the dep, on a literal "workspace:*" that survived resolution', () => {
+  const manifest = { name: '@adhd/x', version: '1.0.0', dependencies: { '@adhd/ghost': 'workspace:*' } };
+  assert.throws(() => assertResolvedInternalDeps(manifest, MAP), /@adhd\/ghost/);
+});
+
+test('assertResolvedInternalDeps: throws on any "workspace:" protocol range, not just the literal "workspace:*" spelling', () => {
+  const manifest = { name: '@adhd/x', version: '1.0.0', dependencies: { '@adhd/ghost': 'workspace:^' } };
+  assert.throws(() => assertResolvedInternalDeps(manifest, MAP), /@adhd\/ghost/);
+});
+
+test('assertResolvedInternalDeps: throws on a bare "*" that survived resolution', () => {
+  const manifest = { name: '@adhd/x', version: '1.0.0', peerDependencies: { '@adhd/ghost': '*' } };
+  assert.throws(() => assertResolvedInternalDeps(manifest, MAP), /@adhd\/ghost/);
+});
+
+test('assertResolvedInternalDeps: never flags external (non-@adhd/*) deps, however unresolved-looking their range', () => {
+  const manifest = { name: '@adhd/x', version: '1.0.0', dependencies: { 'left-pad': '*', react: 'workspace:*' } };
+  assert.doesNotThrow(() => assertResolvedInternalDeps(manifest, MAP));
+});
+
+test('assertResolvedInternalDeps: checks optionalDependencies too', () => {
+  const manifest = { name: '@adhd/x', version: '1.0.0', optionalDependencies: { '@adhd/ghost': '*' } };
+  assert.throws(() => assertResolvedInternalDeps(manifest, MAP), /@adhd\/ghost/);
+});
+
+test('writeDistManifest integration: refuses to write a manifest with a surviving "workspace:*" internal range (real fs, real generateDistManifest)', async () => {
+  const { writeDistManifest } = require('./generate-manifest.js');
+  const rootDir = mkdtempSync(join(tmpdir(), 'generate-manifest-writeDist-'));
+  try {
+    const projectRoot = 'packages/pkg-b';
+    const pkgRoot = join(rootDir, projectRoot);
+    const distDir = join(pkgRoot, 'dist');
+    mkdirSync(distDir, { recursive: true });
+    writeFileSync(
+      join(pkgRoot, 'package.json'),
+      // "@adhd/ghost-dep" is not a workspace sibling (buildVersionMapFromDisk
+      // will never learn its version), so resolveInternalDeps leaves this
+      // "workspace:*" literal untouched — exactly the surviving-hazard shape.
+      JSON.stringify({ name: '@adhd/pkg-b', version: '1.0.0', main: './dist/index.js', dependencies: { '@adhd/ghost-dep': 'workspace:*' } })
+    );
+    writeFileSync(join(distDir, 'index.js'), 'module.exports = {};\n');
+    const context = { root: rootDir, projectName: '@adhd/pkg-b', projectsConfigurations: { projects: { '@adhd/pkg-b': { root: projectRoot } } } };
+
+    await assert.rejects(
+      () => writeDistManifest(context, pkgRoot, distDir),
+      /@adhd\/ghost-dep/,
+      'writeDistManifest must refuse to materialize a dist manifest with a surviving workspace:* range'
+    );
+    assert.equal(existsSync(join(distDir, 'package.json')), false, 'must never have written the bad manifest to disk');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('writeDistManifest integration: a CONCRETE external @adhd/* dependency (not a workspace sibling) writes through unchanged, real fs (BACKLOG false-positive regression: @adhd/sox-graph-store)', async () => {
+  const { writeDistManifest } = require('./generate-manifest.js');
+  const rootDir = mkdtempSync(join(tmpdir(), 'generate-manifest-writeDist-'));
+  try {
+    const projectRoot = 'entrypoint/backlog';
+    const pkgRoot = join(rootDir, projectRoot);
+    const distDir = join(pkgRoot, 'dist');
+    mkdirSync(distDir, { recursive: true });
+    writeFileSync(
+      join(pkgRoot, 'package.json'),
+      JSON.stringify({ name: '@adhd/backlog', version: '1.0.0', main: './dist/index.js', dependencies: { '@adhd/sox-graph-store': '^0.3.0' } })
+    );
+    writeFileSync(join(distDir, 'index.js'), 'module.exports = {};\n');
+    const context = { root: rootDir, projectName: '@adhd/backlog', projectsConfigurations: { projects: { '@adhd/backlog': { root: projectRoot } } } };
+
+    const manifest = await writeDistManifest(context, pkgRoot, distDir);
+    assert.equal(manifest.dependencies['@adhd/sox-graph-store'], '^0.3.0', 'a legitimate external @adhd-scoped package\'s concrete range must ship unchanged');
+    assert.equal(
+      JSON.parse(readFileSync(join(distDir, 'package.json'), 'utf8')).dependencies['@adhd/sox-graph-store'],
+      '^0.3.0'
+    );
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('writeDistManifest integration: succeeds and writes normally when every internal dep resolves (real fs)', async () => {
+  const { writeDistManifest } = require('./generate-manifest.js');
+  const rootDir = mkdtempSync(join(tmpdir(), 'generate-manifest-writeDist-'));
+  try {
+    const projectRoot = 'packages/pkg-b';
+    const depRoot = 'packages/pkg-dep';
+    const pkgRoot = join(rootDir, projectRoot);
+    const distDir = join(pkgRoot, 'dist');
+    mkdirSync(distDir, { recursive: true });
+    writeFileSync(
+      join(pkgRoot, 'package.json'),
+      JSON.stringify({ name: '@adhd/pkg-b', version: '1.0.0', main: './dist/index.js', dependencies: { '@adhd/pkg-dep': '^1.0.0' } })
+    );
+    writeFileSync(join(distDir, 'index.js'), 'module.exports = {};\n');
+    mkdirSync(join(rootDir, depRoot), { recursive: true });
+    writeFileSync(join(rootDir, depRoot, 'package.json'), JSON.stringify({ name: '@adhd/pkg-dep', version: '1.2.0' }));
+    const context = {
+      root: rootDir,
+      projectName: '@adhd/pkg-b',
+      projectsConfigurations: { projects: { '@adhd/pkg-b': { root: projectRoot }, '@adhd/pkg-dep': { root: depRoot } } },
+    };
+
+    const manifest = await writeDistManifest(context, pkgRoot, distDir);
+    assert.equal(manifest.dependencies['@adhd/pkg-dep'], '^1.2.0');
+    assert.equal(JSON.parse(readFileSync(join(distDir, 'package.json'), 'utf8')).dependencies['@adhd/pkg-dep'], '^1.2.0');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
 });
 
 test('does not mutate the input source manifest', () => {

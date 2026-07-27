@@ -13,8 +13,14 @@
  *     package from npm, then the decision below proceeds against the
  *     now-populated entry. This is the ONLY place `version` touches the
  *     network, and only for packages the cache doesn't know about yet.
- *   - cached version !== source version -> source is already ahead of what's
- *     recorded as published (a bump is already pending publish); leave as-is.
+ *   - cached version !== source version -> BUG-005: this is now a semver-
+ *     DIRECTIONAL check, not a bare inequality. `semver.lt(source, cached)`
+ *     (source is BEHIND the cache's recorded published version) is a
+ *     REGRESSION — a hard error, never silently treated as pending (see the
+ *     in-line comment at the call site for why silently proceeding would
+ *     permanently poison `published-state.json`). Otherwise (source >
+ *     cached), source is already ahead of what's recorded as published (a
+ *     bump is already pending publish); leave as-is.
  *   - cached version === source version -> compare `normalizedHash(localDist)`
  *     against the cache's `normalizedHash` (the PUBLISHED content's hash,
  *     computed with the exact same `normalizeManifest`/`listFiles`/
@@ -75,6 +81,10 @@
 const { spawnSync } = require('node:child_process');
 const { existsSync, readFileSync, writeFileSync, rmSync } = require('node:fs');
 const { join, relative } = require('node:path');
+// semver is a transitive dep of nx, resolved from the workspace root
+// node_modules (confirmed: `require.resolve('semver')` from this exact file
+// location resolves cleanly — no vendoring/inline-compare fallback needed).
+const semver = require('semver');
 const { bumpVersion, normalizedHash } = require('./compare-published');
 const { writeDistManifest } = require('../manifest/generate-manifest');
 const { readState, updatePublishedState } = require('../../lib/published-state');
@@ -222,13 +232,25 @@ function reconcileInternalRangesFromDisk(context, dryRun) {
     return { success: false };
   }
 
+  // BUG DEBT-002 #5 FIX: `desiredRanges` used to be keyed ONLY by `depName`,
+  // and the (global) regex replace below rewrote EVERY textual occurrence of
+  // `"<depName>": "..."` across the WHOLE file — including in a DIFFERENT
+  // dependency field than the one the desired-prefix computation came from.
+  // A dep declared with different range prefixes in, say, `dependencies`
+  // (`^1.2.3`) vs `peerDependencies` (`~1.2.3`) would have BOTH forced onto
+  // whichever field's entry happened to populate the map first (`desiredRanges.
+  // has(depName)` dedup — same bug, opposite symptom). Fixed by scoping both
+  // the computation AND the replace by `(field, depName)`: the desired-range
+  // map is now keyed `"<field>::<depName>"`, and the replace is applied only
+  // within THIS field's own `{ ... }` block of the raw text — never spilling
+  // into a sibling field that happens to share a dependency name.
   const depFields = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies'];
-  const desiredRanges = new Map(); // depName -> desired range string
+  const desiredRanges = new Map(); // "<field>::<depName>" -> desired range string
   for (const field of depFields) {
     const deps = pkg[field];
     if (!deps) continue;
     for (const [depName, currentRange] of Object.entries(deps)) {
-      if (!depName.startsWith('@adhd/') || desiredRanges.has(depName)) continue;
+      if (!depName.startsWith('@adhd/')) continue;
       const depProjectName = depName.slice('@adhd/'.length);
       const depProject = context.projectsConfigurations.projects[depProjectName];
       if (!depProject) continue; // not a workspace project — leave whatever's there alone
@@ -241,26 +263,44 @@ function reconcileInternalRangesFromDisk(context, dryRun) {
       }
       if (!depVersion) continue;
       const prefix = /^[\^~]/.test(currentRange) ? currentRange[0] : '^';
-      desiredRanges.set(depName, `${prefix}${depVersion}`);
+      desiredRanges.set(`${field}::${depName}`, `${prefix}${depVersion}`);
     }
   }
 
   let next = raw;
   let changed = false;
-  for (const [depName, desiredRange] of desiredRanges) {
-    const escaped = depName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const pattern = new RegExp(`("${escaped}"\\s*:\\s*")[^"]*(")`, 'g');
-    const updated = next.replace(pattern, (match, pre, post) => {
-      const already = match.slice(pre.length, match.length - post.length);
-      if (already === desiredRange) return match;
-      changed = true;
-      console.error(
-        `version: [internal-range] ${dryRun ? 'would fix' : 'fixing'} ${context.projectName}'s "${depName}" ` +
-        `${already} -> ${desiredRange} (direct on-disk read, bypassing cached project graph)`
-      );
-      return `${pre}${desiredRange}${post}`;
-    });
-    next = updated;
+  for (const field of depFields) {
+    if (!pkg[field]) continue;
+    // Locate THIS field's own `{ ... }` block in the current text. Dependency
+    // collections are flat string maps (no nested `{}` in a well-formed
+    // package.json), so a non-nested `[^}]*` match safely captures the whole
+    // block without spilling into the next field.
+    const fieldRegex = new RegExp(`("${field}"\\s*:\\s*\\{)([^}]*)(\\})`);
+    const fieldMatch = fieldRegex.exec(next);
+    if (!fieldMatch) continue; // field present in the parsed object but not found as expected in raw text — leave untouched
+    const blockStart = fieldMatch.index + fieldMatch[1].length;
+    const blockContent = fieldMatch[2];
+    let updatedBlock = blockContent;
+    for (const depName of Object.keys(pkg[field])) {
+      const key = `${field}::${depName}`;
+      if (!desiredRanges.has(key)) continue;
+      const desiredRange = desiredRanges.get(key);
+      const escaped = depName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const pattern = new RegExp(`("${escaped}"\\s*:\\s*")[^"]*(")`);
+      updatedBlock = updatedBlock.replace(pattern, (match, pre, post) => {
+        const already = match.slice(pre.length, match.length - post.length);
+        if (already === desiredRange) return match;
+        changed = true;
+        console.error(
+          `version: [internal-range] ${dryRun ? 'would fix' : 'fixing'} ${context.projectName}'s "${field}.${depName}" ` +
+          `${already} -> ${desiredRange} (direct on-disk read, bypassing cached project graph)`
+        );
+        return `${pre}${desiredRange}${post}`;
+      });
+    }
+    if (updatedBlock !== blockContent) {
+      next = next.slice(0, blockStart) + updatedBlock + next.slice(blockStart + blockContent.length);
+    }
   }
 
   if (!changed) return { success: true };
@@ -424,6 +464,35 @@ async function runVersion(options, context, rec) {
   }
 
   if (cached.version !== version) {
+    // BUG-005 (CRITICAL): a bare `!==` here cannot tell "source is ahead of
+    // what's published" (the legitimate, common case — a bump already landed
+    // locally, release pending) apart from "source is BEHIND what's already
+    // published" (a REGRESSION — e.g. a revert, a bad merge, a stale branch
+    // rebuilt after main already moved on and published further). The old
+    // code silently treated BOTH as "release pending, no bump" — and for a
+    // regression, that is actively dangerous: `publish`'s own existence check
+    // (`cached.version === version`) would then MISS (source is behind, not
+    // equal), so `publish` would attempt `npm publish` for the OLD version
+    // and, on npm's "cannot publish over previously published version"
+    // rejection, run its write-through-cache path — overwriting the cache's
+    // `normalizedHash`/`publishedIntegrity` for the ALREADY-PUBLISHED newer
+    // version with the CURRENT (older, regressed) dist's hash under the OLD
+    // version number. That poisons `published-state.json` permanently (every
+    // future run compares the wrong hash against the wrong version) and
+    // silently stalls the real release. A regression must be a loud, hard
+    // failure here — never silently reinterpreted as "pending".
+    if (semver.lt(version, cached.version)) {
+      console.error(
+        `version: ERROR — ${name}'s source version (${version}) is BEHIND the published-state cache's ` +
+        `recorded version (${cached.version}). This looks like a version REGRESSION (a revert, a stale ` +
+        `branch, or a bad merge) rather than a pending release. Refusing to proceed: continuing would let ` +
+        `'publish' attempt to (re-)publish the OLD version and, on npm's "already published" rejection, ` +
+        `write-through-cache the CURRENT (regressed) dist's hash under the OLD version number — permanently ` +
+        `poisoning published-state.json and silently stalling the real release. Fix the source version (it ` +
+        `must be >= ${cached.version}) before re-running.`
+      );
+      return { success: false };
+    }
     // Source is already ahead of the cache's last known published version —
     // a bump is already pending publish (mirrors the legacy "source version
     // not yet on npm" branch, without a live `npm view` — the cache always

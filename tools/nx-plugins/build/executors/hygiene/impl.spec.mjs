@@ -130,52 +130,99 @@ test('end-to-end integration (real module, real npm pack --dry-run, no mocks): a
   }
 });
 
-test('end-to-end integration (real module, real npm pack --dry-run, no mocks): BUG-RELEASE-NX-RELEASE-PUBLISH-EMPTY-TARBALL-001 repro — a stale "files" field (relative to the WRONG packageRoot) that matches nothing FAILS on the empty-tarball guard, even though real code exists on disk', async () => {
+test('end-to-end integration (real module, real npm pack --dry-run, no mocks): BUG-001 — a TRANSIENT stale "files" field left by a `build` re-clobber is fixed by the executor\'s own re-stamp before hygiene packs, so a package with real code on disk now PASSES', async () => {
+  // CONTRACT CHANGE (BUG-001): this test used to assert `success:false` for
+  // exactly this fixture, under the name
+  // BUG-RELEASE-NX-RELEASE-PUBLISH-EMPTY-TARBALL-001. That was correct for
+  // the OLD executor, which trusted whatever was sitting in dist/ when it
+  // ran. But `publish`/`version` ALREADY defend against this exact shape by
+  // calling `writeDistManifest` as their own truly-last write before they
+  // trust dist/'s content (`dist-manifest` is a sibling of `build` in
+  // `publish`'s `dependsOn`, so nx guarantees both complete but not their
+  // relative order — a cache-restored `build` can re-clobber the rebase
+  // `dist-manifest` already did). `publish-hygiene` now does the same
+  // re-stamp (see impl.js), so a dist caught in this TRANSIENT clobbered
+  // state — real code on disk, package.json's `files` field just hasn't
+  // been re-rebased yet — is exactly what the re-stamp fixes, and hygiene
+  // now checks the SAME state the real publish will pack: a false-fail
+  // eliminated, not a real defect masked. The case where re-stamping cannot
+  // help (no source package.json to re-stamp FROM, or dist has no code even
+  // after a correct re-stamp) is covered below and still fails.
   const rootDir = mkdtempSync(join(tmpdir(), 'hygiene-impl-'));
   try {
     const projectRoot = 'packages/pkg-b';
-    const distDir = join(rootDir, projectRoot, 'dist');
+    const pkgRoot = join(rootDir, projectRoot);
+    const distDir = join(pkgRoot, 'dist');
     mkdirSync(distDir, { recursive: true });
-    // Reproduces the live incident exactly: `dist-manifest` did NOT strip the
-    // source-root-relative "files":["dist", …] allowlist (as it's supposed
-    // to — see generate-manifest.js's "(4) Drops files" step) before this
-    // manifest was packed FROM the dist directory itself. Relative to
+    // The real, authored SOURCE manifest — present so the executor's
+    // re-stamp (writeDistManifest) has something correct to regenerate FROM.
+    writeFileSync(join(pkgRoot, 'package.json'), JSON.stringify({ name: '@adhd/pkg-b', version: '1.0.0', main: './dist/index.js', files: ['dist', 'CHANGELOG.md'] }));
+    // The DIST manifest, caught mid-transient exactly like the live incident:
+    // `dist-manifest` did NOT strip the source-root-relative "files" allowlist
+    // (it's supposed to — see generate-manifest.js's "(4) Drops files" step)
+    // before this was packed FROM the dist directory itself. Relative to
     // packageRoot=dist/, "dist" matches nothing, so npm's `files` allowlist
-    // excludes the real `index.js` sitting right next to package.json — npm
-    // packs ONLY package.json. Verified empirically (real `npm pack
-    // --dry-run`, no mock) before writing this assertion.
+    // would exclude the real `index.js` sitting right next to package.json —
+    // UNLESS something re-stamps first.
     writeFileSync(
       join(distDir, 'package.json'),
       JSON.stringify({ name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', files: ['dist', 'CHANGELOG.md'] })
     );
-    writeFileSync(join(distDir, 'index.js'), 'module.exports = {};\n'); // real code IS on disk — npm's `files` field is what excludes it
+    writeFileSync(join(distDir, 'index.js'), 'module.exports = {};\n'); // real code IS on disk
     const context = { root: rootDir, projectName: '@adhd/pkg-b', projectsConfigurations: { projects: { '@adhd/pkg-b': { root: projectRoot } } } };
-    const impl = loadFreshImpl(); // real __internals.runHygieneCheck — not overridden
+    const impl = loadFreshImpl(); // real __internals.runHygieneCheck AND restampDistManifest — not overridden
 
     const result = await impl({}, context);
-    assert.equal(result.success, false, 'an empty (package.json-only) tarball must fail even when the real code exists on disk');
+    assert.equal(result.success, true, 'the executor\'s own re-stamp must repair a transient stale "files" field before hygiene packs, matching what the real publish would ship');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
 });
 
-test('end-to-end integration (real module, real npm pack --dry-run, no mocks): empty-tarball guard fires even for a manifest with NO declared entry point at all (isolates the new assertion from the pre-existing "declared entry missing" check)', async () => {
+test('end-to-end integration (real module, real npm pack --dry-run, no mocks): BUG-001 — re-stamp also fixes a manifest with NO declared entry point at all (isolates the fix from the pre-existing "declared entry missing" check)', async () => {
   const rootDir = mkdtempSync(join(tmpdir(), 'hygiene-impl-'));
   try {
     const projectRoot = 'packages/pkg-b';
-    const distDir = join(rootDir, projectRoot, 'dist');
+    const pkgRoot = join(rootDir, projectRoot);
+    const distDir = join(pkgRoot, 'dist');
     mkdirSync(distDir, { recursive: true });
+    writeFileSync(join(pkgRoot, 'package.json'), JSON.stringify({ name: '@adhd/pkg-b', version: '1.0.0', files: ['dist'] }));
     // No main/module/typings/exports declared at all — `collectExpectedTargets`
-    // returns nothing, so the PRE-EXISTING "declared entry missing" check has
-    // nothing to check. Only the new, unconditional empty-tarball guard can
-    // catch this shape.
+    // returns nothing, so the pre-existing "declared entry missing" check has
+    // nothing to check; only the empty-tarball guard is in play here, and the
+    // re-stamp (stripping the stale "files" allowlist) is what lets the real
+    // `index.js` through.
     writeFileSync(join(distDir, 'package.json'), JSON.stringify({ name: '@adhd/pkg-b', version: '1.0.0', files: ['dist'] }));
     writeFileSync(join(distDir, 'index.js'), 'module.exports = {};\n');
     const context = { root: rootDir, projectName: '@adhd/pkg-b', projectsConfigurations: { projects: { '@adhd/pkg-b': { root: projectRoot } } } };
     const impl = loadFreshImpl();
 
     const result = await impl({}, context);
-    assert.equal(result.success, false, 'a package.json-only tarball must fail even when it declares no entry point to check against');
+    assert.equal(result.success, true, 'the re-stamp must strip the stale "files" allowlist so the real index.js is packed even when no entry point is declared');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('end-to-end integration (real module, real npm pack --dry-run, no mocks): a GENUINELY empty tarball — no shippable code even AFTER a correct re-stamp — still FAILS (the guarantee the re-stamp must never weaken)', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'hygiene-impl-'));
+  try {
+    const projectRoot = 'packages/pkg-b';
+    const pkgRoot = join(rootDir, projectRoot);
+    const distDir = join(pkgRoot, 'dist');
+    mkdirSync(distDir, { recursive: true });
+    // A real, well-formed source manifest — the re-stamp runs successfully
+    // and regenerates a perfectly correct dist/package.json. But the build
+    // never actually emitted any code into dist/ (e.g. a genuinely broken
+    // build), so there is nothing for the re-stamp to rescue: dist/ contains
+    // ONLY package.json before AND after re-stamping.
+    writeFileSync(join(pkgRoot, 'package.json'), JSON.stringify({ name: '@adhd/pkg-b', version: '1.0.0' }));
+    writeFileSync(join(distDir, 'package.json'), JSON.stringify({ name: '@adhd/pkg-b', version: '1.0.0' }));
+    const context = { root: rootDir, projectName: '@adhd/pkg-b', projectsConfigurations: { projects: { '@adhd/pkg-b': { root: projectRoot } } } };
+    const impl = loadFreshImpl(); // real re-stamp AND real hygiene check — not overridden
+
+    const result = await impl({}, context);
+    assert.equal(result.success, false, 'a dist with no shippable files must still fail even after the executor\'s own correct re-stamp — the re-stamp fixes a stale manifest, it cannot manufacture missing code');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }

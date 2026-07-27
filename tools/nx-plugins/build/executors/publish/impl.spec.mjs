@@ -205,6 +205,119 @@ test('--dryRun: never writes the cache, even on a "successful" (dry) npm publish
   }
 });
 
+test('DEBT-002 #2: defaults --access from the dist manifest\'s publishConfig.access when no explicit task option is given', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
+  try {
+    const distPkg = { name: '@adhd/pkg-b', version: '1.0.0', publishConfig: { access: 'restricted' } };
+    const { context, distDir } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', distPkg });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const publishImpl = loadFreshImpl();
+
+    const result = await publishImpl({}, context);
+    assert.equal(result.success, true);
+    const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
+    assert.equal(publishCalls.length, 1);
+    const accessIdx = publishCalls[0].args.indexOf('--access');
+    assert.equal(publishCalls[0].args[accessIdx + 1], 'restricted', 'must honor the package\'s own declared publishConfig.access, not hardcode public');
+    assert.ok(publishCalls[0].args.includes(distDir));
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('DEBT-002 #2: an explicit task option.access OVERRIDES the manifest\'s publishConfig.access', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
+  try {
+    const distPkg = { name: '@adhd/pkg-b', version: '1.0.0', publishConfig: { access: 'restricted' } };
+    const { context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', distPkg });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const publishImpl = loadFreshImpl();
+
+    const result = await publishImpl({ access: 'public' }, context);
+    assert.equal(result.success, true);
+    const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
+    const accessIdx = publishCalls[0].args.indexOf('--access');
+    assert.equal(publishCalls[0].args[accessIdx + 1], 'public', 'an explicit task option must win over the manifest\'s own declared access');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('DEBT-002 #2: no publishConfig.access declared and no option override -> unchanged default of "public" (every package in this workspace today)', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
+  try {
+    const distPkg = { name: '@adhd/pkg-b', version: '1.0.0' }; // no publishConfig at all
+    const { context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', distPkg });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const publishImpl = loadFreshImpl();
+
+    const result = await publishImpl({}, context);
+    assert.equal(result.success, true);
+    const publishCalls = state.calls.filter((c) => c.cmd === 'npm' && c.args[0] === 'publish');
+    const accessIdx = publishCalls[0].args.indexOf('--access');
+    assert.equal(publishCalls[0].args[accessIdx + 1], 'public', 'must remain unchanged for every existing (public) package');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('BUG-005 write-through guard: a successful publish for an OLDER version than what the cache already recorded must NOT regress the cache', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
+  try {
+    // Cache already recorded 2.0.0 as published (e.g. from a prior, correct
+    // run). This run's dist somehow carries a REGRESSED 1.0.0 (the exact
+    // shape `version/impl.js`'s own semver guard is meant to catch upstream —
+    // this test proves `publish`'s write-through is a second, independent
+    // line of defense: even if a regressed version slipped past that guard,
+    // the cache itself must never be allowed to move backwards).
+    const distPkg = { name: '@adhd/pkg-b', version: '1.0.0' };
+    const { context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', distPkg });
+    writePublishedState(rootDir, {
+      '@adhd/pkg-b': { version: '2.0.0', normalizedHash: 'sha256:the-real-2.0.0-hash', publishedIntegrity: 'sha512-real' },
+    });
+
+    const state = newState(); // npm publish "succeeds" (mock always returns status 0)
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const publishImpl = loadFreshImpl();
+
+    const result = await publishImpl({}, context);
+    assert.equal(result.success, true, 'the publish attempt itself is not what this guards — the write-through afterward is');
+    const cached = JSON.parse(readFileSync(publishedStatePath(rootDir), 'utf8'));
+    assert.equal(cached['@adhd/pkg-b'].version, '2.0.0', 'the cache must be left at the NEWER already-recorded version, never regressed to 1.0.0');
+    assert.equal(cached['@adhd/pkg-b'].normalizedHash, 'sha256:the-real-2.0.0-hash', 'the existing (correct, newer) entry must be preserved verbatim, not partially overwritten');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('BUG-005 write-through guard: a NEWER version writes through normally (unchanged happy-path behavior)', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
+  try {
+    const distPkg = { name: '@adhd/pkg-b', version: '2.0.0' };
+    const { context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', distPkg });
+    writePublishedState(rootDir, {
+      '@adhd/pkg-b': { version: '1.0.0', normalizedHash: 'sha256:old', publishedIntegrity: 'sha512-old' },
+    });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const publishImpl = loadFreshImpl();
+
+    const result = await publishImpl({}, context);
+    assert.equal(result.success, true);
+    const cached = JSON.parse(readFileSync(publishedStatePath(rootDir), 'utf8'));
+    assert.equal(cached['@adhd/pkg-b'].version, '2.0.0', 'a genuinely newer version must still write through normally');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
 test('BUG-BUILD-PUBLISH-DISTMANIFEST-CLOBBERED-001: publish re-stamps dist/package.json from source, even if a sibling task (build) clobbered it with an un-rebased copy first', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'publish-impl-'));
   try {

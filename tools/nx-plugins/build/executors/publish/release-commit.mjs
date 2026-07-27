@@ -61,9 +61,30 @@ function git(args, opts = {}) {
   return spawnSync('git', args, { cwd: workspaceRoot, encoding: 'utf8', ...opts });
 }
 
-/** `git status --porcelain` modified/added file paths (workspace-root-relative, forward-slash). */
+/**
+ * `git status --porcelain` modified/added/UNTRACKED file paths
+ * (workspace-root-relative, forward-slash).
+ *
+ * BUG-006 (HIGH): this previously passed `--untracked-files=no`, which hides
+ * untracked files from `git status` entirely. A package's brand-new
+ * (first-ever release) `CHANGELOG.md` is untracked — `nx release changelog
+ * --first-release` creates it fresh, it has never been committed — so it was
+ * invisible here and never staged. The next release then ran
+ * `--first-release` again (nothing recorded it happened), re-dumping the
+ * package's FULL commit history into the changelog every subsequent release
+ * instead of appending just the new entry.
+ *
+ * Fixed by dropping the flag (default is `--untracked-files=all` for
+ * `--porcelain=v1`, listing every untracked file individually rather than
+ * collapsing untracked directories). This is intentionally safe to widen:
+ * the result still passes through `isReleaseArtifact()` below, which only
+ * matches `package.json`/`CHANGELOG.md` directly under
+ * `packages/<domain>/<pkg>/` or `entrypoint/<pkg>/` — any other untracked
+ * file (unrelated in-flight work from another agent/human) is filtered out
+ * exactly as before, never staged.
+ */
 function dirtyPaths() {
-  const res = git(['status', '--porcelain=v1', '--untracked-files=no']);
+  const res = git(['status', '--porcelain=v1']);
   if (res.status !== 0) throw new Error(`git status failed: ${res.stderr || res.stdout}`);
   return res.stdout
     .split('\n')

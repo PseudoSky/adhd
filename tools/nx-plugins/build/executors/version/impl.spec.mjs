@@ -429,6 +429,97 @@ test('cache HIT but source already ahead of the cached version: ZERO network, tr
   }
 });
 
+// ---------------------------------------------------------------------------
+// BUG-005 — semver-DIRECTIONAL check on `cached.version !== version`
+// ---------------------------------------------------------------------------
+
+test('BUG-005 REGRESSION-LOWER: source version BEHIND the cache\'s recorded published version is a HARD FAILURE, not "release pending"', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    // Source has REVERTED to 1.0.0 (a bad merge / stale branch rebuilt),
+    // while the cache already recorded 1.0.1 as published.
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const distFiles = { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' };
+    const { pkgRoot, context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg, distFiles });
+    writePublishedState(rootDir, {
+      '@adhd/pkg-b': { version: '1.0.1', normalizedHash: 'sha256:irrelevant', publishedIntegrity: 'sha512-whatever' },
+    });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, false, 'a version regression relative to the published-state cache must fail, never silently pass');
+    assert.deepEqual(networkCalls(state), [], 'detecting the regression itself must still be zero-network — the cache alone is enough to know');
+    const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    assert.equal(after.version, '1.0.0', 'a failed regression gate must never rewrite the (already-wrong) source version');
+    // Negative control for the poisoning hazard this fix closes: with the old
+    // `!==` check, this exact scenario was silently treated as "release
+    // pending", and — had `publish` run next — its own `cached.version ===
+    // version` existence check would MISS (1.0.1 !== 1.0.0), `npm publish`
+    // would be attempted for the OLD 1.0.0, npm would reject with "cannot
+    // publish over previously published version", and the write-through path
+    // would then overwrite the cache's 1.0.1 entry with a hash computed from
+    // the CURRENT (regressed) 1.0.0 dist — permanently poisoning
+    // published-state.json. Failing loudly HERE is what prevents all of that.
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('BUG-005 boundary: source version EQUAL to the cache\'s recorded version is NOT a regression (falls through to the normal hash-compare path)', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
+    const distFiles = { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' };
+    const { pkgRoot, context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg, distFiles });
+    const { normalizedHash } = require('./compare-published.js');
+    writePublishedState(rootDir, {
+      '@adhd/pkg-b': { version: '1.0.0', normalizedHash: normalizedHash(join(pkgRoot, 'dist')), publishedIntegrity: 'sha512-whatever' },
+    });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true, 'an EQUAL version is never a regression — this must reach the hash-compare path and succeed normally');
+    assert.deepEqual(networkCalls(state), []);
+    const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    assert.equal(after.version, '1.0.0', 'unchanged content vs published -> no bump');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('BUG-005 boundary: source version AHEAD of the cache\'s recorded version is the legitimate "release pending" case (unchanged behavior)', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.1', main: './index.js', dependencies: {} }; // already bumped locally
+    const distFiles = { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 2;\n' };
+    const { pkgRoot, context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg, distFiles });
+    writePublishedState(rootDir, {
+      '@adhd/pkg-b': { version: '1.0.0', normalizedHash: 'sha256:irrelevant', publishedIntegrity: 'sha512-whatever' },
+    });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true, 'source ahead of the cache is a legitimate pending release, not a regression');
+    assert.deepEqual(networkCalls(state), []);
+    const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    assert.equal(after.version, '1.0.1', 'must be left exactly as-is — release already pending');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
 test('cache HIT, integrity fast path used at backfill time is directly consumable later with zero network (end-to-end: miss -> populate -> hit)', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
   try {
@@ -476,6 +567,12 @@ test('"not yet published" path (cache miss -> backfill -> still pending): reconc
       srcPkg: { name: '@adhd/pkg-b', version: '9.9.9', dependencies: { '@adhd/pkg-a': '^1.0.0' } },
       distFiles: { 'package.json': JSON.stringify({ name: '@adhd/pkg-b', version: '9.9.9' }), 'index.js': 'x\n' },
     });
+    // DEBT-002 #1: writeDistManifest now hard-gates on any @adhd/* dependency
+    // that doesn't resolve to a real on-disk sibling — register pkg-a as a
+    // real workspace project so this test's own (unrelated) cache-miss/
+    // backfill scenario isn't collaterally blocked by that gate.
+    makeFiles(join(rootDir, 'packages/pkg-a'), { 'package.json': JSON.stringify({ name: '@adhd/pkg-a', version: '1.0.0' }) });
+    context.projectsConfigurations.projects['pkg-a'] = { root: 'packages/pkg-a' };
     const state = newState({ publishedVersions: [] }); // never published
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
@@ -565,6 +662,12 @@ test('published (cache miss, backfill) + range-only drift vs published tarball: 
       srcPkg: localPkg,
       distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' },
     });
+    // DEBT-002 #1: writeDistManifest now hard-gates on any @adhd/* dependency
+    // absent from the workspace version map — register pkg-a as a real
+    // sibling project so this test's own range-only-drift scenario isn't
+    // collaterally blocked.
+    makeFiles(join(rootDir, 'packages/pkg-a'), { 'package.json': JSON.stringify({ name: '@adhd/pkg-a', version: '1.1.0' }) });
+    context.projectsConfigurations.projects['pkg-a'] = { root: 'packages/pkg-a' };
     const state = newState({
       publishedVersions: ['1.0.0'],
       publishedFiles: { 'package.json': JSON.stringify(publishedPkg), 'index.js': 'export const x = 1;\n' },
@@ -868,10 +971,47 @@ test('dry run: reports the internal-range fix it would make but never writes pac
   }
 });
 
-test('leaves an internal range untouched when the dependency is not a known workspace project (e.g. no on-disk package.json to trust)', async (t) => {
+// CONTRACT REFINEMENT (DEBT-002 #1, post-audit false positive): the FIRST cut
+// of this gate treated ANY @adhd/* name absent from the workspace version map
+// as a hazard — which blocked a real release: `@adhd/backlog` legitimately
+// depends on `@adhd/sox-graph-store@^0.3.0`, a genuine EXTERNAL npm package
+// (published 0.3.0/0.5.0) that merely shares the `@adhd/` scope and is not a
+// workspace sibling. Map absence alone says nothing about installability — a
+// CONCRETE range on such a name is exactly what a legitimate external
+// @adhd-scoped dependency looks like, and must pass through untouched. The
+// real hazard `assertResolvedInternalDeps` targets is the LITERAL RANGE
+// itself: a `workspace:` protocol range (npm never substitutes it) or a bare
+// `*` — see generate-manifest.js's `assertResolvedInternalDeps` doc comment
+// and generate-manifest.spec.mjs's dedicated tests for the pure-function
+// proof. This test (and its sibling below) now assert the CORRECTED contract
+// at the `version` task's orchestration layer.
+test('DEBT-002 #1 (corrected): a CONCRETE range on an @adhd/* dependency absent from the workspace project graph is ALLOWED — a legitimate external @adhd-scoped package (e.g. @adhd/sox-graph-store) — version proceeds normally', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
   try {
-    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: { '@adhd/not-a-real-project': '^1.0.0' } };
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: { '@adhd/sox-graph-store': '^0.3.0' } };
+    const { pkgRoot, context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'x\n' },
+    });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
+    const result = await versionImpl({}, context);
+    assert.equal(result.success, true, 'a concrete external @adhd/* range must never be treated as an unresolvable hazard');
+    const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    assert.equal(after.dependencies['@adhd/sox-graph-store'], '^0.3.0', 'the external range must be left exactly as authored');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('DEBT-002 #1 (corrected): a surviving "workspace:*" range on an @adhd/* dependency absent from the workspace project graph is STILL a hard failure (the real hazard)', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: { '@adhd/not-a-real-project': 'workspace:*' } };
     const { pkgRoot, context } = makeProject({
       rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg,
       distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'x\n' },
@@ -883,10 +1023,104 @@ test('leaves an internal range untouched when the dependency is not a known work
     const versionImpl = loadFreshImpl();
     installEslintCheckMock(state);
 
+    await assert.rejects(
+      () => versionImpl({}, context),
+      /not-a-real-project/,
+      'a surviving workspace: protocol range must still fail the task loudly, naming the offending dependency'
+    );
+    const after = readFileSync(join(pkgRoot, 'package.json'), 'utf8');
+    assert.equal(after, before, 'a failed gate must never have written a (still-unresolvable) version bump to the source package.json');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DEBT-002 #5 — reconcileInternalRangesFromDisk must scope by (field, depName),
+// never rewrite a dep's range in EVERY field it appears in from just one
+// field's computed prefix.
+// ---------------------------------------------------------------------------
+
+test('DEBT-002 #5: a dep declared with DIFFERENT range prefixes in `dependencies` (^) vs `peerDependencies` (~) each keep their OWN prefix — no cross-field contamination', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    // pkg-a is now at 2.0.0 on disk. pkg-b declares it TWICE, with two
+    // DIFFERENT prefixes in two DIFFERENT fields — the exact shape that used
+    // to collapse onto whichever field's entry populated the (depName-only)
+    // map first, forcing one field's prefix onto the other.
+    makeFiles(join(rootDir, 'packages/pkg-a'), { 'package.json': JSON.stringify({ name: '@adhd/pkg-a', version: '2.0.0' }, null, 2) });
+    const localPkg = {
+      name: '@adhd/pkg-b',
+      version: '1.0.0',
+      main: './index.js',
+      dependencies: { '@adhd/pkg-a': '^1.0.0' },
+      peerDependencies: { '@adhd/pkg-a': '~1.0.0' },
+    };
+    const { pkgRoot, context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'x\n' },
+    });
+    context.projectsConfigurations.projects['pkg-a'] = { root: 'packages/pkg-a' };
+
+    const { normalizedHash } = require('./compare-published.js');
+    writePublishedState(rootDir, {
+      '@adhd/pkg-b': { version: '1.0.0', normalizedHash: normalizedHash(join(pkgRoot, 'dist')), publishedIntegrity: 'sha512-whatever' },
+    });
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
     const result = await versionImpl({}, context);
     assert.equal(result.success, true);
+    const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
+    // Negative control: the OLD (depName-keyed, global-replace) implementation
+    // would compute ONE desired range from whichever field's Object.entries
+    // iteration reached `@adhd/pkg-a` first (dependencies, since it's declared
+    // first), then blindly replace EVERY textual `"@adhd/pkg-a": "..."`
+    // occurrence with that SAME desired range — forcing `^2.0.0` onto
+    // peerDependencies too, silently discarding its intentionally different
+    // `~` prefix. Both assertions below would NOT both hold under that bug.
+    assert.equal(after.dependencies['@adhd/pkg-a'], '^2.0.0', 'dependencies keeps its OWN ^ prefix, updated to the current on-disk version');
+    assert.equal(after.peerDependencies['@adhd/pkg-a'], '~2.0.0', 'peerDependencies keeps its OWN ~ prefix — must NOT be contaminated by dependencies\' ^ prefix');
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true });
+  }
+});
+
+test('DEBT-002 #5 dry run: reports BOTH fields\' fixes with their own prefixes, never writes package.json', async (t) => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
+  try {
+    makeFiles(join(rootDir, 'packages/pkg-a'), { 'package.json': JSON.stringify({ name: '@adhd/pkg-a', version: '2.0.0' }, null, 2) });
+    const localPkg = {
+      name: '@adhd/pkg-b',
+      version: '1.0.0',
+      main: './index.js',
+      dependencies: { '@adhd/pkg-a': '^1.0.0' },
+      devDependencies: { '@adhd/pkg-a': '1.0.0' }, // no prefix -> defaults to ^ per existing convention
+    };
+    const { pkgRoot, context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg,
+      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'x\n' },
+    });
+    context.projectsConfigurations.projects['pkg-a'] = { root: 'packages/pkg-a' };
+
+    const { normalizedHash } = require('./compare-published.js');
+    writePublishedState(rootDir, {
+      '@adhd/pkg-b': { version: '1.0.0', normalizedHash: normalizedHash(join(pkgRoot, 'dist')), publishedIntegrity: 'sha512-whatever' },
+    });
+    const before = readFileSync(join(pkgRoot, 'package.json'), 'utf8');
+
+    const state = newState();
+    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
+    const versionImpl = loadFreshImpl();
+    installEslintCheckMock(state);
+
+    const result = await versionImpl({ dryRun: true }, context);
+    assert.equal(result.success, true);
     const after = readFileSync(join(pkgRoot, 'package.json'), 'utf8');
-    assert.equal(after, before, 'no known on-disk project for the dep -> leave the declared range exactly as-is');
+    assert.equal(after, before, 'a dry run must never write package.json, even with multi-field drift');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
