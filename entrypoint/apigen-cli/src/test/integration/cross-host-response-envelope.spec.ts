@@ -56,6 +56,12 @@ import * as net from 'node:net';
 import * as readline from 'node:readline';
 import { project } from '@adhd/apigen-engine-naming';
 import { runExtractorEmitJson } from '@adhd/apigen-python-env';
+import {
+  READY_TIMEOUT_MS,
+  liveTestTimeoutMs,
+  captureStderr,
+  waitForHttp as sharedWaitForHttp,
+} from '../support/readiness';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -145,34 +151,29 @@ async function freePort(): Promise<number> {
 
 /**
  * Wait for an HTTP endpoint to respond (bounded poll — no fixed sleep).
- * Retries every 100 ms until `timeoutMs` is exhausted.
+ * Retries every 100 ms until `timeoutMs` (default `READY_TIMEOUT_MS`, 60 s,
+ * overridable via `APIGEN_TEST_READY_TIMEOUT_MS`) is exhausted. If `child` is
+ * supplied and exits first, fails fast with its captured stderr instead of
+ * silently burning the rest of the deadline polling a dead process.
  */
-async function waitForHttp(url: string, timeoutMs = 15_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  let lastErr: unknown;
-  while (Date.now() < deadline) {
-    try {
-      await fetch(url);
-      return;
-    } catch (e) {
-      lastErr = e;
-      await new Promise<void>((r) => setTimeout(r, 100));
-    }
-  }
-  throw new Error(
-    `waitForHttp: ${url} never responded within ${timeoutMs}ms — last error: ${String(
-      lastErr
-    )}`
-  );
+async function waitForHttp(
+  url: string,
+  timeoutMs = READY_TIMEOUT_MS,
+  child?: ChildProcessWithoutNullStreams,
+  getStderr?: () => string
+): Promise<void> {
+  return sharedWaitForHttp(url, { timeoutMs, child, getStderr });
 }
 
 /**
  * Wait for a Python subprocess to emit `{"ready":true}` on stdout.
- * Bounded to `timeoutMs`; rejects on early process exit.
+ * Bounded to `timeoutMs` (default `READY_TIMEOUT_MS`); rejects on early
+ * process exit, including the captured stderr for diagnosability.
  */
 function waitForPythonReady(
   proc: ChildProcessWithoutNullStreams,
-  timeoutMs = 15_000
+  timeoutMs = READY_TIMEOUT_MS,
+  getStderr?: () => string
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const rl = readline.createInterface({ input: proc.stdout });
@@ -185,8 +186,14 @@ function waitForPythonReady(
       fn();
     }
     const timer = setTimeout(() => {
+      const stderr = getStderr?.() ?? '';
       settle(() =>
-        reject(new Error('py-flask: timed out waiting for {"ready":true}'))
+        reject(
+          new Error(
+            `py-flask: timed out waiting for {"ready":true} within ${timeoutMs}ms` +
+              (stderr ? ` — stderr:\n${stderr}` : '')
+          )
+        )
       );
     }, timeoutMs);
     rl.on('line', (line: string) => {
@@ -198,8 +205,14 @@ function waitForPythonReady(
       }
     });
     proc.on('exit', (code) => {
+      const stderr = getStderr?.() ?? '';
       settle(() =>
-        reject(new Error(`py-flask: python3 exited prematurely (code ${code})`))
+        reject(
+          new Error(
+            `py-flask: python3 exited prematurely (code ${code})` +
+              (stderr ? ` — stderr:\n${stderr}` : '')
+          )
+        )
       );
     });
   });
@@ -280,15 +293,20 @@ async function startTsServer(
     }
   ) as ChildProcessWithoutNullStreams;
 
-  proc.stderr.on('data', () => {
-    /* suppress */
-  });
+  const getStderr = captureStderr(proc);
   proc.stdout.on('data', () => {
     /* suppress */
   });
 
-  // Wait until the fastify server accepts connections.
-  await waitForHttp(`http://127.0.0.1:${port}/__probe__`, 15_000);
+  // Wait until the fastify server accepts connections. Fails fast (with the
+  // child's stderr) if the process exits before ever becoming ready, instead
+  // of silently burning the full readiness budget on a dead child.
+  await waitForHttp(
+    `http://127.0.0.1:${port}/__probe__`,
+    READY_TIMEOUT_MS,
+    proc,
+    getStderr
+  );
 
   const server: LiveServer = {
     port,
@@ -392,12 +410,10 @@ async function startPyServer(
     }
   ) as ChildProcessWithoutNullStreams;
 
-  proc.stderr.on('data', () => {
-    /* suppress */
-  });
+  const getStderr = captureStderr(proc);
 
   try {
-    await waitForPythonReady(proc, 15_000);
+    await waitForPythonReady(proc, READY_TIMEOUT_MS, getStderr);
   } finally {
     // Safe to remove once the server is ready (or has failed to become
     // ready) — flask_server.py reads --plan-file synchronously during
@@ -424,7 +440,7 @@ async function startPyServer(
 describe('[cross-host-response-envelope] BUG-APIGEN-015 regression guard', () => {
   it(
     'api-fastify and py-flask emit byte-identical JSON responses for scalar Decimal returns',
-    { timeout: 60_000 },
+    { timeout: liveTestTimeoutMs(1) },
     async () => {
       // Write fixtures to a temp dir.
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-xhost-'));
@@ -524,7 +540,7 @@ describe('[cross-host-response-envelope] BUG-APIGEN-015 regression guard', () =>
 
   it(
     'api-fastify returns application/json (not text/plain) — TEETH: reverts sendJson → test goes RED',
-    { timeout: 60_000 },
+    { timeout: liveTestTimeoutMs(1) },
     async () => {
       // This test isolates the content-type assertion as a standalone teeth check.
       // If sendJson() in api-fastify/run.ts is reverted to `reply.send(string)`,

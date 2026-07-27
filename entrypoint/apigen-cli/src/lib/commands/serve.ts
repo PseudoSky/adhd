@@ -354,6 +354,40 @@ function probeGrpcTcpOnce(port: number): Promise<boolean> {
 }
 
 /**
+ * Production default readiness budget (ms) for a single host to answer its
+ * first health probe. Preserved verbatim as the fallback when neither an
+ * explicit override nor `APIGEN_SERVE_READY_TIMEOUT_MS` is set — changing
+ * this constant IS a production behavior change; the env var / opts override
+ * below exist precisely so callers (e.g. tests under heavy parallel load)
+ * never have to touch it.
+ */
+const DEFAULT_READY_TIMEOUT_MS = 15000;
+
+/**
+ * Resolve the per-host readiness timeout (ms) with precedence:
+ *   1. `override` — an explicit value (e.g. `startServe({ readyTimeoutMs })`).
+ *   2. `APIGEN_SERVE_READY_TIMEOUT_MS` env var (parsed as a positive integer).
+ *   3. `DEFAULT_READY_TIMEOUT_MS` (15 s) — unchanged production default.
+ *
+ * `APIGEN_SERVE_READY_TIMEOUT_MS` exists so a caller that cannot thread an
+ * explicit option through (or a test suite that wants one knob for every
+ * `startServe()` call) can widen the budget without touching this file —
+ * useful under CPU/port contention (e.g. a massively-parallel release run)
+ * where the 15 s default is otherwise marginal.
+ */
+function resolveReadyTimeoutMs(override?: number): number {
+  if (override !== undefined && Number.isFinite(override) && override > 0) {
+    return override;
+  }
+  const raw = process.env['APIGEN_SERVE_READY_TIMEOUT_MS'];
+  if (raw !== undefined) {
+    const parsed = parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return DEFAULT_READY_TIMEOUT_MS;
+}
+
+/**
  * Poll an HTTP host's `_meta/health` until it answers 2xx or the deadline passes.
  *
  * Event-driven: it re-probes on a short interval, but each probe is a real HTTP
@@ -361,12 +395,14 @@ function probeGrpcTcpOnce(port: number): Promise<boolean> {
  * a wall-clock sleep.  Aborts early (rejects) if the child exits first.
  *
  * @param host       - The host to probe.
- * @param timeoutMs  - Overall budget (default 15 s — Python cold-start + import).
+ * @param timeoutMs  - Overall budget. Defaults to `resolveReadyTimeoutMs()`
+ *                     (15 s, unless overridden by `APIGEN_SERVE_READY_TIMEOUT_MS`)
+ *                     — Python cold-start + import can dominate this budget.
  * @param intervalMs - Delay between probes (default 100 ms).
  */
 export async function waitForReady(
   host: Host,
-  timeoutMs = 15000,
+  timeoutMs = resolveReadyTimeoutMs(),
   intervalMs = 100
 ): Promise<void> {
   if (host.transport === 'grpc') {
@@ -407,12 +443,13 @@ export async function waitForReady(
  * alone is sufficient.
  *
  * @param host       - The gRPC host (must have `transport === 'grpc'`).
- * @param timeoutMs  - Overall budget.
+ * @param timeoutMs  - Overall budget. Defaults to `resolveReadyTimeoutMs()`
+ *                     (15 s, unless overridden by `APIGEN_SERVE_READY_TIMEOUT_MS`).
  * @param intervalMs - Interval between TCP probe attempts.
  */
 async function waitForGrpcReady(
   host: Host,
-  timeoutMs = 15000,
+  timeoutMs = resolveReadyTimeoutMs(),
   intervalMs = 100
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -1399,6 +1436,14 @@ export async function startServe(opts: {
   // so a caller can register handlers that can kill in-flight hosts even
   // before `shutdown()` exists.
   onHostsCreated?: (hosts: Host[]) => void;
+  // Override the per-host readiness budget (ms) passed to `waitForReady`/
+  // `waitForGrpcReady` for every host in this `startServe()` call. Falls
+  // back to `APIGEN_SERVE_READY_TIMEOUT_MS` and then the 15 s production
+  // default (see `resolveReadyTimeoutMs`) when omitted — omitting this is a
+  // no-op with respect to production behavior. Intended for callers (e.g.
+  // LIVE tests under heavy parallel load) that need a wider bounded budget
+  // without touching this file or process-wide env state.
+  readyTimeoutMs?: number;
 }): Promise<{
   hosts: Host[];
   front: http.Server;
@@ -1448,10 +1493,13 @@ export async function startServe(opts: {
     );
   }
 
-  // Await readiness for every host in parallel.
+  // Await readiness for every host in parallel. `readyTimeoutMs` resolves
+  // opts.readyTimeoutMs → APIGEN_SERVE_READY_TIMEOUT_MS → the unchanged 15 s
+  // production default (see `resolveReadyTimeoutMs`).
+  const readyTimeoutMs = resolveReadyTimeoutMs(opts.readyTimeoutMs);
   await Promise.all(
     hosts.map((h) =>
-      waitForReady(h).then(() =>
+      waitForReady(h, readyTimeoutMs).then(() =>
         log(
           `[serve] host "${h.namespace}" ready on :${h.port} (${h.transport})`
         )

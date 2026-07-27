@@ -161,6 +161,72 @@ function generateDistManifest(sourcePkg, versionMap) {
   return out;
 }
 
+/**
+ * DEBT-002 #1: post-resolution safety net. `resolveInternalDeps` (above)
+ * deliberately leaves an `@adhd/*` range UNTOUCHED when its name is absent
+ * from `versionMap` (see that function's own doc comment — "nothing to
+ * resolve against"). That is CORRECT, not just tolerated: the `@adhd/*` npm
+ * scope is not exclusively this workspace's own packages — a dependency like
+ * `@adhd/sox-graph-store` is a legitimate EXTERNAL, independently-published
+ * npm package (0.3.0/0.5.0 on the registry) that happens to share the scope,
+ * declared with an ordinary concrete range (`^0.3.0`) a consumer resolves
+ * from npm exactly like any other dependency. Absence from the WORKSPACE
+ * version map only means "not a sibling in this monorepo" — it says nothing
+ * about installability.
+ *
+ * The actual hazard (the real subject of the originating security review)
+ * is a range npm literally cannot install once the package leaves this
+ * workspace: the `workspace:` protocol (never substituted by a real `npm
+ * publish` — it would ship to a consumer verbatim and fail to resolve) and a
+ * bare `*` (an accidentally-unpinned range some workspace-authoring path
+ * left behind). Both are almost always a SIBLING dependency whose range
+ * never got resolved — a real workspace project incorrectly declared this
+ * way is exactly what `resolveInternalDeps` is supposed to fix, and if it
+ * DIDN'T fix it (dep absent from the version map, e.g. a malformed sibling
+ * manifest `buildVersionMapFromDisk` silently skipped), that stale
+ * `workspace:*`/`*` literal is precisely what must not ship.
+ *
+ * So this gate checks the LITERAL RANGE, never map membership: it never
+ * blocks a concrete external `@adhd/*` range (regardless of whether that
+ * name is a known workspace sibling), and it always blocks a surviving
+ * `workspace:` or bare `*` literal (regardless of whether the name IS a
+ * known sibling — a stale literal is still wrong even if the name is
+ * resolvable, e.g. a caller that skipped `resolveInternalDeps` entirely).
+ *
+ * This is deliberately NOT enforced INSIDE `generateDistManifest` itself
+ * (which stays pure and silently permissive — see generate-manifest.spec.mjs's
+ * "leaves internal deps absent from the map untouched" test, a real,
+ * intentional contract for callers that want the raw resolution without a
+ * hard gate). Instead it's enforced by `writeDistManifest` below, the single
+ * shared entry point that actually materializes a manifest to disk — the one
+ * place a real publish can be blocked before shipping.
+ *
+ * @param {Record<string, any>} manifest the RESOLVED dist manifest (generateDistManifest's output)
+ * @param {Record<string, string>} versionMap the same map passed to generateDistManifest (unused by
+ *   the check itself now — kept in the signature so callers don't need to change; map membership is
+ *   no longer part of the hazard test, only the literal range is)
+ * @throws {Error} naming the exact package + dependency-field + dep name, if
+ *   any shipped `@adhd/*` range is a `workspace:` protocol range or a bare `*`.
+ */
+function assertResolvedInternalDeps(manifest, versionMap) {
+  for (const coll of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+    const deps = manifest[coll];
+    if (!deps) continue;
+    for (const [depName, range] of Object.entries(deps)) {
+      if (!depName.startsWith('@adhd/')) continue; // external deps are never this gate's concern
+      const isWorkspaceProtocol = typeof range === 'string' && range.startsWith('workspace:');
+      const isBareWildcard = range === '*';
+      if (isWorkspaceProtocol || isBareWildcard) {
+        throw new Error(
+          `generateDistManifest: refusing to publish "${manifest.name || '(unknown package)'}" — its ${coll}.` +
+          `"${depName}" range ("${range}") is ${isWorkspaceProtocol ? 'a "workspace:" protocol range npm never substitutes (it would ship verbatim and fail to resolve)' : 'an unpinned bare "*" range'}. ` +
+          `Every shipped @adhd/* dependency range must be a concrete, npm-installable range before publish.`
+        );
+      }
+    }
+  }
+}
+
 const { existsSync: _existsSync, readFileSync: _readFileSync, writeFileSync: _writeFileSync, copyFileSync: _copyFileSync } = require('node:fs');
 const { join: _join } = require('node:path');
 
@@ -250,6 +316,10 @@ async function writeDistManifest(context, pkgRoot, distDir) {
   const sourcePkg = JSON.parse(_readFileSync(_join(pkgRoot, 'package.json'), 'utf8'));
   const versionMap = buildVersionMapFromDisk(context);
   const manifest = generateDistManifest(sourcePkg, versionMap);
+  // DEBT-002 #1: hard-gate before this manifest is ever written to disk —
+  // see assertResolvedInternalDeps's own doc comment for why this lives here
+  // rather than inside the pure generateDistManifest.
+  assertResolvedInternalDeps(manifest, versionMap);
   _writeFileSync(_join(distDir, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
   const srcChangelog = _join(pkgRoot, 'CHANGELOG.md');
   if (_existsSync(srcChangelog)) _copyFileSync(srcChangelog, _join(distDir, 'CHANGELOG.md'));
@@ -262,6 +332,7 @@ module.exports = {
   rebaseExports,
   rebaseBin,
   resolveInternalDeps,
+  assertResolvedInternalDeps,
   buildVersionMapFromDisk,
   writeDistManifest,
 };

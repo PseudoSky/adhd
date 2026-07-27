@@ -17,6 +17,7 @@ import {
 } from '../lib/commands/serve';
 import { tokenize, type Operation, type Segment } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
+import { READY_TIMEOUT_MS, liveTestTimeoutMs } from './support/readiness';
 
 // ───────────────────────────────────────────────────────────────────────────
 // apigen-serve-core py-grpc-serve-split: the gRPC front-proxy fixture below
@@ -247,7 +248,7 @@ describe('[serve.live] real cross-language serve front', () => {
   async function pollUntil(
     fn: () => Promise<Response>,
     predicate: (status: number) => boolean,
-    timeoutMs = 10000
+    timeoutMs = READY_TIMEOUT_MS
   ): Promise<Response> {
     const deadline = Date.now() + timeoutMs;
     let last: Response | undefined;
@@ -267,7 +268,7 @@ describe('[serve.live] real cross-language serve front', () => {
 
   it(
     'proxies TS + Python calls, isolates a dead host to 503, and leaves zero orphans',
-    { timeout: 60000 },
+    { timeout: liveTestTimeoutMs(2) },
     async () => {
       // The built CLI bundle must exist (run `nx build apigen-cli` first).
       expect(fs.existsSync(cliPath), `built CLI not found at ${cliPath}`).toBe(
@@ -299,11 +300,16 @@ describe('[serve.live] real cross-language serve front', () => {
       );
 
       const port = await findFreePort();
+      // readyTimeoutMs: widen the per-host readiness budget to
+      // READY_TIMEOUT_MS (60s default) — the production 15s default is
+      // marginal even solo and gets blown by CPU/port contention under a
+      // massively-parallel release run.
       const { hosts, shutdown } = await startServe({
         sources: [aTs, bPy, myUserAccountsTs],
         port,
         cliPath,
         log: () => undefined,
+        readyTimeoutMs: READY_TIMEOUT_MS,
       });
       shutdownFn = shutdown;
       const base = `http://127.0.0.1:${port}`;
@@ -440,7 +446,7 @@ describe('[serve.live] real cross-language serve front', () => {
 
   it(
     'mounts a gRPC host (py-grpc) on the same front port as HTTP hosts',
-    { timeout: 60000 },
+    { timeout: liveTestTimeoutMs(2) },
     async () => {
       // The built CLI bundle must exist (run `nx build apigen-cli` first).
       expect(fs.existsSync(cliPath), `built CLI not found at ${cliPath}`).toBe(
@@ -482,12 +488,16 @@ describe('[serve.live] real cross-language serve front', () => {
       );
 
       const port = await findFreePort();
+      // readyTimeoutMs: same widened budget as the cross-language test above
+      // — a gRPC host's cold-start (Python + grpcio import) is at least as
+      // slow as flask's, so it's just as exposed to parallel-load contention.
       const { hosts, shutdown } = await startServe({
         sources: [aTs, bPy],
         port,
         mounts: { b: 'py-grpc' },
         cliPath,
         log: () => undefined,
+        readyTimeoutMs: READY_TIMEOUT_MS,
       });
       shutdownFn = shutdown;
       const base = `http://127.0.0.1:${port}`;
@@ -658,7 +668,7 @@ describe('[serve.live] real cross-language serve front', () => {
 
   it(
     'cleans up children on SIGTERM and leaves zero orphan processes',
-    { timeout: 30000 },
+    { timeout: liveTestTimeoutMs(1) },
     async () => {
       expect(fs.existsSync(cliPath), `built CLI not found at ${cliPath}`).toBe(
         true
@@ -690,7 +700,7 @@ describe('[serve.live] real cross-language serve front', () => {
 
       try {
         // Wait for the front to be healthy.
-        const deadline = Date.now() + 15000;
+        const deadline = Date.now() + READY_TIMEOUT_MS;
         let ready = false;
         while (Date.now() < deadline) {
           try {
@@ -706,7 +716,7 @@ describe('[serve.live] real cross-language serve front', () => {
         }
         expect(
           ready,
-          `serve did not become ready on port ${port} within 15 s`
+          `serve did not become ready on port ${port} within ${READY_TIMEOUT_MS}ms`
         ).toBe(true);
 
         // Send SIGTERM to the serve process.

@@ -35,6 +35,11 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { tokenize } from '@adhd/apigen-core-client';
 import type { Operation, Segment } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
+import {
+  READY_TIMEOUT_MS,
+  liveTestTimeoutMs,
+  captureStderr,
+} from '../support/readiness';
 
 // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: since BUG-APIGEN-
 // OPENAPI-ROUTE-PATH-MISMATCH-001, every transport derives its operation
@@ -228,7 +233,7 @@ describe('real-consumer: MCP over the built bin against UNMODIFIED @adhd/data-ba
         `callTool(${name}) must equal in-process ground truth`
       ).toEqual(ground.values[name]);
     }
-  }, 60_000);
+  }, liveTestTimeoutMs(1));
 });
 
 /**
@@ -293,9 +298,11 @@ describe('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transf
       ],
       { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'] }
     );
+    const getStderr = captureStderr(httpChild);
 
-    // Bounded readiness poll — no fixed sleep.
-    const namespace = await waitForHttpReady(port);
+    // Bounded readiness poll — no fixed sleep. Fails fast (with the child's
+    // stderr) if the process exits before ever becoming ready.
+    const namespace = await waitForHttpReady(port, httpChild, getStderr);
 
     // FEAT-APIGEN-022: every SAMPLE_ARGS fn here (upperFirst/lowerFirst/
     // capitalize/toUpper/toLower/trim/hyphenCase) takes only string-typed
@@ -319,23 +326,46 @@ describe('real-consumer: HTTP over the built bin against UNMODIFIED @adhd/transf
         ground.values[name]
       );
     }
-  }, 60_000);
+  }, liveTestTimeoutMs(1));
 
   /**
    * Poll the server until a known route answers; returns the package namespace
    * the bin derived (the source's folder name), discovered by probing candidates.
+   *
+   * Bounded to `READY_TIMEOUT_MS` (default 60 s, overridable via
+   * `APIGEN_TEST_READY_TIMEOUT_MS`) — generous enough to survive CPU/port
+   * contention under a massively-parallel release run, while still bounded.
+   * Fails fast (with the child's captured stderr) if `child` exits before the
+   * server ever becomes ready, instead of silently burning the full deadline
+   * polling a dead process.
    */
-  async function waitForHttpReady(p: number): Promise<string> {
+  async function waitForHttpReady(
+    p: number,
+    child?: ChildProcess,
+    getStderr?: () => string
+  ): Promise<string> {
     // The namespace is derived from the source's tsconfig/folder. Probe the most
     // likely candidate ('lib' — the parent folder of text.ts) plus a fallback by
     // attempting a real call and accepting the first that yields a 200.
     const candidates = ['data-base-transforms', 'lib', 'text'];
-    const deadline = Date.now() + 15_000;
+    const deadline = Date.now() + READY_TIMEOUT_MS;
     // DEBT-APIGEN-CLI-STALE-ROUTE-TOOL-NAME-ASSERTIONS-001: the readiness
     // probe must hit the SAME kebab-cased route the fixed api-fastify plugin
     // now serves (`upper-first`, not `upperFirst`).
     const probePath = canonicalHttpPath('upperFirst');
+    let childExited: { code: number | null; signal: NodeJS.Signals | null } | undefined;
+    child?.once('exit', (code, signal) => {
+      childExited = { code, signal };
+    });
     while (Date.now() < deadline) {
+      if (childExited) {
+        const stderr = getStderr?.() ?? '';
+        throw new Error(
+          `waitForHttpReady: process exited (code=${childExited.code} ` +
+            `signal=${childExited.signal}) before port ${p} became ready` +
+            (stderr ? ` — stderr:\n${stderr}` : '')
+        );
+      }
       for (const ns of candidates) {
         try {
           // FEAT-APIGEN-022: upperFirst(str?: string) is a single-string-param
