@@ -1,3 +1,23 @@
+## 2.2.1 (2026-07-27)
+
+Fixes BUG-011 (CRITICAL): the process-entrypoint guard in `src/index.ts`
+compared `path.resolve(process.argv[1])` — which only normalizes a path and
+never resolves symlinks — against `import.meta.url`, which Node always
+resolves to the loaded module's realpath. Any symlinked launch (npm/npx's
+`node_modules/.bin/agent-mcp`, pnpm's symlinked store, an MCP host's
+`type:local` launcher, or macOS's `/tmp` -> `/private/tmp`) therefore always
+had `argv[1]` (the symlink) mismatch `import.meta.url` (the realpath), so
+`isMainModule` was always `false` and `main()` never ran — the process
+loaded env then exited 0 silently: no server bound, no port, no DB touched.
+This made every `npx @adhd/agent-mcp` / opencode `type:local` launch a
+silent no-op. Fixed by resolving `argv[1]` through `realpathSync` before
+comparing (falling back to the old normalize-only comparison if `argv[1]`
+can't be realpath'd), with a `computeIsMainModule()` teeth test that spawns
+the real built `dist/src/index.js` through an actual filesystem symlink and
+asserts the real HTTP transport port becomes reachable — proven red against
+the pre-fix guard (20s timeout, `ECONNREFUSED`, child exits 0 silently) and
+green against the fix.
+
 ## 2.1.5 (2026-07-26)
 
 Ships proper usage accounting and budget enforcement, plus the claudecli provider usage fix (e660126b) — fixes BUG-MCP-PLUGIN-CONFIG-001 (the `@adhd/agent-plugin-budget` dependency was missing from `package.json`, so the config-driven `loadExternalPlugins()` path could never actually resolve/load it at runtime, even though the config plumbing itself was already correct). Also fixes BUG-RELEASE-UNINSTALLABLE-AGENTMCP-001 downstream: republishing `@adhd/agent-store-tools`, `@adhd/agent-engine-orchestrator`, and the `@adhd/agent-core-*`/`@adhd/agent-store-*` family at their now-settled versions makes every internal `@adhd/*` dependency range in this release resolve to a real published version.

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -397,9 +398,31 @@ async function main() {
 // port, and starts background queues/plugins — surfaced while adding the
 // teeth test for BUG-AGENTMCP-REGISTRY-DB-CANTOPEN-001 (importing `./index.js`
 // for its one exported function silently ran a full production server).
-const isMainModule =
-    process.argv[1] !== undefined &&
-    path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+//
+// BUG-011 (CRITICAL): `path.resolve(argv[1])` only normalizes a path — it
+// does NOT resolve symlinks — while Node always resolves `import.meta.url`
+// to the module's REALPATH. Any symlinked launch (npm/npx's
+// `node_modules/.bin/agent-mcp`, pnpm's symlinked store, an MCP host's
+// `type:local` launcher, or macOS's `/tmp` -> `/private/tmp`) therefore had
+// argv[1] (symlink path) != import.meta.url (realpath), so `isMainModule`
+// was always false under those launch paths and `main()` never ran: the
+// process loaded env, then exited 0 silently — no server, no port, no DB.
+// Fix: resolve argv[1] through its realpath before comparing, since
+// import.meta.url is already realpath-resolved. Fall back to the old
+// normalize-only comparison if argv[1] can't be realpath'd (e.g. it no
+// longer exists on disk) so this never throws instead of just returning
+// false.
+export function computeIsMainModule(): boolean {
+    if (process.argv[1] === undefined) return false;
+    const self = fileURLToPath(import.meta.url);
+    try {
+        return realpathSync(process.argv[1]) === self;
+    } catch {
+        return path.resolve(process.argv[1]) === self;
+    }
+}
+
+const isMainModule = computeIsMainModule();
 
 if (isMainModule) {
     main().catch(err => {
