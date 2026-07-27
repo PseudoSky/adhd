@@ -41,6 +41,9 @@
     },
     "test": {
       "executor": "@nx/vite:test",
+      "dependsOn": [
+        "build"
+      ],
       "options": {
         "config": "entrypoint/agent-mcp/vite.config.ts"
       }
