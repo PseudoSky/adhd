@@ -56,6 +56,17 @@ const DEFAULT_PACKAGE_ROOTS = [
 // A package's own shipped payload may legitimately contain test/dev-config-shaped
 // filenames (an Nx generator ships scaffold TEMPLATES under __files__/, e.g.
 // `skeleton.test.ts__tmpl__`). Those are data, not the package's own bloat.
+//
+// This exemption is applied to `files` BEFORE any FORBIDDEN_PATTERNS check
+// runs (see `checkPackage` below: `files = allFiles.filter(...)`) — so it
+// already covers the generic test-dir patterns added for DEBT-002 #3
+// (`test/`, `tests/`, `__mocks__/`, `fixtures/`), not just the original
+// filename-shaped ones. Confirmed live: `apigen-generator-nx` ships
+// `src/generators/plugin/__files__/src/test/plugin.spec.ts__tmpl__` (a real
+// scaffold template for projects IT generates) and correctly passes — see
+// check-publish-hygiene.spec.mjs's dedicated "generator-template
+// false-positive fix" tests, including the negative control proving a
+// GENUINE top-level (non-`__files__/`) `test/` directory is still forbidden.
 const EXEMPT_PATH_TESTS = [(p) => /\/__files__\//.test(p)];
 
 const FORBIDDEN_PATTERNS = [
@@ -67,6 +78,18 @@ const FORBIDDEN_PATTERNS = [
   { label: 'project.json', test: (p) => /(^|\/)project\.json$/.test(p) },
   { label: 'tsconfig*.json', test: (p) => /(^|\/)tsconfig[^/]*\.json$/.test(p) },
   { label: 'coverage/', test: (p) => /(^|\/)coverage\//.test(p) },
+  // DEBT-002 #3: the patterns above only catch `__tests__/` (double
+  // underscore, Jest-style) plus filename-shaped test markers
+  // (`*.test.*`/`*.spec.*`/`*.e2e.*`). A generic `test/`, `tests/`,
+  // `__mocks__/`, or `fixtures/` directory — none of which match any of
+  // those — slips straight through; a real incident shipped `test/*.d.ts` in
+  // a published tarball this way. Deliberately NOT forbidding `*.map` files:
+  // source maps are an intentional part of these packages' public shipped
+  // artifact, not dev-only bloat.
+  { label: 'test/ directory', test: (p) => /(^|\/)test\//.test(p) },
+  { label: 'tests/ directory', test: (p) => /(^|\/)tests\//.test(p) },
+  { label: '__mocks__ directory', test: (p) => /(^|\/)__mocks__\//.test(p) },
+  { label: 'fixtures/ directory', test: (p) => /(^|\/)fixtures\//.test(p) },
 ];
 
 function stripLeadingDotSlash(p) {

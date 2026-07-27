@@ -40,6 +40,9 @@
 const { spawnSync } = require('node:child_process');
 const { existsSync, readFileSync } = require('node:fs');
 const { join, relative } = require('node:path');
+// semver is a transitive dep of nx, resolved from the workspace root
+// node_modules (confirmed resolvable from this exact file location).
+const semver = require('semver');
 const { normalizedHash } = require('../version/compare-published');
 const { writeDistManifest } = require('../manifest/generate-manifest');
 const { packLocalDir, tarballIntegrity } = require('../../lib/npm-registry');
@@ -84,11 +87,34 @@ async function writeThroughCache(root, name, version, distDir, workDir, rec) {
   const tgz = rec ? rec.time('npm pack <distDir> (offline, local)', () => packLocalDir(distDir, workDir)) : packLocalDir(distDir, workDir);
   const publishedIntegrity = tgz ? tarballIntegrity(tgz) : null;
   const entry = { version, normalizedHash: normalizedHash(distDir), publishedIntegrity };
+  let written = entry;
   await updatePublishedState(root, (state) => {
+    const existing = state[name];
+    // BUG-005 guard: never let a write-through REGRESS the cache's recorded
+    // version. This is the second half of the same hazard `version/impl.js`'s
+    // semver-directional check guards against — even if something upstream
+    // slips a stale/regressed `version` past this task (e.g. a hand-edited
+    // package.json, or a future caller that doesn't go through `version`
+    // first), the cache itself must never be allowed to move BACKWARDS. A
+    // backwards write here is exactly how `published-state.json` gets
+    // permanently poisoned: every later run's zero-network decision trusts
+    // whatever this file says, so a regressed entry silently and durably
+    // corrupts the cache for every future invocation.
+    if (existing && semver.valid(existing.version) && semver.valid(version) && semver.lt(version, existing.version)) {
+      console.error(
+        `publish: REFUSING to regress published-state cache for ${name}: existing cached version ` +
+        `${existing.version} is newer than the version just published (${version}) — leaving the cache ` +
+        `entry at ${existing.version} untouched. This indicates a version regression slipped past the ` +
+        `'version' task's own semver guard; investigate before re-running.`
+      );
+      written = existing;
+      return state; // no-op: leave the existing (newer) entry exactly as-is
+    }
     state[name] = entry;
+    written = entry;
     return state;
   });
-  return entry;
+  return written;
 }
 
 async function run(options, context) {
@@ -123,7 +149,16 @@ async function run(options, context) {
       return { success: true };
     }
 
-    const args = ['publish', distDir, '--access', options.access || 'public'];
+    // DEBT-002 #2: `options.access` (an explicit task-option override) wins
+    // when supplied; otherwise defer to the package's OWN declared
+    // `publishConfig.access` on the (rebased) dist manifest — never blindly
+    // hardcode 'public' over a package's explicit choice. Every package in
+    // this workspace is public today, so this is behavior-neutral for them
+    // (falls through to the same 'public' default either way); it only
+    // changes behavior for a package that actually declares
+    // `publishConfig.access: "restricted"`.
+    const access = options.access || manifest.publishConfig?.access || 'public';
+    const args = ['publish', distDir, '--access', access];
     if (options.tag) args.push('--tag', String(options.tag));
     if (options.otp) args.push('--otp', String(options.otp));
     if (options.dryRun) args.push('--dry-run');

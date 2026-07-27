@@ -22,9 +22,28 @@
  * seam (a plain, mutable CJS property looked up at CALL time, not a
  * captured closure) so tests can substitute a fake without needing a real
  * built `dist/` + a real `npm pack` — see impl.spec.mjs.
+ *
+ * BUG-001 (false-fail on a transient un-rebased dist/package.json): `@nx/js:tsc`
+ * (`clean:true`) writes its OWN minimal, un-rebased `dist/package.json`
+ * (carrying the source `"files": ["dist", …]` allowlist) as a build output.
+ * `dist-manifest` is a SIBLING of `build` in `publish`'s `dependsOn` — nx
+ * guarantees both complete, never their relative order — so a cache-restored
+ * `build` can re-clobber `dist-manifest`'s rebase after the fact. `publish`
+ * and `version` already defend against exactly this by calling
+ * `writeDistManifest` as their own truly-last write before they trust
+ * `dist/`'s content (see generate-manifest.js's doc comment). `publish-hygiene`
+ * did not, so it could intermittently fail a package whose dist was, at the
+ * moment hygiene ran, sitting in that transient clobbered state — even though
+ * the REAL publish (which re-stamps) would have packed it correctly. Re-
+ * stamping here makes hygiene check the SAME state the real publish will
+ * pack: no more false-fail, and a package that is genuinely un-packable even
+ * after a correct re-stamp (e.g. its dist has no shippable files at all)
+ * still fails for real.
  */
 const { pathToFileURL } = require('node:url');
+const { join } = require('node:path');
 const { withMetrics } = require('../../../lib/metrics');
+const { writeDistManifest } = require('../manifest/generate-manifest');
 
 const HYGIENE_SCRIPT_URL = pathToFileURL(require.resolve('./check-publish-hygiene.mjs')).href;
 let cachedModulePromise;
@@ -56,11 +75,42 @@ async function run(options, context) {
   return withMetrics('publish-hygiene', context, async (rec) => {
     // Per-project: check THIS package's built+versioned dist ({projectRoot}/dist).
     const projectRoot = context.projectsConfigurations.projects[context.projectName].root;
+    const pkgRoot = join(context.root, projectRoot);
+    const distDir = join(pkgRoot, 'dist');
+
+    // BUG-001: re-stamp the dist manifest HERE, as the truly-last write
+    // before the hygiene pack/check below — mirrors `publish`/`version`'s own
+    // re-stamp (see generate-manifest.js's doc comment). Only meaningful if
+    // build + dist-manifest already ran at least once (a missing dist dir is
+    // still a hard failure, surfaced by the real check below, never silently
+    // skipped here).
+    if (module.exports.__internals.restampDistManifest) {
+      await module.exports.__internals.restampDistManifest(context, pkgRoot, distDir);
+    }
+
     const code = await rec.timeAsync(`check-publish-hygiene.mjs ${projectRoot} (in-process)`, () =>
       module.exports.__internals.runHygieneCheck(projectRoot, context.root)
     );
     return { success: code === 0 };
   });
 }
+
+/**
+ * Re-stamp the dist manifest before the hygiene check reads it — the seam is
+ * mockable (like `runHygieneCheck`) so unit tests that don't care about the
+ * re-stamp can no-op it, and a missing/un-built dist dir (no source
+ * package.json, no dist dir yet) is tolerated here: the real hygiene check
+ * below is what turns "nothing to re-stamp" into a proper failure message.
+ *
+ * @param {import('@nx/devkit').ExecutorContext} context
+ * @param {string} pkgRoot absolute source project root
+ * @param {string} distDir absolute {projectRoot}/dist
+ */
+async function restampDistManifest(context, pkgRoot, distDir) {
+  const { existsSync } = require('node:fs');
+  if (!existsSync(join(pkgRoot, 'package.json')) || !existsSync(distDir)) return;
+  await writeDistManifest(context, pkgRoot, distDir);
+}
+
 module.exports = run; module.exports.default = run;
-module.exports.__internals = { runHygieneCheck, loadHygieneCheck };
+module.exports.__internals = { runHygieneCheck, loadHygieneCheck, restampDistManifest };

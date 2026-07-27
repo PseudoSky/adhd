@@ -60,6 +60,25 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) =>
   // it. `dependsOn: ["build","assets"]` mirrors `version`'s own dist
   // freshness/doc-completeness requirement; `cache:false` because it reads
   // live registry state with no stable cache key.
+  // BUG-007: `verify-dist-load` now reads the REBASED `{projectRoot}/dist/
+  // package.json` (the one `dist-manifest` writes — entry paths rewritten
+  // dist-root-relative) and resolves its entries against `dist/` itself, to
+  // match exactly what an installed consumer's `require`/`import`
+  // resolution sees. The RAW build-only output is UN-rebased — its `main`
+  // still reads `./dist/index.js` (relative to the SOURCE root, not `dist/`
+  // itself) — so if `verify-dist-load` ran before `dist-manifest` rebased
+  // it, resolution would double the `dist/` segment (`dist/dist/index.js`,
+  // never on disk) and fail. `dependsOn` now includes `dist-manifest` to
+  // guarantee the rebased manifest exists first (no cycle: `dist-manifest`
+  // only depends on `build`+`assets`; `verify-dist-load` depends on
+  // `build`+`dist-manifest`; `publish` depends on both of those plus
+  // `verify-dist-load` itself). `cache: false` for the same reason as
+  // `publish-hygiene` (BUG-004, below): its verdict now depends on the
+  // rebased dist manifest, which — like all of `dist/**` — is excluded from
+  // nx's default cache inputs, so a cache HIT would replay a stale verdict
+  // without ever re-reading the current rebase. The executor itself is
+  // cheap (require/import of a handful of entries), so leaving it uncached
+  // costs nothing.
   return {
     projects: {
       [projectRoot]: {
@@ -67,9 +86,27 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) =>
           "version": { "executor": "@adhd/nx-build:version", "dependsOn": ["build", "assets", "^version"], "cache": false },
           "reconcile": { "executor": "@adhd/nx-build:reconcile", "dependsOn": ["build", "assets"], "cache": false },
           "dist-manifest": { "executor": "@adhd/nx-build:manifest", "dependsOn": ["build", "assets"], "cache": false },
-          "verify-dist-load": { "executor": "@adhd/nx-build:verify", "dependsOn": ["build"], "cache": true },
-          "publish-hygiene": { "executor": "@adhd/nx-build:hygiene", "dependsOn": ["dist-manifest"], "cache": true },
-          "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", "^test", "version", "dist-manifest", "verify-dist-load", "publish-hygiene"], "cache": false }
+          "verify-dist-load": { "executor": "@adhd/nx-build:verify", "dependsOn": ["build", "dist-manifest"], "cache": false },
+          // BUG-004 (HIGH): NOT cached. nx's default `production`/`default`
+          // inputs exclude `{projectRoot}/dist/**`, so the cache key for this
+          // target never changes when dist content changes — a cache HIT would
+          // replay a stale verdict from before the executor's BUG-001 re-stamp
+          // fix without ever re-running it. The executor itself only shells
+          // `npm pack --dry-run` against the already-built dist (cheap,
+          // read-only, no network) — same rationale already applied to
+          // `dist-manifest`/`version`/`publish` below, all of which read live
+          // dist/registry state and are also `cache: false`.
+          "publish-hygiene": { "executor": "@adhd/nx-build:hygiene", "dependsOn": ["dist-manifest"], "cache": false },
+          // BUG-002 (CRITICAL): `^publish` orders publish TOPOLOGICALLY, mirroring
+          // the existing `^version` pattern above (see the long comment on
+          // `version` at line 40-51 for the full rationale). Without it, nx is
+          // free to publish a dependent before the internal @adhd/* dependency
+          // it declares has itself landed on the registry — a consumer running
+          // `npm install <dependent>` in that exact window resolves the
+          // dependency's declared range against a version that isn't published
+          // yet and hits ETARGET. `^publish` guarantees every internal
+          // dependency's publish task completes first, closing that window.
+          "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", "^test", "version", "^publish", "dist-manifest", "verify-dist-load", "publish-hygiene"], "cache": false }
         }
       }
     }
