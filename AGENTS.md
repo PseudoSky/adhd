@@ -163,6 +163,7 @@ Refer to these established packages when building new features. **Verify with `C
   - **Extensions**: `agent-generator-plugin`, `agent-plugin-budget`, `agent-plugin-sanitize`
   - Host: `entrypoint/agent-mcp`
 - **Dispatch Family** (`packages/dispatch/*`): task DAG execution. Contains: `dispatch-base-spec`, `dispatch-core-client`, `dispatch-core-optimizer`, `dispatch-orchestrator`, `dispatch-serializer-json`. Host: `entrypoint/dispatch-cli`.
+- **Apigen Family** (`packages/apigen/*`): Code-first API generation from TypeScript types. Extract types → compose schemas → live-mount to any transport (HTTP, CLI, MCP, OpenAPI, Python) with zero code generation. **NEW 0.0.1 (2026-07-28):** Batch/bulk fan-out operations (`_batch/<kind>` synthetic mounts, portable across all hosts). Core: `apigen-core-client` (schema derivation, batch logic), `apigen-core-runtime` (TS runtime execution, concurrency modes). Plugins: `apigen-plugin-fastify`, `apigen-plugin-express`, `apigen-plugin-mcp`, `apigen-plugin-openapi`, `apigen-plugin-cli-output`, `apigen-plugin-py-flask`, `apigen-plugin-grpc`. **Critical fix (2026-07-28):** `BUG-APIGEN-CORE-CLIENT-001` — schema extraction for nested interfaces now correctly computes `required` array; this is a validation-tightening fix affecting all apigen-based operations repo-wide. See CHANGELOG for details. Host: `entrypoint/apigen-cli`. Spec: `docs/spec/apigen/SPEC.md`, `docs/spec/apigen/BATCH_0.0.1.md`.
 - **Environment Cascade** (`packages/environment/*`, **NEW v0.0.1**): Zero-config configuration (code defaults → system → global → project → env vars). Consumers: agent-mcp (config, logging, plugins, queue, server, SSE, transport, DB paths), apigen-plugin-mcp (multi-instance port binding). Tier: core/base. Platform: node. Layers: base-spec, builder, core-node.
 - **Workspace Codegen** (`packages/workspace/workspace-codegen-nx`): **MANDATORY** generator for package scaffolding. Tier: core. Platform: shared. Usage: `npx nx g @adhd/workspace-codegen-nx:<tier> --name <name> --group <domain> --nxLayer <layer> --platform <platform>`.
 
@@ -332,3 +333,47 @@ If you encounter uncommitted changes in the working tree that you did not make, 
 | Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
 | Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+
+<!-- gitnexus:start -->
+# GitNexus — Code Intelligence
+
+This project is indexed by GitNexus as **adhd** (29372 symbols, 43586 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+
+## Always Do
+
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+
+## Never Do
+
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+
+## Resources
+
+| Resource | Use for |
+|----------|---------|
+| `gitnexus://repo/adhd/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/adhd/clusters` | All functional areas |
+| `gitnexus://repo/adhd/processes` | All execution flows |
+| `gitnexus://repo/adhd/process/{name}` | Step-by-step execution trace |
+
+## CLI
+
+| Task | Read this skill file |
+|------|---------------------|
+| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
+| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
+| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
+| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
+| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
+| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+
+<!-- gitnexus:end -->
