@@ -23,7 +23,7 @@ Each subproject has its own quick-start guide. Start here based on your goal:
 | Subproject | Purpose | Entry point |
 |------------|---------|-------------|
 | **agent-mcp** | Run agents as MCP servers; spawn agents, delegate across providers, HITL suspension | [`entrypoint/agent-mcp/README.md`](entrypoint/agent-mcp/README.md) |
-| **apigen-cli** | Code-first API generation: TypeScript → HTTP, MCP, CLI, OpenAPI, Python | [`entrypoint/apigen-cli/README.md`](entrypoint/apigen-cli/README.md) |
+| **apigen-cli** | Code-first API generation: TypeScript → HTTP, MCP, CLI, OpenAPI, Python; batch/bulk fan-out operations | [`entrypoint/apigen-cli/README.md`](entrypoint/apigen-cli/README.md) |
 | **dispatch-cli** | Orchestrate task DAGs: validate, optimize, execute with cost estimation | [`entrypoint/dispatch-cli/README.md`](entrypoint/dispatch-cli/README.md) |
 | **environment** | Zero-config configuration cascade (code defaults → system → global → project → env) | [`docs/environment/`](docs/environment/) |
 | **agent-registry family** | Core modular packages: stores for prompts, tools, policies, models; compiler | [`packages/agent/README.md`](packages/agent/README.md) |
@@ -50,7 +50,7 @@ Each subproject has its own quick-start guide. Start here based on your goal:
 ├─────────────────────────────────────────────────────────────┤
 │  Ecosystem:                                                  │
 │    • apigen-core-* — code-first API generation             │
-│    • apigen-plugin-* — transport adapters (8 languages)    │
+│    • apigen-plugin-* — transport adapters + batch ops      │
 │    • dispatch-* — DAG execution & optimization             │
 │    • environment-* — config cascade & defaults             │
 │    • data-* — shared utilities (transforms, query engine)  │
