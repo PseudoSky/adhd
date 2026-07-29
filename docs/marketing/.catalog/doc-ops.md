@@ -172,10 +172,76 @@ See `/entrypoint/agent-mcp/docs/architecture-and-security.md` for the full agent
 - Junk ratio: ~50% → ~5% (removed Nx boilerplate, stale refs)
 - Undocumented ratio: ~55% → ~30% (agent-core-env, registry-family, environment cascade now documented)
 
+---
+
+## Operations Executed (2026-07-29) — Batch Feature & Validation Fix Documentation
+
+**Date**: 2026-07-29  
+**Scope**: adhd monorepo (root) — batch operations feature, critical validation-tightening fix  
+**Basis**: User briefing, code audit (batch.ts, morph-walk.ts, BATCH_0.0.1.md spec), live verification
+
+**Context**: Session completed major work: generic batch/bulk fan-out operations for apigen (FEAT-APIGEN-BULK-OPS-001, portable across all hosts, verified e2e), and critical validation fix in apigen-core-client (BUG-APIGEN-CORE-CLIENT-001, nested-interface required-field enforcement, repo-wide impact). All changes uncommitted/unreleased, pending release.
+
+### 1. Update CHANGELOG.md (root)
+**Reason**: Reflect new batch feature and validation fix; repo-wide blast-radius impact on validation behavior requires clear, prominent documentation
+
+**Added** (at top of Unreleased section, 2 major entries):
+- Entry 1: "Added — Batch/bulk fan-out operations for apigen" — 18 lines covering spec (BATCH_0.0.1.md), implementation details (apigen-core-client batch.ts, apigen-engine-runtime batch.ts, plugin adoptions), known limitations (cross-host gateway gap), end-to-end verification via live test specs, file manifest
+- Entry 2: "Fixed — apigen-core-client schema extraction for nested interfaces never computed required array" — 12 lines covering bug impact (silent loss of required-field validation repo-wide, concrete proof in backlog DB corruption), fix mechanism (required array from !sym.isOptional()), behavior-change warning (existing integrations will see new validation rejections), related open issue (BUG-BACKLOG-HUMANID-COLLISION-001 data repair), file manifest
+
+**Status**: ✅ COMPLETED — 2026-07-29
+
+### 2. Update README.md (root)
+**Reason**: Highlight batch feature in public-facing product documentation; clarify it's part of apigen-cli
+
+**Modified**:
+1. Updated apigen-cli table entry to mention "batch/bulk fan-out operations" in addition to existing transports
+2. Updated architecture diagram's apigen-plugin section from "transport adapters (8 languages)" to "transport adapters + batch ops"
+
+**Status**: ✅ COMPLETED — 2026-07-29
+
+### 3. Update AGENTS.md §4 "Existing Package Context"
+**Reason**: Agents need operational context on apigen family capabilities, batch feature availability, and critical validation fix
+
+**Added** (new entry in package context list):
+- "**Apigen Family** (`packages/apigen/*`)" — 6 lines documenting: code-first API generation from types, zero-code-generation live-mount, new 0.0.1 batch/bulk feature, core packages (apigen-core-client, apigen-core-runtime), 8 plugins (Fastify, Express, MCP, OpenAPI, CLI, Flask, gRPC, + new batch logic), **CRITICAL FIX 2026-07-28** for nested-interface required arrays with repo-wide impact, links to spec docs (SPEC.md, BATCH_0.0.1.md), host CLI
+
+**Status**: ✅ COMPLETED — 2026-07-29
+
+### 4. Verified Pre-Existing Documentation
+**Reason**: Ground-truth completeness check
+
+**Confirmed**:
+- ✅ `docs/spec/apigen/BATCH_0.0.1.md` exists and comprehensive (0.0.1 finalized, closed architect findings F1–F5)
+- ✅ Batch feature spec covers portable wire IR, TS-runtime specifics, Python/Flask adoption, known limitations (cross-host gateway gap), all architectural decisions
+- ✅ BUG-APIGEN-CORE-CLIENT-001 fix correctly implemented in `packages/apigen/apigen-core-client/src/lib/schema-builders/morph-walk.ts:274` (required array from `!sym.isOptional()`)
+- ✅ `entrypoint/backlog/src/batch-adoption.spec.ts` exists as e2e proof of batch feature adoption
+
+**Status**: ✅ NO CHANGES NEEDED — 2026-07-29
+
+---
+
+## Summary of Operations (2026-07-29)
+
+**Total docs modified**: 3 files
+- 1 update: `CHANGELOG.md` (added 2 major entries, ~30 lines of detailed explanation)
+- 1 update: `README.md` (2 small clarifications to highlight batch feature)
+- 1 update: `AGENTS.md` (added apigen family entry with batch + fix context)
+
+**Metrics Impact** (pending cartographer re-run and reviewer gate):
+- **New shipped capabilities documented**: 1 major (batch operations) + 1 critical fix (validation-tightening)
+- **Behavior changes flagged**: 1 (required-field validation now actually enforced repo-wide)
+- **Known issues/limitations documented**: 2 (cross-host batch gateway gap unaddressed; backlog humanId collisions need data repair)
+- **Links verified**: All relative links in BATCH_0.0.1.md, CHANGELOG entries, AGENTS.md entries resolve to existing files
+
+**Status**: ✅ DOCUMENTATION UPDATES COMPLETED — Pending cartographer re-run for metrics delta, consumer test, and reviewer gate.
+
+---
+
 ## Next: Doc Reviewer Gate
 
-Dispatching doc-reviewer to verify:
-1. Closed-loop metric (reader searches eliminated, junk/undocumented drop)
-2. Template conformance (all docs match their skeleton; every claim resolves to shipped receipt)
-3. Link integrity (all relative links resolve to real files)
-4. Fresh-agent consumer test (docs sufficient for real user tasks)
+Dispatching doc-cartographer (fresh run for metrics delta), doc-consumer (canonical task test against updated docs), doc-reviewer (closed-loop validation) to verify:
+1. Closed-loop metric (eliminated-reader-searches must drop, undocumented/junk %, zero capabilities.json contradictions)
+2. Template conformance (every doc matches its skeleton; every README claim resolves to shipped receipt or "pending release" marker; high-cardinality README test)
+3. Link integrity (all relative links in updated/new sections resolve to real files via pathname resolution, not reasoning)
+4. Fresh-agent consumer test (docs sufficient for real user tasks without reading source)
