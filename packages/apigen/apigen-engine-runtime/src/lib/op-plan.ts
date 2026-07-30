@@ -96,6 +96,33 @@ function isBooleanTypedProp(prop: FlagProp | undefined): boolean {
   return false;
 }
 
+/**
+ * BUG-APIGEN-CLI-OUTPUT-001 (discovered fixing mount-op cliFlags): a
+ * `number`/`integer`-typed domain param had NO CLI-flag typing decision at
+ * all before this — it fell through to `valueKind: 'string'`, so a raw argv
+ * token like `"2"` was handed to a handler expecting a real JS `number`
+ * verbatim (this specifically broke `_batch/<kind>`'s `--concurrency`/
+ * `--itemTimeoutMs` flags: `@adhd/apigen-plugin-batch`'s own `parseBatchRequest`
+ * throws `typeof concurrency !== 'number'`, and `invokeBatch`'s
+ * `resolveConcurrency` uses `Number.isFinite`, which does not coerce a string
+ * at all). Reuses the existing `valueKind: 'json'` convention (never a new
+ * enum member) — `JSON.parse` already produces a real `number` for a bare
+ * numeric token, identically to how an array/object-typed flag is parsed.
+ */
+function isNumberTypedProp(prop: FlagProp | undefined): boolean {
+  if (!prop) return false;
+  if (prop.type === 'number' || prop.type === 'integer') return true;
+  const members = unionMembers(prop);
+  if (members) {
+    const nonNull = members.filter((m) => m.type !== 'null');
+    return (
+      nonNull.length > 0 &&
+      nonNull.every((m) => m.type === 'number' || m.type === 'integer')
+    );
+  }
+  return false;
+}
+
 /** camelCase → kebab-case (e.g. `userId` → `user-id`). Matches Commander's own normalisation. */
 function kebabCase(camel: string): string {
   return camel.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase());
@@ -239,7 +266,7 @@ function computeCliFlags(
   for (const [param, prop] of Object.entries(props)) {
     let valueKind: OpPlanCliFlag['valueKind'] = 'string';
     if (isBooleanTypedProp(prop)) valueKind = 'boolean';
-    else if (isJsonTypedProp(prop)) valueKind = 'json';
+    else if (isJsonTypedProp(prop) || isNumberTypedProp(prop)) valueKind = 'json';
     flags.set(kebabCase(param), {
       camelKey: param,
       kind: 'domain',
