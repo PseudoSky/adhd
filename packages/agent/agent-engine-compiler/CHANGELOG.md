@@ -1,3 +1,11 @@
+## 2.2.1 (2026-07-27)
+
+
+### 🩹 Fixes
+
+- **agent-engine-compiler:** resolve sibling `@adhd/*/drizzle` migration folders via real module resolution (`createRequire` + walk-up) instead of a 3-hop `../../../` that assumed a nonexistent monolithic dist — migrations were silently skipped (→ `no such table: registry_agents`) under the per-project dist layout and pnpm's isolated store (BUG-014). A missing migration set is now a hard error, not a silent warn-and-continue.
+
+
 ## 2.1.10 (2026-07-26)
 
 Re-publish fixing 2.1.9's own defects: an unsatisfiable `@adhd/agent-store-tools: ^2.1.9` dependency range (captured during a transient phantom-version-bump window on agent-store-tools that was later reverted — the real max published is 2.1.8) and a missing `README.md` in the published tarball (BUG-BUILD-ASSETS-CACHE-STALE-AFTER-CLEAN-001) — no code changes to this package itself.

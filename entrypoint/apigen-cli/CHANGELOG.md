@@ -1,3 +1,23 @@
+## 0.2.2 (2026-07-28)
+
+This was a version bump only for apigen-cli to align it with other projects, there were no code changes.
+
+## 0.2.1 (2026-07-28)
+
+This was a version bump only for apigen-cli to align it with other projects, there were no code changes.
+
+## 0.1.6 (2026-07-27)
+
+
+### 🚀 Features
+
+- **apigen-cli:** `--use batch` plugin registers `POST /_batch/<kind>` mounts for bulk fan-out operations
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.5 (2026-07-25)
 
 
