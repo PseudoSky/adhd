@@ -28,6 +28,7 @@ import { resolveTsconfig } from '../resolve-tsconfig';
 // them (a runtime dynamic `import('@adhd/apigen-plugin-health')` would NOT be in
 // the standalone bundle). A bare slug (`--use health`) resolves here; an
 // arbitrary package specifier or local path falls through to a dynamic import.
+import batchPlugin from '@adhd/apigen-plugin-batch';
 import healthPlugin from '@adhd/apigen-plugin-health';
 import loggerPlugin from '@adhd/apigen-plugin-logger';
 import openapiPlugin from '@adhd/apigen-plugin-openapi';
@@ -159,6 +160,7 @@ export function assertDecimalLibPresent(
  * inlines them.
  */
 const BUILTIN_USE_PLUGINS: Record<string, Plugin> = {
+  batch: batchPlugin as Plugin,
   health: healthPlugin as Plugin,
   logger: loggerPlugin as Plugin,
   openapi: openapiPlugin as Plugin,

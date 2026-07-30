@@ -137,9 +137,27 @@ export interface BacklogItem {
 // required evidence THROWS, it never silently succeeds.
 // ============================================================================
 
+/**
+ * BUG-BACKLOG-REPO-LOOKUP-UX-001: a `(repo, humanId)` miss is frequently NOT
+ * "this item doesn't exist" but "this item exists under a DIFFERENT `repo`
+ * string" (e.g. `"adhd"` vs `"PseudoSky/adhd"` both live in the same store
+ * for what is logically one project). `foundInRepos` — populated by
+ * `store/query.ts`'s `buildNotFoundError` helper, which every throw site now
+ * calls instead of constructing this directly — carries the OTHER repo
+ * value(s) the humanId actually lives under, so the thrown message names the
+ * fix instead of leaving the caller to guess.
+ */
 export class BacklogItemNotFoundError extends Error {
-  constructor(repo: string, humanId: string) {
-    super(`backlog item not found: ${repo}::${humanId}`);
+  constructor(
+    repo: string,
+    humanId: string,
+    public readonly foundInRepos: string[] = []
+  ) {
+    const hint =
+      foundInRepos.length > 0
+        ? ` - did you mean repo ${foundInRepos.map((r) => `'${r}'`).join(' or ')}?`
+        : '';
+    super(`backlog item not found: ${repo}::${humanId}${hint}`);
     this.name = 'BacklogItemNotFoundError';
   }
 }
@@ -179,6 +197,59 @@ export class DependencyCycleError extends Error {
   }
 }
 
+/**
+ * BUG-BACKLOG-HUMANID-COLLISION-001 (fix #1 — write-time guard):
+ * `createItemNode` rejects a `family` that is missing/empty/whitespace-only
+ * UNLESS `idOverride` is also given (SPEC.md §5.1's `CreateItemInput.family`
+ * contract: "required unless idOverride given"). Thrown BEFORE
+ * `allocateHumanIdAndInsert`/`computeNextHumanId` ever run, so a caller that
+ * omits `family` (previously silently coerced to the literal string
+ * `"undefined"` by `computeNextHumanId`'s template literal, producing
+ * `humanId: "undefined-001"` and colliding with every other item that hit
+ * the same bug) now fails loudly instead of minting a collision. This is
+ * defense in depth: it must hold regardless of whether an upstream caller's
+ * own input-schema validation (e.g. apigen-core-client's extracted
+ * `CreateItemInput` schema, BUG-APIGEN-CORE-CLIENT-001) enforces `family` as
+ * required — the store's own write path must never trust the caller alone.
+ */
+export class InvalidArgumentError extends Error {
+  constructor(
+    public readonly argument: string,
+    message: string
+  ) {
+    super(message);
+    this.name = 'InvalidArgumentError';
+  }
+}
+
+/**
+ * BUG-BACKLOG-HUMANID-COLLISION-001 (fix #2 — read-time guard): every
+ * `(repo, humanId)`-keyed lookup used to silently resolve to "whichever
+ * live node is found first" when more than one live node shared the same
+ * key (the exact shape of the pre-existing `"undefined-001"` collisions,
+ * and the root cause of a real mis-transition this session — see the
+ * backlog item's body). Any lookup that finds >1 live match now throws this
+ * instead of guessing, listing every colliding `nodeId` so a caller can
+ * disambiguate (there is no tool-level nodeId-addressed path yet — the
+ * caller must go through the store's own repair primitives, e.g.
+ * `renameHumanId`, to resolve the collision).
+ */
+export class AmbiguousHumanIdError extends Error {
+  constructor(
+    repo: string,
+    humanId: string,
+    public readonly nodeIds: number[]
+  ) {
+    super(
+      `backlog: ambiguous lookup — ${nodeIds.length} live items share the same (repo, humanId) key ` +
+        `"${repo}"::"${humanId}" (nodeIds: ${nodeIds.join(', ')}). Refusing to silently pick one — ` +
+        `this is a data-integrity defect (see BUG-BACKLOG-HUMANID-COLLISION-001); repair the collision ` +
+        `(e.g. rename one of these nodeIds to a distinct humanId) before retrying this operation.`
+    );
+    this.name = 'AmbiguousHumanIdError';
+  }
+}
+
 // ============================================================================
 // §5.1 — CRUD
 // ============================================================================
@@ -210,6 +281,14 @@ export interface CreateItemResult {
   item: BacklogItem;
   created: boolean; // false ⇒ no node written; see duplicateCandidates
   duplicateCandidates: BacklogItem[];
+  /**
+   * BUG-BACKLOG-REPO-LOOKUP-UX-001: set (soft warning, never blocks the
+   * write) when `input.repo` doesn't match any repo value already known to
+   * this store — a likely typo/inconsistent-repo-string drift (e.g. filing
+   * under `"adhd"` when every existing item uses `"PseudoSky/adhd"`) rather
+   * than a genuine first-time-use of a new repo, which is always allowed.
+   */
+  repoWarning?: string;
 }
 
 export interface UpdateItemInput {
@@ -405,6 +484,8 @@ export interface ImportResult {
   errors: Array<{ humanId: string; message: string }>;
   /** Headers that look like a corrupted/typo'd id and were dropped instead of parsed — never silent (DEBT-BACKLOG-IMPORT-SILENT-DROP-001). */
   malformedHeaders: MalformedHeaderInfo[];
+  /** See `CreateItemResult.repoWarning` (BUG-BACKLOG-REPO-LOOKUP-UX-001) — computed once for `input.repo`, not per item. */
+  repoWarning?: string;
 }
 
 export interface AuditTrailEntry {

@@ -1,3 +1,7 @@
+## 0.2.1 (2026-07-28)
+
+This was a version bump only for apigen-plugin-cli-output to align it with other projects, there were no code changes.
+
 ## 0.1.7 (2026-07-25)
 
 

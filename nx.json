@@ -131,52 +131,28 @@
   "targetDefaults": {
     "@nx/vite:build": {
       "cache": true,
-      "dependsOn": [
-        "^build"
-      ],
-      "inputs": [
-        "production",
-        "^production"
-      ]
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
     },
     "test": {
       "cache": true,
-      "dependsOn": [
-        "lint",
-        "^build"
-      ],
+      "dependsOn": ["lint", "^build"],
       "inputs": [
         "default",
         "^production",
         {
-          "externalDependencies": [
-            "vitest",
-            "better-sqlite3",
-            "drizzle-orm"
-          ]
+          "externalDependencies": ["vitest", "better-sqlite3", "drizzle-orm"]
         }
       ]
     },
     "@nx/js:tsc": {
       "cache": true,
-      "dependsOn": [
-        "^build",
-        "lint"
-      ],
-      "inputs": [
-        "production",
-        "^production"
-      ]
+      "dependsOn": ["^build", "lint"],
+      "inputs": ["production", "^production"]
     },
     "build": {
-      "dependsOn": [
-        "^build",
-        "lint"
-      ],
-      "inputs": [
-        "production",
-        "^production"
-      ]
+      "dependsOn": ["^build", "lint"],
+      "inputs": ["production", "^production"]
     },
     "nx-release-publish": {
       "dependsOn": [
@@ -189,9 +165,7 @@
       ]
     },
     "lint": {
-      "dependsOn": [
-        "sync-deps"
-      ]
+      "dependsOn": ["sync-deps"]
     }
   },
   "targetDependencies": {
@@ -224,6 +198,9 @@
         }
       },
       "workspaceChangelog": false
+    },
+    "version": {
+      "preVersionCommand": "pnpm dlx nx run-many -t build"
     }
   }
 }

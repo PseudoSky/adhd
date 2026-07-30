@@ -20,6 +20,7 @@ import type {
   MountedOperation,
   Call,
 } from '@adhd/apigen-core-client';
+import { syntheticOp } from '@adhd/apigen-core-client';
 import { toOpenApi } from '@adhd/apigen-codegen-openapi';
 
 // ---------------------------------------------------------------------------
@@ -42,24 +43,6 @@ export interface OpenapiOptions {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Builds the casing-neutral segment helper inline (no import of a runtime
- * helper needed — we only need the static shape).
- */
-function seg(raw: string): { raw: string; words: string[] } {
-  return {
-    raw,
-    words: raw
-      .split(/(?=[A-Z])|[-_]/)
-      .map((w) => w.toLowerCase())
-      .filter(Boolean),
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Mount capability implementation
 // ---------------------------------------------------------------------------
 
@@ -68,6 +51,13 @@ function seg(raw: string): { raw: string; words: string[] } {
  *
  * Called once at compose time; the handler is invoked at request time so the
  * doc always reflects the live descriptor (SPEC §7.2b pattern).
+ *
+ * (DEBT-APIGEN-008 retrofit) Built via `@adhd/apigen-core-client`'s shared
+ * `syntheticOp` helper rather than a locally hand-built `Operation` literal +
+ * local `seg()` — mirrors the `apigen-plugin-health` retrofit (F2,
+ * BUG-APIGEN-SYNTHETICOP). Behavior/output shape is unchanged (verified by
+ * `test/plugin.spec.ts`, which asserts on `id`/`kind`/`safe`/`transports`/
+ * `handler` and passes unmodified).
  */
 function buildOpenapiOperations(
   descriptor: Descriptor,
@@ -75,25 +65,16 @@ function buildOpenapiOperations(
 ): MountedOperation[] {
   return [
     {
-      // Canonical id — the `_meta` prefix is a convention for meta-endpoints.
-      id: '_meta/openapi',
-      host: descriptor.host,
-      namespace: seg('meta'),
-      path: [seg('openapi')],
-      // query + safe → GET /meta/openapi (SPEC §5)
-      kind: 'query',
-      async: false,
-      streaming: false,
-      safe: true,
-      // Input: no domain params — this is a zero-arg metadata endpoint.
-      input: {},
-      // Output: an object (the full OpenAPI doc shape; not narrowed further
-      // here because the exact schema varies with the descriptor content).
-      output: { type: 'object' },
-      envelope: {},
-      typeText: null,
-      // Expose only on HTTP — the doc is a tooling artefact (SPEC §7.2b).
-      transports: ['http'],
+      ...syntheticOp('_meta/openapi', descriptor, {
+        // query + safe → GET /meta/openapi (SPEC §5)
+        kind: 'query',
+        safe: true,
+        // Output: an object (the full OpenAPI doc shape; not narrowed further
+        // here because the exact schema varies with the descriptor content).
+        output: { type: 'object' },
+        // Expose only on HTTP — the doc is a tooling artefact (SPEC §7.2b).
+        transports: ['http'],
+      }),
       // Handler: derive the doc from the descriptor at request time.
       handler: (_call: Call) =>
         toOpenApi(descriptor.operations, {

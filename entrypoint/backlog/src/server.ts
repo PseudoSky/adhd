@@ -40,6 +40,7 @@ import { extract, composeSchemas, type Operation } from '@adhd/apigen-core-clien
 import { apiFastifyPlugin } from '@adhd/apigen-plugin-api-fastify';
 import { openapiPlugin } from '@adhd/apigen-plugin-openapi';
 import { mcpPlugin } from '@adhd/apigen-plugin-mcp';
+import { batchPlugin } from '@adhd/apigen-plugin-batch';
 import * as clientMod from './client.js';
 import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
@@ -105,12 +106,41 @@ export interface StartOpts {
   signal: AbortSignal;
 }
 
+/**
+ * Resolves the directory that actually contains the built `client.d.ts` /
+ * `client.js` artifacts, by PROBING for `client.d.ts` rather than assuming a
+ * fixed relative path — because this module executes from THREE genuinely
+ * different layouts and a single `../dist` computation cannot satisfy all
+ * three (BUG confirmed live via `npm install @adhd/backlog@0.1.0`: it
+ * crashed at mount with `.../node_modules/@adhd/dist/client.d.ts does not
+ * exist`):
+ *
+ *  1. PUBLISHED (`node_modules/@adhd/backlog/…`): `@adhd/nx-build`'s
+ *     `dist-manifest`/`publish` executors run `npm publish <distDir>` —
+ *     `dist/` IS packed as the package root, so the shipped tarball has
+ *     `index.js` and `client.d.ts` as SIBLINGS at the package root (there is
+ *     no `dist/` subdirectory at all once installed). `dirname(import.meta.url)`
+ *     here is already that root, so the OLD `join(here, '..', 'dist')` escaped
+ *     one level too far, past the package root into
+ *     `node_modules/@adhd/dist` — nonexistent.
+ *  2. DEV-BUILT (`entrypoint/backlog/dist/index.{js,mjs}`, e.g. this repo's
+ *     own `nx build backlog` output before packing): `client.d.ts` is ALSO a
+ *     sibling of `index.js`, both living directly under `dist/`.
+ *  3. VITEST (`src/server.ts` transformed and run in place): `client.d.ts`
+ *     has not moved next to `src/` — it's still only in the built `dist/`,
+ *     one level up and back down from `src/`.
+ *
+ * Layouts 1 and 2 are identical in shape (client.d.ts is a sibling of the
+ * running module) and differ from layout 3 only in WHERE that sibling lives
+ * relative to the module — so probing "is client.d.ts sitting right next to
+ * me?" before falling back to the vitest-only `../dist` shape correctly
+ * covers all three without needing to distinguish "published" from
+ * "dev-built" explicitly.
+ */
 function backlogDistDir(): string {
-  // Resolves to `<packageRoot>/dist` whether this module runs bundled from
-  // `dist/index.{js,mjs}` (rollup rewrites `import.meta.url` to the output
-  // chunk's own URL) or from `src/server.ts` under vitest — see the
-  // file-level DEVIATION doc comment above.
-  return join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+  const here = dirname(fileURLToPath(import.meta.url));
+  if (existsSync(join(here, 'client.d.ts'))) return here;
+  return join(here, '..', 'dist');
 }
 
 /**
@@ -303,7 +333,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
       requireRun(apiFastifyPlugin)({
         packages: [pkg],
         outputDir: '',
-        options: { port: opts.port ?? 3300, host: opts.host ?? '127.0.0.1', usePlugins: [openapiPlugin] },
+        options: { port: opts.port ?? 3300, host: opts.host ?? '127.0.0.1', usePlugins: [openapiPlugin, batchPlugin] },
         signal: opts.signal,
         operations,
         logger,
@@ -315,7 +345,7 @@ export async function startBacklogServer(opts: StartOpts): Promise<void> {
       requireRun(mcpPlugin)({
         packages: [pkg],
         outputDir: '',
-        options: { transport: 'stdio' },
+        options: { transport: 'stdio', usePlugins: [batchPlugin] },
         signal: opts.signal,
         operations,
         logger,

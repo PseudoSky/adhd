@@ -1,0 +1,56 @@
+{
+  "name": "apigen-plugin-batch",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/apigen/apigen-plugin-batch/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "packages/apigen/apigen-plugin-batch"
+      }
+    }
+  },
+  "tags": [
+    "domain:apigen",
+    "pkg-kind:plugin",
+    "pkg-class:optional",
+    "layer:logic",
+    "platform:node",
+    "access:domain"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "packages/apigen/apigen-plugin-batch/dist",
+        "emptyOutDir": true
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-batch"
+      ],
+      "options": {
+        "configFile": "packages/apigen/apigen-plugin-batch/vite.config.ts"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ],
+      "executor": "@nx/js:release-publish",
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}

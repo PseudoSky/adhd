@@ -60,14 +60,28 @@ export interface IEnsurePythonEnvOptions {
 /**
  * Locate the directory containing the `apigen_python` package sources.
  *
- * Primary: `<this file>/../../../python` (source layout:
- * packages/apigen/python-env/src/lib → packages/apigen/python).
- * Fallback: walk up from __dirname looking for `packages/apigen/python`
- * (covers the vite-bundled CLI, where __dirname is the bundle output dir).
+ * Probed in order:
+ *   1. Co-located (SHIPPED) copy: `<this file's dir>/python`. This package's
+ *      build copies `packages/apigen/python/apigen_python/**` into its own
+ *      `dist/python/apigen_python/`, so for a consumer installed from npm
+ *      OUTSIDE the monorepo (where __dirname is `node_modules/@adhd/
+ *      apigen-python-env/dist`), the sources are bundled right next to the
+ *      compiled code. This MUST be probed first so published consumers never
+ *      fall through to a monorepo-only path that doesn't exist for them.
+ *   2. Monorepo source (dev-time fallback): `<this file>/../../../python`
+ *      (source layout: packages/apigen/python-env/src/lib → packages/apigen/
+ *      python). Keeps vitest/ts-node runs resolving the LIVE source instead
+ *      of the copied snapshot.
+ *   3. Walk up from __dirname looking for `packages/apigen/python` (covers
+ *      the vite-bundled CLI, where __dirname is the bundle output dir).
  * (Shared by py-grpc / py-flask — previously duplicated in each plugin.)
  */
 export function resolvePythonPkgDir(fromDir?: string): string {
   const base = fromDir ?? __dirname
+
+  const coLocated = path.join(base, 'python')
+  if (fs.existsSync(path.join(coLocated, 'apigen_python'))) return coLocated
+
   const primary = path.resolve(base, '..', '..', '..', 'python')
   if (fs.existsSync(path.join(primary, 'apigen_python'))) return primary
 

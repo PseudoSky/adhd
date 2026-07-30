@@ -24,7 +24,13 @@
 // so this file has zero schema-model duplication. `Operation` is the shape every
 // extractor emits and every plugin consumes.
 
-import type { Operation, JSONSchema } from './descriptor';
+import type {
+  Operation,
+  OperationKind,
+  JSONSchema,
+  Segment,
+  TypeText,
+} from './descriptor';
 import type { PluginLanguage } from './types';
 
 // ---------------------------------------------------------------------------
@@ -321,13 +327,62 @@ export interface LayerCapability {
 }
 
 /**
+ * Runtime dispatch options a {@link MountHostBridge} hands back to a mount
+ * plugin's handler — structurally equivalent to `apigen-engine-runtime`'s
+ * real `InvokeOptions` (duck-typed here, never imported: `apigen-core-client`
+ * is a lower tier than `apigen-engine-runtime` and must never depend upward
+ * on it — batch-rollout architect review, Finding 3).
+ */
+export interface MountHostBridgeInvokeOptions {
+  /** The live function table (op-id → implementation), spanning EVERY package the host serves. */
+  fns: Record<string, (...args: unknown[]) => unknown>;
+  /** Composed schemas (op-id → schema), spanning every package the host serves. */
+  schemas: Record<string, unknown>;
+  /** Optional client factory (session-ctx middleware), when the host has one. */
+  createClient?: (envelope: Record<string, unknown>) => Promise<unknown>;
+}
+
+/**
+ * A host-supplied bridge letting a `MountCapability`'s handler invoke OTHER
+ * operations already registered on that host — the missing piece a fan-out
+ * mount (e.g. `_batch/<kind>`) needs that a pure mount like `/meta/health` or
+ * `/meta/openapi` never did (batch-rollout design note + architect review).
+ *
+ * `invoke`/`invokeOptions` are structurally equivalent to
+ * `apigen-engine-runtime`'s real `InvokeFn`/`InvokeOptions` pair so a plugin
+ * can hand them straight to `invokeBatch(hostBridge.invoke, fnName, calls,
+ * hostBridge.invokeOptions, batchOptions)` with zero adapter shim (Finding 1
+ * of the review) — the tier boundary is preserved by keeping this an inline
+ * structural type, never an import from `apigen-engine-runtime` (Finding 3).
+ */
+export interface MountHostBridge {
+  /**
+   * Invoke `fnName` (any operation id already registered on this host, from
+   * any package) with the given domain call, through the SAME composed
+   * `--use` Layer stack (auth/logging/validate) every other request goes
+   * through — never a bypass of it.
+   */
+  invoke(
+    fnName: string,
+    call: {
+      domainArgs: Record<string, unknown>;
+      envelope: Record<string, unknown>;
+      signal?: AbortSignal;
+    },
+    opts: MountHostBridgeInvokeOptions
+  ): Promise<unknown>;
+  /** The host's merged, package-spanning `InvokeOptions`-equivalent — pass straight to `invokeBatch`. */
+  invokeOptions: MountHostBridgeInvokeOptions;
+}
+
+/**
  * **`mount`** capability — add synthetic operations to the descriptor
  * (SPEC §7.1 / §7.2b / §7.2c).
  *
  * A `MountCapability` is loaded via `--use <plugin>` and contributes extra
  * `Operation`-like entries (with an in-process `handler`) that flow through the
  * harness and Layer stack exactly like extracted operations.  Typical uses:
- * `/meta/openapi`, `/meta/health`, version endpoints.
+ * `/meta/openapi`, `/meta/health`, version endpoints, `_batch/<kind>` fan-out.
  */
 export interface MountCapability {
   /**
@@ -336,13 +391,21 @@ export interface MountCapability {
    * `MountedOperation` extends `Operation` with an in-process `handler` and
    * an optional `transports` filter (default: all transports).
    *
-   * @param descriptor - The current merged descriptor (read-only).
-   * @param opts       - Plugin-specific options.
+   * @param descriptor  - The current merged descriptor (read-only).
+   * @param opts        - Plugin-specific options.
+   * @param hostBridge  - (BATCH_0.0.1.md §2/§F1 rollout) Optional, additive —
+   *   a host-supplied bridge letting the returned operations' handlers invoke
+   *   OTHER operations on this host (e.g. a `_batch/<kind>` fan-out target).
+   *   Omitted by plugins (like `health`/`openapi`) that never need it; a
+   *   plugin whose handler DOES need cross-op invocation (batch) must throw a
+   *   clear error if it's undefined rather than silently no-op, since that
+   *   means the host hasn't wired hostBridge support yet.
    * @returns           Array of `MountedOperation`s; may be empty.
    */
   operations(
     descriptor: Descriptor,
-    opts?: Record<string, unknown>
+    opts?: Record<string, unknown>,
+    hostBridge?: MountHostBridge
   ): MountedOperation[];
 }
 
@@ -373,6 +436,106 @@ export type MountedOperation = Operation & {
    */
   handler(call: Call): unknown | Promise<unknown> | AsyncIterable<Chunk>;
 };
+
+// ---------------------------------------------------------------------------
+// §7.2b/§7.2c — shared synthetic-operation builder (F2, BUG-APIGEN-SYNTHETICOP)
+// ---------------------------------------------------------------------------
+
+/**
+ * Casing-neutral segment builder for synthetic operation ids.
+ *
+ * Tokenizes on case boundaries / `-`/`_` exactly like a real extractor's
+ * segment builder (SPEC §4) so mount-contributed ids compose correctly with
+ * `@adhd/apigen-engine-naming`'s per-transport casing (kebab/`_`/Pascal) —
+ * unlike the ad-hoc `words: [raw]` a hand-rolled `seg()` might use.
+ */
+function syntheticSegment(raw: string): Segment {
+  return {
+    raw,
+    words: raw
+      .split(/(?=[A-Z])|[-_]/)
+      .map((w) => w.toLowerCase())
+      .filter(Boolean),
+  };
+}
+
+/**
+ * Overridable fields accepted by {@link syntheticOp}. Every field has a safe
+ * default so a minimal mount (like health's `_meta/health`) needs to specify
+ * only what actually differs from a zero-input, zero-output `action`.
+ */
+export interface SyntheticOpFields {
+  /** @default 'action' */
+  kind?: OperationKind;
+  /** @default `kind === 'query'` (mirrors {@link Operation.safe}'s own default-from-kind rule) */
+  safe?: boolean;
+  /** @default false */
+  async?: boolean;
+  /** @default false */
+  streaming?: boolean;
+  /** @default {} */
+  input?: JSONSchema;
+  /** @default {} */
+  output?: JSONSchema;
+  /** @default {} */
+  envelope?: JSONSchema;
+  /** @default null */
+  typeText?: TypeText | null;
+  /** @default undefined (all transports) */
+  transports?: Transport[];
+  hasCtx?: boolean;
+}
+
+/**
+ * Build the common ~10-field {@link Operation} boilerplate for a synthetic
+ * mount-contributed operation (F2 — `apigen-core-client/src/lib/plugin.ts`
+ * JSDoc previously referenced this as though it already existed; it did not).
+ *
+ * `id` is `"<namespace>/<path...>"` (e.g. `'_meta/health'`, `'_batch/query'`).
+ * Per the existing `_meta/*` mount convention (health/openapi, pre-retrofit),
+ * a leading run of underscores on the first segment marks a synthetic
+ * namespace in the *id* but is stripped when tokenizing the namespace
+ * {@link Segment} itself — `'_meta/health'` → `namespace: {raw:'meta',…}`,
+ * `path: [{raw:'health',…}]`, matching what both plugins already produced
+ * by hand.
+ *
+ * Returns everything `MountedOperation` needs except `handler` — the caller
+ * supplies that (it's the one part that's genuinely plugin-specific) via
+ * `{ ...syntheticOp(id, descriptor, fields), handler: ... }`.
+ */
+export function syntheticOp(
+  id: string,
+  descriptor: Descriptor,
+  fields: SyntheticOpFields = {}
+): Omit<MountedOperation, 'handler'> {
+  const parts = id.split('/');
+  if (parts.length < 2 || parts.some((p) => p.length === 0)) {
+    throw new Error(
+      `syntheticOp: id "${id}" must be "<namespace>/<path...>" with non-empty segments`
+    );
+  }
+  const [namespaceRaw, ...pathRaw] = parts;
+  const namespaceWord = namespaceRaw.replace(/^_+/, '');
+  const kind = fields.kind ?? 'action';
+
+  const op: Omit<MountedOperation, 'handler'> = {
+    id,
+    host: descriptor.host,
+    namespace: syntheticSegment(namespaceWord),
+    path: pathRaw.map(syntheticSegment),
+    kind,
+    async: fields.async ?? false,
+    streaming: fields.streaming ?? false,
+    safe: fields.safe ?? kind === 'query',
+    input: fields.input ?? {},
+    output: fields.output ?? {},
+    envelope: fields.envelope ?? {},
+    typeText: fields.typeText ?? null,
+  };
+  if (fields.hasCtx !== undefined) op.hasCtx = fields.hasCtx;
+  if (fields.transports !== undefined) op.transports = fields.transports;
+  return op;
+}
 
 /**
  * **`envelope`** capability — declare request/response side-channel fields

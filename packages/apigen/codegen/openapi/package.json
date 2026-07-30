@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-codegen-openapi",
-  "version": "0.1.6",
+  "version": "0.2.1",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "typings": "./dist/index.d.ts",
@@ -8,8 +8,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@adhd/apigen-core-client": "^0.1.0",
-    "@adhd/apigen-engine-naming": "^0.1.1"
+    "@adhd/apigen-core-client": "^0.2.1",
+    "@adhd/apigen-engine-naming": "^0.2.1"
   },
   "files": [
     "dist",

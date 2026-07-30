@@ -24,6 +24,7 @@ import type {
   MountedOperation,
   Call,
 } from '@adhd/apigen-core-client';
+import { syntheticOp } from '@adhd/apigen-core-client';
 
 // ---------------------------------------------------------------------------
 // Plugin-specific options
@@ -58,18 +59,6 @@ export interface HealthResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Builds a casing-neutral segment inline (avoids importing @adhd/apigen-engine-naming
- * to keep the health plugin dependency-light; the shape is trivially stable).
- */
-function seg(raw: string): { raw: string; words: string[] } {
-  return { raw, words: [raw] };
-}
-
-// ---------------------------------------------------------------------------
 // Mount capability implementation
 // ---------------------------------------------------------------------------
 
@@ -78,6 +67,12 @@ function seg(raw: string): { raw: string; words: string[] } {
  *
  * The handler always returns `{ status: 'ok', host: descriptor.host }` for
  * an in-process runtime — if the handler can respond, the runtime is ready.
+ *
+ * (F2 retrofit) Built via `@adhd/apigen-core-client`'s shared `syntheticOp`
+ * helper rather than a locally hand-built `Operation` literal + local `seg()`
+ * — see `BATCH_0.0.1.md` §F2. Behavior/output shape is unchanged (verified by
+ * `test/plugin.spec.ts`, which asserts on `id`/`kind`/`safe`/`transports`/
+ * `handler` and passes unmodified).
  */
 function buildHealthOperations(
   descriptor: Descriptor,
@@ -85,33 +80,24 @@ function buildHealthOperations(
 ): MountedOperation[] {
   return [
     {
-      // Canonical id — `_meta` prefix convention for meta-endpoints.
-      id: '_meta/health',
-      host: descriptor.host,
-      namespace: seg('meta'),
-      path: [seg('health')],
-      // query + safe → GET /meta/health; gRPC also useful for load-balancer probes.
-      kind: 'query',
-      async: false,
-      streaming: false,
-      safe: true,
-      // Input: no domain params.
-      input: {},
-      // Output: the HealthResponse shape (inlined for zero extra dependencies).
-      output: {
-        type: 'object',
-        required: ['status', 'host'],
-        properties: {
-          status: { const: 'ok' },
-          host: { type: 'string' },
-          meta: { type: 'object' },
+      ...syntheticOp('_meta/health', descriptor, {
+        // query + safe → GET /meta/health; gRPC also useful for load-balancer probes.
+        kind: 'query',
+        safe: true,
+        // Output: the HealthResponse shape (inlined for zero extra dependencies).
+        output: {
+          type: 'object',
+          required: ['status', 'host'],
+          properties: {
+            status: { const: 'ok' },
+            host: { type: 'string' },
+            meta: { type: 'object' },
+          },
         },
-      },
-      envelope: {},
-      typeText: null,
-      // Expose on HTTP and gRPC — useful for both HTTP health checks and
-      // gRPC-native load-balancer probes (SPEC §7.2c / §13.1).
-      transports: ['http', 'grpc'],
+        // Expose on HTTP and gRPC — useful for both HTTP health checks and
+        // gRPC-native load-balancer probes (SPEC §7.2c / §13.1).
+        transports: ['http', 'grpc'],
+      }),
       // Handler: always returns ready when the runtime can answer.
       handler: (_call: Call): HealthResponse => {
         const response: HealthResponse = {

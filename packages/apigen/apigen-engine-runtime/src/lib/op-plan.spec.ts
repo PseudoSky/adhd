@@ -198,10 +198,17 @@ describe('buildOpPlan — source op', () => {
 
   it('computes the precomputed cliFlags table with kebab keys + correct valueKind per prop [serve-core-primitives.5]', () => {
     expect(plan.cliFlags.size).toBe(5);
+    // BUG-APIGEN-CLI-OUTPUT-001 (fixed alongside the mount-cliFlags gap): a
+    // `number`-typed domain param now resolves `valueKind: 'json'` (JSON.parse
+    // produces a real JS `number`) — it previously fell through to `'string'`,
+    // silently handing a raw unparsed argv token to a handler expecting a
+    // real number (this specifically broke `_batch/<kind>`'s
+    // `--concurrency`/`--itemTimeoutMs` flags once mount ops got real cliFlags
+    // at all).
     expect(plan.cliFlags.get('bytes')).toEqual({
       camelKey: 'bytes',
       kind: 'domain',
-      valueKind: 'string',
+      valueKind: 'json',
     });
     expect(plan.cliFlags.get('pretty')).toEqual({
       camelKey: 'pretty',
