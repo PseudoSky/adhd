@@ -1,3 +1,15 @@
+## 0.2.2 (2026-07-30)
+
+
+### 🚀 Features
+
+- **apigen:** wire MountHostBridge/LayerContext into express, fastify, health
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.2.1 (2026-07-28)
 
 This was a version bump only for apigen-plugin-api-express to align it with other projects, there were no code changes.

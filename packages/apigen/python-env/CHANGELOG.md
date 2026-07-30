@@ -1,3 +1,17 @@
+## 0.2.2 (2026-07-30)
+
+
+### 🩹 Fixes
+
+- **nx-build:** release-atomicity test coverage + CPU-guard flakiness + cache-input gap
+
+- **apigen-python-env:** dist copy-plugin hardening alongside cache-input fix
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.2.1 (2026-07-27)
 
 

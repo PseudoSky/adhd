@@ -8,7 +8,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@adhd/apigen-core-client": "^0.2.1",
+    "@adhd/apigen-core-client": "^0.2.2",
     "@adhd/apigen-engine-naming": "^0.2.1"
   },
   "files": [

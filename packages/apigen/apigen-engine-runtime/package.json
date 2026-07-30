@@ -1,11 +1,11 @@
 {
   "name": "@adhd/apigen-engine-runtime",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "dependencies": {
     "ajv": "^8.20.0",
     "ajv-formats": "2.1.1",
     "pino": "10.3.1",
-    "@adhd/apigen-core-client": "^0.2.1",
+    "@adhd/apigen-core-client": "^0.2.2",
     "@adhd/apigen-base-logical": "^0.1.0",
     "@adhd/apigen-base-errors": "^0.2.0",
     "@adhd/apigen-engine-naming": "^0.2.1",
