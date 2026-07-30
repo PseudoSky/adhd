@@ -22,10 +22,11 @@
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
-      "//dependsOn": "the real-MCP stdio test (server.mcp.spec.ts) spawns the BUILT dist/index.js as a child process (a real MCP client can only talk to a real process, never an in-process stdio hijack) and verify-dist-load parity checks also read dist/ — the default targetDefaults.test dependsOn is only [\"^build\"] (dependencies), so backlog's OWN build must be added explicitly or dist/ is stale/missing when tests run.",
+      "//dependsOn": "the real-MCP stdio test (server.mcp.spec.ts) spawns the BUILT dist/index.js as a child process (a real MCP client can only talk to a real process, never an in-process stdio hijack) and verify-dist-load parity checks also read dist/ — the default targetDefaults.test dependsOn is only [\"^build\"] (dependencies), so backlog's OWN build must be added explicitly or dist/ is stale/missing when tests run. `assets` is ALSO required (BUG-013 FIX A): `@nx/vite:build`'s own `options.assets` is a documented no-op for this executor (verified against its build.impl.js — it never reads options.assets at all), so `dist/skill/SKILL.md` only exists once the separate, package.json-`assets`-array-driven `@adhd/nx-assets:copy` target (`tools/nx-plugins/assets/`) has run — the published-layout regression test (server.published-layout.spec.ts) and the install-skill/install CLI subprocess tests all need it present in dist/.",
       "dependsOn": [
         "^build",
-        "build"
+        "build",
+        "assets"
       ],
       "outputs": [
         "{workspaceRoot}/coverage/entrypoint/backlog"
@@ -63,6 +64,18 @@
           "entrypoint/backlog/*.md"
         ]
       }
+    },
+    "assets": {
+      "//": "BUG-013 FIX A hardening: the globally-inferred @adhd/nx-assets:copy target (tools/nx-plugins/assets/plugin.js) declares NO `outputs` at all, so a later cache HIT on THIS project's `build` target (whose own declared `outputs` is the whole `dist/` dir) silently restores build's own cached dist/ SNAPSHOT — taken before `assets` ever ran — wiping whatever `assets` had already copied in (dist/skill/, dist/README.md, dist/CHANGELOG.md), with no re-copy on `assets`'s own subsequent cache hit (nothing declared to restore). Reproduced live: a standalone `nx build backlog` + `nx run backlog:assets` leaves dist/skill/SKILL.md present, but a LATER `nx test backlog` (whose dependsOn re-requests both `build`, a cache HIT, and `assets`, also a cache HIT) silently wiped it again, breaking install.published-layout.spec.ts non-deterministically. Declaring explicit `outputs`/`inputs` HERE (merged on top of the inferred target — same override pattern already used for `test`/`build`/`nx-release-publish` in this file) gives `assets` its OWN real cache archive of dist/, so nx restores it correctly on every subsequent cache hit, in dependency order, regardless of `build`'s own restore. Scoped to backlog only per this task's file-scope constraint — the SAME underlying gap (already tracked as BUG-BUILD-ASSETS-CACHE-STALE-AFTER-CLEAN-001, tools/nx-plugins/build/executors/manifest) affects every OTHER `assets`-consuming project in the repo too, worked around there only for the publish/manifest path by re-invoking the copy executor programmatically — out of scope here.",
+      "outputs": [
+        "{projectRoot}/dist"
+      ],
+      "inputs": [
+        "{projectRoot}/skill/**/*",
+        "{projectRoot}/README.md",
+        "{projectRoot}/CHANGELOG.md",
+        "{projectRoot}/package.json"
+      ]
     },
     "nx-release-publish": {
       "options": {
