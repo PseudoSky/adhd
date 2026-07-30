@@ -69,9 +69,17 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import type { Operation, OutputPlugin, RunInput } from '@adhd/apigen-core-client';
+import type {
+  BatchKindOperation,
+  Descriptor,
+  Operation,
+  OutputPlugin,
+  RunInput,
+} from '@adhd/apigen-core-client';
+import { buildBatchMountedOperations } from '@adhd/apigen-core-client';
 import { ensurePythonEnv, runExtractorEmitJson } from '@adhd/apigen-python-env';
 import { project } from '@adhd/apigen-engine-naming';
+import { readUsePlugins } from '@adhd/apigen-engine-runtime';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -153,7 +161,7 @@ interface ServePlanRoute {
 
 /** The `--plan-file` JSON payload `flask_server.py`'s `_build_state()` consumes. */
 interface ServePlan {
-  operations: Operation[];
+  operations: Array<Operation | BatchKindOperation>;
   routes: Record<string, ServePlanRoute>;
 }
 
@@ -200,14 +208,48 @@ async function run(input: RunInput): Promise<void> {
     'py-flask'
   );
 
+  // ---- Phase 1.5: `_batch/<kind>` mount, opt-in via `--use batch` (F6 /
+  // BATCH_0.0.1.md §2.1) ----
+  //
+  // Mirrors the SAME `usePlugins`-off-`input.options` convention every other
+  // TS host (fastify/express/mcp/cli-output) reads via `readUsePlugins` —
+  // none of them declare a dedicated `usePlugins` property on their own
+  // `optionsSchema` either (the CLI's `--use` loader threads the already-
+  // loaded plugin objects onto `options.usePlugins` itself; see
+  // `entrypoint/apigen-cli/src/lib/commands/run.ts`), so this is the real
+  // wiring convention to match, not a bespoke shape.
+  //
+  // Unlike fastify/express/mcp, py-flask does NOT go through the `batch`
+  // plugin's own `MountCapability.operations()` (which requires a
+  // `MountHostBridge` + TS-runtime `invokeBatch` — neither of which apply
+  // here, since the spawned Python process dispatches every one of its own
+  // operations locally, with no TS-side invoke hop at all). Only the
+  // host-agnostic schema/route-shape half (`buildBatchMountedOperations`,
+  // `apigen-core-client/src/lib/batch.ts`) is needed — the actual fan-out
+  // execution is implemented independently, Python-side, in
+  // `apigen_python/flask_server.py`'s `_dispatch_batch` (design doc §2.2).
+  const usePlugins = readUsePlugins(input.options);
+  const planOperations: Array<Operation | BatchKindOperation> = [...operations];
+  if (usePlugins.some((p) => p.id === 'batch')) {
+    const descriptor: Descriptor = { host: 'py', operations };
+    const batchOps = buildBatchMountedOperations(descriptor);
+    planOperations.push(...batchOps);
+  }
+
   // ---- Phase 2: canonical route/verb via the REAL project() (never a
   // Python re-derivation — BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001) ----
   const routes: Record<string, ServePlanRoute> = {};
-  for (const op of operations) {
+  for (const op of planOperations) {
     const projected = project(op);
-    routes[op.id] = { route: projected.http.route, verb: projected.http.verb };
+    // Batch is never a GET — a `_batch/<kind>` body (`{operation, items,
+    // concurrency, mode, onItemError, itemTimeoutMs}`) cannot round-trip
+    // through a query string, regardless of what `project()`'s own
+    // primitive-only-input GET-hoist heuristic would otherwise pick (design
+    // doc §2.1: "verb is always POST — batch is never a GET").
+    const verb = op.id.startsWith('_batch/') ? 'POST' : projected.http.verb;
+    routes[op.id] = { route: projected.http.route, verb };
   }
-  const plan: ServePlan = { operations, routes };
+  const plan: ServePlan = { operations: planOperations, routes };
 
   // ---- Phase 3: write the plan to a temp file and spawn flask_server ----
   // See module docstring for why a temp FILE, not a `--plan '<json>'` argv

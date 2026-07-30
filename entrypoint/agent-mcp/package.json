@@ -25,7 +25,7 @@
     "@adhd/environment": "^0.1.0",
     "@adhd/environment-base-spec": "^0.1.0",
     "@adhd/agent-base-types": "^2.2.0",
-    "@adhd/agent-engine-compiler": "^2.2.0",
+    "@adhd/agent-engine-compiler": "^2.2.1",
     "@adhd/agent-core-provider": "^2.2.0",
     "@adhd/agent-store-tools": "^2.2.0",
     "@adhd/agent-core-policy": "^2.2.0",

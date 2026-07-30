@@ -72,6 +72,15 @@ export type { McpOutputAdapter } from './lib/mcp-output-schema';
 // consumes these yet; the fastify/express/mcp/cli/py-* adapter states
 // migrate onto them (and DELETE their duplicated equivalents) later.
 // ---------------------------------------------------------------------------
+// F1/F4 (BATCH_0.0.1.md) — pure batch/bulk fan-out orchestration over the
+// existing createInvoker/Layer harness.
+export {
+  invokeBatch,
+  BATCH_DEFAULT_CONCURRENCY,
+  BATCH_MAX_CONCURRENCY,
+} from './lib/batch';
+export type { BatchOptions, BatchItemResult } from './lib/batch';
+
 export { buildOpPlan } from './lib/op-plan';
 export type {
   OpPlan,

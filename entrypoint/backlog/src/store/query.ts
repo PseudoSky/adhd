@@ -6,7 +6,7 @@
  */
 import type { NodeFilter, NodeRecord } from '@adhd/sox-graph-store';
 import type { AuditTrailEntry, AuditTrailResult, BacklogFilter, BacklogItem, DependencyGraph, StatsScope, TopoOrderResult } from '../model.js';
-import { BacklogItemNotFoundError, isTerminalStatus } from '../model.js';
+import { AmbiguousHumanIdError, BacklogItemNotFoundError, isTerminalStatus } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { BACKLOG_ITEM_TAG, buildNodeName, isLiveBacklogItemNode, sanitizeFtsQuery, toBacklogItem, type BacklogNodeMeta } from './mapping.js';
 import { queryAuditEvents } from './audit-log.js';
@@ -100,11 +100,78 @@ export function listItems(store: GraphBacklogStore, filter: BacklogFilter = {}):
   return applyOpenClosedFilter(items, filter);
 }
 
+/**
+ * BUG-BACKLOG-HUMANID-COLLISION-001 fix #2: this is THE shared `(repo,
+ * humanId) -> NodeRecord` lookup every store module funnels through
+ * (`crud.ts`/`lifecycle.ts`/`structure.ts`/`client.ts`'s `requireItem*`
+ * helpers all call this, directly or via `buildNotFoundError`'s sibling
+ * miss path). It used to silently resolve to "whichever live node happens
+ * to match `name`, else whichever is first" when more than one live node
+ * shared the same `(repo, humanId)` key — the exact shape of the
+ * pre-existing `"undefined-001"` collisions, and the root cause of a real
+ * mis-transition (see the backlog item body: a `resolveItem` call intended
+ * for one node silently landed on a different, unrelated one). Any lookup
+ * that finds >1 live match now throws `AmbiguousHumanIdError` instead of
+ * guessing.
+ */
 export function findItemNode(store: GraphBacklogStore, repo: string, humanId: string): NodeRecord | null {
   const name = buildNodeName(repo, humanId);
   const nodes = store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: repo, metadata: { humanId } });
   const live = nodes.filter(isLiveBacklogItemNode);
+  if (live.length > 1) {
+    throw new AmbiguousHumanIdError(repo, humanId, live.map((n) => n.id));
+  }
   return live.find((n) => n.name === name) ?? live[0] ?? null;
+}
+
+/** `metadata.repo` is the source-of-truth field written at create time; `namespace` (== the `repo` a node was written under) is the fallback for the rare row predating that field. Mirrors `toBacklogItem`'s own `meta.repo ?? node.namespace` fallback. */
+function nodeRepo(node: NodeRecord): string {
+  return (node.metadata as { repo?: string } | undefined)?.repo ?? node.namespace ?? '';
+}
+
+/**
+ * Finds every LIVE node carrying this `humanId`, across ALL repos (no
+ * `namespace` filter) — BUG-BACKLOG-REPO-LOOKUP-UX-001's "did you mean repo
+ * X?" hint needs this to distinguish "this humanId truly doesn't exist" from
+ * "it exists, just filed under a different repo string than the caller
+ * passed." Used only on the miss path (`buildNotFoundError`) — never on the
+ * hot successful-lookup path, so it costs nothing when a lookup is correct.
+ */
+export function findHumanIdInAnyRepo(store: GraphBacklogStore, humanId: string): NodeRecord[] {
+  const nodes = store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], metadata: { humanId } });
+  return nodes.filter(isLiveBacklogItemNode);
+}
+
+/**
+ * Every distinct repo value any LIVE backlog item is currently filed under.
+ * Used by `createItemNode`'s soft repo-drift warning (write-time half of
+ * BUG-BACKLOG-REPO-LOOKUP-UX-001) — an empty store (no items yet) has no
+ * "known" repos, so the very first item filed under any repo string never
+ * triggers a false-positive warning.
+ */
+export function knownRepos(store: GraphBacklogStore): Set<string> {
+  const nodes = store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG] });
+  const repos = new Set<string>();
+  for (const node of nodes) {
+    if (!isLiveBacklogItemNode(node)) continue;
+    const repo = nodeRepo(node);
+    if (repo) repos.add(repo);
+  }
+  return repos;
+}
+
+/**
+ * Builds the `BacklogItemNotFoundError` every miss site throws — the single
+ * place that decides whether a "did you mean repo X?" hint is warranted
+ * (BUG-BACKLOG-REPO-LOOKUP-UX-001, read-time half). Callers pass the SAME
+ * `(repo, humanId)` they just failed to find via `findItemNode` — this
+ * re-queries WITHOUT the `namespace` restriction to see if the humanId lives
+ * under a different repo string instead.
+ */
+export function buildNotFoundError(store: GraphBacklogStore, repo: string, humanId: string): BacklogItemNotFoundError {
+  const elsewhere = findHumanIdInAnyRepo(store, humanId).filter((n) => nodeRepo(n) !== repo);
+  const foundInRepos = [...new Set(elsewhere.map(nodeRepo).filter((r) => r.length > 0))];
+  return new BacklogItemNotFoundError(repo, humanId, foundInRepos);
 }
 
 function countByKey(items: BacklogItem[], keyFn: (item: BacklogItem) => string | undefined): Record<string, number> {
@@ -294,7 +361,7 @@ export function staleClaims(store: GraphBacklogStore, maxAgeMin: number, scope: 
  */
 export function auditTrail(store: GraphBacklogStore, repo: string, humanId: string): AuditTrailResult {
   const node = findItemNode(store, repo, humanId);
-  if (!node) throw new BacklogItemNotFoundError(repo, humanId);
+  if (!node) throw buildNotFoundError(store, repo, humanId);
   const item = toBacklogItem(node);
 
   const history: AuditTrailEntry[] = [

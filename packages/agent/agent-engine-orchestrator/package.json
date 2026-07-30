@@ -37,7 +37,7 @@
     "zod": "4.4.3"
   },
   "peerDependencies": {
-    "@adhd/agent-engine-compiler": "^2.2.0"
+    "@adhd/agent-engine-compiler": "^2.2.1"
   },
   "peerDependenciesMeta": {
     "@adhd/agent-engine-compiler": {

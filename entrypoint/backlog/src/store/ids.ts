@@ -18,10 +18,27 @@
  */
 import type { NodeRecord } from '@adhd/sox-graph-store';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
+import { AmbiguousHumanIdError, InvalidArgumentError } from '../model.js';
 import { BACKLOG_ITEM_TAG, isLiveBacklogItemNode, type BacklogNodeMeta } from './mapping.js';
 import { withImmediateRetry } from './immediate-retry.js';
 
 function computeNextHumanId(store: GraphBacklogStore, repo: string, family: string): string {
+  // BUG-BACKLOG-HUMANID-COLLISION-001 fix #1 (authoritative, in-transaction
+  // guard): mirrors `createItemNode`'s early check, but here — inside the
+  // SAME `.immediate()` transaction that actually mints the humanId — so
+  // EVERY caller that reaches this function (not just `createItemNode`'s
+  // fast path, e.g. `supersedeItemNode` in structure.ts, which calls
+  // `allocateHumanIdAndInsert` directly) is covered. Without this, an
+  // `undefined`/empty `family` reaching the template literal below silently
+  // stringifies to the literal `"undefined"`, minting a colliding
+  // `humanId: "undefined-001"`.
+  if (typeof family !== 'string' || family.trim().length === 0) {
+    throw new InvalidArgumentError(
+      'family',
+      `backlog: cannot allocate a humanId for repo=${JSON.stringify(repo)} — "family" is required and must be a ` +
+        `non-empty string, received ${JSON.stringify(family)}. See BUG-BACKLOG-HUMANID-COLLISION-001.`
+    );
+  }
   const existing = store.graph.queryNodes({
     kind: 'generic',
     tags: [BACKLOG_ITEM_TAG],
@@ -50,11 +67,19 @@ function findLiveByHumanId(store: GraphBacklogStore, repo: string, humanId: stri
   // prior supersede/merge tombstoned) permanently unimportable. A soft-deleted
   // id must read as ABSENT here so re-import resurrects it as a fresh live node.
   const nodes = store.graph.queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: repo, metadata: { humanId } });
-  return (
-    nodes.find(
-      (n) => isLiveBacklogItemNode(n) && (n.metadata as Partial<BacklogNodeMeta> | undefined)?.humanId === humanId,
-    ) ?? null
+  const live = nodes.filter(
+    (n) => isLiveBacklogItemNode(n) && (n.metadata as Partial<BacklogNodeMeta> | undefined)?.humanId === humanId,
   );
+  // BUG-BACKLOG-HUMANID-COLLISION-001 fix #2: more than one live node
+  // sharing this exact (repo, humanId) key is a pre-existing data-integrity
+  // defect (the "undefined-001" collisions) — refuse to silently pick one
+  // (this used to be `nodes.find(...)`, which took whichever node the query
+  // happened to return first) rather than let `allocateHumanIdAndInsert`'s
+  // idOverride path silently treat the wrong node as "the existing item".
+  if (live.length > 1) {
+    throw new AmbiguousHumanIdError(repo, humanId, live.map((n) => n.id));
+  }
+  return live[0] ?? null;
 }
 
 /**

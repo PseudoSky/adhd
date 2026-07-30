@@ -126,9 +126,32 @@ curl http://localhost:8080/_meta/health
 ### With middleware
 
 ```bash
-npx @adhd/apigen-cli run --source hello.ts --type api-fastify --use health --use logger
-# health → GET /_meta/health  (live health check)
-# logger → per-operation structured logging to stderr
+npx @adhd/apigen-cli run --source hello.ts --type api-fastify --use health --use logger --use batch
+# health  → GET /_meta/health  (live health check)
+# logger  → per-operation structured logging to stderr
+# batch   → POST /_batch/query, /_batch/action (bulk fan-out)
+```
+
+Batch operations let clients invoke multiple items in one request:
+
+```bash
+curl -X POST http://localhost:3000/_batch/action \
+  -H 'content-type: application/json' \
+  -d '{
+    "operation": "hello/greet",
+    "items": [
+      { "name": "alice" },
+      { "name": "bob" },
+      { "name": "charlie" }
+    ],
+    "concurrency": 2,
+    "onItemError": "continue"
+  }'
+# => [
+#   { "index": 0, "status": "fulfilled", "value": "hello, alice" },
+#   { "index": 1, "status": "fulfilled", "value": "hello, bob" },
+#   { "index": 2, "status": "fulfilled", "value": "hello, charlie" }
+# ]
 ```
 
 ---
@@ -359,6 +382,7 @@ Built-in plugins:
 
 | Plugin | Type | What it does |
 |--------|------|-------------|
+| `batch` | Mount | Adds `POST /_batch/<kind>` — fan out N items through one operation with concurrency control and per-item error handling |
 | `health` | Mount | Adds `GET /_meta/health` with aggregate status |
 | `logger` | Layer | Per-operation pino logging to stderr |
 
@@ -423,6 +447,21 @@ apigen works in three stages:
 3. **Project** — Hand the composed descriptor to the selected output plugin for live serving or code generation.
 
 The v2 architecture (`docs/apigen/SPEC.md`) extends this to a polyglot detect → extract → merge → project pipeline with a canonical JSON descriptor as the neutral contract. Python plugins already ship; Rust/Go/Java host languages are designed in the SPEC.
+
+---
+
+## Known real-world consumers
+
+Beyond this monorepo's own `entrypoint/backlog` (hand-wired `extract()`/`composeSchemas()`/`plugin.run()` consumer), apigen-cli is used directly, as a published/local dependency, by external projects:
+
+- **`agent-browser`** (`~/dev/ai/scratch/agent-browser`) — a standalone search/browser-automation toolkit. Its `search-mcp-source.ts` (7 real operations: `search`, `listProviders`, `tripwireStatus`, `clearTripwire`, `chromeStatus`, `launchChrome`, `providerUsage`) is mounted as a live MCP server entirely via apigen-cli — no hand-written MCP glue in that project at all. The exact invocation, taken directly from its production config (`~/.config/opencode/opencode.json`'s `search` MCP server entry):
+  ```bash
+  npx -y @adhd/apigen-cli run \
+    --source /path/to/agent-browser/search-mcp-source.ts \
+    --type mcp \
+    --log-level silent
+  ```
+  Verified (2026-07-27) that this same real source file also works correctly with `--use batch` added — a real batch call fanning out `listProviders`/`tripwireStatus` through the live MCP server returned correct results, end-to-end, against agent-browser's actual functions (no fixture, no mock). This is the real consumer that surfaced `BUG-APIGEN-MCP-ROOT-ONEOF-001` (now fixed).
 
 ---
 
