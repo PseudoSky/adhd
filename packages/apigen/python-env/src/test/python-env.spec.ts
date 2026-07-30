@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import * as fs from 'node:fs'
+import * as os from 'node:os'
 import * as path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { ensurePythonEnv, resolvePythonPkgDir } from '../index'
@@ -20,6 +21,87 @@ describe('resolvePythonPkgDir', () => {
     const dir = resolvePythonPkgDir()
     expect(fs.existsSync(path.join(dir, 'apigen_python', 'grpc_server.py'))).toBe(true)
     expect(fs.existsSync(path.join(dir, 'pyproject.toml'))).toBe(true)
+  })
+})
+
+// Regression: resolvePythonPkgDir() must resolve the SHIPPED, co-located
+// `apigen_python` copy for a consumer installed from npm OUTSIDE this
+// monorepo — where __dirname is `node_modules/@adhd/apigen-python-env/dist`
+// and neither the monorepo-source primary candidate
+// (`<dist>/../../../python`) nor the 20-level `packages/apigen/python`
+// walk-up exist. The `test` target `dependsOn: ["build"]` (project.json)
+// guarantees `dist/python/apigen_python` already exists here — that's the
+// build's own copy-plugin (vite.config.ts `copyPythonPackagePlugin`)
+// output, proven present by this test's own precondition assertion below.
+describe('resolvePythonPkgDir — published (outside-monorepo) layout', () => {
+  const distDir = path.resolve(__dirname, '..', '..', 'dist')
+  // Deliberately OUTSIDE the repo tree (os.tmpdir(), not repo tmp/): the
+  // whole point of this test is that neither monorepo-relative fallback can
+  // reach `packages/apigen/python` from here. Removed in afterAll.
+  let publishedDistDir: string
+
+  beforeAll(() => {
+    // Precondition: the build actually shipped the sources (proves the
+    // project.json `dependsOn: ["build"]` + vite.config.ts copy plugin work
+    // — this is the "sources shipped into dist" half of the fix). Asserts
+    // BOTH `apigen_python/` AND `pyproject.toml` land beside each other —
+    // BUG-015-REGRESSION shipped only the former, which satisfied a narrower
+    // version of this same precondition while ENOENT-ing every real
+    // consumer that reads `pythonPkgDir/pyproject.toml` at runtime
+    // (py-flask, py-grpc, apigen-cli serve.live, apigen-engine-conformance).
+    expect(fs.existsSync(path.join(distDir, 'python', 'apigen_python', '__init__.py'))).toBe(true)
+    expect(fs.existsSync(path.join(distDir, 'python', 'pyproject.toml'))).toBe(true)
+
+    publishedDistDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-python-env-published-'))
+    fs.cpSync(distDir, publishedDistDir, { recursive: true })
+  })
+
+  afterAll(() => {
+    fs.rmSync(publishedDistDir, { recursive: true, force: true })
+  })
+
+  it('RED: without the co-located probe, both monorepo-relative fallbacks are dead ends here', () => {
+    const monorepoSourcePrimary = path.resolve(publishedDistDir, '..', '..', '..', 'python')
+    expect(fs.existsSync(path.join(monorepoSourcePrimary, 'apigen_python'))).toBe(false)
+
+    let walkedUpToMonorepo = false
+    let dir = publishedDistDir
+    for (let i = 0; i < 20; i++) {
+      const candidate = path.join(dir, 'packages', 'apigen', 'python')
+      if (fs.existsSync(path.join(candidate, 'apigen_python'))) walkedUpToMonorepo = true
+      const parent = path.dirname(dir)
+      if (parent === dir) break
+      dir = parent
+    }
+    expect(walkedUpToMonorepo).toBe(false)
+  })
+
+  it('GREEN: resolves the bundled co-located copy from the relocated dist dir', () => {
+    const resolved = resolvePythonPkgDir(publishedDistDir)
+    expect(resolved).toBe(path.join(publishedDistDir, 'python'))
+    expect(fs.existsSync(path.join(resolved, 'apigen_python', '__init__.py'))).toBe(true)
+    expect(fs.existsSync(path.join(resolved, 'apigen_python', 'grpc_server.py'))).toBe(true)
+  })
+
+  // BUG-015-REGRESSION guard: mirrors exactly what the runtime does —
+  // `ensurePythonEnv()`'s `pyprojectHash()` calls
+  // `fs.readFileSync(path.join(pythonPkgDir, 'pyproject.toml'))` unconditionally,
+  // and py-flask/py-grpc/conformance all resolve `pythonPkgDir` the same way.
+  // A copy plugin that ships `apigen_python/**` but not `pyproject.toml`
+  // (the exact shape of the regression) passes every OTHER assertion in this
+  // describe block while failing only this one — so this is the assertion
+  // that must never be allowed to regress away again.
+  it('GREEN: pyproject.toml (and conformance-vector siblings) ship alongside apigen_python/, not just the subpackage', () => {
+    const resolved = resolvePythonPkgDir(publishedDistDir)
+    const pyprojectPath = path.join(resolved, 'pyproject.toml')
+    expect(fs.existsSync(pyprojectPath)).toBe(true)
+    const pyprojectContents = fs.readFileSync(pyprojectPath, 'utf8')
+    expect(pyprojectContents.length).toBeGreaterThan(0)
+    expect(pyprojectContents).toContain('apigen')
+
+    // Siblings the conformance suite reads from the same resolved dir.
+    expect(fs.existsSync(path.join(resolved, 'apigen_logical.py'))).toBe(true)
+    expect(fs.existsSync(path.join(resolved, 'conformance_vectors.json'))).toBe(true)
   })
 })
 
