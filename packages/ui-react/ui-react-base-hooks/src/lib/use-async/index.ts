@@ -43,14 +43,26 @@ export function useAsync<
           ? await asyncFunction(...args)
           : ((await asyncFunction()) as Data);
         setState({ status: 'success', data: response, error: undefined });
-        options.onSuccess?.(response);
+        // Read the handler into a local before calling it: calling
+        // `options.onSuccess(...)` directly as a member expression makes
+        // exhaustive-deps require the *whole* `options` object (it can't
+        // prove the call doesn't rely on `options` as `this`), which would
+        // reintroduce the re-identify-every-render problem the comment below
+        // describes. Assigning to a local first calls it as a plain
+        // function and lets the rule accept the narrower `options.onSuccess`
+        // dependency.
+        const onSuccess = options.onSuccess;
+        if (onSuccess) {
+          onSuccess(response);
+        }
         return response;
       } catch (error) {
         const errorObject =
           error instanceof Error ? error : new Error('An error occurred');
         setState({ status: 'error', data: undefined, error: errorObject });
-        if (options.onError) {
-          options.onError(errorObject);
+        const onError = options.onError;
+        if (onError) {
+          onError(errorObject);
         } else {
           throw errorObject;
         }
