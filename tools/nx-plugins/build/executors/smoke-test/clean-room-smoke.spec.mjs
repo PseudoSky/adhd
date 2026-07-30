@@ -26,6 +26,11 @@ import {
   computeCoverageGap,
   resolveInstalledEntry,
   smokeInstalledLibraryLoad,
+  classifyBinHelpExit,
+  buildNpmInstallArgs,
+  compareSemver,
+  isInstallStale,
+  looksLikeTransientRegistryError,
 } from './clean-room-smoke.mjs';
 
 function makeWorkspace(entrypoints) {
@@ -355,4 +360,155 @@ test('smokeInstalledLibraryLoad: installed package.json not found at all -> ok:f
   } finally {
     rmSync(installDir, { recursive: true, force: true });
   }
+});
+
+// --- classifyBinHelpExit: BUG-012 fail-safe verdict (the confirmed false-negative fix) ---
+//
+// BUG-012: a real `@adhd/backlog@0.1.0` install from the registry crashes on
+// `backlog --help` (exit 1, stderr = a thrown `Error: ... cannot mount ...`
+// + stack trace, matching NONE of `CRASH_ON_LOAD_SIGNATURES`). The OLD
+// verdict ("non-zero exit + no crash-on-load signature -> PASS") let this
+// through as a false PASS. The tests below assert the NEW fail-safe verdict
+// treats this exact stderr as FAIL, while still passing every empirically
+// observed benign arg-parse rejection (see the task's live bin-enumeration:
+// agent-mcp-tail's `util.parseArgs`, agent-engine-compiler's own usage
+// rejection, apigen/decompile exiting 0, agent-mcp staying alive).
+
+test('classifyBinHelpExit: exit 0 -> ok:true', () => {
+  const result = classifyBinHelpExit({ code: 0, timedOut: false, stderr: '' });
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'exited-0');
+});
+
+test('classifyBinHelpExit: still running at timeout -> ok:true (server-style entrypoint)', () => {
+  const result = classifyBinHelpExit({ code: null, timedOut: true, stderr: '' });
+  assert.equal(result.ok, true);
+  assert.match(result.mode, /still-running-at-timeout/);
+});
+
+test('classifyBinHelpExit: node:util parseArgs unknown-option rejection -> ok:true (benign, empirically observed on @adhd/agent-mcp\'s agent-mcp-tail bin)', () => {
+  const stderr = [
+    "node:internal/util/parse_args/parse_args:107",
+    "TypeError [ERR_PARSE_ARGS_UNKNOWN_OPTION]: Unknown option '--help'. To specify a positional argument starting with a '-', place it at the end of the command after '--', as in '-- \"--help\"'",
+    '    at checkOptionUsage (node:internal/util/parse_args/parse_args:107:13)',
+    '    at parseArgs (node:internal/util/parse_args/parse_args:379:3) {',
+    "  code: 'ERR_PARSE_ARGS_UNKNOWN_OPTION'",
+    '}',
+  ].join('\n');
+  const result = classifyBinHelpExit({ code: 1, timedOut: false, stderr });
+  assert.equal(result.ok, true, result.reason);
+  assert.match(result.mode, /ERR_PARSE_ARGS_UNKNOWN_OPTION/);
+});
+
+test('classifyBinHelpExit: own usage-rejection message ("Expected sub-command") -> ok:true (benign, empirically observed on @adhd/agent-engine-compiler\'s agent-compiler bin)', () => {
+  const result = classifyBinHelpExit({ code: 1, timedOut: false, stderr: "agent-compiler: Expected sub-command 'compile', got: --help\n" });
+  assert.equal(result.ok, true, result.reason);
+  assert.match(result.mode, /Expected sub-command/);
+});
+
+test('classifyBinHelpExit: REGRESSION for BUG-012 — a real backlog-style startup crash -> ok:false (was a false PASS under the old verdict)', () => {
+  const stderr = [
+    'Error: @adhd/backlog: cannot mount — /x/node_modules/@adhd/dist/client.d.ts does not exist. Run "nx build backlog" first (extract() needs the built .d.ts for type information).',
+    '    at qN (/x/node_modules/@adhd/backlog/index.js:190:7364)',
+    '    at Wi (/x/node_modules/@adhd/backlog/index.js:190:7644)',
+  ].join('\n');
+  const result = classifyBinHelpExit({ code: 1, timedOut: false, stderr });
+  assert.equal(result.ok, false, 'a real startup crash must FAIL under the fail-safe verdict — this is the exact BUG-012 stderr shape');
+  assert.match(result.reason, /fail-safe default/);
+  // Prove the OLD (pre-fix) permissive verdict would have wrongly passed this exact case: it
+  // matches none of the old CRASH_ON_LOAD_SIGNATURES denylist, so "no crash-on-load signature
+  // found -> PASS" (the old logic) evaluates true here, even though the NEW verdict is FAIL.
+  const OLD_CRASH_ON_LOAD_SIGNATURES = [
+    'Cannot find module',
+    'ERR_MODULE_NOT_FOUND',
+    'MODULE_NOT_FOUND',
+    'ERR_REQUIRE_ESM',
+    'is not a constructor',
+    'is not a function',
+    'Cannot read propert',
+    'SyntaxError',
+    'ReferenceError',
+  ];
+  const oldVerdictWouldHavePassed = !OLD_CRASH_ON_LOAD_SIGNATURES.some((sig) => stderr.includes(sig));
+  assert.equal(oldVerdictWouldHavePassed, true, 'sanity check: this stderr must indeed have slipped past the old denylist (that IS BUG-012)');
+});
+
+test('classifyBinHelpExit: a generic thrown Error with a stack trace -> ok:false', () => {
+  const stderr = 'Error: something went wrong\n    at foo (file.js:1:1)\n    at bar (file.js:2:2)\n';
+  const result = classifyBinHelpExit({ code: 1, timedOut: false, stderr });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /fail-safe default/);
+});
+
+test('classifyBinHelpExit: a known crash-on-load signature (Cannot find module) -> ok:false and annotated as such', () => {
+  const stderr = "Error: Cannot find module '/x/node_modules/@adhd/foo/dist/index.js'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1421:15)\n";
+  const result = classifyBinHelpExit({ code: 1, timedOut: false, stderr });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /matches a known crash-on-load signature/);
+});
+
+// --- buildNpmInstallArgs / compareSemver / isInstallStale / looksLikeTransientRegistryError ---
+//
+// GATE 2 hardening: a live release run proved `npm install <name>@latest`
+// (no `--prefer-online`) can resolve a STALE packument straight from npm's
+// local cache immediately after `npm publish` — `@adhd/backlog@0.1.1` was
+// published, but GATE 2's install pulled the cached `0.1.0` and red-failed
+// on an already-fixed package. `npm view` (which GATE 2 does not use for
+// its actual install step) already showed `0.1.1` as `dist-tags.latest`;
+// only `npm install` trusted stale local metadata. These are the pure,
+// spawn-free seams that fix now covers.
+
+test('buildNpmInstallArgs: always includes --prefer-online (mandatory for a POST-publish gate)', () => {
+  const args = buildNpmInstallArgs('@adhd/backlog', '/tmp/install-dir');
+  assert.ok(args.includes('--prefer-online'), `expected --prefer-online in ${JSON.stringify(args)}`);
+  assert.deepEqual(args, [
+    'install',
+    '--prefix',
+    '/tmp/install-dir',
+    '@adhd/backlog@latest',
+    '--no-audit',
+    '--no-fund',
+    '--loglevel=error',
+    '--prefer-online',
+  ]);
+});
+
+test('buildNpmInstallArgs: appends --registry when a custom registryUrl is supplied', () => {
+  const args = buildNpmInstallArgs('@adhd/backlog', '/tmp/install-dir', { registryUrl: 'https://registry.example.com' });
+  assert.ok(args.includes('--prefer-online'));
+  assert.deepEqual(args.slice(-2), ['--registry', 'https://registry.example.com']);
+});
+
+test('compareSemver: orders major/minor/patch numerically, not lexicographically', () => {
+  assert.equal(compareSemver('0.1.0', '0.1.1') < 0, true);
+  assert.equal(compareSemver('0.1.1', '0.1.0') > 0, true);
+  assert.equal(compareSemver('0.1.1', '0.1.1'), 0);
+  assert.equal(compareSemver('0.2.0', '0.10.0') < 0, true, 'numeric compare: 2 < 10, never lexicographic "0.2.0" > "0.10.0"');
+  assert.equal(compareSemver('1.0.0', '0.9.9') > 0, true);
+});
+
+test('isInstallStale: resolved OLDER than on-disk -> true (the live @adhd/backlog 0.1.0-vs-0.1.1 incident shape)', () => {
+  assert.equal(isInstallStale('0.1.0', '0.1.1'), true);
+});
+
+test('isInstallStale: resolved EQUAL to on-disk -> false', () => {
+  assert.equal(isInstallStale('0.1.1', '0.1.1'), false);
+});
+
+test('isInstallStale: resolved NEWER than on-disk -> false (never a reason to retry)', () => {
+  assert.equal(isInstallStale('0.1.2', '0.1.1'), false);
+});
+
+test('isInstallStale: missing resolved or on-disk version -> false (never a hard error, never retried)', () => {
+  assert.equal(isInstallStale(null, '0.1.1'), false);
+  assert.equal(isInstallStale('0.1.1', undefined), false);
+  assert.equal(isInstallStale(null, null), false);
+});
+
+test('looksLikeTransientRegistryError: detects ETARGET/E404-shaped npm install failures', () => {
+  assert.equal(looksLikeTransientRegistryError('npm ERR! code ETARGET\nnpm ERR! notarget No matching version found'), true);
+  assert.equal(looksLikeTransientRegistryError('npm ERR! code E404\nnpm ERR! 404 Not Found'), true);
+  assert.equal(looksLikeTransientRegistryError('npm ERR! code EACCES\npermission denied'), false);
+  assert.equal(looksLikeTransientRegistryError(''), false);
+  assert.equal(looksLikeTransientRegistryError(undefined), false);
 });
