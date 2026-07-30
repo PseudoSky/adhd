@@ -1,12 +1,12 @@
 {
   "name": "@adhd/apigen-plugin-cli-output",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "main": "./dist/index.js",
   "dependencies": {
-    "@adhd/apigen-core-client": "^0.2.0",
-    "@adhd/apigen-engine-runtime": "^0.2.0",
+    "@adhd/apigen-core-client": "^0.2.1",
+    "@adhd/apigen-engine-runtime": "^0.2.1",
     "@adhd/apigen-base-errors": "^0.2.0",
-    "@adhd/apigen-engine-naming": "^0.2.0"
+    "@adhd/apigen-engine-naming": "^0.2.1"
   },
   "publishConfig": {
     "access": "public"
