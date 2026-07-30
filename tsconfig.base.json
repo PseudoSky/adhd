@@ -107,6 +107,9 @@
       "@adhd/apigen-plugin-api-fastify": [
         "./packages/apigen/apigen-plugin-api-fastify/src/index.ts"
       ],
+      "@adhd/apigen-plugin-batch": [
+        "./packages/apigen/apigen-plugin-batch/src/index.ts"
+      ],
       "@adhd/apigen-plugin-cli-output": [
         "./packages/apigen/apigen-plugin-cli-output/src/index.ts"
       ],
