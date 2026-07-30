@@ -1,3 +1,7 @@
+## 0.2.1 (2026-07-30)
+
+This was a version bump only for apigen-plugin-batch to align it with other projects, there were no code changes.
+
 # Changelog
 
 ## [Unreleased]

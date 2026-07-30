@@ -1,3 +1,15 @@
+## 0.2.2 (2026-07-30)
+
+
+### 🩹 Fixes
+
+- **apigen:** schema extraction required-array + CLI mount/discriminated-union gaps
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.2.1 (2026-07-28)
 
 This was a version bump only for apigen-plugin-cli-output to align it with other projects, there were no code changes.

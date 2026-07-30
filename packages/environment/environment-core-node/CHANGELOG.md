@@ -1,3 +1,7 @@
+## 0.1.3 (2026-07-30)
+
+This was a version bump only for environment-core-node to align it with other projects, there were no code changes.
+
 ## 0.1.2 (2026-07-28)
 
 This was a version bump only for environment-core-node to align it with other projects, there were no code changes.

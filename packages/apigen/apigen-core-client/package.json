@@ -1,6 +1,6 @@
 {
   "name": "@adhd/apigen-core-client",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "dependencies": {
     "ts-morph": "^23.0.0",
     "ts-json-schema-generator": "^2.3.0",
