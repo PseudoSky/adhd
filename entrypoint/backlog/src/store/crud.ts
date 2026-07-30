@@ -7,10 +7,10 @@
  */
 import type { NodeRecord } from '@adhd/sox-graph-store';
 import type { BacklogItem, CreateItemInput, CreateItemResult, UpdateItemInput } from '../model.js';
-import { BacklogItemNotFoundError } from '../model.js';
+import { InvalidArgumentError } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { allocateHumanIdAndInsert } from './ids.js';
-import { findItemNode } from './query.js';
+import { buildNotFoundError, findItemNode, knownRepos } from './query.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import {
   BACKLOG_ITEM_TAG,
@@ -81,6 +81,25 @@ function dedupeScan(store: GraphBacklogStore, repo: string, input: CreateItemInp
 }
 
 export function createItemNode(store: GraphBacklogStore, input: CreateItemInput): CreateItemResult {
+  // BUG-BACKLOG-HUMANID-COLLISION-001 fix #1: `family` is REQUIRED unless
+  // `idOverride` is given (SPEC.md §5.1, model.ts `CreateItemInput.family`
+  // doc comment). Validated HERE, before any allocation runs, so a missing/
+  // empty/whitespace-only `family` can never reach `computeNextHumanId`'s
+  // `${family}-NNN` template literal, which used to silently coerce JS
+  // `undefined` to the literal string `"undefined"` and mint a
+  // `humanId: "undefined-001"` that collides with every other item that hit
+  // the same bug. This is store-level defense in depth — it must hold
+  // regardless of whether the caller's own schema validation (e.g.
+  // apigen-core-client's extracted `CreateItemInput` shape,
+  // BUG-APIGEN-CORE-CLIENT-001) enforces `family` as required.
+  if (!input.idOverride && (typeof input.family !== 'string' || input.family.trim().length === 0)) {
+    throw new InvalidArgumentError(
+      'family',
+      `backlog: createItem requires a non-empty "family" (e.g. "BUG-APIGEN") unless "idOverride" is given — ` +
+        `received family=${JSON.stringify(input.family)}. See BUG-BACKLOG-HUMANID-COLLISION-001.`
+    );
+  }
+
   // `idOverride` (import path, or a planner-chosen id) must never mint a
   // SECOND node claiming an already-live humanId — `humanId` is documented
   // as "unique within (repo, family)" (SPEC.md §4.1). This is a HARD check,
@@ -109,6 +128,19 @@ export function createItemNode(store: GraphBacklogStore, input: CreateItemInput)
   if (duplicateCandidates.length > 0 && !input.force) {
     return { item: duplicateCandidates[0], created: false, duplicateCandidates };
   }
+
+  // BUG-BACKLOG-REPO-LOOKUP-UX-001 (write-time half): a genuinely NEW repo
+  // must always be allowed to file its first item (an empty `known` set, or
+  // `input.repo` already known, both produce no warning) — this only flags
+  // the case most likely to be a typo/inconsistent-repo-string drift: a repo
+  // this store has NEVER seen before, filed alongside others it HAS seen.
+  // Soft warning only — never blocks the write (per the backlog item's fix
+  // direction and this repo's CLAUDE.md "never hard-fail on new repo" rule).
+  const known = knownRepos(store);
+  const repoWarning =
+    known.size > 0 && !known.has(input.repo)
+      ? `repo '${input.repo}' is new to this store — existing repo value(s) here: ${[...known].sort().join(', ')}. If this is meant to be the same project, use the existing repo value instead.`
+      : undefined;
 
   return allocateHumanIdAndInsert(store, input.repo, input.family, input.idOverride, (humanId, existingAtCommit) => {
     if (existingAtCommit) {
@@ -155,7 +187,7 @@ export function createItemNode(store: GraphBacklogStore, input: CreateItemInput)
 
     const node = store.graph.getNode(nodeId);
     if (!node) throw new Error(`backlog: writeNode returned an id that does not resolve: ${nodeId}`);
-    return { item: toBacklogItem(node), created: true, duplicateCandidates: [] };
+    return { item: toBacklogItem(node), created: true, duplicateCandidates: [], ...(repoWarning !== undefined ? { repoWarning } : {}) };
   });
 }
 
@@ -166,7 +198,7 @@ export function getItemNode(store: GraphBacklogStore, repo: string, humanId: str
 
 function requireItemNode(store: GraphBacklogStore, repo: string, humanId: string): NodeRecord {
   const node = findItemNode(store, repo, humanId);
-  if (!node) throw new BacklogItemNotFoundError(repo, humanId);
+  if (!node) throw buildNotFoundError(store, repo, humanId);
   return node;
 }
 
@@ -220,7 +252,7 @@ export function updateItemNode(store: GraphBacklogStore, repo: string, humanId: 
       .run(newContent, computeContentHash(newContent), node.id);
   }
   const updated = store.graph.getNode(node.id);
-  if (!updated) throw new BacklogItemNotFoundError(repo, humanId);
+  if (!updated) throw buildNotFoundError(store, repo, humanId);
   return toBacklogItem(updated);
 }
 
