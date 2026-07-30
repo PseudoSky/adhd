@@ -97,6 +97,17 @@ const INSTALL_TIMEOUT_MS = Number(process.env.ADHD_SMOKE_INSTALL_TIMEOUT_MS) || 
 const LIBRARY_LOAD_TIMEOUT_MS = Number(process.env.ADHD_SMOKE_LIBRARY_LOAD_TIMEOUT_MS) || 15_000;
 /** How many packages may be smoked concurrently (see file header "PERFORMANCE"). */
 const SMOKE_CONCURRENCY = Number(process.env.ADHD_SMOKE_CONCURRENCY) || 8;
+/**
+ * How many EXTRA `npm install` attempts (beyond the first) this gate makes
+ * when the install lands but resolves a version OLDER than the workspace's
+ * own on-disk version for that package — see `isInstallStale` / the
+ * "STALE PACKUMENT CACHE" note on `cleanRoomInstall` below. Bounded and
+ * overridable (mirrors `ADHD_SMOKE_*` elsewhere in this file) — never an
+ * unbounded/wall-clock wait.
+ */
+const INSTALL_RETRIES = Number(process.env.ADHD_SMOKE_INSTALL_RETRIES) || 3;
+/** Backoff between bounded stale-install retries (see `INSTALL_RETRIES`). */
+const INSTALL_RETRY_DELAY_MS = Number(process.env.ADHD_SMOKE_INSTALL_RETRY_DELAY_MS) || 5000;
 
 /**
  * Discover every publishable, `bin`-shipping project directly under
@@ -182,8 +193,15 @@ export function discoverAllPackageManifests(root) {
  * classification is purely "does the manifest declare `bin`", never "which
  * directory is it in".
  *
+ * Each returned target also carries `version` — the on-disk source
+ * `package.json` version — so a caller (`cleanRoomInstall`, via
+ * `smokeOneEntrypoint`/`smokeOneLibrary`) can detect a stale npm packument
+ * cache resolving an OLDER version than what this workspace just published.
+ * This reuses the manifest map `discoverAllPackageManifests` already built —
+ * it does not re-glob the workspace independently.
+ *
  * @param {string} root
- * @returns {{ binTargets: {projectRoot: string, name: string}[], libraryTargets: {projectRoot: string, name: string}[] }}
+ * @returns {{ binTargets: {projectRoot: string, name: string, version: string}[], libraryTargets: {projectRoot: string, name: string, version: string}[] }}
  */
 export function classifyPublishableTargets(root) {
   const manifests = discoverAllPackageManifests(root);
@@ -192,7 +210,7 @@ export function classifyPublishableTargets(root) {
   for (const { name, pkg, projectRoot } of manifests.values()) {
     if (pkg.private === true) continue;
     const hasBin = pkg.bin != null && (typeof pkg.bin === 'string' || Object.keys(pkg.bin).length > 0);
-    (hasBin ? binTargets : libraryTargets).push({ projectRoot, name });
+    (hasBin ? binTargets : libraryTargets).push({ projectRoot, name, version: pkg.version });
   }
   return { binTargets, libraryTargets };
 }
@@ -342,35 +360,215 @@ function run(cmd, args, opts = {}) {
 }
 
 /**
+ * Build the argv for the clean-room `npm install <name>@latest` invocation.
+ * Extracted as a pure, spawn-free function specifically so the
+ * `--prefer-online` flag (see `cleanRoomInstall`'s header) is unit-testable
+ * without spawning a real npm process.
+ *
+ * @param {string} name npm package name
+ * @param {string} installDir the `--prefix` target directory
+ * @param {{ registryUrl?: string }} [opts]
+ * @returns {string[]}
+ */
+export function buildNpmInstallArgs(name, installDir, opts = {}) {
+  const args = [
+    'install',
+    '--prefix',
+    installDir,
+    `${name}@latest`,
+    '--no-audit',
+    '--no-fund',
+    '--loglevel=error',
+    // MANDATORY for a POST-publish gate — see the BUG-012 follow-up incident
+    // recorded on `cleanRoomInstall` below (`@adhd/backlog@0.1.1` published,
+    // but `install @latest` resolved the stale cached `0.1.0`). Without this
+    // flag npm is free to trust its local packument cache, which is exactly
+    // the metadata this gate must NOT trust immediately after a publish.
+    '--prefer-online',
+  ];
+  if (opts.registryUrl) args.push('--registry', opts.registryUrl);
+  return args;
+}
+
+/**
+ * Compare two dotted numeric version strings (`"1.2.3"` vs `"1.10.0"`),
+ * pure/spawn-free. Deliberately NOT a full semver parser (no prerelease/build
+ * metadata handling) — every version this gate ever compares is either an
+ * npm-registry `dist-tags.latest` resolution or a workspace `package.json`
+ * `version` field, both of which are plain `major.minor.patch` in this repo's
+ * release flow (see PUBLISHING.md). A missing/non-numeric segment is treated
+ * as `0`.
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {number} negative if a<b, 0 if equal, positive if a>b
+ */
+export function compareSemver(a, b) {
+  const partsA = String(a ?? '').split('.');
+  const partsB = String(b ?? '').split('.');
+  const len = Math.max(partsA.length, partsB.length);
+  for (let i = 0; i < len; i++) {
+    const na = parseInt(partsA[i], 10) || 0;
+    const nb = parseInt(partsB[i], 10) || 0;
+    if (na !== nb) return na - nb;
+  }
+  return 0;
+}
+
+/**
+ * The staleness predicate this gate retries against (task requirement #2):
+ * TRUE only when `resolvedVersion` (what `npm install @latest` actually
+ * pulled down) is strictly OLDER than `onDiskVersion` (this workspace's own
+ * source `package.json` version for that package — i.e. the version that was
+ * just published). Equal or NEWER is always fine — "newer" legitimately
+ * happens when something else published after this workspace's checkout, and
+ * is never a reason to retry.
+ *
+ * @param {string | undefined | null} resolvedVersion
+ * @param {string | undefined | null} onDiskVersion
+ * @returns {boolean}
+ */
+export function isInstallStale(resolvedVersion, onDiskVersion) {
+  if (!resolvedVersion || !onDiskVersion) return false;
+  return compareSemver(resolvedVersion, onDiskVersion) < 0;
+}
+
+/**
+ * Stderr/error signatures indicating a REGISTRY-PROPAGATION-shaped failure —
+ * npm couldn't resolve a version/tarball that (per the workspace's own
+ * on-disk manifest) should exist, most plausibly because the just-published
+ * metadata/CDN hasn't fully propagated yet. Distinct from a genuine broken
+ * install: this is about the INSTALL ITSELF failing to resolve at all
+ * (ETARGET/E404), not about it succeeding-but-stale (that's `isInstallStale`,
+ * checked separately after a successful install).
+ *
+ * @param {string} stderr
+ * @returns {boolean}
+ */
+export function looksLikeTransientRegistryError(stderr) {
+  const text = stderr || '';
+  return text.includes('ETARGET') || text.includes('E404') || text.includes('code E404');
+}
+
+/** @param {number} ms */
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Read the version actually resolved by a completed install, straight from
+ * `node_modules/<name>/package.json` — the ground truth for "what did npm
+ * really give us", as opposed to trusting `npm install`'s stdout/exit code
+ * alone. Never throws — returns `null` on any read/parse failure (the caller
+ * treats "unknown resolved version" as "not stale", never as a hard error;
+ * the subsequent bin/library smoke will surface a missing-install failure on
+ * its own if the install truly didn't land).
+ *
+ * @param {string} installDir
+ * @param {string} name
+ * @returns {string | null}
+ */
+function readInstalledVersion(installDir, name) {
+  try {
+    const pkgJsonPath = join(installDir, 'node_modules', name, 'package.json');
+    if (!existsSync(pkgJsonPath)) return null;
+    const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8'));
+    return typeof pkg.version === 'string' ? pkg.version : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * `npm install <name>@latest` into an ephemeral, throwaway directory — a
  * genuine clean-room install against the REAL registry. No `package.json` is
  * created first; npm installs directly into `<dir>/node_modules` regardless
  * (verified empirically against the npm version pinned in this workspace).
  *
+ * STALE PACKUMENT CACHE (the reason for `--prefer-online` + bounded retry
+ * below): this gate runs immediately AFTER `npm publish` in the release
+ * flow. A live release run proved that timing is dangerous — `npm install
+ * @adhd/backlog@latest` (no `--prefer-online`) resolved the OLD `0.1.0`
+ * tarball from npm's LOCAL packument cache even though `@adhd/backlog@0.1.1`
+ * had just been published successfully and `npm view` already showed
+ * `0.1.1` as the registry's `dist-tags.latest`. GATE 2 red-failed on an
+ * already-fixed package, purely because `npm install` (unlike `npm view`)
+ * is willing to trust stale local metadata by default. `--prefer-online`
+ * (see `buildNpmInstallArgs`) forces npm to revalidate packument metadata
+ * against the registry instead of trusting that cache. On top of that, a
+ * SEPARATE and real failure mode is registry/CDN propagation lag of a few
+ * seconds right after publish — `--prefer-online` alone can't fix "the
+ * registry itself hasn't finished propagating yet" — so this function also
+ * retries (bounded: `INSTALL_RETRIES` attempts, `INSTALL_RETRY_DELAY_MS`
+ * backoff, both overridable via `ADHD_SMOKE_INSTALL_RETRIES` /
+ * `ADHD_SMOKE_INSTALL_RETRY_DELAY_MS`) whenever the install either (a) fails
+ * with an ETARGET/E404-shaped error (`looksLikeTransientRegistryError`), or
+ * (b) succeeds but resolves a version OLDER than this workspace's own
+ * on-disk `package.json` version for that package (`isInstallStale` — the
+ * exact 0.1.0-vs-0.1.1 shape of the live incident). If retries are exhausted
+ * and the install is STILL stale, that is a genuine, surfaced propagation
+ * problem — the returned `staleness` field records it rather than silently
+ * treating the stale-but-successful install as a pass (see
+ * `smokeOneEntrypoint` / `smokeOneLibrary`, which turn a still-stale result
+ * into a hard FAIL with the staleness detail in the reason).
+ *
  * @param {string} name npm package name
  * @param {string} scratchRoot a dir under `{workspaceRoot}/tmp` to nest the ephemeral install dir in
- * @param {{ registryUrl?: string }} [opts]
+ * @param {{ registryUrl?: string, onDiskVersion?: string, installRetries?: number, installRetryDelayMs?: number }} [opts]
  */
 async function cleanRoomInstall(name, scratchRoot, opts = {}) {
   mkdirSync(scratchRoot, { recursive: true });
   const installDir = mkdtempSync(join(scratchRoot, 'install-'));
-  const args = ['install', '--prefix', installDir, `${name}@latest`, '--no-audit', '--no-fund', '--loglevel=error'];
-  if (opts.registryUrl) args.push('--registry', opts.registryUrl);
-  const result = await run('npm', args, { timeoutMs: INSTALL_TIMEOUT_MS, cwd: workspaceRoot });
-  return { installDir, ...result };
+  const maxAttempts = 1 + Math.max(0, opts.installRetries ?? INSTALL_RETRIES);
+  const retryDelayMs = opts.installRetryDelayMs ?? INSTALL_RETRY_DELAY_MS;
+
+  let result = null;
+  let staleness = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const args = buildNpmInstallArgs(name, installDir, opts);
+    result = await run('npm', args, { timeoutMs: INSTALL_TIMEOUT_MS, cwd: workspaceRoot });
+    staleness = null;
+
+    if (result.code !== 0) {
+      const transient = looksLikeTransientRegistryError(result.stderr || '');
+      if (transient && attempt < maxAttempts) {
+        await delay(retryDelayMs);
+        continue;
+      }
+      break; // either a genuine (non-transient) install failure, or retries exhausted
+    }
+
+    if (opts.onDiskVersion) {
+      const resolvedVersion = readInstalledVersion(installDir, name);
+      if (isInstallStale(resolvedVersion, opts.onDiskVersion)) {
+        staleness = { resolvedVersion, onDiskVersion: opts.onDiskVersion, attempt, attemptsMade: attempt };
+        if (attempt < maxAttempts) {
+          await delay(retryDelayMs);
+          continue;
+        }
+        break; // still stale after exhausting retries — surfaced via `staleness`, not silently passed
+      }
+    }
+    break; // success, and not stale (or staleness not checkable)
+  }
+
+  return { installDir, ...result, staleness };
 }
 
 /**
  * Stderr signatures that indicate the process crashed trying to LOAD/RESOLVE
  * code — a broken install (missing dep, unresolved module, syntax error from
- * a bad bundle) — as opposed to a controlled, intentional non-zero exit from
- * argument parsing (e.g. Node's `util.parseArgs` or commander rejecting an
- * unrecognized flag). Only the former is what this gate exists to catch; the
- * latter proves the opposite — the bin loaded, ran ITS OWN code, and made an
- * ordinary CLI-usage decision. Verified empirically: `@adhd/agent-mcp`'s
- * `agent-mcp-tail` bin uses `node:util`'s `parseArgs`, which throws
- * `ERR_PARSE_ARGS_UNKNOWN_OPTION` on `--help` — a real, working bin exiting
- * non-zero for reasons that have nothing to do with installability.
+ * a bad bundle). KEPT purely as an informational annotation on a FAIL verdict
+ * (so a report can call out "this looks like a known crash-on-load shape")
+ * — it is NO LONGER part of the pass/fail decision. See BUG-012: a real
+ * `@adhd/backlog@0.1.0` install threw `Error: @adhd/backlog: cannot mount —
+ * .../node_modules/@adhd/dist/client.d.ts does not exist. Run "nx build
+ * backlog" first ...` on `--help`, which matches NONE of these signatures,
+ * and the old verdict (PASS unless a signature matched) let a genuine
+ * startup crash through as "controlled argument-parsing rejection". The
+ * verdict is now fail-safe by default — see `BENIGN_ARGPARSE` /
+ * `classifyBinHelpExit` below — so this list can never again be the reason a
+ * crash is misclassified as benign.
  */
 const CRASH_ON_LOAD_SIGNATURES = [
   'Cannot find module',
@@ -390,24 +588,111 @@ function looksLikeCrashOnLoad(stderr) {
 }
 
 /**
+ * Stderr signatures that indicate a bin exited non-zero on `--help` for a
+ * genuinely BENIGN reason: it loaded fully, ran ITS OWN argument-parsing
+ * code, and made an ordinary "I don't recognize this flag" decision — never
+ * a signal that the install/bundle itself is broken. This is an ALLOWLIST,
+ * not a denylist (see `classifyBinHelpExit`): a non-zero exit is FAIL by
+ * default now, and only escapes that default by matching one of these,
+ * empirically observed against real `@latest` installs from the registry
+ * (see clean-room-smoke.spec.mjs and the task's bin-enumeration table):
+ *   - `@adhd/agent-mcp`'s `agent-mcp-tail` bin uses `node:util`'s
+ *     `parseArgs`, which throws `ERR_PARSE_ARGS_UNKNOWN_OPTION` on `--help`.
+ *   - `@adhd/agent-engine-compiler`'s `agent-compiler` bin prints its own
+ *     `<bin>: Expected sub-command '<cmd>', got: --help` usage rejection
+ *     (no stack trace, no `Error:` prefix — a deliberate, printed decision).
+ *   - commander-based CLIs (this workspace's `apigen`/`backlog`/`decompile`)
+ *     print `error: unknown option` / `error: unknown command` for a flag
+ *     they don't recognize, though in practice every commander bin in this
+ *     workspace recognizes `--help` and exits 0, so this is defense-in-depth
+ *     rather than an observed live case.
+ * DELIBERATELY EXCLUDES anything that could also appear in a real crash: a
+ * bare `Error:` + stack trace, `does not exist`, `ENOENT`, `cannot mount`,
+ * or `Run "nx build` (all present in the live BUG-012 backlog crash) must
+ * NEVER be added here.
+ */
+const BENIGN_ARGPARSE = ['ERR_PARSE_ARGS_UNKNOWN_OPTION', 'error: unknown option', 'error: unknown command', 'Expected sub-command'];
+
+/** @param {string} stderr @returns {string | null} the matched signature, or null */
+function matchBenignArgparse(stderr) {
+  return BENIGN_ARGPARSE.find((sig) => stderr.includes(sig)) ?? null;
+}
+
+/**
+ * The verdict for a single `<bin> --help` invocation. Pure and
+ * spawn-free — exactly the seam BUG-012 needed unit-testable without a real
+ * child process. FAIL-SAFE BY DEFAULT (BUG-012 fix): a non-zero, non-timed-
+ * out exit is FAIL unless it matches the empirically-grounded
+ * `BENIGN_ARGPARSE` allowlist. Before this fix the default for a non-zero
+ * exit was PASS ("no crash-on-load signature found") — a permissive
+ * denylist that a real startup crash (`@adhd/backlog@0.1.0`, whose stderr
+ * matched none of `CRASH_ON_LOAD_SIGNATURES`) slipped straight through.
+ *
+ * Verdict:
+ *   - exit 0                                                -> PASS
+ *   - still running at timeout (server-style entrypoint)     -> PASS
+ *   - exit non-zero AND stderr matches `BENIGN_ARGPARSE`      -> PASS
+ *   - exit non-zero, otherwise                                -> FAIL (the
+ *     fail-safe default — covers both "matches a known crash-on-load
+ *     signature" and, critically, "matches neither list", which is exactly
+ *     the BUG-012 case)
+ *
+ * @param {{ code: number | null, timedOut: boolean, stderr: string, stdout?: string }} outcome
+ * @returns {{ ok: true, mode: string } | { ok: false, reason: string }}
+ */
+export function classifyBinHelpExit({ code, timedOut, stderr }) {
+  if (code === 0) {
+    return { ok: true, mode: 'exited-0' };
+  }
+  if (timedOut) {
+    return { ok: true, mode: 'still-running-at-timeout (server-style entrypoint, treated as healthy start)' };
+  }
+  const benignMatch = matchBenignArgparse(stderr || '');
+  if (benignMatch) {
+    return {
+      ok: true,
+      mode: `exited ${code} matched benign arg-parse rejection ("${benignMatch}") — the bin loaded and ran its own arg parser, not a broken install`,
+    };
+  }
+  const knownCrashSignature = looksLikeCrashOnLoad(stderr || '');
+  return {
+    ok: false,
+    reason:
+      `exited ${code} with no benign arg-parse signature — fail-safe default treats this as a startup crash (BUG-012)` +
+      (knownCrashSignature ? ' [matches a known crash-on-load signature]' : ' [no known signature matched either — still FAIL by default]') +
+      ` — stderr: ${(stderr || '').slice(0, 2000)}`,
+  };
+}
+
+/**
  * Resolve the installed package's own declared `bin` entries (from what
  * ACTUALLY landed in `node_modules`, not the source manifest) and smoke each:
  * spawn it with a small, framework-agnostic safe argv and a bounded timeout.
  *
- * Verdict is deliberately permissive about *how* a bin ends its run — the
- * thing this gate must catch is an IMMEDIATE crash (module resolution
- * failure, syntax error, uncaught throw during startup), not "did it exit 0"
- * (a long-running MCP/server bin is SUPPOSED to keep running, and a
- * commander/`util.parseArgs`-based CLI rejecting an unrecognized flag is
- * SUPPOSED to exit non-zero):
+ * Verdict is FAIL-SAFE BY DEFAULT (BUG-012 fix — see `classifyBinHelpExit`
+ * for the pure decision function this delegates to): the thing this gate
+ * must catch is an IMMEDIATE crash (module resolution failure, syntax error,
+ * uncaught throw during startup, a thrown "cannot mount"/setup error), not
+ * "did it exit 0" (a long-running MCP/server bin is SUPPOSED to keep
+ * running, and a real, working CLI rejecting an unrecognized flag via its
+ * own arg parser is SUPPOSED to exit non-zero). A non-zero exit is now FAIL
+ * UNLESS it is proven benign:
  *   - exits 0 before the timeout                       -> PASS
  *   - still running when the timeout fires (killed)    -> PASS (a server-style
  *     entrypoint staying alive IS the healthy outcome — this is exactly
  *     `verify-dist-load`'s own "existenceOnly" reasoning for `bin`-shipping
  *     packages, applied to a real installed artifact instead of local dist)
- *   - exits non-zero, stderr has NO crash-on-load signature -> PASS (a
- *     controlled argument-parsing rejection, not a broken install)
- *   - exits non-zero, stderr HAS a crash-on-load signature   -> FAIL
+ *   - exits non-zero, stderr matches the empirically-grounded
+ *     `BENIGN_ARGPARSE` allowlist (e.g. `ERR_PARSE_ARGS_UNKNOWN_OPTION`)
+ *     -> PASS (a controlled argument-parsing rejection, not a broken install)
+ *   - exits non-zero, otherwise                          -> FAIL (fail-safe
+ *     default — this is what BUG-012 needed: `@adhd/backlog@0.1.0`'s real
+ *     `--help` crash — `Error: @adhd/backlog: cannot mount — .../
+ *     node_modules/@adhd/dist/client.d.ts does not exist. Run "nx build
+ *     backlog" first ...` — matched NONE of the old `CRASH_ON_LOAD_SIGNATURES`
+ *     denylist and was misclassified PASS under the previous "permissive
+ *     unless proven bad" verdict; it now correctly FAILs because it matches
+ *     no benign-allowlist signature either)
  *
  * @param {string} installDir
  * @param {string} pkgName
@@ -443,23 +728,8 @@ async function smokeInstalledBin(installDir, pkgName) {
     // `--help` (e.g. a bare server bootstrap like agent-mcp), the permissive
     // verdict above still passes it via the "still alive at timeout" branch.
     const res = await run(process.execPath, [binAbs, '--help'], { timeoutMs: BIN_SMOKE_TIMEOUT_MS, cwd: installDir });
-    if (res.code === 0) {
-      results.push({ binName, ok: true, mode: 'exited-0' });
-    } else if (res.timedOut) {
-      results.push({ binName, ok: true, mode: 'still-running-at-timeout (server-style entrypoint, treated as healthy start)' });
-    } else if (!looksLikeCrashOnLoad(res.stderr)) {
-      results.push({
-        binName,
-        ok: true,
-        mode: `exited ${res.code} but no crash-on-load signature (controlled argument-parsing rejection, not a broken install)`,
-      });
-    } else {
-      results.push({
-        binName,
-        ok: false,
-        reason: `exited ${res.code} before timeout with a crash-on-load signature — stderr: ${res.stderr.slice(0, 2000)}`,
-      });
-    }
+    const verdict = classifyBinHelpExit(res);
+    results.push(verdict.ok ? { binName, ok: true, mode: verdict.mode } : { binName, ok: false, reason: verdict.reason });
   }
   const ok = results.every((r) => r.ok);
   return { ok, results };
@@ -587,7 +857,7 @@ export async function smokeInstalledLibraryLoad(installDir, pkgName) {
 export async function smokeOneLibrary(target, opts = {}) {
   const scratchRoot = join(workspaceRoot, 'tmp', 'nx-build-smoke');
   const t0 = Date.now();
-  const install = await cleanRoomInstall(target.name, scratchRoot, opts);
+  const install = await cleanRoomInstall(target.name, scratchRoot, { ...opts, onDiskVersion: target.version });
   try {
     if (install.code !== 0) {
       return {
@@ -599,6 +869,20 @@ export async function smokeOneLibrary(target, opts = {}) {
         reason: install.timedOut
           ? `npm install timed out after ${INSTALL_TIMEOUT_MS}ms`
           : `npm install exited ${install.code} — stderr: ${install.stderr.slice(0, 4000)}`,
+        elapsedMs: Date.now() - t0,
+      };
+    }
+    if (install.staleness) {
+      return {
+        name: target.name,
+        projectRoot: target.projectRoot,
+        kind: 'library',
+        ok: false,
+        stage: 'install',
+        reason:
+          `npm install @latest resolved a STALE version after ${install.staleness.attemptsMade} attempt(s): resolved ` +
+          `"${install.staleness.resolvedVersion}" but this workspace's on-disk source version is "${install.staleness.onDiskVersion}" — ` +
+          `real registry/CDN propagation lag (or a genuinely un-published bump); see cleanRoomInstall's "STALE PACKUMENT CACHE" note`,
         elapsedMs: Date.now() - t0,
       };
     }
@@ -633,7 +917,7 @@ export async function smokeOneLibrary(target, opts = {}) {
 export async function smokeOneEntrypoint(entrypoint, opts = {}) {
   const scratchRoot = join(workspaceRoot, 'tmp', 'nx-build-smoke');
   const t0 = Date.now();
-  const install = await cleanRoomInstall(entrypoint.name, scratchRoot, opts);
+  const install = await cleanRoomInstall(entrypoint.name, scratchRoot, { ...opts, onDiskVersion: entrypoint.version });
   try {
     if (install.code !== 0) {
       return {
@@ -645,6 +929,20 @@ export async function smokeOneEntrypoint(entrypoint, opts = {}) {
         reason: install.timedOut
           ? `npm install timed out after ${INSTALL_TIMEOUT_MS}ms`
           : `npm install exited ${install.code} — stderr: ${install.stderr.slice(0, 4000)}`,
+        elapsedMs: Date.now() - t0,
+      };
+    }
+    if (install.staleness) {
+      return {
+        name: entrypoint.name,
+        projectRoot: entrypoint.projectRoot,
+        kind: 'bin',
+        ok: false,
+        stage: 'install',
+        reason:
+          `npm install @latest resolved a STALE version after ${install.staleness.attemptsMade} attempt(s): resolved ` +
+          `"${install.staleness.resolvedVersion}" but this workspace's on-disk source version is "${install.staleness.onDiskVersion}" — ` +
+          `real registry/CDN propagation lag (or a genuinely un-published bump); see cleanRoomInstall's "STALE PACKUMENT CACHE" note`,
         elapsedMs: Date.now() - t0,
       };
     }
