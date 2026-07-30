@@ -37,12 +37,12 @@ import type {
   TransitionOpts,
   UpdateItemInput,
 } from './model.js';
-import { BacklogItemNotFoundError, isTerminalStatus, requiresCitation, requiresReason } from './model.js';
+import { isTerminalStatus, requiresCitation, requiresReason } from './model.js';
 import type { BacklogConfig } from './env.js';
 import { writeMigrationPhase } from './migration-admin.js';
 import type { GraphBacklogStore } from './store/graph-backlog-store.js';
 import { createItemNode, getItemNode, softDeleteItemNode, updateItemNode } from './store/crud.js';
-import { auditTrail as auditTrailNode, blockers as blockersNode, computeStats, dependencyGraph as dependencyGraphNode, listItems as listItemsNode, queryItemNodes, readyItems as readyItemsNode, spotlight as spotlightNode, staleClaims as staleClaimsNode, topoOrder as topoOrderNode } from './store/query.js';
+import { auditTrail as auditTrailNode, blockers as blockersNode, buildNotFoundError, computeStats, dependencyGraph as dependencyGraphNode, knownRepos, listItems as listItemsNode, queryItemNodes, readyItems as readyItemsNode, spotlight as spotlightNode, staleClaims as staleClaimsNode, topoOrder as topoOrderNode } from './store/query.js';
 import { toBacklogItem } from './store/mapping.js';
 import { claimItemNode, releaseClaimNode, renewClaimNode } from './store/claim.js';
 import { addCitationNode, appendNoteNode, archiveTerminalItems, resolveItemNode, startWorkNode, transitionStatusNode } from './store/lifecycle.js';
@@ -70,7 +70,7 @@ export interface BacklogCtx {
 
 function requireItem(ctx: BacklogCtx, repo: string, humanId: string): BacklogItem {
   const item = getItemNode(ctx.store, repo, humanId);
-  if (!item) throw new BacklogItemNotFoundError(repo, humanId);
+  if (!item) throw buildNotFoundError(ctx.store, repo, humanId);
   return item;
 }
 
@@ -87,9 +87,29 @@ export async function createItem(ctx: BacklogCtx, input: CreateItemInput): Promi
   return createItemNode(ctx.store, input);
 }
 
-/** repo is required — humanId alone is not globally unique. */
+/**
+ * repo is required — humanId alone is not globally unique. A genuine miss
+ * (humanId doesn't exist under ANY repo) still returns `null` — unchanged,
+ * every existing caller relying on nullable-not-throwing keeps working.
+ *
+ * BUG-BACKLOG-REPO-LOOKUP-UX-001: previously a repo/humanId MISMATCH (the
+ * item is live, just filed under a different `repo` string) was
+ * indistinguishable from a genuine miss — both silently returned `null`,
+ * which is worse than `appendNote`'s bare-but-at-least-thrown
+ * `BacklogItemNotFoundError` (and, before this fix, could surface through
+ * apigen's MCP layer as the unrelated broken int64/null encoding,
+ * BUG-APIGEN-LOGICAL-NULL-OBJECT-RESULT-INT64-001 — out of scope here, but
+ * this fix removes the only path that made this lookup look like that bug).
+ * Now: a real cross-repo match THROWS the same informative
+ * `BacklogItemNotFoundError` (with `foundInRepos` naming the actual repo) the
+ * mutating lookups already throw, instead of masquerading as "not found".
+ */
 export async function getItem(ctx: BacklogCtx, repo: string, humanId: string): Promise<BacklogItem | null> {
-  return getItemNode(ctx.store, repo, humanId);
+  const item = getItemNode(ctx.store, repo, humanId);
+  if (item) return item;
+  const notFound = buildNotFoundError(ctx.store, repo, humanId);
+  if (notFound.foundInRepos.length > 0) throw notFound;
+  return null;
 }
 
 export async function updateItem(ctx: BacklogCtx, repo: string, humanId: string, patch: UpdateItemInput): Promise<BacklogItem> {
@@ -256,7 +276,16 @@ export async function importFromMarkdown(ctx: BacklogCtx, input: ImportMarkdownI
   // the ORIGINAL path recorded as provenance (DEBT-BACKLOG-IMPORT-PLAN-PROVENANCE-001).
   const sourcePath = input.sourcePath ?? input.path;
 
-  const result: ImportResult = { parsed: items.length, created: 0, skippedDuplicates: 0, updated: 0, errors: [], malformedHeaders };
+  // BUG-BACKLOG-REPO-LOOKUP-UX-001 (write-time half): same soft, non-blocking
+  // check `createItemNode` runs per item — computed ONCE here since the whole
+  // import shares one `input.repo`, not per item.
+  const known = knownRepos(ctx.store);
+  const repoWarning =
+    known.size > 0 && !known.has(input.repo)
+      ? `repo '${input.repo}' is new to this store — existing repo value(s) here: ${[...known].sort().join(', ')}. If this is meant to be the same project, use the existing repo value instead.`
+      : undefined;
+
+  const result: ImportResult = { parsed: items.length, created: 0, skippedDuplicates: 0, updated: 0, errors: [], malformedHeaders, ...(repoWarning !== undefined ? { repoWarning } : {}) };
   if (input.dryRun) return result;
 
   for (const item of items) {
