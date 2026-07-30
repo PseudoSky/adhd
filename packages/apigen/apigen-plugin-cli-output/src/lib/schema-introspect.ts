@@ -161,6 +161,103 @@ export function dataSchemaProps(schema: ComposedSchemas[string]): {
 }
 
 // ---------------------------------------------------------------------------
+// BUG-APIGEN-CLI-ROOT-ONEOF-UNSUPPORTED-001 — root-level `oneOf`+`discriminator`
+// domain schema detection (a WHOLE operation's domain data is a discriminated
+// union, e.g. `apigen-core-client`'s `buildBatchKindSchema` output — used by
+// the shipped `apigen-plugin-batch`'s `_batch/<kind>` mount operations).
+//
+// Deliberately NOT the same mechanism as `FlagProp.oneOf` above
+// (BUG-APIGEN-CLI-ONEOF-001): that one is scoped to a single NESTED property
+// whose optional (`T | undefined`) type renders as `oneOf: [{type:'null'},
+// {type:X}]` — a leaf-level nullable-field shape. This one operates on the
+// domain schema (`schema.input.properties.data`) AS A WHOLE: the whole
+// operation's domain input is itself `{oneOf: [...], discriminator: {...}}`,
+// with no top-level `properties` to iterate at all. Conflating the two would
+// be wrong — a `oneOf`-typed *property* is not a reason to fan an operation
+// out into N subcommands.
+// ---------------------------------------------------------------------------
+
+/** One discriminator branch of a root-level union domain schema. */
+export interface RootUnionBranch {
+  /** The literal discriminator value selecting this branch (e.g. a target operation id). */
+  value: string;
+  /** Sanitized kebab-case Commander subcommand name derived from {@link value}. */
+  commandName: string;
+  /** This branch's own flat property map — rendered via the EXISTING flag logic, unchanged. */
+  props: Record<string, FlagProp>;
+  /** This branch's own required-field list (still includes the discriminator field itself). */
+  required: string[];
+}
+
+/** A root-level discriminated-union domain schema, decomposed into per-branch flag data. */
+export interface RootUnionSchema {
+  /** The shared property name carrying the discriminator literal (e.g. `'operation'`). */
+  discriminatorProperty: string;
+  branches: RootUnionBranch[];
+}
+
+/** Parses a same-document JSON Pointer of the form `#/oneOf/<n>` into `<n>`; `undefined` if malformed. */
+function oneOfPointerIndex(pointer: string): number | undefined {
+  const match = /^#\/oneOf\/(\d+)$/.exec(pointer);
+  if (!match) return undefined;
+  return Number(match[1]);
+}
+
+/** Sanitizes an arbitrary discriminator literal into a safe Commander subcommand token. */
+function sanitizeCommandName(value: string): string {
+  const kebabed = kebabCase(value);
+  const cleaned = kebabed.replace(/[^a-zA-Z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+  return cleaned.length > 0 ? cleaned.toLowerCase() : 'branch';
+}
+
+/**
+ * Detects whether `schema`'s domain (`data`) schema is a root-level
+ * `oneOf`+`discriminator` union (BUG-APIGEN-CLI-ROOT-ONEOF-UNSUPPORTED-001)
+ * and, if so, decomposes it into per-branch flag data. Returns `undefined`
+ * for the (overwhelmingly common) flat `{type:'object', properties:{...}}`
+ * domain schema — callers must fall back to {@link dataSchemaProps} /
+ * `dataParamNames` in that case, unchanged.
+ */
+export function resolveRootUnion(
+  schema: ComposedSchemas[string]
+): RootUnionSchema | undefined {
+  const dataSchema = (
+    (schema.input as Record<string, unknown>)?.['properties'] as
+      | Record<string, unknown>
+      | undefined
+  )?.['data'] as Record<string, unknown> | undefined;
+  if (!dataSchema) return undefined;
+
+  const oneOf = dataSchema['oneOf'] as
+    | Array<Record<string, unknown>>
+    | undefined;
+  const discriminator = dataSchema['discriminator'] as
+    | { propertyName: string; mapping: Record<string, string> }
+    | undefined;
+  if (!oneOf || !discriminator) return undefined;
+
+  const branches: RootUnionBranch[] = [];
+  for (const [value, pointer] of Object.entries(discriminator.mapping)) {
+    const idx = oneOfPointerIndex(pointer);
+    if (idx === undefined) continue;
+    const branchSchema = oneOf[idx];
+    if (!branchSchema) continue;
+    const props =
+      (branchSchema['properties'] as Record<string, FlagProp>) ?? {};
+    const required = (branchSchema['required'] as string[]) ?? [];
+    branches.push({
+      value,
+      commandName: sanitizeCommandName(value),
+      props,
+      required,
+    });
+  }
+  if (branches.length === 0) return undefined;
+
+  return { discriminatorProperty: discriminator.propertyName, branches };
+}
+
+// ---------------------------------------------------------------------------
 // Casing helpers — camelCase param name <-> kebab-case CLI flag
 // ---------------------------------------------------------------------------
 
