@@ -15,6 +15,7 @@ import type { ServerResult } from '@modelcontextprotocol/sdk/types.js';
 import type {
   ComposedSchemas,
   MountedOperation,
+  MountHostBridge,
   Operation,
   RunInput,
 } from '@adhd/apigen-core-client';
@@ -38,6 +39,7 @@ import {
   createPackageInvoker,
   dispatchForPlan,
   isApiStream,
+  LayerContext,
   readUseOptions,
   readUsePlugins,
   wrapMcpStructuredContent,
@@ -240,8 +242,17 @@ class McpTransportAdapter implements TransportAdapter<McpRaw> {
       const value = raw.meta[field.mcpMetaKey];
       if (value !== undefined) envelope[field.field] = value;
     }
-    const domainArgs =
-      (raw.args['data'] as Record<string, unknown> | undefined) ?? {};
+    // (batch-rollout, BATCH_0.0.1.md §2) A mount op's advertised MCP
+    // `inputSchema` is `mountedOp.input` DIRECTLY (see `buildToolTable`'s
+    // `mountInputSchema` below) — NOT data-wrapped like a real domain op's
+    // tool arguments are. `health`/`openapi` never surfaced this gap because
+    // their mounts are zero-input, so reading `args['data']` (always
+    // `undefined` → `{}`) was indistinguishable from "no input was sent" —
+    // but a mount with real domain input (e.g. `_batch/<kind>`'s
+    // `{operation, items, …}`) needs the raw `args` object itself, unwrapped.
+    const domainArgs = plan.isMount
+      ? raw.args
+      : ((raw.args['data'] as Record<string, unknown> | undefined) ?? {});
     return { envelope, domainArgs };
   }
 
@@ -285,6 +296,82 @@ class McpTransportAdapter implements TransportAdapter<McpRaw> {
 }
 
 // ---------------------------------------------------------------------------
+// BUG-APIGEN-MCP-ROOT-ONEOF-001 — MCP's `Tool.inputSchema` requires a literal
+// top-level `type:"object"` (`ToolSchema` in `@modelcontextprotocol/sdk`), but
+// a mount's real `Operation.input` may be a root-level `oneOf`+`discriminator`
+// union (e.g. the batch plugin's `_batch/<kind>` mount — see
+// `apigen-core-client/src/lib/batch.ts`'s `buildBatchKindSchema`) with no
+// top-level `type` at all. The SDK's zod schema also carries a
+// `$catchall<ZodUnknown>` on `inputSchema`, meaning sibling keys beyond
+// `type`/`properties`/`required` pass through unvalidated rather than being
+// rejected — so the real `oneOf`/`discriminator` can be preserved alongside a
+// synthesized `type:'object'`/`properties` envelope instead of being
+// discarded. Every real oneOf-union mount schema this repo produces today
+// (batch) has branches that are themselves flat `{type:'object', properties,
+// required}` objects sharing an identical field-name set (only the
+// `operation` const and per-field item types vary per branch) — verified in
+// `batch.ts`'s `branchInputSchema` — so unioning branch `properties` and
+// intersecting branch `required` gives a genuinely useful, not-empty
+// advertised schema, not a hand-wavy approximation.
+// ---------------------------------------------------------------------------
+
+/**
+ * Derive a valid MCP `Tool.inputSchema` (`{type:'object', ...}`) from a
+ * mount's real `Operation.input`, never silently discarding a real
+ * `oneOf`-rooted schema down to an empty `{type:'object', properties:{}}`
+ * unless there is genuinely nothing to recover.
+ */
+export function deriveMcpMountInputSchema(input: unknown): Record<string, unknown> {
+  if (
+    input &&
+    typeof input === 'object' &&
+    (input as Record<string, unknown>)['type'] === 'object'
+  ) {
+    // Already the required shape (e.g. health/openapi's genuinely zero-arg
+    // `{}`-derived schemas never reach this branch; a real flat object schema
+    // does) — pass through unchanged.
+    return input as Record<string, unknown>;
+  }
+
+  const oneOf = (input as Record<string, unknown> | undefined)?.['oneOf'];
+  if (Array.isArray(oneOf) && oneOf.length > 0) {
+    const properties: Record<string, unknown> = {};
+    let requiredIntersection: string[] | null = null;
+    for (const branch of oneOf) {
+      if (!branch || typeof branch !== 'object') continue;
+      const b = branch as Record<string, unknown>;
+      const branchProps = b['properties'];
+      if (branchProps && typeof branchProps === 'object') {
+        for (const [key, schema] of Object.entries(
+          branchProps as Record<string, unknown>
+        )) {
+          if (!(key in properties)) properties[key] = schema;
+        }
+      }
+      const branchRequired = Array.isArray(b['required'])
+        ? (b['required'] as string[])
+        : [];
+      requiredIntersection =
+        requiredIntersection === null
+          ? [...branchRequired]
+          : requiredIntersection.filter((k) => branchRequired.includes(k));
+    }
+    return {
+      ...(input as Record<string, unknown>), // preserves the real `oneOf`/`discriminator` (passthrough, per SDK's own $catchall)
+      type: 'object',
+      properties,
+      ...(requiredIntersection && requiredIntersection.length > 0
+        ? { required: requiredIntersection }
+        : {}),
+    };
+  }
+
+  // Genuinely nothing to recover (e.g. a bare `{}` zero-arg mount) — the
+  // original safe fallback.
+  return { type: 'object', properties: {} };
+}
+
+// ---------------------------------------------------------------------------
 // §7.1 / §8 — `--use` mount composition (dod.11 / [mcp-adapter.7]) — mirrors
 // fastify's `collectMountedOperations`, filtered to `'mcp'` instead of
 // `'http'`. A wholly NEW mcp capability (mcp had zero mount support
@@ -295,14 +382,15 @@ function collectMountedOperations(
   usePlugins: UsePlugin[],
   useOptions: UseOptions,
   host: string,
-  operations: Operation[]
+  operations: Operation[],
+  hostBridge?: MountHostBridge
 ): MountedOperation[] {
   const result: MountedOperation[] = [];
   const descriptor = { host, operations: operations as unknown[] };
   for (const plugin of usePlugins) {
     const cap = plugin.capabilities?.mount;
     if (!cap) continue;
-    const ops = cap.operations(descriptor, useOptions[plugin.id]);
+    const ops = cap.operations(descriptor, useOptions[plugin.id], hostBridge);
     for (const op of ops) {
       // A mounted op is exposed on MCP unless it declares an explicit
       // `transports` filter that omits `'mcp'`.
@@ -328,6 +416,17 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
   const usePlugins = readUsePlugins(input.options);
   const useOptions = readUseOptions(input.options);
 
+  // (batch-rollout, BATCH_0.0.1.md §2/§F1, architect-review Finding 2)
+  // Host-level accumulators, merged ACROSS every package this host serves —
+  // hoisted out of the per-package loop below so a `MountHostBridge` (built
+  // after the loop) can target ANY op from ANY package, not just the last one
+  // processed. Each package's own per-package `schemasByOpId`/`fnsByOpId`
+  // (used to build that package's own composed invoker) are unchanged and
+  // still scoped per-package below — these are a SEPARATE, additional,
+  // package-spanning table for hostBridge purposes only.
+  const mergedSchemasByOpId: ComposedSchemas = {};
+  const mergedFnsByOpId: Record<string, (...args: unknown[]) => unknown> = {};
+
   for (const pkg of input.packages) {
     if (!pkg.fns) throw new Error(`Package "${pkg.id}" is missing fns`);
     const pkgFns = pkg.fns;
@@ -349,6 +448,8 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
     for (const { fnName, fnSchema, op } of resolved) {
       schemasByOpId[op.id] = fnSchema;
       fnsByOpId[op.id] = pkgFns[fnName];
+      mergedSchemasByOpId[op.id] = fnSchema;
+      mergedFnsByOpId[op.id] = pkgFns[fnName];
     }
 
     // [mcp-adapter.1] BUG-APIGEN-SERVE-CORE-001: compose the validate-Layer
@@ -399,11 +500,39 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
   // composed `--use` invoker so the `--use` layer capabilities observe mount
   // calls too, exactly like fastify's `[fix:mount-through-layers]`.
   const mountHost = input.packages[0]?.id ?? 'ts';
+
+  // (batch-rollout Finding 1/2) The host bridge a mount plugin's handler uses
+  // to invoke OTHER already-registered ops (e.g. `_batch/<kind>`'s fan-out
+  // target) — built from the package-spanning merged tables above, through
+  // the SAME composed `--use` invoker every request goes through (never a
+  // bypass of auth/logging/validate).
+  const hostInvoke = createPackageInvoker(mergedSchemasByOpId, usePlugins);
+  const hostBridge: MountHostBridge = {
+    invoke: (fnName, call, opts) =>
+      hostInvoke(
+        fnName,
+        {
+          operation: { id: fnName },
+          ctx: new LayerContext(),
+          domainArgs: call.domainArgs,
+          envelope: call.envelope,
+          signal: call.signal,
+        },
+        opts as InvokeOptions
+      ),
+    invokeOptions: {
+      fns: mergedFnsByOpId,
+      schemas: mergedSchemasByOpId,
+      createClient: input.packages[0]?.createClient,
+    },
+  };
+
   const mountedOps = collectMountedOperations(
     usePlugins,
     useOptions,
     mountHost,
-    input.operations ?? []
+    input.operations ?? [],
+    hostBridge
   );
   if (mountedOps.length > 0) {
     const mountInvoke = createPackageInvoker({}, usePlugins);
@@ -416,16 +545,19 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
         descriptions[plan.mcp.name]
       );
       // MCP's Tool.inputSchema is constrained to a top-level `{type:"object"}`
-      // shape by the SDK's own zod validation — a mount's bare `Operation.input`
-      // is often `{}` (no domain params) or otherwise not already in that
-      // shape (unlike a composed schema's `input`, which is ALWAYS
-      // `{type:'object', properties:{data:...}}`), so fall back explicitly.
-      const mountInputSchema =
-        mountedOp.input &&
-        typeof mountedOp.input === 'object' &&
-        (mountedOp.input as Record<string, unknown>)['type'] === 'object'
-          ? mountedOp.input
-          : { type: 'object', properties: {} };
+      // shape by the SDK's own zod validation (ToolSchema.inputSchema requires
+      // a literal `type:"object"` — confirmed against
+      // @modelcontextprotocol/sdk/dist/esm/types.js's ToolSchema, which also
+      // carries `z.core.$catchall<z.ZodUnknown>` on inputSchema, meaning any
+      // EXTRA sibling keys beyond type/properties/required pass through
+      // unvalidated rather than being rejected). A mount's bare
+      // `Operation.input` is often `{}` (no domain params, e.g. health/openapi
+      // — genuinely representable as `{type:'object', properties:{}}`) or a
+      // root-level `oneOf`+`discriminator` union (e.g. batch,
+      // BUG-APIGEN-MCP-ROOT-ONEOF-001) that isn't already in the required
+      // shape. `deriveMcpMountInputSchema` handles both without discarding the
+      // real schema for the latter case.
+      const mountInputSchema = deriveMcpMountInputSchema(mountedOp.input);
       adapter.bindToolMeta(plan.mcp.name, {
         description,
         inputSchema: mountInputSchema,

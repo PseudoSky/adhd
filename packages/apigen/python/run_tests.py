@@ -25,6 +25,7 @@ import importlib.util
 import inspect
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -916,6 +917,44 @@ def run_echo_roundtrip(results: _Results) -> None:
 # Never sleep-as-proof: all waits are bounded polls.
 # ---------------------------------------------------------------------------
 
+def _build_flask_plan(
+    fixture_module: Path,
+    namespace: str,
+    ops: list[dict[str, Any]] | None = None,
+    extra_operations: list[dict[str, Any]] | None = None,
+    extra_routes: dict[str, dict[str, str]] | None = None,
+) -> tuple[Path, Path]:
+    """Build a real `--plan-file` for `flask_server.py` from a real
+    `extract_module()` pass — `flask_server.py` has required `--plan-file`
+    since the apigen-serve-core py-flask-serve-split (it no longer
+    self-extracts or re-derives route/verb; see its module docstring).
+
+    Routes use the flat `/{namespace}/{fnName}` shape this file's own
+    `_post`/`_get` test helpers already assume — this suite tests
+    `flask_server.py`'s OWN dispatch/validation/logical-type/batch behavior
+    given a correct plan, not route derivation itself (the real
+    `project()`-derived kebab-route shape is independently proven
+    byte-for-byte by `apigen-plugin-py-flask`'s own TS test suite,
+    BUG-APIGEN-OPENAPI-ROUTE-PATH-MISMATCH-001).
+
+    Returns:
+        `(plan_path, tmpdir)` — caller removes `tmpdir` (best-effort) once
+        the spawned server is done with it.
+    """
+    if ops is None:
+        ops = extract_module(str(fixture_module), namespace)
+    routes: dict[str, dict[str, str]] = {}
+    for op in ops:
+        fn_name = op["path"][-1]["raw"]
+        routes[op["id"]] = {"route": f"/{namespace}/{fn_name}", "verb": "POST"}
+    all_ops = list(ops) + list(extra_operations or [])
+    routes.update(extra_routes or {})
+    tmpdir = Path(tempfile.mkdtemp(prefix="apigen-py-flask-runtests-plan-"))
+    plan_path = tmpdir / "plan.json"
+    plan_path.write_text(json.dumps({"operations": all_ops, "routes": routes}))
+    return plan_path, tmpdir
+
+
 def run_flask_server_tests(results: _Results) -> None:
     """Run live HTTP tests against a real flask_server subprocess."""
     import signal
@@ -930,7 +969,7 @@ def run_flask_server_tests(results: _Results) -> None:
     # SCRIPT_DIR.parent = packages/apigen
     fixture_module = (
         SCRIPT_DIR.parent /   # packages/apigen
-        "plugins" / "py-flask" / "src" / "test" / "fixtures" / "test_api.py"
+        "apigen-plugin-py-flask" / "src" / "test" / "fixtures" / "test_api.py"
     )
     if not fixture_module.exists():
         results.fail(
@@ -943,6 +982,37 @@ def run_flask_server_tests(results: _Results) -> None:
     namespace = "testapi"
     base_url = f"http://127.0.0.1:{port}"
 
+    # (batch-rollout) Every fixture op below (`echo_str`/`double_decimal`/...)
+    # is `kind='action'` (see extractor.py: every callable export → 'action'),
+    # so they group under ONE synthetic `_batch/action` mount — mirrors what
+    # `buildBatchMountedOperations` (apigen-core-client/src/lib/batch.ts)
+    # would produce TS-side for this same fixture module, hand-built here
+    # since this suite has no Node/TS runtime available to call it for real.
+    real_ops = extract_module(str(fixture_module), namespace)
+    batch_op_id = "_batch/action"
+    batch_op: dict[str, Any] = {
+        "id": batch_op_id,
+        "host": "python",
+        "namespace": {"raw": namespace, "words": [namespace]},
+        "path": [{"raw": "batch", "words": ["batch"]}, {"raw": "action", "words": ["action"]}],
+        "kind": "action",
+        "async": False,
+        "streaming": False,
+        "safe": False,
+        "input": {"type": "object"},
+        "output": {},
+        "envelope": {},
+        "typeText": None,
+        "operationIds": [op["id"] for op in real_ops],
+    }
+    plan_path, plan_tmpdir = _build_flask_plan(
+        fixture_module,
+        namespace,
+        ops=real_ops,
+        extra_operations=[batch_op],
+        extra_routes={batch_op_id: {"route": f"/{namespace}/_batch/action", "verb": "POST"}},
+    )
+
     # Spawn the server subprocess.
     proc = subprocess.Popen(
         [
@@ -950,6 +1020,7 @@ def run_flask_server_tests(results: _Results) -> None:
             "--module", str(fixture_module),
             "--namespace", namespace,
             "--port", str(port),
+            "--plan-file", str(plan_path),
         ],
         cwd=str(SCRIPT_DIR),
         env={**os.environ, "PYTHONPATH": str(SCRIPT_DIR)},
@@ -971,6 +1042,7 @@ def run_flask_server_tests(results: _Results) -> None:
 
     if not ready:
         proc.kill()
+        shutil.rmtree(plan_tmpdir, ignore_errors=True)
         results.fail("flask.startup", "Server did not become ready within 10 s")
         return
 
@@ -1119,12 +1191,219 @@ def run_flask_server_tests(results: _Results) -> None:
         else:
             results.fail("flask.envelope.ctx", f"expected session in response, got {env_status} {env_body!r}")
 
+        # ------------------------------------------------------------------
+        # Batch/bulk fan-out — BATCH_0.0.1.md §5 (batch-rollout, py-flask)
+        # ------------------------------------------------------------------
+        batch_url = f"{base_url}/{namespace}/_batch/action"
+
+        def _post_batch(payload: dict[str, Any]) -> tuple[int, Any]:
+            req = urllib.request.Request(
+                batch_url,
+                data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    return resp.status, json.loads(resp.read())
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read())
+
+        # Test: parallel fan-out, 3 items (2 valid echo_str + 1 that fails
+        # input validation) — proves per-item partial-failure with
+        # onItemError='continue' (the default) using the REAL ApiError
+        # reason shape.
+        status, body = _post_batch({
+            "operation": f"{namespace}/test-api/echo-str",
+            "items": [{"msg": "one"}, {"msg": 123}, {"msg": "two"}],
+        })
+        if (
+            status == 200
+            and isinstance(body, list)
+            and len(body) == 3
+            and body[0] == {"index": 0, "status": "fulfilled", "value": "one"}
+            and body[1]["status"] == "rejected"
+            and body[1]["reason"].get("code") == "invalid_argument"
+            and body[2] == {"index": 2, "status": "fulfilled", "value": "two"}
+        ):
+            results.ok("flask.batch.parallel.partial_failure")
+        else:
+            results.fail(
+                "flask.batch.parallel.partial_failure",
+                f"expected [fulfilled,rejected(invalid_argument),fulfilled], got {status} {body!r}",
+            )
+
+        # Test: Decimal logical-type parity through the batch path (F4) —
+        # same decoded-Decimal-then-encoded-string round-trip as the
+        # single-op `double_decimal` test above.
+        status, body = _post_batch({
+            "operation": f"{namespace}/test-api/double-decimal",
+            "items": [{"amount": "123.456"}, {"amount": "0.1"}],
+        })
+        if (
+            status == 200
+            and isinstance(body, list)
+            and len(body) == 2
+            and body[0] == {"index": 0, "status": "fulfilled", "value": "246.912"}
+            and body[1] == {"index": 1, "status": "fulfilled", "value": "0.2"}
+            and isinstance(body[1]["value"], str)
+        ):
+            results.ok("flask.batch.logical_type.decimal_parity")
+        else:
+            results.fail(
+                "flask.batch.logical_type.decimal_parity",
+                f"expected decimal-string parity with single-op path, got {status} {body!r}",
+            )
+
+        # Test: mode='serial' actually runs sequentially, in declared order,
+        # all fulfilled (no failures to react to).
+        status, body = _post_batch({
+            "operation": f"{namespace}/test-api/echo-str",
+            "items": [{"msg": "a"}, {"msg": "b"}, {"msg": "c"}],
+            "mode": "serial",
+        })
+        if status == 200 and body == [
+            {"index": 0, "status": "fulfilled", "value": "a"},
+            {"index": 1, "status": "fulfilled", "value": "b"},
+            {"index": 2, "status": "fulfilled", "value": "c"},
+        ]:
+            results.ok("flask.batch.serial.order")
+        else:
+            results.fail("flask.batch.serial.order", f"expected in-order fulfilled triple, got {status} {body!r}")
+
+        # Test: mode='chained' stops immediately on the first failure —
+        # every remaining item is marked not-attempted regardless of
+        # onItemError (which defaults to 'continue' here, deliberately, to
+        # prove 'chained' overrides it).
+        status, body = _post_batch({
+            "operation": f"{namespace}/test-api/echo-str",
+            "items": [{"msg": 999}, {"msg": "never-runs"}, {"msg": "never-runs-2"}],
+            "mode": "chained",
+        })
+        if (
+            status == 200
+            and isinstance(body, list)
+            and len(body) == 3
+            and body[0]["status"] == "rejected"
+            and body[0]["reason"].get("code") == "invalid_argument"
+            and body[1]["status"] == "rejected"
+            and body[1]["reason"].get("code") == "internal"
+            and "never attempted" in body[1]["reason"].get("message", "").lower()
+            and body[2]["status"] == "rejected"
+            and body[2]["reason"].get("code") == "internal"
+        ):
+            results.ok("flask.batch.chained.stops_on_first_failure")
+        else:
+            results.fail(
+                "flask.batch.chained.stops_on_first_failure",
+                f"expected item0 rejected + items1/2 not-attempted, got {status} {body!r}",
+            )
+
+        # NEGATIVE CONTROL for the chained test above: with mode='parallel'
+        # (the default) and onItemError='continue' (the default), the SAME
+        # failing-first-item batch must NOT abort the remaining items — if
+        # it did, this would go RED, proving the 'chained' assertion above
+        # has teeth (it is actually 'chained'-specific behavior, not just
+        # "the server always stops on first failure").
+        status, body = _post_batch({
+            "operation": f"{namespace}/test-api/echo-str",
+            "items": [{"msg": 999}, {"msg": "still-runs"}, {"msg": "still-runs-2"}],
+        })
+        if (
+            status == 200
+            and isinstance(body, list)
+            and len(body) == 3
+            and body[0]["status"] == "rejected"
+            and body[1] == {"index": 1, "status": "fulfilled", "value": "still-runs"}
+            and body[2] == {"index": 2, "status": "fulfilled", "value": "still-runs-2"}
+        ):
+            results.ok("flask.batch.chained.negative_control_default_continues")
+        else:
+            results.fail(
+                "flask.batch.chained.negative_control_default_continues",
+                f"default mode must NOT stop on first failure, got {status} {body!r}",
+            )
+
+        # Test: onItemError='abort' under mode='parallel' with concurrency=1
+        # (forces strict submission-order execution through the single
+        # ThreadPoolExecutor worker) — the first item fails, so items 1/2
+        # must never actually run (not-attempted), deterministically (no
+        # timing/sleep dependency: with exactly one worker thread pulling
+        # from the pool's FIFO queue, item 0 always completes — and sets the
+        # abort flag — strictly before item 1 is dequeued).
+        status, body = _post_batch({
+            "operation": f"{namespace}/test-api/echo-str",
+            "items": [{"msg": 999}, {"msg": "should-not-run"}, {"msg": "should-not-run-2"}],
+            "concurrency": 1,
+            "onItemError": "abort",
+        })
+        if (
+            status == 200
+            and isinstance(body, list)
+            and len(body) == 3
+            and body[0]["status"] == "rejected"
+            and body[0]["reason"].get("code") == "invalid_argument"
+            and body[1]["status"] == "rejected"
+            and body[1]["reason"].get("code") == "internal"
+            and "abort" in body[1]["reason"].get("message", "").lower()
+            and body[2]["status"] == "rejected"
+        ):
+            results.ok("flask.batch.parallel.on_item_error_abort")
+        else:
+            results.fail(
+                "flask.batch.parallel.on_item_error_abort",
+                f"expected item0 rejected + items1/2 not-attempted (abort), got {status} {body!r}",
+            )
+
+        # Test: itemTimeoutMs is rejected upfront (F3) — the WHOLE batch
+        # request 400s with invalid_argument, before any item is dispatched.
+        status, body = _post_batch({
+            "operation": f"{namespace}/test-api/echo-str",
+            "items": [{"msg": "x"}],
+            "itemTimeoutMs": 1000,
+        })
+        if status == 400 and body.get("code") == "invalid_argument":
+            results.ok("flask.batch.item_timeout_ms.rejected")
+        else:
+            results.fail(
+                "flask.batch.item_timeout_ms.rejected",
+                f"expected 400 invalid_argument for itemTimeoutMs, got {status} {body!r}",
+            )
+
+        # Test: targeting a nested `_batch/*` mount is rejected (F4's
+        # ID-prefix guard) — never silently accepted as a real op.
+        status, body = _post_batch({
+            "operation": batch_op_id,
+            "items": [{}],
+        })
+        if status == 400 and body.get("code") == "invalid_argument":
+            results.ok("flask.batch.nested_batch_target.rejected")
+        else:
+            results.fail(
+                "flask.batch.nested_batch_target.rejected",
+                f"expected 400 invalid_argument for nested batch target, got {status} {body!r}",
+            )
+
+        # Test: targeting an operation id that doesn't exist at all.
+        status, body = _post_batch({
+            "operation": f"{namespace}/does-not-exist",
+            "items": [{}],
+        })
+        if status == 400 and body.get("code") == "invalid_argument":
+            results.ok("flask.batch.unknown_operation.rejected")
+        else:
+            results.fail(
+                "flask.batch.unknown_operation.rejected",
+                f"expected 400 invalid_argument for unknown operation, got {status} {body!r}",
+            )
+
     finally:
         proc.kill()
         try:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
+        shutil.rmtree(plan_tmpdir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1338,7 +1617,7 @@ def run_cli_decimal_live_tests(results: _Results) -> None:
     # Locate the decimal_api fixture module.
     fixture_module = (
         SCRIPT_DIR.parent /           # packages/apigen
-        "plugins" / "py-flask" / "src" / "test" / "fixtures" / "decimal_api.py"
+        "apigen-plugin-py-flask" / "src" / "test" / "fixtures" / "decimal_api.py"
     )
     if not fixture_module.exists():
         results.fail(
@@ -1351,6 +1630,8 @@ def run_cli_decimal_live_tests(results: _Results) -> None:
     namespace = "decapi"
     base_url = f"http://127.0.0.1:{port}"
 
+    plan_path, plan_tmpdir = _build_flask_plan(fixture_module, namespace)
+
     # Spawn the flask_server directly (not through the CLI, to keep this test
     # self-contained within run_tests.py) but using PYTHONPATH=SCRIPT_DIR so
     # the environment matches the CLI-spawned environment exactly.
@@ -1360,6 +1641,7 @@ def run_cli_decimal_live_tests(results: _Results) -> None:
             "--module", str(fixture_module),
             "--namespace", namespace,
             "--port", str(port),
+            "--plan-file", str(plan_path),
         ],
         cwd=str(SCRIPT_DIR),
         env={**os.environ, "PYTHONPATH": str(SCRIPT_DIR)},
@@ -1382,6 +1664,7 @@ def run_cli_decimal_live_tests(results: _Results) -> None:
     if not ready:
         stderr_out = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
         proc.kill()
+        shutil.rmtree(plan_tmpdir, ignore_errors=True)
         results.fail(
             "cli_decimal.startup",
             f"Server did not become ready within 10 s. stderr: {stderr_out[:500]}",
@@ -1557,6 +1840,7 @@ def run_cli_decimal_live_tests(results: _Results) -> None:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
+        shutil.rmtree(plan_tmpdir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1585,7 +1869,7 @@ def run_future_annotations_tests(results: _Results) -> None:
 
     fixture_module = (
         SCRIPT_DIR.parent /        # packages/apigen
-        "plugins" / "py-flask" / "src" / "test" / "fixtures" / "future_annotations_api.py"
+        "apigen-plugin-py-flask" / "src" / "test" / "fixtures" / "future_annotations_api.py"
     )
     if not fixture_module.exists():
         results.fail(
@@ -1674,12 +1958,15 @@ def run_future_annotations_tests(results: _Results) -> None:
     namespace = "futureann"
     base_url = f"http://127.0.0.1:{port}"
 
+    plan_path, plan_tmpdir = _build_flask_plan(fixture_module, namespace, ops=ops)
+
     proc = subprocess.Popen(
         [
             sys.executable, "-m", "apigen_python.flask_server",
             "--module", str(fixture_module),
             "--namespace", namespace,
             "--port", str(port),
+            "--plan-file", str(plan_path),
         ],
         cwd=str(SCRIPT_DIR),
         env={**os.environ, "PYTHONPATH": str(SCRIPT_DIR)},
@@ -1702,6 +1989,7 @@ def run_future_annotations_tests(results: _Results) -> None:
     if not ready:
         stderr_out = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
         proc.kill()
+        shutil.rmtree(plan_tmpdir, ignore_errors=True)
         results.fail(
             "future_ann.startup",
             f"Server did not become ready within 10 s. stderr: {stderr_out[:500]}",
@@ -1782,6 +2070,7 @@ def run_future_annotations_tests(results: _Results) -> None:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
+        shutil.rmtree(plan_tmpdir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1798,6 +2087,65 @@ def run_future_annotations_tests(results: _Results) -> None:
 #   6. Decimal "0.1" → "0.101" (float would give 0.10100000000000001)
 #      NEGATIVE CONTROL: JSON number response would fail typeof=='string' check
 # ---------------------------------------------------------------------------
+
+def _grpc_snake(words: list[str]) -> str:
+    """Join tokenised Segment `words` into a snake_case identifier."""
+    return "_".join(words)
+
+
+def _grpc_pascal(words: list[str]) -> str:
+    """Join tokenised Segment `words` into a PascalCase identifier."""
+    return "".join(w.capitalize() for w in words)
+
+
+def _build_grpc_plan(
+    fixture_module: Path,
+    namespace: str,
+) -> tuple[Path, Path, str, str]:
+    """Build a real `--plan-file` for `grpc_server.py` from a real
+    `extract_module()` pass — `grpc_server.py` has required `--plan-file`
+    since the apigen-serve-core py-grpc-serve-split (it no longer
+    self-extracts or re-derives package/service/method; see its module
+    docstring).
+
+    Computes each op's `{package, service, method}` the SAME way the real
+    `@adhd/apigen-engine-naming` `project(op).grpc` does (grpc_server.py's
+    module docstring, mirrored from `naming.ts`):
+        package = dotted, snake_cased, all `[namespace, ...path]` segments
+                  but the last
+        service = Pascal-cased second-to-last segment (the "file" segment,
+                  falling back to the first segment when there is no
+                  second-to-last)
+        method  = Pascal-cased last segment (the "export" segment)
+
+    This suite tests `grpc_server.py`'s OWN dispatch/validation/logical-type
+    behavior given a correct plan, not naming derivation itself (the real
+    `project()`-derived package/service/method shape is independently
+    proven byte-for-byte by `apigen-plugin-py-grpc`'s own TS test suite,
+    `apigen-engine-naming/src/test/naming.spec.ts`).
+
+    Returns:
+        `(plan_path, tmpdir, package, service)` — caller removes `tmpdir`
+        (best-effort) once the spawned server is done with it; `package`
+        and `service` are returned so callers can build the expected
+        `<package>.<Service>/<Method>` gRPC target without recomputing it.
+    """
+    ops = extract_module(str(fixture_module), namespace)
+    grpc_map: dict[str, dict[str, str]] = {}
+    package = ""
+    service = ""
+    for op in ops:
+        all_segs = [op["namespace"]] + op["path"]
+        package = ".".join(_grpc_snake(seg["words"]) for seg in all_segs[:-1])
+        second_to_last = all_segs[-2] if len(all_segs) >= 2 else all_segs[0]
+        service = _grpc_pascal(second_to_last["words"])
+        method = _grpc_pascal(all_segs[-1]["words"])
+        grpc_map[op["id"]] = {"package": package, "service": service, "method": method}
+    tmpdir = Path(tempfile.mkdtemp(prefix="apigen-py-grpc-runtests-plan-"))
+    plan_path = tmpdir / "plan.json"
+    plan_path.write_text(json.dumps({"operations": ops, "grpc": grpc_map}))
+    return plan_path, tmpdir, package, service
+
 
 def run_grpc_server_tests(results: _Results) -> None:
     """Run live gRPC tests against a real grpc_server subprocess (using grpcurl)."""
@@ -1821,7 +2169,7 @@ def run_grpc_server_tests(results: _Results) -> None:
     # Locate the gRPC fixture module
     fixture_module = (
         SCRIPT_DIR.parent /           # packages/apigen
-        "plugins" / "py-grpc" / "src" / "test" / "fixtures" / "grpc_api.py"
+        "apigen-plugin-py-grpc" / "src" / "test" / "fixtures" / "grpc_api.py"
     )
     if not fixture_module.exists():
         results.fail(
@@ -1836,12 +2184,22 @@ def run_grpc_server_tests(results: _Results) -> None:
     namespace = "pkg"
     addr = f"localhost:{port}"
 
+    plan_path, plan_tmpdir, grpc_package, grpc_service = _build_grpc_plan(
+        fixture_module, namespace,
+    )
+    # Full gRPC method target, e.g. "pkg.grpc_api.GrpcApi/AddDecimal" —
+    # computed from the SAME injected plan the server itself consumes (never
+    # a re-derived/hard-coded literal), so this suite can never drift from
+    # `grpc_server.py`'s actual `--plan-file` contract.
+    service_target = f"{grpc_package}.{grpc_service}"
+
     proc = subprocess.Popen(
         [
             sys.executable, "-m", "apigen_python.grpc_server",
             "--module", str(fixture_module),
             "--namespace", namespace,
             "--port", str(port),
+            "--plan-file", str(plan_path),
         ],
         cwd=str(SCRIPT_DIR),
         env={**os.environ, "PYTHONPATH": str(SCRIPT_DIR)},
@@ -1873,6 +2231,7 @@ def run_grpc_server_tests(results: _Results) -> None:
     if not ready:
         stderr_out = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
         proc.kill()
+        shutil.rmtree(plan_tmpdir, ignore_errors=True)
         results.fail(
             "grpc.startup",
             f"Server did not emit ready signal within 10 s. stderr: {stderr_out[:500]}",
@@ -1890,32 +2249,37 @@ def run_grpc_server_tests(results: _Results) -> None:
         return r.returncode, r.stdout.strip(), r.stderr.strip()
 
     def _call(method: str, data: dict[str, Any]) -> tuple[int, str, str]:
-        """Call /<namespace>.<Namespace>Service/<method> with typed data payload."""
-        return _grpcurl("-d", json.dumps(data), addr, f"{namespace}.PkgService/{method}")
+        """Call /<package>.<Service>/<Method> with typed data payload — target
+        computed from the SAME injected `--plan-file` the server consumes.
+        `method` is the fixture's raw snake_case function name (e.g.
+        "add_decimal"); it is Pascal-cased here to match the plan's
+        `grpc_map[...]["method"]` the server actually registered."""
+        method_pascal = _grpc_pascal(method.split("_"))
+        return _grpcurl("-d", json.dumps(data), addr, f"{service_target}/{method_pascal}")
 
     try:
         # ------------------------------------------------------------------
         # Test 1: grpcurl list → service visible via reflection
         # ------------------------------------------------------------------
         code, out, err = _grpcurl(addr, "list")
-        if code == 0 and f"{namespace}.PkgService" in out:
+        if code == 0 and service_target in out:
             results.ok("grpc.list.service_visible")
         else:
             results.fail(
                 "grpc.list.service_visible",
-                f"expected pkg.PkgService in list; exit={code} out={out!r} err={err[:200]!r}",
+                f"expected {service_target} in list; exit={code} out={out!r} err={err[:200]!r}",
             )
 
         # ------------------------------------------------------------------
         # Test 2: describe → methods present
         # ------------------------------------------------------------------
-        code, out, err = _grpcurl(addr, "describe", f"{namespace}.PkgService")
-        if code == 0 and "add_decimal" in out and "greet" in out:
+        code, out, err = _grpcurl(addr, "describe", service_target)
+        if code == 0 and "AddDecimal" in out and "Greet" in out:
             results.ok("grpc.describe.methods_present")
         else:
             results.fail(
                 "grpc.describe.methods_present",
-                f"expected add_decimal, greet in describe; exit={code} out={out[:300]!r}",
+                f"expected AddDecimal, Greet in describe; exit={code} out={out[:300]!r}",
             )
 
         # ------------------------------------------------------------------
@@ -2056,6 +2420,7 @@ def run_grpc_server_tests(results: _Results) -> None:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             proc.kill()
+        shutil.rmtree(plan_tmpdir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
