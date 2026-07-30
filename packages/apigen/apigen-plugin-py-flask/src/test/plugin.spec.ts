@@ -45,7 +45,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { ensurePythonEnv } from '@adhd/apigen-python-env';
-import { tokenize } from '@adhd/apigen-core-client';
+import { tokenize, buildBatchMountedOperations } from '@adhd/apigen-core-client';
 import type { Operation, RunInput, Segment, JSONSchema } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import { pyFlaskPlugin } from '../lib/plugin';
@@ -485,6 +485,99 @@ describe('py-flask plugin — LIVE server', () => {
       method: 'POST',
       body: '{}',
       headers: { 'content-type': 'application/json' },
+    });
+    expect(res.status).toBe(404);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Batch/bulk fan-out mount (BATCH_0.0.1.md §2.1/§5, batch-rollout F6) — the
+// `_batch/<kind>` route is opt-in ONLY via `input.options.usePlugins`
+// containing a plugin whose `id === 'batch'` (the SAME `readUsePlugins`
+// convention every other TS host already reads its own `--use` plugins off
+// of — see `plugin.ts`'s "Phase 1.5" comment). Drives the REAL production
+// entrypoint (`pyFlaskPlugin.run()`) with real HTTP, never a bypass — the
+// same standard the golden-snapshot parity suite above already holds itself
+// to (AGENTS.md §7).
+// ---------------------------------------------------------------------------
+
+describe('py-flask plugin — batch mount (BATCH_0.0.1.md, batch-rollout F6)', () => {
+  it('usePlugins: [{id:"batch"}] adds a real, dispatchable _batch/<kind> route (partial-failure fan-out)', async () => {
+    const controller = new AbortController();
+    let runPromise: Promise<void> | undefined;
+
+    const portPromise = new Promise<number>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error('[py-flask-batch] server did not report a bound port within 15s'));
+      }, 15000);
+      const runInput: RunInput = {
+        packages: [{ id: NS, schemas: {}, importPath: FIXTURE_MODULE }],
+        outputDir: '/tmp/out',
+        options: {
+          port: 0,
+          namespace: NS,
+          usePlugins: [{ id: 'batch' }],
+          onListening: (port: number) => {
+            clearTimeout(timer);
+            resolve(port);
+          },
+        },
+        signal: controller.signal,
+      };
+      runPromise = pyFlaskPlugin.run(runInput).catch((err: unknown) => {
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      });
+    });
+
+    try {
+      const boundPort = await portPromise;
+      const base = `http://127.0.0.1:${boundPort}`;
+
+      // Compute the expected batch route the SAME way plugin.ts itself does
+      // (buildBatchMountedOperations + project()) — never a hand-guessed
+      // literal, so this test breaks if that derivation ever drifts.
+      const operations = await runExtractorEmitJson(FIXTURE_MODULE, NS);
+      const batchOps = buildBatchMountedOperations({ host: 'py', operations });
+      expect(batchOps.length).toBeGreaterThan(0);
+      const batchRoute = project(batchOps[0]).http.route;
+
+      const echoOp = operations.find((o) => o.id.endsWith('echo-str'));
+      if (!echoOp) {
+        throw new Error('[py-flask-batch] echo_str operation not found in extracted operations');
+      }
+
+      const res = await fetch(`${base}${batchRoute}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          operation: echoOp.id,
+          items: [{ msg: 'one' }, { msg: 123 }, { msg: 'two' }],
+        }),
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Array<Record<string, unknown>>;
+      expect(body).toHaveLength(3);
+      expect(body[0]).toEqual({ index: 0, status: 'fulfilled', value: 'one' });
+      expect(body[1]['status']).toBe('rejected');
+      expect((body[1]['reason'] as Record<string, unknown>)['code']).toBe('invalid_argument');
+      expect(body[2]).toEqual({ index: 2, status: 'fulfilled', value: 'two' });
+    } finally {
+      controller.abort();
+      if (runPromise) await runPromise;
+    }
+  }, 20000);
+
+  it('usePlugins absent (default): the batch route does NOT exist — opt-in only, never a runtime flag', async () => {
+    server = await startServer();
+    const operations = await runExtractorEmitJson(FIXTURE_MODULE, NS);
+    const batchOps = buildBatchMountedOperations({ host: 'py', operations });
+    const batchRoute = project(batchOps[0]).http.route;
+
+    const res = await fetch(`${base()}${batchRoute}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ operation: 'irrelevant', items: [] }),
     });
     expect(res.status).toBe(404);
   });

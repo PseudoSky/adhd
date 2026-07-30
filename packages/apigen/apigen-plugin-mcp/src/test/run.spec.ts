@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { run, __toolTableBuildCount } from '../lib/run';
+import {
+  run,
+  __toolTableBuildCount,
+  deriveMcpMountInputSchema,
+} from '../lib/run';
 import { dispatch } from '@adhd/apigen-engine-runtime';
 import type { UsePlugin } from '@adhd/apigen-engine-runtime';
 import type {
@@ -1701,4 +1705,94 @@ describe('[mcp-adapter.6] negative control — the parity gate actually gates', 
     },
     60000
   );
+});
+
+// ---------------------------------------------------------------------------
+// BUG-APIGEN-MCP-ROOT-ONEOF-001 — a mount's real root-level `oneOf` schema
+// must survive into the advertised MCP `Tool.inputSchema`, not collapse to an
+// empty `{type:'object', properties:{}}`. Discovered via real testing against
+// an external MCP consumer (agent-browser's search-mcp-source.ts, mounted via
+// `--use batch`) — this regression test pins the fix without needing a live
+// server, since `deriveMcpMountInputSchema` is a pure function.
+// ---------------------------------------------------------------------------
+describe('[BUG-APIGEN-MCP-ROOT-ONEOF-001] deriveMcpMountInputSchema', () => {
+  it('passes an already-valid {type:"object", ...} schema through unchanged', () => {
+    const input = {
+      type: 'object',
+      properties: { foo: { type: 'string' } },
+      required: ['foo'],
+    };
+    expect(deriveMcpMountInputSchema(input)).toEqual(input);
+  });
+
+  it('falls back to an empty object schema for a genuinely zero-arg mount (health/openapi precedent)', () => {
+    expect(deriveMcpMountInputSchema({})).toEqual({
+      type: 'object',
+      properties: {},
+    });
+  });
+
+  it('preserves a real root-level oneOf+discriminator, never collapsing it to {}', () => {
+    const oneOfInput = {
+      oneOf: [
+        {
+          type: 'object',
+          required: ['operation', 'items'],
+          properties: {
+            operation: { type: 'string', enum: ['createItem'] },
+            items: { type: 'array', items: { type: 'object' } },
+            concurrency: { type: 'number' },
+          },
+        },
+        {
+          type: 'object',
+          required: ['operation', 'items'],
+          properties: {
+            operation: { type: 'string', enum: ['deleteItem'] },
+            items: { type: 'array', items: { type: 'string' } },
+            concurrency: { type: 'number' },
+          },
+        },
+      ],
+      discriminator: {
+        propertyName: 'operation',
+        mapping: { createItem: '#/oneOf/0', deleteItem: '#/oneOf/1' },
+      },
+    };
+
+    const result = deriveMcpMountInputSchema(oneOfInput);
+
+    // Valid MCP Tool.inputSchema envelope — the part the SDK's zod actually validates.
+    expect(result['type']).toBe('object');
+    expect(result['required']).toEqual(['operation', 'items']);
+    // The real oneOf/discriminator survive verbatim (passthrough via the SDK's catchall).
+    expect(result['oneOf']).toEqual(oneOfInput.oneOf);
+    expect(result['discriminator']).toEqual(oneOfInput.discriminator);
+    // Union of branch properties is present — NOT empty like the old fallback.
+    const props = result['properties'] as Record<string, unknown>;
+    expect(Object.keys(props).sort()).toEqual([
+      'concurrency',
+      'items',
+      'operation',
+    ]);
+  });
+
+  it('intersects required across branches, dropping any field not required by every branch', () => {
+    const oneOfInput = {
+      oneOf: [
+        {
+          type: 'object',
+          required: ['operation', 'items'],
+          properties: { operation: {}, items: {}, extra: {} },
+        },
+        {
+          type: 'object',
+          required: ['operation'], // "items" NOT required in this branch
+          properties: { operation: {}, items: {} },
+        },
+      ],
+    };
+    const result = deriveMcpMountInputSchema(oneOfInput);
+    expect(result['required']).toEqual(['operation']);
+  });
 });

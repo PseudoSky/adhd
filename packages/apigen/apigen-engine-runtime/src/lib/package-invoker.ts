@@ -45,7 +45,32 @@ export interface UsePlugin {
     mount?: {
       operations: (
         descriptor: { host: string; operations: unknown[] },
-        opts?: Record<string, unknown>
+        opts?: Record<string, unknown>,
+        // (batch-rollout, BATCH_0.0.1.md §2/§F1) Optional, additive third
+        // param — structurally equivalent to `apigen-core-client`'s
+        // `MountHostBridge` (duck-typed here rather than imported, since this
+        // file must not depend on the core-client package for its own
+        // internal `UsePlugin` shape).
+        hostBridge?: {
+          invoke(
+            fnName: string,
+            call: {
+              domainArgs: Record<string, unknown>;
+              envelope: Record<string, unknown>;
+              signal?: AbortSignal;
+            },
+            opts: {
+              fns: Record<string, unknown>;
+              schemas: Record<string, unknown>;
+              createClient?: (envelope: Record<string, unknown>) => Promise<unknown>;
+            }
+          ): Promise<unknown>;
+          invokeOptions: {
+            fns: Record<string, unknown>;
+            schemas: Record<string, unknown>;
+            createClient?: (envelope: Record<string, unknown>) => Promise<unknown>;
+          };
+        }
       ) => Array<{
         id: string;
         transports?: string[];
