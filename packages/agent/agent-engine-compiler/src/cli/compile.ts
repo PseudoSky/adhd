@@ -29,6 +29,7 @@
 // ──────────────────────────────────────────────
 
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -46,13 +47,26 @@ import { compileAgent } from '../compile.js';
 
 // ── Migration folders ─────────────────────────────────────────────────────
 //
-// Resolved relative to this compiled file's __dirname at runtime so the bin
-// works from the dist layout without referencing source paths.
+// Each sibling registry-family package ships its drizzle-kit-generated
+// migrations at the ROOT of its published package (`<pkgRoot>/drizzle`) — see
+// e.g. agent-core-provider's `project.json` `assets` copying `drizzle/**/*`
+// to its dist root, and its `migrate-runner.ts` resolving
+// `new URL('../../drizzle', import.meta.url)` relative to
+// `dist/src/db/migrate-runner.js`.
 //
-// dist/packages/agent/agent-engine-compiler/src/cli/compile.js
-//   → ../../               = dist/packages/agent/agent-engine-compiler/
-//   → ../../../            = dist/packages/agent/
-//   → ../../../<pkg>/drizzle = dist/packages/agent/<pkg>/drizzle
+// We MUST resolve these via real Node module resolution rather than `..`
+// arithmetic off this file's own __dirname: this monorepo builds each
+// package to its OWN per-project `dist/` (via @nx/js:tsc), not into a single
+// monolithic dist tree, so there is no fixed number of `..` hops from this
+// compiled file to a sibling package's install location — that number
+// differs between monorepo-dev, a flat-hoisted npm install, and pnpm's
+// isolated store layout. `require.resolve('<pkg>/package.json')` is not an
+// option either: these packages restrict the `package.json` subpath via
+// `exports`, so that throws `ERR_PACKAGE_PATH_NOT_EXPORTED`. Instead we
+// resolve the package's MAIN entry file (which every consumer of the
+// package is already relying on being resolvable) and walk up from that
+// file's directory to the nearest ancestor whose own `package.json` `name`
+// matches — i.e. the real package root — then join `drizzle` onto it.
 //
 // Timestamp order (ascending) matters so Drizzle's journal bookkeeping
 // doesn't skip a migration set:
@@ -61,17 +75,137 @@ import { compileAgent } from '../compile.js';
 //
 // This mirrors the migration order in compile-agent.test.ts.
 
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const AI_DIST = path.resolve(__dirname, '../../../');
+const require = createRequire(import.meta.url);
 
-const PROVIDER_MIGRATIONS = path.join(AI_DIST, 'agent-core-provider/drizzle');
-const REGISTRY_MIGRATIONS = path.join(AI_DIST, 'agent-store-prompts/drizzle');
-const TOOL_REGISTRY_MIGRATIONS = path.join(
-  AI_DIST,
-  'agent-store-tools/drizzle'
+/**
+ * Upper bound on how many directory levels we'll walk up from a resolved
+ * entry file before giving up looking for its package root. Generous enough
+ * to cover any real install layout (monorepo source, flat npm hoist, pnpm's
+ * nested `.pnpm/<pkg>@<ver>/node_modules/<pkg>/dist/src/`), while still
+ * failing fast — and with a clear error — instead of looping indefinitely.
+ */
+const MAX_PACKAGE_ROOT_WALK_UP_HOPS = 20;
+
+/**
+ * Resolve `<pkgRoot>/drizzle` for a sibling `@adhd/*` package via real Node
+ * module resolution, so it works identically under monorepo-dev, a flat npm
+ * install, and pnpm's isolated store.
+ *
+ * Resolves the package's main entry file, then walks up from that file's
+ * directory to the nearest ancestor directory whose `package.json` `name`
+ * field equals `pkgName` (the real package root — `dist/` in every layout
+ * we ship, `packages/agent/<pkg>/` in source), and joins `drizzle` onto it.
+ *
+ * Throws a clear, actionable error (never silently skips) if the package
+ * can't be resolved, its root can't be found, or the resolved `drizzle`
+ * directory doesn't exist — a missing migration set must be a hard failure
+ * at compile time, not a stderr warning that proceeds to a
+ * `no such table` crash deep inside a later query.
+ */
+function resolveSiblingDrizzle(pkgName: string): string {
+  let entryFile: string;
+  try {
+    entryFile = require.resolve(pkgName);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `agent-compiler: cannot resolve sibling package '${pkgName}' to locate ` +
+        `its drizzle migrations (is it installed / listed as a dependency ` +
+        `of @adhd/agent-engine-compiler?): ${msg}`
+    );
+  }
+
+  let dir = path.dirname(entryFile);
+  for (let hop = 0; hop <= MAX_PACKAGE_ROOT_WALK_UP_HOPS; hop++) {
+    const pkgJsonPath = path.join(dir, 'package.json');
+    if (fs.existsSync(pkgJsonPath)) {
+      try {
+        const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8')) as {
+          name?: string;
+        };
+        if (pkgJson.name === pkgName) {
+          const drizzleDir = path.join(dir, 'drizzle');
+          if (!fs.existsSync(drizzleDir)) {
+            throw new Error(
+              `agent-compiler: resolved package root for '${pkgName}' at ` +
+                `'${dir}' but it has no 'drizzle' migrations directory ` +
+                `('${drizzleDir}' does not exist).`
+            );
+          }
+          return drizzleDir;
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message.startsWith('agent-compiler:')) {
+          throw err;
+        }
+        // Malformed package.json on the walk up — keep walking; the real
+        // package root's package.json will parse fine.
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      break; // reached filesystem root
+    }
+    dir = parent;
+  }
+  throw new Error(
+    `agent-compiler: walked up from '${entryFile}' without finding a ` +
+      `package.json named '${pkgName}' within ${MAX_PACKAGE_ROOT_WALK_UP_HOPS} ` +
+      `directory hops — cannot locate its drizzle migrations directory.`
+  );
+}
+
+/**
+ * Resolve `<ownPkgRoot>/drizzle` for THIS package (agent-engine-compiler)
+ * itself, using the same walk-up-to-package.json approach as
+ * {@link resolveSiblingDrizzle} rather than a fixed hop count off
+ * `import.meta.url` — this file's own compiled location
+ * (`dist/src/cli/compile.js`) is two directories below the package root in
+ * every layout we ship, but relying on that being exactly two hops is the
+ * same brittle assumption this fix removes for siblings.
+ */
+function resolveOwnDrizzle(): string {
+  const ownDir = fileURLToPath(new URL('.', import.meta.url));
+  let dir = ownDir;
+  for (let hop = 0; hop <= MAX_PACKAGE_ROOT_WALK_UP_HOPS; hop++) {
+    const pkgJsonPath = path.join(dir, 'package.json');
+    if (fs.existsSync(pkgJsonPath)) {
+      const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8')) as {
+        name?: string;
+      };
+      if (pkgJson.name === '@adhd/agent-engine-compiler') {
+        const drizzleDir = path.join(dir, 'drizzle');
+        if (!fs.existsSync(drizzleDir)) {
+          throw new Error(
+            `agent-compiler: resolved own package root at '${dir}' but it ` +
+              `has no 'drizzle' migrations directory ('${drizzleDir}' does ` +
+              `not exist).`
+          );
+        }
+        return drizzleDir;
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      break; // reached filesystem root
+    }
+    dir = parent;
+  }
+  throw new Error(
+    `agent-compiler: walked up from '${ownDir}' without finding ` +
+      `@adhd/agent-engine-compiler's own package.json within ` +
+      `${MAX_PACKAGE_ROOT_WALK_UP_HOPS} directory hops — cannot locate its ` +
+      `own drizzle migrations directory.`
+  );
+}
+
+const PROVIDER_MIGRATIONS = resolveSiblingDrizzle('@adhd/agent-core-provider');
+const REGISTRY_MIGRATIONS = resolveSiblingDrizzle('@adhd/agent-store-prompts');
+const TOOL_REGISTRY_MIGRATIONS = resolveSiblingDrizzle(
+  '@adhd/agent-store-tools'
 );
-const POLICY_MIGRATIONS = path.join(AI_DIST, 'agent-core-policy/drizzle');
-const COMPILER_MIGRATIONS = path.join(AI_DIST, 'agent-engine-compiler/drizzle');
+const POLICY_MIGRATIONS = resolveSiblingDrizzle('@adhd/agent-core-policy');
+const COMPILER_MIGRATIONS = resolveOwnDrizzle();
 
 // ──────────────────────────────────────────────
 // Resolved args
@@ -216,6 +350,13 @@ function openDb(dbPath: string): {
   const db = drizzle(conn, { schema: {} as any });
 
   // Migrate in ascending timestamp order — same pattern as the test suite.
+  // Each folder was already resolved via resolveSiblingDrizzle/
+  // resolveOwnDrizzle above, which throws at module-load time if it can't
+  // find a package's migrations directory. We still re-verify existence
+  // here (defense in depth against the directory disappearing between
+  // resolution and use) and treat a missing folder as a hard failure —
+  // never a warn-and-continue that silently skips a migration set and
+  // proceeds to a `no such table` crash later.
   for (const folder of [
     PROVIDER_MIGRATIONS,
     REGISTRY_MIGRATIONS,
@@ -223,13 +364,12 @@ function openDb(dbPath: string): {
     POLICY_MIGRATIONS,
     COMPILER_MIGRATIONS,
   ]) {
-    if (fs.existsSync(folder)) {
-      migrate(db, { migrationsFolder: folder });
-    } else {
-      process.stderr.write(
-        `agent-compiler: warning: migration folder not found: ${folder}\n`
+    if (!fs.existsSync(folder)) {
+      throw new Error(
+        `agent-compiler: migration folder not found: ${folder}`
       );
     }
+    migrate(db, { migrationsFolder: folder });
   }
 
   conn.pragma('foreign_keys = ON');
