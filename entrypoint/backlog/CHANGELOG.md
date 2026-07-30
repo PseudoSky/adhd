@@ -1,3 +1,20 @@
+## 0.1.3 (2026-07-30)
+
+
+### 🚀 Features
+
+- **apigen:** generic batch/bulk fan-out operations (FEAT-APIGEN-BULK-OPS-001)
+
+
+### 🩹 Fixes
+
+- **backlog:** humanId collision hardening + repo-lookup UX + install/skill packaging
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.2 (2026-07-27)
 
 

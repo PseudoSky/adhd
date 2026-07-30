@@ -1,3 +1,15 @@
+## 0.2.2 (2026-07-30)
+
+
+### 🚀 Features
+
+- **apigen:** generic batch/bulk fan-out operations (FEAT-APIGEN-BULK-OPS-001)
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.2.1 (2026-07-28)
 
 This was a version bump only for apigen-plugin-mcp to align it with other projects, there were no code changes.

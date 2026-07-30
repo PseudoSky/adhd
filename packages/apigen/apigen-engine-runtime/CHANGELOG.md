@@ -1,3 +1,20 @@
+## 0.2.2 (2026-07-30)
+
+
+### 🚀 Features
+
+- **apigen:** generic batch/bulk fan-out operations (FEAT-APIGEN-BULK-OPS-001)
+
+
+### 🩹 Fixes
+
+- **apigen:** schema extraction required-array + CLI mount/discriminated-union gaps
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.2.1 (2026-07-28)
 
 This was a version bump only for apigen-engine-runtime to align it with other projects, there were no code changes.

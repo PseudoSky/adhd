@@ -3,7 +3,7 @@
   "version": "0.2.1",
   "main": "./dist/index.js",
   "dependencies": {
-    "@adhd/apigen-core-client": "^0.2.1",
+    "@adhd/apigen-core-client": "^0.2.2",
     "@adhd/apigen-codegen-openapi": "^0.2.1"
   },
   "publishConfig": {
