@@ -1,3 +1,19 @@
+## 0.2.1 (2026-07-28)
+
+This was a version bump only for apigen-core-client to align it with other projects, there were no code changes.
+
+## 0.1.6 (2026-07-27)
+
+
+### 🚀 Features
+
+- **apigen:** batch/bulk fan-out plugin — `groupBatchableOperationsByKind()`, `buildBatchKindSchema()`, `buildBatchMountedOperations()` for discriminated `_batch/<kind>` mounts
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.5 (2026-07-25)
 
 
