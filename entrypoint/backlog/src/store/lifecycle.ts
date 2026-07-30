@@ -6,17 +6,17 @@
  * terminal-dismissed status with no reason, THROWS.
  */
 import type { ArchiveOpts, BacklogItem, BacklogStatus, Citation, StatsScope, TransitionOpts } from '../model.js';
-import { BacklogItemNotFoundError, CitationRequiredError, ClaimHeldError, ReasonRequiredError, isTerminalStatus, requiresCitation, requiresReason, TERMINAL_STATUSES } from '../model.js';
+import { CitationRequiredError, ClaimHeldError, ReasonRequiredError, isTerminalStatus, requiresCitation, requiresReason, TERMINAL_STATUSES } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { claimItemNode } from './claim.js';
-import { findItemNode, listItems } from './query.js';
+import { buildNotFoundError, findItemNode, listItems } from './query.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import { toBacklogItem, type BacklogNodeMeta } from './mapping.js';
 import { writeAuditEvent } from './audit-log.js';
 
 function requireItemNode(store: GraphBacklogStore, repo: string, humanId: string) {
   const node = findItemNode(store, repo, humanId);
-  if (!node) throw new BacklogItemNotFoundError(repo, humanId);
+  if (!node) throw buildNotFoundError(store, repo, humanId);
   return node;
 }
 
@@ -54,7 +54,7 @@ export function transitionStatusNode(store: GraphBacklogStore, repo: string, hum
   writeAuditEvent(store, node.id, repo, humanId, 'transition', { from: fromStatus, to: status, by: opts.by, ...(opts.reason ? { reason: opts.reason } : {}) });
 
   const updated = store.graph.getNode(node.id);
-  if (!updated) throw new BacklogItemNotFoundError(repo, humanId);
+  if (!updated) throw buildNotFoundError(store, repo, humanId);
   return toBacklogItem(updated);
 }
 
@@ -86,7 +86,7 @@ export function addCitationNode(store: GraphBacklogStore, repo: string, humanId:
     updatedAt: new Date().toISOString(),
   }));
   const updated = store.graph.getNode(node.id);
-  if (!updated) throw new BacklogItemNotFoundError(repo, humanId);
+  if (!updated) throw buildNotFoundError(store, repo, humanId);
   return toBacklogItem(updated);
 }
 
@@ -97,7 +97,7 @@ export function appendNoteNode(store: GraphBacklogStore, repo: string, humanId: 
     return { ...meta, notes: [...meta.notes, { by, at: nowIso, text }], updatedAt: nowIso };
   });
   const updated = store.graph.getNode(node.id);
-  if (!updated) throw new BacklogItemNotFoundError(repo, humanId);
+  if (!updated) throw buildNotFoundError(store, repo, humanId);
   return toBacklogItem(updated);
 }
 

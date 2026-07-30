@@ -1,3 +1,28 @@
+## 0.1.2 (2026-07-27)
+
+
+### 🚀 Features
+
+- **backlog:** add `backlog install` command — installs the skill AND registers the MCP server into host configs (Claude Code `~/.claude.json` + project `.mcp.json`; opencode `~/.config/opencode/opencode.json` + project) idempotently, at user/project scopes; `install-skill` retained as an alias.
+
+
+### 🩹 Fixes
+
+- **backlog:** ship `skill/SKILL.md` into `dist/` via a vite `writeBundle` copy plugin (project.json `build.options.assets` is a no-op under `@nx/vite:build`); fix `install-skill` packaged-skill path escaping to `@adhd/skill` in the published rebased layout (BUG-013, BUG-012 class). Harden the inferred `assets` nx target with explicit `outputs` so a `build` cache-hit can't wipe copied assets.
+
+
+## 0.1.1 (2026-07-27)
+
+
+### 🩹 Fixes
+
+- **backlog:** fix published tarball crashing at mount — `backlogDistDir()` resolved `client.d.ts` via `import.meta.url + '../dist'`, which escaped to the nonexistent `node_modules/@adhd/dist` once `dist-manifest` rebased the package to its root; now probes for the sibling `client.d.ts` (BUG-012). Adds `server.published-layout.spec.ts` reproducing the published rebased-to-root layout.
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.0.3 (2026-07-25)
 
 

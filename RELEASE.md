@@ -77,6 +77,16 @@ The code-first API generation framework reaches a new level of maturity:
 - **Usage accounting**: Per-task, per-session, and per-agent usage tracking capturing input/output tokens, model calls, wall-clock time, model processing time, cost, tool calls, and response size. Persisted to SQLite and queryable via MCP tool.
 - **Budget enforcement** (`@adhd/agent-plugin-budget@0.0.6`): Caps token spend, cost, wall-clock time, model calls, tool calls, and response size per task/session/agent/global scope with ISO 8601 duration windows and warning vs block enforcement modes.
 - **Claude CLI provider**: New `claudecli` provider type uses the local `claude` CLI (Claude Code) as a subprocess provider. Supports `allowedBuiltinTools` whitelist and `systemPromptIsAgentSpec` mode for complete agent markdown file support.
+
+  **Measured performance (8-file edit+verify task, same model across all conditions):**
+
+  | Condition | Turns | Cost | Wall Time |
+  |-----------|-------|------|-----------|
+  | Agent-tool harness (wildcard tools) | 28 | $0.71 | 90.6s |
+  | Agent-tool harness (scoped tools) | 27 | $0.69 | 71.8s |
+  | **claudecli provider (scoped tools)** | **5** | **$0.21** | **26.2s** |
+
+  The claudecli provider completes identical work in **~3.4x fewer turns and at ~3.4x lower cost** than the interactive Agent-tool harness. Root cause: the claudecli provider batches multiple tool calls into single dense turns (833-1335 output tokens/turn) while the Agent-tool harness issues one tool call per round-trip (70-300 tokens/turn). Savings come from turn-count reduction, not per-turn efficiency — the interactive harness's dispatch loop adds overhead between every tool call that headless `claude -p` doesn't incur.
 - **Rate cards**: Provider pricing configuration in `@adhd/agent-core-provider` — maps provider type and model to per-unit costs, used by usage accounting for monetary cost computation.
 - **12 packages published** to npm: base-types (2.1.5), core-policy (2.1.6), core-provider (2.1.6), core-env (0.0.4), store-prompts (2.1.4), store-tools (2.1.6), store-runtime (2.1.5), engine-compiler (2.1.5), engine-orchestrator (2.1.5), plugin-budget (0.0.6), plugin-sanitize (0.0.4), generator-plugin (0.0.4).
 

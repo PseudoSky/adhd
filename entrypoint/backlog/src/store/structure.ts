@@ -4,27 +4,31 @@
  * DESIGN.md §2.3/§14).
  */
 import type { BacklogItem, CreateItemInput, Priority } from '../model.js';
-import { BacklogItemNotFoundError } from '../model.js';
+import { InvalidArgumentError } from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
-import { findItemNode } from './query.js';
+import { buildNotFoundError, findItemNode } from './query.js';
 import { mutateMetadata } from './mutate-metadata.js';
 import { createItemNode } from './crud.js';
 import { allocateHumanIdAndInsert } from './ids.js';
 import {
   BACKLOG_ASSIGNEE_TAG,
+  BACKLOG_ITEM_TAG,
   BACKLOG_PLAN_TAG,
   buildNodeContent,
   buildNodeName,
+  buildTags,
+  computeContentHash,
   humanIdFamily,
   humanIdKind,
   importanceForPriority,
+  isLiveBacklogItemNode,
   toBacklogItem,
   type BacklogNodeMeta,
 } from './mapping.js';
 
 function requireItemNode(store: GraphBacklogStore, repo: string, humanId: string) {
   const node = findItemNode(store, repo, humanId);
-  if (!node) throw new BacklogItemNotFoundError(repo, humanId);
+  if (!node) throw buildNotFoundError(store, repo, humanId);
   return node;
 }
 
@@ -162,7 +166,7 @@ export function mergeItemsNode(store: GraphBacklogStore, repo: string, keepHuman
   store.graph.invalidate(drop.id, reason);
 
   const keepNode = store.graph.getNode(keep.id);
-  if (!keepNode) throw new BacklogItemNotFoundError(repo, keepHumanId);
+  if (!keepNode) throw buildNotFoundError(store, repo, keepHumanId);
   return toBacklogItem(keepNode);
 }
 
@@ -171,7 +175,7 @@ export function setPriorityNode(store: GraphBacklogStore, repo: string, humanId:
   mutateMetadata<BacklogNodeMeta>(store, node.id, (meta) => ({ ...meta, priority, updatedAt: new Date().toISOString() }));
   store.graph.touch(node.id, { importance: importanceForPriority(priority) });
   const updated = store.graph.getNode(node.id);
-  if (!updated) throw new BacklogItemNotFoundError(repo, humanId);
+  if (!updated) throw buildNotFoundError(store, repo, humanId);
   return toBacklogItem(updated);
 }
 
@@ -219,6 +223,105 @@ export function assignItemNode(store: GraphBacklogStore, repo: string, humanId: 
   });
   store.graph.writeEdge(item.id, assigneeId, 'ASSIGNED_TO');
   const updated = store.graph.getNode(item.id);
-  if (!updated) throw new BacklogItemNotFoundError(repo, humanId);
+  if (!updated) throw buildNotFoundError(store, repo, humanId);
+  return toBacklogItem(updated);
+}
+
+/**
+ * BUG-BACKLOG-HUMANID-COLLISION-001 fix #3 (repair primitive): re-ids a
+ * single, `nodeId`-scoped live backlog item to a new `humanId` within the
+ * same `repo`. `nodeId`-scoped (not `(repo, oldHumanId)`-keyed) so this is
+ * unambiguous EVEN under the exact collision it exists to repair — every
+ * other `(repo, humanId)`-keyed lookup in this file would throw
+ * `AmbiguousHumanIdError` on a colliding key (fix #2, `findItemNode`), so a
+ * repair tool needs a way in that doesn't go through that same lookup.
+ *
+ * There is no tool-level rename/re-id operation exposed anywhere in this
+ * store today (the backlog item's fix direction #5 explicitly calls this
+ * gap out) — this is that primitive, added as part of this fix, kept
+ * store-internal (not wired to `client.ts`/the MCP surface) since it is a
+ * narrow one-off repair tool, not a general-purpose end-user operation.
+ *
+ * Guards:
+ *  - the node at `nodeId` must be live and its CURRENT `metadata.humanId`
+ *    must equal `oldHumanId` (sanity check — refuses to rename the wrong
+ *    node out from under a caller who mis-copied a nodeId).
+ *  - `newHumanId` must not already resolve to a DIFFERENT live node in this
+ *    `repo` (refuses to rename INTO a fresh collision).
+ *  - re-derives `kind`/`family` from `newHumanId`, rebuilds `tags` (swapping
+ *    the old kind/family tags for the new ones, preserving every other
+ *    user tag) and the node `name`/`content`/`content_hash` (which both bake
+ *    in `repo::humanId` — DESIGN.md §2.2, mapping.ts's `buildNodeName`/
+ *    `buildNodeContent`) so the renamed node is indistinguishable from one
+ *    that was always minted under `newHumanId`.
+ */
+export function renameHumanIdNode(store: GraphBacklogStore, repo: string, nodeId: number, oldHumanId: string, newHumanId: string): BacklogItem {
+  if (typeof newHumanId !== 'string' || newHumanId.trim().length === 0) {
+    throw new InvalidArgumentError('newHumanId', `backlog: renameHumanId requires a non-empty newHumanId, received ${JSON.stringify(newHumanId)}`);
+  }
+
+  const node = store.graph.getNode(nodeId);
+  if (!node || node.tInvalid || !isLiveBacklogItemNode(node)) {
+    throw buildNotFoundError(store, repo, oldHumanId);
+  }
+  const currentMeta = node.metadata as Partial<BacklogNodeMeta> | undefined;
+  const currentHumanId = currentMeta?.humanId;
+  const currentRepo = currentMeta?.repo ?? node.namespace;
+  if (currentHumanId !== oldHumanId || currentRepo !== repo) {
+    throw new InvalidArgumentError(
+      'nodeId',
+      `backlog: renameHumanId nodeId=${nodeId} does not currently carry (repo=${JSON.stringify(repo)}, humanId=${JSON.stringify(oldHumanId)}) ` +
+        `— it carries (repo=${JSON.stringify(currentRepo)}, humanId=${JSON.stringify(currentHumanId)}). Refusing to rename the wrong node.`
+    );
+  }
+
+  // A DIFFERENT live node already claiming `newHumanId` in this repo would
+  // itself be a fresh, avoidable collision — refuse. (A live node that is
+  // THIS SAME nodeId, i.e. renaming to the id it already has, is a no-op
+  // and allowed through.)
+  const clashing = store.graph
+    .queryNodes({ kind: 'generic', tags: [BACKLOG_ITEM_TAG], namespace: repo, metadata: { humanId: newHumanId } })
+    .filter((n) => isLiveBacklogItemNode(n) && n.id !== nodeId);
+  if (clashing.length > 0) {
+    throw new InvalidArgumentError(
+      'newHumanId',
+      `backlog: cannot rename nodeId=${nodeId} to humanId=${JSON.stringify(newHumanId)} in repo=${JSON.stringify(repo)} — ` +
+        `already claimed by live nodeId(s) ${clashing.map((n) => n.id).join(', ')}.`
+    );
+  }
+
+  const newKind = humanIdKind(newHumanId);
+  const newFamily = humanIdFamily(newHumanId);
+  const oldReservedTags = new Set<string>([BACKLOG_ITEM_TAG, currentMeta?.kind ?? humanIdKind(oldHumanId), currentMeta?.family ?? humanIdFamily(oldHumanId)]);
+  const userTags = node.tags.filter((t) => !oldReservedTags.has(t));
+
+  let finalTitle = '';
+  let finalBody = '';
+  mutateMetadata<BacklogNodeMeta>(store, nodeId, (meta) => {
+    finalTitle = meta.title;
+    finalBody = meta.body;
+    const nowIso = new Date().toISOString();
+    return {
+      ...meta,
+      humanId: newHumanId,
+      kind: newKind,
+      family: newFamily,
+      notes: [...meta.notes, { by: 'system', at: nowIso, text: `[data repair] renamed humanId from "${oldHumanId}" to "${newHumanId}" (BUG-BACKLOG-HUMANID-COLLISION-001)` }],
+      updatedAt: nowIso,
+    };
+  });
+
+  store.graph.touch(nodeId, {
+    name: buildNodeName(repo, newHumanId),
+    tags: buildTags(newKind, newFamily, userTags),
+  });
+
+  const newContent = buildNodeContent(repo, newHumanId, finalTitle, finalBody);
+  store.db
+    .prepare(`UPDATE node SET content = ?, content_hash = ? WHERE rowid = ? AND t_invalid IS NULL`)
+    .run(newContent, computeContentHash(newContent), nodeId);
+
+  const updated = store.graph.getNode(nodeId);
+  if (!updated) throw buildNotFoundError(store, repo, newHumanId);
   return toBacklogItem(updated);
 }

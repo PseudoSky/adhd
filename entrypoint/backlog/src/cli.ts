@@ -28,6 +28,7 @@ import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore }
 import { buildBacklogEnv } from './env.js';
 import { buildBacklogApigenPackage, requireRun, testSilentLogger } from './server.js';
 import { runInstallSkillCommand } from './install-skill.js';
+import { runInstallCommand } from './install.js';
 import { runServeCommand } from './serve.js';
 
 /**
@@ -124,6 +125,16 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
   // `-h` before consulting its own route table.
   if (userArgvEarly[0] === 'install-skill') {
     await runInstallSkillCommand(userArgvEarly.slice(1));
+    return;
+  }
+  // `install` (BUG-013 feature half) is the richer successor to
+  // `install-skill` above: same "pure filesystem/config operation, no
+  // store/ctx" shape, so it is special-cased identically, before ever
+  // building the apigen package/command table. By default it installs BOTH
+  // the skill AND registers the `backlog` MCP server into the requested
+  // host config(s) — see `install.ts`'s own doc comment.
+  if (userArgvEarly[0] === 'install') {
+    await runInstallCommand(userArgvEarly.slice(1));
     return;
   }
   // `serve` (MIGRATION.md §4.5) starts the long-lived HTTP/MCP listener

@@ -2,6 +2,7 @@ import type {
   RunInput,
   Operation,
   MountedOperation,
+  MountHostBridge,
   ComposedSchemas,
 } from '@adhd/apigen-core-client';
 import {
@@ -9,6 +10,7 @@ import {
   buildOpPlan,
   createPackageInvoker,
   dispatchForPlan,
+  LayerContext,
   readUseOptions,
   readUsePlugins,
   isApiStream,
@@ -26,6 +28,7 @@ import type {
   UsePlugin,
 } from '@adhd/apigen-engine-runtime';
 import { ApiError, isApiError, CLI_EXIT_CODE } from '@adhd/apigen-base-errors';
+import { projectMountInputSchema } from './mount-cli-flags';
 
 // ---------------------------------------------------------------------------
 // run() — serve-core migration (cli-adapter).
@@ -462,14 +465,15 @@ function collectMountedCliOperations(
   usePlugins: UsePlugin[],
   useOptions: UseOptions,
   host: string,
-  operations: Operation[]
+  operations: Operation[],
+  hostBridge?: MountHostBridge
 ): MountedOperation[] {
   const result: MountedOperation[] = [];
   const descriptor = { host, operations: operations as unknown[] };
   for (const plugin of usePlugins) {
     const cap = plugin.capabilities?.mount;
     if (!cap) continue;
-    const ops = cap.operations(descriptor, useOptions[plugin.id]);
+    const ops = cap.operations(descriptor, useOptions[plugin.id], hostBridge);
     for (const op of ops) {
       if (op.transports && !op.transports.includes('cli')) continue;
       result.push(op as unknown as MountedOperation);
@@ -513,6 +517,18 @@ export async function run(input: RunInput): Promise<void> {
     if (list) list.push(entry);
     else byPkg.set(entry.pkgId, [entry]);
   }
+
+  // (batch-rollout, BATCH_0.0.1.md §2/§F1, architect-review Finding 2)
+  // Host-level accumulators, merged ACROSS every package this host serves —
+  // hoisted out of the per-package loop below so a `MountHostBridge` (built
+  // after the loop) can target ANY op from ANY package, not just the last one
+  // processed. Each package's own per-package `schemasByOpId`/`fnsByOpId`
+  // (used to build that package's own composed invoker) are unchanged and
+  // still scoped per-package below — these are a SEPARATE, additional,
+  // package-spanning table for hostBridge purposes only.
+  const mergedSchemasByOpId: ComposedSchemas = {};
+  const mergedFnsByOpId: Record<string, (...args: unknown[]) => unknown> = {};
+
   for (const pkg of input.packages) {
     const entries = byPkg.get(pkg.id);
     if (!entries || entries.length === 0) continue;
@@ -531,6 +547,8 @@ export async function run(input: RunInput): Promise<void> {
     for (const entry of entries) {
       schemasByOpId[entry.plan.op.id] = entry.schema;
       fnsByOpId[entry.plan.op.id] = pkgFns[entry.fnName];
+      mergedSchemasByOpId[entry.plan.op.id] = entry.schema;
+      mergedFnsByOpId[entry.plan.op.id] = pkgFns[entry.fnName];
     }
 
     const invoke = createPackageInvoker(schemasByOpId, usePlugins);
@@ -551,11 +569,39 @@ export async function run(input: RunInput): Promise<void> {
   // health`) are now real, dispatchable CLI commands, flowing through the
   // SAME composed `--use` invoker as source ops ([fix:mount-through-layers]).
   const mountHost = input.packages[0]?.id ?? 'ts';
+
+  // (batch-rollout Finding 1/2) The host bridge a mount plugin's handler uses
+  // to invoke OTHER already-registered ops (e.g. `_batch/<kind>`'s fan-out
+  // target) — built from the package-spanning merged tables above, through
+  // the SAME composed `--use` invoker every request goes through (never a
+  // bypass of auth/logging/validate).
+  const hostInvoke = createPackageInvoker(mergedSchemasByOpId, usePlugins);
+  const hostBridge: MountHostBridge = {
+    invoke: (fnName, call, opts) =>
+      hostInvoke(
+        fnName,
+        {
+          operation: { id: fnName },
+          ctx: new LayerContext(),
+          domainArgs: call.domainArgs,
+          envelope: call.envelope,
+          signal: call.signal,
+        },
+        opts as InvokeOptions
+      ),
+    invokeOptions: {
+      fns: mergedFnsByOpId,
+      schemas: mergedSchemasByOpId,
+      createClient: input.packages[0]?.createClient,
+    },
+  };
+
   const mountedOps = collectMountedCliOperations(
     usePlugins,
     useOptions,
     mountHost,
-    input.operations ?? []
+    input.operations ?? [],
+    hostBridge
   );
   if (mountedOps.length > 0) {
     const mountInvoke = createPackageInvoker({}, usePlugins);
@@ -564,7 +610,23 @@ export async function run(input: RunInput): Promise<void> {
       // F3 [fix:transport-stamping]: stamp 'cli' here — the mechanism
       // (`dispatchForPlan` reading `plan.transport` back) is generic; never a
       // hardcoded literal downstream.
-      const plan = buildOpPlan({ op: mountedOp, transport: 'cli' });
+      //
+      // BUG-APIGEN-CLI-OUTPUT-001: unlike a source op (whose composed schema
+      // already carries the `{ data: {...} }` wrapper `buildOpPlan`'s
+      // `computeCliFlags` expects), a `MountedOperation.input` is the bare
+      // domain schema — passing it straight through as `schema` would resolve
+      // ZERO flags (mirroring the bug this fixes), not real ones.
+      // `projectMountInputSchema` (`./mount-cli-flags`) is the dedicated
+      // mount-input → flag-table projection this path needs; see its own doc
+      // comment for the full reasoning (including why a root-level
+      // `oneOf`+`discriminator` mount schema, e.g. `_batch/<kind>` fanning out
+      // over ≥2 operations of that kind, is merged into ONE flag table rather
+      // than fanned out into N synthetic subcommands).
+      const plan = buildOpPlan({
+        op: mountedOp,
+        schema: projectMountInputSchema(mountedOp.input),
+        transport: 'cli',
+      });
       adapter.registerRoute(plan, (call) =>
         dispatchForPlan(plan, mountInvoke, call, mountInvokeOpts)
       );

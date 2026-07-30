@@ -3,6 +3,7 @@ import { HTTP_STATUS, isApiError } from '@adhd/apigen-base-errors';
 import type {
   ComposedSchemas,
   MountedOperation,
+  MountHostBridge,
   Operation,
   RunInput,
 } from '@adhd/apigen-core-client';
@@ -26,6 +27,7 @@ import {
   describeParams,
   dispatchForPlan,
   isApiStream,
+  LayerContext,
   readUseOptions,
   readUsePlugins,
 } from '@adhd/apigen-engine-runtime';
@@ -245,6 +247,19 @@ class FastifyTransportAdapter implements TransportAdapter<FastifyRaw> {
           (req.body as Record<string, unknown> | undefined) ?? {};
         domainArgs = data as Record<string, unknown>;
       }
+    } else {
+      // (batch-rollout, BATCH_0.0.1.md §2) A mount op's `Operation.input`
+      // (`syntheticOp`'s `input` field) is NEVER data-wrapped — mounts never
+      // flow through `composeSchemas()`'s `{data:{...}}` convention (unlike
+      // every real domain op above). `health`/`openapi` never surfaced this
+      // gap because their mounts are zero-input, so hardcoding `{}` here was
+      // indistinguishable from "read the real (empty) request" — but a mount
+      // with real domain input (e.g. `_batch/<kind>`'s `{operation, items,
+      // …}`) needs its ACTUAL body/query read, not a silently-discarded `{}`.
+      domainArgs =
+        plan.http.verb === 'GET'
+          ? ((req.query as Record<string, unknown>) ?? {})
+          : ((req.body as Record<string, unknown> | undefined) ?? {});
     }
 
     return { envelope, domainArgs, signal: this.signal };
@@ -295,14 +310,15 @@ function collectMountedOperations(
   usePlugins: UsePlugin[],
   useOptions: UseOptions,
   host: string,
-  operations: Operation[]
+  operations: Operation[],
+  hostBridge?: MountHostBridge
 ): MountedOperation[] {
   const result: MountedOperation[] = [];
   const descriptor = { host, operations: operations as unknown[] };
   for (const plugin of usePlugins) {
     const cap = plugin.capabilities?.mount;
     if (!cap) continue;
-    const ops = cap.operations(descriptor, useOptions[plugin.id]);
+    const ops = cap.operations(descriptor, useOptions[plugin.id], hostBridge);
     for (const op of ops) {
       // A mounted op is exposed on HTTP unless it declares an explicit
       // `transports` filter that omits `'http'`.
@@ -346,6 +362,17 @@ export async function run(input: RunInput): Promise<void> {
   const adapter = new FastifyTransportAdapter(app, routePrefix, input.signal);
   const routes: Route[] = [];
 
+  // (batch-rollout, BATCH_0.0.1.md §2/§F1, architect-review Finding 2)
+  // Host-level accumulators, merged ACROSS every package this host serves —
+  // hoisted out of the per-package loop below so a `MountHostBridge` (built
+  // after the loop) can target ANY op from ANY package, not just the last one
+  // processed. Each package's own per-package `schemasByOpId`/`fnsByOpId`
+  // (used to build that package's own composed invoker) are unchanged and
+  // still scoped per-package below — these are a SEPARATE, additional,
+  // package-spanning table for hostBridge purposes only.
+  const mergedSchemasByOpId: ComposedSchemas = {};
+  const mergedFnsByOpId: Record<string, (...args: unknown[]) => unknown> = {};
+
   for (const pkg of input.packages) {
     if (!pkg.fns) throw new Error(`Package "${pkg.id}" is missing fns`);
     const pkgFns = pkg.fns;
@@ -370,6 +397,8 @@ export async function run(input: RunInput): Promise<void> {
     for (const { fnName, fnSchema, op } of resolved) {
       schemasByOpId[op.id] = fnSchema;
       fnsByOpId[op.id] = pkgFns[fnName];
+      mergedSchemasByOpId[op.id] = fnSchema;
+      mergedFnsByOpId[op.id] = pkgFns[fnName];
     }
 
     // BUG-APIGEN-009: compose the validate-Layer (+ any `--use` layers) around
@@ -413,11 +442,42 @@ export async function run(input: RunInput): Promise<void> {
   // (health, openapi, …). They flow through a composed `--use` invoker so the
   // `--use` layer capabilities observe them too ([fix:mount-through-layers]).
   const mountHost = input.packages[0]?.id ?? 'ts';
+
+  // (batch-rollout Finding 1/2) The host bridge a mount plugin's handler uses
+  // to invoke OTHER already-registered ops (e.g. `_batch/<kind>`'s fan-out
+  // target) — built from the package-spanning merged tables above, through
+  // the SAME composed `--use` invoker every request goes through (never a
+  // bypass of auth/logging/validate). `hostInvoke`'s real `InvokeFn` shape
+  // already matches `MountHostBridge.invoke`'s duck-typed signature except for
+  // needing `operation`/`ctx` filled in per call — done here exactly like
+  // `dispatchForPlan`'s own mount-branch adaptation.
+  const hostInvoke = createPackageInvoker(mergedSchemasByOpId, usePlugins);
+  const hostBridge: MountHostBridge = {
+    invoke: (fnName, call, opts) =>
+      hostInvoke(
+        fnName,
+        {
+          operation: { id: fnName },
+          ctx: new LayerContext(),
+          domainArgs: call.domainArgs,
+          envelope: call.envelope,
+          signal: call.signal,
+        },
+        opts as InvokeOptions
+      ),
+    invokeOptions: {
+      fns: mergedFnsByOpId,
+      schemas: mergedSchemasByOpId,
+      createClient: input.packages[0]?.createClient,
+    },
+  };
+
   const mountedOps = collectMountedOperations(
     usePlugins,
     useOptions,
     mountHost,
-    input.operations ?? []
+    input.operations ?? [],
+    hostBridge
   );
   if (mountedOps.length > 0) {
     // A composed invoker for mount dispatch: the `--use` layers apply; the

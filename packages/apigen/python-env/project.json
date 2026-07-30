@@ -18,6 +18,9 @@
   "targets": {
     "test": {
       "executor": "@nx/vite:test",
+      "dependsOn": [
+        "build"
+      ],
       "outputs": [
         "{workspaceRoot}/coverage/packages/apigen/python-env"
       ],
@@ -27,6 +30,16 @@
     },
     "build": {
       "executor": "@nx/vite:build",
+      "inputs": [
+        "production",
+        "^production",
+        "{workspaceRoot}/packages/apigen/python/**/*",
+        "!{workspaceRoot}/packages/apigen/python/**/__pycache__/**",
+        "!{workspaceRoot}/packages/apigen/python/**/*.pyc",
+        "!{workspaceRoot}/packages/apigen/python/.pytest_cache/**",
+        "!{workspaceRoot}/packages/apigen/python/build/**",
+        "!{workspaceRoot}/packages/apigen/python/*.egg-info/**"
+      ],
       "outputs": [
         "{options.outputPath}"
       ],

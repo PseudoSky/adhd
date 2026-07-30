@@ -222,6 +222,22 @@ export async function walkType(
     }
 
     const properties: Record<string, unknown> = {};
+    // BUG-APIGEN-CORE-CLIENT-001: object shapes resolved through THIS path
+    // (Path 2 — reached whenever Path 1's ts-json-schema-generator lookup
+    // fails or is skipped, which is the common case for a named interface
+    // used as a function-parameter type: `p.getTypeAtLocation(sig.getDeclaration())
+    // .getText()` with no enclosing-node context emits a fully-qualified
+    // `import("<abs path>").TypeName` expression — see extract.ts's
+    // `rawParams`/`rawParamsFromSig` — which ts-json-schema-generator cannot
+    // resolve as a type name and throws, falling through to this walker) must
+    // carry non-optional TS properties into the JSON-Schema `required` array
+    // the exact same way ts-json-schema-generator's own ObjectTypeFormatter
+    // does. Previously this branch never populated `required` at all, so ANY
+    // object reaching Path 2 — not just one type — silently lost required-field
+    // enforcement at the AJV validate-layer (confirmed: `entrypoint/backlog`'s
+    // `CreateItemInput.family` sailed through validation missing entirely,
+    // persisting the literal string "undefined").
+    const required: string[] = [];
     for (const sym of namedProps) {
       const name = sym.getName();
       // Resolve the property's declared type at its declaration node so we get
@@ -251,10 +267,21 @@ export async function walkType(
         propType !== undefined ? safeTypeText(propType, node) : undefined;
       properties[name] =
         propTypeText !== undefined ? await recurse(propTypeText) : {};
+
+      // `sym.isOptional()` reflects the TS `?` modifier (interface/type-literal
+      // property signatures) — the same signal ts-json-schema-generator's own
+      // formatter uses to decide `required` membership.
+      if (!sym.isOptional()) required.push(name);
     }
 
     if (Object.keys(properties).length > 0) {
-      return { type: 'object', properties };
+      return {
+        type: 'object',
+        properties,
+        // Match ts-json-schema-generator's own convention: omit `required`
+        // entirely when no property is required, rather than emitting `[]`.
+        ...(required.length > 0 ? { required } : {}),
+      };
     }
     // An index-signature-only object resolved above; anything else with no
     // data-shaped properties (e.g. all-method object) → permissive empty schema.

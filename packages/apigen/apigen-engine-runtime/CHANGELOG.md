@@ -1,3 +1,19 @@
+## 0.2.1 (2026-07-28)
+
+This was a version bump only for apigen-engine-runtime to align it with other projects, there were no code changes.
+
+## 0.1.6 (2026-07-27)
+
+
+### 🚀 Features
+
+- **apigen-engine-runtime:** batch/bulk fan-out execution — `invokeBatch()` with concurrency control, per-item timeouts, and error semantics
+
+
+### ❤️  Thank You
+
+- pseudosky
+
 ## 0.1.5 (2026-07-25)
 
 
