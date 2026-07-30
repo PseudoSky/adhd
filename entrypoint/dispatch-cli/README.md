@@ -22,10 +22,10 @@ generated CLI is a disposable projection of it.
 ## Generate + run the CLI
 
 ```bash
-npx nx run dispatch-cli:generate-cli   # → dist/packages/dispatch/dispatch-cli/cli/cli.ts
+npx nx run dispatch-cli:generate-cli   # → dist/entrypoint/dispatch-cli/cli/cli.ts
 
 npx tsx --tsconfig tsconfig.base.json \
-  dist/packages/dispatch/dispatch-cli/cli/cli.ts \
+  dist/entrypoint/dispatch-cli/cli/cli.ts \
   eligible --dag-path docs/plan/dispatch-production/dag.json
 ```
 
@@ -82,7 +82,7 @@ agent-mcp task-runner boundary). Run it with:
 
 ```bash
 npx nx build dispatch-cli && npx tsx --tsconfig tsconfig.base.json \
-  packages/dispatch/dispatch-cli/src/test/integration/real-e2e.ts
+  entrypoint/dispatch-cli/src/test/integration/real-e2e.ts
 ```
 
 It prints a per-scenario result table and exits 0 iff every required
@@ -115,5 +115,5 @@ Run it explicitly with:
 
 ```bash
 DISPATCH_E2E_LIVE=1 npx tsx --tsconfig tsconfig.base.json \
-  packages/dispatch/dispatch-cli/src/test/integration/real-e2e.ts
+  entrypoint/dispatch-cli/src/test/integration/real-e2e.ts
 ```

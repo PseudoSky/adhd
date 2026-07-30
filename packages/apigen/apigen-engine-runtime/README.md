@@ -9,8 +9,8 @@ Part of [apigen](../README.md). For end-to-end usage see [`../cli`](../cli).
 ## Public API
 
 ```ts
-import { dispatch, buildFnTable, describeParams, needsEnvelopeField, dataParamNames, createLogger, defineMiddleware, createApiPackage, EventBus, wireObservers, buildContext } from '@adhd/apigen-engine-runtime';
-import type { Logger, LogFormat, CreateLoggerOptions, ParamInfo, AnyFn } from '@adhd/apigen-engine-runtime';
+import { dispatch, buildFnTable, describeParams, needsEnvelopeField, dataParamNames, createLogger, defineMiddleware, createApiPackage, EventBus, wireObservers, buildContext, invokeBatch } from '@adhd/apigen-engine-runtime';
+import type { Logger, LogFormat, CreateLoggerOptions, ParamInfo, AnyFn, BatchOptions, BatchItemResult } from '@adhd/apigen-engine-runtime';
 ```
 
 - **`dispatch(fns, ctx, schema, fnName, envelope, data)`** — the one dispatch path. No plugin
@@ -23,6 +23,10 @@ import type { Logger, LogFormat, CreateLoggerOptions, ParamInfo, AnyFn } from '@
 - **`needsEnvelopeField` / `dataParamNames`** — envelope + param helpers (single source).
 - **`createLogger({ level, format, destination })`** — pino-based logger; defaults to
   **stderr** so MCP stdio stdout stays protocol-clean. `format: 'json' | 'pretty'`.
+- **`invokeBatch(invoke, operationId, items, opts, batchOpts)`** — fan out N calls through
+  the real `invoke` path (via `createInvoker`'s composed Layer stack) with controlled
+  concurrency, error handling, and per-item timeouts. Returns `Promise<BatchItemResult[]>`.
+  See `@adhd/apigen-plugin-batch` for mount wiring.
 - **`defineMiddleware` / `createApiPackage` / `EventBus` / `wireObservers` / `buildContext`**
   — middleware + observer wiring.
 

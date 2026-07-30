@@ -387,6 +387,29 @@ try {
 
 **Important:** Do **not** parallelize `buildSchema` loops — the work is synchronous CPU under an async signature, and morph-walk mutates the shared SourceFile, so `Promise.all` gains nothing and can race.
 
+### Mount capability: Synthetic operations and batch fan-out
+
+Mount plugins add synthetic operations to your server — both simple mounts like `GET /_meta/health` and complex features like batch bulk fan-out. The batch plugin demonstrates the pattern:
+
+```ts
+import { buildBatchMountedOperations } from '@adhd/apigen-core-client';
+
+// Derive one _batch/<kind> mount per distinct operation kind
+const batchMounts = buildBatchMountedOperations(descriptor, { exclude: ['catalog/delete'] });
+// => [
+//   { id: '_batch/query', kind: 'query', input: { oneOf: [...] }, output: { ... } },
+//   { id: '_batch/action', kind: 'action', input: { oneOf: [...] }, output: { ... } }
+// ]
+```
+
+The batch feature provides:
+- `groupBatchableOperationsByKind()` — group operations by kind (query vs. action)
+- `buildBatchKindSchema()` — build discriminated-union input/output schemas for one kind
+- `buildBatchMountedOperations()` — emit one synthetic mount per distinct kind
+- `syntheticOp()` — shared helper to build synthetic operation shapes
+
+See [apigen-plugin-batch](../../packages/apigen/apigen-plugin-batch) for the host-specific wiring.
+
 ### v2 Plugin Capability Interface
 
 The `Plugin` interface (SPEC §7.1) declares four orthogonal capabilities — a plugin implements only what it needs:
@@ -395,8 +418,10 @@ The `Plugin` interface (SPEC §7.1) declares four orthogonal capabilities — a 
 |-----------|---------|---------|
 | `target` | Project descriptor to transport/format (codegen) or host functions in-process (serve) | MCP server, Fastify HTTP server, proto client |
 | `layer` | Wrap all operations in the onion (middleware) | Logger, auth, rate-limiting |
-| `mount` | Add synthetic operations | `/meta/openapi`, `/meta/health` |
+| `mount` | Add synthetic operations | `/meta/openapi`, `/meta/health`, batch fan-out |
 | `envelope` | Declare transport-agnostic side-channel fields (request/response headers, metadata) | Session tokens, request IDs |
+
+The `MountCapability.operations()` method receives an optional `hostBridge` parameter carrying the actual invoker and option schemas — enabling mounts like batch to route directly to real operations without a separate dispatch layer.
 
 ```ts
 import type { Plugin } from '@adhd/apigen-core-client';
@@ -468,10 +493,11 @@ Recognized extensions: `.ts/.tsx/.mts/.cts` → `ts`, `.py` → `py`, `.rs` → 
 |--------|---------|-------------|
 | [Extract](./docs/reference/extract.md) | v2 symbol-based extraction | `extract()`, `tokenize()`, `ExtractOptions` |
 | [Schemas](./docs/reference/schemas.md) | Schema generation & composition | `generateSchemas()`, `composeSchemas()`, `GenerateSchemasOptions`, `ComposedSchemas` |
-| [Plugin](./docs/reference/plugin.md) | v1 & v2 Plugin contracts | `Plugin`, `OutputPlugin`, `TargetCapability`, `LayerCapability`, `MountCapability`, `EnvelopeCapability` |
+| [Plugin](./docs/reference/plugin.md) | v1 & v2 Plugin contracts | `Plugin`, `OutputPlugin`, `TargetCapability`, `LayerCapability`, `MountCapability`, `EnvelopeCapability`, `syntheticOp()` |
 | [Extraction Session](./docs/reference/session.md) | Per-run caching | `createExtractionSession()`, `clearPersistentProjectCache()`, `ExtractionSession` |
 | [Extract Classes](./docs/reference/extract-classes.md) | Class export extraction | `extractClasses()`, `ExtractClassesOptions` |
 | [Source Language](./docs/reference/source-language.md) | Polyglot file routing | `languageOfSource()`, `sourcesForPlugin()`, `pluginConsumesSource()` |
+| [Batch Fan-Out](./docs/reference/batch.md) | Bulk operation dispatch schemas | `groupBatchableOperationsByKind()`, `buildBatchKindSchema()`, `buildBatchMountedOperations()`, `BatchMountOptions`, `BatchKindSchema`, `BatchKindOperation` |
 | [Descriptor](./docs/reference/descriptor.md) | Canonical types | `Operation`, `Segment`, `JSONSchema`, `TypeText`, `OperationKind` |
 
 ## How-To Guides

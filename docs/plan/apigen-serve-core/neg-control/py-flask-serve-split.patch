@@ -1,13 +1,13 @@
 diff --git a/packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts b/packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts
-index 8a0c249d..5c638983 100644
+index 09579af3..3ed5a1d3 100644
 --- a/packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts
 +++ b/packages/apigen/apigen-plugin-py-flask/src/lib/plugin.ts
 @@ -246,7 +246,7 @@ async function run(input: RunInput): Promise<void> {
-   const routes: Record<string, ServePlanRoute> = {};
-   for (const op of operations) {
-     const projected = project(op);
--    routes[op.id] = { route: projected.http.route, verb: projected.http.verb };
-+    routes[op.id] = { route: projected.http.route, verb: 'POST' };
+     // through a query string, regardless of what `project()`'s own
+     // primitive-only-input GET-hoist heuristic would otherwise pick (design
+     // doc §2.1: "verb is always POST — batch is never a GET").
+-    const verb = op.id.startsWith('_batch/') ? 'POST' : projected.http.verb;
++    const verb = 'POST';
+     routes[op.id] = { route: projected.http.route, verb };
    }
-   const plan: ServePlan = { operations, routes };
- 
+   const plan: ServePlan = { operations: planOperations, routes };

@@ -204,7 +204,7 @@ See `/entrypoint/agent-mcp/docs/architecture-and-security.md` for the full agent
 **Reason**: Agents need operational context on apigen family capabilities, batch feature availability, and critical validation fix
 
 **Added** (new entry in package context list):
-- "**Apigen Family** (`packages/apigen/*`)" — 6 lines documenting: code-first API generation from types, zero-code-generation live-mount, new 0.0.1 batch/bulk feature, core packages (apigen-core-client, apigen-core-runtime), 8 plugins (Fastify, Express, MCP, OpenAPI, CLI, Flask, gRPC, + new batch logic), **CRITICAL FIX 2026-07-28** for nested-interface required arrays with repo-wide impact, links to spec docs (SPEC.md, BATCH_0.0.1.md), host CLI
+- "**Apigen Family** (`packages/apigen/*`)" — 6 lines documenting: code-first API generation from types, zero-code-generation live-mount, new 0.0.1 batch/bulk feature, core packages (apigen-core-client, apigen-engine-runtime), 8 plugins (apigen-plugin-api-fastify, apigen-plugin-api-express, apigen-plugin-mcp, apigen-plugin-openapi, apigen-plugin-cli-output, apigen-plugin-py-flask, apigen-plugin-py-grpc, apigen-plugin-batch), **CRITICAL FIX 2026-07-28** for nested-interface required arrays with repo-wide impact, links to spec docs (SPEC.md, BATCH_0.0.1.md), host CLI
 
 **Status**: ✅ COMPLETED — 2026-07-29
 
