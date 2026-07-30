@@ -73,6 +73,7 @@ import json
 import sys
 import threading
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from decimal import Decimal
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -278,7 +279,7 @@ class _RouteEntry:
 class _ServerState:
     """Immutable server configuration shared across all request threads."""
 
-    __slots__ = ("namespace", "runtime", "operations", "route_map")
+    __slots__ = ("namespace", "runtime", "operations", "route_map", "route_map_by_op_id")
 
     def __init__(
         self,
@@ -299,6 +300,12 @@ class _ServerState:
         # composition artifact; the Python runtime receives bare params), so
         # no separate schema map is needed alongside this.
         self.route_map: dict[str, _RouteEntry] = {}
+        # (batch-rollout F8) op id -> _RouteEntry, built from the SAME loop
+        # that builds route_map above. `_dispatch_batch` resolves a batch
+        # request's `operation` field (an operation ID, not a URL path) to
+        # its real, dispatchable route entry through this index — `route_map`
+        # alone (keyed by URL path) cannot serve that lookup.
+        self.route_map_by_op_id: dict[str, _RouteEntry] = {}
         for op in operations:
             entry = routes.get(op["id"])
             if entry is None:
@@ -308,7 +315,256 @@ class _ServerState:
                     f"cover every operation extract_module() (phase 1) "
                     f"produced, 1:1."
                 )
-            self.route_map[entry["route"]] = _RouteEntry(op=op, verb=entry["verb"])
+            route_entry = _RouteEntry(op=op, verb=entry["verb"])
+            self.route_map[entry["route"]] = route_entry
+            self.route_map_by_op_id[op["id"]] = route_entry
+
+
+# ---------------------------------------------------------------------------
+# Batch/bulk fan-out (`_batch/<kind>`) — BATCH_0.0.1.md §5, this host's own
+# executor implementation, ported from the design at
+# tmp/apigen-batch-python-design.md (§2.2, corrected per §3.5's architect-
+# review findings F2-F5). This is the Python-idiom equivalent of the TS
+# `invokeBatch` (`apigen-engine-runtime/src/lib/batch.ts`), never a call into
+# it — the target op is dispatched locally, the same way every other route on
+# this server already dispatches, N times, with concurrency/mode/onItemError
+# control.
+# ---------------------------------------------------------------------------
+
+# (F7) Hard cap on requested concurrency — a literal port of the TS
+# constant's VALUE (intentionally duplicated per-host rather than unified
+# into one cross-language source of truth; there is no cross-language
+# constant-sharing mechanism in this repo today — see
+# `apigen-engine-runtime/src/lib/batch.ts:35`'s
+# `export const BATCH_MAX_CONCURRENCY = 32;`).
+BATCH_MAX_CONCURRENCY = 32
+
+# Mirrors `apigen-engine-runtime/src/lib/batch.ts`'s
+# `BATCH_DEFAULT_CONCURRENCY = 4` — the fan-out width used when the request
+# doesn't specify one.
+BATCH_DEFAULT_CONCURRENCY = 4
+
+
+def _not_attempted_reason(mode: str) -> dict[str, Any]:
+    """The per-item rejection reason for an item never attempted because an
+    earlier item aborted the whole batch (F5): a REAL
+    ``ApiError('internal', ...).to_json()``, never a hand-rolled dict with an
+    invented ``'cancelled'`` code that exists in neither ``errors.py``'s
+    taxonomy nor ``apigen-base-errors`` — mirrors TS `invokeBatch`'s own
+    `notAttempted()` mapping (`apigen-engine-runtime/src/lib/batch.ts`)."""
+    if mode == "chained":
+        message = (
+            "batch aborted (mode=chained) — an earlier item failed and this "
+            "item was never attempted"
+        )
+    else:
+        message = (
+            "batch aborted (onItemError=abort) — an earlier item failed and "
+            "this item was never attempted"
+        )
+    return ApiError("internal", message).to_json()
+
+
+def _run_batch_item(
+    state: _ServerState,
+    entry: _RouteEntry,
+    index: int,
+    item: Any,
+    envelope: dict[str, Any],
+) -> dict[str, Any]:
+    """Dispatch ONE batch item through the SAME validate -> decode logical
+    types -> invoke -> encode result pipeline `_ApigenHandler._dispatch`
+    already performs for a real single-op request (F4 — logical-type
+    parity). Never a bypass of `_decode_params`/`pre_validated=True`/
+    `_encode_result`; the only difference from `_dispatch` is that a failure
+    here becomes a per-item `BatchItemResult` instead of an HTTP response.
+    """
+    input_schema: dict[str, Any] = entry.op.get("input", {})
+    try:
+        data = item if isinstance(item, dict) else {}
+
+        # SPEC §6: validate BEFORE dispatch, exactly like the single-op path.
+        if input_schema:
+            try:
+                validate(input_schema, data)
+            except ValidationError as exc:
+                raise ApiError(
+                    "invalid_argument", f"input validation failed: {exc}"
+                ) from exc
+
+        # Schema-driven logical-type decode (Decimal, datetime, ...) — F4.
+        decoded_data = _decode_params(data, input_schema)
+
+        host_req = HostRequest(
+            operation=entry.op,
+            data=decoded_data,
+            envelope=envelope,
+            transport="http",
+            pre_validated=True,
+        )
+        value = state.runtime.invoke_sync(host_req)
+        return {"index": index, "status": "fulfilled", "value": _encode_result(value)}
+    except ApiError as exc:
+        return {"index": index, "status": "rejected", "reason": exc.to_json()}
+    except Exception as exc:  # noqa: BLE001 - must never leak a bare traceback over the wire
+        return {
+            "index": index,
+            "status": "rejected",
+            "reason": ApiError("internal", f"dispatch error: {exc}").to_json(),
+        }
+
+
+def _resolve_batch_concurrency(mode: str, requested: Any, item_count: int) -> int:
+    """Mirror `apigen-engine-runtime/src/lib/batch.ts`'s `resolveConcurrency`:
+    `serial`/`chained` are always width-1 (never reach this — callers only
+    invoke this for `mode == 'parallel'`), a bad/missing request falls back
+    to `BATCH_DEFAULT_CONCURRENCY`, and the result is always clamped to
+    `[1, BATCH_MAX_CONCURRENCY]` and never exceeds the item count (so
+    `ThreadPoolExecutor` is never constructed with `max_workers=0`).
+    """
+    if requested is None or not isinstance(requested, (int, float)) or requested < 1:
+        n = BATCH_DEFAULT_CONCURRENCY
+    else:
+        n = int(requested)
+    n = min(n, BATCH_MAX_CONCURRENCY)
+    return max(1, min(n, max(item_count, 1)))
+
+
+def _dispatch_batch(
+    state: _ServerState, body: dict[str, Any], envelope: dict[str, Any]
+) -> list[dict[str, Any]]:
+    """Fan out `body['items']` to the real operation `body['operation']` —
+    the Python host's OWN executor against BATCH_0.0.1.md §5's wire contract
+    (LEFT column only; this function is never a call into the TS
+    `invokeBatch`). Implements the architect-reviewed design's binding fixes
+    (`tmp/apigen-batch-python-design.md` §3.5):
+
+    - F2: `mode` branching — `parallel` uses a bounded `ThreadPoolExecutor`;
+      `serial`/`chained` use a plain sequential loop; `chained` additionally
+      stops on the first failure regardless of `onItemError`.
+    - F3: `itemTimeoutMs` is rejected upfront (whole-batch `invalid_argument`)
+      — `Runtime.invoke_sync` has no timeout kwarg / cancellation hook, so no
+      partial/best-effort cancellation is offered under the same field name
+      TS uses for real `AbortSignal`-based cancellation.
+    - F4: every item goes through `_run_batch_item`'s real
+      validate/decode/invoke/encode pipeline (logical-type parity with the
+      single-op path); the nested-batch guard checks the `_batch/` ID
+      PREFIX, never `op["kind"] == "batch"` (impossible — `kind` is always
+      the real grouped kind, e.g. `'action'`/`'query'`).
+    - F5: every rejected result's `reason` is a real `ApiError(...).to_json()`
+      using an existing `errors.py` taxonomy code.
+
+    Raises:
+        ApiError: for whole-request-level rejections (bad `operation`,
+            unsupported `itemTimeoutMs`, malformed `items`/`mode`/
+            `onItemError`/`concurrency`) — the caller maps this to a real
+            HTTP 4xx via `_send_error`, the SAME mechanism every other route
+            on this server already uses.
+    """
+    # F3 — reject the WHOLE batch upfront; never a silently-weaker
+    # wait-only guarantee under the same field name TS uses for real
+    # cancellation.
+    if body.get("itemTimeoutMs") is not None:
+        raise ApiError(
+            "invalid_argument",
+            "itemTimeoutMs is not supported by the Python host",
+        )
+
+    target_op_id = body.get("operation")
+    if not isinstance(target_op_id, str) or not target_op_id:
+        raise ApiError(
+            "invalid_argument",
+            '"operation" must be a non-empty string naming the target operation id',
+        )
+    # F4 — the nested-batch guard checks the ID PREFIX (`syntheticOp` always
+    # names batch mounts this way), NOT `op["kind"] == "batch"` (impossible:
+    # `kind` on a real target op is always its real grouped kind, never the
+    # literal string 'batch').
+    if target_op_id.startswith("_batch/"):
+        raise ApiError(
+            "invalid_argument",
+            f"not a real batchable operation: {target_op_id!r} is itself a "
+            "batch mount",
+        )
+    entry = state.route_map_by_op_id.get(target_op_id)
+    if entry is None:
+        raise ApiError(
+            "invalid_argument",
+            f"not a real batchable operation: {target_op_id!r} is not one "
+            "of this server's operations",
+        )
+
+    items = body.get("items")
+    if not isinstance(items, list):
+        raise ApiError("invalid_argument", '"items" must be an array')
+
+    mode = body.get("mode", "parallel")
+    if mode not in ("parallel", "serial", "chained"):
+        raise ApiError(
+            "invalid_argument",
+            '"mode" must be one of "parallel" | "serial" | "chained"',
+        )
+    on_item_error = body.get("onItemError", "continue")
+    if on_item_error not in ("continue", "abort"):
+        raise ApiError(
+            "invalid_argument",
+            '"onItemError" must be one of "continue" | "abort"',
+        )
+    requested_concurrency = body.get("concurrency")
+    if requested_concurrency is not None and not isinstance(requested_concurrency, (int, float)):
+        raise ApiError("invalid_argument", '"concurrency" must be a number')
+
+    results: list[dict[str, Any] | None] = [None] * len(items)
+
+    # F2 — serial/chained: a plain sequential loop, no thread pool at all
+    # (strictly simpler than the parallel path below).
+    if mode in ("serial", "chained"):
+        stop = False
+        for i, item in enumerate(items):
+            if stop:
+                results[i] = {
+                    "index": i,
+                    "status": "rejected",
+                    "reason": _not_attempted_reason(mode),
+                }
+                continue
+            result = _run_batch_item(state, entry, i, item, envelope)
+            results[i] = result
+            if result["status"] == "rejected" and (mode == "chained" or on_item_error == "abort"):
+                stop = True
+        return results  # type: ignore[return-value]
+
+    # F2 — parallel: bounded ThreadPoolExecutor, the idiomatic sync-Python
+    # equivalent of TS's worker-pool scheduler (runtime.invoke is NOT used —
+    # introducing asyncio into this synchronous BaseHTTPRequestHandler server
+    # is out of scope; see the design doc's "Concurrency primitive" note).
+    concurrency = _resolve_batch_concurrency(mode, requested_concurrency, len(items))
+    aborted = threading.Event()
+
+    def run_one(i: int, item: Any) -> None:
+        if aborted.is_set():
+            results[i] = {
+                "index": i,
+                "status": "rejected",
+                "reason": _not_attempted_reason(mode),
+            }
+            return
+        result = _run_batch_item(state, entry, i, item, envelope)
+        results[i] = result
+        if result["status"] == "rejected" and on_item_error == "abort":
+            # Stop starting NEW items once one fails — cannot un-submit
+            # already-running thread-pool work, identical in spirit to TS's
+            # `onItemError:'abort'` behavior (in-flight items are allowed to
+            # finish; they are not force-cancelled).
+            aborted.set()
+
+    if items:
+        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+            futures = [pool.submit(run_one, i, item) for i, item in enumerate(items)]
+            for f in futures:
+                f.result()  # propagate any genuinely unexpected exception loudly
+
+    return results  # type: ignore[return-value]
 
 
 # ---------------------------------------------------------------------------
@@ -371,6 +627,46 @@ class _ApigenHandler(BaseHTTPRequestHandler):
             return
 
         self._dispatch(op, data, envelope_from_headers=True)
+
+    # ------------------------------------------------------------------
+    # Route: POST <route> for a synthetic `_batch/<kind>` mount
+    # (BATCH_0.0.1.md §5 — see `_dispatch_batch`'s own doc comment).
+    # ------------------------------------------------------------------
+
+    def _handle_batch_post(self, op: dict[str, Any]) -> None:
+        content_length = int(self.headers.get("Content-Length", "0") or "0")
+        body_bytes = self.rfile.read(content_length) if content_length > 0 else b"{}"
+        try:
+            body = json.loads(body_bytes or b"{}")
+        except json.JSONDecodeError as exc:
+            self._send_error(400, "invalid_argument", f"JSON parse error: {exc}")
+            return
+
+        if not isinstance(body, dict):
+            self._send_error(400, "invalid_argument", "request body must be a JSON object")
+            return
+
+        state: _ServerState = self.server.state  # type: ignore[attr-defined]
+
+        # §9.1 envelope from headers, extracted once and shared across every
+        # item — mirrors the TS `invokeBatch` call site, which also threads
+        # ONE shared `call.envelope` across every fanned-out item (never a
+        # per-item envelope).
+        headers_lc = {k.lower(): v for k, v in self.headers.items()}
+        envelope = _extract_envelope(op.get("input", {}), headers_lc)
+
+        try:
+            results = _dispatch_batch(state, body, envelope)
+        except ApiError as exc:
+            status = HTTP_STATUS.get(exc.code, 500)
+            self._send_error(status, exc.code, exc.message)
+            return
+        except Exception as exc:
+            self._send_error(500, "internal", f"batch dispatch error: {exc}")
+            return
+
+        body_out = _json_dumps(results).encode()
+        self._send_json(200, body_out)
 
     # ------------------------------------------------------------------
     # Dispatch (shared between GET/POST paths)
@@ -480,7 +776,15 @@ class _ApigenHandler(BaseHTTPRequestHandler):
         state: _ServerState = self.server.state  # type: ignore[attr-defined]
         entry = state.route_map.get(path_only)
         if entry is not None:
-            self._handle_post(entry.op)
+            # (batch-rollout) A synthetic `_batch/<kind>` mount's op id is
+            # the authoritative marker (`syntheticOp` always names batch
+            # mounts this way — F4) — never `entry.op.get("kind")`, which on
+            # a batch mount is its real grouped kind (e.g. 'action'), not the
+            # literal string 'batch'.
+            if entry.op.get("id", "").startswith("_batch/"):
+                self._handle_batch_post(entry.op)
+            else:
+                self._handle_post(entry.op)
             return
 
         self._send_error(404, "not_found", f"no route for POST {path_only}")
