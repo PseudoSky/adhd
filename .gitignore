@@ -62,14 +62,21 @@ calc-server.*
 .nx/cache
 .nx/workspace-data
 
-# Claude Code local state + git worktrees. The worktrees under
-# .claude/worktrees/ are full repo copies; if nx scans them it sees every
-# project name twice and fails the project graph with
-# ProjectsWithConflictingNamesError. Keep this ignored (also prevents
-# `git add -A` from sweeping local job/worktree state into commits).
-.claude/
-# Same class: the repo convention (CLAUDE.md §Bash) puts agent worktrees at
-# <project>/.worktrees/ — full repo copies; must never be tracked or nx-scanned.
+# Claude Code local state. Only the genuinely local/huge/personal pieces are
+# ignored here -- .claude/settings.json (team-wide hooks/permissions),
+# .claude/hooks/, .claude/agents/, .claude/skills/ are real, shareable project
+# configuration and ARE tracked (moved out of a blanket .claude/ ignore
+# 2026-07-31 specifically so a committed PreToolUse hook actually propagates
+# to other clones instead of silently staying local-only).
+.claude/settings.local.json
+.claude/.DS_Store
+# All git worktrees (agent or human) live under <project>/.worktrees/ per
+# CLAUDE.md §Bash -- full repo copies; if nx scans them it sees every project
+# name twice and fails the project graph with ProjectsWithConflictingNamesError.
+# Must never be tracked or nx-scanned. (.claude/worktrees/ was a stray second
+# worktree location that existed before this convention was fully enforced --
+# all worktrees found there were moved to .worktrees/ via `git worktree move`
+# on 2026-07-31; that path should not be recreated.)
 .worktrees/
 
 # agent-mcp secret store — ADHD_AGENT_* secrets live in ~/.adhd/.env (outside
