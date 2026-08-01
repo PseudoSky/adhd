@@ -44,6 +44,10 @@ export {
 export type { DecimalString } from './lib/codecs/index';
 
 // Template-cell registry (DESIGN §13.1–§13.3, §14.1)
+// Schema-driven worked-example synthesis (BUG-APIGEN-MCP-DISCOVERABILITY-001)
+export { synthesizeExample, renderExampleNote } from './lib/example';
+export type { JsonSchemaLike } from './lib/example';
+
 export {
   CANONICAL_LOGICAL_TYPE_IDS,
   TEMPLATE_CELLS,

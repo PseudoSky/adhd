@@ -539,11 +539,6 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
     const mountInvokeOpts: InvokeOptions = { fns: {}, schemas: {} };
     for (const mountedOp of mountedOps) {
       const plan = buildOpPlan({ op: mountedOp, transport: 'mcp', projection });
-      const description = buildToolDescription(
-        plan.mcp.name,
-        undefined,
-        descriptions[plan.mcp.name]
-      );
       // MCP's Tool.inputSchema is constrained to a top-level `{type:"object"}`
       // shape by the SDK's own zod validation (ToolSchema.inputSchema requires
       // a literal `type:"object"` — confirmed against
@@ -558,6 +553,19 @@ function buildToolTable(input: RunInput, adapter: McpTransportAdapter): void {
       // shape. `deriveMcpMountInputSchema` handles both without discarding the
       // real schema for the latter case.
       const mountInputSchema = deriveMcpMountInputSchema(mountedOp.input);
+      // BUG-APIGEN-MCP-DISCOVERABILITY-001: mount ops have no `data` envelope
+      // by design (see `apigen-core-client/src/lib/batch.ts`'s
+      // `branchInputSchema` — a genuinely different, flat calling shape from
+      // extracted operations) and never carry an `input.description` note,
+      // so `buildToolDescription` contributes no envelope doc here — only
+      // the schema-derived worked example, synthesized off the SAME
+      // `mountInputSchema` actually advertised as this tool's `inputSchema`
+      // below, so the example never drifts from the published shape.
+      const description = buildToolDescription(
+        plan.mcp.name,
+        { input: mountInputSchema },
+        descriptions[plan.mcp.name]
+      );
       adapter.bindToolMeta(plan.mcp.name, {
         description,
         inputSchema: mountInputSchema,

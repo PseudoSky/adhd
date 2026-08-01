@@ -40,6 +40,7 @@ import {
   X_APIGEN_CODEC,
   X_APIGEN_CTOR,
   X_APIGEN_TOJSON,
+  renderExampleNote,
 } from '@adhd/apigen-base-logical';
 import type { Layer, Call, Next } from './invoke';
 import type { LayerResult } from './invoke';
@@ -106,6 +107,29 @@ function formatErrors(errors: ErrorObject[]): string {
     .join('; ');
 }
 
+/**
+ * BUG-APIGEN-MCP-DISCOVERABILITY-001: builds the full `invalid_argument`
+ * message for a validation failure — AJV's own per-violation diagnostics
+ * (WHAT was wrong, from {@link formatErrors}) PLUS a concrete, schema-derived
+ * example of a shape that WOULD pass (WHAT a correct call looks like),
+ * synthesized by the exact same `@adhd/apigen-base-logical` primitive the
+ * MCP tool description (`tool-description.ts`'s `buildToolDescription`)
+ * uses to render its own `Example: {...}` note — so a caller who got the
+ * shape wrong sees the identical worked example whether they read the tool
+ * description up front or only discover the mistake from the error.
+ *
+ * @internal shared by both {@link validateLayer} and {@link makeValidateLayer}.
+ */
+function buildValidationErrorMessage(
+  errors: ErrorObject[],
+  inputSchema: Record<string, unknown>
+): string {
+  const exampleNote = renderExampleNote(inputSchema);
+  const parts = [`Validation failed: ${formatErrors(errors)}`];
+  if (exampleNote) parts.push(exampleNote);
+  return parts.join(' — ');
+}
+
 // ---------------------------------------------------------------------------
 // validateLayer — the exported Layer
 // ---------------------------------------------------------------------------
@@ -166,7 +190,7 @@ export const validateLayer: Layer = async (
     const errors = validate.errors ?? [];
     throw new ApiError(
       'invalid_argument',
-      `Validation failed: ${formatErrors(errors)}`,
+      buildValidationErrorMessage(errors, schema.input),
       errors
     );
   }
@@ -247,7 +271,7 @@ export function makeValidateLayer(schemas: ComposedSchemas): Layer {
       const errors = validate.errors ?? [];
       throw new ApiError(
         'invalid_argument',
-        `Validation failed: ${formatErrors(errors)}`,
+        buildValidationErrorMessage(errors, schema.input),
         errors
       );
     }
