@@ -15,12 +15,12 @@
     "check:clean-room-smoke": "node tools/nx-plugins/build/executors/smoke-test/clean-room-smoke.mjs",
     "storybook": "nx run storybook:storybook",
     "list": "nx show projects --affected",
-    "lint": "nx run-many --targets=lint --configuration=production",
-    "test": "nx run-many --targets=test --configuration=production",
+    "lint:all": "nx run-many --targets=lint --configuration=production",
+    "test:all": "nx run-many --targets=test --configuration=production",
     "check:publish-hygiene": "nx run @adhd/source:check-publish-hygiene",
     "logs:agent": "node dist/packages/ai/agent-mcp/src/scripts/agent-mcp-tail.js",
     "check:test-wiring": "node scripts/check-test-wiring.mjs",
-    "test:build-tools": "node --test tools/nx-plugins/build/plugin.spec.mjs tools/nx-plugins/build/executors/manifest/generate-manifest.spec.mjs tools/nx-plugins/build/executors/version/compare-published.spec.mjs tools/nx-plugins/build/executors/version/impl.spec.mjs tools/nx-plugins/build/executors/publish/impl.spec.mjs tools/nx-plugins/build/executors/publish/release-commit.spec.mjs tools/nx-plugins/build/executors/reconcile/reconcile-core.spec.mjs tools/nx-plugins/build/lib/published-state.spec.mjs tools/nx-plugins/build/lib/range-resolvability.spec.mjs tools/nx-plugins/build/executors/smoke-test/clean-room-smoke.spec.mjs tools/nx-plugins/deps/eslint-check.spec.mjs tools/nx-plugins/deps/executors/sync/impl.spec.mjs tools/nx-plugins/deps/executors/check/impl.spec.mjs tools/nx-plugins/lib/file-lock.spec.mjs tools/nx-plugins/lib/metrics.spec.mjs"
+    "test:build-tools": "node --test tools/nx-plugins/build/plugin.spec.mjs tools/nx-plugins/build/executors/manifest/generate-manifest.spec.mjs tools/nx-plugins/build/executors/version/compare-published.spec.mjs tools/nx-plugins/build/executors/version/impl.spec.mjs tools/nx-plugins/build/executors/publish/impl.spec.mjs tools/nx-plugins/build/executors/publish/manifest-backstop.spec.mjs tools/nx-plugins/build/executors/publish/release-commit.spec.mjs tools/nx-plugins/build/lib/release-manifest.spec.mjs tools/nx-plugins/build/executors/reconcile/reconcile-core.spec.mjs tools/nx-plugins/build/lib/published-state.spec.mjs tools/nx-plugins/build/lib/range-resolvability.spec.mjs tools/nx-plugins/build/lib/changed-set.spec.mjs tools/nx-plugins/build/executors/smoke-test/clean-room-smoke.spec.mjs tools/nx-plugins/build/executors/smoke-test/run-release.spec.mjs tools/nx-plugins/deps/eslint-check.spec.mjs tools/nx-plugins/deps/executors/sync/impl.spec.mjs tools/nx-plugins/deps/executors/check/impl.spec.mjs tools/nx-plugins/lib/file-lock.spec.mjs tools/nx-plugins/lib/metrics.spec.mjs"
   },
   "private": true,
   "dependencies": {

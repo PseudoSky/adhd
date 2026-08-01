@@ -68,6 +68,12 @@ export function linkRelatedNode(store: GraphBacklogStore, repo: string, humanIdA
  * and a final `invalidate(oldId, reason)`.
  */
 export function supersedeItemNode(store: GraphBacklogStore, repo: string, oldHumanId: string, newInput: CreateItemInput, reason: string): BacklogItem {
+  if (typeof reason !== 'string' || reason.trim().length === 0) {
+    throw new InvalidArgumentError(
+      'reason',
+      `backlog: supersedeItem requires a non-empty "reason" — received reason=${JSON.stringify(reason)}.`
+    );
+  }
   const old = requireItemNode(store, repo, oldHumanId);
 
   // The new item's humanId must be allocated BEFORE minting (it is baked
@@ -146,6 +152,12 @@ export function splitItemNode(store: GraphBacklogStore, repo: string, parentHuma
  * Returns the KEPT item.
  */
 export function mergeItemsNode(store: GraphBacklogStore, repo: string, keepHumanId: string, dropHumanId: string, reason: string): BacklogItem {
+  if (typeof reason !== 'string' || reason.trim().length === 0) {
+    throw new InvalidArgumentError(
+      'reason',
+      `backlog: mergeItems requires a non-empty "reason" — received reason=${JSON.stringify(reason)}.`
+    );
+  }
   const keep = requireItemNode(store, repo, keepHumanId);
   const drop = requireItemNode(store, repo, dropHumanId);
 
