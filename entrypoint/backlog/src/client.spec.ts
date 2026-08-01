@@ -82,6 +82,60 @@ describe('createItem / getItem / listItems', () => {
     expect(forced.item.humanId).not.toBe(first.item.humanId);
   });
 
+  it('does NOT flag a short generic new title as a duplicate of an unrelated long document that merely repeats a couple of its words (BUG-BACKLOG-DEDUPE-FTS-WEAK-MATCH-001)', async () => {
+    // Regression guard for the exact live-reproduced false positive: a real,
+    // very long, verbose ticket (here: about batch/live dispatch wiring) that
+    // happens to repeat the words "live" and "batch" (and, incidentally,
+    // "item"/"1") many times used to swallow the FTS bareword AND-query for
+    // an entirely unrelated short title, "live batch proof item 1", and block
+    // its creation outright.
+    const longUnrelatedBody = Array.from(
+      { length: 40 },
+      (_, i) =>
+        `This describes the live dispatch mount and batch action wiring in detail, item ${i} of 1, as proof of correctness. ` +
+        `The live batch mount handles live batch requests through the batch plugin using --use batch live dispatch, see item 1 above for proof.`
+    ).join(' ');
+    await client.createItem(ctx, {
+      family: 'BUG-APIGEN-CLI-OUTPUT',
+      title: 'apigen-cli output mount flag wiring is inconsistent across hosts',
+      body: longUnrelatedBody,
+      repo: REPO,
+    });
+
+    const result = await client.createItem(ctx, {
+      family: 'TEST-BATCH-LIVE-PROOF',
+      title: 'live batch proof item 1',
+      body: 'disposable test item, unrelated to CLI output wiring.',
+      repo: REPO,
+    });
+
+    expect(result.created, `expected the short generic title to create cleanly, got duplicateCandidates=${JSON.stringify(result.duplicateCandidates.map((c) => c.humanId))}`).toBe(true);
+    expect(result.duplicateCandidates).toEqual([]);
+  });
+
+  it('still flags a genuine near-duplicate short title as a duplicate candidate (BUG-BACKLOG-DEDUPE-FTS-WEAK-MATCH-001 — must not swing to zero detection)', async () => {
+    // Same shape as the "dedupe-scans by title (FTS)" positive control above,
+    // but phrased differently to prove the title-overlap fix doesn't
+    // over-correct into never catching real duplicates: two short titles
+    // describing the same real thing in mostly-the-same words must still be
+    // caught, even with the new title-overlap gate in place.
+    const first = await client.createItem(ctx, {
+      family: 'BUG-DUP2',
+      title: 'API rate limiter drops requests under high concurrency',
+      body: 'Repro steps here.',
+      repo: REPO,
+    });
+    const attempt = await client.createItem(ctx, {
+      family: 'BUG-DUP2',
+      title: 'rate limiter drops requests under high concurrency',
+      body: 'Same bug, slightly different words, seen again independently.',
+      repo: REPO,
+    });
+    expect(attempt.created).toBe(false);
+    expect(attempt.duplicateCandidates.length).toBeGreaterThan(0);
+    expect(attempt.duplicateCandidates[0]?.humanId).toBe(first.item.humanId);
+  });
+
   it('createItem never crashes on a title containing FTS5-syntax-significant characters (BUG-BACKLOG-DEDUPE-FTS-SYNTAX-CRASH-001)', async () => {
     // Regression guard: `dedupeScan` used to pass `input.title` RAW to
     // `store.graph.searchNodes()`, which binds it directly as an FTS5 MATCH
