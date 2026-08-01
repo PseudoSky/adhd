@@ -4,28 +4,28 @@
     "tools": [
       {
         "name": "parity_env_pkg_get_user",
-        "description": "parity_env_pkg_get_user",
+        "description": "Example: {\"session\":\"<string>\",\"data\":{\"userId\":\"<string>\"}}",
         "outputSchema": {
           "type": "object"
         }
       },
       {
         "name": "parity_err_pkg_get_thing",
-        "description": "parity_err_pkg_get_thing",
+        "description": "Example: {\"data\":{\"id\":\"<string>\"}}",
         "outputSchema": {
           "type": "object"
         }
       },
       {
         "name": "parity_pkg_get_user",
-        "description": "parity_pkg_get_user",
+        "description": "Example: {\"data\":{\"userId\":\"<string>\"}}",
         "outputSchema": {
           "type": "object"
         }
       },
       {
         "name": "parity_pkg_list_users",
-        "description": "parity_pkg_list_users",
+        "description": "Example: {\"data\":{}}",
         "outputSchema": {
           "type": "object",
           "properties": {

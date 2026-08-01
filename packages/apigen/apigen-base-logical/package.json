@@ -1,6 +1,10 @@
 {
   "name": "@adhd/apigen-base-logical",
   "version": "0.1.0",
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "2.1.1"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "typings": "./dist/index.d.ts",

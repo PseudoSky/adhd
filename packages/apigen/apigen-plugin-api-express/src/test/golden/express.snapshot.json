@@ -17,7 +17,7 @@
   "validation-failure": {
     "status": 400,
     "contentType": "application/json; charset=utf-8",
-    "body": "{\"code\":\"invalid_argument\",\"message\":\"Validation failed: /data/when must match format \\\"date-time\\\"\",\"details\":[{\"instancePath\":\"/data/when\",\"schemaPath\":\"#/properties/data/properties/when/format\",\"keyword\":\"format\",\"params\":{\"format\":\"date-time\"},\"message\":\"must match format \\\"date-time\\\"\"}]}"
+    "body": "{\"code\":\"invalid_argument\",\"message\":\"Validation failed: /data/when must match format \\\"date-time\\\" — Example: {\\\"data\\\":{\\\"when\\\":\\\"1970-01-01T00:00:00.000Z\\\"}}\",\"details\":[{\"instancePath\":\"/data/when\",\"schemaPath\":\"#/properties/data/properties/when/format\",\"keyword\":\"format\",\"params\":{\"format\":\"date-time\"},\"message\":\"must match format \\\"date-time\\\"\"}]}"
   },
   "domain-apierror": {
     "status": 404,
