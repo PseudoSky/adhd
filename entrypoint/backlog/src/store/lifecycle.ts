@@ -6,7 +6,16 @@
  * terminal-dismissed status with no reason, THROWS.
  */
 import type { ArchiveOpts, BacklogItem, BacklogStatus, Citation, StatsScope, TransitionOpts } from '../model.js';
-import { CitationRequiredError, ClaimHeldError, ReasonRequiredError, isTerminalStatus, requiresCitation, requiresReason, TERMINAL_STATUSES } from '../model.js';
+import {
+  CitationRequiredError,
+  ClaimHeldError,
+  InvalidArgumentError,
+  ReasonRequiredError,
+  isTerminalStatus,
+  requiresCitation,
+  requiresReason,
+  TERMINAL_STATUSES,
+} from '../model.js';
 import type { GraphBacklogStore } from './graph-backlog-store.js';
 import { claimItemNode } from './claim.js';
 import { buildNotFoundError, findItemNode, listItems } from './query.js';
@@ -20,7 +29,32 @@ function requireItemNode(store: GraphBacklogStore, repo: string, humanId: string
   return node;
 }
 
+/**
+ * `Citation.file` is required at the TypeScript/JSON-Schema level
+ * (BUG-APIGEN-CORE-CLIENT-001 makes that presence check reach the extracted
+ * schema), but presence alone still accepts `""`/whitespace — a citation
+ * with no actual file is not evidence. Every write path that accepts a
+ * caller-supplied `Citation` (inline on `transitionStatus`/`resolveItem`, and
+ * standalone `addCitation`) runs every entry through this before it is
+ * persisted.
+ */
+function assertValidCitation(citation: Citation): void {
+  if (typeof citation.file !== 'string' || citation.file.trim().length === 0) {
+    throw new InvalidArgumentError(
+      'citation.file',
+      `backlog: a citation requires a non-empty "file" — received file=${JSON.stringify(citation.file)}.`
+    );
+  }
+}
+
 export function transitionStatusNode(store: GraphBacklogStore, repo: string, humanId: string, status: BacklogStatus, opts: TransitionOpts): BacklogItem {
+  // Validated up front, BEFORE the mutateMetadata transaction opens — a
+  // malformed inline citation must never partially write (mirrors the
+  // "a rejected transition is not a partial write" guarantee already proven
+  // for the citation/reason presence gate below).
+  if (opts.citations) {
+    for (const citation of opts.citations) assertValidCitation(citation);
+  }
   const node = requireItemNode(store, repo, humanId);
   let fromStatus: BacklogStatus | undefined;
 
@@ -31,7 +65,10 @@ export function transitionStatusNode(store: GraphBacklogStore, repo: string, hum
     if (requiresCitation(status) && citations.length === 0) {
       throw new CitationRequiredError(status);
     }
-    if (requiresReason(status) && !opts.reason) {
+    // `!opts.reason` alone accepts a whitespace-only string (`"   "` is
+    // truthy in JS) — a reason that carries no actual content is not
+    // evidence, so this checks for trimmed non-emptiness, not mere presence.
+    if (requiresReason(status) && (!opts.reason || opts.reason.trim().length === 0)) {
       throw new ReasonRequiredError(status);
     }
 
@@ -79,6 +116,7 @@ export function startWorkNode(store: GraphBacklogStore, repo: string, humanId: s
 }
 
 export function addCitationNode(store: GraphBacklogStore, repo: string, humanId: string, citation: Citation): BacklogItem {
+  assertValidCitation(citation);
   const node = requireItemNode(store, repo, humanId);
   mutateMetadata<BacklogNodeMeta>(store, node.id, (meta) => ({
     ...meta,
