@@ -29,6 +29,20 @@ import type { Logger, LogFormat, CreateLoggerOptions, ParamInfo, AnyFn, BatchOpt
   See `@adhd/apigen-plugin-batch` for mount wiring.
 - **`defineMiddleware` / `createApiPackage` / `EventBus` / `wireObservers` / `buildContext`**
   — middleware + observer wiring.
+- **`buildToolDescription(schema, ...)`** — builds the human-facing description shown for a
+  mounted tool/operation, appending a schema-synthesized worked example (via
+  `@adhd/apigen-base-logical`'s `renderExampleNote`) after the envelope-convention note. The
+  same function backs both `apigen-plugin-cli-output`'s static codegen and
+  `apigen-plugin-mcp`'s dynamic server, so every apigen-mounted tool's description carries a
+  concrete example of its own real shape, not just a generic convention sentence.
+
+## Validation error messages include a worked example
+
+The validate-Layer's AJV validation-failure errors append the same schema-synthesized
+example described above (`invalid_argument`, `Validation failed: ... — Example: {...}`) —
+so a rejected call comes back with both what was structurally wrong and a shape that would
+actually pass. This closes a real discoverability gap: previously an error only named the
+missing/invalid property, never what a correct call looked like.
 
 ## Request envelope
 
