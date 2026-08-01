@@ -28,6 +28,17 @@
  * read-modify-write) so parallel `nx run-many -t publish` tasks — each a
  * separate process — never lose one another's update.
  *
+ * MANIFEST BACKSTOP (Phase 3, `tmp/release-pipeline-audit.md`): before doing
+ * anything else, this task calls `../../lib/release-manifest.js`'s
+ * `checkPublishAllowed` — it refuses to run a real `npm publish` unless this
+ * project is listed in a FRESH manifest written by `changed-set.js`'s
+ * `computeChangedProjectSet` (i.e. this run went through `run-release.mjs` /
+ * `pnpm release`). This is the last-line-of-defense for the case where
+ * something upstream calls `nx run-many -t publish` (or a single project's
+ * `publish` target) directly, bypassing the changed-set scoping entirely —
+ * see that module's header for the full design, freshness window, and the
+ * `RELEASE_FORCE_FULL_PUBLISH`/`RELEASE_FORCE_REASON` override.
+ *
  * Versioning model: the source package.json `version` IS the release
  * version — bump it (via `version`) to cut a new release.
  *
@@ -47,6 +58,7 @@ const { normalizedHash } = require('../version/compare-published');
 const { writeDistManifest } = require('../manifest/generate-manifest');
 const { packLocalDir, tarballIntegrity } = require('../../lib/npm-registry');
 const { readState, updatePublishedState } = require('../../lib/published-state');
+const { checkPublishAllowed } = require('../../lib/release-manifest');
 const { withMetrics } = require('../../../lib/metrics');
 
 function sh(cmd, args, opts = {}) {
@@ -119,6 +131,18 @@ async function writeThroughCache(root, name, version, distDir, workDir, rec) {
 
 async function run(options, context) {
   return withMetrics('publish', context, async (rec) => {
+    // MANIFEST BACKSTOP — see this file's header. Checked FIRST, before any
+    // dist/manifest work, so a disallowed publish is refused as cheaply and
+    // as early as possible.
+    const manifestCheck = checkPublishAllowed({ workspaceRoot: context.root, projectName: context.projectName });
+    if (!manifestCheck.allowed) {
+      console.error(`publish: REFUSED for ${context.projectName} — ${manifestCheck.reason}`);
+      return { success: false };
+    }
+    if (manifestCheck.forced) {
+      console.error(`publish: ${context.projectName} — ${manifestCheck.reason}`);
+    }
+
     const projectRoot = context.projectsConfigurations.projects[context.projectName].root;
     const pkgRoot = join(context.root, projectRoot);
     const distDir = join(pkgRoot, 'dist');

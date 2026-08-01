@@ -24,6 +24,7 @@ const require = createRequire(import.meta.url);
 const implAbs = require.resolve('./impl.js');
 const npmRegistryAbs = require.resolve('../../lib/npm-registry.js');
 const publishedStateAbs = require.resolve('../../lib/published-state.js');
+const { writeReleaseManifest } = require('../../lib/release-manifest.js');
 
 function resetAll() {
   delete require.cache[implAbs];
@@ -77,7 +78,7 @@ function makeSpawnSyncMock(state) {
   };
 }
 
-function makeProject({ rootDir, name, projectRoot, distPkg, srcPkg }) {
+function makeProject({ rootDir, name, projectRoot, distPkg, srcPkg, skipManifest = false }) {
   const pkgRoot = join(rootDir, projectRoot);
   // `publish` now re-stamps dist/package.json from the SOURCE manifest as its
   // truly-last step before `npm publish` (BUG-BUILD-PUBLISH-DISTMANIFEST-
@@ -92,6 +93,15 @@ function makeProject({ rootDir, name, projectRoot, distPkg, srcPkg }) {
     projectName: name,
     projectsConfigurations: { projects: { [name]: { root: projectRoot } } },
   };
+  // MANIFEST BACKSTOP (Phase 3): every one of these pre-existing cache/
+  // dist-manifest tests exercises behavior AFTER the backstop check passes —
+  // they are not testing the backstop itself (see manifest-backstop.spec.mjs
+  // for that), so default to writing a fresh manifest that already lists
+  // this project, matching what a real `computeChangedProjectSet` call
+  // (via `run-release.mjs`) would have produced moments before `publish` runs.
+  if (!skipManifest) {
+    writeReleaseManifest(rootDir, [name]);
+  }
   return { pkgRoot, distDir: join(pkgRoot, 'dist'), context };
 }
 
@@ -385,9 +395,13 @@ test('concurrency: N parallel publish tasks (simulating `nx run-many -t publish`
     const contexts = [];
     for (let i = 0; i < N; i++) {
       const distPkg = { name: `@adhd/pkg-${i}`, version: '1.0.0' };
-      const { context } = makeProject({ rootDir, name: `pkg-${i}`, projectRoot: `packages/pkg-${i}`, distPkg });
+      // skipManifest: written once below, listing ALL N projects — writing it
+      // per-project here (as the default helper does) would have each
+      // iteration overwrite the previous one's single-project manifest.
+      const { context } = makeProject({ rootDir, name: `pkg-${i}`, projectRoot: `packages/pkg-${i}`, distPkg, skipManifest: true });
       contexts.push(context);
     }
+    writeReleaseManifest(rootDir, Array.from({ length: N }, (_, i) => `pkg-${i}`));
     const state = newState();
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const publishImpl = loadFreshImpl();
