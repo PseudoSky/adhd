@@ -79,6 +79,7 @@ Plugins registered in `src/index.ts`:
 |----|----------|-----------|----------------|---------|
 | `mcp` | TS | Yes | Yes | `@adhd/apigen-plugin-mcp` |
 | `jsonschema` | TS | No | Yes | `@adhd/apigen-plugin-jsonschema` |
+| `ts-types` | TS | No | Yes | `@adhd/apigen-plugin-ts-types` |
 | `api-fastify` | TS | Yes | Yes | `@adhd/apigen-plugin-api-fastify` |
 | `api-express` | TS | Yes | Yes | `@adhd/apigen-plugin-api-express` |
 | `cli` | TS | Yes | Yes | `@adhd/apigen-plugin-cli-output` |
