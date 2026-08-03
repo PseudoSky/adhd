@@ -9,7 +9,7 @@
     "better-sqlite3": "^12.10.0",
     "@adhd/environment": "^0.1.0",
     "@adhd/environment-base-spec": "^0.1.0",
-    "@adhd/apigen-core-client": "^0.2.2",
+    "@adhd/apigen-core-client": "0.3.0",
     "@adhd/apigen-plugin-api-fastify": "^0.2.2",
     "@adhd/apigen-plugin-openapi": "^0.2.1",
     "@adhd/apigen-plugin-mcp": "^0.2.2",
