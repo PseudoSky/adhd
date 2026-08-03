@@ -229,6 +229,66 @@ export function persistentSchemasFor(
 export function clearPersistentProjectCache(): void {
   _persistentProjects.clear();
   _persistentSchemas.clear();
+  _syntacticResolverProject = undefined;
+}
+
+/**
+ * FEAT-002: process-lifetime singleton Project used ONLY for syntactic module
+ * resolution (no type checking, no lib.d.ts) — the cheap machinery behind
+ * {@link collectLocalImportPaths}. Built lazily on first use and cleared by
+ * {@link clearPersistentProjectCache} alongside the other process-lifetime
+ * tiers. Never build a fresh Project per call: `collectReferencedFiles`'s walk
+ * is AST-level (`getModuleSpecifierSourceFile()`, no type checker), so a
+ * bare, lib-less Project is sufficient and avoids re-parsing lib.d.ts
+ * (~1-2s) on every cache-key computation.
+ */
+let _syntacticResolverProject: Project | undefined;
+
+function syntacticResolverProject(): Project {
+  if (!_syntacticResolverProject) {
+    _syntacticResolverProject = new Project({
+      skipAddingFilesFromTsConfig: true,
+      compilerOptions: { noLib: true },
+    });
+  }
+  return _syntacticResolverProject;
+}
+
+/**
+ * FEAT-002: absolute paths of every LOCAL (non-`node_modules`) file
+ * transitively imported by `entryPath`, in deterministic (sorted) order.
+ *
+ * Host-neutral, path-in/paths-out — the same `collectReferencedFiles` walk the
+ * session uses for its own invalidation, exposed so a persistent IR cache can
+ * content-hash the entry file's ENTIRE dependency graph for a stable,
+ * cross-machine cache key (an imported file's content is part of what the
+ * extractor's output depends on; a key covering only the entry file would
+ * falsely HIT after a type in an imported file changed).
+ *
+ * Uses a process-lifetime singleton Project with syntactic-only module
+ * resolution (no lib.d.ts parse, no type checking) so repeated key
+ * computations stay cheap. If the entry file was loaded before and has since
+ * changed on disk it is refreshed first, matching the walk's own
+ * refresh-before-descend behavior for visited targets.
+ */
+export function collectLocalImportPaths(entryPath: string): string[] {
+  const project = syntacticResolverProject();
+  const existing = project.getSourceFile(entryPath);
+  const sf =
+    existing ??
+    project.addSourceFileAtPath(entryPath);
+  if (existing) {
+    try {
+      existing.refreshFromFileSystemSync();
+    } catch {
+      // Deleted/unreadable — leave the last-known content; a genuinely
+      // missing entry file surfaces a clear error downstream (the extractor
+      // or the cache's own content read), not here.
+    }
+  }
+  const seen = new Set<string>([entryPath]);
+  collectReferencedFiles(sf, seen);
+  return [...seen].sort();
 }
 
 /**
