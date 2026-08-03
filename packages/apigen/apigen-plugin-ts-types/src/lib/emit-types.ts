@@ -150,11 +150,24 @@ function emitRoot(
     if (nullIdx >= 0) {
       // Root nullable union (e.g. `Promise<Task | null>`) → a type alias whose
       // object branches get `<RootName>Item` names (never a self-reference).
-      const branches = (s['oneOf'] as Schema[]).filter((_, i) => i !== nullIdx);
-      const exprs = branches.map((b, i) => {
+      // Iterate the ORIGINAL oneOf indices (skipping the null branch) so
+      // branch names and error paths match their oneOf positions
+      // (BUG-APIGEN-050); a null-only `oneOf` emits a plain `null` alias
+      // (BUG-APIGEN-049 — never a leading empty union member).
+      const oneOf = s['oneOf'] as Schema[];
+      const nonNullCount = oneOf.length - 1;
+      if (nonNullCount === 0) {
+        ctx.decls.push(`export type ${name} = null;`);
+        return;
+      }
+      const exprs: string[] = [];
+      oneOf.forEach((b, i) => {
+        if (i === nullIdx) return;
         const branchName =
-          branches.length > 1 ? `${name}Item${i}` : `${name}Item`;
-        return emitTypeExpr(b, { name: branchName, path: `${path}[${i}]` }, ctx);
+          nonNullCount > 1 ? `${name}Item${i}` : `${name}Item`;
+        exprs.push(
+          emitTypeExpr(b, { name: branchName, path: `${path}[${i}]` }, ctx)
+        );
       });
       ctx.decls.push(`export type ${name} = ${exprs.join(' | ')} | null;`);
       return;
@@ -211,13 +224,22 @@ function emitTypeExpr(
     // `oneOf: [T, { type: 'null' }]` without a discriminator — e.g. the
     // fixture's `name?: string`) → faithful `<rest> | null`. Everything else
     // without a discriminator is a genuine untagged union → REJECT.
+    // Iterate ORIGINAL oneOf indices (skipping the null branch) so branch
+    // names and error paths match their oneOf positions (BUG-APIGEN-050); a
+    // null-only `oneOf` yields plain `null` (BUG-APIGEN-049).
     const nullIdx = indexOfNullBranch(s);
     if (nullIdx >= 0) {
-      const branches = (s['oneOf'] as Schema[]).filter((_, i) => i !== nullIdx);
-      const exprs = branches.map((b, i) => {
+      const oneOf = s['oneOf'] as Schema[];
+      const nonNullCount = oneOf.length - 1;
+      if (nonNullCount === 0) return 'null';
+      const exprs: string[] = [];
+      oneOf.forEach((b, i) => {
+        if (i === nullIdx) return;
         const branchName =
-          branches.length > 1 ? `${hint.name}${i}` : hint.name;
-        return emitTypeExpr(b, { name: branchName, path: `${hint.path}[${i}]` }, ctx);
+          nonNullCount > 1 ? `${hint.name}${i}` : hint.name;
+        exprs.push(
+          emitTypeExpr(b, { name: branchName, path: `${hint.path}[${i}]` }, ctx)
+        );
       });
       return `${exprs.join(' | ')} | null`;
     }
@@ -476,10 +498,22 @@ function emitEnum(s: Schema, path: string, ctx: EmitContext): string {
  * Render a literal as TS source. Strings use single quotes (matching SPEC
  * §6.1's examples — `'cat'`, `'admin' | 'user'`); numbers/booleans/null use
  * JSON spelling.
+ *
+ * BUG-APIGEN-048: beyond backslashes and single quotes, the control
+ * characters that would break a TS single-quoted string literal (newline, CR,
+ * tab, U+2028, U+2029) are escaped to their `\n`/`\r`/`\t`/`\u2028`/`\u2029`
+ * sequences — a raw line terminator inside the literal is a syntax error.
  */
 function lit(v: string | number | boolean | null): string {
   if (typeof v === 'string') {
-    return `'${v.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+    return `'${v
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\t/g, '\\t')
+      .replace(/\u2028/g, '\\u2028')
+      .replace(/\u2029/g, '\\u2029')}'`;
   }
   return JSON.stringify(v);
 }
