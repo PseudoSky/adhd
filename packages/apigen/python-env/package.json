@@ -12,7 +12,7 @@
     "provisioning"
   ],
   "dependencies": {
-    "@adhd/apigen-core-client": "^0.2.2"
+    "@adhd/apigen-core-client": "0.3.0"
   },
   "publishConfig": {
     "access": "public"

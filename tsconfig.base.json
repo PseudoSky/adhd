@@ -119,6 +119,9 @@
       "@adhd/apigen-plugin-health": [
         "./packages/apigen/apigen-plugin-health/src/index.ts"
       ],
+      "@adhd/apigen-plugin-ir-cache": [
+        "./packages/apigen/apigen-plugin-ir-cache/src/index.ts"
+      ],
       "@adhd/apigen-plugin-jsonschema": [
         "./packages/apigen/apigen-plugin-jsonschema/src/index.ts"
       ],
