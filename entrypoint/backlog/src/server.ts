@@ -35,8 +35,19 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import type { Scope } from '@adhd/environment-base-spec';
-import { extract, composeSchemas, type Operation } from '@adhd/apigen-core-client';
+import {
+  extract,
+  composeSchemas,
+  createExtractInvoker,
+  type ExtractCall,
+  type Operation,
+} from '@adhd/apigen-core-client';
+import {
+  createIrCacheLayer,
+  createLocalFsBackend,
+} from '@adhd/apigen-plugin-ir-cache';
 import { apiFastifyPlugin } from '@adhd/apigen-plugin-api-fastify';
 import { openapiPlugin } from '@adhd/apigen-plugin-openapi';
 import { mcpPlugin } from '@adhd/apigen-plugin-mcp';
@@ -228,6 +239,61 @@ function dereferenceSchema(schema: unknown): unknown {
   return inline(schema, new Set());
 }
 
+const requirePkg = createRequire(import.meta.url);
+
+/**
+ * FEAT-002: the extractor version stamped into every IR-cache entry — the
+ * `@adhd/apigen-core-client` package version. Any change to the extractor's
+ * output for the same input (a bug fix, new TS feature support, or a future
+ * DEBT-003 fix making Path 2 correct for cross-referencing named types) bumps
+ * this version, which changes the cache key and busts every stale entry — the
+ * mechanism that keeps this cache from ever becoming a reason to defer DEBT-003.
+ */
+const CORE_CLIENT_VERSION: string = requirePkg(
+  '@adhd/apigen-core-client/package.json'
+).version;
+
+/**
+ * FEAT-002: cache root for the extract-stage IR cache. Env-overridable
+ * (the integration spec points it at a fresh dir); default under the repo's
+ * canonical `tmp/` (AGENTS.md §10 — gitignored, removable with `nx reset`).
+ */
+function irCacheDir(): string {
+  return (
+    process.env['APIGEN_IR_CACHE_DIR'] ??
+    join(process.cwd(), 'tmp', 'apigen', 'ir-cache')
+  );
+}
+
+/**
+ * FEAT-002: the extract-stage invoker with the IR-cache layer wired in — the
+ * BUG-019 hot path. On a cache HIT the terminal `extract()` is never called
+ * (the cached `Operation[]` is returned); on a MISS the result is written
+ * through fire-and-forget. Built LAZILY on first use so callers can point
+ * `APIGEN_IR_CACHE_DIR` at a fresh dir before the first extraction (tests).
+ */
+let extractInvoke: ((call: ExtractCall) => Promise<Operation[]>) | undefined;
+function getExtractInvoke(): (call: ExtractCall) => Promise<Operation[]> {
+  extractInvoke ??= createExtractInvoker(
+    [
+      createIrCacheLayer(createLocalFsBackend(irCacheDir()), {
+        extractorVersion: CORE_CLIENT_VERSION,
+      }),
+    ],
+    (call: ExtractCall) =>
+      extract({
+        sourceFile: call.source,
+        namespace: call.namespace,
+        tsconfig:
+          typeof call.extractorOptions?.tsconfig === 'string'
+            ? call.extractorOptions.tsconfig
+            : undefined,
+        dropFileSegment: true,
+      })
+  );
+  return extractInvoke;
+}
+
 async function extractClientOperations(): Promise<Operation[]> {
   const clientDts = join(backlogDistDir(), 'client.d.ts');
   if (!existsSync(clientDts)) {
@@ -246,7 +312,19 @@ async function extractClientOperations(): Promise<Operation[]> {
   // cross-file name to disambiguate against; a genuine same-name collision
   // would still be caught at extract time by `checkCollisions`
   // (`@adhd/apigen-engine-naming`).
-  return extract({ sourceFile: clientDts, namespace: 'backlog', dropFileSegment: true });
+  //
+  // FEAT-002: extraction flows through the extract-stage invoker (BUG-019 hot
+  // path) with the IR-cache layer — a cache HIT returns the cached
+  // `Operation[]` without re-running `extract()`; a MISS runs `extract()` as
+  // before and writes the result through to the cache fire-and-forget. The
+  // cached value is byte-identical to what `extract()` would produce, so the
+  // downstream `composeSchemas`/`dereferenceSchema` behavior is unchanged.
+  return getExtractInvoke()({
+    source: clientDts,
+    host: 'ts',
+    namespace: 'backlog',
+    extractorOptions: {},
+  });
 }
 
 /**
