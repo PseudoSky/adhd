@@ -4,9 +4,9 @@
   "dependencies": {
     "@adhd/apigen-core-client": "0.3.0"
   },
-  "main": "./index.js",
-  "module": "./index.mjs",
-  "typings": "./index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
   "publishConfig": {
     "access": "public"
   },
