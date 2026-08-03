@@ -4,7 +4,7 @@
   "main": "./dist/index.js",
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.29.0",
-    "@adhd/apigen-core-client": "^0.2.2",
+    "@adhd/apigen-core-client": "0.3.0",
     "@adhd/apigen-engine-runtime": "^0.2.2",
     "@adhd/apigen-base-errors": "^0.2.0",
     "@adhd/apigen-engine-naming": "^0.2.1"
