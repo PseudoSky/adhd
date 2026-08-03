@@ -1,0 +1,43 @@
+{
+  "name": "apigen-plugin-ts-types",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/apigen/apigen-plugin-ts-types/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "domain:apigen",
+    "pkg-kind:plugin",
+    "pkg-class:optional",
+    "layer:logic",
+    "platform:node",
+    "access:domain"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "packages/apigen/apigen-plugin-ts-types/dist",
+        "main": "packages/apigen/apigen-plugin-ts-types/src/index.ts",
+        "tsConfig": "packages/apigen/apigen-plugin-ts-types/tsconfig.lib.json",
+        "assets": ["packages/apigen/apigen-plugin-ts-types/*.md"]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      },
+      "dependsOn": ["build", "test"]
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}
