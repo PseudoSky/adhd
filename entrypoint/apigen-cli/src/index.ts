@@ -7,6 +7,7 @@ import { registerServeCommand } from './lib/commands/serve';
 import { registerListTypesCommand } from './lib/commands/list-types';
 import mcpPlugin from '@adhd/apigen-plugin-mcp';
 import jsonschemaPlugin from '@adhd/apigen-plugin-jsonschema';
+import tsTypesPlugin from '@adhd/apigen-plugin-ts-types';
 import fastifyPlugin from '@adhd/apigen-plugin-api-fastify';
 import expressPlugin from '@adhd/apigen-plugin-api-express';
 import cliOutputPlugin from '@adhd/apigen-plugin-cli-output';
@@ -18,6 +19,8 @@ import type { OutputPlugin } from '@adhd/apigen-core-client';
 const plugins: Record<string, OutputPlugin> = {
   mcp: mcpPlugin,
   jsonschema: jsonschemaPlugin,
+  // Generate-only typed TS client codegen target (SPEC §6.1).
+  'ts-types': tsTypesPlugin,
   'api-fastify': fastifyPlugin,
   'api-express': expressPlugin,
   cli: cliOutputPlugin,
