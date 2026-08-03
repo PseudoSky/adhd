@@ -350,6 +350,128 @@ describe('nullable union (extractor optional-member spelling)', () => {
     expect(content).toContain('export interface DemoApiGetTaskOutputItem {');
     expect(content).toContain('id: string;');
   });
+
+  it('emits a plain null type for a null-only oneOf (BUG-APIGEN-049)', async () => {
+    // Root position: no non-null branches → `null`, never a leading empty
+    // union member (`export type X =  | null;` would be invalid TS).
+    const rootContent = emit(
+      'demo-api',
+      'getValue',
+      { type: 'object', properties: {}, required: [] },
+      { oneOf: [{ type: 'null' }], 'x-apigen-logical': 'union' }
+    );
+    expect(rootContent).toContain('export type DemoApiGetValueOutput = null;');
+    await expect(transform(rootContent, { loader: 'ts' })).resolves.toBeDefined();
+
+    // Member position: same contract.
+    const memberContent = emit(
+      'demo-api',
+      'getUser',
+      { type: 'object', properties: {}, required: [] },
+      {
+        type: 'object',
+        properties: {
+          note: { oneOf: [{ type: 'null' }], 'x-apigen-logical': 'union' },
+        },
+        required: ['note'],
+      }
+    );
+    expect(memberContent).toContain('note: null;');
+  });
+
+  it('reports the ORIGINAL oneOf index in rejection paths after a leading null branch (BUG-APIGEN-050)', () => {
+    expect(() =>
+      emitFnTypes('DemoApi', 'getUser', {
+        input: { type: 'object', properties: {}, required: [] },
+        output: {
+          type: 'object',
+          properties: {
+            note: {
+              oneOf: [{ type: 'null' }, { allOf: [] }],
+              'x-apigen-logical': 'union',
+            },
+          },
+          required: ['note'],
+        },
+      })
+    ).toThrow('(fn: getUser, path: output/note[1])');
+  });
+
+  it('names nullable-union object branches by their ORIGINAL oneOf index (BUG-APIGEN-050)', async () => {
+    const content = emit(
+      'demo-api',
+      'runTask',
+      { type: 'object', properties: {}, required: [] },
+      {
+        type: 'object',
+        properties: {
+          task: {
+            oneOf: [
+              { type: 'null' },
+              {
+                type: 'object',
+                properties: { kind: { const: 'a' } },
+                required: ['kind'],
+              },
+              {
+                type: 'object',
+                properties: { kind: { const: 'b' } },
+                required: ['kind'],
+              },
+            ],
+            'x-apigen-logical': 'union',
+          },
+        },
+        required: ['task'],
+      }
+    );
+    // Branches sit at ORIGINAL oneOf indices 1 and 2 → `…Task1` / `…Task2`,
+    // not the filtered ordinals `…Task0` / `…Task1`.
+    expect(content).toContain(
+      'task: DemoApiRunTaskOutputTask1 | DemoApiRunTaskOutputTask2 | null;'
+    );
+    expect(content).toContain('export interface DemoApiRunTaskOutputTask1 {');
+    expect(content).toContain("kind: 'a';");
+    expect(content).toContain('export interface DemoApiRunTaskOutputTask2 {');
+    expect(content).toContain("kind: 'b';");
+    await expect(transform(content, { loader: 'ts' })).resolves.toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6c. Literal escaping — const/enum strings with control characters
+// ---------------------------------------------------------------------------
+
+describe('literal escaping (BUG-APIGEN-048)', () => {
+  it('escapes newline/tab/CR/U+2028/U+2029 in const strings so the output compiles', async () => {
+    const content = emit(
+      'demo-api',
+      'echo',
+      { type: 'object', properties: {}, required: [] },
+      { const: 'line1\nline2\tend\rsep\u2028sep\u2029' }
+    );
+    expect(content).toContain(
+      "export type DemoApiEchoOutput = 'line1\\nline2\\tend\\rsep\\u2028sep\\u2029';"
+    );
+    await expect(transform(content, { loader: 'ts' })).resolves.toBeDefined();
+  });
+
+  it('escapes control characters in enum literals too', async () => {
+    const content = emit(
+      'demo-api',
+      'pick',
+      {
+        type: 'object',
+        properties: {
+          choice: { type: 'string', enum: ['ok\nx', 'plain'] },
+        },
+        required: ['choice'],
+      },
+      STRING
+    );
+    expect(content).toContain("choice: 'ok\\nx' | 'plain';");
+    await expect(transform(content, { loader: 'ts' })).resolves.toBeDefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
