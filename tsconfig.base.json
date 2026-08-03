@@ -137,6 +137,9 @@
       "@adhd/apigen-plugin-py-grpc": [
         "./packages/apigen/apigen-plugin-py-grpc/src/index.ts"
       ],
+      "@adhd/apigen-plugin-ts-types": [
+        "./packages/apigen/apigen-plugin-ts-types/src/index.ts"
+      ],
       "@adhd/apigen-python-env": ["./packages/apigen/python-env/src/index.ts"],
       "@adhd/backlog": ["./entrypoint/backlog/src/index.ts"],
       "@adhd/data-base-transforms": [
