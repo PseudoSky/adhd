@@ -299,10 +299,22 @@ export const DEFAULT_MAX_CYCLES = 500;
 const GUARD_OUTPUT_CAP_BYTES = 8 * 1024;
 const GUARD_EXEC_AGENT_LABEL = 'dispatch-orchestrator:guard-exec';
 
+/**
+ * Caps `s` at `GUARD_OUTPUT_CAP_BYTES` UTF-8 bytes without splitting a
+ * multi-byte character mid-sequence. A naive `buf.toString('utf8', 0, N)`
+ * cut can land inside a multi-byte UTF-8 character (e.g. a 3-byte '☃'),
+ * which Node's UTF-8 decoder replaces with U+FFFD — corrupting the
+ * truncated tail. We back the cut index off while the byte at that offset
+ * is a UTF-8 *continuation* byte (top two bits `10`, i.e. `0x80`-`0xBF`);
+ * a lead byte (ASCII `0xxxxxxx` or multi-byte lead `11xxxxxx`) is always a
+ * safe cut point. See DEBT-DISPATCH-017.
+ */
 function capOutput(s: string): string {
   const buf = Buffer.from(s, 'utf8');
   if (buf.byteLength <= GUARD_OUTPUT_CAP_BYTES) return s;
-  return `${buf.toString('utf8', 0, GUARD_OUTPUT_CAP_BYTES)}\n...[truncated at ${GUARD_OUTPUT_CAP_BYTES} bytes]`;
+  let cut = GUARD_OUTPUT_CAP_BYTES;
+  while (cut > 0 && (buf[cut] & 0xc0) === 0x80) cut--;
+  return `${buf.toString('utf8', 0, cut)}\n...[truncated at ${GUARD_OUTPUT_CAP_BYTES} bytes]`;
 }
 
 function defaultClock(): string {
