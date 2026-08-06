@@ -7,8 +7,9 @@
    real-fixture `checker.spec.ts` suite and the `provenance.spec.ts`
    round-trip suite.
 3. `npx nx build workspace-base-standard` — must produce
-   `dist/packages/workspace/workspace-base-standard/index.js` and
-   `index.mjs`.
+   `packages/workspace/workspace-base-standard/dist/index.js` and
+   `index.mjs` (in-source dist — this repo builds into
+   `{projectRoot}/dist`, not a workspace-root-relative `dist/` tree).
 4. `npx nx affected -t verify-dist-load --uncommitted` — proves the built
    artifact actually `require()`/`import()`s, not just that source
    resolves.
