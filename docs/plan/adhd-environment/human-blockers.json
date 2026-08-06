@@ -8,7 +8,8 @@
     "destination": "env:ADHD_AGENT_OPENAI_SECRET",
     "verification": "test -n \"$ADHD_AGENT_OPENAI_SECRET\" && test -n \"$ADHD_AGENT_DATABASE_PATH\"",
     "blocks_at": "per-state",
-    "status": "needed"
+    "status": "moot",
+    "resolution_note": "ENV-PLAN-007: verified against the landed zero-config design (entrypoint/agent-mcp/src/config.ts:89-93, :224-259) that ADHD_AGENT_DATABASE_PATH and ADHD_AGENT_OPENAI_SECRET are optional EnvironmentSpec fields with zero-config fallbacks (db.path falls back to env.files.db; provider secrets are resolved lazily via env.resolveEnvName only when getProviderConfig is invoked for that specific provider). Neither is read at Environment construction time, so agent-mcp build/test do not require them. Verified: `env -u ADHD_AGENT_OPENAI_SECRET -u ADHD_AGENT_DATABASE_PATH npx nx affected -t test --files=entrypoint/agent-mcp/src/config.ts` exits 0."
   },
   "cargo-registry-token": {
     "type": "credential",
