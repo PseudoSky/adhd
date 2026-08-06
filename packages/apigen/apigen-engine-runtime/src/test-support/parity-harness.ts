@@ -29,6 +29,9 @@
 
 import { execFileSync, type ChildProcess } from 'node:child_process';
 import { isDeepStrictEqual } from 'node:util';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
 // ---------------------------------------------------------------------------
 // Fixtures + driver contract
@@ -242,11 +245,124 @@ export async function proveNegativeControl(
 }
 
 function applyPatch(patchPath: string, cwd: string): void {
-  execFileSync('git', ['apply', patchPath], { cwd, stdio: 'pipe' });
+  runGit(['apply', patchPath], { cwd });
 }
 
 function revertPatch(patchPath: string, cwd: string): void {
-  execFileSync('git', ['apply', '-R', patchPath], { cwd, stdio: 'pipe' });
+  runGit(['apply', '-R', patchPath], { cwd });
+}
+
+// ---------------------------------------------------------------------------
+// Isolated git subprocess helpers (BUG-APIGEN-052)
+// ---------------------------------------------------------------------------
+//
+// PROVEN ESCAPE MECHANISM (reproduced, not guessed): git exports GIT_DIR,
+// GIT_WORK_TREE, and GIT_INDEX_FILE as environment variables into every
+// hook invocation (`.githooks/pre-commit` -> `nx affected -t test` ->
+// vitest -> this module's `execFileSync('git', …)` calls). Node's
+// `child_process.execFileSync` inherits `process.env` by default, so those
+// three variables silently rode along into every `git` subprocess this
+// module spawned. `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` take priority
+// over the `cwd` option — `cwd` alone does NOT make git operate on the
+// directory you think it does once those variables are set. A repro:
+//
+//   GIT_DIR=<outer>/.git GIT_WORK_TREE=<outer> \
+//     git -C <scratchDir> init -q      # re-inits <outer>, not <scratchDir>
+//   git -C <scratchDir> config user.name x   # rewrites <outer>'s identity
+//   git -C <scratchDir> commit -q -m y       # commits <outer>'s STAGED INDEX
+//
+// This exactly reproduces the observed symptoms: the enclosing repo's local
+// identity was overwritten, and an unscoped `commit` swept in whatever was
+// already staged there by a concurrent agent. `cwd` was never wrong; the
+// ambient `GIT_*` environment silently outranked it.
+//
+// The fix has two independent layers, both mandatory:
+//   1. `runGit` strips every `GIT_*` environment variable before spawning,
+//      so `-C <cwd>` (not ambient env) is authoritative for every git call
+//      this module makes — including the legitimate, real-repo-root
+//      `applyPatch`/`revertPatch` calls used by production parity gates.
+//   2. `createIsolatedScratchRepo` additionally proves the isolation instead
+//      of assuming it: it never nests the scratch repo under a tracked
+//      working tree (it lives under `os.tmpdir()`, immune to `findRepoRoot`
+//      walking into an enclosing `.git`), and it asserts
+//      `git rev-parse --show-toplevel` resolves to the scratch dir itself —
+//      failing LOUDLY, before any mutating command runs, if it does not.
+
+/** `process.env` with every `GIT_*` variable stripped. */
+function sanitizedGitEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!key.startsWith('GIT_')) {
+      env[key] = value;
+    }
+  }
+  return env;
+}
+
+/**
+ * Runs `git <args>` scoped to `cwd` via `-C` (never relying on the child's
+ * inherited working directory alone), with every `GIT_*` environment
+ * variable stripped so an ambient `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE`
+ * (as git sets when invoking hooks — see above) cannot silently redirect the
+ * command at a different repository than `cwd`.
+ */
+export function runGit(args: readonly string[], opts: { cwd: string }): string {
+  return execFileSync('git', ['-C', opts.cwd, ...args], {
+    env: sanitizedGitEnv(),
+    stdio: 'pipe',
+  }).toString();
+}
+
+/**
+ * Proves `dir` is itself a git repository root — not merely a subdirectory
+ * of some OTHER repository (which `git rev-parse --show-toplevel` would
+ * silently resolve to instead). Throws loudly on any mismatch, missing
+ * repo, or git failure — this is the assertion that turns "we assume the
+ * scratch repo is isolated" into "we proved it before touching it".
+ */
+export function assertIsolatedRepoRoot(dir: string): void {
+  const wantTop = fs.realpathSync(dir);
+  let gotTop: string;
+  try {
+    gotTop = fs.realpathSync(runGit(['rev-parse', '--show-toplevel'], { cwd: dir }).trim());
+  } catch (err) {
+    throw new Error(
+      `assertIsolatedRepoRoot: "git -C ${dir} rev-parse --show-toplevel" failed — ` +
+        `expected an isolated repo rooted exactly at ${wantTop}. ` +
+        `Underlying error: ${(err as Error).message}`
+    );
+  }
+  if (gotTop !== wantTop) {
+    throw new Error(
+      `assertIsolatedRepoRoot: isolation violated — "git -C ${dir} rev-parse --show-toplevel" ` +
+        `resolved to "${gotTop}", not the expected scratch root "${wantTop}". This means git ` +
+        `is operating on a DIFFERENT (likely the enclosing, real) repository — refusing to run ` +
+        `any further git command against it.`
+    );
+  }
+}
+
+/**
+ * Creates a throwaway, PROVABLY isolated git repository for tests that need
+ * to exercise real `git` mutations (init/config/add/commit) without any
+ * possibility of touching the enclosing repository.
+ *
+ * Isolation is structural, not incidental:
+ *   - The scratch repo lives under `os.tmpdir()` (never nested inside any
+ *     tracked working tree), so nothing that walks up looking for an
+ *     enclosing `.git` can land on the real repo.
+ *   - `git init` and every subsequent call go through {@link runGit}, which
+ *     strips `GIT_*` env so ambient hook variables cannot redirect it.
+ *   - {@link assertIsolatedRepoRoot} is run immediately after `init` and
+ *     BEFORE this function returns — the caller only ever receives a dir
+ *     that has already been proven isolated; a failure to isolate throws
+ *     here rather than silently degrading into "isolated most of the time".
+ */
+export function createIsolatedScratchRepo(prefix: string): { dir: string } {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
+  runGit(['init', '-q'], { cwd: dir });
+  assertIsolatedRepoRoot(dir);
+  return { dir };
 }
 
 // ---------------------------------------------------------------------------
