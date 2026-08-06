@@ -113,6 +113,14 @@ packages/apigen/python/build/
 .pytest_cache/
 packages/environment/environment-core-rs/target/
 
+# apigen Java host (packages/apigen/java, FEAT-APIGEN-001) — Maven build
+# output (compiled classes, shaded/fat jar, surefire reports). Ephemeral,
+# regenerable via `nx run apigen-java:build`/`:package`/`:test`.
+packages/apigen/java/target/
+# maven-shade-plugin's reduced-pom byproduct, written to the module root
+# (not target/) during `mvn package` — also ephemeral/regenerable.
+packages/apigen/java/dependency-reduced-pom.xml
+
 # @adhd/environment resolved snapshots — contain PLAINTEXT values for fields
 # declared `secret: true` (no redaction exists in that package family; see
 # BACKLOG ENV-CORE-009). The `.tmp` sibling is left behind by `atomicWrite` if
