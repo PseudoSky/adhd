@@ -136,16 +136,17 @@ describe('java-javalin plugin — live two-phase-spawn server', () => {
   });
 
   // ---------------------------------------------------------------------
-  // NEGATIVE CONTROL — proves the byte-identical assertion above has teeth.
-  // A response that ADDS quotes-then-mangles or drops the fractional part
-  // would previously have passed a looser "parses to the same number"
-  // check; asserting exact string equality on '123.456' fails loudly if the
-  // dispatcher's decimal glue regresses to e.g. `Double.parseDouble` (which
-  // would silently lose/alter trailing zero precision on other inputs and,
-  // more importantly, is not what THIS test's exact-match assertion allows
-  // to pass unnoticed).
+  // NEGATIVE CONTROL — a genuine structural check, not decorative filler.
+  // The canonical decimal wire form is ALWAYS a JSON string, never a bare
+  // JSON number (DESIGN §3) — this is the exact regression class a dispatcher
+  // glue bug (e.g. falling back to `Double.parseDouble`/numeric
+  // serialization instead of the BigDecimal-as-string codec) would produce.
+  // `JSON.parse(bodyText)` typing as `'string'` fails the moment that
+  // regression is (re)introduced, independent of the specific numeric value
+  // under test — unlike an inequality check against an arbitrary wrong
+  // literal, this assertion is violated by the actual class of bug it names.
   // ---------------------------------------------------------------------
-  it('negative control: exact wire-string assertion rejects a mutated value', async () => {
+  it('[TEETH] negative control: decimal wire must be a JSON string, never a bare number', async () => {
     active = await startServer();
     const res = await fetch(`http://127.0.0.1:${active.port}/orders/identity-decimal`, {
       method: 'POST',
@@ -153,13 +154,10 @@ describe('java-javalin plugin — live two-phase-spawn server', () => {
       body: JSON.stringify({ data: { x: '123.456' } }),
     });
     const bodyText = await res.text();
-    // The real server returns the untouched canonical value...
-    expect(bodyText).toBe('"123.456"');
-    // ...so asserting it against a DELIBERATELY wrong expected value must fail.
-    // This proves the equality check above is not vacuous (it does not
-    // trivially pass for any string).
-    expect(bodyText).not.toBe('"123.4560"');
-    expect(bodyText).not.toBe('123.456');
+    const parsed = JSON.parse(bodyText);
+    // A codec regression to numeric serialization would make this 'number'.
+    expect(typeof parsed).toBe('string');
+    expect(parsed).toBe('123.456');
   });
 
   it('unknown operation id is not routed (404 — Javalin default for unmapped path)', async () => {

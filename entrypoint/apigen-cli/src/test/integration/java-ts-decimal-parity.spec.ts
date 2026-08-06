@@ -251,10 +251,18 @@ describe('java-ts-decimal-parity — TS (api-fastify) vs Java (java-javalin), re
   );
 
   it(
-    '[TEETH] negative control: a deliberately WRONG expected value fails the byte-identical assertion',
+    '[TEETH] negative control: decimal wire must be a JSON string, never a bare number',
     async () => {
-      // Proves the byte-identical check above is not vacuous: comparing the
-      // real TS/Java bodies against a MUTATED value must fail.
+      // A genuine structural check, not decorative filler: the canonical
+      // decimal wire form is ALWAYS a JSON string, never a bare JSON number
+      // (DESIGN §3) — this is the exact regression class a dispatcher glue
+      // bug (falling back to numeric serialization instead of the
+      // BigDecimal-as-string codec) would produce. `JSON.parse(javaBody)`
+      // typing as `'string'` fails the moment that regression is
+      // (re)introduced, independent of the specific numeric value under
+      // test — unlike an inequality check against an arbitrary wrong
+      // literal, this assertion is violated by the actual class of bug it
+      // names.
       const tsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'apigen-ts-fixture-'));
       const tsFixturePath = path.join(tsDir, 'identity-decimal.ts');
       fs.writeFileSync(tsFixturePath, TS_FIXTURE_SRC, 'utf-8');
@@ -272,13 +280,10 @@ describe('java-ts-decimal-parity — TS (api-fastify) vs Java (java-javalin), re
           }
         );
         const javaBody = await javaRes.text();
-        expect(javaBody).toBe('"42.5"');
-
-        // A deliberately mutated "expected" value must NOT match — proves
-        // the comparison has teeth (a broken codec that always passed would
-        // not be caught by a test whose assertion trivially always passes).
-        expect(javaBody).not.toBe('"42.50"');
-        expect(javaBody).not.toBe('42.5');
+        const parsed = JSON.parse(javaBody);
+        // A codec regression to numeric serialization would make this 'number'.
+        expect(typeof parsed).toBe('string');
+        expect(parsed).toBe('42.5');
       } finally {
         fs.rmSync(tsDir, { recursive: true, force: true });
       }
