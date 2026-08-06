@@ -2,13 +2,14 @@
 import { defineConfig } from 'vite';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { projectCacheDir, projectCoverage } from '../workspace-base-vite-paths/src/index';
 
 import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 const repoRoot = path.resolve(__dirname, '../../..');
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: path.join(repoRoot, 'node_modules/.vite/packages/workspace/workspace-base-tools'),
+  cacheDir: projectCacheDir(__dirname),
 
   plugins: [nxViteTsPaths()],
 
@@ -20,10 +21,7 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     reporters: ['default'],
     coverage: {
-      reportsDirectory: path.join(
-        repoRoot,
-        'coverage/packages/workspace/workspace-base-tools'
-      ),
+      reportsDirectory: projectCoverage(__dirname),
       provider: 'v8',
     },
   },
