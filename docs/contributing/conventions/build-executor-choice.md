@@ -54,18 +54,40 @@ transitively loads `better-sqlite3`.
 ### (b) Nx-devkit plugin-loader dependents
 
 **Mechanism:** Nx's own generator/executor loader performs a synchronous `require()`
-on the entrypoint module. That loader expects plain, unbundled CJS output — a
-Rollup-bundled ESM/CJS-hybrid output is not guaranteed to satisfy it.
+on the entrypoint module named by `package.json`'s `"generators"`/`"executors"` field.
+That loader expects plain, unbundled CJS output — a Rollup-bundled ESM/CJS-hybrid
+output is not guaranteed to satisfy it.
 
-**Members:**
+**Members verified to actually meet this bar** (grep-verified: each ships a
+`generators.json`/`executors.json` on disk **and** registers it via a
+`"generators"`/`"executors"` field in its own `package.json` — confirmed with `find
+<pkg-dir> -maxdepth 1 -iname "*generators*" -o -iname "*executors*"` plus `grep -n
+'"generators"\|"executors"' <pkg-dir>/package.json`):
 
-- `apigen-generator-nx`
-- `workspace-base-tools`
-- `workspace-codegen-nx`
-- `agent-generator-plugin` — newest addition to this category. Depends on
-  `@nx/devkit` and ships `generators.json` (confirmed in
+- `apigen-generator-nx` — ships both `generators.json` and `executors.json`,
+  registers `"generators": "./generators.json"`.
+- `workspace-codegen-nx` — ships `generators.json`, registers
+  `"generators": "./generators.json"`.
+- `agent-generator-plugin` — newest addition to this category. Ships
+  `generators.json` and registers `"generators": "./generators.json"` (confirmed in
   `packages/agent/agent-generator-plugin/package.json`), the same devkit/CLI-loading
-  rationale as the other three members.
+  rationale as the two members above.
+
+**`workspace-base-tools` — kept on `@nx/js:tsc`, but lower-confidence, unlike the
+three members above.** It depends on `@nx/devkit` (imports `workspaceRoot` in
+`src/get-package-info.ts`) but ships **neither** a `generators.json` nor an
+`executors.json`, and its `package.json` has no `"generators"`/`"executors"` field.
+It also has **zero repo-wide importers**: `grep -rl "workspace-base-tools"
+--exclude-dir=node_modules --exclude-dir=dist --exclude-dir=.nx .` finds no
+consuming `.ts` file anywhere in the workspace, including
+`workspace-codegen-nx` (the one package it would plausibly feed). In other words,
+the synchronous-`require()` mechanism that justifies this category for the other
+three members is **not currently exercised** by `workspace-base-tools` at all — its
+`@nx/js:tsc` build is a defensive/precautionary choice from when it was scaffolded
+as a devkit-adjacent utility, not evidence the mechanism applies today. Treat this
+membership exactly like `decompile-cli` in category (c): retained, unverified, not
+settled fact — until either a real consumer proves the sync-require path or someone
+confirms it's safe to move to `@nx/vite:build`.
 
 ### (c) Legacy/CJS-heavy surface — lower-confidence
 
@@ -105,10 +127,20 @@ relevant category list above **and** add a line here.
 
 1. **Does it depend on a native/compiled addon** (transitively or directly, e.g.
    `better-sqlite3`)? → `@nx/js:tsc`.
-2. **Is it an Nx generator/executor/plugin loaded via synchronous `require()`**
-   (ships a `generators.json`/`executors.json`, depends on `@nx/devkit`)? →
-   `@nx/js:tsc`.
-3. **Otherwise** → `@nx/vite:build` (the default).
+2. **Is it an Nx generator/executor/plugin actually loaded via synchronous
+   `require()`?** Verify concretely, don't infer from the dependency alone: does it
+   ship a `generators.json`/`executors.json` **and** does its own `package.json`
+   register that file via a `"generators"`/`"executors"` field? If both are true →
+   `@nx/js:tsc`, high confidence (this is category (b)'s bar — three of its four
+   members meet it). Merely depending on `@nx/devkit` without that registration is
+   **not** sufficient evidence the mechanism applies — `workspace-base-tools` is the
+   cautionary example: it depends on `@nx/devkit` and has zero registration and zero
+   importers, and its category-(b) membership is explicitly flagged there as
+   unverified rather than treated as settled.
+3. **Otherwise** → `@nx/vite:build` (the default). If you're genuinely unsure
+   whether bundling is safe (e.g. a CJS-heavy legacy dependency surface with no
+   concrete failure observed yet), don't guess either way — add it to category (c)
+   as lower-confidence rather than asserting a mechanism you haven't verified.
 
 Do **not** add a `project.json` comment field to record this decision — JSON has no
 comment syntax in this repo's schema (`.eslintrc.json`/Nx project-schema validation
