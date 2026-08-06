@@ -83,6 +83,8 @@ Packages follow `<domain>-<tier>-<name>` and live at `packages/<domain>/<domain>
 
 **Full convention, tier vocabulary, and the "should this be a package at all?" checklist: [`docs/contributing/conventions/package-naming.md`](docs/contributing/conventions/package-naming.md).**
 
+**Why a project builds with `@nx/js:tsc` instead of `@nx/vite:build`:** [`docs/contributing/conventions/build-executor-choice.md`](docs/contributing/conventions/build-executor-choice.md).
+
 ### Before you scaffold: should this be a package at all?
 
 A `packages/` entry is a **library with importers**. If nothing will `import` it, it is not a package:
