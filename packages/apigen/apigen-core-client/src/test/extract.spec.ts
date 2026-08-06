@@ -12,6 +12,8 @@
 // produces no matching operation (verifying id/symbol correctness).
 
 import path from 'node:path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import { describe, it, expect, vi } from 'vitest';
 import { extract } from '../lib/extract';
 
@@ -721,5 +723,79 @@ describe('extract — ExtractOptions.dropFileSegment', () => {
     const op = ops.find((o) => o.path.at(-1)?.raw === 'getUser');
     expect(op?.path).toHaveLength(1);
     expect(op?.id).toBe('backlog/get-user');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DEBT-APIGEN-007: user type-alias with @format JSDoc preserves format
+// ---------------------------------------------------------------------------
+//
+// Root cause: extract.ts's param-extraction helpers (rawParams,
+// rawParamsFromSig, rawParamsSig) and every `sig.getReturnType().getText()`
+// return-side call site resolve a type via ts-morph's `Type#getText()`, which
+// eagerly resolves a type alias to its underlying primitive — discarding the
+// alias's own name and therefore any JSDoc (including `@format`) attached to
+// it. Fixed via a narrow side-channel (`detectFormatAnnotatedAlias`,
+// `format-alias.ts`) that recovers the `@format` tag from the syntactic
+// TypeNode and merges it back onto the built schema — see extract.ts's
+// `RawParam.format` / `detectReturnFormat` / `mergeFormatIfPlainScalar`.
+//
+// This runs the REAL `extract()` against a real fixture file (not a mock) —
+// the exact repro from the backlog item — and asserts BOTH the input param's
+// format AND the output's format survive.
+describe('DEBT-APIGEN-007: user type-alias with @format JSDoc preserves format annotation', () => {
+  it('[debt-apigen-007.1] input.properties.value carries format:"decimal" from the DecimalValue alias', async () => {
+    const ops = await extract({
+      sourceFile: fixture('format-alias-decimal.ts'),
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'echoDecimal');
+    expect(op).toBeDefined();
+    const input = op?.input as { properties?: Record<string, unknown> };
+    expect(input?.properties?.['value']).toEqual({
+      type: 'string',
+      format: 'decimal',
+    });
+  });
+
+  it('[debt-apigen-007.2] output carries format:"decimal" from the DecimalValue alias', async () => {
+    const ops = await extract({
+      sourceFile: fixture('format-alias-decimal.ts'),
+    });
+    const op = ops.find((o) => o.path.at(-1)?.raw === 'echoDecimal');
+    expect(op).toBeDefined();
+    expect(op?.output).toEqual({ type: 'string', format: 'decimal' });
+  });
+
+  it('[debt-apigen-007.NEGATIVE-guard] generic function param/return still extract exactly as before (regression guard: fix must not touch generic resolution)', async () => {
+    // `function echo<T>(x: T): T` needs the RESOLVED type at the call site
+    // (`unknown`/the type-parameter's constraint text), never the literal
+    // syntactic text `"T"` — proving `detectFormatAnnotatedAlias`'s generic
+    // guard doesn't regress the existing (unrelated) generic-resolution path.
+    const tmpDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'apigen-debt-007-generic-')
+    );
+    const tmpFile = path.join(tmpDir, 'generic-fn.ts');
+    fs.writeFileSync(
+      tmpFile,
+      'export function echo<T>(x: T): T {\n  return x;\n}\n'
+    );
+    try {
+      const ops = await extract({ sourceFile: tmpFile });
+      const op = ops.find((o) => o.path.at(-1)?.raw === 'echo');
+      expect(op).toBeDefined();
+      // Generic param/return text resolves to the type parameter itself
+      // (ts-morph prints an unconstrained generic as its own name, `T`) —
+      // unchanged by this fix, and critically carries no `format` key.
+      const input = op?.input as { properties?: Record<string, unknown> };
+      const xSchema = input?.properties?.['x'] as
+        | Record<string, unknown>
+        | undefined;
+      expect(xSchema).toBeDefined();
+      expect(xSchema).not.toHaveProperty('format');
+      const output = op?.output as Record<string, unknown> | undefined;
+      expect(output).not.toHaveProperty('format');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true });
+    }
   });
 });
