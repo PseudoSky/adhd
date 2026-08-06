@@ -1,5 +1,6 @@
 /// <reference types='vitest' />
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';
 import * as path from 'path';
 import { defineConfig } from 'vite';
 
@@ -7,7 +8,7 @@ const repoRoot = path.resolve(__dirname, '../../..');
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: path.join(repoRoot, 'node_modules/.vite/packages/agent/agent-engine-orchestrator'),
+  cacheDir: projectCacheDir(__dirname),
 
   plugins: [nxViteTsPaths()],
 
@@ -40,10 +41,7 @@ export default defineConfig({
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: path.join(
-        repoRoot,
-        'coverage/packages/agent/agent-engine-orchestrator'
-      ),
+      reportsDirectory: projectCoverage(__dirname),
       provider: 'v8',
     },
   },

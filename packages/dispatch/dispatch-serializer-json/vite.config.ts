@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';
 import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs';
 
 import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
@@ -10,7 +11,7 @@ const repoRoot = path.resolve(__dirname, '../../..');
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: path.join(repoRoot, 'node_modules/.vite/packages/dispatch/dispatch-serializer-json'),
+  cacheDir: projectCacheDir(__dirname),
 
   plugins: [
     nxViteTsPaths(),
@@ -60,10 +61,7 @@ export default defineConfig({
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: path.join(
-        repoRoot,
-        'coverage/packages/dispatch/dispatch-serializer-json'
-      ),
+      reportsDirectory: projectCoverage(__dirname),
       provider: 'v8',
     },
   },
