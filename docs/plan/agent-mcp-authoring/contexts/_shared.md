@@ -151,16 +151,25 @@ session, and the `./core` export is still uncommitted in sox-ecosystem's working
   (`agent_list`/`*_list` default-limit + summary projection), and `component_delete`.
 - `main` must not be pushed to `origin` until the LM Studio API key is rotated.
 
-## Environment (verified 2026-07-08)
+## Environment (verified 2026-08-05)
 
-- **`$SKILL`** = `~/.claude/plugins/cache/sox-subagents/workflow/0.8.25/skills/plan-state-machine/scripts`
-  (installed cache; latest is 0.8.25). `state.json.schema_version = 2` is current for
-  0.8.25.
-- **`.mcp.json`** points the `agent-mcp` server at the built artifact
-  `dist/entrypoint/agent-mcp/src/index.js` (the old
-  `/Users/nix/dev/node/adhd-agent-registry/…` worktree no longer exists — only `main`
-  and `.claude/worktrees/impl-ephemeral` are live worktrees).
+- **`$SKILL`** = `~/.claude/plugins/cache/sox-subagents/workflow/<highest-installed-version>/skills/plan-state-machine/scripts`.
+  As of 2026-08-05 the highest installed version is `0.8.33` (`0.8.30`-`0.8.33` are all present
+  in the cache; always take the highest, do not hardcode). Verify with:
+  `ls ~/.claude/plugins/cache/sox-subagents/workflow/ | sort -V | tail -1`.
+  `state.json.schema_version` for 0.8.33 is **3** (`TARGET_SCHEMA_VERSION` constant in
+  `.../plan-state-machine/scripts/migrate-plan.js:37`) -- do not hardcode this either;
+  grep that constant directly rather than trusting a number pinned here, since this
+  value has already drifted twice (2 -> 3) across two prior corrections of this doc.
+- **`.mcp.json`** (`mcpServers.agent-mcp.args`) points the `agent-mcp` server at the built
+  artifact `entrypoint/agent-mcp/dist/src/index.js` (package-local `dist/`, NOT a
+  top-level `dist/entrypoint/...` path -- that shape was never correct). The old
+  `/Users/nix/dev/node/adhd-agent-registry/…` worktree no longer exists; verify current
+  worktrees with `git worktree list`.
 - **agent-mcp** source lives at `entrypoint/agent-mcp/`; `node_modules/@adhd/*` are
   symlinked to their dist builds; `~/.adhd/agent-mcp/agents.db` is the registry
   server's default store; the live MCP-stdio test harness is
-  `docs/plan/agent-registry/demo/live-test-mcp.mjs`.
+  `docs/plan/agent-final/superseded/agent-registry/demo/live-test-mcp.mjs` (moved from
+  the original `docs/plan/agent-registry/demo/` location; that directory no longer
+  contains this file -- re-verify with `find docs/plan -iname live-test-mcp.mjs` before
+  relying on this path again).
