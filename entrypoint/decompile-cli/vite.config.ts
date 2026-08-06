@@ -1,11 +1,12 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { projectCacheDir, projectCoverage } from '../../packages/workspace/workspace-base-vite-paths/src/index';
 
 import { vitestPoolOptions } from '../../tools/vite-plugins/vitest-pool-defaults.mjs';
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../node_modules/.vite/entrypoint/decompile-cli',
+  cacheDir: projectCacheDir(__dirname),
 
   plugins: [nxViteTsPaths()],
 
@@ -25,7 +26,7 @@ export default defineConfig({
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../coverage/entrypoint/decompile-cli',
+      reportsDirectory: projectCoverage(__dirname),
       provider: 'v8',
     },
   },

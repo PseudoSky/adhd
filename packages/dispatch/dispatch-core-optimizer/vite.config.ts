@@ -2,6 +2,7 @@
 import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';
 import p from 'node:path';
 
 import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
@@ -9,7 +10,7 @@ const repoRoot = p.resolve(__dirname, '../../..');
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: p.join(repoRoot, 'node_modules/.vite/packages/dispatch/dispatch-optimizer'),
+  cacheDir: projectCacheDir(__dirname),
 
   plugins: [
     nxViteTsPaths(),
@@ -48,10 +49,7 @@ export default defineConfig({
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: p.join(
-        repoRoot,
-        'coverage/packages/dispatch/dispatch-optimizer'
-      ),
+      reportsDirectory: projectCoverage(__dirname),
       provider: 'v8',
     },
   },
