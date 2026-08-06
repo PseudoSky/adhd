@@ -1,6 +1,0 @@
-{
-  "name": "@adhd/nx-deps",
-  "version": "0.1.0",
-  "private": true,
-  "executors": "./executors.json"
-}
