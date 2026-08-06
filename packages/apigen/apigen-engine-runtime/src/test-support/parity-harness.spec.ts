@@ -9,14 +9,19 @@
  *     — the required negative control — REJECTS when a recapture diverges
  *     ([inv:byte-identical]).
  *   - `proveNegativeControl` drives a REAL `git apply`/`git apply -R` cycle
- *     against an ephemeral, disposable git repository under `tmp/`
- *     ([inv:negative-control]) and — its own negative control — REJECTS when
- *     the supplied patch fails to turn the suite RED, proving the
+ *     against an ephemeral, disposable git repository that is PROVABLY
+ *     isolated from the enclosing repo ([inv:negative-control],
+ *     BUG-APIGEN-052) and — its own negative control — REJECTS when the
+ *     supplied patch fails to turn the suite RED, proving the
  *     negative-control machinery can itself fail loudly rather than
  *     rubber-stamping a broken gate.
  *
  * No mocking of anything under test: the HTTP server is real, `fetch` is the
- * real global, and the git repo is a real (throwaway) repository.
+ * real global, and the git repo is a real (throwaway) repository — created
+ * via `createIsolatedScratchRepo`, which lives under `os.tmpdir()` (never
+ * nested inside this — or any — tracked working tree) and asserts its own
+ * isolation before this suite ever touches it (see BUG-APIGEN-052 in
+ * `isolated-git.spec.ts` for the proven escape mechanism and its fix).
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -24,12 +29,13 @@ import * as http from 'node:http';
 import * as net from 'node:net';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import {
   assertParity,
   captureGolden,
+  createIsolatedScratchRepo,
   ParityMismatchError,
   proveNegativeControl,
+  runGit,
   type GoldenFixture,
   type GoldenSnapshot,
   type ParityDriver,
@@ -45,19 +51,6 @@ async function freePort(): Promise<number> {
     });
     srv.on('error', reject);
   });
-}
-
-/** Walk up from `startDir` to the nearest ancestor containing `.git` (the repo root). */
-function findRepoRoot(startDir: string): string {
-  let dir = startDir;
-  for (;;) {
-    if (fs.existsSync(path.join(dir, '.git'))) return dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) {
-      throw new Error(`findRepoRoot: no ".git" found walking up from ${startDir}`);
-    }
-    dir = parent;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -177,22 +170,17 @@ describe('captureGolden + assertParity (real HTTP consumer protocol)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// proveNegativeControl — driven over a REAL, disposable git repo under tmp/
+// proveNegativeControl — driven over a REAL, disposable, PROVABLY isolated
+// git repo under os.tmpdir() (BUG-APIGEN-052)
 // ---------------------------------------------------------------------------
 
 describe('proveNegativeControl (real git apply / git apply -R cycle)', () => {
-  const scratchRoot = path.join(
-    findRepoRoot(__dirname),
-    'tmp',
-    'apigen-engine-runtime',
-    'parity-harness-self-test'
-  );
   let repoDir: string;
   let patchPath: string;
   let subjectPath: string;
 
   function git(...args: string[]): string {
-    return execFileSync('git', args, { cwd: repoDir, stdio: 'pipe' }).toString();
+    return runGit(args, { cwd: repoDir });
   }
 
   function readSubject(): string {
@@ -208,11 +196,14 @@ describe('proveNegativeControl (real git apply / git apply -R cycle)', () => {
   }
 
   beforeAll(() => {
-    fs.mkdirSync(scratchRoot, { recursive: true });
-    repoDir = fs.mkdtempSync(path.join(scratchRoot, 'repo-'));
+    // BUG-APIGEN-052: createIsolatedScratchRepo lives under os.tmpdir() (never
+    // nested inside this — or any — tracked working tree) and asserts its own
+    // isolation (`git rev-parse --show-toplevel` resolves to itself) before
+    // returning — this suite never gets a repoDir that hasn't been proven
+    // isolated from the enclosing repo.
+    repoDir = createIsolatedScratchRepo('apigen-parity-harness-self-test-').dir;
     subjectPath = path.join(repoDir, 'subject.txt');
 
-    git('init', '-q');
     git('config', 'user.email', 'parity-harness-self-test@example.com');
     git('config', 'user.name', 'parity-harness-self-test');
     fs.writeFileSync(subjectPath, 'before\n');
@@ -235,7 +226,7 @@ describe('proveNegativeControl (real git apply / git apply -R cycle)', () => {
 
   afterAll(() => {
     // Test cleans up after itself (AGENTS.md §10) — the scratch repo lives
-    // entirely under tmp/, never in the tracked tree.
+    // entirely under os.tmpdir(), never in the tracked tree.
     fs.rmSync(repoDir, { recursive: true, force: true });
   });
 
