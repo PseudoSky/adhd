@@ -29,6 +29,9 @@ const VALID_OPERATION_STATUSES = new Set<OperationStatus>([
   'skipped',
 ]);
 const VALID_OPERATION_TYPES = new Set(['automated', 'tool-call', 'generative']);
+const VALID_PROVIDERS = new Set([
+  'anthropic', 'openai', 'deepseek', 'google', 'local', 'claudecli', 'teammate',
+]);
 const VALID_SHAPE_KINDS = new Set([
   'function',
   'interface',
@@ -96,8 +99,9 @@ function detectCycle(
  * malformed independent of `model_calls` (wrong types, missing required
  * fields), never a turn that simply omits `model_calls`.
  *
- * Provider values are not validated here. See DEBT-DISPATCH-019 for the gap
- * ('claudecli' and 'teammate' were added after initial validation).
+ * `provider` IS validated here against the closed `VALID_PROVIDERS` enum
+ * (includes 'claudecli' and 'teammate', both real production values) —
+ * see DEBT-DISPATCH-019.
  */
 function validateDispatchLogTurns(
   entries: unknown[],
@@ -106,6 +110,10 @@ function validateDispatchLogTurns(
   for (const entry of entries) {
     if (!isObject(entry)) continue;
     const entryId = isString(entry['id']) ? entry['id'] : '?';
+    const provider = entry['provider'];
+    if (!isString(provider) || !VALID_PROVIDERS.has(provider)) {
+      errors.push(err(`dispatch_log[${entryId}].provider`, 'invalid provider', provider));
+    }
     const turns = entry['turns'];
     if (!Array.isArray(turns)) {
       errors.push(
