@@ -1,3 +1,5 @@
+> ⛔ **SUPERSEDED — see [SUPERSEDED.md](./SUPERSEDED.md). Do not resume or cite this DoD as ground truth; the actual deliverable landed via `packages/environment/ARCHITECTURE.md`.**
+
 # adhd-environment v0.0.5
 
 Multi-language centralized configuration management for the ADHD monorepo. Replaces hand-written Zod schemas + dotenv + manual env var mapping with a YAML config file, a CLI builder, and thin typed runtime clients in TypeScript, Python, and Rust.
