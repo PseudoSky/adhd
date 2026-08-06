@@ -17,6 +17,11 @@
  *                      match, not accumulation — a criterion must declare
  *                      `phase: X` to be selected; X must be a declared phase
  *                      or the runner errors out)
+ *   --phase       X,Y  run the UNION of the named phases (each an exact
+ *                      match); this is how composite audit gates scope
+ *                      themselves (e.g. guard_audit_builder.py runs
+ *                      `--phase contract,builder`) — every named phase must
+ *                      itself be declared or the runner errors out
  *   --criteria         path to the criteria file (default: scripts/criteria.json,
  *                      then <planDir>/criteria.json relative to cwd, then this
  *                      script's own directory)
@@ -161,13 +166,32 @@ function validateCriteriaDoc(doc) {
   return { schema_version: doc.schema_version ?? 1, criteria };
 }
 
-function selectCriteria(criteria, phase) {
-  if (phase === undefined || phase === null || phase === "") return criteria;
+/**
+ * Select criteria for `--phase`. Exact set-membership, never file-order
+ * accumulation:
+ *   `--phase X`      → ONLY criteria whose `phase === X`.
+ *   `--phase X,Y,Z`  → the UNION of the named phases (each an exact match) —
+ *                      this is how the composite audit guards scope
+ *                      themselves (e.g. guard_audit_builder.py runs
+ *                      `--phase contract,builder`). A comma-joined phaseSpec
+ *                      is split, trimmed, and every named phase must itself
+ *                      be declared or the runner errors out.
+ *   `--phase ""`/absent → every criterion (the whole-plan audit).
+ */
+function selectCriteria(criteria, phaseSpec) {
+  if (phaseSpec === undefined || phaseSpec === null || phaseSpec === "") return criteria;
   const declared = new Set(criteria.map((c) => c.phase).filter((p) => p != null));
-  if (!declared.has(phase)) {
-    throw new Error(`criteria: --phase "${phase}" is not a declared phase (have: ${[...declared].join(", ") || "<none>"})`);
+  const wanted = String(phaseSpec)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const p of wanted) {
+    if (!declared.has(p)) {
+      throw new Error(`criteria: --phase "${p}" is not a declared phase (have: ${[...declared].join(", ") || "<none>"})`);
+    }
   }
-  return criteria.filter((c) => c.phase === phase);
+  const wset = new Set(wanted);
+  return criteria.filter((c) => c.phase != null && wset.has(c.phase));
 }
 
 // ── per-kind execution ─────────────────────────────────────────────────────────
@@ -357,22 +381,30 @@ function main() {
   }
 
   // Self-test: proves the phase-filter algorithm itself (exact-match, not
-  // accumulation) against an in-memory fixture, independent of any real
-  // plan's criteria.json existing at all. Must run before any criteria-file
-  // lookup.
+  // accumulation; plus the comma-separated multi-phase union) against an
+  // in-memory fixture, independent of any real plan's criteria.json existing
+  // at all. Must run before any criteria-file lookup.
   if (args.includes("--self-test")) {
     const fixture = {
       schema_version: 1,
       criteria: [
         { id: "a.1", phase: "one", kind: "exists", path: "." },
         { id: "b.1", phase: "two", kind: "exists", path: "." },
+        { id: "c.1", phase: "three", kind: "exists", path: "." },
       ],
     };
     const r1 = runCriteria(fixture, { phase: "one", cwd: process.cwd() });
     const onlyPhaseOne = r1.lines.length === 1 && r1.lines[0].startsWith("[a.1]");
     const r2 = runCriteria(fixture, { phase: "", cwd: process.cwd() });
-    const allRun = r2.lines.length === 2;
-    const ok = onlyPhaseOne && allRun;
+    const allRun = r2.lines.length === 3;
+    // Multi-phase union: "one,two" must select EXACTLY {a.1, b.1}, never c.1,
+    // and never fewer than both — this is the shape guard_audit_builder.py
+    // depends on (`--phase contract,builder`).
+    const r3 = runCriteria(fixture, { phase: "one,two", cwd: process.cwd() });
+    const unionIds = r3.lines.map((l) => l.slice(1, l.indexOf("]")));
+    const unionOk =
+      r3.lines.length === 2 && unionIds.includes("a.1") && unionIds.includes("b.1") && !unionIds.includes("c.1");
+    const ok = onlyPhaseOne && allRun && unionOk;
     process.stdout.write(ok ? "[self-test] PASS\n" : "[self-test] FAIL\n");
     process.exit(ok ? 0 : 1);
   }
