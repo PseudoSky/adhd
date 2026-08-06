@@ -111,39 +111,55 @@ public final class ApigenConformanceMatrix {
     }
 
     // ---- Negative control ----
+    // Mirrors PYTHON_MATRIX_SCRIPT's algorithm exactly (gate.ts:552-590): for a
+    // 'wire' mutation, FIRST decode the mutated wire and diff it against the
+    // original invariants (catching any mutation that changes the actual
+    // decoded value, or that throws on decode). Only when that invariant-diff
+    // already passed do we fall through to the wire-format-only heuristic
+    // (e.g. `endsWith('Z')`, lowercase check) — a mutation that changes the
+    // decoded semantic value while still passing the naive wire-format check
+    // must still be caught by the invariant diff, not skipped.
     boolean negRed = false;
     try {
       String mutate = nc.get("mutate").asText();
       if ("wire".equals(mutate)) {
         JsonNode mutatedWire = nc.get("to");
-        if ("date-time".equals(logicalType)) {
-          negRed = !(mutatedWire.isTextual() && mutatedWire.asText().endsWith("Z"));
-        } else if ("uuid".equals(logicalType)) {
-          String s = mutatedWire.asText();
-          negRed = mutatedWire.isTextual() && !s.equals(s.toLowerCase());
-        } else if ("byte".equals(logicalType)) {
-          String s = mutatedWire.isTextual() ? mutatedWire.asText() : "";
-          negRed = s.contains("_") || s.contains("-");
-        } else if ("int64".equals(logicalType)) {
-          negRed = !mutatedWire.isTextual();
-        } else if ("decimal".equals(logicalType)) {
-          negRed = !mutatedWire.isTextual();
-        } else if ("number-special".equals(logicalType)) {
-          try {
-            Object mutDecoded = decode(logicalType, mutatedWire);
-            boolean allInvPass = true;
-            for (JsonNode inv : invariants) {
-              if (!checkInvariant(mutDecoded, inv.get("pointer").asText(), inv.get("equals"))) {
-                allInvPass = false;
-                break;
-              }
-            }
-            negRed = !allInvPass;
-          } catch (Exception e) {
-            negRed = true;
-          }
-        } else {
+        boolean decodeThrew = false;
+        Object mutDecoded = null;
+        try {
+          mutDecoded = decode(logicalType, mutatedWire);
+        } catch (Exception e) {
+          // decode throwing is itself a valid "turns RED" outcome.
+          decodeThrew = true;
           negRed = true;
+        }
+        if (!decodeThrew) {
+          boolean allInvPass = true;
+          for (JsonNode inv : invariants) {
+            if (!checkInvariant(mutDecoded, inv.get("pointer").asText(), inv.get("equals"))) {
+              allInvPass = false;
+              break;
+            }
+          }
+          if (!allInvPass) {
+            negRed = true;
+          } else if ("date-time".equals(logicalType)) {
+            negRed = !(mutatedWire.isTextual() && mutatedWire.asText().endsWith("Z"));
+          } else if ("uuid".equals(logicalType)) {
+            String s = mutatedWire.asText();
+            negRed = mutatedWire.isTextual() && !s.equals(s.toLowerCase());
+          } else if ("byte".equals(logicalType)) {
+            String s = mutatedWire.isTextual() ? mutatedWire.asText() : "";
+            negRed = s.contains("_") || s.contains("-");
+          } else if ("int64".equals(logicalType)) {
+            negRed = !mutatedWire.isTextual();
+          } else if ("decimal".equals(logicalType)) {
+            negRed = !mutatedWire.isTextual();
+          } else if ("number-special".equals(logicalType)) {
+            negRed = !valuesEqual(mutDecoded, decoded);
+          } else {
+            negRed = false;
+          }
         }
       } else {
         // 'schema' or 'codec' mutation — always red (no codec fires / schema mismatch).
@@ -327,6 +343,22 @@ public final class ApigenConformanceMatrix {
 
   private static boolean jsonEquals(JsonNode a, JsonNode b) {
     return a.equals(b);
+  }
+
+  /**
+   * Value equality for the number-special negative-control fallback, mirroring
+   * Python's {@code mut_decoded != decoded} on two floats (gate.ts:580). Uses
+   * primitive {@code ==} for {@code Double} operands rather than {@link
+   * Double#equals}, since {@code Double.equals} treats {@code NaN} as equal to
+   * itself (boxed-object semantics) while Python's (and Java's primitive)
+   * {@code NaN != NaN} is always {@code true} — exactly the case this
+   * negative-control vector exercises.
+   */
+  private static boolean valuesEqual(Object a, Object b) {
+    if (a instanceof Double && b instanceof Double) {
+      return ((Double) a).doubleValue() == ((Double) b).doubleValue();
+    }
+    return java.util.Objects.equals(a, b);
   }
 
   private static ObjectNode result(String vectorId, boolean pass, String phase, String error) {

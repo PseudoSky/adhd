@@ -1,11 +1,12 @@
 #!/usr/bin/env sh
 # nx target driver for apigen-java (packages/apigen/java, FEAT-APIGEN-001).
 #
-# Mirrors the pattern prototyped for Rust in
-# packages/environment/environment-core-rs/nx-run.sh: there is no registered
-# Nx plugin for Java in nx.json (only @monodon/rust and @nxlv/python are
-# registered), so this module is driven by nx:run-commands + this script
-# rather than a new Nx plugin (installing one requires human approval).
+# Mirrors the pattern prototyped for Rust in an unmerged sibling worktree
+# (.worktrees/apigen-reexport-fix/.../environment-core-rs/nx-run.sh — not a
+# path present on this branch or main): there is no registered Nx plugin for
+# Java in nx.json (only @monodon/rust and @nxlv/python are registered), so
+# this module is driven by nx:run-commands + this script rather than a new
+# Nx plugin (installing one requires human approval).
 #
 # Resolves `mvn` from PATH and fails loudly if it is absent — never silently
 # skips. Invoked by project.json's build/test/package targets.
