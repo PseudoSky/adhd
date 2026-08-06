@@ -23,6 +23,8 @@ import {
   runTsMatrix,
   getTsHostManifest,
   getPythonHostManifest,
+  getJavaHostManifest,
+  runJavaMatrix,
   discoverManifestHosts,
   discoverHosts,
   runConformanceMatrix,
@@ -441,6 +443,75 @@ describe('getPythonHostManifest', () => {
   });
 });
 
+describe('getJavaHostManifest', () => {
+  it('returns a manifest when packages/apigen/java/pom.xml exists', () => {
+    const m = getJavaHostManifest(WORKSPACE_ROOT);
+    expect(m).not.toBeNull();
+    if (!m) throw new Error('expected Java host manifest');
+    expect(m.host).toBe('java');
+    expect(checkSupportedIds(m)).toHaveLength(0);
+  });
+
+  it('returns null for a workspace root without the Java host', () => {
+    const m = getJavaHostManifest('/tmp/nonexistent-workspace-root');
+    expect(m).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runJavaMatrix — REAL JVM subprocess (ApigenConformanceMatrix), no mock.
+// Slower than the other unit tests (real `mvn`/JVM startup) — this is the
+// load-bearing live proof for FEAT-APIGEN-001 acceptance criterion 2.
+// ---------------------------------------------------------------------------
+
+describe('runJavaMatrix — live JVM subprocess (real ApigenConformanceMatrix)', () => {
+  it(
+    '[Java-pass] every canonical logical-type id passes encode/decode/invariant/negative-control',
+    () => {
+      const results = runJavaMatrix(logicalTypeVectors, WORKSPACE_ROOT);
+      const failures = results.filter((r) => !r.pass);
+      expect(
+        failures,
+        `Java host failures:\n${failures
+          .map((f) => `  ${f.vectorId} (${f.phase}): ${f.error}`)
+          .join('\n')}`
+      ).toHaveLength(0);
+
+      // Every canonical id is covered by at least one vector's encode phase.
+      const coveredTypes = new Set(
+        logicalTypeVectors.map((v) => v.logicalType)
+      );
+      for (const id of CANONICAL_IDS) {
+        expect(coveredTypes.has(id), `no vector exercises "${id}"`).toBe(true);
+      }
+    },
+    120_000
+  );
+
+  it(
+    '[TEETH] negative control genuinely fails when a vector wire is corrupted (proves runJavaMatrix is not vacuous)',
+    () => {
+      // A vector set where the negativeControl mutation is a NO-OP relative
+      // to the real logical type (mutating to the exact same wire value) —
+      // if runJavaMatrix's negative-control phase were vacuous (always
+      // "pass"), this would still show green. It must NOT.
+      const vacuousVector: LogicalTypeVector = {
+        ...logicalTypeVectors[0],
+        negativeControl: { mutate: 'wire', to: logicalTypeVectors[0].wire },
+      };
+      const results = runJavaMatrix([vacuousVector], WORKSPACE_ROOT);
+      const ncResult = results.find((r) => r.phase === 'negative-control');
+      expect(ncResult).toBeDefined();
+      if (!ncResult) throw new Error('expected a negative-control result');
+      expect(
+        ncResult.pass,
+        'runJavaMatrix must flag a no-op negativeControl mutation as a FAILING (vacuous) check'
+      ).toBe(false);
+    },
+    120_000
+  );
+});
+
 describe('discoverManifestHosts', () => {
   it('returns [] when packages/apigen/hosts does not exist', () => {
     const manifests = discoverManifestHosts('/tmp/nonexistent-workspace-root');
@@ -545,6 +616,19 @@ describe('discoverHosts', () => {
     if (!py) throw new Error('expected python host');
     expect(py.runner).toBe('python');
   });
+
+  it('includes the Java host when workspace has packages/apigen/java/pom.xml', () => {
+    const hosts = discoverHosts(WORKSPACE_ROOT);
+    expect(hosts.some((h) => h.manifest.host === 'java')).toBe(true);
+  });
+
+  it('Java host runner is "java"', () => {
+    const hosts = discoverHosts(WORKSPACE_ROOT);
+    const java = hosts.find((h) => h.manifest.host === 'java');
+    expect(java).toBeDefined();
+    if (!java) throw new Error('expected java host');
+    expect(java.runner).toBe('java');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -593,10 +677,34 @@ describe('runConformanceMatrix — integration', () => {
     expect(anyError).toBe(true);
   });
 
-  it('[coverage] both TS and Python hosts are discovered and present in results', () => {
+  it(
+    '[Java-pass] Java host result has passed=true (runner executed live codec vectors, not manifest-only)',
+    () => {
+      const results = runConformanceMatrix(WORKSPACE_ROOT);
+      const java = results.find((r) => r.host === 'java');
+      expect(java).toBeDefined();
+      if (!java) throw new Error('expected java result');
+      const failures = java.results.filter((r) => !r.pass);
+      expect(
+        failures,
+        `Java host failures:\n${failures
+          .map((f) => `  ${f.vectorId} (${f.phase}): ${f.error}`)
+          .join('\n')}`
+      ).toHaveLength(0);
+      expect(java.passed).toBe(true);
+      // Prove it's a LIVE runner, not the manifest-only supportedIds-only
+      // check: more than just the single 'supported-ids' result must be
+      // present (manifest-only hosts have exactly 1 result).
+      expect(java.results.length).toBeGreaterThan(1);
+    },
+    120_000
+  );
+
+  it('[coverage] TS, Python, and Java hosts are all discovered and present in results', () => {
     const results = runConformanceMatrix(WORKSPACE_ROOT);
     const hosts = results.map((r) => r.host);
     expect(hosts).toContain('ts');
     expect(hosts).toContain('python');
+    expect(hosts).toContain('java');
   });
 });
