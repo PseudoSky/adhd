@@ -1,7 +1,0 @@
-div.cssClass {
-  width: 100%;
-}
-
-html {
-  background: white;
-}

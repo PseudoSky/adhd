@@ -1,9 +1,0 @@
-{
-  "generators": {
-    "registry-package": {
-      "factory": "./src/generators/registry-package/generator",
-      "schema": "./src/generators/registry-package/schema.json",
-      "description": "Scaffold a golden-path @adhd/agent-* registry package: platform:node, one shared SQLite file, drizzle skeleton, inherited cache + ^build, lint target, README + CLAUDE.md linking the rules doc."
-    }
-  }
-}

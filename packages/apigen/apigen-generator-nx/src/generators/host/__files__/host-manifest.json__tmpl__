@@ -1,6 +1,0 @@
-{
-  "host": "<%= hostName %>",
-  "logicalTypeVersion": "<%= logicalTypeVersion %>",
-  "supportedIds": [],
-  "deps": {}
-}

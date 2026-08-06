@@ -1,9 +1,0 @@
-{
-  "executors": {
-    "copy": {
-      "implementation": "./executors/copy/impl",
-      "schema": "./executors/copy/schema.json",
-      "description": "Copy README/CHANGELOG + declared assets into dist."
-    }
-  }
-}
