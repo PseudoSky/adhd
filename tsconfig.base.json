@@ -184,6 +184,9 @@
       "@adhd/ui-react-base-storybook": [
         "./packages/ui-react/ui-react-base-storybook/src/index.ts"
       ],
+      "@adhd/workspace-base-standard": [
+        "./packages/workspace/workspace-base-standard/src/index.ts"
+      ],
       "@adhd/workspace-base-tools": [
         "./packages/workspace/workspace-base-tools/src/index.ts"
       ],
