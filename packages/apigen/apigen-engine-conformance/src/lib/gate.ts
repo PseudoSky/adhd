@@ -681,6 +681,102 @@ export function runPythonMatrix(
 }
 
 // ---------------------------------------------------------------------------
+// Java host runner (subprocess — ApigenConformanceMatrix, real JVM)
+// ---------------------------------------------------------------------------
+
+function resolveMvnForGate(): string {
+  const override = process.env['APIGEN_MVN'];
+  if (override) return override;
+  const check = spawnSync('mvn', ['-version'], { stdio: 'ignore' });
+  if (check.error === undefined && check.status === 0) return 'mvn';
+  if (fs.existsSync('/opt/homebrew/bin/mvn')) return '/opt/homebrew/bin/mvn';
+  throw new Error(
+    'apigen-conformance: `mvn` not found on PATH or at /opt/homebrew/bin/mvn — cannot run the Java host matrix.'
+  );
+}
+
+/**
+ * Run the Java host conformance matrix via a REAL JVM subprocess — mirrors
+ * `runPythonMatrix` exactly (FEAT-APIGEN-001 acceptance criterion 2: this is
+ * the load-bearing live proof, not the `manifest-only` coverage check).
+ *
+ * Writes the shared vectors to a temp JSON file, then invokes:
+ *   mvn -q -pl packages/apigen/java exec:java \
+ *       -Dexec.mainClass=com.adhd.apigen.conformance.ApigenConformanceMatrix \
+ *       -Dexec.args="<vectors-json-tempfile>"
+ *
+ * Returns an array of VectorRunResult records. Throws on subprocess failure
+ * (mvn not installed, apigen-java module missing, etc.) — the caller
+ * (`runConformanceMatrix`) turns that into a failed matrix entry, exactly
+ * like the Python runner's own failure path.
+ */
+export function runJavaMatrix(
+  vectors: readonly LogicalTypeVector[],
+  workspaceRoot: string
+): VectorRunResult[] {
+  const javaPkgDir = path.resolve(workspaceRoot, 'packages/apigen/java');
+  const tmpDir = os.tmpdir();
+  const vectorsFile = path.join(
+    tmpDir,
+    `apigen-gate-java-vectors-${process.pid}.json`
+  );
+
+  try {
+    fs.writeFileSync(vectorsFile, JSON.stringify(vectors), 'utf-8');
+
+    const mvn = resolveMvnForGate();
+    // 'compile' first — exec:java as a standalone goal does not run through
+    // the default lifecycle, so target/classes must already exist (cheap
+    // no-op on repeat invocations — Maven's own incremental compiler).
+    const result = spawnSync(
+      mvn,
+      [
+        '-q',
+        '-pl',
+        '.',
+        'compile',
+        'exec:java',
+        '-Dexec.mainClass=com.adhd.apigen.conformance.ApigenConformanceMatrix',
+        `-Dexec.args=${vectorsFile}`,
+      ],
+      { cwd: javaPkgDir, timeout: 120_000, encoding: 'utf-8' }
+    );
+
+    if (result.status !== 0) {
+      const detail = result.stderr ?? result.error?.message ?? 'unknown error';
+      throw new Error(
+        `Java matrix subprocess failed (exit ${String(result.status)}):\n${detail}`
+      );
+    }
+
+    const stdout = result.stdout?.trim() ?? '';
+    let raw: unknown[];
+    try {
+      raw = JSON.parse(stdout) as unknown[];
+    } catch {
+      throw new Error(`Java matrix subprocess returned invalid JSON:\n${stdout}`);
+    }
+
+    return raw.map((r): VectorRunResult => {
+      const rec = r as Record<string, unknown>;
+      return {
+        vectorId: rec['vectorId'] as string,
+        host: 'java',
+        pass: Boolean(rec['pass']),
+        phase: rec['phase'] as VectorRunResult['phase'],
+        error: rec['error'] as string | undefined,
+      };
+    });
+  } finally {
+    try {
+      fs.unlinkSync(vectorsFile);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Host discovery
 // ---------------------------------------------------------------------------
 
@@ -736,6 +832,26 @@ export function getPythonHostManifest(
 }
 
 /**
+ * Synthesise the Java host manifest by detecting the Java host on disk
+ * (`packages/apigen/java/pom.xml` — FEAT-APIGEN-001 slice 1/3).
+ *
+ * Returns null if the Java host is not present.
+ */
+export function getJavaHostManifest(workspaceRoot: string): HostManifest | null {
+  const javaHost = path.join(workspaceRoot, 'packages', 'apigen', 'java', 'pom.xml');
+  if (!fs.existsSync(javaHost)) return null;
+
+  // The Java host covers all 6 canonical well-known scalar ids — see
+  // ApigenConformanceMatrix.
+  return {
+    host: 'java',
+    logicalTypeVersion: LOGICAL_TYPE_VERSION,
+    supportedIds: [...CANONICAL_IDS],
+    deps: {},
+  };
+}
+
+/**
  * Glob for `host-manifest.json` files emitted by the `host` generator.
  *
  * These cover future hosts added via `nx generate apigen-nx:host`.
@@ -779,11 +895,11 @@ export function discoverManifestHosts(workspaceRoot: string): HostManifest[] {
  */
 export function discoverHosts(workspaceRoot: string): Array<{
   manifest: HostManifest;
-  runner: 'ts' | 'python' | 'manifest-only';
+  runner: 'ts' | 'python' | 'java' | 'manifest-only';
 }> {
   const hosts: Array<{
     manifest: HostManifest;
-    runner: 'ts' | 'python' | 'manifest-only';
+    runner: 'ts' | 'python' | 'java' | 'manifest-only';
   }> = [];
 
   // 1. Built-in TS host (always present — it's in this workspace)
@@ -793,6 +909,12 @@ export function discoverHosts(workspaceRoot: string): Array<{
   const pyManifest = getPythonHostManifest(workspaceRoot);
   if (pyManifest !== null) {
     hosts.push({ manifest: pyManifest, runner: 'python' });
+  }
+
+  // 2b. Java host (present if packages/apigen/java/pom.xml exists — FEAT-APIGEN-001)
+  const javaManifest = getJavaHostManifest(workspaceRoot);
+  if (javaManifest !== null) {
+    hosts.push({ manifest: javaManifest, runner: 'java' });
   }
 
   // 3. Future hosts from host-manifest.json (generator-scaffolded)
@@ -871,6 +993,19 @@ export function runConformanceMatrix(
         allResults.push({
           vectorId: 'python-matrix',
           host: 'python',
+          pass: false,
+          phase: 'encode',
+          error: String(err),
+        });
+      }
+    } else if (runner === 'java') {
+      try {
+        const javaResults = runJavaMatrix(vectors, workspaceRoot);
+        allResults.push(...javaResults);
+      } catch (err) {
+        allResults.push({
+          vectorId: 'java-matrix',
+          host: 'java',
           pass: false,
           phase: 'encode',
           error: String(err),
