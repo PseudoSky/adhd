@@ -43,8 +43,27 @@ function unsafeGit(args: readonly string[], cwd: string): string {
 describe('BUG-APIGEN-052: isolated-git escape mechanism + fix', () => {
   let victimDir: string;
 
+  // BUG-APIGEN-052 (follow-up, discovered live 2026-08-06 via an ordinary
+  // pathspec-scoped commit in an unrelated worktree): this fixture helper
+  // used to be `execFileSync('git', args, { cwd: victimDir, stdio: 'pipe' })`
+  // — the SAME unsafe pattern (bare cwd, full process.env inheritance) that
+  // the production fix (runGit/sanitizedGitEnv below) eliminated from
+  // parity-harness.ts. `vgit` bootstraps the "victim" repo in `beforeEach`
+  // (before the test's own deliberate env-leak simulation below ever runs),
+  // so when this suite executes for real inside an ACTUAL git hook chain
+  // (`git commit` -> `.githooks/pre-commit` -> `nx affected -t test` ->
+  // vitest -> this spec file), git itself has ALREADY exported
+  // GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE into process.env for the REAL,
+  // currently-in-progress commit — an AMBIENT leak, not the test's own
+  // simulated one — and `beforeEach`'s very first unsanitized `vgit` call
+  // inherited it, corrupting the enclosing real repository's git config and
+  // HEAD instead of the intended disposable victimDir. Routing through the
+  // already-proven-safe `runGit` (env-sanitized, `-C`-scoped) closes this:
+  // only the deliberately-unsafe `unsafeGit` below (scoped to the already
+  // safely-bootstrapped victimDir/nestedScratchDir) should ever demonstrate
+  // the unsafe pattern.
   function vgit(...args: string[]): string {
-    return execFileSync('git', args, { cwd: victimDir, stdio: 'pipe' }).toString();
+    return runGit(args, { cwd: victimDir });
   }
 
   // A fresh victim repo PER TEST (beforeEach, not beforeAll): the first
