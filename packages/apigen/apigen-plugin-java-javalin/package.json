@@ -1,0 +1,27 @@
+{
+  "name": "@adhd/apigen-plugin-java-javalin",
+  "version": "0.0.1",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "description": "apigen plugin: serve Java (JavaParser-extracted, Javalin-served, codegen-woven dispatch) functions over HTTP",
+  "keywords": [
+    "apigen",
+    "plugin",
+    "java",
+    "http",
+    "javalin"
+  ],
+  "dependencies": {
+    "@adhd/apigen-core-client": "^0.2.2",
+    "@adhd/apigen-engine-naming": "^0.2.1",
+    "@adhd/apigen-base-logical": "^0.1.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
+}
