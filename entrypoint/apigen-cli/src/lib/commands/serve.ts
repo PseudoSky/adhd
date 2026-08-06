@@ -91,6 +91,7 @@ let _managedPython: string | undefined;
 const DEFAULT_PLUGIN_FOR_LANGUAGE: Partial<Record<PluginLanguage, string>> = {
   ts: 'api-fastify',
   py: 'py-flask',
+  java: 'java-javalin',
 };
 
 /** Plugin ids that use gRPC transport rather than HTTP. */
@@ -1567,7 +1568,7 @@ export function registerServeCommand(program: Command): void {
     .description('Mount many sources/languages behind one HTTP/gRPC front')
     .requiredOption(
       '--source <path>',
-      'Source file to mount (repeatable; .ts → api-fastify, .py → py-flask)',
+      'Source file to mount (repeatable; .ts → api-fastify, .py → py-flask, .java → java-javalin)',
       (val: string, prev: string[]) => [...prev, val],
       [] as string[]
     )
