@@ -1,9 +1,0 @@
-{
-  "executors": {
-    "wiring": {
-      "implementation": "./executors/wiring/impl",
-      "schema": "./executors/wiring/schema.json",
-      "description": "Every spec-bearing project declares a test target."
-    }
-  }
-}
