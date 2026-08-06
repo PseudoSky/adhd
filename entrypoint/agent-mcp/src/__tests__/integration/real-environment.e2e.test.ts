@@ -45,7 +45,7 @@
  * immediately after each observation; see the actual command transcripts in
  * this task's PR/backlog note):
  *
- * 1. (Proves test 2 has teeth.) Temporarily changed
+ * 1. (Proves test 2b has teeth.) Temporarily changed
  *    `packages/environment/environment-builder/src/config-resolver.ts` line
  *    `const liveEnvValue = processEnv[envName];` to
  *    `const liveEnvValue = undefined;` (disabling the env-var cascade layer
@@ -61,19 +61,52 @@
  *    Restored the `ADHD_ENV_SCOPE` line; re-ran — GREEN again. (`.adhd/*` is
  *    gitignored — see `.gitignore` — so this never surfaced as an untracked
  *    file, but the directory was still removed by hand afterward.)
+ * 3. (Re-run against the fixed, single-import-per-test shape below, per
+ *    code review CHANGES_REQUESTED on the first version of this file —
+ *    see BUG-AGENTMCP-TEST-ISOLATION-SCOPE-001's sibling review note.)
+ *    The original test 2 did TWO `vi.resetModules()` + dynamic
+ *    `import('../../config.js')` calls back-to-back inside one `it()`
+ *    (baseline-unset import, then override-set import). Under concurrent
+ *    system load, vite-node's module cache did not always re-evaluate the
+ *    module fresh on the second import within the same test, so the second
+ *    import sometimes silently reused the first import's already-
+ *    constructed `env` singleton — `defaultMaxTokens` stayed `8192` even
+ *    though `ADHD_AGENT_DEFAULT_MAX_TOKENS=12345` had been set before the
+ *    second `import(...)` call. Reproduced 8/8 failures under load,
+ *    11/11 passes once load subsided — a real non-determinism in the
+ *    two-imports-per-test pattern, not a product bug (an isolated `tsx`
+ *    script importing `config.ts` directly, one process per resolution,
+ *    resolved `12345` correctly every run). Fixed by splitting test 2 into
+ *    2a (baseline, one `vi.resetModules()` + one `import()`) and 2b
+ *    (override, one `vi.resetModules()` + one `import()`) — matching the
+ *    exactly-one-import-per-test shape of tests 1/3/4, none of which ever
+ *    exhibited the race in ~20 runs before or after the split. Re-ran the
+ *    negative control from (1) above against this fixed shape: 2b went RED
+ *    with `liveEnvValue` disabled, GREEN once restored — the assertion
+ *    still has teeth after the fix. Also ran 25 consecutive full-file
+ *    passes (`for i in $(seq 1 25); do vitest run
+ *    real-environment.e2e.test.ts || break; done`) with zero failures,
+ *    including runs against an artificially loaded machine (`yes > /dev/null
+ *    &` background spinners), to confirm the flake is gone.
  *
- * Both are one-time, documented implementation-time proofs, not part of the
- * shipped suite (a permanently-broken negative-control variant is never
- * committed).
+ * All three are one-time, documented implementation-time proofs, not part
+ * of the shipped suite (a permanently-broken negative-control variant is
+ * never committed).
  * ---------------------------------------------------------------------------
  *
  * Isolation: every test gets its own fresh temp `HOME` (`tmp/agent-mcp/
  * env-proof-e2e-home-*`, removed in `afterEach`), `vi.resetModules()` before
- * each dynamic `import('../../config.js')` so the module-level
+ * its single dynamic `import('../../config.js')` so the module-level
  * `loadEnvHierarchy()` call and `env` singleton construction re-run fresh
  * against the current `process.env`, and every touched env var is
  * snapshotted/restored per test so nothing leaks into another test, another
  * file, or the real developer machine's `~/.adhd`.
+ *
+ * DELIBERATE CONSTRAINT (do not "simplify" this back): every `it()` in this
+ * file performs AT MOST ONE `vi.resetModules()` + dynamic
+ * `import('../../config.js')` pair. Two dynamic re-imports of the same
+ * module specifier inside a single test is exactly the pattern that caused
+ * negative control 3 above — do not reintroduce it.
  */
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -147,20 +180,38 @@ describe("agent-mcp real env singleton (config.ts) — end-to-end through the re
     expect(configModule.env.config.server.defaultMaxTokens).toBe(8192);
   });
 
-  it("(test 2) ADHD_AGENT_DEFAULT_MAX_TOKENS env var overrides server.defaultMaxTokens end-to-end through the real Environment", async () => {
+  // Split into 2a/2b (one `vi.resetModules()` + one dynamic `import()` per
+  // test) per code review CHANGES_REQUESTED — see the file header's
+  // "negative control 3" note. The original single-`it()` version did two
+  // back-to-back dynamic re-imports of `../../config.js` and was flaky
+  // under system load (vite-node's module cache did not always evaluate
+  // the second import fresh). 2a proves the baseline (unset -> code
+  // default); 2b proves the override, independently, against its own fresh
+  // module graph — together they still prove the override is a real
+  // cascade effect and not a coincidental hardcoded value, without ever
+  // importing the module twice inside one test.
+  it("(test 2a) baseline: with ADHD_AGENT_DEFAULT_MAX_TOKENS unset, server.defaultMaxTokens resolves to the code default (8192)", async () => {
     const tmpHome = mkTmpHome();
     process.env.HOME = tmpHome;
     process.env.ADHD_ENV_SCOPE = "global";
     delete process.env.ADHD_AGENT_DEFAULT_MAX_TOKENS;
     vi.resetModules();
 
-    // Baseline: unset -> the code default (8192), proving the override
-    // below is a real cascade effect and not a coincidental hardcoded value.
     const baseline = await import("../../config.js");
-    expect(baseline.env.config.server.defaultMaxTokens).toBe(8192);
 
-    vi.resetModules();
+    expect(baseline.env.config.server.defaultMaxTokens).toBe(8192);
+    expect(baseline.env.get("provenance.server.defaultMaxTokens")).toMatchObject({
+      source: "default",
+    });
+  });
+
+  it("(test 2b) ADHD_AGENT_DEFAULT_MAX_TOKENS env var overrides server.defaultMaxTokens end-to-end through the real Environment", async () => {
+    const tmpHome = mkTmpHome();
+    process.env.HOME = tmpHome;
+    process.env.ADHD_ENV_SCOPE = "global";
     process.env.ADHD_AGENT_DEFAULT_MAX_TOKENS = "12345";
+    vi.resetModules();
+
     const overridden = await import("../../config.js");
 
     expect(overridden.env.config.server.defaultMaxTokens).toBe(12345);
