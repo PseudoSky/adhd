@@ -452,6 +452,75 @@ describe('Python column — verbatim expressions from DESIGN §13.2', () => {
 });
 
 // ---------------------------------------------------------------------------
+// 8a. Java column — FEAT-APIGEN-001 slice 1/3: filled (no scaffold left)
+// ---------------------------------------------------------------------------
+
+describe('Java column — filled (FEAT-APIGEN-001), no __SCAFFOLD_* placeholders remain', () => {
+  it('no cell in the java column contains a "__SCAFFOLD_" placeholder', () => {
+    for (const id of CANONICAL_LOGICAL_TYPE_IDS) {
+      const cell = TEMPLATE_CELLS.java[id as keyof LanguageTable];
+      expect(
+        cell.encode,
+        `java "${id}".encode still has a __SCAFFOLD_ placeholder`
+      ).not.toMatch(/__SCAFFOLD_/);
+      expect(
+        cell.decode,
+        `java "${id}".decode still has a __SCAFFOLD_ placeholder`
+      ).not.toMatch(/__SCAFFOLD_/);
+    }
+  });
+
+  it('negative control: the regex DOES catch a placeholder if reintroduced', () => {
+    const dirty: TemplateCell = {
+      encode: '__SCAFFOLD_JAVA_DATETIME_ENCODE__',
+      decode: 'Instant.parse($)',
+      mode: 'native',
+    };
+    expect(dirty.encode).toMatch(/__SCAFFOLD_/);
+  });
+
+  it('date-time: Instant.toString()/Instant.parse($) via jackson-datatype-jsr310', () => {
+    expect(TEMPLATE_CELLS.java['date-time'].encode).toBe('$.toString()');
+    expect(TEMPLATE_CELLS.java['date-time'].decode).toBe('Instant.parse($)');
+    expect(TEMPLATE_CELLS.java['date-time'].dep?.name).toBe(
+      'jackson-datatype-jsr310'
+    );
+  });
+
+  it('int64: declarative @JsonFormat(shape=STRING) annotation on both sides', () => {
+    expect(TEMPLATE_CELLS.java['int64'].encode).toContain('@JsonFormat');
+    expect(TEMPLATE_CELLS.java['int64'].decode).toContain('@JsonFormat');
+    expect(TEMPLATE_CELLS.java['int64'].mode).toBe('native');
+  });
+
+  it('decimal: @JsonSerialize(ToStringSerializer) encode / new BigDecimal($) decode', () => {
+    expect(TEMPLATE_CELLS.java['decimal'].encode).toContain(
+      'ToStringSerializer'
+    );
+    expect(TEMPLATE_CELLS.java['decimal'].decode).toBe('new BigDecimal($)');
+  });
+
+  it('byte: identity passthrough (Jackson default base64 codec)', () => {
+    expect(TEMPLATE_CELLS.java['byte'].encode).toBe('$');
+    expect(TEMPLATE_CELLS.java['byte'].decode).toBe('$');
+  });
+
+  it('uuid: $.toString() / UUID.fromString($)', () => {
+    expect(TEMPLATE_CELLS.java['uuid'].encode).toBe('$.toString()');
+    expect(TEMPLATE_CELLS.java['uuid'].decode).toBe('UUID.fromString($)');
+  });
+
+  it('number-special: custom NumberSpecialSerializer/Deserializer annotations', () => {
+    expect(TEMPLATE_CELLS.java['number-special'].encode).toContain(
+      'NumberSpecialSerializer'
+    );
+    expect(TEMPLATE_CELLS.java['number-special'].decode).toContain(
+      'NumberSpecialDeserializer'
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 8. Immutability — TEMPLATE_CELLS is frozen
 // ---------------------------------------------------------------------------
 
