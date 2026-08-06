@@ -6,6 +6,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "npx nx run-many -t build --projects=environment-*",
       "expect": "exit0"
     },
@@ -14,6 +15,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "adhd-env init --generate-config",
       "expect": "exit0"
     },
@@ -22,6 +24,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "adhd-env set test.key test-val --namespace default && adhd-env build",
       "expect": "exit0"
     },
@@ -30,6 +33,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "adhd-env build --namespace production",
       "expect": "exit0"
     },
@@ -38,6 +42,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "node -e 'new (require(\"@adhd/environment\").Environment)({project:\"test\",namespace:\"default\"})'",
       "expect": "exit0"
     },
@@ -46,6 +51,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "node -e 'const{contentHash}=require(\"@adhd/environment\"); process.exit(contentHash({b:\"2\",a:\"1\"})===\"sha256-66e4efebc74d002dabcf821c0ee1402726e5c9d25a8469e7fc3f7d7691464788\"?0:1)'",
       "expect": "exit0"
     },
@@ -54,6 +60,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "test ! -f entrypoint/agent-mcp/src/config.ts",
       "expect": "exit0"
     },
@@ -62,6 +69,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "node -e 'const{build}=require(\"@adhd/environment-builder\"); const s=build({project:{name:\"t\",envPrefix:\"T\"}}); process.exit([\"get\",\"set\",\"configPath\",\"write\"].every(m=>typeof s[m]===\"function\")?0:1)'",
       "expect": "exit0"
     },
@@ -70,6 +78,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_py.py test",
       "expect": "exit0",
       "_note": "F13 \u2014 Python runtime covered EXPLICITLY via the pinned pytest guard (uv run --python 3.10 -m pytest), independent of nx project registration. A narrowed `--projects=environment-*` glob (audit-final.1) cannot substitute for this."
@@ -79,6 +88,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_rs.py test",
       "expect": "exit0",
       "_note": "F13 \u2014 Rust runtime covered EXPLICITLY via the pinned cargo-test guard (rustup run 1.95.0 cargo test), independent of nx project registration."
@@ -88,6 +98,7 @@
       "phase": "contract",
       "tier": null,
       "kind": "exists",
+      "cwd": "repo-root",
       "path": "packages/environment/environment-base-spec/spec/adhd-environment.schema.json"
     },
     {
@@ -95,6 +106,7 @@
       "phase": "contract",
       "tier": null,
       "kind": "exists",
+      "cwd": "repo-root",
       "path": "packages/environment/environment-base-spec/spec/cross-language-test-vectors.json"
     },
     {
@@ -102,6 +114,7 @@
       "phase": "contract",
       "tier": null,
       "kind": "exists",
+      "cwd": "repo-root",
       "path": "packages/environment/environment-base-spec/src/index.ts"
     },
     {
@@ -109,6 +122,7 @@
       "phase": "contract",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "npx nx build environment-base-spec",
       "expect": "exit0"
     },
@@ -117,6 +131,7 @@
       "phase": "builder",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "node -e 'const{m}=require(\"./packages/environment/environment-builder/src/field-merge\"); console.log(typeof m)'",
       "expect": "exit0"
     },
@@ -125,6 +140,7 @@
       "phase": "builder",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "node -e 'const{inferEnvVar}=require(\"./packages/environment/environment-builder/src/config-resolver\"); console.log(inferEnvVar(\"ADHD_AGENT_MCP\",\"db.path\"))'",
       "expect": "exit0"
     },
@@ -133,6 +149,7 @@
       "phase": "builder",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "npx nx build environment-builder",
       "expect": "exit0"
     },
@@ -141,6 +158,7 @@
       "phase": "builder",
       "tier": null,
       "kind": "exists",
+      "cwd": "repo-root",
       "path": "packages/environment/environment-builder/src/environment-snapshot.ts"
     },
     {
@@ -148,6 +166,7 @@
       "phase": "builder",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "npx nx build environment-builder",
       "expect": "exit0"
     },
@@ -156,6 +175,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "exists",
+      "cwd": "repo-root",
       "path": "packages/environment/environment-core-node/src/environment.ts"
     },
     {
@@ -163,6 +183,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "npx nx build environment-core-node",
       "expect": "exit0"
     },
@@ -171,6 +192,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "exists",
+      "cwd": "repo-root",
       "path": "entrypoint/environment-cli/src/api.ts"
     },
     {
@@ -178,6 +200,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "exists",
+      "cwd": "repo-root",
       "path": "entrypoint/environment-cli/src/commands/set.ts"
     },
     {
@@ -185,6 +208,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "exists",
+      "cwd": "repo-root",
       "path": "packages/environment/environment-core-py/src/adhd_environment/environment.py"
     },
     {
@@ -192,6 +216,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_py.py build",
       "expect": "exit0"
     },
@@ -200,6 +225,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "exists",
+      "cwd": "repo-root",
       "path": "packages/environment/environment-core-rs/src/lib.rs"
     },
     {
@@ -207,6 +233,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_rs.py build",
       "expect": "exit0"
     },
@@ -215,6 +242,7 @@
       "phase": "refactor",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "test ! -f entrypoint/agent-mcp/src/config.ts",
       "expect": "exit0"
     },
@@ -223,6 +251,7 @@
       "phase": "refactor",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "test -f entrypoint/agent-mcp/adhd.environment.yaml && grep -Eq \"envPrefixOverride:[[:space:]]*ADHD_AGENT\" entrypoint/agent-mcp/adhd.environment.yaml",
       "expect": "exit0"
     },
@@ -231,6 +260,7 @@
       "phase": "refactor",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "npx nx test agent-mcp",
       "expect": "exit0"
     },
@@ -239,6 +269,7 @@
       "phase": "refactor",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "test -f entrypoint/agent-mcp/src/environment.ts && grep -qs getProviderConfig entrypoint/agent-mcp/src/environment.ts",
       "expect": "exit0"
     },
@@ -247,6 +278,7 @@
       "phase": "refactor",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "test -f entrypoint/agent-mcp/adhd.environment.yaml && grep -qs ADHD_AGENT_DATABASE_PATH entrypoint/agent-mcp/adhd.environment.yaml && grep -qs ADHD_AGENT_OPENAI_SECRET entrypoint/agent-mcp/adhd.environment.yaml && grep -qs ADHD_AGENT_LOG_LEVEL entrypoint/agent-mcp/adhd.environment.yaml",
       "expect": "exit0"
     },
@@ -255,6 +287,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "npx nx build environment-base-spec && npx nx build environment-builder",
       "expect": "exit0"
     },
@@ -263,6 +296,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "npx nx build environment-core-node",
       "expect": "exit0"
     },
@@ -271,6 +305,7 @@
       "phase": "docs",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "test -f packages/environment/environment-core-node/README.md && test -f entrypoint/environment-cli/README.md && test -f packages/environment/environment-core-py/README.md && test -f packages/environment/environment-core-rs/README.md",
       "expect": "exit0"
     },
@@ -279,6 +314,7 @@
       "phase": "scaffold",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "test -d packages/environment/environment-base-spec && test -d packages/environment/environment-builder && test -d packages/environment/environment-core-node && test -d packages/environment/environment-core-py && test -d packages/environment/environment-core-rs",
       "expect": "exit0"
     },
@@ -287,6 +323,7 @@
       "phase": "scaffold",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "test -d entrypoint/environment-cli",
       "expect": "exit0"
     },
@@ -295,6 +332,7 @@
       "phase": "scaffold",
       "tier": null,
       "kind": "present",
+      "cwd": "repo-root",
       "pattern": "@monodon/rust",
       "paths": [
         "nx.json"
@@ -305,6 +343,7 @@
       "phase": "scaffold",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "node -e 'process.exit(require(\"./packages/environment/environment-core-node/package.json\").name===\"@adhd/environment\"?0:1)' && grep -q '\"@adhd/environment\":' tsconfig.base.json",
       "expect": "exit0"
     },
@@ -313,6 +352,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "node -e 'const{Environment}=require(\"./packages/environment/environment-core-node/src/environment\");console.log(typeof Environment)'",
       "expect": "exit0"
     },
@@ -321,6 +361,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "F=packages/environment/environment-core-node/src/environment.ts; grep -q provenance $F && grep -q version $F && grep -q hash $F && grep -qi scope $F && grep -q Proxy $F",
       "expect": "exit0"
     },
@@ -329,6 +370,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "npx nx test environment-core-node",
       "expect": "exit0"
     },
@@ -337,6 +379,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "node -e 'process.exit(require(\"./packages/environment/environment-core-node/package.json\").name===\"@adhd/environment\"?0:1)'",
       "expect": "exit0"
     },
@@ -345,6 +388,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "present",
+      "cwd": "repo-root",
       "pattern": "export",
       "paths": [
         "entrypoint/environment-cli/src/commands/set.ts"
@@ -355,6 +399,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "F=entrypoint/environment-cli/src/api.ts; grep -q 'function init' $F && grep -q 'function build' $F && grep -q 'function set' $F && grep -q 'function status' $F && grep -q 'function verify' $F && grep -q 'function doctor' $F && grep -q 'function configGet' $F && grep -q 'function exportSnapshot' $F && grep -q 'function diff' $F",
       "expect": "exit0"
     },
@@ -363,6 +408,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "npx nx test environment-cli",
       "expect": "exit0"
     },
@@ -371,6 +417,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "npx nx build environment-cli",
       "expect": "exit0"
     },
@@ -379,6 +426,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_py.py test",
       "expect": "exit0"
     },
@@ -387,6 +435,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_py.py import",
       "expect": "exit0"
     },
@@ -395,6 +444,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_rs.py test",
       "expect": "exit0"
     },
@@ -403,6 +453,7 @@
       "phase": "runtime",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_rs.py clippy",
       "expect": "exit0"
     },
@@ -411,6 +462,7 @@
       "phase": "refactor",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "test ! -f entrypoint/agent-mcp/src/utils/load-env.ts",
       "expect": "exit0"
     },
@@ -419,6 +471,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_py.py build",
       "expect": "exit0"
     },
@@ -427,6 +480,7 @@
       "phase": "audit",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "python3 docs/plan/adhd-environment/scripts/guard_runtime_rs.py build",
       "expect": "exit0"
     },
@@ -435,6 +489,7 @@
       "phase": "docs",
       "tier": null,
       "kind": "command",
+      "cwd": "repo-root",
       "cmd": "test -f packages/environment/environment-core-node/README.md && test -f entrypoint/environment-cli/README.md && test -f packages/environment/environment-core-py/README.md && test -f packages/environment/environment-core-rs/README.md",
       "expect": "exit0"
     }
