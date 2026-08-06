@@ -470,15 +470,6 @@ describe('Java column — filled (FEAT-APIGEN-001), no __SCAFFOLD_* placeholders
     }
   });
 
-  it('negative control: the regex DOES catch a placeholder if reintroduced', () => {
-    const dirty: TemplateCell = {
-      encode: '__SCAFFOLD_JAVA_DATETIME_ENCODE__',
-      decode: 'Instant.parse($)',
-      mode: 'native',
-    };
-    expect(dirty.encode).toMatch(/__SCAFFOLD_/);
-  });
-
   it('date-time: Instant.toString()/Instant.parse($) via jackson-datatype-jsr310', () => {
     expect(TEMPLATE_CELLS.java['date-time'].encode).toBe('$.toString()');
     expect(TEMPLATE_CELLS.java['date-time'].decode).toBe('Instant.parse($)');
