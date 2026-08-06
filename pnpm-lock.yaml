@@ -1400,6 +1400,8 @@ importers:
         specifier: ~3.8.3
         version: 3.8.3(@types/node@25.9.5)(rollup@2.80.0)(typescript@5.9.3)(vite@5.0.13)
 
+  packages/workspace/workspace-base-standard: {}
+
   packages/workspace/workspace-base-tools:
     dependencies:
       '@nx/devkit':
