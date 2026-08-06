@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  packages/apigen/java — Java host for apigen (FEAT-APIGEN-001 slice 1/3).
+
+  Companion-source convention: mirrors packages/apigen/python/ (a bare-named
+  language directory holding real source; not itself <domain>-<tier>-<name>
+  since Python already established this precedent). There is no registered
+  Nx plugin for Java in nx.json (only @monodon/rust and @nxlv/python are
+  registered) — this module is driven by hand-authored nx:run-commands
+  executors (see project.json / nx-run.sh), not a new Nx plugin.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.adhd.apigen</groupId>
+  <artifactId>apigen-java</artifactId>
+  <version>0.0.1</version>
+  <packaging>jar</packaging>
+
+  <name>apigen-java</name>
+  <description>Java host for apigen: JavaParser source extraction, codegen-woven Javalin dispatcher, logical-type codec column.</description>
+
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <!-- Pinned via `mvn versions:display-dependency-updates` at implementation
+         time (2026-08-06) against the live Maven Central metadata for each
+         artifact. javaparser-core is pinned to the latest stable 3.26.x patch
+         per SPEC step 1 (not hand-guessed). -->
+    <javaparser.version>3.26.3</javaparser.version>
+    <jackson.version>2.22.1</jackson.version>
+    <javalin.version>6.7.0</javalin.version>
+    <junit.version>5.14.4</junit.version>
+    <junit-platform.version>1.14.4</junit-platform.version>
+
+    <maven-compiler-plugin.version>3.14.1</maven-compiler-plugin.version>
+    <maven-surefire-plugin.version>3.5.4</maven-surefire-plugin.version>
+    <exec-maven-plugin.version>3.5.1</exec-maven-plugin.version>
+    <maven-shade-plugin.version>3.6.1</maven-shade-plugin.version>
+  </properties>
+
+  <dependencies>
+    <!-- JavaParser — used by ApigenJavaExtractor to introspect real .java
+         source (StaticJavaParser.parse(Path)) — no source annotation required
+         (SPEC.md Tenet 0/1: every export is exposed; the Java analog is
+         "every public static method on the single top-level public class"). -->
+    <dependency>
+      <groupId>com.github.javaparser</groupId>
+      <artifactId>javaparser-core</artifactId>
+      <version>${javaparser.version}</version>
+    </dependency>
+
+    <!-- Jackson — JSON I/O for the extractor's stdout protocol, the Javalin
+         dispatcher's JsonNode-level codec glue, and the conformance matrix
+         runner's vector I/O. -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.datatype</groupId>
+      <artifactId>jackson-datatype-jsr310</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+
+    <!-- Javalin — the real HTTP server ApigenJavalinServer boots, routing
+         every request through the single compiler-generated
+         GeneratedDispatcher.dispatch(String, JsonNode) entrypoint. -->
+    <dependency>
+      <groupId>io.javalin</groupId>
+      <artifactId>javalin</artifactId>
+      <version>${javalin.version}</version>
+    </dependency>
+    <!-- Javalin's own logging backend (SLF4J no-op by default warns loudly;
+         a real, minimal backend keeps Javalin/Jetty startup logs sane in the
+         two-phase-spawn stdout protocol without polluting the {"ready":true}
+         readiness line). -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <version>2.0.16</version>
+    </dependency>
+
+    <!-- JUnit 5 -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <finalName>apigen-java</finalName>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>${maven-compiler-plugin.version}</version>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>${maven-surefire-plugin.version}</version>
+      </plugin>
+
+      <!-- exec:java — used both by the TS two-phase-spawn plugin (phase 1:
+           ApigenJavaExtractor; the compiled GeneratedDispatcher + server) and
+           by the conformance gate (ApigenConformanceMatrix). -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>${exec-maven-plugin.version}</version>
+      </plugin>
+
+      <!-- Shaded (fat) jar so ApigenJavalinServer / ApigenConformanceMatrix
+           can be launched with a single `-jar` classpath from the TS plugin
+           and the conformance gate without needing to reconstruct Maven's
+           dependency classpath at spawn time. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>${maven-shade-plugin.version}</version>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <shadedArtifactAttached>true</shadedArtifactAttached>
+              <shadedClassifierName>all</shadedClassifierName>
+              <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <mainClass>com.adhd.apigen.extractor.ApigenJavaExtractor</mainClass>
+                </transformer>
+              </transformers>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
