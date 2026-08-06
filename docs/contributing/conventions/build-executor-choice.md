@@ -89,17 +89,33 @@ membership exactly like `decompile-cli` in category (c): retained, unverified, n
 settled fact — until either a real consumer proves the sync-require path or someone
 confirms it's safe to move to `@nx/vite:build`.
 
-### (c) Legacy/CJS-heavy surface — lower-confidence
+### (c) Unverified/defensive retention — lower-confidence
 
-**Member:** `decompile-cli`.
+Both members here are on `@nx/js:tsc` for reasons that are **plausible but not
+mechanism-verified** the way (a) and (b) are — no one has actually attempted a
+`@nx/vite:build` for either and observed a concrete failure. Treat both as "keep on
+`tsc` until someone either proves the failure or proves it's safe to move," not as
+settled fact.
 
-Its dependency surface (`cheerio`, `depcheck`, `dependency-cruiser`, `fs-extra`,
-`tough-cookie`, `babel-polyfill`, `react`) makes bundling risk plausible — several of
-these are legacy CJS packages with dynamic `require()` patterns Rollup can mishandle —
-but this is **honestly lower-confidence** than categories (a) and (b): no one has
-actually attempted a `@nx/vite:build` for this project and observed a concrete
-failure. Treat this as "keep on `tsc` until someone either proves the failure or
-proves it's safe to move," not as settled fact.
+**Members:**
+
+- `decompile-cli` — its dependency surface (`cheerio`, `depcheck`,
+  `dependency-cruiser`, `fs-extra`, `tough-cookie`, `babel-polyfill`, `react`) makes
+  bundling risk plausible: several of these are legacy CJS packages with dynamic
+  `require()` patterns Rollup can mishandle.
+- `environment-cli` — moved onto `@nx/js:tsc` as the fix for `BUILD-CONSIST-002` (an
+  incompletely-scaffolded stub whose original `build` target was an uncached,
+  mis-pathed `nx:run-commands` invocation, not a working bundle at all). The fix
+  pattern-matched `decompile-cli`'s known-working config shape
+  (`tsconfig.lib.json`, `generatePackageJson: true`) to get a correct build quickly.
+  **This is not category (b) membership** — confirmed via `grep -n
+  '"generators"\|"executors"' entrypoint/environment-cli/package.json` (no match) and
+  no `generators.json`/`executors.json` on disk — and its dependency surface
+  (`yaml`, `tslib`, `@adhd/environment-base-spec`, `@adhd/environment-builder`) has no
+  native-addon or legacy-CJS signal either. It sits here in (c) because the choice was
+  a defensive pattern-match with zero verified mechanism behind it, exactly like
+  `decompile-cli`'s "lower-confidence" framing — not because its dependency surface
+  independently justifies the category.
 
 The pointer comment in `entrypoint/decompile-cli/vite.config.ts` (around line 13)
 links here rather than only citing the backlog ID, so a reader lands on the full
@@ -112,12 +128,9 @@ have been added since:
 
 - **`agent-generator-plugin`** — added to category (b) (Nx-devkit plugin-loader);
   see above.
-- **`environment-cli`** — moved onto `@nx/js:tsc` as the fix for `BUILD-CONSIST-002`
-  (an incompletely-scaffolded stub with an uncached, mis-pathed `nx:run-commands`
-  build). Its fix direction was to match `decompile-cli`'s pattern
-  (`tsconfig.lib.json`, `generatePackageJson: true`) — i.e. the same devkit/CLI-loading
-  rationale category as (b), recorded here so this doc doesn't silently drift stale
-  the next time someone audits the split.
+- **`environment-cli`** — added to category (c) (unverified/defensive retention); see
+  above. Recorded here so this doc doesn't silently drift stale the next time someone
+  audits the split.
 
 This section exists specifically so the count and membership above don't go stale
 unnoticed on the next audit — if you add or remove a `@nx/js:tsc` project, update the
