@@ -12,6 +12,7 @@ import expressPlugin from '@adhd/apigen-plugin-api-express';
 import cliOutputPlugin from '@adhd/apigen-plugin-cli-output';
 import pyFlaskPlugin from '@adhd/apigen-plugin-py-flask';
 import pyGrpcPlugin from '@adhd/apigen-plugin-py-grpc';
+import javaJavalinPlugin from '@adhd/apigen-plugin-java-javalin';
 import { addLoggingOptions } from './lib/logging';
 import type { OutputPlugin } from '@adhd/apigen-core-client';
 
@@ -28,6 +29,9 @@ const plugins: Record<string, OutputPlugin> = {
   'py-flask': pyFlaskPlugin,
   // Python gRPC target — spawns python3 -m apigen_python.grpc_server
   'py-grpc': pyGrpcPlugin,
+  // Java HTTP target (FEAT-APIGEN-001) — two-phase spawn: mvn exec:java
+  // ApigenJavaExtractor, then a codegen-woven ApigenJavalinServer.
+  'java-javalin': javaJavalinPlugin,
 };
 
 const program = new Command().name('apigen').version('0.1.0');

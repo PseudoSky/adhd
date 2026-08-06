@@ -22,6 +22,7 @@
     "@adhd/apigen-plugin-cli-output": "^0.2.2",
     "@adhd/apigen-plugin-py-flask": "^0.2.2",
     "@adhd/apigen-plugin-py-grpc": "^0.2.2",
+    "@adhd/apigen-plugin-java-javalin": "^0.0.1",
     "@adhd/apigen-plugin-health": "^0.2.1",
     "@adhd/apigen-plugin-batch": "^0.2.1",
     "@adhd/apigen-plugin-logger": "^0.2.0",
