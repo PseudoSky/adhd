@@ -1,6 +1,9 @@
 {
   "name": "@adhd/dispatch-cli",
   "version": "0.1.0",
+  "bin": {
+    "dispatch-cli": "./dist/bin/cli.js"
+  },
   "dependencies": {
     "@adhd/dispatch-serializer-json": "^0.1.0",
     "@adhd/dispatch-orchestrator": "^0.1.0",
