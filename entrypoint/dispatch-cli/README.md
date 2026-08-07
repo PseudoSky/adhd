@@ -1,11 +1,9 @@
 # dispatch-cli
 
 The human dispatcher CLI for `docs/plan/dispatch-production` (and any other
-plan-state-machine `dag.json`). This package holds **no hand-written CLI
-code** — `src/api.ts` is a plain, JSDoc'd TypeScript functions surface;
-[`@adhd/apigen`](../../apigen) generates the actual Commander CLI from it (see
-`generate-cli` in `project.json`). `src/api.ts` is the contract; the
-generated CLI is a disposable projection of it.
+plan-state-machine `dag.json`). This is a published, **npx-invocable command-line tool** — `package.json` declares `bin: { "dispatch-cli": "./dist/bin/cli.js" }`, and `npm run build` compiles the hand-written `bin/cli.ts` fallback into the `dist/bin/cli.js` executable that ships with the package.
+
+The CLI wraps `src/api.ts`, a plain, JSDoc'd TypeScript functions surface where all commands are defined. The published binary (`dist/bin/cli.js`) is the compiled-to-JavaScript version of `bin/cli.ts`, which is a hand-written Commander wrapper over the same `api.ts` contract.
 
 ## Commands
 
@@ -19,13 +17,26 @@ generated CLI is a disposable projection of it.
 | `run --dag-path <p> [--dry-run]` | **writes** the dag | Runs exactly one `@adhd/dispatch-orchestrator` scheduling cycle. |
 | `calibrate --model-tier <Haiku\|Sonnet\|Opus>` | **writes** `~/.adhd/dispatch-calibration.json` | Fires a null-task dispatch to measure a baseline per-tier token cost ("B"). |
 
-## Generate + run the CLI
+## Run the CLI
+
+After installation and build, invoke the compiled binary directly:
 
 ```bash
-npx nx run dispatch-cli:generate-cli   # → dist/entrypoint/dispatch-cli/cli/cli.ts
+npx dispatch-cli eligible --dag-path docs/plan/dispatch-production/dag.json
+```
 
+In development (in-repo), build the compiled binary first:
+
+```bash
+npx nx run dispatch-cli:build-bin
+npx dispatch-cli eligible --dag-path docs/plan/dispatch-production/dag.json
+```
+
+Or use `tsx` directly against the hand-written `bin/cli.ts` fallback:
+
+```bash
 npx tsx --tsconfig tsconfig.base.json \
-  dist/entrypoint/dispatch-cli/cli/cli.ts \
+  bin/cli.ts \
   eligible --dag-path docs/plan/dispatch-production/dag.json
 ```
 
@@ -40,15 +51,7 @@ network, no cost, fully deterministic. `dryRun: false` wires a real
 `AgentMcpRunner` that spawns `npx -y @adhd/agent-mcp` and fires real, billed
 model calls. `calibrate` *always* fires one real model call.
 
-**CLI caveat:** the apigen `cli-output` plugin emits boolean flags as
-presence-only (`--dry-run` sets `true`; there is no `--no-dry-run` negation),
-so the apigen-*generated* CLI can only ever request the safe default — it
-cannot reach `dryRun: false`. `bin/cli.ts` (the hand-written fallback — see
-"Generate + run the CLI" above) uses Commander's native `--no-dry-run`
-negation instead, so it *does* reach the real path from the command line
-today — no TypeScript call-site needed — proven by `cli-smoke.spec.ts`'s
-`run --no-dry-run` test. See the cli milestone completion report
-(`docs/plan/dispatch-production`) for the tracked apigen-core follow-up.
+**CLI implementation:** `bin/cli.ts` (the hand-written fallback) uses Commander's native `--no-dry-run` negation, so it *does* reach the real paid path from the command line — proved by `cli-smoke.spec.ts`'s `run --no-dry-run` test. This is the CLI that ships (compiled to `dist/bin/cli.js` and executed via `npx dispatch-cli`).
 
 Neither path is exercised by this package's default-running tests, which
 call the DI'd `lib/core.ts` functions directly with an injected
@@ -56,13 +59,22 @@ call the DI'd `lib/core.ts` functions directly with an injected
 
 ## Building
 
-Run `nx build dispatch-cli` to build the library.
+Run `nx build dispatch-cli` to build the main library code. This does NOT compile the CLI binary — you must also run `nx run dispatch-cli:build-bin` to compile `bin/cli.ts` to JavaScript (`dist/bin/cli.js`), which is what gets published.
+
+For a complete build (library + CLI binary):
+```bash
+npx nx run dispatch-cli:build-bin
+```
+
+The `build-bin` target depends on `build`, so it runs both automatically. This produces `dist/bin/cli.js`, which is declared as the `bin` entry in `package.json` and becomes the npx-invocable command when the package is published.
 
 ## Running unit tests
 
-Run `nx test dispatch-cli` to execute the unit tests via [Vitest](https://vitest.dev/)
-— includes a default-running smoke test that generates the real CLI and
-spawns it as a child process.
+Run `nx test dispatch-cli` to execute the unit tests via [Vitest](https://vitest.dev/).
+This automatically builds and tests:
+- The generated CLI (via `generate-cli` target)
+- The compiled binary (via `build-bin` target) — the actual `dist/bin/cli.js` that ships with the package
+- Smoke tests that spawn both CLI paths as child processes
 
 ## Real end-to-end lifecycle test
 
