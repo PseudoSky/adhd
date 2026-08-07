@@ -122,6 +122,9 @@
       "@adhd/apigen-plugin-ir-cache": [
         "./packages/apigen/apigen-plugin-ir-cache/src/index.ts"
       ],
+      "@adhd/apigen-plugin-java-javalin": [
+        "./packages/apigen/apigen-plugin-java-javalin/src/index.ts"
+      ],
       "@adhd/apigen-plugin-jsonschema": [
         "./packages/apigen/apigen-plugin-jsonschema/src/index.ts"
       ],

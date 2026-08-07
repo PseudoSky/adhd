@@ -40,6 +40,7 @@ import {
   type InternalExtractionSession,
 } from './extraction-session';
 import { extractParamDefault, applyParamDefault } from './param-defaults';
+import { detectFormatAnnotatedAlias } from './format-alias';
 
 // ---------------------------------------------------------------------------
 // Public entry-point
@@ -186,6 +187,7 @@ async function extractWithSession(
       // BUG-APIGEN-018: jsDocSource = fnDecl itself (matches v1 named.ts).
       const params = rawParams(sig, fnDecl);
       const returnText = sig.getReturnType().getText();
+      const returnFormat = detectReturnFormat(sig);
 
       ops.push(
         await buildActionOp(
@@ -198,7 +200,8 @@ async function extractWithSession(
           returnText,
           fnDecl.isAsync(),
           tsconfig,
-          session
+          session,
+          returnFormat
         )
       );
       continue;
@@ -233,6 +236,7 @@ async function extractWithSession(
         varDecl.getVariableStatement()
       );
       const returnText = sig.getReturnType().getText();
+      const returnFormat = detectReturnFormat(sig);
       const isAsync =
         initKind === 'ArrowFunction'
           ? (init as import('ts-morph').ArrowFunction).isAsync()
@@ -249,7 +253,8 @@ async function extractWithSession(
           returnText,
           isAsync,
           tsconfig,
-          session
+          session,
+          returnFormat
         )
       );
     } else if (initKind === 'ObjectLiteralExpression') {
@@ -273,6 +278,7 @@ async function extractWithSession(
           varDecl.getVariableStatement()
         );
         const returnText = sig.getReturnType().getText();
+        const returnFormat = detectReturnFormat(sig);
 
         // Path: [file, objectName, propName] — file segment omitted when
         // `dropFileSegment` is set (see `fileSeg` above).
@@ -292,7 +298,8 @@ async function extractWithSession(
             returnText,
             false,
             tsconfig,
-            session
+            session,
+            returnFormat
           )
         );
       }
@@ -353,6 +360,7 @@ async function extractWithSession(
           // v1's object-literal-only `extractDefault`).
           const params = rawParamsSig(sig, exportAssign);
           const returnText = sig.getReturnType().getText();
+          const returnFormat = detectReturnFormat(sig);
           const isAsync =
             exprKind === 'ArrowFunction'
               ? (expr as import('ts-morph').ArrowFunction).isAsync()
@@ -369,7 +377,8 @@ async function extractWithSession(
               returnText,
               isAsync,
               tsconfig,
-              session
+              session,
+              returnFormat
             )
           );
         }
@@ -387,6 +396,7 @@ async function extractWithSession(
           // default-export.ts's object-property branch).
           const params = rawParamsSig(sig, exportAssign);
           const returnText = sig.getReturnType().getText();
+          const returnFormat = detectReturnFormat(sig);
           // SPEC §5: default object → path=[file,"default",…keys] (file
           // segment omitted when `dropFileSegment` is set).
           const propPath: Segment[] = [
@@ -405,7 +415,8 @@ async function extractWithSession(
               returnText,
               false,
               tsconfig,
-              session
+              session,
+              returnFormat
             )
           );
         }
@@ -429,6 +440,7 @@ async function extractWithSession(
         // form, not a bare `export default function foo(…)`).
         const params = rawParams(sig, fnDecl);
         const returnText = sig.getReturnType().getText();
+        const returnFormat = detectReturnFormat(sig);
         ops.push(
           await buildActionOp(
             project,
@@ -440,7 +452,8 @@ async function extractWithSession(
             returnText,
             fnDecl.isAsync(),
             tsconfig,
-            session
+            session,
+            returnFormat
           )
         );
       }
@@ -458,6 +471,7 @@ async function extractWithSession(
       if (shouldSkip(propName)) continue;
       const params = rawParamsSig(sig);
       const returnText = sig.getReturnType().getText();
+      const returnFormat = detectReturnFormat(sig);
       // Synthesise stable id from filename + symbol — CJS module scope
       // (file segment omitted when `dropFileSegment` is set).
       const cjsPath: Segment[] = [
@@ -475,7 +489,8 @@ async function extractWithSession(
           returnText,
           false,
           tsconfig,
-          session
+          session,
+          returnFormat
         )
       );
     }
@@ -494,6 +509,15 @@ type RawParam = {
   optional: boolean;
   /** BUG-APIGEN-018: raw source text of the param's default value, if any. */
   defaultValue?: string;
+  /**
+   * DEBT-APIGEN-007: `@format` JSDoc tag recovered from a plain, non-generic
+   * reference to a user-defined scalar type alias — see
+   * `detectFormatAnnotatedAlias`'s doc comment. `type` above (from
+   * `Type#getText()`) has already lost the alias's identity by the time this
+   * field is populated; this is a narrow side-channel that recovers just the
+   * `@format` annotation without changing type-text resolution itself.
+   */
+  format?: string;
 };
 
 /**
@@ -629,6 +653,56 @@ function hoistNestedDefs(
   return clone(fragment) as Record<string, unknown>;
 }
 
+/**
+ * DEBT-APIGEN-007: merges a recovered `@format` JSDoc annotation onto a
+ * built param/output schema fragment, in place — but ONLY when it is safe
+ * and unambiguous to do so:
+ *   - no-op when `format` is absent (the common case — nothing recovered).
+ *   - no-op when the schema already carries its own `format` (never
+ *     overwrite a format ts-json-schema-generator itself already resolved,
+ *     e.g. via the decimal.js nominal-detection path).
+ *   - no-op when the schema is a `$ref`, or has `properties`/`items` — this
+ *     annotation only ever applies to a PLAIN scalar leaf schema, never a
+ *     structural/object/array/ref shape (the `detectFormatAnnotatedAlias`
+ *     scalar guard already prevents the alias side from producing a format
+ *     for those, but this is a second, schema-shape-level guard so a bug on
+ *     one side can never silently corrupt the other).
+ *   - otherwise, only actually sets `format` when `schema.type` is one of
+ *     `string`/`number`/`integer`/`boolean`.
+ */
+function mergeFormatIfPlainScalar(
+  schema: Record<string, unknown>,
+  format: string | undefined
+): void {
+  if (!format) return;
+  if (schema['format'] !== undefined) return;
+  if ('$ref' in schema || 'properties' in schema || 'items' in schema) return;
+  const t = schema['type'];
+  if (t === 'string' || t === 'number' || t === 'integer' || t === 'boolean') {
+    schema['format'] = format;
+  }
+}
+
+/**
+ * DEBT-APIGEN-007: return-side counterpart of `RawParam.format` — recovers a
+ * `@format` JSDoc tag from a plain, non-generic reference to a user-defined
+ * scalar type alias used as a function's RETURN type, since
+ * `sig.getReturnType().getText()` (the existing return-type-text resolution,
+ * left unchanged) eagerly resolves the alias away exactly like the param
+ * side. See `detectFormatAnnotatedAlias`'s doc comment for the full set of
+ * narrow guards (non-generic, plain identifier, scalar alias only, etc).
+ * Never throws — an enhancement to extraction, not a required path.
+ */
+function detectReturnFormat(
+  sig: import('ts-morph').Signature
+): string | undefined {
+  try {
+    return detectFormatAnnotatedAlias(sig.getDeclaration()?.getReturnTypeNode());
+  } catch {
+    return undefined;
+  }
+}
+
 async function buildActionOp(
   project: Project,
   sf: SourceFile,
@@ -639,7 +713,8 @@ async function buildActionOp(
   returnText: string,
   isAsync: boolean,
   tsconfig?: string,
-  session?: InternalExtractionSession
+  session?: InternalExtractionSession,
+  returnFormat?: string
 ): Promise<Operation> {
   const exportSeg = makeSeg(exportName);
   const opPath: Segment[] = fileSeg ? [fileSeg, exportSeg] : [exportSeg];
@@ -653,7 +728,8 @@ async function buildActionOp(
     returnText,
     isAsync,
     tsconfig,
-    session
+    session,
+    returnFormat
   );
 }
 
@@ -667,7 +743,8 @@ async function buildActionOpAtPath(
   returnText: string,
   isAsync: boolean,
   tsconfig?: string,
-  session?: InternalExtractionSession
+  session?: InternalExtractionSession,
+  returnFormat?: string
 ): Promise<Operation> {
   // [inv:ctx-name-only] — exclude ctx by name, no type checking. Recorded via
   // `hasCtx` (BUG-APIGEN-001) so a runtime dispatcher can re-inject it as the
@@ -698,6 +775,11 @@ async function buildActionOpAtPath(
     if (p.defaultValue !== undefined) {
       applyParamDefault(propSchema, p.defaultValue);
     }
+    // DEBT-APIGEN-007: re-attach a `@format` JSDoc annotation recovered from
+    // the param's syntactic type-alias reference (see
+    // `detectFormatAnnotatedAlias`) — `propSchema` is already a fresh,
+    // fully-cloned fragment (via `hoistNestedDefs`), safe to mutate here.
+    mergeFormatIfPlainScalar(propSchema, p.format);
     properties[p.name] = propSchema;
   }
 
@@ -710,6 +792,18 @@ async function buildActionOpAtPath(
     tsconfig,
     session
   );
+  // DEBT-APIGEN-007: unlike the param path above, `outputSchema` is used
+  // DIRECTLY with no `hoistNestedDefs` clone — `buildSchema`'s own doc
+  // comment (BUG-APIGEN-029, see above) states its results are memoized by
+  // reference and MUST be treated as immutable by callers. Mutating
+  // `outputSchema` in place would corrupt the shared schema cache for every
+  // other operation that resolves the same return type. Only shallow-clone
+  // (and only when there's actually a format to merge) — the merge itself
+  // only ever touches top-level scalar keys, never anything nested.
+  const finalOutputSchema = returnFormat
+    ? { ...outputSchema }
+    : outputSchema;
+  mergeFormatIfPlainScalar(finalOutputSchema, returnFormat);
 
   const inputSchema: Record<string, unknown> = {
     type: 'object',
@@ -738,7 +832,7 @@ async function buildActionOpAtPath(
     streaming: false,
     safe: false, // action → false per §4
     input: inputSchema,
-    output: outputSchema,
+    output: finalOutputSchema,
     envelope: {},
     typeText: {
       lang: 'ts',
@@ -911,6 +1005,7 @@ function rawParams(
       type: p.getTypeAtLocation(sig.getDeclaration()).getText(),
       optional,
       defaultValue: extractParamDefault(paramDecl, p.getName(), jsDocSource),
+      format: detectFormatAnnotatedAlias(paramDecl?.getTypeNode()),
     };
   });
 }
@@ -939,6 +1034,7 @@ function rawParamsFromSig(
         p.getName(),
         jsDocSource ?? locationNode
       ),
+      format: detectFormatAnnotatedAlias(paramDecl?.getTypeNode()),
     };
   });
 }
@@ -964,6 +1060,7 @@ function rawParamsSig(
         : p.getValueDeclaration()?.getType()?.getText() ?? 'unknown',
       optional,
       defaultValue: extractParamDefault(paramDecl, p.getName(), jsDocSource),
+      format: detectFormatAnnotatedAlias(paramDecl?.getTypeNode()),
     };
   });
 }
