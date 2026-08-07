@@ -24,6 +24,7 @@ export type {
   // capability interfaces
   TargetCapability,
   LayerCapability,
+  ExtractLayerCapability,
   MountCapability,
   MountedOperation,
   // hostBridge (batch-rollout, BATCH_0.0.1.md §2/§F1)
@@ -69,6 +70,7 @@ export type { ExtractOptions } from './lib/extract';
 export {
   composeOnion,
   createExtractInvoker,
+  createExtractInvokerFromPlugins,
 } from './lib/extract-invoker';
 export type {
   ExtractCall,

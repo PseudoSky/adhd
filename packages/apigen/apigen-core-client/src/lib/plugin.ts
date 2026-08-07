@@ -32,6 +32,9 @@ import type {
   TypeText,
 } from './descriptor';
 import type { PluginLanguage } from './types';
+// Type-only, same-package sibling import — see extract-invoker.ts's matching
+// note on the other side of this cycle (design doc Revision 2, R2-2).
+import type { ExtractMiddleware } from './extract-invoker';
 
 // ---------------------------------------------------------------------------
 // §7 — canonical transport identifiers (SPEC §5/§7)
@@ -324,6 +327,59 @@ export interface LayerCapability {
    *              for streaming operations.
    */
   layer(call: Call, next: Next): Promise<Result> | AsyncIterable<Chunk>;
+}
+
+/**
+ * **`extractLayer`** capability — wrap the EXTRACT stage (design doc
+ * `extract-stage-onion-and-ir-cache.md` Revision 2, R2.6 item 1), not the
+ * dispatch stage `LayerCapability` above wraps.
+ *
+ * Same right-fold onion algebra as `LayerCapability.layer` — composed via
+ * {@link createExtractInvokerFromPlugins} in `extract-invoker.ts`, outermost
+ * plugin first — but typed against `ExtractCall`/`ExtractResult`
+ * (`extract-invoker.ts`), never the dispatch-shaped `Call`/`Result`. This is
+ * the deliberate, accepted "two Call shapes" asymmetry: `ExtractCall` has no
+ * `domainArgs`/`envelope`/`operation.id` to view-cast into a dispatch `Call`,
+ * so an extract-stage plugin (e.g. `@adhd/apigen-plugin-ir-cache`) declares
+ * this capability rather than reusing `layer`.
+ *
+ * A plugin may declare BOTH `layer` and `extractLayer` (they compose in their
+ * own, independent stages) or `extractLayer` alongside `target` (e.g. the
+ * ir-cache plugin: `extractLayer` for RUNTIME CACHE mode via `--use`,
+ * `target` for ARTIFACT mode via `--type`).
+ *
+ * **`createLayer` vs `layer` — the `--opt` gap fix.** A `Plugin` object is a
+ * static value with no per-invocation lifecycle hook, so a plain `layer`
+ * middleware built once at module-import time can never see a caller's
+ * `--use <id> --opt cache=<path>` value (unlike `TargetCapability.generate`/
+ * `MountCapability.operations`, which already receive `opts` as an explicit
+ * call-time parameter). `createLayer`, when present, is called ONCE per
+ * plugin at invoker-construction time (`createExtractInvokerFromPlugins`)
+ * with that invocation's flat `--opt` bag (the same bag already threaded to
+ * `TargetCapability.generate`'s `opts` — apigen-cli has exactly one flat
+ * `--opt` bag per invocation, not a per-plugin-id namespaced one; see
+ * `readUseOptions`'s `UseOptions` bag in `apigen-engine-runtime` for the
+ * dispatch-side per-plugin-id shape, which nothing in apigen-cli populates
+ * today, so this deliberately does not invent that infrastructure) and takes
+ * precedence over the static `layer`, which stays as the fallback for a
+ * plugin with no opts-dependent behaviour (or as an already-configured
+ * middleware a HOST builds directly via a factory, e.g.
+ * `entrypoint/backlog/src/server.ts`'s `backlogIrCachePlugin()`).
+ */
+export interface ExtractLayerCapability {
+  /**
+   * A ready-to-use extract-stage middleware — same short-circuit rule as
+   * `LayerCapability.layer`. Used when `createLayer` is absent, or by a host
+   * that constructs its own already-configured `Plugin` object directly
+   * (bypassing `--opt` entirely).
+   */
+  layer?: ExtractMiddleware;
+  /**
+   * Opts-aware factory: builds the middleware from this invocation's `--opt`
+   * bag. Preferred over `layer` by `createExtractInvokerFromPlugins` when
+   * both are present.
+   */
+  createLayer?: (opts: Record<string, unknown>) => ExtractMiddleware;
 }
 
 /**
@@ -696,6 +752,17 @@ export interface Plugin<Opts = Record<string, unknown>> {
      * fields it needs and *read/write* them in its layer function.
      */
     envelope?: EnvelopeCapability;
+
+    /**
+     * Extract-layer capability — wrap the EXTRACT stage (design doc Revision
+     * 2, R2.6 item 1), not the dispatch stage `layer` above wraps.
+     *
+     * Loaded by `--use <plugin>` and composed via
+     * `createExtractInvokerFromPlugins` (`extract-invoker.ts`) — the single
+     * call site is `entrypoint/apigen-cli`'s `orchestrator.ts`'s
+     * `extractSource()`.
+     */
+    extractLayer?: ExtractLayerCapability;
   };
 }
 
