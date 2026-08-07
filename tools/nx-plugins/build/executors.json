@@ -34,6 +34,11 @@
       "implementation": "./executors/link/impl",
       "schema": "./executors/link/schema.json",
       "description": "Symlink dist into node_modules/@adhd/*."
+    },
+    "release-reset": {
+      "implementation": "./executors/release-reset/impl",
+      "schema": "./executors/release-reset/schema.json",
+      "description": "Detect (and, with --live, revert) a partial/half-generated release version+changelog step for this project. Dry-run by default."
     }
   }
 }

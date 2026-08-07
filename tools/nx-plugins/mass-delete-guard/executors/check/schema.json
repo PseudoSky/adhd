@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "$id": "mass-delete-guard-check",
+  "type": "object",
+  "properties": {
+    "base": {
+      "type": "string",
+      "description": "Base ref for --range mode (e.g. a PR's merge-base, or HEAD~1). If omitted, checks the STAGED index (--staged)."
+    },
+    "head": {
+      "type": "string",
+      "description": "Target ref for --range mode. Required if `base` is set."
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}
