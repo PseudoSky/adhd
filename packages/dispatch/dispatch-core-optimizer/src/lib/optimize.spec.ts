@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DagSnapshot } from '@adhd/dispatch-base-spec';
 
 import { snapshot } from './snapshot.js';
-import { computeTokensNaive, optimize } from './optimize.js';
+import { DISPATCH_AGENT_SYSTEM_PREAMBLE, computeTokensNaive, optimize } from './optimize.js';
 import {
   deepFreeze,
   defaultDeps,
@@ -24,6 +24,20 @@ const DOC_SHAPE = {
   description: 'a doc',
   objective: 'explain things',
   required_sections: ['intro'],
+};
+
+const FUNCTION_SHAPE_WITH_TYPE_SPEC = {
+  kind: 'function' as const,
+  ops: [
+    {
+      op: 'add-export' as const,
+      target: 'field',
+      to: null,
+      position: null,
+      required: true,
+      type_spec: { config: 'ProviderConfig' },
+    },
+  ],
 };
 
 function buildSnapshot(overrides: Parameters<typeof miniDag>[0] = {}): DagSnapshot {
@@ -276,5 +290,148 @@ describe('optimize() / computeTokensNaive() non-mutation contract', () => {
     expect(units.length).toBeGreaterThan(0);
     expect(units.flatMap((u) => u.milestones).sort()).toEqual(['a', 'b']);
     expect(naive).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (e) DispatchUnit.systemPrompt/prompt split + execution_mode
+//     (DEBT-DISPATCH-012, DEBT-DISPATCH-005/BL-102)
+// ---------------------------------------------------------------------------
+
+describe('optimize() DispatchUnit systemPrompt/prompt split + execution_mode', () => {
+  it('bakes DISPATCH_AGENT_SYSTEM_PREAMBLE into systemPrompt and the compiled milestone body into prompt — never duplicated — for a real model dispatch', () => {
+    const snap = buildSnapshot({
+      milestones: {
+        a: miniMilestone({
+          model: 'Sonnet',
+          agent: 'test-agent',
+          description: 'Implement the widget factory.',
+        }),
+      },
+      operations: [
+        miniOp({
+          id: 'a.1',
+          milestone: 'a',
+          type: 'generative',
+          shape: FUNCTION_SHAPE,
+          ki_estimate: 100,
+        }),
+      ],
+    });
+    const units = optimize(snap, defaultDeps());
+    expect(units).toHaveLength(1);
+    const [unit] = units;
+    expect(unit).toBeDefined();
+
+    expect(unit?.execution_mode).toBe('model-dispatch');
+    expect(unit?.systemPrompt).toBe(DISPATCH_AGENT_SYSTEM_PREAMBLE);
+    expect(unit?.prompt).toContain('Implement the widget factory.');
+    // NEGATIVE-CONTROL: previously agent-runner.ts's ensureAgent baked
+    // `unit.prompt` — not `unit.systemPrompt` — into every agent_create call,
+    // billing the same text twice per dispatch. This equality check proves
+    // the two ARE genuinely distinct strings today, not just both non-null;
+    // it would pass trivially (and hide the bug) if systemPrompt were ever
+    // computed as `= prompt` again.
+    expect(unit?.prompt).not.toBe(unit?.systemPrompt);
+  });
+
+  it('marks a D-12 guard-only milestone (agent: null, model: null, zero ops) as guard-only with both prompt fields null', () => {
+    const snap = buildSnapshot({
+      milestones: {
+        a: miniMilestone({ agent: null, model: null, effort: null }),
+      },
+      operations: [],
+    });
+    const units = optimize(snap, defaultDeps());
+    expect(units).toHaveLength(1);
+    const [unit] = units;
+    expect(unit).toBeDefined();
+
+    expect(unit?.execution_mode).toBe('guard-only');
+    expect(unit?.systemPrompt).toBeNull();
+    expect(unit?.prompt).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (f) compilePrompt nested type_spec inlining (BL-104)
+// ---------------------------------------------------------------------------
+
+describe('optimize() compilePrompt nested type_spec inlining', () => {
+  it('inlines a ShapeOpDag.type_spec as a nested "- field: Type" line under its op', () => {
+    const snap = buildSnapshot({
+      milestones: {
+        a: miniMilestone({ model: 'Sonnet', agent: 'test-agent' }),
+      },
+      operations: [
+        miniOp({
+          id: 'a.1',
+          milestone: 'a',
+          type: 'generative',
+          shape: FUNCTION_SHAPE_WITH_TYPE_SPEC,
+          ki_estimate: 100,
+        }),
+      ],
+    });
+    const units = optimize(snap, defaultDeps());
+    expect(units).toHaveLength(1);
+    const prompt = units[0]?.prompt;
+
+    expect(prompt).not.toBeNull();
+    // Case-sensitive substring match, per acceptance criteria: the nested
+    // type_spec line itself satisfies both '- config' and the fuller
+    // '- config: ProviderConfig' substring.
+    expect(prompt).toContain('- config');
+    expect(prompt).toContain('- config: ProviderConfig');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// (g) fits_context_window JSON round-trip (DEBT-DISPATCH-014)
+// ---------------------------------------------------------------------------
+
+describe('optimize() DispatchUnit.fits_context_window JSON round-trip', () => {
+  it('serializes fits_context_window as a plain boolean when a model tier has no known context window in either the snapshot or deps', () => {
+    const deps = defaultDeps({
+      // Haiku deliberately absent from deps.contextWindowPerTier.
+      contextWindowPerTier: { Sonnet: 200000, Opus: 200000 },
+    });
+    const dag = miniDag({
+      milestones: {
+        a: miniMilestone({ model: 'Haiku', agent: 'test-agent' }),
+      },
+      operations: [
+        miniOp({
+          id: 'a.1',
+          milestone: 'a',
+          type: 'generative',
+          shape: FUNCTION_SHAPE,
+          ki_estimate: 100,
+        }),
+      ],
+    });
+    // Built with the SAME restricted `deps` (not defaultDeps()) so
+    // snapshot()'s own resolveContextWindowPerTier fallback doesn't
+    // silently backfill Haiku from a full deps object — see buildSnapshot(),
+    // which always uses defaultDeps() and would mask this precondition.
+    const snap = snapshot(dag, deps);
+    // Precondition: Haiku is absent from BOTH sources of context_window_per_tier.
+    expect(snap.optimization.context_window_per_tier['Haiku']).toBeUndefined();
+    expect(deps.contextWindowPerTier['Haiku']).toBeUndefined();
+
+    const units = optimize(snap, deps);
+    expect(units).toHaveLength(1);
+
+    const json = JSON.stringify(units);
+    // NEGATIVE-CONTROL: if fits_context_window ever held the raw (Infinity)
+    // window value instead of the computed boolean, JSON.stringify silently
+    // turns Infinity into the literal `null` (JSON has no Infinity token) —
+    // both of these checks would catch that regression.
+    expect(json).not.toContain('"fits_context_window":null');
+    expect(json).not.toContain('Infinity');
+
+    const parsed = JSON.parse(json) as typeof units;
+    expect(typeof parsed[0]?.fits_context_window).toBe('boolean');
+    expect(parsed[0]?.fits_context_window).toBe(true);
   });
 });

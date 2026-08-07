@@ -28,6 +28,7 @@
  */
 import type {
   DagSnapshot,
+  DispatchExecutionMode,
   DispatchUnit,
   IOptimizerDeps,
   KindFamily,
@@ -36,6 +37,20 @@ import type {
 } from '@adhd/dispatch-base-spec';
 
 import { lookupFileSizes, siBytesAsTokens } from './size-tokens.js';
+
+/**
+ * Stable, milestone-independent preamble baked into every model-dispatch
+ * DispatchUnit's `systemPrompt` (DEBT-DISPATCH-012). Never varies per
+ * milestone — that's precisely what makes it safe to bake once at
+ * agent_create and never re-send.
+ */
+export const DISPATCH_AGENT_SYSTEM_PREAMBLE =
+  'You are a dispatch-orchestrator worker agent executing one or more ' +
+  'milestones from a dependency-DAG build plan. Each task turn gives you the ' +
+  'full compiled instructions for this dispatch: milestone description, the ' +
+  'operations to perform, and the guard command that defines done. Execute ' +
+  'the operations precisely and produce real output (code, docs, or config) ' +
+  '— never a plan or a summary in place of the work.';
 
 // ---------------------------------------------------------------------------
 // Candidate selection
@@ -192,6 +207,11 @@ function compilePrompt(
             const toStr = sop.to !== null ? ` → ${sop.to}` : '';
             const targetStr = sop.target !== null ? ` "${sop.target}"` : '';
             parts.push(`    - ${sop.op}${targetStr}${toStr}`);
+            if (sop.type_spec) {
+              for (const [field, fieldType] of Object.entries(sop.type_spec)) {
+                parts.push(`        - ${field}: ${fieldType}`);
+              }
+            }
           }
         }
       }
@@ -236,6 +256,13 @@ function resolveB(
  * Resolve the effective context window for a model tier: snapshot wins, then
  * deps.contextWindowPerTier, then +Infinity (no known constraint — never
  * reject on a genuinely unresolvable window; mirrors the PoC's `?? Infinity`).
+ *
+ * Unlike `resolveContextWindowPerTier()` (which now throws for an absent
+ * tier because its result is PERSISTED into
+ * `SnapshotOptimization.context_window_per_tier`), this value feeds only the
+ * in-memory `fits_context_window` boolean computed in `assembleUnit()` and
+ * is never itself serialized — Infinity here is safe and intentional
+ * (DEBT-DISPATCH-014).
  */
 function resolveContextWindow(
   model: ModelTier | null,
@@ -412,6 +439,17 @@ function assembleUnit(
 
   const agent_name = resolveAgentName(primaryM?.agent ?? null);
   const prompt = compilePrompt(packedSlugs, ctx.snapshot.milestones, ctx.snapshot.operations);
+  // Derived from `prompt !== null` — NOT `model === null` — deliberately:
+  // a batch can have every op typed 'tool-call' (compilePrompt's allToolCall
+  // === true → prompt === null) while its milestone still carries a non-null
+  // model/agent (e.g. every fixture in this repo's own test suite). Keying
+  // off `model === null` alone would mislabel that tool-call-only case as
+  // 'model-dispatch', which is exactly the regression this field exists to
+  // prevent (DEBT-DISPATCH-005 / BL-102) — it must track the SAME condition
+  // that decides systemPrompt below, not merely the D-12 guard-only subset
+  // of it.
+  const execution_mode: DispatchExecutionMode = prompt !== null ? 'model-dispatch' : 'guard-only';
+  const systemPrompt = prompt !== null ? DISPATCH_AGENT_SYSTEM_PREAMBLE : null;
 
   return {
     id: `${primarySlug}.dispatch.${unitIndex}`,
@@ -422,9 +460,11 @@ function assembleUnit(
     two_stage: primaryM?.two_stage ?? false,
     provider: null,
     agent_name,
+    execution_mode,
     mcp_servers: null,
     resolved_max_tokens: null,
     background: true,
+    systemPrompt,
     prompt,
     context_files,
     si_bytes,
