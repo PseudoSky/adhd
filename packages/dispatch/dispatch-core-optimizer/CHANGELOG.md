@@ -1,3 +1,21 @@
+## 0.1.1 (2026-08-07)
+
+
+### 🚀 Features
+
+- **dispatch-core-optimizer:** assemble DispatchUnit.systemPrompt/execution_mode, inline type_spec
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+
 ## 0.0.6 (2026-07-25)
 
 

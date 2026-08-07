@@ -1,3 +1,25 @@
+## 0.1.1 (2026-08-07)
+
+
+### 🩹 Fixes
+
+- **workspace-codegen-nx:** wire vite-paths helper into scaffold; fix broken externalizeRealDeps path + stale dist layout
+
+- **workspace-base-vite-paths:** commit test fix + lockfile delta from code review
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+
+### 🔥 Performance
+
+- **test:** bound vitest thread pools to curb CPU oversubscription (DEBT-TEST-CPU-OVERSUBSCRIBED-001)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+
 ## 0.0.4 (2026-07-24)
 
 This was a version bump only for workspace-codegen-nx to align it with other projects, there were no code changes.

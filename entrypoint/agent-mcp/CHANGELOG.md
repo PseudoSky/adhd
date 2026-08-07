@@ -1,3 +1,18 @@
+## 2.2.2 (2026-08-07)
+
+
+### 🩹 Fixes
+
+- **agent-mcp:** eliminate double-import flakiness in real-environment.e2e.test.ts
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+
 ## 2.2.1 (2026-07-27)
 
 Fixes BUG-011 (CRITICAL): the process-entrypoint guard in `src/index.ts`

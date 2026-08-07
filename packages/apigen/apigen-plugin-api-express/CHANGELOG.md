@@ -1,3 +1,21 @@
+## 0.2.3 (2026-08-07)
+
+
+### 🚀 Features
+
+- **apigen:** schema-driven worked examples for MCP tool descriptions + validation errors
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+
 ## 0.2.2 (2026-07-30)
 
 
