@@ -108,7 +108,7 @@
  * module specifier inside a single test is exactly the pattern that caused
  * negative control 3 above — do not reintroduce it.
  */
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -142,6 +142,26 @@ function mkTmpHome(): string {
   const dir = mkdtempSync(join(TMP_BASE, "home-"));
   cleanupDirs.push(dir);
   return dir;
+}
+
+/** Sorted, recursive listing of every entry name under `REPO_ROOT/data`
+ *  (or `null` if the directory doesn't exist yet). Used to prove a DELTA —
+ *  see the "nothing lands in this repo's own `./data/`" assertion in test 3
+ *  below for why this can't be an absolute existsSync check. */
+function snapshotRepoDataDir(): string[] | null {
+  const dataDir = join(REPO_ROOT, "data");
+  if (!existsSync(dataDir)) return null;
+  const entries: string[] = [];
+  const walk = (dir: string, prefix: string): void => {
+    for (const name of readdirSync(dir).sort()) {
+      const rel = prefix ? join(prefix, name) : name;
+      entries.push(rel);
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) walk(full, rel);
+    }
+  };
+  walk(dataDir, "");
+  return entries.sort();
 }
 
 beforeEach(() => {
@@ -229,6 +249,10 @@ describe("agent-mcp real env singleton (config.ts) — end-to-end through the re
     delete process.env.ADHD_AGENT_DATABASE_PATH;
     vi.resetModules();
 
+    // Snapshot BEFORE the code under test runs — see the delta assertion at
+    // the end of this test for why this can't be an absolute check.
+    const repoDataDirBefore = snapshotRepoDataDir();
+
     const { env } = await import("../../config.js");
 
     const dbPath = env.files.db;
@@ -259,8 +283,28 @@ describe("agent-mcp real env singleton (config.ts) — end-to-end through the re
     expect(writtenSnapshotPath.startsWith(tmpHome)).toBe(true);
 
     // And nothing lands in this repo's own gitignored root `./data/`
-    // (AGENTS.md §10 / the legacy `./data/agents.db` default this replaces).
-    expect(existsSync(join(REPO_ROOT, "data"))).toBe(false);
+    // (AGENTS.md §10 / the legacy `./data/agents.db` default this replaces)
+    // — as a DELTA against the pre-test snapshot, not an absolute
+    // `existsSync(...) === false` check. An absolute check asserts global
+    // machine state this test does not own: MCP hosts keep resident
+    // `@adhd/agent-mcp@latest` processes running with `cwd` = this repo
+    // root, and that (older, published) build can legitimately recreate
+    // `REPO_ROOT/data/agent-mcp/...` at any moment completely independent
+    // of this test run. Asserting "still absent" would then fail for
+    // reasons entirely outside the code under test. What we actually own
+    // and must prove is that THIS test added/changed nothing under
+    // `REPO_ROOT/data` — a delta against the snapshot taken before the code
+    // under test ran, above.
+    const repoDataDirAfter = snapshotRepoDataDir();
+    if (repoDataDirBefore === null) {
+      // Directory didn't exist before this test ran — the strict guarantee
+      // holds: it must still not exist.
+      expect(existsSync(join(REPO_ROOT, "data"))).toBe(false);
+    } else {
+      // Directory pre-existed (e.g. a concurrently-running resident
+      // agent-mcp process owns it) — prove this test didn't add to it.
+      expect(repoDataDirAfter).toEqual(repoDataDirBefore);
+    }
   });
 
   it("(test 4) documents the REAL isEnvNameAllowed prefix-only allowlist behavior (ADHD_AGENT_* only — the G1 gap is real and unfixed here, out of scope)", async () => {
