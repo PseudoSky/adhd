@@ -69,6 +69,7 @@ export type DispatchUnitStatus =
   | 'in_progress'
   | 'complete'
   | 'failed';
+export type DispatchExecutionMode = 'model-dispatch' | 'guard-only';
 export type OperationStatus =
   | 'pending'
   | 'in_progress'
@@ -277,6 +278,7 @@ export interface ShapeOpDag {
   to: string | null;
   position: number | null;
   required: boolean | null;
+  type_spec?: Record<string, string> | null; // NEW (BL-104): field-name -> type-name map for ops whose target is itself a complex interface (e.g. `{ field: 'ProviderConfig' }`), so compilePrompt() can inline the nested shape instead of the model having to guess it. Optional/nullable — every dag.json written before this field existed remains valid without it.
 }
 
 export interface ShapeOpSnapshot extends ShapeOpDag {
@@ -632,10 +634,12 @@ export interface DispatchUnit {
   two_stage: boolean;
   provider: ProviderConfig | null;
   agent_name: string;
+  execution_mode: DispatchExecutionMode; // NEW (BL-102): distinguishes a guard-only/tool-call-only unit (compiles to a null `prompt` — e.g. a D-12 milestone with model===null, or an all-tool-call batch) from a genuine model dispatch, as an explicit signal instead of orchestrator.ts inferring it from `prompt !== null` as a side effect of compilePrompt's return contract.
   mcp_servers: Record<string, unknown> | null;
   resolved_max_tokens: number | null;
   background: true;
-  prompt: string | null;
+  systemPrompt: string | null; // NEW (DEBT-DISPATCH-012): stable, milestone-independent preamble baked ONCE at agent_create. Deliberately NOT milestone-specific content (would go stale for every dispatch after the first one under a shared, persistent agent_name — see agent-runner.ts ensureAgent's early-return-if-exists path).
+  prompt: string | null; // per-fire compiled task body (milestone description/ops/guard) — UNCHANGED semantics, sent fresh on every fire(), no longer ALSO baked into systemPrompt.
   context_files: string[];
   si_bytes: number;
   tokens_estimated: number | null;
