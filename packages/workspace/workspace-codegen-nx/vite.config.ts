@@ -3,11 +3,12 @@ import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { projectCacheDir } from '../workspace-base-vite-paths/src/index';
 
 import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/workspace/workspace-codegen-nx',
+  cacheDir: projectCacheDir(__dirname),
   plugins: [
     nxViteTsPaths(),
     dts({ entryRoot: 'src', tsconfigPath: path.join(__dirname, 'tsconfig.lib.json') }),

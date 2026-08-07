@@ -43,6 +43,19 @@ This starts a JSON-RPC server over stdio. Configure in your MCP host (e.g., Clau
 }
 ```
 
+### Configuration: Zero-Config with Optional Overrides
+
+`@adhd/agent-mcp` is designed for **zero-config startup** — every setting has a built-in default and the server runs immediately without files or env vars. Configuration is resolved via the `@adhd/environment` cascade:
+
+| Layer | Source | Overrides |
+|---|---|---|
+| **Code defaults** | Built into `src/config.ts` | all others below |
+| **Global config** | `~/.adhd/agent-mcp/config.yaml` | project/env |
+| **Project config** | `./.adhd/agent-mcp/config.yaml` | env only |
+| **Environment variables** | `ADHD_AGENT_*` names | none |
+
+The database (SQLite, agents/sessions/messages/usage) is stored in the resolved scope root, defaulting to `~/.adhd/agent-mcp/production/data/agents.db` (never the repo tree). Override via `ADHD_AGENT_DATABASE_PATH`.
+
 ### Common environment variables
 
 | Variable | Default | Purpose |
@@ -52,6 +65,7 @@ This starts a JSON-RPC server over stdio. Configure in your MCP host (e.g., Clau
 | `ADHD_AGENT_CONTEXT_LIMIT` | `0` | Max context size in tokens; 0 = no limit (enforce only at provider ceiling) |
 | `ADHD_AGENT_MAX_TOOL_LOOPS` | `50` | Max tool-call iterations per task |
 | `ADHD_AGENT_MAX_DEPTH` | `3` | Max delegation depth (agent → child → grandchild) |
+| `ADHD_AGENT_DATABASE_PATH` | (auto-resolved) | Custom SQLite DB path; falls back to zero-config `~/.adhd/agent-mcp/production/data/agents.db` |
 
 ## Providers and credentials
 

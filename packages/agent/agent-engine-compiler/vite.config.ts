@@ -1,10 +1,11 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/ai/agent-compiler',
+  cacheDir: projectCacheDir(__dirname),
 
   plugins: [nxViteTsPaths()],
 
@@ -24,7 +25,7 @@ export default defineConfig({
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../../coverage/packages/ai/agent-compiler',
+      reportsDirectory: projectCoverage(__dirname),
       provider: 'v8',
     },
   },

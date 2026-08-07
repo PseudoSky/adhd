@@ -4,6 +4,7 @@ import dts from 'vite-plugin-dts';
 import * as fs from 'fs';
 import * as path from 'path';
 import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
+import { projectCacheDir, projectCoverage } from '../../workspace/workspace-base-vite-paths/src/index';
 
 import { vitestPoolOptions } from '../../../tools/vite-plugins/vitest-pool-defaults.mjs';
 
@@ -70,7 +71,7 @@ function copyPythonPackagePlugin(): Plugin {
 
 export default defineConfig({
   root: __dirname,
-  cacheDir: '../../../node_modules/.vite/packages/apigen/python-env',
+  cacheDir: projectCacheDir(__dirname),
 
   plugins: [
     nxViteTsPaths(),
@@ -111,7 +112,7 @@ export default defineConfig({
 
     reporters: ['default'],
     coverage: {
-      reportsDirectory: '../../../coverage/packages/apigen/python-env',
+      reportsDirectory: projectCoverage(__dirname),
       provider: 'v8',
     },
   },

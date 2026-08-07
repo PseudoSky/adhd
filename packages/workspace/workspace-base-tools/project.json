@@ -3,6 +3,7 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/workspace/workspace-base-tools/src",
   "projectType": "library",
+  "implicitDependencies": ["!workspace-base-vite-paths"],
   "release": {
     "version": {
       "generatorOptions": {

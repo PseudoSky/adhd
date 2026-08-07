@@ -61,14 +61,18 @@ Entrypoint: entrypoint/<name>/                       → @adhd/<name>
 
 ## Post-generation patches
 
-Same six patches as the original `generate-lib.sh`:
+The generator applies six patching functions to scaffold packages correctly:
 
-1. **vite.config.ts** — `emptyOutDir: true`
-2. **project.json** — `dependsOn:["build","test"]` on `nx-release-publish`
-3. **README.md** — starter scaffold
-4. **.eslintrc.json** — `vite.config.*` in `ignorePatterns`
-5. **tsconfig.lib.json** — `src/test/**` in `exclude`
-6. **vite.config.ts** — inline copy-readme plugin
+1. **patchInSourceDist** — Migrates `project.json` and `vite.config.ts` from pre-migration workspace-root layout (`dist/{projectRoot}`) to in-source layout (`{projectRoot}/dist`)
+2. **patchViteConfig** — Configures `vite.config.ts`:
+   - Adds `emptyOutDir: true`
+   - Adds copy-readme plugin to bundle `README.md` in output
+   - For `platform:node` and `platform:shared`: adds `external: externalizeRealDeps(__dirname)` to prevent bundling real npm deps (see BUILD-CONSIST-008)
+   - Patches `cacheDir` and `coverage.reportsDirectory` to use `projectCacheDir(__dirname)` and `projectCoverage(__dirname)` from `workspace-base-vite-paths`, enabling packages to be moved without stale cache paths
+3. **patchReleasePublish** — Sets `nx-release-publish` target's `dependsOn:["build","test","verify-dist-load","dist-manifest","publish-hygiene"]`
+4. **ensureReadme** — Creates a starter `README.md` scaffold if missing
+5. **patchEslintrc** — Adds `vite.config.*` patterns to `.eslintrc.json` `ignorePatterns`
+6. **patchTsconfigLib** — Adds `src/test/**` to `tsconfig.lib.json` `exclude`
 
 ## Examples
 

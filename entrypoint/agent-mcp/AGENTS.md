@@ -40,6 +40,22 @@ The server exposes these MCP tools:
 | `usage_query` | `(filter?: object, groupBy?: string) -> {usage: [...]}` | Query task usage across multiple tasks (grouped by agent, model, provider) |
 | `guide` | `() -> {workflows, providers, errors}` | Built-in help: 5 workflows, provider table, error codes |
 
+### Configuration: Zero-Config via @adhd/environment Cascade
+
+`@adhd/agent-mcp` uses `@adhd/environment` (per `packages/environment/ARCHITECTURE.md`) to implement zero-config startup with optional file/env-var overrides. Every configuration field has a code default; the server starts and runs with zero files on disk and zero env vars set. Configuration layers in precedence order:
+
+1. **Code defaults** — hardcoded in `src/config.ts` (e.g., `server.defaultMaxTokens = 8192`)
+2. **Global config file** — `~/.adhd/agent-mcp/config.yaml` (if present)
+3. **Project config file** — `./.adhd/agent-mcp/config.yaml` (if present; scoped to git/`.adhd` marker)
+4. **Environment variables** — `ADHD_AGENT_*` names only (see below)
+
+The zero-config DB path is resolved under the scope root:
+- **Scope** is auto-detected (walks up from `process.cwd()` looking for `.git`/`.adhd` markers) or forced via `ADHD_ENV_SCOPE=global`/`project`
+- **Global scope** (`~/.adhd/agent-mcp/production/data/agents.db` by default) — never the repo tree, even when inside one
+- **Overridable** via `ADHD_AGENT_DATABASE_PATH` env var (falls back to `env.files.db` location when unset)
+
+Verified end-to-end in `src/__tests__/integration/real-environment.e2e.test.ts` (ENV-ADOPT-PROOF-000).
+
 ### Configuration: Environment Variables
 
 These env vars configure the server-wide default agent and provider credentials:
