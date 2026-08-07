@@ -21,6 +21,15 @@
       "rules": {}
     },
     {
+      "files": ["*.mjs"],
+      "parserOptions": {
+        "sourceType": "module",
+        "ecmaVersion": 2022
+      },
+      "extends": ["plugin:@nx/javascript"],
+      "rules": {}
+    },
+    {
       "files": ["*.json"],
       "parser": "jsonc-eslint-parser",
       "rules": {

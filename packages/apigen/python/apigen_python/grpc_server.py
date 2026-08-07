@@ -119,6 +119,7 @@ if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
 from apigen_python.errors import ApiError, GRPC_CODE  # noqa: E402
+from apigen_python.parent_watchdog import start_parent_death_watchdog  # noqa: E402
 from apigen_python.runtime import HostRequest, Runtime  # noqa: E402
 from apigen_python.validator import validate, ValidationError  # noqa: E402
 
@@ -841,6 +842,11 @@ class ApigenGrpcServer:
 
         _signal.signal(_signal.SIGTERM, _sig_handler)
         _signal.signal(_signal.SIGINT, _sig_handler)
+
+        # BUG-APIGEN-053: self-terminate if the TS parent process dies
+        # outright (SIGKILL/OOM-kill/crash) without ever sending a signal —
+        # see apigen_python.parent_watchdog's module docstring.
+        start_parent_death_watchdog()
 
         try:
             stop_event.wait()

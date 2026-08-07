@@ -93,6 +93,7 @@ if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
 from apigen_python.errors import ApiError, HTTP_STATUS  # noqa: E402
+from apigen_python.parent_watchdog import start_parent_death_watchdog  # noqa: E402
 from apigen_python.runtime import HostRequest, Runtime  # noqa: E402
 from apigen_python.validator import validate, ValidationError  # noqa: E402
 
@@ -946,6 +947,10 @@ class ApigenFlaskServer:
         self.start()
         # §13.1 readiness signal — TS launcher polls for this line on stdout
         print(json.dumps({"ready": True, "port": self._port}), flush=True)
+        # BUG-APIGEN-053: self-terminate if the TS parent process dies
+        # outright (SIGKILL/OOM-kill/crash) without ever sending a signal —
+        # see apigen_python.parent_watchdog's module docstring.
+        start_parent_death_watchdog()
         try:
             # Block main thread while the daemon thread serves
             if self._thread is not None:
