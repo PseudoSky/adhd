@@ -367,7 +367,7 @@ export class AgentMcpRunner implements IDispatchAgentRunner {
     await this.callTool('agent_create', {
       name: unit.agent_name,
       provider: toAgentMcpProviderConfig(unit.provider),
-      systemPrompt: unit.prompt ?? undefined,
+      systemPrompt: unit.systemPrompt ?? undefined,
       mcpServers: {},
     });
   }
