@@ -1,3 +1,29 @@
+## 0.2.3 (2026-08-07)
+
+
+### 🚀 Features
+
+- **apigen:** generic batch/bulk fan-out operations (FEAT-APIGEN-BULK-OPS-001)
+
+- **apigen-cli:** register apigen-plugin-batch as a builtin --use option
+
+- **apigen-cli:** register java-javalin host, cross-host TS<->Java decimal parity proof (FEAT-APIGEN-001 1/3)
+
+
+### 🩹 Fixes
+
+- **apigen-cli:** guard bin entry point so argv-parsing only runs as the real process entry
+
+- **apigen-java:** mirror PYTHON_MATRIX_SCRIPT's decode+invariant-diff negative-control algorithm exactly (FEAT-APIGEN-001 review)
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+
 ## 0.2.2 (2026-07-28)
 
 This was a version bump only for apigen-cli to align it with other projects, there were no code changes.

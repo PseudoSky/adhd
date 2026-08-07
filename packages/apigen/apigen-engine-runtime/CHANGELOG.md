@@ -1,3 +1,27 @@
+## 0.2.3 (2026-08-07)
+
+
+### 🚀 Features
+
+- **apigen:** schema-driven worked examples for MCP tool descriptions + validation errors
+
+
+### 🩹 Fixes
+
+- **apigen-engine-runtime:** stop parity-harness from mutating the real repo (BUG-APIGEN-052)
+
+- **apigen-engine-runtime:** isolated-git.spec.ts's own fixture helper can corrupt the enclosing repo under real hook env (BUG-APIGEN-052 follow-up)
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+- **apigen-engine-runtime:** delegate vgit() to runGit() in isolated-git.spec.ts (BUG-APIGEN-054)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+
 ## 0.2.2 (2026-07-30)
 
 

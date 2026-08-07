@@ -1,3 +1,25 @@
+## 0.1.1 (2026-08-07)
+
+
+### 🩹 Fixes
+
+- **dispatch-cli:** compile bin/cli.ts for real npx distribution (build-bin + package.json bin)
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+- **dispatch-cli:** populate DispatchUnit.execution_mode/systemPrompt in calibration unit
+
+
+### 🔥 Performance
+
+- **test:** bound vitest thread pools to curb CPU oversubscription (DEBT-TEST-CPU-OVERSUBSCRIBED-001)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+
 ## 0.0.4 (2026-07-24)
 
 This was a version bump only for dispatch-cli to align it with other projects, there were no code changes.
