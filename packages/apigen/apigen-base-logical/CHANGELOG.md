@@ -1,3 +1,25 @@
+## 0.1.1 (2026-08-07)
+
+
+### 🚀 Features
+
+- **apigen:** schema-driven worked examples for MCP tool descriptions + validation errors
+
+- **apigen-base-logical:** fill JAVA_COLUMN codec expressions (FEAT-APIGEN-001 1/3)
+
+
+### 🩹 Fixes
+
+- **apigen-java:** mirror PYTHON_MATRIX_SCRIPT's decode+invariant-diff negative-control algorithm exactly (FEAT-APIGEN-001 review)
+
+- **apigen-cli:** restore 2768 files mass-deleted by 0117eb22 (BUG-APIGEN-052)
+
+
+### ❤️  Thank You
+
+- parity-harness-self-test
+- pseudosky
+
 ## 0.0.6 (2026-07-25)
 
 
