@@ -43,8 +43,38 @@ function unsafeGit(args: readonly string[], cwd: string): string {
 describe('BUG-APIGEN-052: isolated-git escape mechanism + fix', () => {
   let victimDir: string;
 
+  // BUG-APIGEN-052-SELF (found live, 2026-08-07): this helper managed the
+  // "victim" fixture repo itself — every beforeEach()/victimFingerprint()
+  // call — via the exact unsafe `execFileSync('git', args, { cwd })` pattern
+  // this whole file exists to prove is dangerous. That's a live hazard, not
+  // a hypothetical: `beforeEach()` runs UNCONDITIONALLY for every test in
+  // this suite, before any test body has a chance to set OR clear GIT_DIR/
+  // GIT_WORK_TREE/GIT_INDEX_FILE — so if THIS suite's own process ever
+  // inherits a REAL ambient leak (not the ones the tests below simulate
+  // on purpose), e.g. because it is actually invoked from inside a real
+  // git hook (`.githooks/pre-commit` -> `nx affected -t test` -> vitest,
+  // exactly the call chain this file's own doc comment names as the proven
+  // leak vector), `vgit('commit', ..., 'victim init')` does not create its
+  // fixture commit in the intended `os.tmpdir()` victimDir at all — it
+  // lands on whatever repo GIT_WORK_TREE/GIT_DIR actually point at, sweeping
+  // in that repo's currently-staged content. This is not theoretical: it
+  // reproduced exactly this way against a real, unpushed feature branch
+  // during BL-DISPATCH-026 verification (a "victim init" commit containing
+  // that branch's legitimately-staged diff landed as its HEAD).
+  //
+  // Fix: `vgit` now delegates to `runGit` (imported above), the SAME
+  // GIT_*-env-stripped, `-C`-scoped helper this file already imports and
+  // already proves immune to the identical hazard elsewhere in this suite
+  // (the "runGit ... is immune" and "createIsolatedScratchRepo end-to-end"
+  // tests below). This does not weaken any test's negative-control power:
+  // `unsafeGit()` (deliberately reproducing the OLD pattern to simulate a
+  // leak against `nestedScratchDir`) is untouched — only the "victim"
+  // fixture's OWN bookkeeping (init/config/commit/fingerprint) is hardened,
+  // which is exactly the FICTION every test in this file already assumes to
+  // be true ("A fresh victim repo PER TEST" — pristine, not itself
+  // vulnerable to the very leak it exists to detect).
   function vgit(...args: string[]): string {
-    return execFileSync('git', args, { cwd: victimDir, stdio: 'pipe' }).toString();
+    return runGit(args, { cwd: victimDir });
   }
 
   // A fresh victim repo PER TEST (beforeEach, not beforeAll): the first
