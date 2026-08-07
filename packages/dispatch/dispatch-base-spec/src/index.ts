@@ -6,6 +6,7 @@ export type {
   CrossPlanDep,
   DagJson,
   DagSnapshot,
+  DispatchExecutionMode,
   DispatchKind,
   DispatchLogEntry,
   DispatchNote,
