@@ -1164,14 +1164,15 @@ async function dispatchUnit(
   const entry: DispatchLogEntry = {
     id: dispatchId,
     kind: 'execution',
-    // DispatchLogEntry.provider is a closed enum ('anthropic'|'openai'|
-    // 'deepseek'|'google'|'local') that predates agent-mcp's 'claudecli'
-    // provider type — AgentMcpRunner always creates agents with
-    // { type: 'claudecli' } (see agent-runner.ts ensureAgent), which has no
-    // exact match in this enum. 'anthropic' is the closest honest fit (the
-    // underlying model IS Claude/Anthropic); flagged in the completion
-    // report as a real dispatch-spec/agent-mcp schema gap, not papered over.
-    provider: hasRealDispatch ? 'anthropic' : 'local',
+    // unit.provider.type ('anthropic'|'openai'|'claudecli') is a subset of
+    // DispatchLogEntry.provider's union and is already threaded through from
+    // dag.providers via resolveUnitProviderAndTokens — use it directly instead
+    // of a blind literal (DEBT-DISPATCH-019). Falls back to 'claudecli' (not
+    // 'anthropic') when no provider was configured at all: that's the exact
+    // default AgentMcpRunner.ensureAgent's toAgentMcpProviderConfig(null)
+    // produces (agent-runner.ts:227, { type: 'claudecli' }), so the fallback
+    // here matches what the real dispatch actually used.
+    provider: hasRealDispatch ? (unit.provider?.type ?? 'claudecli') : 'local',
     model: hasRealDispatch ? unit.model : null,
     agent: hasRealDispatch ? unit.agent_name : GUARD_EXEC_AGENT_LABEL,
     effort: unit.effort,
