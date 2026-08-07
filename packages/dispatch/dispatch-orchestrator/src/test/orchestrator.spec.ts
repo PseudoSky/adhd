@@ -240,6 +240,12 @@ describe('orchestrateCycle — real agent dispatch', () => {
     expect(entry.turns[0]?.output_tokens).toBe(50);
     expect(entry.turns[0]?.model_calls).toBe(1);
 
+    // DEBT-DISPATCH-019: telemetry must report the REAL provider that was
+    // actually threaded to the agent (unit.provider.type, resolved from
+    // dag.providers.Sonnet -> { type: 'claudecli', ... } via
+    // resolveUnitProviderAndTokens), never a hardcoded 'anthropic'.
+    expect(entry.provider).toBe('claudecli');
+
     const opResult = entry.results.find((r) => r.op_id === 'a.1');
     expect(opResult?.status).toBe('complete');
 
@@ -252,6 +258,27 @@ describe('orchestrateCycle — real agent dispatch', () => {
     // the shape snapshot.ts's synthesizeGuardOp/deriveMilestoneStatus expect.
     const snap2 = snapshot(reloaded, { bPerTier: {}, contextWindowPerTier: {} });
     expect(snap2.milestones['a']?.status).toBe('complete');
+
+    runner.cleanup();
+  });
+
+  it('falls back to provider claudecli (never anthropic) when a real dispatch has no dag.providers entry for its model (DEBT-DISPATCH-019)', async () => {
+    // Sonnet has no matching entry in `providers` -> resolveUnitProviderAndTokens
+    // leaves unit.provider === null -> AgentMcpRunner.ensureAgent's real
+    // toAgentMcpProviderConfig(null) default is { type: 'claudecli' }
+    // (agent-runner.ts), so telemetry must report that, not a blind 'anthropic'.
+    const { dagPath, deps, runner } = await setupScenario(
+      'no-provider-config',
+      makeDag({ providers: {} })
+    );
+
+    const result = await orchestrateCycle(deps);
+    expect(result.dispatched[0]?.taskStatus).toBe('completed');
+    expect(runner.firedUnits[0]?.provider).toBeNull();
+
+    const reloaded = await reload(dagPath);
+    const entry = reloaded.dispatch_log[0] as DispatchLogEntry;
+    expect(entry.provider).toBe('claudecli');
 
     runner.cleanup();
   });
