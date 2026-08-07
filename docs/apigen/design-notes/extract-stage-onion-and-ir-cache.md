@@ -513,3 +513,397 @@ paper over (§2.5's `extractorVersion` row is the concrete mechanism keeping the
 DEBT-003 is fixed). No new backlog item filed by this review — no new defect was found during
 this investigation; DEBT-003 was already filed by the same investigation thread that produced this
 task's context.
+
+---
+
+## Revision 2 (2026-08-05): unified cache config + generic CLI wiring
+
+Status: PROPOSAL — revises §2 and §4 above after a review of the shipped worktree
+(`.worktrees/wt-2c81b7`, branch `wip-b917d3`, HEAD `d8aa76ec`, **unmerged** — not on `main`)
+surfaced four gaps: (1) `entrypoint/backlog/src/server.ts:276-295`'s `getExtractInvoke()` wires
+the cache layer unconditionally, with no opt-out; (2) `fs-backend.ts:35-38`'s `put` is a plain
+`writeFile`, not atomic; (3) even on a HIT, `computeCacheKey` (`ir-cache-layer.ts:91-107`) pays
+real I/O — a full `sha256File` of the source plus every transitive local import — on *every*
+call, which is the exact "extraction is slow, so cache it" cost the plugin was supposed to
+eliminate, just moved from ts-morph to `crypto`; (4) the directory-shaped content-addressed store
+leaves an orphaned `.json` entry behind for every historical content-version of a source file,
+with no eviction anywhere in the diff. This revision keeps §1 (the onion / `ExtractCall` contract)
+and §3 (the subprocess-agnosticism argument) unchanged — both are sound and unaffected — and
+replaces §2's single "content-addressed directory" cache shape with **two explicit modes** behind
+one option, plus a generic composition mechanism closing the "backlog is the only consumer" gap
+this section's own §5.1 already flagged.
+
+### R2.1 — Why one directory-shaped cache wasn't the whole answer
+
+§2.2's design was correct as far as it went — content-hash, not mtime, is the right key — but
+conflated two different jobs under one shape:
+
+- A **runtime, write-through cache** (what §2 actually built): pay the cost once, reuse it across
+  process invocations, on the SAME machine or a machine sharing the same filesystem/mount. This is
+  BUG-019's actual hot path — the backlog CLI re-extracting `client.d.ts` on every `--help`.
+- A **build-time artifact**: a JSON file produced once, at `nx build`/CI time, that ships
+  alongside the compiled output and is read (or statically imported) by the consumer with **zero**
+  extraction machinery in the runtime path at all — not even a cache lookup.
+
+Forcing both through one content-addressed-directory shape is why gap (3) above exists: a
+directory-of-many-keyed-files design *needs* the full content hash to know which file to open,
+so there's no way to shortcut the hash even on a HIT. A **single, literal, pre-agreed file path**
+doesn't have this problem — the caller already knows exactly which file to open; the only question
+left is "is what's in it still fresh," which is a much cheaper question than "which of N possible
+files is the answer."
+
+### R2.2 — The unified `cache` option
+
+```ts
+// apigen-plugin-ir-cache's Plugin options (replaces the current constructor-argument-only shape)
+export interface IrCacheOptions {
+  /**
+   * Either:
+   *  - An absolute or relative file path: RUNTIME CACHE mode (R2.3). The plugin
+   *    treats this as a single-entry cache at that literal file — not a
+   *    content-addressed directory of many keyed files.
+   *  - The literal string `'artifact'`: ARTIFACT mode (R2.4). Signals "produce
+   *    a build-time artifact via the target/generate capability," not a
+   *    runtime cache. No extraction happens at request/CLI-invocation time in
+   *    this mode — the artifact is produced by a separate, prior `apigen
+   *    generate --type ir-cache` step.
+   *
+   * The literal string `'artifact'` is reserved and cannot name a real cache
+   * file relative to cwd without the `./` prefix (`cache: './artifact'`) —
+   * an accepted, documented ambiguity (see R2.6 open questions), not a type-
+   * level guarantee. `IrCacheOptions.cache` stays `string` rather than a
+   * `{mode,path}` discriminated union specifically because the task's own
+   * unification goal is "one option, two modes inferred from its value" —
+   * not two options a caller could set inconsistently.
+   */
+  cache: string;
+  /** Filename for the emitted artifact in ARTIFACT mode. Default: `ir-cache.json`.
+   *  Ignored in RUNTIME CACHE mode (the `cache` value itself IS the path). */
+  filename?: string;
+  /** Override for `extractorVersion` (defaults to `@adhd/apigen-core-client`'s
+   *  own `package.json` version, read via `createRequire` — same mechanism
+   *  `server.ts:252-254` already uses). */
+  extractorVersion?: string;
+}
+```
+
+Both modes read/write the **same** `CachedExtractEntry` shape (R2.5) — a consumer can start in
+RUNTIME CACHE mode and switch to ARTIFACT mode (or vice versa) later with zero format migration,
+and `extractorVersion` keeps DEBT-003's correctness invariant (§2.5's table, unchanged) honored
+identically in both modes.
+
+### R2.3 — RUNTIME CACHE mode (`cache: <file-path>`) — the `layer` capability
+
+**Staleness-check strategy — the concrete decision R2.1 motivated.** A HIT still needs *some*
+staleness check (a cache that never invalidates isn't a cache, it's a permanent wrong answer
+waiting to happen) — the design decision is *how cheap* that check can be made for the common
+"nothing changed" case, which is the overwhelmingly common case for a CLI invoked repeatedly in
+a dev loop.
+
+Decision: **store a cheap mtime snapshot inside the entry at write time, gate on it first, and
+only fall back to the expensive full content rehash when the mtime snapshot itself has changed.**
+
+```ts
+export interface CachedExtractEntry {
+  formatVersion: number;
+  operations: Operation[];          // unchanged from §2.1/R2.5
+  extractorVersion: string;         // unchanged
+  createdAt: string;                // unchanged
+  /**
+   * RUNTIME CACHE mode only (absent/undefined for an ARTIFACT-mode entry —
+   * a build artifact is never staleness-checked at read time, R2.4). Absent
+   * also for an entry written by a future directory-mode backend reusing
+   * this same interface — its reader just always takes the full-rehash path,
+   * which is correct, just not fast. This is what keeps the "same shape,
+   * either mode" promise: the field is additive, never required.
+   */
+  staleness?: {
+    /** The full content/version-addressed key (R2.2's old §2.2 formula,
+     *  unchanged) computed at write time — compared only on the slow path. */
+    contentKey: string;
+    /** Absolute path + mtimeMs of the source file at write time. */
+    source: { path: string; mtimeMs: number };
+    /** Absolute path + mtimeMs of every transitive local import at write
+     *  time (same `collectLocalImportPaths` walk §2.2 already specified). */
+    deps: Array<{ path: string; mtimeMs: number }>;
+  };
+}
+```
+
+Read path (`createIrCacheLayer`'s `layer` function) for `cache: <file-path>`:
+
+1. `stat()` the configured file. Missing → MISS (run extractor, write R2.3's atomic write below).
+2. Missing/mismatched `formatVersion`/`extractorVersion` → MISS (identical gate to today's §2.1).
+3. **Fast gate**: `stat()` `entry.staleness.source.path` and every `entry.staleness.deps[].path`
+   directly (no `collectLocalImportPaths` call, no hashing — just `fs.stat` on a short, already-known
+   list of paths). If every current `mtimeMs` matches the recorded one *and* `call.source` matches
+   `entry.staleness.source.path` → **HIT**, return `entry.operations`. This is the path that
+   eliminates gap (3): a clean repeated `--help` invocation costs `N` cheap `stat()` calls (`N`
+   = 1 + dep count, typically single digits for `client.d.ts`), not `N` full file reads + SHA-256.
+4. **Slow gate (mtime changed, or `staleness` absent)**: recompute the full `contentKey` — R2.2's
+   old §2.2 formula, i.e. `collectLocalImportPaths(call.source)` + `sha256File` of the source and
+   every dep — and compare against `entry.staleness.contentKey`. Match → HIT (a `touch` with no
+   real edit; e.g. a fresh git checkout or CI restore that didn't preserve mtimes) — return
+   `entry.operations` AND fire-and-forget rewrite the entry's `staleness` mtimes to the current
+   values (so the NEXT read takes the fast path again, not the slow one forever). Mismatch → MISS.
+5. MISS in either case → run the real extractor (`next()`), then write R2.3's atomic entry.
+
+This is an explicit tradeoff, stated plainly: step 3's fast gate trusts mtime as a *sufficient*
+condition for freshness (matching the OS's own build-tool convention — make, Nx, tsc's own
+incremental builds all do exactly this), while step 4's fallback is what makes an mtime-only
+scheme *safe* against the exact class of false-negative BUG-019/§2.2 was written to avoid
+(content genuinely unchanged, mtime bumped by a checkout) — the fallback is only ever reached when
+the fast gate's premise (mtime tracks content) has already been violated, so its cost is paid
+rarely, not on every call. This closes gap (3) (no cost on the common HIT) without reopening the
+mtime-correctness gap §2.2 explicitly rejected (a *genuine* content change still MISSes, because
+step 4's fallback recomputes the real hash whenever mtimes disagree, and step 3 never runs without
+a `staleness` snapshot recorded by a prior real extraction).
+
+**Atomic write (closes the review-flagged non-atomic-write gap).** Replace `fs-backend.ts:35-38`'s
+plain `writeFile(path, ...)` with temp-file + rename, at the single-file backend used by RUNTIME
+CACHE mode:
+
+```ts
+import { writeFile, rename, unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+
+async function atomicWriteJson(path: string, data: unknown): Promise<void> {
+  const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(tmp, JSON.stringify(data), 'utf8');
+    await rename(tmp, path); // atomic on the same filesystem (POSIX rename(2))
+  } catch (err) {
+    await unlink(tmp).catch(() => {}); // best-effort cleanup; never mask the real error
+    throw err;
+  }
+}
+```
+
+`rename()` on the same filesystem is atomic (POSIX guarantee) — a reader mid-`get()` either sees
+the old complete file or the new complete file, never a half-written one. The `pid + randomUUID()`
+suffix avoids two concurrent writers (e.g. two CLI invocations racing on a cache MISS) colliding
+on the same temp path; the *last* `rename()` wins, which is an acceptable, documented race (both
+writers computed the extraction independently and would have written byte-identical
+`operations` for identical input — losing one temp write costs nothing but a redundant extraction
+that already happened).
+
+### R2.4 — ARTIFACT mode (`cache: 'artifact'`) — the `target` capability
+
+**Why a `target` capability, not a Vite/rollup build hook.** A build-hook approach (e.g. a rollup
+`writeBundle`/`generateBundle` plugin that both derives the IR *and* participates in the same
+build that imports it) was explicitly considered and rejected in the conversation that produced
+this revision: rollup resolves **static imports before `writeBundle` fires** — a chunk containing
+`import data from './client.ir.json'` is resolved and inlined *before* any hook that could
+generate `client.ir.json` for the first time has run, producing an unresolvable
+chicken-and-egg failure the first time (and on any subsequent run where the artifact was deleted).
+Reusing the *existing* `TargetCapability` shape (`plugin.ts:254-288`) and the *existing*
+`apigen generate --type <plugin-id> --out-dir <path>` CLI invocation
+(`entrypoint/apigen-cli/src/lib/commands/generate.ts:178-294`) sidesteps this entirely by making
+artifact production a **separate command, a separate process, run strictly before** the consumer's
+own build — not a hook inside it.
+
+```ts
+// apigen-plugin-ir-cache's target capability (new; the plugin becomes BOTH
+// a --use-loadable layer AND a --type-selectable target — see R2.6 for how
+// one Plugin object carries both without conflict)
+capabilities: {
+  target: {
+    name: 'ir-cache',
+    generate(descriptor: Descriptor, opts: IrCacheOptions): File[] {
+      if (opts.cache !== 'artifact') {
+        throw new Error(
+          `apigen-plugin-ir-cache: --type ir-cache requires --opt cache=artifact ` +
+          `(got "${opts.cache}"). RUNTIME CACHE mode (a file path) is a --use ` +
+          `layer, not a --type target — see docs/apigen/design-notes/` +
+          `extract-stage-onion-and-ir-cache.md Revision 2.`
+        );
+      }
+      const entry: CachedExtractEntry = {
+        formatVersion: CURRENT_FORMAT_VERSION,
+        operations: descriptor.operations,
+        extractorVersion: opts.extractorVersion ?? readCoreClientVersion(),
+        createdAt: new Date().toISOString(),
+        // no `staleness` — an artifact is never read-time-staleness-checked (R2.3's
+        // note); its freshness comes from WHEN the generating command was run.
+      };
+      return [{ path: opts.filename ?? 'ir-cache.json', content: JSON.stringify(entry, null, 2) }];
+    },
+    // no `serve()` — codegen-only, per `plugin.ts:280`'s documented convention
+    // (`apigen-plugin-openapi` is the reference example: mount-only, no target
+    // at all; this plugin is the mirror case — target-only for this capability,
+    // `layer`-only for the other, never both on the same invocation).
+  },
+},
+```
+
+**The critical ordering constraint — stated prominently, per the review's own flag that this is
+the single most important thing in this whole design.** ARTIFACT mode MUST run as a separate,
+*prior* build step whose output already exists on disk before the consumer's own build/import
+runs. Concretely, for an Nx-built consumer:
+
+```json
+// packages/<consumer>/project.json — a new target, NOT folded into "build"
+"generate-ir-cache": {
+  "executor": "nx:run-commands",
+  "options": {
+    "command": "apigen generate --source {projectRoot}/src/client.ts --type ir-cache --out-dir {projectRoot}/src --opt cache=artifact"
+  },
+  "dependsOn": ["^build"]  // needs the consumer's OWN deps built, not the consumer itself
+},
+"build": {
+  // ...existing build config...
+  "dependsOn": ["generate-ir-cache", "^build"]  // artifact MUST exist before build starts
+}
+```
+
+A consumer's `import data from './client.ir.json'` (or `.json` resolved via `resolveJsonModule`)
+then sees a real, already-on-disk file the moment its own build starts — never a build racing to
+both generate and consume the same artifact in one pass. **Do not attempt to fold artifact
+generation into the SAME build invocation that imports it** — that is exactly the ordering hazard
+this mode exists to avoid, restated once more because it is the one design constraint in this
+revision that, if violated, silently reintroduces the exact rollup chicken-and-egg failure this
+mode was built to sidestep.
+
+### R2.5 — Shared entry shape (unchanged core, additive field)
+
+`CachedExtractEntry` (R2.3) keeps §2.1's original four fields (`formatVersion`, `operations`,
+`extractorVersion`, `createdAt`) byte-for-byte, and adds one **optional** field, `staleness`,
+populated only by RUNTIME CACHE mode. This is what makes "switch modes without a migration" true:
+an ARTIFACT-mode-written entry read by a RUNTIME-CACHE-mode reader has `staleness` absent, which
+the reader's step 4 (R2.3) already treats as "always take the slow, correct, full-rehash path" —
+never a MISS on absent metadata, never a crash, just no fast-path benefit until the next
+RUNTIME-CACHE-mode write repopulates it.
+
+### R2.6 — Generic `--use`/`--type`-driven composition (closing "only backlog gets this")
+
+**The gap, restated concretely.** Today, exactly one call site in the entire repo gets IR caching:
+`entrypoint/backlog/src/server.ts:276-295`'s `getExtractInvoke()`, which hand-constructs
+`createExtractInvoker([createIrCacheLayer(...)], (call) => extract({...}))` directly — no `--use`
+flag, no plugin registry involvement, no way for a different command (`apigen generate`,
+`apigen run`, `generate-registry`, `run-registry`) to opt in without duplicating that same
+hand-wiring. This is the dispatch-side onion's situation *before* `package-invoker.ts`'s
+`createPackageInvoker`/`UsePlugin`/`readUsePlugins` existed — the exact gap this revision closes
+for the extract side, by the same pattern.
+
+**Where it plugs in.** `entrypoint/apigen-cli/src/lib/orchestrator.ts`'s `extractSource()`
+(`:282-313`) is the **single** call site of `extract()` reached by every apigen-cli command that
+performs extraction — `buildDescriptor()` (`:388+`) calls it once per `SourceEntry`, and
+`buildDescriptor()` is itself the shared core every one of `generate`/`generate-registry`/
+`run`/`run-registry` funnels through. `OrchestratorOptions` (`:114+`) already carries
+`usePluginObjects?: Plugin[]` (`:133`) — the *loaded* `--use` plugin objects, already threaded
+into `buildDescriptor()` (destructured `:391`) and already dispatched for the **envelope**
+capability via `pluginsToEnvelopeMiddlewares(usePluginObjects)` (`:396`). Extraction is the one
+capability class that ISN'T dispatched there yet — this revision adds it, using the exact same
+already-loaded `usePluginObjects` array, no new CLI flag, no new loading mechanism.
+
+**What changes, concretely:**
+
+1. **New capability field**, `extractLayer`, added to `Plugin.capabilities` in
+   `packages/apigen/apigen-core-client/src/lib/plugin.ts` (sibling to `layer`/`target`/`mount`/
+   `envelope` at `:667-699`):
+
+   ```ts
+   export interface ExtractLayerCapability {
+     /** Wraps the extract-stage invoker — same algebra as LayerCapability.layer
+      *  (`:326`), but typed against ExtractCall/ExtractResult (extract-invoker.ts),
+      *  NOT the dispatch-shaped Call/Result. This is the deliberate, accepted
+      *  "two Call shapes" asymmetry §1.3/§5.1 already flagged, made concrete
+      *  and type-safe rather than papered over with an unsafe duck-typed view:
+      *  ExtractCall has no domainArgs/envelope/operation.id to view-cast INTO
+      *  a dispatch Call, so — unlike adaptCoreLayer's `Object.assign(call,
+      *  {data: call.domainArgs})` trick, which works because the two Call
+      *  shapes are structurally close — an extract-stage plugin needs its own
+      *  field, not a coercion of `layer`. */
+     layer: ExtractMiddleware;
+   }
+   // Plugin.capabilities gains: extractLayer?: ExtractLayerCapability;
+   ```
+
+2. **New composition helper**, alongside `createExtractInvoker` in
+   `packages/apigen/apigen-core-client/src/lib/extract-invoker.ts` (this package already owns
+   `Plugin`, `ExtractCall`/`ExtractResult`/`ExtractMiddleware`, and `createExtractInvoker` — no new
+   package, no upward dependency onto `apigen-engine-runtime` needed, unlike the dispatch side's
+   `adaptCoreLayer`/`createPackageInvoker` which legitimately live one tier up because they touch
+   the runtime `Call`/`InvokeFn` shapes):
+
+   ```ts
+   import type { Plugin } from './plugin';
+
+   /** Mirrors createPackageInvoker's (`package-invoker.ts:124`) role for the
+    *  extract stage: pulls every loaded plugin's `extractLayer` capability
+    *  (in declaration order, outermost-first — identical composition rule to
+    *  `--use` layer ordering on the dispatch side) and wraps `runExtractor`. */
+   export function createExtractInvokerFromPlugins(
+     plugins: readonly Plugin[],
+     runExtractor: (call: ExtractCall) => Promise<ExtractResult>
+   ): (call: ExtractCall) => Promise<ExtractResult> {
+     const middlewares = plugins
+       .filter((p): p is Plugin & { capabilities: { extractLayer: ExtractLayerCapability } } =>
+         Boolean(p.capabilities.extractLayer)
+       )
+       .map((p) => p.capabilities.extractLayer.layer);
+     return createExtractInvoker(middlewares, runExtractor);
+   }
+   ```
+
+3. **`orchestrator.ts`'s `extractSource()`** gains a `usePluginObjects?: Plugin[]` parameter
+   (threaded from `buildDescriptor()`'s already-destructured `:391` value, no new plumbing at the
+   command layer) and wraps its existing `extract({...})` call (`:296-301`) with
+   `createExtractInvokerFromPlugins(usePluginObjects, (call) => extract({sourceFile: call.source, namespace: call.namespace, tsconfig: call.extractorOptions?.tsconfig, session: call.extractorOptions?.session}))`
+   instead of calling `extract()` directly — a MISS behaves byte-identically to today (same
+   `extract()` call, same arguments); a plugin supplying `extractLayer` (e.g. `apigen-plugin-
+   ir-cache` with `--use ir-cache --opt cache=<path>`) now transparently wraps every apigen-cli
+   command's extraction, not just backlog's hand-wired one.
+
+4. **`entrypoint/backlog/src/server.ts`** stops hand-constructing the invoker (see the
+   implementation spec's Revision 2 section for the exact diff) and instead loads `apigen-plugin-
+   ir-cache`'s exported `Plugin` object the same way any `--use`-style consumer would, passing it
+   through `createExtractInvokerFromPlugins` — collapsing backlog's bespoke `getExtractInvoke()`
+   onto the same generic mechanism every other apigen-cli command now uses, and gaining an opt-out
+   for free (see R2.7).
+
+This closes the ergonomics gap §1.3/§5.1 already flagged rather than hiding it: an extract-stage
+plugin author writes against `ExtractCall`/`ExtractResult` via the new, explicit `extractLayer`
+capability; a dispatch-stage plugin author writes against `Call`/`Result` via the existing `layer`
+capability; a plugin wanting BOTH declares both capabilities on the same `Plugin` object (as R2.4's
+`apigen-plugin-ir-cache` now does for `target`+`extractLayer`) — no unification of the two `Call`
+shapes is attempted, matching §5.1 finding 1's own conclusion that no unforced unification exists.
+
+### R2.7 — The opt-out (closing the "no runtime kill switch" review flag)
+
+Because R2.6 makes `extractLayer` composition **opt-in via `--use`** (or, for backlog's non-CLI
+server/MCP mount path, via an explicit plugin list backlog itself constructs), the "unconditional,
+no opt-out" gap dissolves structurally rather than needing a bespoke env-var check: backlog's
+`server.ts` decides whether to include the ir-cache plugin in the list it passes to
+`createExtractInvokerFromPlugins` at all. The implementation spec's Revision 2 section specifies
+this as `APIGEN_IR_CACHE_ENABLED` (default `'1'`; `'0'` omits the plugin from the list entirely) —
+kept as an explicit env-var gate on backlog's side specifically because backlog's three transports
+(HTTP/MCP/CLI) are not driven through `apigen-cli`'s `--use` flag parsing at all (they're a live
+mount, not a `generate`/`run` invocation), so there is no `--use`/`--no-use` CLI surface for a
+human to flip there — an env var is the only available knob for that specific host, not a
+general pattern this revision is proposing repo-wide.
+
+### R2.8 — Open questions carried forward / newly raised (not resolved here)
+
+1. **The `'artifact'` sentinel string collision** (R2.2) is a real, if narrow, ambiguity — a
+   caller who wants a RUNTIME CACHE file literally named `artifact` (no extension, cwd-relative,
+   no `./` prefix) cannot express that. Accepted as documented behavior, not fixed by a type-level
+   guarantee; flagged for a human to confirm is acceptable rather than assumed.
+2. **Concurrent-writer races in RUNTIME CACHE mode** (R2.3's atomic write): `rename()` makes each
+   individual write atomic, but two concurrent MISSes both racing to write the same path are not
+   coordinated (no lock) — the design accepts "last writer wins, both computed the same answer" as
+   sufficient, but this has not been verified true for a NON-deterministic extractor output (see
+   original §5's open question 2 on transitive-hash cost — the same "is extraction actually
+   deterministic for identical input" assumption underlies this too and was never independently
+   proven, only asserted).
+3. **`filename` default (`ir-cache.json`) collision across multiple sources** in ARTIFACT mode:
+   if a future multi-source `generate-registry`-driven artifact build runs the ir-cache target once
+   per source into the same `--out-dir`, every source produces `ir-cache.json` and the last one
+   wins silently. Not exercised by the smallest slice (single-source `generate`, matching the
+   original design's own §4 sequencing decision to defer multi-source orchestrator wiring), but a
+   real gap the moment ARTIFACT mode is used from `generate-registry`.
+4. **Whether `extractLayer` should also gain an `envelopeFields`-style declarative surface**
+   (mirroring `LayerCapability.envelopeFields`, `plugin.ts:310`) is left unaddressed — no extract-
+   stage equivalent of envelope fields is proposed here, because no concrete plugin need for one
+   has surfaced yet (YAGNI, consistent with the original design's own §3 closing paragraph on not
+   over-building `composeOnion` ahead of a second real consumer).
