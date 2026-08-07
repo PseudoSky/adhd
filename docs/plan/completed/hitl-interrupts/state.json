@@ -1,0 +1,147 @@
+{
+  "schema_version": 3,
+  "plan": "hitl-interrupts",
+  "current_state": "done",
+  "states": {
+    "hitl-orchestrator": {
+      "status": "complete",
+      "started_at": "2026-06-14T04:00:37.097Z",
+      "done_at": "2026-06-14T04:04:09.241Z",
+      "start_ref": "b08890aaaeb0bca64852ba71ae16c8f0987c7ae3",
+      "end_ref": "d3d2d0e2bb77a1f44c537bb14884cf28d1d5821c"
+    },
+    "hitl-resume-tool": {
+      "status": "complete",
+      "started_at": "2026-06-14T04:04:27.831Z",
+      "done_at": "2026-06-14T04:07:48.481Z",
+      "start_ref": "27dfffb993190ecc05a9880e014b5022bd8c71e9",
+      "end_ref": "c746f90441095cf31cacbd8258a49818189bbd8e"
+    },
+    "audit-foundation": {
+      "status": "complete",
+      "started_at": "2026-06-14T04:08:05.179Z",
+      "done_at": "2026-06-14T04:08:24.806Z",
+      "start_ref": "55c6443e9bbc8ee0fe32a0774c7698de0f5194eb",
+      "end_ref": "2e8b3a4963e44a8234a9e62ab306e853e6b0ab7f"
+    },
+    "code-review": {
+      "status": "complete",
+      "started_at": "2026-06-15T15:08:48.293Z",
+      "done_at": "2026-06-15T15:08:48.675Z",
+      "start_ref": "30350b0a49fb115ee26c1bee904dc1d8bdef9aa7",
+      "end_ref": "7890d431602738b81a0a49c162da59a1118a91de"
+    },
+    "audit-final": {
+      "status": "complete",
+      "started_at": "2026-06-15T16:44:26.256Z",
+      "done_at": "2026-06-15T16:44:46.138Z",
+      "start_ref": "caf52a83bc3ed07037114d1e5a1d56a79ad7d957",
+      "end_ref": "66f05c0f886ab2200a52859c5df5bf3580043f3f"
+    },
+    "docs-and-publish": {
+      "status": "complete",
+      "started_at": "2026-06-15T16:44:46.375Z",
+      "done_at": "2026-06-15T16:44:47.337Z",
+      "start_ref": "e55a04d15d2a5d105ca11d3fe8e87aadc582b8a6",
+      "end_ref": "ba36fe86981dc2ffb08b45a15771f088a4c7171b"
+    }
+  },
+  "transition_log": [
+    {
+      "ts": "2026-06-14T04:04:09.241Z",
+      "from": "hitl-orchestrator",
+      "to": "hitl-orchestrator",
+      "start_ref": "b08890aaaeb0bca64852ba71ae16c8f0987c7ae3",
+      "end_ref": "d3d2d0e2bb77a1f44c537bb14884cf28d1d5821c",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "HITL intercept in Phase-1 loop; DB-persist resumeToken before await; abort-wired"
+    },
+    {
+      "ts": "2026-06-14T04:07:48.481Z",
+      "from": "hitl-resume-tool",
+      "to": "hitl-resume-tool",
+      "start_ref": "27dfffb993190ecc05a9880e014b5022bd8c71e9",
+      "end_ref": "c746f90441095cf31cacbd8258a49818189bbd8e",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "task_resume with token validation; TASK_NOT_RESUMABLE registered; awaiting_input cancellable"
+    },
+    {
+      "ts": "2026-06-14T04:08:24.806Z",
+      "from": "audit-foundation",
+      "to": "audit-foundation",
+      "start_ref": "55c6443e9bbc8ee0fe32a0774c7698de0f5194eb",
+      "end_ref": "2e8b3a4963e44a8234a9e62ab306e853e6b0ab7f",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "foundation audit green"
+    },
+    {
+      "ts": "2026-06-15T15:08:48.675Z",
+      "from": "code-review",
+      "to": "code-review",
+      "start_ref": "30350b0a49fb115ee26c1bee904dc1d8bdef9aa7",
+      "end_ref": "7890d431602738b81a0a49c162da59a1118a91de",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Human sign-off recorded (pseudosky, 2026-06-15): features verified end-to-end live — real-DB FK migration preserved task_events; recursive DAG with all tool calls confirmed via calc-server.log + task_events + usage_query."
+    },
+    {
+      "ts": "2026-06-15T16:44:46.138Z",
+      "from": "audit-final",
+      "to": "audit-final",
+      "start_ref": "caf52a83bc3ed07037114d1e5a1d56a79ad7d957",
+      "end_ref": "66f05c0f886ab2200a52859c5df5bf3580043f3f",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Final DoD audit green (all criteria) at consolidated 1.0.0."
+    },
+    {
+      "ts": "2026-06-15T16:44:47.337Z",
+      "from": "docs-and-publish",
+      "to": "docs-and-publish",
+      "start_ref": "e55a04d15d2a5d105ca11d3fe8e87aadc582b8a6",
+      "end_ref": "ba36fe86981dc2ffb08b45a15771f088a4c7171b",
+      "audit_exit": 2,
+      "audit_criteria_passed": 0,
+      "audit_criteria_total": 0,
+      "by": "pseudosky",
+      "note": "Shipped in consolidated @adhd/agent-mcp@1.0.0 (published to npm); ROADMAP updated."
+    }
+  ],
+  "amendment_log": [
+    {
+      "at": "2026-06-13",
+      "author": "planner",
+      "summary": "Extract hitl-schema + hitl-types nodes into task-schema-foundation plan. Schema/types work (resume_token column; 'awaiting_input' status; TaskStore.updateStatus resumeToken) moved to prerequisite plan. hitl-orchestrator now depends_on: [] and assumes foundation + 0.1.0 + 0.2.0 are deployed. agent-mcp-types/package.json removed from docs-and-publish artifacts (foundation owns that bump)."
+    },
+    {
+      "ts": "2026-06-14T04:05:30.910Z",
+      "state": "hitl-resume-tool",
+      "class": "executor",
+      "type": "reservation-expansion",
+      "reason": "TASK_NOT_RESUMABLE error code required by DoD hitl-resume-tool.4 must be registered in AgentMcpErrorCode + errorCodeSchema for the build to compile; additive enum member, no behavior change",
+      "files_synced": [
+        "packages/ai/agent-mcp-types/src/errors.ts",
+        "packages/ai/agent-mcp/src/validation/errors.ts"
+      ],
+      "by": "pseudosky"
+    }
+  ],
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.8",
+    "hash": "fd74ba3328ea"
+  }
+}

@@ -1,0 +1,199 @@
+{
+  "compileOnSave": false,
+  "ts-node": {
+    "esm": true,
+    "compilerOptions": {
+      "module": "CommonJS",
+      "paths": {
+        "@adhd/data": ["./packages/data/src/index.ts"],
+        "@adhd/query": ["./packages/query/src/index.ts"],
+        "@adhd/react-hooks": ["./packages/react-hooks/src/index.ts"],
+        "@adhd/transform": ["./packages/transform/src/index.ts"]
+      }
+    }
+  },
+  "compilerOptions": {
+    "rootDir": "./",
+    "sourceMap": true,
+    "declaration": false,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "noImplicitThis": false,
+    "importHelpers": true,
+    "target": "es2018",
+    "module": "esnext",
+    "lib": ["es2020", "dom"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "paths": {
+      "@adhd/agent-base-types": [
+        "./packages/agent/agent-base-types/src/index.ts"
+      ],
+      "@adhd/agent-core-env": ["./packages/agent/agent-core-env/src/index.ts"],
+      "@adhd/agent-core-policy": [
+        "./packages/agent/agent-core-policy/src/index.ts"
+      ],
+      "@adhd/agent-core-provider": [
+        "./packages/agent/agent-core-provider/src/index.ts"
+      ],
+      "@adhd/agent-engine-compiler": [
+        "./packages/agent/agent-engine-compiler/src/index.ts"
+      ],
+      "@adhd/agent-engine-orchestrator": [
+        "./packages/agent/agent-engine-orchestrator/src/index.ts"
+      ],
+      "@adhd/agent-generator-plugin": [
+        "./packages/agent/agent-generator-plugin/src/index.ts"
+      ],
+      "@adhd/agent-mcp": ["./entrypoint/agent-mcp/src/index.ts"],
+      "@adhd/agent-plugin-budget": [
+        "./packages/agent/agent-plugin-budget/src/index.ts"
+      ],
+      "@adhd/agent-plugin-sanitize": [
+        "./packages/agent/agent-plugin-sanitize/src/index.ts"
+      ],
+      "@adhd/agent-store-prompts": [
+        "./packages/agent/agent-store-prompts/src/index.ts"
+      ],
+      "@adhd/agent-store-runtime": [
+        "./packages/agent/agent-store-runtime/src/index.ts"
+      ],
+      "@adhd/agent-store-tools": [
+        "./packages/agent/agent-store-tools/src/index.ts"
+      ],
+      "@adhd/apigen-base-errors": [
+        "./packages/apigen/apigen-base-errors/src/index.ts"
+      ],
+      "@adhd/apigen-base-logical": [
+        "./packages/apigen/apigen-base-logical/src/index.ts"
+      ],
+      "@adhd/apigen-base-schema": [
+        "./packages/apigen/apigen-base-schema/src/index.ts"
+      ],
+      "@adhd/apigen-base-types": [
+        "./packages/apigen/apigen-base-types/src/index.ts"
+      ],
+      "@adhd/apigen-cli": ["./entrypoint/apigen-cli/src/index.ts"],
+      "@adhd/apigen-codegen-openapi": [
+        "./packages/apigen/codegen/openapi/src/index.ts"
+      ],
+      "@adhd/apigen-core": [
+        "./packages/apigen/apigen-core-client/src/index.ts"
+      ],
+      "@adhd/apigen-core-client": [
+        "./packages/apigen/apigen-core-client/src/index.ts"
+      ],
+      "@adhd/apigen-engine-conformance": [
+        "./packages/apigen/apigen-engine-conformance/src/index.ts"
+      ],
+      "@adhd/apigen-engine-gateway": [
+        "./packages/apigen/apigen-engine-gateway/src/index.ts"
+      ],
+      "@adhd/apigen-engine-naming": [
+        "./packages/apigen/apigen-engine-naming/src/index.ts"
+      ],
+      "@adhd/apigen-engine-runtime": [
+        "./packages/apigen/apigen-engine-runtime/src/index.ts"
+      ],
+      "@adhd/apigen-engine-runtime/test-support": [
+        "./packages/apigen/apigen-engine-runtime/src/test-support/parity-harness.ts"
+      ],
+      "@adhd/apigen-generator-nx": [
+        "./packages/apigen/apigen-generator-nx/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-api-express": [
+        "./packages/apigen/apigen-plugin-api-express/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-api-fastify": [
+        "./packages/apigen/apigen-plugin-api-fastify/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-batch": [
+        "./packages/apigen/apigen-plugin-batch/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-cli-output": [
+        "./packages/apigen/apigen-plugin-cli-output/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-demo-plugin": [
+        "./packages/apigen/plugins/demo-plugin/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-health": [
+        "./packages/apigen/apigen-plugin-health/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-java-javalin": [
+        "./packages/apigen/apigen-plugin-java-javalin/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-jsonschema": [
+        "./packages/apigen/apigen-plugin-jsonschema/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-logger": [
+        "./packages/apigen/apigen-plugin-logger/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-mcp": [
+        "./packages/apigen/apigen-plugin-mcp/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-openapi": [
+        "./packages/apigen/apigen-plugin-openapi/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-py-flask": [
+        "./packages/apigen/apigen-plugin-py-flask/src/index.ts"
+      ],
+      "@adhd/apigen-plugin-py-grpc": [
+        "./packages/apigen/apigen-plugin-py-grpc/src/index.ts"
+      ],
+      "@adhd/apigen-python-env": ["./packages/apigen/python-env/src/index.ts"],
+      "@adhd/backlog": ["./entrypoint/backlog/src/index.ts"],
+      "@adhd/data-base-transforms": [
+        "./packages/data/data-base-transforms/src/index.ts"
+      ],
+      "@adhd/data-core-structures": [
+        "./packages/data/data-core-structures/src/index.ts"
+      ],
+      "@adhd/data-query-engine": [
+        "./packages/data/data-query-engine/src/index.ts"
+      ],
+      "@adhd/decompile-cli": ["./entrypoint/decompile-cli/src/index.ts"],
+      "@adhd/dispatch-base-spec": [
+        "./packages/dispatch/dispatch-base-spec/src/index.ts"
+      ],
+      "@adhd/dispatch-base-types": [
+        "./packages/dispatch/dispatch-base-types/src/index.ts"
+      ],
+      "@adhd/dispatch-cli": ["./entrypoint/dispatch-cli/src/index.ts"],
+      "@adhd/dispatch-core-client": [
+        "./packages/dispatch/dispatch-core-client/src/index.ts"
+      ],
+      "@adhd/dispatch-core-optimizer": [
+        "./packages/dispatch/dispatch-core-optimizer/src/index.ts"
+      ],
+      "@adhd/dispatch-orchestrator": [
+        "./packages/dispatch/dispatch-orchestrator/src/index.ts"
+      ],
+      "@adhd/dispatch-serializer-json": [
+        "./packages/dispatch/dispatch-serializer-json/src/index.ts"
+      ],
+      "@adhd/environment": [
+        "./packages/environment/environment-core-node/src/index.ts"
+      ],
+      "@adhd/environment-base-spec": [
+        "./packages/environment/environment-base-spec/src/index.ts"
+      ],
+      "@adhd/environment-builder": [
+        "./packages/environment/environment-builder/src/index.ts"
+      ],
+      "@adhd/environment-cli": ["./entrypoint/environment-cli/src/index.ts"],
+      "@adhd/ui-react-base-hooks": [
+        "./packages/ui-react/ui-react-base-hooks/src/index.ts"
+      ],
+      "@adhd/ui-react-base-storybook": [
+        "./packages/ui-react/ui-react-base-storybook/src/index.ts"
+      ],
+      "@adhd/workspace-base-tools": [
+        "./packages/workspace/workspace-base-tools/src/index.ts"
+      ],
+      "@adhd/workspace-codegen-nx": [
+        "./packages/workspace/workspace-codegen-nx/src/index.ts"
+      ]
+    }
+  },
+  "exclude": ["node_modules", "tmp"]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@adhd/apigen-plugin-cli-output",
+  "version": "0.2.2",
+  "main": "./dist/index.js",
+  "dependencies": {
+    "@adhd/apigen-core-client": "^0.2.2",
+    "@adhd/apigen-engine-runtime": "^0.2.2",
+    "@adhd/apigen-base-errors": "^0.2.0",
+    "@adhd/apigen-engine-naming": "^0.2.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
+}

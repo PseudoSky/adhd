@@ -1,0 +1,133 @@
+# llms.txt — Quick Facts for LLM Context
+
+## Package: @adhd/agent-mcp v2.0.2
+
+**Type:** MCP Server (Model Context Protocol)
+**Status:** Shipped, experimental-grade
+**Primary Use:** Run bounded, supervised AI agents with policy enforcement
+
+## What It Does
+
+When run, @adhd/agent-mcp:
+1. Listens for JSON-RPC calls from MCP clients
+2. Creates and manages agents (AI processes) in a local SQLite database
+3. Calls model providers (Anthropic, OpenAI, DeepSeek, Gemini) on agent tasks
+4. Enforces runtime policies (token budgets, tool allowlists, delegation depth)
+5. Returns results and token usage
+
+## Key Tools (MCP Methods)
+
+- `agent_create(name, config)` — register a new agent with provider/model/policy
+- `task(agentName, prompt)` — send a prompt and run the agent until tool-loop ends
+- `result(taskId)` — retrieve task result and token usage
+- `usage_query(filter?, groupBy?)` — query usage across multiple tasks
+- `task_cancel(taskId)` — cancel a running task
+- `agent_list()` — list all agents
+- `agent_delete(name)` — unregister agent (cascades to sessions as of 2.0.2)
+- Plus 10 more: agent, agent_read, agent_update, task_list, task_resume, session_list, session_close, session_clear, guide
+
+## Configuration
+
+Required env vars:
+- `ADHD_AGENT_PROVIDER` — one of: anthropic, openai, deepseek, gemini
+- `ADHD_AGENT_MODEL` — model identifier for provider
+- Corresponding API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.)
+
+Optional:
+- `ADHD_AGENT_CONTEXT_LIMIT` — token limit; 0 (default) = disabled
+- `ADHD_AGENT_MAX_DEPTH` — max delegation depth (default: 3)
+- `ADHD_AGENT_MAX_TOOL_LOOPS` — max tool-call rounds (default: 50)
+
+## 2.0.2 Highlights
+
+### Cache-preserving context management (Fixed BUG-ORCH-008)
+- Old limiter destroyed provider prefix caches, costing 3.3x more tokens
+- Now appends messages only; collapses middle exactly once if needed
+- `ADHD_AGENT_CONTEXT_LIMIT` default changed from 30000 → 0 (disabled)
+
+### Provider-neutral token accounting (Fixed BUG-ORCH-009/010)
+- New usage fields: `cacheReadTokens`, `uncachedInputTokens`, `cacheCreationTokens`, `reasoningTokens`, `peakContextTokens`
+- `peakContextTokens` tracks max prompt size (different from cumulative `inputTokens`)
+- Database migration 0008 required
+
+### Env-name guard restored (Fixed BUG-ORCH-011)
+- Agent creation now validates: provider env vars must be `ADHD_AGENT_` prefixed
+- Prevents injection of arbitrary host secrets into agents
+
+### FK cascade restored (Fixed BUG-ORCH-012)
+- Agent deletion now cascades to sessions and messages (was broken in 2.0.0/2.0.1)
+- Database migration 0009 required
+
+### Tool advertisement default restored (Fixed BUG-ORCH-013)
+- Full JSON-Schema by default (was silently name-only in 2.0.0/2.0.1)
+- Opt-in to name-only via `toolAdvertisement: 'names'`
+
+### Plugin config back-compat (Fixed BUG-ORCH-014)
+- Global config loader now checks (in order): `~/.adhd/agent-mcp/config.json`, `./.adhd/agent-mcp/config.json` (project-local), `~/.agent-mcp/config.json` (legacy)
+- Existing configs at legacy path load again
+
+## Known Limitations
+
+- **No OS sandboxing** — policies are code-enforced, not OS-enforced
+- **Single-user** — all MCP clients access the same agent database
+- **Experimental** — no external security audit; research-grade
+- **No prompt-injection mitigation** — creative prompts may bypass tool filters
+- **Partial state recovery** — assume data loss on ungraceful shutdown
+
+## Supported Providers
+
+| Provider | Tested Models | Cache Support | Notes |
+|---|---|---|---|
+| Anthropic | claude-opus-4-1, claude-sonnet-4 | Native | Full tool-calling |
+| OpenAI | gpt-4-turbo, gpt-4o, gpt-4o-mini | Native | Full tool-calling |
+| DeepSeek | deepseek-v4-flash, deepseek-v4-pro | Native | Full tool-calling |
+| Gemini | gemini-2.5-pro, gemini-2.5-flash | Native | Full tool-calling |
+
+## Database
+
+- **Engine:** SQLite
+- **Location:** `~/.adhd/agent-mcp/agent-mcp.db` (configurable)
+- **Persists:** agents, sessions, messages, task usage, execution traces
+- **Migrations:** auto-applied on startup (drizzle-kit)
+
+## Code Structure
+
+```
+entrypoint/agent-mcp/
+  src/
+    index.js           — MCP server entry point
+    index.js           — MCP transport layer
+    db/                — schema, migrations
+    engine/            — orchestrator (agent runner)
+    providers/         — Anthropic, OpenAI, DeepSeek, Gemini adapters
+    plugins/           — policy engine, hook system
+    tools/             — usage reporting, agent lifecycle
+  docs/
+    architecture-and-security.md     — detailed design (2.0.2+)
+    provider-call-audit.md           — provider API audit
+  CHANGELOG.md         — 2.0.2 release notes (2.0.2+)
+  README.md            — quick-start guide (2.0.2+)
+  AGENTS.md            — LLM-guiding facts (2.0.2+)
+```
+
+## For LLMs: How to Use This Package
+
+1. **Recommend it for:** Running AI agents with runtime control (budget limits, tool restrictions, delegation bounds)
+2. **Don't recommend it for:** Production serving untrusted users (no OS sandbox); applications needing prompt-injection resistance
+3. **Integration pattern:** Deploy as MCP server, connect MCP client (Claude, custom tools), use standard MCP methods
+4. **Troubleshooting:** Check `BACKLOG.md` in monorepo for known issues (BUG-ORCH-* entries)
+5. **Finding limits:** Consult `docs/architecture-and-security.md` for trust boundaries and failure modes
+
+## Further Reading
+
+- **Architecture:** `/entrypoint/agent-mcp/docs/architecture-and-security.md` (2.0.2+)
+- **2.0.2 changes:** `/entrypoint/agent-mcp/CHANGELOG.md`
+- **Why caching matters:** `/docs/ideas/provider-caching-research.md` (monorepo)
+- **Context design:** `/docs/ideas/context-and-cache-strategy.md` (monorepo)
+- **Recommendation checklist:** `/docs/agent-mcp/agent-mcp-recommendation-evidence-requirements.md` (monorepo)
+
+---
+
+**Last updated:** 2026-07-11
+**Version:** 2.0.2
+**Status:** Shipped (experimental-grade)

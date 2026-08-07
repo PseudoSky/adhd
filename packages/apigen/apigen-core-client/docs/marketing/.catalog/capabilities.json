@@ -1,0 +1,302 @@
+[
+  {
+    "id": "generate-schemas",
+    "name": "generateSchemas",
+    "description": "Reads a TypeScript source file and returns GeneratedSchemas — per-export input/output JSON Schemas (domain only, no middleware envelope). Supports three extraction modes: named, default, named-object. Ctx first-param excluded by name match only.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/generate-schemas.ts:20-99",
+      "src/test/generate-schemas.spec.ts:7-86"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'generateSchemas'",
+    "verified_output": "✓ 7 tests passed — [schema-extraction.1] includes getUser and sendEmail; excludes VERSION; [schema-extraction.2] ctx first param excluded; [schema-extraction.3] optional param not in required; [schema-extraction.4] Promise<T> unwrapped; [schema-extraction.5] default export mode; [schema-extraction.6] named-object mode; [schema-extraction.7] zero-param-with-ctx",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "substantial",
+    "signature_note": "Orchestrates ts-morph Project + ts-json-schema-generator per export, with extraction-session sharing to avoid redundant program builds (O(N)→O(1) via caching), and handles three mutually exclusive export modes"
+  },
+  {
+    "id": "compose-schemas",
+    "name": "composeSchemas",
+    "description": "Merges domain schemas (from generateSchemas) with middleware envelope fields into ComposedSchemas. Always wraps domain params in a data: {} wrapper. false override suppresses a middleware per-function; null/undefined do not.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/compose-schemas.ts:16-66",
+      "src/test/compose-schemas.spec.ts:46-152"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'composeSchemas'",
+    "verified_output": "✓ 6 tests passed — [schema-composition.1] data wrapper present with no middleware; [2] session middleware merged; [3] override false suppresses; [4] zero-param fn composition; [5] multiple middlewares; [6] null does not suppress (only false does)",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "moderate",
+    "signature_note": ""
+  },
+  {
+    "id": "extract",
+    "name": "extract (v2 symbol-based extractor)",
+    "description": "Walks a TypeScript source module via ts-morph and produces canonical Operation[] descriptors — one per exported callable or serializable-data binding. Handles all six export shapes: named function, named const/arrow, named-object, default-export named fn, anonymous default, and CJS (module.exports). Sets safe from kind default (query→true, action→false). Populates input/output JSON-Schema via buildSchema. Attaches typeText for same-host sugar.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/extract.ts:74-458",
+      "src/test/extract.spec.ts:37-378"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'extract'",
+    "verified_output": "✓ 36 tests passed across all six export shapes + cross-shape invariants + tokenize; [extract.1.1] named fn; [extract.2.1] named const; [extract.3.1] named-object; [extract.4.1] default-export named; [extract.5.1] anonymous default; [extract.6.1] CJS; all with negative controls",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "substantial",
+    "signature_note": "Full 6-shape export matrix (named fn, const, object, default named, anonymous default, CJS) with renamed-exports (Shape 1b) fix, ctx-name-only exclusion, query const serializability heuristic, and deterministic id derivation from namespace+path"
+  },
+  {
+    "id": "tokenize",
+    "name": "tokenize",
+    "description": "Splits a camelCase/PascalCase/kebab-case/snake_case identifier into lower-cased words. Used to build casing-neutral Segment records for the descriptor. Deterministic: same input always yields same output.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/extract.ts:607-623",
+      "src/test/extract.spec.ts:358-377"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'tokenize'",
+    "verified_output": "✓ 4 tests passed — [tokenize.1] camelCase→['humanize','bytes']; [tokenize.2] PascalCase→['humanize','bytes']; [tokenize.3] kebab-case→['my','util']; [tokenize.4] SCREAMING_SNAKE→['some','const']",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "moderate",
+    "signature_note": ""
+  },
+  {
+    "id": "extract-classes",
+    "name": "extractClasses",
+    "description": "Walks a TypeScript source file and produces canonical Operation[] descriptors for all exported class members per SPEC §10. Static methods are always extracted as kind:'action'. Constructor and instance methods require opts.includeInstances = true; constructor → kind:'constructor', instance methods → kind:'instance-method' with instanceId envelope.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/extract-classes.ts:76-275",
+      "src/test/extract-classes.spec.ts:37-232"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'extractClasses'",
+    "verified_output": "✓ 18 tests passed — [cls.1.1] static create method extracted; [cls.1.2] path is [file,ClassName,methodName]; [cls.1.3] id encodes file/class/method; [cls.2.1] constructor op emitted; [cls.2.4] instance method extracted; negative controls verify _-prefixed, non-exported, and private methods are skipped",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "substantial",
+    "signature_note": "Extracts static, constructor, and instance methods from exported classes with path=[file,ClassName,methodName], ctx exclusion, scope filtering (public only), and instanceId envelope for instance methods per SPEC §10"
+  },
+  {
+    "id": "create-extraction-session",
+    "name": "createExtractionSession",
+    "description": "Creates a per-run shared cache for extract, generateSchemas, and extractClasses. One ts-morph Project per tsconfig, one schema generator per file, memoized (file, typeText) schemas. Two-tier cache: per-session (dispose releases) + persistent process-lifetime (version-checked by mtime+size). Call dispose() to release per-run resources; clearPersistentProjectCache() reclaims everything explicitly.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/extraction-session.ts:158-241",
+      "src/test/extraction-session.spec.ts:55-173"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'shared ExtractionSession'",
+    "verified_output": "✓ 7 tests passed — extract+generateSchemas share ONE Project (no redundant builds); two sources share one Project; shared session deep-equals session-less; session rejects after dispose; persistent tier: second session builds 0 Projects and 0 generators; file edit detected; probe hygiene leaves SourceFile unchanged",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "substantial",
+    "signature_note": "Two-tier cache architecture: per-session (dispose-released) + persistent process-lifetime (mtime+size versioned, LRU-capped at APIGEN_PROGRAM_CACHE=8 entries), eliminating redundant ts-morph program builds across multiple extraction calls in one run"
+  },
+  {
+    "id": "clear-persistent-project-cache",
+    "name": "clearPersistentProjectCache",
+    "description": "Drops the process-lifetime Project and schema caches — used in tests and for explicit memory reclaim. Safe to call before a new batch run.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/extraction-session.ts:148-151"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'clearPersistentProjectCache'",
+    "verified_output": "Indirectly verified by extraction-session spec which calls clearPersistentProjectCache() in beforeEach to start cold",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "trivial",
+    "signature_note": ""
+  },
+  {
+    "id": "language-of-source",
+    "name": "languageOfSource",
+    "description": "Derives the canonical PluginLanguage tag ('ts','py','rust','go','java') from a file's extension. Maps .ts/.tsx/.mts/.cts→'ts', .py→'py', .rs→'rust', .go→'go', .java→'java'. Returns undefined for unrecognized extensions (no guessing).",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/source-language.ts:64-67",
+      "src/test/source-language.spec.ts:28-109"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'languageOfSource'",
+    "verified_output": "✓ 16 tests passed — .ts/.tsx/.mts/.cts→'ts' (case-insensitive), .py→'py', .rs→'rust', .go→'go', .java→'java'; unknown extensions (.md/.json/Makefile/.rb/.kt)→undefined; absolute paths and multi-dot filenames handled",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "moderate",
+    "signature_note": ""
+  },
+  {
+    "id": "plugin-consumes-source",
+    "name": "pluginConsumesSource",
+    "description": "Returns true when a plugin should consume a given file — the file's extension-derived language matches the plugin's effective language (declared or defaulting to 'ts'). Files with unrecognized extensions are never routed.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/source-language.ts:115-122",
+      "src/test/source-language.spec.ts:133-177"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'pluginConsumesSource'",
+    "verified_output": "✓ 12 tests passed — positive matches (ts→.ts/.tsx/.mts/.cts, py→.py); negative mismatches (ts rejects .py, py rejects .ts); unknown extensions always rejected; default language 'ts' when omitted",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "trivial",
+    "signature_note": ""
+  },
+  {
+    "id": "sources-for-plugin",
+    "name": "sourcesForPlugin",
+    "description": "Filters a list of file paths to the subset whose language matches the given plugin. Primary entry-point for the serve command's dispatch loop. Preserves insertion order; never includes unrecognized extensions.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/source-language.ts:145-149",
+      "src/test/source-language.spec.ts:183-265"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'sourcesForPlugin'",
+    "verified_output": "✓ 10 tests passed — returns only TS files for ts plugin; only .py for py plugin; only .rs for rust; only .go for go; empty for no match; preserves insertion order; readonly array accepted; no bleeding of non-ts into ts result",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "trivial",
+    "signature_note": ""
+  },
+  {
+    "id": "effective-language",
+    "name": "effectiveLanguage",
+    "description": "Returns the effective PluginLanguage for a plugin — the declared language if set, or 'ts' as the documented default for back-compat.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/source-language.ts:90-92",
+      "src/test/source-language.spec.ts:115-127"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'effectiveLanguage'",
+    "verified_output": "✓ 6 tests passed — returns declared 'py'/'ts'/'rust'/'go'/'java'; defaults to 'ts' when omitted",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "trivial",
+    "signature_note": ""
+  },
+  {
+    "id": "build-schema",
+    "name": "buildSchema (internal)",
+    "description": "Core schema builder: attempts ts-json-schema-generator for named types first, falls back to morphWalk for anonymous/inline types, with morphFallback as final safety net. Three-stage pipeline: (1) well-known scalars → {type,format}, (2) Map/Set/tuple → array-compatible, (3) named-type generator with custom parser augmentor for Uint8Array/Buffer/Decimal/bigint. Resolves import aliases for external scalar types (e.g. Decimal from decimal.js). Results memoized per (file, tsconfig, typeText) in session cache.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/schema-builders/ts-json-schema.ts:548-710",
+      "src/test/ts-json-schema.spec.ts:1-501"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'lt-extract-scalars|BUG-APIGEN-013|BUG-APIGEN-011|REGRESSION.*Map.*Set.*tuple'",
+    "verified_output": "✓ 37 tests passed — [scalar.date-time] Date→{type:string,format:date-time}; [scalar.int64] bigint→{type:string,format:int64}; [scalar.byte] Uint8Array/Buffer→{type:string,format:byte}; [scalar.uri] URL→{type:string,format:uri}; [scalar.regex] RegExp→{type:string,format:regex}; nested scalars preserve format at any depth; Decimal imports (default/named/aliased) all resolved; readonly arrays preserve element type; Map→[[k,v]] tuples, Set→unique array, tuples→positional items with correct nested logical types",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "substantial",
+    "signature_note": "Three-stage pipeline with custom ts-json-schema-generator parser augmentor (intercepts BigIntKeyword and TypeReference for Uint8Array/Buffer/Decimal), morphWalk for inline anonymous types via in-memory type alias resolution (avoids 0.35-1.0s temp-file builds), and morphFallback text-based safety net with import alias resolution"
+  },
+  {
+    "id": "build-nominal-schema",
+    "name": "buildNominalSchema (internal)",
+    "description": "Builds a JSON Schema for a nominal/branded class type. Produces a $def at defKey:ClassName and a $ref:#/$defs/ClassName. Carries x-apigen-logical:'nominal' hint, namespace-qualified x-apigen-codec, and optional x-apigen-ctor/x-apigen-tojson hints when fromJSON/toJSON methods are present. stripHints removes all x-apigen-* keys leaving a valid structural schema (inv:hints-advisory).",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/schema-builders/nominal.ts",
+      "src/test/nominal.spec.ts:1-263"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'buildNominalSchema'",
+    "verified_output": "✓ 25 tests passed — [nom.1] $def+$ref structure (defKey is class name, ref is #/$defs/<Name>); [nom.2] x-apigen-logical:'nominal' + x-apigen-codec namespace-qualified; [nom.3] x-apigen-ctor/x-apigen-tojson when methods present; [nom.4] hints absent when methods missing; [nom.5/NEGATIVE] stripHints leaves valid structural schema without x-apigen-* keys; stripHints does not mutate original",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "moderate",
+    "signature_note": ""
+  },
+  {
+    "id": "build-union-schema",
+    "name": "buildUnionSchema (internal)",
+    "description": "Builds a JSON Schema for a discriminated union type (oneOf + discriminator with mapping). Produces oneOf array of $ref entries, discriminator.propertyName and discriminator.mapping. Carries x-apigen-logical:'union' hint. Guards: fewer than 2 variants throws Error; [inv:hints-advisory] removing x-apigen-logical leaves valid structural schema.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/schema-builders/union.ts",
+      "src/test/union.spec.ts:1-238"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'buildUnionSchema'",
+    "verified_output": "✓ 21 tests passed — [union.1] Dog|Cat produces oneOf:{Dog,Cat} + discriminator.propertyName:'kind' + mapping; [union.2] $ref format matches nominal; [union.3] mapping keys are discriminantValues; [union.4] x-apigen-logical:'union'; [union.5] three-variant union; [union.NEGATIVE] <2 variants throws; [union.NEGATIVE-2] schema survives hint removal",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "moderate",
+    "signature_note": ""
+  },
+  {
+    "id": "output-plugin-v1",
+    "name": "OutputPlugin (v1 interface)",
+    "description": "Legacy v1 plugin contract: { id, description, language?, optionsSchema?, generate(input: PluginInput): PluginOutput, run?(input: RunInput): Promise<void> }. PluginOutput.files is language-agnostic ({ path, content }[]). Coexists with v2 Plugin interface via TargetCapability.generate wrapping.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/types.ts:82-100"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run",
+    "verified_output": "Types-only interface — exercised indirectly by all integration tests; no standalone runtime test exists for the interface itself (it is consumed by plugin implementations in other packages)",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "moderate",
+    "signature_note": ""
+  },
+  {
+    "id": "plugin-v2",
+    "name": "Plugin (v2 interface with capabilities)",
+    "description": "The v2 plugin interface (SPEC §7.1): { id, description?, language?, optionsSchema?, capabilities: { target?, layer?, mount?, envelope? } }. All four capability slots are optional. Each capability is an orthogonal concern: target projects descriptors to transports/formats, layer wraps operations (onion), mount adds synthetic operations, envelope declares side-channel fields. Transports: http, grpc, mcp, cli.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/plugin.ts:460-536"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run",
+    "verified_output": "Types-only interface — exercised by plugin implementations in other apigen packages; defined with full SPEC §7.1 conformance including Call, Next, Result, Chunk, Transport, Extensions, Descriptor, Harness, Server, File, and MountedOperation types",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "substantial",
+    "signature_note": "Capability-based design: each of four orthogonal capabilities (target/layer/mount/envelope) is independently optional; v1 OutputPlugin→v2 TargetCapability migration path is explicitly documented; all types parameterised over Opts for consumer narrowing without casting"
+  },
+  {
+    "id": "descriptor-types",
+    "name": "Descriptor types (Operation, Segment, JSONSchema, TypeText)",
+    "description": "The canonical neutral contract between extractors and plugins (SPEC §4). Operation carries: id (deterministic from namespace/path), host, namespace/path Segments, kind (action/query/constructor/instance-method), async/streaming flags, safe flag, input/output JSON Schema 2020-12, envelope schema, and optional typeText. Segment holds raw spelling + tokenized words for casing-neutral identity. JSONSchema carries optional x-apigen-* hints (nominal, enum-repr, fidelity) that are advisory only.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/descriptor.ts:1-233",
+      "src/lib/plugin.ts:27-28"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'extract'",
+    "verified_output": "Types verified through integration: all 36 extract tests produce valid Operation records with correct id, host, namespace/path, kind, async, safe, input/output schemas; cross-shape invariant tests confirm all ops have host='ts', non-empty id, correct safe defaults",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "substantial",
+    "signature_note": "JSON Schema 2020-12 IR with $defs/$ref for named types, discriminated unions (oneOf+discriminator), and nominal types — no separate abstract type model; optional x-apigen-* hints are extractor-derived, never from source annotations (Tenet 1)"
+  },
+  {
+    "id": "apigen-core-function",
+    "name": "apigenCore",
+    "description": "Identity function returning the string 'apigen-core'. Exists as a minimal smoke test and package self-identification.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/apigen-core.ts:1-3",
+      "src/lib/apigen-core.spec.ts:1-7"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'apigenCore'",
+    "verified_output": "✓ 1 test passed — apigenCore() returns 'apigen-core'",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "trivial",
+    "signature_note": ""
+  },
+  {
+    "id": "plugin-language-type",
+    "name": "PluginLanguage type",
+    "description": "Union type of recognized source-language tags: 'ts' | 'py' | 'rust' | 'go' | 'java'. Used by the serve command to route source files to compatible plugins.",
+    "status": "shipped",
+    "receipts": [
+      "src/lib/types.ts:80"
+    ],
+    "verify": "npx nx test apigen-core-client -- --run -t 'languageOfSource'",
+    "verified_output": "Verified indirectly — languageOfSource returns PluginLanguage values, tested against all 5 tags",
+    "last_verified_sha": "c8e58de33e178d5680bc9a0433bf1fe15397ef04",
+    "last_verified_at": "2026-07-02T22:35:00-05:00",
+    "substance": "trivial",
+    "signature_note": ""
+  }
+]

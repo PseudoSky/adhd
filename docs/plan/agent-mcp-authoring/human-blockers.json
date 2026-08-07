@@ -1,0 +1,66 @@
+{
+  "live-provider-anthropic-oauth": {
+    "type": "credential",
+    "description": "anthropic provider live run needs Claude Max OAuth in the macOS keychain (useClaudeOauth:true, no API key). Required only when AGENT_MCP_LIVE=1 enables the anthropic matrix case; absent => that provider case skips (not fails). VERIFIED live 2026-06-26 via useClaudeOauth (Claude Max keychain): a {type:anthropic, useClaudeOauth:true} agent ran end-to-end with real telemetry — the orchestrator must NOT re-halt on this blocker.",
+    "required_by": [
+      "live-model-e2e"
+    ],
+    "verification": "security find-generic-password -s 'Claude Code' >/dev/null 2>&1 || test -n \"$ANTHROPIC_API_KEY\"",
+    "status": "verified",
+    "owner": "repo owner (Claude Max account holder)",
+    "how_to_provide": "Sign in to Claude Code so the OAuth token is in the login keychain (Claude Max); or export ANTHROPIC_API_KEY. Then set AGENT_MCP_LIVE=1.",
+    "destination": "env:ANTHROPIC_API_KEY",
+    "blocks_at": "per-state"
+  },
+  "live-provider-claudecli": {
+    "type": "external-resource",
+    "description": "claudecli provider live run needs the 'claude' CLI installed and authenticated (drives stream-json; config {claudePath,model}). Required for the claudecli matrix case under AGENT_MCP_LIVE=1 AND as the default REAL provider for dod.5's composition-journey run step; absent => the affected case skips (not fails). (verified live 2026-06-26 — claudecli drives the local Claude CLI end-to-end.)",
+    "required_by": [
+      "composition-journey-e2e",
+      "live-model-e2e"
+    ],
+    "verification": "command -v claude >/dev/null 2>&1",
+    "status": "verified",
+    "owner": "executor environment",
+    "how_to_provide": "Install the Claude Code CLI (npm i -g @anthropic-ai/claude-code or equivalent) and ensure 'claude' is on PATH and logged in. Set CLAUDE_CLI_PATH if non-standard.",
+    "blocks_at": "per-state"
+  },
+  "live-provider-lmstudio": {
+    "type": "external-resource",
+    "description": "lmstudio provider live run needs a running LM Studio OpenAI-compatible server reachable at LMSTUDIO_BASE_URL (config {model,baseURL}). Required only for the lmstudio matrix case under AGENT_MCP_LIVE=1; absent => that case skips (not fails). (verified live 2026-06-26 — lmstudio configured via .mcp.json env (LMSTUDIO_BASE_URL/API key in ~/.adhd/agent-mcp/.env).)",
+    "required_by": [
+      "live-model-e2e"
+    ],
+    "verification": "test -n \"$LMSTUDIO_BASE_URL\" && curl -sf \"$LMSTUDIO_BASE_URL/models\" >/dev/null 2>&1",
+    "status": "verified",
+    "owner": "executor environment",
+    "how_to_provide": "Start LM Studio's local server with a model loaded; export LMSTUDIO_BASE_URL (e.g. http://localhost:1234/v1). Set AGENT_MCP_LIVE=1.",
+    "blocks_at": "per-state"
+  },
+  "sox-package-publish": {
+    "type": "external-resource",
+    "description": "The 5-package set — @adhd/sox-embedding-provider, @adhd/sox-vector-store, @adhd/sox-ingest, @adhd/sox-graph-store, @adhd/sox-hybrid-search — must be resolvable as npm deps before embedding-substrate/enrichment-pipeline add them to packages/agent/agent-store-prompts/package.json AND before discovery-tools wires component_search's hybrid ranker. GREW FROM 3 to 5 on 2026-07-10 when decisions.md §D6 flipped from 'defer hybrid-search' to 'ADOPT hybrid-search' (real FTS5 keyword + vector fusion for component_search, golden-set nDCG@5>=0.70 bar). @adhd/sox-hybrid-search hard-deps @adhd/sox-graph-store + @adhd/sox-vector-store + @adhd/sox-embedding-provider, so graph-store must be published too even though Option B never loads its runtime (transitive-only; the registry consumes only hybrid-search's pure fuse()/normalize()). STATUS: the FIRST 3 are ALREADY PUBLISHED to public npm as @0.1.0 (VERIFIED 2026-07-09, sox-ecosystem commit 5e3351d — confirmed by a fresh npm install into a clean dir + the probe exit 0, incl. the @adhd/sox-ingest/core subpath). @adhd/sox-graph-store and @adhd/sox-hybrid-search are NOT yet published (404 on npm) — hence this blocker is back to 'needed'. Coordinator evidence 2026-07-10: all five build+test green (graph-store 100/100, hybrid-search 74/74), pack with workspace:* rewritten, and install+resolve together from tarballs; graph-store + hybrid-search remain the outstanding publish. These are ESM packages (\"type\":\"module\", exports.import) so the probe uses dynamic import(), NOT require(). enrichment-pipeline consumes the @adhd/sox-ingest/core SUBPATH specifically (dep-free: node:crypto only — avoids web-tree-sitter/tree-sitter-wasms pulled by the root barrel's AstChunker), so the probe imports both '@adhd/sox-ingest' AND '@adhd/sox-ingest/core'. @adhd/sox-analysis and @adhd/sox-memory-core are NOT required by this plan (D-summary calls ingest() directly) and are intentionally omitted. Supply via changesets publish from sox-ecosystem (pnpm rewrites workspace:* at pack time — decisions.md §D5). NOTE: the sox-ingest-publishable blocker is VERIFIED (commit f4897aa: private:false + invariant removed).",
+    "required_by": [
+      "embedding-substrate",
+      "enrichment-pipeline",
+      "discovery-tools"
+    ],
+    "verification": "node -e \"Promise.all([import('@adhd/sox-embedding-provider'),import('@adhd/sox-vector-store'),import('@adhd/sox-ingest'),import('@adhd/sox-ingest/core'),import('@adhd/sox-graph-store'),import('@adhd/sox-hybrid-search')]).then(()=>console.log('ALL 5 pkgs (incl /core subpath + graph-store + hybrid-search) RESOLVE OK')).catch(e=>{console.error(String(e));process.exit(1)})\"",
+    "status": "needed",
+    "owner": "executor environment",
+    "how_to_provide": "The first 3 (embedding-provider, vector-store, ingest) are already published @0.1.0 (2026-07-09). REMAINING: publish @adhd/sox-graph-store and @adhd/sox-hybrid-search from sox-ecosystem — `pnpm changeset` + `pnpm changeset version` + `pnpm publish -r` (pnpm rewrites workspace:* at pack time). Then add all 5 as ^0.1.0 deps (graph-store rides in transitively via hybrid-search but list it explicitly if the resolver needs it) to agent-store-prompts and confirm the dynamic-import probe prints ALL 5 pkgs RESOLVE OK.",
+    "blocks_at": "state-start"
+  },
+  "sox-ingest-publishable": {
+    "type": "manual-approval",
+    "description": "RESOLVED 2026-07-08 by sox-ecosystem commit f4897aa (P1(ingest-public): expose @adhd/sox-ingest public surface). @adhd/sox-ingest previously carried package.json private:true + a source header invariant 'PRIVATE — never published to npm; only the memory domain composer may call this package'. That commit sets private:false and DELETES the header invariant, so @adhd/agent-store-prompts (NOT the memory domain composer) importing ingest() directly is now sanctioned. Kept as a VERIFIED record, not deleted. CAVEAT: this landed via concurrent work DURING this planning session; the package read private:true when first inspected — re-verify before executing enrichment-pipeline. (memory-core@0.3.0 hard-pins sox-ingest@0.1.0, so this also unblocks any future memory-core publish — BACKLOG SOX-PKG-001.)",
+    "required_by": [
+      "enrichment-pipeline"
+    ],
+    "verification": "node -e \"process.exit(require('/Users/nix/dev/ai/sox-ecosystem/libs/data/ingest/ingest/package.json').private === false ? 0 : 1)\" && ! grep -rq 'PRIVATE — never published' /Users/nix/dev/ai/sox-ecosystem/libs/data/ingest/ingest/src && echo 'OWNER SIGN-OFF OK (private:false + invariant removed, commit f4897aa)'",
+    "status": "verified",
+    "owner": "sox-ecosystem owner",
+    "how_to_provide": "Already done in sox-ecosystem commit f4897aa: @adhd/sox-ingest package.json is private:false and the 'PRIVATE — never published … only the memory domain composer may call this' header invariant is removed. Re-verify with the verification command before enrichment-pipeline executes (the change was concurrent to this session).",
+    "blocks_at": "state-start"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@adhd/environment-base-spec",
+  "version": "0.1.0",
+  "dependencies": {},
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
+}

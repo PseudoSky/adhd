@@ -1,0 +1,39 @@
+{
+  "executors": {
+    "manifest": {
+      "implementation": "./executors/manifest/impl",
+      "schema": "./executors/manifest/schema.json",
+      "description": "Version the dist: write the resolved, dist-root publishable package.json."
+    },
+    "version": {
+      "implementation": "./executors/version/impl",
+      "schema": "./executors/version/schema.json",
+      "description": "Bump source version iff the built dist differs from the published tarball."
+    },
+    "reconcile": {
+      "implementation": "./executors/reconcile/impl",
+      "schema": "./executors/reconcile/schema.json",
+      "description": "Backfill/refresh this package's published-state.json cache entry from npm (integrity-gated, network-light)."
+    },
+    "verify": {
+      "implementation": "./executors/verify/impl",
+      "schema": "./executors/verify/schema.json",
+      "description": "Load dist entry points as a consumer would."
+    },
+    "hygiene": {
+      "implementation": "./executors/hygiene/impl",
+      "schema": "./executors/hygiene/schema.json",
+      "description": "npm-pack allowlist + declared-entry gate."
+    },
+    "publish": {
+      "implementation": "./executors/publish/impl",
+      "schema": "./executors/publish/schema.json",
+      "description": "Gated per-project publish."
+    },
+    "link": {
+      "implementation": "./executors/link/impl",
+      "schema": "./executors/link/schema.json",
+      "description": "Symlink dist into node_modules/@adhd/*."
+    }
+  }
+}

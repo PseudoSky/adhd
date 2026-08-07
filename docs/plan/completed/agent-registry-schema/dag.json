@@ -1,0 +1,179 @@
+{
+  "schema_version": 2,
+  "title": "Agent Registry — Prompt Component Schema (@adhd/agent-registry)",
+  "plan_kind": "greenfield",
+  "phases": [
+    "foundation",
+    "schema",
+    "composition",
+    "seed",
+    "audit",
+    "architecture"
+  ],
+  "terminal": "done",
+  "nodes": {
+    "scaffold-package": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": [
+        "design-and-architecture"
+      ],
+      "guard": "npx --yes nx build agent-registry",
+      "artifacts": [
+        "packages/ai/agent-registry/project.json",
+        "packages/ai/agent-registry/package.json",
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/db/client.ts",
+        "packages/ai/agent-registry/src/db/schema.ts",
+        "tsconfig.base.json"
+      ],
+      "context": "contexts/scaffold-package.md",
+      "notes": ""
+    },
+    "lookup-and-component-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "scaffold-package"
+      ],
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/component-store.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry/src/db/schema.ts",
+        "packages/ai/agent-registry/src/store/component-store.ts",
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/__tests__/component-store.test.ts",
+        "packages/ai/agent-registry/drizzle"
+      ],
+      "context": "contexts/lookup-and-component-schema.md",
+      "notes": ""
+    },
+    "agent-and-taxonomy-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "lookup-and-component-schema"
+      ],
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/agent-store.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry/src/db/schema.ts",
+        "packages/ai/agent-registry/src/store/agent-store.ts",
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/__tests__/agent-store.test.ts",
+        "packages/ai/agent-registry/drizzle"
+      ],
+      "context": "contexts/agent-and-taxonomy-schema.md",
+      "notes": ""
+    },
+    "composition-junction": {
+      "kind": "work",
+      "phase": "composition",
+      "depends_on": [
+        "agent-and-taxonomy-schema"
+      ],
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/composition-store.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry/src/db/schema.ts",
+        "packages/ai/agent-registry/src/store/composition-store.ts",
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/__tests__/composition-store.test.ts",
+        "packages/ai/agent-registry/drizzle"
+      ],
+      "context": "contexts/composition-junction.md",
+      "notes": ""
+    },
+    "usecase-and-context-rules": {
+      "kind": "work",
+      "phase": "composition",
+      "depends_on": [
+        "composition-junction"
+      ],
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/usecase-store.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry/src/db/schema.ts",
+        "packages/ai/agent-registry/src/store/usecase-store.ts",
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/__tests__/usecase-store.test.ts",
+        "packages/ai/agent-registry/drizzle"
+      ],
+      "context": "contexts/usecase-and-context-rules.md",
+      "notes": ""
+    },
+    "composed-prompt-cache": {
+      "kind": "work",
+      "phase": "composition",
+      "depends_on": [
+        "usecase-and-context-rules"
+      ],
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/composed-prompt-store.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry/src/db/schema.ts",
+        "packages/ai/agent-registry/src/store/composed-prompt-store.ts",
+        "packages/ai/agent-registry/src/index.ts",
+        "packages/ai/agent-registry/src/__tests__/composed-prompt-store.test.ts",
+        "packages/ai/agent-registry/drizzle"
+      ],
+      "context": "contexts/composed-prompt-cache.md",
+      "notes": ""
+    },
+    "audit-schema": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "composed-prompt-cache"
+      ],
+      "guard": "python3 docs/plan/agent-registry-schema/scripts/audit_registry_schema.py --phase schema",
+      "artifacts": [
+        "docs/plan/agent-registry-schema/scripts/audit_registry_schema.py"
+      ],
+      "context": "contexts/audit-schema.md",
+      "notes": ""
+    },
+    "seed-and-roundtrip": {
+      "kind": "work",
+      "phase": "seed",
+      "depends_on": [
+        "audit-schema"
+      ],
+      "guard": "npx --yes nx test agent-registry --testFile=packages/ai/agent-registry/src/__tests__/roundtrip.test.ts",
+      "artifacts": [
+        "packages/ai/agent-registry/src/seed/prompt-types.ts",
+        "packages/ai/agent-registry/src/seed/components.ts",
+        "packages/ai/agent-registry/src/seed/index.ts",
+        "packages/ai/agent-registry/src/__tests__/roundtrip.test.ts",
+        "packages/ai/agent-registry/src/index.ts"
+      ],
+      "context": "contexts/seed-and-roundtrip.md",
+      "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "seed-and-roundtrip"
+      ],
+      "guard": "python3 docs/plan/agent-registry-schema/scripts/audit_registry_schema.py --phase final",
+      "artifacts": [
+        "docs/plan/agent-registry-schema/scripts/audit_registry_schema.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
+    },
+    "design-and-architecture": {
+      "kind": "work",
+      "phase": "architecture",
+      "depends_on": [],
+      "guard": "python3 docs/plan/agent-registry-schema/scripts/audit_registry_schema.py --phase architecture",
+      "artifacts": [
+        "docs/plan/agent-registry-schema/decisions.md",
+        "docs/plan/agent-registry-schema/contexts/design-and-architecture.md"
+      ],
+      "context": "contexts/design-and-architecture.md",
+      "notes": ""
+    }
+  },
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.22",
+    "hash": "1e4130a84aed"
+  }
+}

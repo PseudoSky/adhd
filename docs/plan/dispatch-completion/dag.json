@@ -1,0 +1,352 @@
+{
+  "schema_version": 2,
+  "title": "Dispatch Completion",
+  "plan_kind": "brownfield",
+  "phases": [
+    "triage",
+    "spec",
+    "optimizer-client",
+    "orchestrator",
+    "plugins",
+    "storage",
+    "tools",
+    "cli",
+    "algorithms",
+    "tests",
+    "release"
+  ],
+  "terminal": "audit-final",
+  "nodes": {
+    "triage": {
+      "kind": "audit",
+      "phase": "triage",
+      "depends_on": [],
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase triage",
+      "artifacts": [
+        "scripts/audit_triage.py"
+      ],
+      "context": "contexts/triage.md",
+      "notes": ""
+    },
+    "spec-foundations": {
+      "kind": "work",
+      "phase": "spec",
+      "depends_on": [
+        "triage"
+      ],
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-base-spec",
+      "artifacts": [
+        "packages/dispatch/dispatch-base-spec/src/lib/types.ts",
+        "packages/dispatch/dispatch-base-spec/src/lib/validate.ts"
+      ],
+      "context": "contexts/spec-foundations.md",
+      "notes": ""
+    },
+    "spec-audit": {
+      "kind": "audit",
+      "phase": "spec",
+      "depends_on": [
+        "spec-foundations"
+      ],
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase spec",
+      "artifacts": [
+        "scripts/audit_spec-audit.py"
+      ],
+      "context": "contexts/spec-audit.md",
+      "notes": ""
+    },
+    "optimizer-client": {
+      "kind": "work",
+      "phase": "optimizer-client",
+      "depends_on": [
+        "spec-audit"
+      ],
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-core-optimizer,dispatch-core-client",
+      "artifacts": [
+        "packages/dispatch/dispatch-core-optimizer/src/lib/optimize.ts",
+        "packages/dispatch/dispatch-core-optimizer/src/lib/snapshot.ts",
+        "packages/dispatch/dispatch-core-client/src/lib/client.ts"
+      ],
+      "context": "contexts/optimizer-client.md",
+      "notes": ""
+    },
+    "opt-audit": {
+      "kind": "audit",
+      "phase": "optimizer-client",
+      "depends_on": [
+        "optimizer-client"
+      ],
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase optimizer-client",
+      "artifacts": [
+        "scripts/audit_opt-audit.py"
+      ],
+      "context": "contexts/opt-audit.md",
+      "notes": ""
+    },
+    "orchestrator-harden": {
+      "kind": "work",
+      "phase": "orchestrator",
+      "depends_on": [
+        "opt-audit"
+      ],
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-orchestrator",
+      "artifacts": [
+        "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts"
+      ],
+      "context": "contexts/orchestrator-harden.md",
+      "notes": ""
+    },
+    "causal-replan": {
+      "kind": "work",
+      "phase": "orchestrator",
+      "depends_on": [
+        "orchestrator-harden"
+      ],
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-orchestrator",
+      "artifacts": [
+        "packages/dispatch/dispatch-orchestrator/src/lib/orchestrator.ts"
+      ],
+      "context": "contexts/causal-replan.md",
+      "notes": ""
+    },
+    "orch-audit": {
+      "kind": "audit",
+      "phase": "orchestrator",
+      "depends_on": [
+        "causal-replan"
+      ],
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase orchestrator",
+      "artifacts": [
+        "scripts/audit_orch-audit.py"
+      ],
+      "context": "contexts/orch-audit.md",
+      "notes": ""
+    },
+    "plugin-io": {
+      "kind": "work",
+      "phase": "plugins",
+      "depends_on": [
+        "orch-audit"
+      ],
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-plugin-io",
+      "artifacts": [
+        "packages/dispatch/dispatch-plugin-io/src/index.ts"
+      ],
+      "context": "contexts/plugin-io.md",
+      "notes": ""
+    },
+    "plugin-gitnexus": {
+      "kind": "work",
+      "phase": "plugins",
+      "depends_on": [
+        "orch-audit"
+      ],
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-plugin-gitnexus",
+      "artifacts": [
+        "packages/dispatch/dispatch-plugin-gitnexus/src/index.ts"
+      ],
+      "context": "contexts/plugin-gitnexus.md",
+      "notes": ""
+    },
+    "plugin-audit": {
+      "kind": "audit",
+      "phase": "plugins",
+      "depends_on": [
+        "plugin-io",
+        "plugin-gitnexus"
+      ],
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase plugins",
+      "artifacts": [
+        "scripts/audit_plugin-audit.py"
+      ],
+      "context": "contexts/plugin-audit.md",
+      "notes": ""
+    },
+    "serializer-sqlite": {
+      "kind": "work",
+      "phase": "storage",
+      "depends_on": [
+        "orch-audit"
+      ],
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-serializer-sqlite",
+      "artifacts": [
+        "packages/dispatch/dispatch-serializer-sqlite/src/index.ts"
+      ],
+      "context": "contexts/serializer-sqlite.md",
+      "notes": ""
+    },
+    "storage-audit": {
+      "kind": "audit",
+      "phase": "storage",
+      "depends_on": [
+        "serializer-sqlite"
+      ],
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase storage",
+      "artifacts": [
+        "scripts/audit_storage-audit.py"
+      ],
+      "context": "contexts/storage-audit.md",
+      "notes": ""
+    },
+    "dispatch-tools": {
+      "kind": "work",
+      "phase": "tools",
+      "depends_on": [
+        "opt-audit"
+      ],
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-tools",
+      "artifacts": [
+        "packages/dispatch/dispatch-tools/src/index.ts"
+      ],
+      "context": "contexts/dispatch-tools.md",
+      "notes": ""
+    },
+    "tools-audit": {
+      "kind": "audit",
+      "phase": "tools",
+      "depends_on": [
+        "dispatch-tools"
+      ],
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase tools",
+      "artifacts": [
+        "scripts/audit_tools-audit.py"
+      ],
+      "context": "contexts/tools-audit.md",
+      "notes": ""
+    },
+    "cli-complete": {
+      "kind": "work",
+      "phase": "cli",
+      "depends_on": [
+        "orch-audit"
+      ],
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-cli",
+      "artifacts": [
+        "entrypoint/dispatch-cli/package.json",
+        "entrypoint/dispatch-cli/project.json",
+        "entrypoint/dispatch-cli/src/lib/core.ts"
+      ],
+      "context": "contexts/cli-complete.md",
+      "notes": ""
+    },
+    "cli-audit": {
+      "kind": "audit",
+      "phase": "cli",
+      "depends_on": [
+        "cli-complete"
+      ],
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase cli",
+      "artifacts": [
+        "scripts/audit_cli-audit.py"
+      ],
+      "context": "contexts/cli-audit.md",
+      "notes": ""
+    },
+    "optimizer-algorithms": {
+      "kind": "work",
+      "phase": "algorithms",
+      "depends_on": [
+        "opt-audit"
+      ],
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-core-optimizer",
+      "artifacts": [
+        "packages/dispatch/dispatch-core-optimizer/src/lib/algorithms/index.ts"
+      ],
+      "context": "contexts/optimizer-algorithms.md",
+      "notes": ""
+    },
+    "algo-audit": {
+      "kind": "audit",
+      "phase": "algorithms",
+      "depends_on": [
+        "optimizer-algorithms"
+      ],
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase algorithms",
+      "artifacts": [
+        "scripts/audit_algo-audit.py"
+      ],
+      "context": "contexts/algo-audit.md",
+      "notes": ""
+    },
+    "tests-hardening": {
+      "kind": "work",
+      "phase": "tests",
+      "depends_on": [
+        "plugin-audit",
+        "storage-audit",
+        "tools-audit",
+        "cli-audit"
+      ],
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-core-optimizer",
+      "artifacts": [
+        "packages/dispatch/dispatch-core-optimizer/src/test/golden.spec.ts"
+      ],
+      "context": "contexts/tests-hardening.md",
+      "notes": ""
+    },
+    "test-audit": {
+      "kind": "audit",
+      "phase": "tests",
+      "depends_on": [
+        "tests-hardening",
+        "algo-audit",
+        "live-e2e"
+      ],
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase tests",
+      "artifacts": [
+        "scripts/audit_test-audit.py"
+      ],
+      "context": "contexts/test-audit.md",
+      "notes": ""
+    },
+    "release-ready": {
+      "kind": "work",
+      "phase": "release",
+      "depends_on": [
+        "test-audit"
+      ],
+      "guard": "npx --yes nx run-many -t test,build -p dispatch-base-spec,dispatch-core-client,dispatch-serializer-json,dispatch-serializer-sqlite,dispatch-core-optimizer,dispatch-orchestrator,dispatch-plugin-io,dispatch-plugin-gitnexus,dispatch-tools,dispatch-cli",
+      "artifacts": [
+        "package.json"
+      ],
+      "context": "contexts/release-ready.md",
+      "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "release",
+      "depends_on": [
+        "release-ready"
+      ],
+      "guard": "python3 docs/plan/dispatch-completion/scripts/audit_dispatch-completion.py --phase dod",
+      "artifacts": [
+        "scripts/audit_audit-final.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
+    },
+    "live-e2e": {
+      "kind": "work",
+      "phase": "tests",
+      "depends_on": [
+        "cli-audit",
+        "orch-audit"
+      ],
+      "guard": "npx --yes nx test dispatch-cli",
+      "artifacts": [
+        "entrypoint/dispatch-cli/src/test/integration/real-e2e.ts"
+      ],
+      "context": "contexts/live-e2e.md",
+      "notes": ""
+    }
+  },
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.29",
+    "hash": "836ff34f0a74"
+  },
+  "demo": {
+    "source": "demo/DEMO.md",
+    "package_artifact": "entrypoint/dispatch-cli/src/test/cli-smoke.spec.ts"
+  }
+}

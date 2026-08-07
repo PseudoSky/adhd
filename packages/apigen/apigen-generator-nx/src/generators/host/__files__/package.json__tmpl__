@@ -1,0 +1,11 @@
+{
+  "name": "<%= packageScope %>/<%= projectName %>",
+  "version": "0.0.1",
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "types": "./index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {}
+}

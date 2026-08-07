@@ -1,0 +1,17 @@
+{
+  "name": "@adhd/dispatch-core-client",
+  "version": "0.1.0",
+  "dependencies": {
+    "@adhd/dispatch-base-spec": "^0.1.0"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
+}
