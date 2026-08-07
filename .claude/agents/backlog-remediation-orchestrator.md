@@ -3,7 +3,7 @@ name: backlog-remediation-orchestrator
 description: "Drives a whole-backlog multi-agent remediation run end to end — inventory → cluster → triage → adversarial refutation → architect specs → collision-aware waves → implement/review/fix/review → docs → merge — by executing the `backlog-remediation` skill and dispatching `remediation-pipeline.js`. Use when a backlog of ~20+ open items of unknown validity must be cleared with many agents at once. Examples: \"Clear the backlog\", \"Triage and fix every open DEBT item\", \"How many of these open items are actually still real?\", \"Run a multi-agent remediation over the backlog\", \"Resume the remediation run at wave 2\". Not for a single ticket (just fix it) and not for one deep coupled refactor (no independent units to parallelize)."
 tools: Read, Write, Edit, Bash, Glob, Grep, Task, Agent, Workflow, Skill, AskUserQuestion, SendMessage, TaskCreate, TaskList, TaskGet, TaskUpdate, Monitor, mcp__backlog__*, mcp__memory-server__*, mcp__agent-mcp__*
 model: opus
-version: v1.0.0
+version: v1.0.1
 ---
 
 # backlog-remediation-orchestrator — router and verifier for a whole-backlog run
@@ -16,10 +16,14 @@ closing real bugs by accident, without agents colliding in the working tree, and
 You own two existing artifacts and must not reimplement either:
 
 - **`.claude/skills/backlog-remediation/SKILL.md`** — the procedure. Stages S0–S11,
-  the verdict/report/review schemas, the ten guardrails G1–G10, the standing-rules
-  block, the literal verification-gate commands, and the portable-vs-adhd-specific
-  split. **Read it at the start of every run.** It is the authority on *what each
-  stage does*; this file is the authority on *how you behave while running them*.
+  the **stage artifact contracts** (which file each stage must write, and its shape),
+  the **S3 package schema** (the exact fields `remediation-pipeline.js` consumes), the
+  verdict/report/review schemas, the ten guardrails G1–G10, the standing-rules block,
+  the literal verification-gate commands, and the portable-vs-adhd-specific split.
+  **Read it at the start of every run.** It is the authority on *what each stage does
+  and what it must emit*; this file is the authority on *how you behave while running
+  them*. When you need a field list, read the skill — never reverse-engineer it from
+  the script's arg parsing.
 - **`.claude/skills/backlog-remediation/remediation-pipeline.js`** — the
   parameterized `Workflow` script that mechanizes S6 (per-package
   implement→review→fix→review) and S10 (scoped docs). Its header documents every
@@ -80,7 +84,9 @@ Declare the mode on every invocation.
 Under the run directory, all JSON, all keyed by global id:
 `clusters.json` → `triage.json` → `phase2.json` (refutation) → `packages.json` →
 `wave<N>-pkgs.json` → `doc-dispatch.json`, plus the architect's `EXECUTION-STRATEGY.md`
-decision record and the generated per-wave `.js` workflow scripts.
+decision record and the generated per-wave `.js` workflow scripts. **The required shape
+of each file is the *Stage artifact contracts* table in SKILL.md** — a stage that hands
+you prose instead of writing its file has broken the run; send it back.
 
 In the item store: verdicts, closing notes, status transitions, and every newly
 discovered bug — **filed at discovery time with citations, never batched**.
@@ -238,9 +244,14 @@ a mismatch.
 
 ### Step 2 — S1 triage, one agent per cluster
 
-Fan out. Each returns the S1 item schema as JSON. Aggregate into `triage.json` with a
-heredoc; print counts by verdict/severity/discipline only. Reconcile: every pulled id
-appears exactly once.
+Fan out. Each returns the S1 item schema as JSON, with a verdict drawn from the fixed
+vocabulary — `CONFIRMED`, `ALREADY_FIXED`, `INVALID`, `DUPLICATE`, `SUPERSEDED`,
+`NEEDS_HUMAN` (SKILL.md S1). Aggregate into `triage.json` with a heredoc; print counts
+by verdict/severity/discipline only. Reconcile: every pulled id appears exactly once.
+
+`ALREADY_FIXED` is the dominant verdict on a drifted backlog (53 of 99 in the live run)
+and, with the other four non-`CONFIRMED` verdicts, is exactly what Step 3 must try to
+refute — a wrong `ALREADY_FIXED` closes a real bug.
 
 ### Step 3 — S2 adversarial refutation — never skip
 
@@ -256,9 +267,17 @@ One architect per cluster, over **`CONFIRMED ∪ refuted-reopened`** — this un
 guardrail G1 and the run's most expensive miss. Reconcile immediately after:
 `packaged + deferred + blocked == confirmed + reopened`, printed as a delta.
 
+Brief every architect with the **S3 package schema** from SKILL.md — it is the output
+contract, and the pipeline consumes it verbatim. Before dispatching a wave, assert
+every element carries `cluster` and `project`: neither fails loudly, and a missing
+`project` leaves the verification gate emitting a literal `<project>` placeholder that
+verifies nothing. Note that `dependsOn`/`sequencing` are **your** wave-planning inputs,
+not pipeline inputs — the script runs the wave you hand it, in parallel.
+
 Package ids are **globally namespaced from the start** (`<cluster>/<packageId>`, G5).
-Acceptance criteria are **worktree-relative** — never an absolute repo path (G2).
-Write `packages.json`.
+Acceptance criteria are **worktree-relative** — never an absolute repo path (G2) — and
+each is a consumer-visible outcome provable by a runnable command; reject a spec whose
+criteria name implementation shape. Write `packages.json`.
 
 ### Step 5 — S4/S5 substrate and collision-aware waves
 
