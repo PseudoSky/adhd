@@ -1285,6 +1285,16 @@ export async function orchestrateCycle(deps: OrchestratorDeps): Promise<CycleRes
         })),
       });
 
+      // DEBT-DISPATCH-015: persist the failure entry NOW -- the try branch's
+      // saveDag above only runs on success, so without this, a failing unit
+      // that is the LAST (or only) unit dispatched this cycle leaves its
+      // failEntry sitting only in this function's local `dag` reference,
+      // discarded the instant the function returns or throws. Must run
+      // unconditionally, before the continueOnError check below, so the
+      // forensic trace survives even when we are about to rethrow.
+      await resolved.client.saveDag(dag);
+      persisted = true;
+
       if (!resolved.continueOnError) throw err;
     }
   }
