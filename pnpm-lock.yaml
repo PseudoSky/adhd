@@ -430,7 +430,7 @@ importers:
         specifier: ^0.1.0
         version: link:../../packages/apigen/apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../../packages/apigen/apigen-core-client
       '@adhd/apigen-engine-naming':
         specifier: ^0.2.1
@@ -453,6 +453,9 @@ importers:
       '@adhd/apigen-plugin-health':
         specifier: ^0.2.1
         version: link:../../packages/apigen/apigen-plugin-health
+      '@adhd/apigen-plugin-ir-cache':
+        specifier: ^0.1.0
+        version: link:../../packages/apigen/apigen-plugin-ir-cache
       '@adhd/apigen-plugin-jsonschema':
         specifier: ^0.2.0
         version: link:../../packages/apigen/apigen-plugin-jsonschema
@@ -512,7 +515,7 @@ importers:
   entrypoint/backlog:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: ^0.3.0
         version: link:../../packages/apigen/apigen-core-client
       '@adhd/apigen-engine-naming':
         specifier: ^0.2.1
@@ -526,6 +529,9 @@ importers:
       '@adhd/apigen-plugin-cli-output':
         specifier: ^0.2.2
         version: link:../../packages/apigen/apigen-plugin-cli-output
+      '@adhd/apigen-plugin-ir-cache':
+        specifier: ^0.1.0
+        version: link:../../packages/apigen/apigen-plugin-ir-cache
       '@adhd/apigen-plugin-mcp':
         specifier: ^0.2.2
         version: link:../../packages/apigen/apigen-plugin-mcp
@@ -1067,7 +1073,7 @@ importers:
         specifier: ^0.1.0
         version: link:../apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
         specifier: ^0.2.1
@@ -1082,13 +1088,13 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
 
   packages/apigen/apigen-engine-naming:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
 
   packages/apigen/apigen-engine-runtime:
@@ -1100,7 +1106,7 @@ importers:
         specifier: ^0.1.0
         version: link:../apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
         specifier: ^0.2.1
@@ -1133,7 +1139,7 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
         specifier: ^0.2.1
@@ -1154,7 +1160,7 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
         specifier: ^0.2.1
@@ -1172,7 +1178,7 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-runtime':
         specifier: ^0.2.2
@@ -1184,7 +1190,7 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
         specifier: ^0.2.1
@@ -1196,19 +1202,25 @@ importers:
   packages/apigen/apigen-plugin-health:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
+        version: link:../apigen-core-client
+
+  packages/apigen/apigen-plugin-ir-cache:
+    dependencies:
+      '@adhd/apigen-core-client':
+        specifier: 0.3.0
         version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-jsonschema:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-logger:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
       pino:
         specifier: 10.3.1
@@ -1220,7 +1232,7 @@ importers:
         specifier: ^0.2.0
         version: link:../apigen-base-errors
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
         specifier: ^0.2.1
@@ -1238,13 +1250,13 @@ importers:
         specifier: ^0.2.1
         version: link:../codegen/openapi
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
 
   packages/apigen/apigen-plugin-py-flask:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
         specifier: ^0.2.1
@@ -1259,7 +1271,7 @@ importers:
   packages/apigen/apigen-plugin-py-grpc:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
         specifier: ^0.2.1
@@ -1271,7 +1283,7 @@ importers:
   packages/apigen/codegen/openapi:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../../apigen-core-client
       '@adhd/apigen-engine-naming':
         specifier: ^0.2.1
@@ -1280,7 +1292,7 @@ importers:
   packages/apigen/python-env:
     dependencies:
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
+        specifier: 0.3.0
         version: link:../apigen-core-client
 
   packages/data/data-base-transforms: {}

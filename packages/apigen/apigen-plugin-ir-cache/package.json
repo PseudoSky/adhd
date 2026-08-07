@@ -1,0 +1,16 @@
+{
+  "name": "@adhd/apigen-plugin-ir-cache",
+  "version": "0.1.0",
+  "dependencies": {
+    "@adhd/apigen-core-client": "0.3.0"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist"
+  ]
+}

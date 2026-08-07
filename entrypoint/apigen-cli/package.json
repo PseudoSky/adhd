@@ -28,9 +28,10 @@
     "@adhd/apigen-python-env": "^0.2.2",
     "@adhd/apigen-base-logical": "^0.1.0",
     "@adhd/apigen-engine-runtime": "^0.2.2",
-    "@adhd/apigen-core-client": "^0.2.2",
+    "@adhd/apigen-core-client": "0.3.0",
     "@adhd/apigen-engine-naming": "^0.2.1",
-    "@adhd/apigen-plugin-openapi": "^0.2.1"
+    "@adhd/apigen-plugin-openapi": "^0.2.1",
+    "@adhd/apigen-plugin-ir-cache": "^0.1.0"
   },
   "devDependencies": {
     "decimal.js": "^10.4.3"

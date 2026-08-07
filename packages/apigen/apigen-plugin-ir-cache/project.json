@@ -1,0 +1,50 @@
+{
+  "name": "apigen-plugin-ir-cache",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/apigen/apigen-plugin-ir-cache/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "packages/apigen/apigen-plugin-ir-cache",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "domain:apigen",
+    "pkg-kind:plugin",
+    "pkg-class:optional",
+    "layer:logic",
+    "platform:node",
+    "access:domain"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "packages/apigen/apigen-plugin-ir-cache/dist",
+        "main": "packages/apigen/apigen-plugin-ir-cache/src/index.ts",
+        "tsConfig": "packages/apigen/apigen-plugin-ir-cache/tsconfig.lib.json",
+        "assets": [
+          "packages/apigen/apigen-plugin-ir-cache/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "packages/apigen/apigen-plugin-ir-cache/dist"
+      },
+      "dependsOn": [
+        "build",
+        "test"
+      ]
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}
