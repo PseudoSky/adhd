@@ -14,6 +14,10 @@ import {
   unknownTypeError,
   unsupportedRunError,
 } from '../plugin-registry';
+// BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001: `run-registry` never exposed
+// `--use` at all, so no extractLayer/layer/mount plugin could ever be
+// composed for registry-driven run. Reuse run.ts's resolver.
+import { loadUsePlugins } from './run';
 
 /** Parse --opt key=value pairs into an options record. */
 function parseOptPairs(pairs: string[]): Record<string, unknown> {
@@ -75,6 +79,12 @@ export function registerRunRegistryCommand(
       (val: string, prev: string[]) => [...prev, val],
       [] as string[]
     )
+    .option(
+      '--use <plugin>',
+      'Layer/mount/envelope plugin to activate (repeatable; accepts package specifier or local path)',
+      (val: string, prev: string[]) => [...prev, val],
+      [] as string[]
+    )
     .action(
       async (
         cliArgs: string[],
@@ -85,6 +95,7 @@ export function registerRunRegistryCommand(
           excludeTag: string[];
           tsconfig?: string;
           opt: string[];
+          use: string[];
         }
       ) => {
         const plugin = plugins[opts.type];
@@ -97,6 +108,16 @@ export function registerRunRegistryCommand(
         // precedence over `--opt argv=<string>` when both are present.
         if (cliArgs.length > 0) {
           options['argv'] = cliArgs;
+        }
+        // BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001: resolve `--use`
+        // specifiers to loaded Plugin objects — mirrors `run`'s handling
+        // (thread via options.usePlugins for the run plugin's own
+        // layer/mount composition AND via OrchestratorOptions.usePluginObjects
+        // below so buildDescriptor()/extractSource() can compose a declared
+        // `extractLayer` capability, e.g. `apigen-plugin-ir-cache`).
+        const usePlugins = await loadUsePlugins(opts.use);
+        if (usePlugins.length > 0) {
+          options['usePlugins'] = usePlugins;
         }
         const packagesDir = path.resolve(opts.packagesDir);
 
@@ -134,7 +155,7 @@ export function registerRunRegistryCommand(
         process.on('SIGTERM', () => controller.abort());
 
         await orchestrateRun(
-          { sources, logger },
+          { sources, usePlugins: opts.use, usePluginObjects: usePlugins, logger },
           plugin,
           async (entry: SourceEntry) => {
             const tsconfig = resolveTsconfig(entry.file, entry.tsconfig);

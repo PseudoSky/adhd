@@ -14,6 +14,13 @@ import type {
 } from '@adhd/apigen-core-client';
 import { emitResolutionScaffolding } from '../scaffold';
 import { describeTypeOption, unknownTypeError } from '../plugin-registry';
+// BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001: `generate` accepted `--use` but
+// never resolved the specifiers to loaded `Plugin[]` objects (only run.ts
+// did), so `extractSource()`'s `createExtractInvokerFromPlugins` always saw
+// `usePluginObjects = []` here — `--use ir-cache` (and any other extractLayer
+// plugin) silently no-opped for `generate`. Reuse run.ts's resolver rather
+// than duplicating it.
+import { loadUsePlugins } from './run';
 // DEBT-LT-005: replaced the inline TS_LOGICAL_TYPE_DEP_MAP duplicate with the
 // authoritative source from @adhd/apigen-base-logical. tsDepMap() derives the map
 // from the same TemplateCell.dep fields that are the single source of truth
@@ -247,6 +254,14 @@ export function registerGenerateCommand(
         const overrides = loadOverrideConfig(opts.config, cliOverrides);
         const options = parseOptPairs(allOpts);
 
+        // BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001: resolve the `--use`
+        // specifiers to loaded Plugin objects and thread them as
+        // `usePluginObjects` (not just the raw specifier strings) so
+        // buildDescriptor()/extractSource() can compose a declared
+        // `extractLayer` capability (e.g. `apigen-plugin-ir-cache`) into
+        // extraction, exactly as `run` already does.
+        const usePlugins = await loadUsePlugins(opts.use);
+
         // Unified v2 orchestrator path: detect → extract → merge →
         // collision-check → gen. This is now the ONLY extraction pipeline
         // (v1's generateSchemas()/extractNamed()/extractDefault()/
@@ -264,6 +279,7 @@ export function registerGenerateCommand(
               },
             ],
             usePlugins: opts.use,
+            usePluginObjects: usePlugins,
             overrides,
             logger,
           },
