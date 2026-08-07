@@ -40,14 +40,12 @@ import type { Scope } from '@adhd/environment-base-spec';
 import {
   extract,
   composeSchemas,
-  createExtractInvoker,
+  createExtractInvokerFromPlugins,
   type ExtractCall,
   type Operation,
+  type Plugin,
 } from '@adhd/apigen-core-client';
-import {
-  createIrCacheLayer,
-  createLocalFsBackend,
-} from '@adhd/apigen-plugin-ir-cache';
+import { createIrCacheLayer } from '@adhd/apigen-plugin-ir-cache';
 import { apiFastifyPlugin } from '@adhd/apigen-plugin-api-fastify';
 import { openapiPlugin } from '@adhd/apigen-plugin-openapi';
 import { mcpPlugin } from '@adhd/apigen-plugin-mcp';
@@ -254,32 +252,83 @@ const CORE_CLIENT_VERSION: string = requirePkg(
 ).version;
 
 /**
- * FEAT-002: cache root for the extract-stage IR cache. Env-overridable
- * (the integration spec points it at a fresh dir); default under the repo's
- * canonical `tmp/` (AGENTS.md §10 — gitignored, removable with `nx reset`).
+ * FEAT-002 Revision 2 (design doc R2.2/R2.3, implementation spec R2-4):
+ * RUNTIME CACHE mode targets a single, literal file — not a directory of
+ * many content-addressed entries. Env-overridable (the integration spec
+ * points it at a fresh throwaway file); default under the repo's canonical
+ * `tmp/` (AGENTS.md §10 — gitignored, removable with `nx reset`).
+ * `APIGEN_IR_CACHE_FILE` replaces the Revision-1 `APIGEN_IR_CACHE_DIR`.
  */
-function irCacheDir(): string {
+function irCacheFile(): string {
   return (
-    process.env['APIGEN_IR_CACHE_DIR'] ??
-    join(process.cwd(), 'tmp', 'apigen', 'ir-cache')
+    process.env['APIGEN_IR_CACHE_FILE'] ??
+    join(process.cwd(), 'tmp', 'apigen', 'ir-cache', 'backlog-client.ir.json')
   );
 }
 
 /**
- * FEAT-002: the extract-stage invoker with the IR-cache layer wired in — the
- * BUG-019 hot path. On a cache HIT the terminal `extract()` is never called
- * (the cached `Operation[]` is returned); on a MISS the result is written
- * through fire-and-forget. Built LAZILY on first use so callers can point
- * `APIGEN_IR_CACHE_DIR` at a fresh dir before the first extraction (tests).
+ * FEAT-002 Revision 2 (design doc R2.7): opt-out kill switch. Backlog's
+ * three transports (HTTP/MCP/CLI) are a live mount, not a `--use`-flag-
+ * parsed `apigen-cli` invocation, so there is no CLI surface for a human to
+ * omit the plugin here — this env var is that surface for this host
+ * specifically. Default enabled (`'1'`/unset); `'0'` disables caching
+ * entirely (every call is a real extraction, no cache read/write at all).
+ */
+function irCacheEnabled(): boolean {
+  return process.env['APIGEN_IR_CACHE_ENABLED'] !== '0';
+}
+
+/**
+ * FEAT-002 Revision 2 (design doc R2.6 item 4 / implementation spec R2.7):
+ * a `Plugin` object carrying ONLY the `extractLayer` capability, built from
+ * `@adhd/apigen-plugin-ir-cache`'s `createIrCacheLayer(opts)` factory —
+ * NOT the package's static `irCachePlugin` export, because that singleton's
+ * `extractLayer.layer` resolves its cache file / extractor version lazily
+ * from `APIGEN_IR_CACHE_FILE`/`APIGEN_IR_CACHE_EXTRACTOR_VERSION` env vars
+ * with no per-call configuration hook (see that package's own `src/index.ts`
+ * module doc) — backlog needs a DIFFERENT default file
+ * (`backlog-client.ir.json`, not the plugin's own generic `default.ir.json`)
+ * and a specific `extractorVersion` (`CORE_CLIENT_VERSION`, the actual
+ * installed `@adhd/apigen-core-client` version, not an env-var-overridable
+ * value), so it builds its own `Plugin`-shaped instance around the factory
+ * instead — exactly the escape hatch that module doc describes for a caller
+ * wanting non-default configuration in the same process.
+ */
+function backlogIrCachePlugin(): Plugin {
+  return {
+    id: 'ir-cache',
+    description: 'Extract-stage IR cache, configured for the backlog hot path (BUG-019).',
+    language: 'ts',
+    capabilities: {
+      extractLayer: {
+        layer: createIrCacheLayer({
+          cache: irCacheFile(),
+          extractorVersion: CORE_CLIENT_VERSION,
+        }),
+      },
+    },
+  };
+}
+
+/**
+ * FEAT-002 Revision 2 (design doc R2.6 item 4): the extract-stage invoker,
+ * composed through the GENERIC `createExtractInvokerFromPlugins` mechanism
+ * (the same one `apigen-cli`'s orchestrator uses for `--use`-loaded plugins)
+ * rather than hand-constructing a middleware array — the plugin list is
+ * either `[backlogIrCachePlugin()]` (caching enabled, the default) or `[]`
+ * (R2.7's `APIGEN_IR_CACHE_ENABLED=0` opt-out: extraction always runs live,
+ * no cache read/write of any kind — `createExtractInvokerFromPlugins`
+ * degrades to a pure pass-through to `runExtractor` on an empty/non-matching
+ * plugin list). On a cache HIT the terminal `extract()` is never called (the
+ * cached `Operation[]` is returned); on a MISS the result is written through
+ * fire-and-forget. Built LAZILY on first use so callers/tests can point
+ * `APIGEN_IR_CACHE_FILE`/`APIGEN_IR_CACHE_ENABLED` at test values before the
+ * first extraction.
  */
 let extractInvoke: ((call: ExtractCall) => Promise<Operation[]>) | undefined;
 function getExtractInvoke(): (call: ExtractCall) => Promise<Operation[]> {
-  extractInvoke ??= createExtractInvoker(
-    [
-      createIrCacheLayer(createLocalFsBackend(irCacheDir()), {
-        extractorVersion: CORE_CLIENT_VERSION,
-      }),
-    ],
+  extractInvoke ??= createExtractInvokerFromPlugins(
+    irCacheEnabled() ? [backlogIrCachePlugin()] : [],
     (call: ExtractCall) =>
       extract({
         sourceFile: call.source,
