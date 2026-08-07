@@ -32,7 +32,7 @@ import type { BacklogCtx } from './client.js';
 import { buildBacklogEnv } from './env.js';
 import { openGraphBacklogStore, closeGraphBacklogStore } from './store/graph-backlog-store.js';
 import { buildBacklogApigenPackage } from './server.js';
-import { resolveCommandPrefix, prefixCommand } from './cli.js';
+import { resolveCommandPrefix, prefixCommand, resolveMountNamespaces, USE_PLUGINS } from './cli.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DIST_INDEX = join(HERE, '..', 'dist', 'index.js');
@@ -97,7 +97,7 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
   });
 
   it('prefixCommand prepends the real prefix to a BARE user command (what a human actually types)', () => {
-    expect(prefixCommand(['get-item', '--repo', 'x', '--human-id', 'y'], ['backlog'])).toEqual([
+    expect(prefixCommand(['get-item', '--repo', 'x', '--human-id', 'y'], ['backlog'], new Set())).toEqual([
       'backlog',
       'get-item',
       '--repo',
@@ -108,19 +108,70 @@ describe('resolveCommandPrefix / prefixCommand — namespace-prefix derivation (
   });
 
   it('prefixCommand is idempotent — an already-fully-prefixed argv is NEVER double-prefixed', () => {
-    expect(prefixCommand(['backlog', 'get-item'], ['backlog'])).toEqual([
+    expect(prefixCommand(['backlog', 'get-item'], ['backlog'], new Set())).toEqual([
       'backlog',
       'get-item',
     ]);
   });
 
   it('prefixCommand leaves a leading --help/-h flag untouched (never shadows run()\'s own top-level --help short-circuit)', () => {
-    expect(prefixCommand(['--help'], ['backlog'])).toEqual(['--help']);
-    expect(prefixCommand(['-h'], ['backlog'])).toEqual(['-h']);
+    expect(prefixCommand(['--help'], ['backlog'], new Set())).toEqual(['--help']);
+    expect(prefixCommand(['-h'], ['backlog'], new Set())).toEqual(['-h']);
   });
 
   it('prefixCommand leaves empty argv untouched', () => {
-    expect(prefixCommand([], ['backlog'])).toEqual([]);
+    expect(prefixCommand([], ['backlog'], new Set())).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // resolveMountNamespaces — dynamic derivation from `usePlugins`, not a
+  // hand-maintained list (fixing the "silently goes stale" architecture flaw
+  // in the ORIGINAL `MOUNT_COMMAND_NAMESPACES` constant, BUG-BACKLOG-CLI-
+  // BATCH-PREFIX-CLOBBER-001 follow-up).
+  // ---------------------------------------------------------------------------
+
+  it('resolveMountNamespaces derives "batch" from the REAL usePlugins array (batchPlugin), not a hardcoded string', async () => {
+    const { operations } = await buildBacklogApigenPackage({} as BacklogCtx);
+    const reserved = resolveMountNamespaces(USE_PLUGINS, operations, 'backlog');
+    expect(reserved.has('batch')).toBe(true);
+  });
+
+  // The "would go red if reverted" proof AGENTS.md §7 requires: this asserts
+  // the reserved set is genuinely DERIVED from `usePlugins`, not a disguised
+  // hardcoded string match — an EMPTY `usePlugins` array must yield an EMPTY
+  // set (no mount plugin ⇒ nothing reserved), proving the previous test's
+  // green result is contingent on `batchPlugin` actually being in the array.
+  it('resolveMountNamespaces returns an EMPTY set for an empty usePlugins array — proves the derivation is dynamic, not hardcoded', async () => {
+    const { operations } = await buildBacklogApigenPackage({} as BacklogCtx);
+    const reserved = resolveMountNamespaces([], operations, 'backlog');
+    expect(reserved.size).toBe(0);
+    expect(reserved.has('batch')).toBe(false);
+  });
+
+  // BUG-018: a top-level mount-plugin command (e.g. `@adhd/apigen-plugin-batch`'s
+  // `_batch/action` → real CLI path `['batch', 'action']`) must NEVER be
+  // backlog-prefixed — it is registered at the command table's top level,
+  // sibling to `backlog`'s own namespace, not nested under it.
+  it('prefixCommand leaves a reserved mount-namespace command (e.g. "batch action …") untouched — never backlog-prefixed (BUG-018)', async () => {
+    const { operations } = await buildBacklogApigenPackage({} as BacklogCtx);
+    const reserved = resolveMountNamespaces(USE_PLUGINS, operations, 'backlog');
+    expect(reserved.has('batch')).toBe(true);
+    expect(
+      prefixCommand(['batch', 'action', '--operation', 'backlog/create-item', '--items', '[]'], ['backlog'], reserved)
+    ).toEqual(['batch', 'action', '--operation', 'backlog/create-item', '--items', '[]']);
+  });
+
+  it('prefixCommand still prefixes an ordinary bare client.ts command whose name happens to differ from any reserved namespace', async () => {
+    const { operations } = await buildBacklogApigenPackage({} as BacklogCtx);
+    const reserved = resolveMountNamespaces(USE_PLUGINS, operations, 'backlog');
+    expect(prefixCommand(['get-item', '--repo', 'x', '--human-id', 'y'], ['backlog'], reserved)).toEqual([
+      'backlog',
+      'get-item',
+      '--repo',
+      'x',
+      '--human-id',
+      'y',
+    ]);
   });
 });
 
@@ -151,6 +202,20 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
     const res = runBin(['--help'], adhdRoot);
     expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
     expect(res.stdout).toContain('backlog get-item');
+  });
+
+  it('BUG-BACKLOG-001: --help and no-args surface the special-cased commands (install-skill/install/serve) that never enter the apigen command table', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-help-special-'));
+    const help = runBin(['--help'], adhdRoot);
+    expect(help.status, `stderr:\n${help.stderr}\nstdout:\n${help.stdout}`).toBe(0);
+    expect(help.stdout).toContain('Special commands');
+    expect(help.stdout).toContain('install-skill');
+    expect(help.stdout).toContain('serve');
+
+    const noArgs = runBin([], adhdRoot);
+    expect(noArgs.status, `stderr:\n${noArgs.stderr}\nstdout:\n${noArgs.stdout}`).toBe(0);
+    expect(noArgs.stdout).toContain('Special commands');
+    expect(noArgs.stdout).toContain('install-skill');
   });
 
   it('--help and no-args NEVER create the backing SQLite store (DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001)', () => {
@@ -299,6 +364,95 @@ describe('runBacklogCli — live CLI mount, real spawned dist/index.js bin, temp
   // machine home directory with no override, so it is exercised exclusively
   // via `install-skill.spec.ts`'s `homeOverride`-isolated unit tests, never
   // through a real spawned process here.
+  // Task A (FEAT-BACKLOG batch-CLI wiring) + BUG-018 (prefixCommand mount-
+  // namespace clobber, fixed in the same change): `runBacklogCli` now wires
+  // `usePlugins: [batchPlugin]` into `cliPlugin.run()`'s `options` (mirroring
+  // `server.ts`'s MCP-transport wiring) AND `prefixCommand` skips prefixing a
+  // top-level mount-plugin command (`MOUNT_COMMAND_NAMESPACES`). Reverting
+  // EITHER half of that fix turns this test red: dropping `usePlugins`
+  // resolves `batch action` as an unrecognized command (status 4, `not_found`
+  // — matched `Unknown command: backlog batch action …` in manual repro);
+  // dropping the `prefixCommand` reserved-namespace guard corrupts the argv
+  // into `backlog batch action …`, which the real command table also has no
+  // entry for — same `not_found` failure, just a different root cause. This
+  // spec proves both halves together via the one thing that actually matters:
+  // a real 2-item batch fan-out dispatched through the real spawned CLI bin,
+  // reaching the REAL `createItem` (`client.ts`) via the REAL
+  // `_batch/action` mount, over a real temp-scoped SQLite store — no mocks.
+  it('"batch action --operation backlog/create-item --items […]" fans out via the real CLI to real client.ts createItem, and both items persist independently (BUG-018 / batch-CLI wiring)', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-batch-'));
+    const repo = 'PseudoSky/cli-batch-test';
+
+    const items = JSON.stringify([
+      { input: { family: 'BUG-CLIBATCH', title: 'batch one', body: 'x', repo } },
+      { input: { family: 'BUG-CLIBATCH', title: 'batch two', body: 'y', repo } },
+    ]);
+    const res = runBin(
+      ['batch', 'action', '--operation', 'backlog/create-item', '--items', items, '--concurrency', '2', '--on-item-error', 'continue'],
+      adhdRoot
+    );
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+
+    interface BatchItemResult {
+      index: number;
+      status: 'fulfilled' | 'rejected';
+      value?: { item: { humanId: string; title: string; repo: string }; created: boolean };
+      reason?: { message?: string; code?: string };
+    }
+    const results = JSON.parse(res.stdout.trim()) as BatchItemResult[];
+    expect(results).toHaveLength(2);
+
+    expect(results[0]?.status).toBe('fulfilled');
+    expect(results[0]?.value?.created).toBe(true);
+    expect(results[0]?.value?.item.title).toBe('batch one');
+    const firstHumanId = results[0]?.value?.item.humanId;
+    expect(firstHumanId).toBeTruthy();
+
+    expect(results[1]?.status).toBe('fulfilled');
+    expect(results[1]?.value?.created).toBe(true);
+    expect(results[1]?.value?.item.title).toBe('batch two');
+    const secondHumanId = results[1]?.value?.item.humanId;
+    expect(secondHumanId).toBeTruthy();
+    expect(secondHumanId).not.toBe(firstHumanId);
+
+    // Follow-up REAL "get-item" (a separate process invocation, through the
+    // ordinary `backlog`-prefixed command path) proves both batch-created
+    // items are genuinely persisted in the store — not just echoed back in
+    // the batch response.
+    const get1 = runBin(['get-item', '--repo', repo, '--human-id', firstHumanId as string], adhdRoot);
+    expect(get1.status, `stderr:\n${get1.stderr}`).toBe(0);
+    expect((JSON.parse(get1.stdout.trim()) as { title: string }).title).toBe('batch one');
+
+    const get2 = runBin(['get-item', '--repo', repo, '--human-id', secondHumanId as string], adhdRoot);
+    expect(get2.status, `stderr:\n${get2.stderr}`).toBe(0);
+    expect((JSON.parse(get2.stdout.trim()) as { title: string }).title).toBe('batch two');
+  });
+
+  it('an "operation" not in this mount\'s batchable set is rejected by the batch handler\'s own validation (proves the CLI mount is bound to the real backlog descriptor, not a stub)', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-batch-badop-'));
+    const res = runBin(['batch', 'action', '--operation', 'backlog/not-a-real-op', '--items', '[]'], adhdRoot);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).not.toBe(0);
+    const lastLine = res.stderr.trim().split('\n').pop() ?? '';
+    const body = JSON.parse(lastLine) as { code: string; message: string };
+    expect(body.code).toBe('invalid_argument');
+    expect(body.message).toContain('backlog/not-a-real-op');
+  });
+
+  // Task B: `client.ts`'s `version()` export is automatically extracted and
+  // exposed as `backlog version` on every transport, with NO server.ts/cli.ts
+  // changes needed beyond the export itself — this proves that over the
+  // REAL, spawned, dev-built `dist/index.js` bin (the "DEV-BUILT" layout in
+  // `server.ts`'s `backlogDistDir()` doc comment), reading the REAL
+  // `package.json` at test time so this can never silently drift from it.
+  it('"version" reports the REAL, currently-built package.json name/version — dev-dist layout (spawned dist/index.js bin)', () => {
+    adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-version-'));
+    const res = runBin(['version'], adhdRoot);
+    expect(res.status, `stderr:\n${res.stderr}\nstdout:\n${res.stdout}`).toBe(0);
+    const parsed = JSON.parse(res.stdout.trim()) as { name: string; version: string };
+    const realPkg = JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8')) as { name: string; version: string };
+    expect(parsed).toEqual({ name: realPkg.name, version: realPkg.version });
+  });
+
   it('install-skill --host claude --scope project drops the packaged, currently-built SKILL.md under the given cwd — content-hash matches (MIGRATION.md §4.4 DoD)', () => {
     adhdRoot = mkdtempSync(join(tmpdir(), 'backlog-cli-install-skill-'));
     const res = runBin(['install-skill', '--host', 'claude', '--scope', 'project'], adhdRoot);

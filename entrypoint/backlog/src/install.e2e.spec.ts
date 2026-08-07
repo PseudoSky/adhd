@@ -52,7 +52,7 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
     expect(BACKLOG_MCP_NPX_ARGS).toEqual(['-y', '@adhd/backlog@latest', 'serve', '--transport', 'mcp']);
   });
 
-  it('claude-style config: spawning the real dist/index.js serve --transport mcp (the local stand-in for the written npx invocation) advertises all 37 real tools', async () => {
+  it('claude-style config: spawning the real dist/index.js serve --transport mcp (the local stand-in for the written npx invocation) advertises all 38 real tools', async () => {
     tmp = mkdtempSync(join(tmpdir(), 'backlog-install-e2e-claude-'));
     const result = install(['--host', 'claude', '--scope', 'user', '--mcp-only'], tmp, tmp);
     const doc = JSON.parse(readFileSync(result.mcp[0]!.configPath, 'utf8')) as {
@@ -77,17 +77,18 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
     await client.connect(transport);
 
     const tools = await client.listTools();
-    // 37 real tools: every `client.ts` export (36, `backlog_*`) plus the
+    // 38 real tools: every `client.ts` export (37, `backlog_*` — 36 pre-
+    // existing plus Task B's new `version` op, `backlog_version`) plus the
     // batch-dispatch tool `apigen-plugin-batch` mounts (`batch_action`,
     // deliberately UN-namespaced — confirmed against the real tool list
     // below, not guessed).
-    expect(tools.tools.length).toBe(37);
+    expect(tools.tools.length).toBe(38);
     expect(tools.tools.map((t) => t.name)).toEqual(
-      expect.arrayContaining(['backlog_list_items', 'backlog_create_item', 'backlog_get_item', 'batch_action']),
+      expect.arrayContaining(['backlog_list_items', 'backlog_create_item', 'backlog_get_item', 'backlog_version', 'batch_action']),
     );
   }, 30_000);
 
-  it('opencode-style config: spawning the real dist/index.js via the written command ARRAY shape advertises all 37 real tools', async () => {
+  it('opencode-style config: spawning the real dist/index.js via the written command ARRAY shape advertises all 38 real tools', async () => {
     tmp = mkdtempSync(join(tmpdir(), 'backlog-install-e2e-opencode-'));
     const result = install(['--host', 'opencode', '--scope', 'user', '--mcp-only'], tmp, tmp);
     const doc = JSON.parse(readFileSync(result.mcp[0]!.configPath, 'utf8')) as {
@@ -113,6 +114,6 @@ describe('BUG-013 — install-written MCP config actually launches a working rea
     await client.connect(transport);
 
     const tools = await client.listTools();
-    expect(tools.tools.length).toBe(37);
+    expect(tools.tools.length).toBe(38);
   }, 30_000);
 });

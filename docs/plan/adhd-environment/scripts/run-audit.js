@@ -10,27 +10,14 @@
  *
  * Usage:
  *   node scripts/run-audit.js [--phase <phase>] [--criteria <file>] [--repo-root <path>]
- *   node scripts/run-audit.js --self-test
  *
  *   --phase       ""   run all phases (the Python harness's empty-phase shape)
- *   --phase       X    run ONLY criteria whose phase EXACTLY equals X (exact
- *                      match, not accumulation — a criterion must declare
- *                      `phase: X` to be selected; X must be a declared phase
- *                      or the runner errors out)
- *   --phase       X,Y  run the UNION of the named phases (each an exact
- *                      match); this is how composite audit gates scope
- *                      themselves (e.g. guard_audit_builder.py runs
- *                      `--phase contract,builder`) — every named phase must
- *                      itself be declared or the runner errors out
+ *   --phase       X    run phase X + every phase ordered before it (accumulation)
  *   --criteria         path to the criteria file (default: scripts/criteria.json,
- *                      then <planDir>/criteria.json relative to cwd, then this
- *                      script's own directory)
+ *                      then <planDir>/criteria.json relative to cwd)
  *   --repo-root        explicit repo root (BL-96(1) opt-in, see below). Falls
  *                      back to `git rev-parse --show-toplevel` from cwd, then
  *                      to cwd itself, when omitted.
- *   --self-test        run an in-memory fixture through the phase-filter
- *                      algorithm and print [self-test] PASS/FAIL; proves the
- *                      filtering logic independent of any real criteria.json.
  *
  * BL-96(1) — cwd resolution is OPT-IN, never implicit (migration note):
  * The runner's own cwd is whatever the caller sets (state-transition.js runs it
@@ -166,32 +153,32 @@ function validateCriteriaDoc(doc) {
   return { schema_version: doc.schema_version ?? 1, criteria };
 }
 
-/**
- * Select criteria for `--phase`. Exact set-membership, never file-order
- * accumulation:
- *   `--phase X`      → ONLY criteria whose `phase === X`.
- *   `--phase X,Y,Z`  → the UNION of the named phases (each an exact match) —
- *                      this is how the composite audit guards scope
- *                      themselves (e.g. guard_audit_builder.py runs
- *                      `--phase contract,builder`). A comma-joined phaseSpec
- *                      is split, trimmed, and every named phase must itself
- *                      be declared or the runner errors out.
- *   `--phase ""`/absent → every criterion (the whole-plan audit).
- */
-function selectCriteria(criteria, phaseSpec) {
-  if (phaseSpec === undefined || phaseSpec === null || phaseSpec === "") return criteria;
-  const declared = new Set(criteria.map((c) => c.phase).filter((p) => p != null));
-  const wanted = String(phaseSpec)
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  for (const p of wanted) {
-    if (!declared.has(p)) {
-      throw new Error(`criteria: --phase "${p}" is not a declared phase (have: ${[...declared].join(", ") || "<none>"})`);
+function phaseOrder(criteria) {
+  const order = [];
+  const seen = new Set();
+  for (const c of criteria) {
+    if (c.phase == null) continue;
+    if (!seen.has(c.phase)) {
+      seen.add(c.phase);
+      order.push(c.phase);
     }
   }
-  const wset = new Set(wanted);
-  return criteria.filter((c) => c.phase != null && wset.has(c.phase));
+  return order;
+}
+
+function accumulatedPhases(criteria, phase) {
+  const order = phaseOrder(criteria);
+  if (phase === undefined || phase === null || phase === "") return new Set(order);
+  const idx = order.indexOf(phase);
+  if (idx === -1) {
+    throw new Error(`criteria: --phase "${phase}" is not a declared phase (have: ${order.join(", ") || "<none>"})`);
+  }
+  return new Set(order.slice(0, idx + 1));
+}
+
+function selectCriteria(criteria, phase) {
+  const phases = accumulatedPhases(criteria, phase);
+  return criteria.filter((c) => c.phase == null || phases.has(c.phase));
 }
 
 // ── per-kind execution ─────────────────────────────────────────────────────────
@@ -314,12 +301,7 @@ function argValue(args, flag) {
 function resolveCriteriaFile(args, cwd) {
   const explicit = argValue(args, "--criteria");
   if (explicit) return path.isAbsolute(explicit) ? explicit : path.join(cwd, explicit);
-  const scriptDir = path.dirname(new URL(import.meta.url).pathname);
-  for (const cand of [
-    path.join(cwd, "scripts", "criteria.json"),
-    path.join(cwd, "criteria.json"),
-    path.join(scriptDir, "criteria.json"),
-  ]) {
+  for (const cand of [path.join(cwd, "scripts", "criteria.json"), path.join(cwd, "criteria.json")]) {
     if (fs.existsSync(cand)) return cand;
   }
   return null;
@@ -379,36 +361,6 @@ function main() {
     process.stdout.write(`${JSON.stringify(VENDOR_STAMP)}\n`);
     process.exit(0);
   }
-
-  // Self-test: proves the phase-filter algorithm itself (exact-match, not
-  // accumulation; plus the comma-separated multi-phase union) against an
-  // in-memory fixture, independent of any real plan's criteria.json existing
-  // at all. Must run before any criteria-file lookup.
-  if (args.includes("--self-test")) {
-    const fixture = {
-      schema_version: 1,
-      criteria: [
-        { id: "a.1", phase: "one", kind: "exists", path: "." },
-        { id: "b.1", phase: "two", kind: "exists", path: "." },
-        { id: "c.1", phase: "three", kind: "exists", path: "." },
-      ],
-    };
-    const r1 = runCriteria(fixture, { phase: "one", cwd: process.cwd() });
-    const onlyPhaseOne = r1.lines.length === 1 && r1.lines[0].startsWith("[a.1]");
-    const r2 = runCriteria(fixture, { phase: "", cwd: process.cwd() });
-    const allRun = r2.lines.length === 3;
-    // Multi-phase union: "one,two" must select EXACTLY {a.1, b.1}, never c.1,
-    // and never fewer than both — this is the shape guard_audit_builder.py
-    // depends on (`--phase contract,builder`).
-    const r3 = runCriteria(fixture, { phase: "one,two", cwd: process.cwd() });
-    const unionIds = r3.lines.map((l) => l.slice(1, l.indexOf("]")));
-    const unionOk =
-      r3.lines.length === 2 && unionIds.includes("a.1") && unionIds.includes("b.1") && !unionIds.includes("c.1");
-    const ok = onlyPhaseOne && allRun && unionOk;
-    process.stdout.write(ok ? "[self-test] PASS\n" : "[self-test] FAIL\n");
-    process.exit(ok ? 0 : 1);
-  }
-
   // --phase passthrough: an empty value means "all phases" (SPEC §4.3 pt 2).
   // argValue returns null when the flag is absent → treat as all phases too.
   const phaseRaw = args.includes("--phase") ? (argValue(args, "--phase") ?? "") : "";
@@ -418,9 +370,7 @@ function main() {
   if (!criteriaFile) {
     // FAIL-CLOSED: no criteria file at all is the apigen pass=0/0 class.
     process.stdout.write("[audit.no-criteria] FAIL\n");
-    process.stderr.write(
-      "run-audit: no criteria file found (looked for scripts/criteria.json, criteria.json, and the script's own directory)\n",
-    );
+    process.stderr.write("run-audit: no criteria file found (looked for scripts/criteria.json, criteria.json)\n");
     process.exit(1);
   }
 

@@ -21,7 +21,8 @@
  */
 import type { Scope } from '@adhd/environment-base-spec';
 import { cliPlugin } from '@adhd/apigen-plugin-cli-output';
-import type { Operation } from '@adhd/apigen-core-client';
+import { batchPlugin } from '@adhd/apigen-plugin-batch';
+import type { Descriptor, Operation, Plugin } from '@adhd/apigen-core-client';
 import { project } from '@adhd/apigen-engine-naming';
 import type { BacklogCtx } from './client.js';
 import { openGraphBacklogStore, closeGraphBacklogStore, type GraphBacklogStore } from './store/graph-backlog-store.js';
@@ -66,6 +67,91 @@ export function resolveCommandPrefix(operations: readonly Operation[]): string[]
 }
 
 /**
+ * The exact `--use` mount-plugin array `runBacklogCli` hands to
+ * `cliPlugin.run()`'s `options.usePlugins` AND the array
+ * {@link resolveMountNamespaces} derives reserved top-level segments from —
+ * the SAME array reference, never two independently-written lists, so the
+ * two can never drift apart (that drift is exactly what made the old
+ * hand-maintained `MOUNT_COMMAND_NAMESPACES` constant go stale).
+ */
+export const USE_PLUGINS: readonly Plugin[] = [batchPlugin];
+
+/**
+ * Derives the set of top-level command segments reserved by every mount
+ * plugin in `usePlugins`' own synthetic operations, registered SIBLING to
+ * (never nested under) `backlog`'s own `['backlog', ...]` namespace.
+ *
+ * Previously this repo (BUG-BACKLOG-CLI-BATCH-PREFIX-CLOBBER-001) hand-
+ * maintained a `MOUNT_COMMAND_NAMESPACES` constant with a doc comment
+ * claiming a mount plugin's real synthetic namespace "can only be known by
+ * actually invoking its `capabilities.mount.operations(descriptor, …)`, which
+ * needs a real `Descriptor` this file does not have before dispatch" — that
+ * claim was WRONG, verified by reading source rather than assumed:
+ *
+ *  1. `runBacklogCli` DOES have a real descriptor's ingredients at the exact
+ *     point this is called — `operations` (from `buildBacklogApigenPackage`)
+ *     is real, already-extracted `Operation[]`, and the host string is the
+ *     same `pkg.id` (`'backlog'`) that
+ *     `apigen-plugin-cli-output`'s `run()` itself uses for the identical
+ *     purpose (`packages/apigen/apigen-plugin-cli-output/src/lib/run.ts`:
+ *     `const mountHost = input.packages[0]?.id ?? 'ts';`).
+ *  2. `batchPlugin.capabilities.mount.operations(descriptor, opts, hostBridge)`
+ *     (`packages/apigen/apigen-plugin-batch/src/lib/plugin.ts`,
+ *     `buildBatchOperations`) delegates to `buildBatchMountedOperations`
+ *     (`packages/apigen/apigen-core-client/src/lib/batch.ts`) to compute
+ *     every mounted operation's SHAPE — including `namespace`/`path`, since
+ *     `MountedOperation extends Operation`
+ *     (`apigen-core-client/src/lib/plugin.ts:422`) — and only uses
+ *     `hostBridge` AFTERWARD, separately, to build each shape's `.handler`
+ *     (`buildBatchHandler(shape.operationIds, hostBridge)`, same file). The
+ *     handler closure simply captures `hostBridge` (including `undefined`)
+ *     without dereferencing it — `buildBatchOperations`/`operations()` never
+ *     throw when `hostBridge` is omitted; only actually CALLING the built
+ *     handler with a missing bridge throws
+ *     (`packages/apigen/apigen-plugin-batch/src/lib/plugin.ts:148`,
+ *     `if (!hostBridge) { throw … }` inside `buildBatchHandler`, never
+ *     inside `operations()`). So calling `operations(descriptor, opts)` with
+ *     `hostBridge` omitted is safe for path-derivation purposes: the
+ *     returned ops' handlers would be broken if invoked, but this function
+ *     never invokes them, only reads `.namespace`/`.path`.
+ *  3. `buildBatchMountedOperations` (`apigen-core-client/src/lib/batch.ts`)
+ *     is cheap — it groups already-extracted `descriptor.operations` by kind
+ *     and derives JSON-Schema fragments from them; it does no ts-morph
+ *     parsing or schema generation of its own, so calling it once per CLI
+ *     invocation (in addition to the identical call `run()` itself makes
+ *     later) has no measurable cost.
+ *
+ * So this is derived dynamically instead: for each plugin in `usePlugins`
+ * exposing a `mount` capability, call `capabilities.mount.operations(...)`
+ * (no `hostBridge`) and project each returned op's real CLI top-level
+ * segment via `@adhd/apigen-engine-naming`'s `project(op).cli.path[0]` — the
+ * SAME derivation `resolveCommandPrefix` above uses for `backlog`'s own
+ * prefix. Adding a future mount plugin to {@link USE_PLUGINS} now
+ * automatically and correctly extends the reserved set with zero separate
+ * bookkeeping — it can never again silently go stale the way the old
+ * hardcoded set did the moment a second mount plugin was added without
+ * remembering to update it too.
+ */
+export function resolveMountNamespaces(
+  usePlugins: readonly Plugin[],
+  operations: readonly Operation[],
+  host: string
+): Set<string> {
+  const descriptor: Descriptor = { host, operations: operations as Operation[] };
+  const namespaces = new Set<string>();
+  for (const plugin of usePlugins) {
+    const mount = plugin.capabilities.mount;
+    if (!mount) continue;
+    const mountedOps = mount.operations(descriptor, undefined, undefined);
+    for (const op of mountedOps) {
+      const [first] = project(op).cli.path;
+      if (first !== undefined) namespaces.add(first);
+    }
+  }
+  return namespaces;
+}
+
+/**
  * Prepends `prefix` (the real, namespace-qualified command path segments
  * every `client.ts` export shares — see {@link resolveCommandPrefix}) to a
  * user-typed argv, so `backlog get-item --repo … --human-id …` (what a
@@ -83,10 +169,27 @@ export function resolveCommandPrefix(operations: readonly Operation[]): string[]
  *    BEFORE ever consulting the command table
  *    (`if (argv.length === 0 || argv[0] === '--help' || argv[0] === '-h')`),
  *    so prefixing here would shadow that check and break `backlog --help`.
+ *  - Argv whose first token is a reserved mount-namespace segment (per
+ *    {@link resolveMountNamespaces}'s dynamically-derived set — currently
+ *    just `batch`, from {@link USE_PLUGINS}) is returned unchanged — that
+ *    command is registered at the CLI's top level by a mount plugin, never
+ *    under `backlog`'s own namespace; prefixing it would make it
+ *    unresolvable.
+ *
+ * `reservedNamespaces` has no default — the real call site
+ * (`runBacklogCli`) always passes a freshly-derived
+ * `resolveMountNamespaces(...)` result; the caller must supply one
+ * explicitly (an empty `Set` for a caller with no mount plugins) so this
+ * can never silently fall back to a stale hardcoded default.
  */
-export function prefixCommand(userArgv: readonly string[], prefix: readonly string[]): string[] {
+export function prefixCommand(
+  userArgv: readonly string[],
+  prefix: readonly string[],
+  reservedNamespaces: ReadonlySet<string>
+): string[] {
   if (userArgv.length === 0) return [...userArgv];
   if (userArgv[0]?.startsWith('-')) return [...userArgv];
+  if (userArgv[0] !== undefined && reservedNamespaces.has(userArgv[0])) return [...userArgv];
   const alreadyPrefixed = prefix.length > 0 && prefix.every((seg, i) => userArgv[i] === seg);
   if (alreadyPrefixed) return [...userArgv];
   return [...prefix, ...userArgv];
@@ -117,6 +220,20 @@ export interface RunBacklogCliOpts {
  */
 export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {}): Promise<void> {
   const userArgvEarly = argv ?? process.argv.slice(2);
+  // BUG-BACKLOG-001: `install-skill`/`install`/`serve` are intercepted below,
+  // BEFORE the apigen package/command table is built, so `cliPlugin.run()`'s
+  // own `--help`/`-h` rendering (and the identical no-args listing) can never
+  // show them. Surface them explicitly here — this branch runs only for
+  // help/no-args, opens no store (see DEBT-BACKLOG-CLI-EAGER-STORE-OPEN-001),
+  // and falls through to the apigen program for the full command listing.
+  const helpRequested =
+    userArgvEarly.length === 0 || userArgvEarly[0] === '--help' || userArgvEarly[0] === '-h';
+  if (helpRequested) {
+    console.log('Special commands (handled before the apigen command table):');
+    console.log('  install-skill [options]  Install the backlog skill for a host (alias: install)');
+    console.log('  serve [options]          Start the long-lived HTTP/MCP server (--transport http|mcp|both)');
+    console.log('');
+  }
   // `install-skill` (MIGRATION.md §4.2) is a PURE filesystem operation — copy
   // the packaged `skill/SKILL.md` to a per-host path — not an apigen-
   // dispatched `client.ts` export (it needs no store/ctx at all), so it is
@@ -166,12 +283,23 @@ export async function runBacklogCli(argv?: string[], opts: RunBacklogCliOpts = {
     const { pkg, operations } = await buildBacklogApigenPackage(getCtx);
     const userArgv = userArgvEarly;
     const prefix = resolveCommandPrefix(operations);
+    // Derived from the SAME `USE_PLUGINS` array passed to `options.usePlugins`
+    // below — see {@link resolveMountNamespaces}'s doc comment — never a
+    // separately hand-maintained list.
+    const reservedNamespaces = resolveMountNamespaces(USE_PLUGINS, operations, pkg.id);
 
     await requireRun(cliPlugin)({
       packages: [pkg],
       operations,
       outputDir: '',
-      options: { argv: prefixCommand(userArgv, prefix) },
+      // `usePlugins: USE_PLUGINS` mirrors `server.ts`'s MCP-transport wiring
+      // exactly (both are single-transport mounts with no separate "openapi"
+      // concept the way HTTP's `usePlugins: [openapiPlugin, batchPlugin]`
+      // has) — without this the `_batch/<kind>` synthetic mount
+      // (`@adhd/apigen-plugin-batch`) is reachable over HTTP/MCP but not the
+      // CLI, since `@adhd/apigen-plugin-cli-output`'s `run()` only mounts
+      // plugins it's explicitly handed via `readUsePlugins(input.options)`.
+      options: { argv: prefixCommand(userArgv, prefix, reservedNamespaces), usePlugins: [...USE_PLUGINS] },
       signal: opts.signal ?? new AbortController().signal,
       logger: testSilentLogger(),
     });

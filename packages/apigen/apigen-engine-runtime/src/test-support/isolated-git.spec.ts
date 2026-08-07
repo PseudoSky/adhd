@@ -20,7 +20,7 @@
  * disposable repositories under `os.tmpdir()` — nothing here is mocked.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -43,37 +43,11 @@ function unsafeGit(args: readonly string[], cwd: string): string {
 describe('BUG-APIGEN-052: isolated-git escape mechanism + fix', () => {
   let victimDir: string;
 
-  // BUG-APIGEN-052 (follow-up, discovered live 2026-08-06 via an ordinary
-  // pathspec-scoped commit in an unrelated worktree): this fixture helper
-  // used to be `execFileSync('git', args, { cwd: victimDir, stdio: 'pipe' })`
-  // — the SAME unsafe pattern (bare cwd, full process.env inheritance) that
-  // the production fix (runGit/sanitizedGitEnv below) eliminated from
-  // parity-harness.ts. `vgit` bootstraps the "victim" repo in `beforeEach`
-  // (before the test's own deliberate env-leak simulation below ever runs),
-  // so when this suite executes for real inside an ACTUAL git hook chain
-  // (`git commit` -> `.githooks/pre-commit` -> `nx affected -t test` ->
-  // vitest -> this spec file), git itself has ALREADY exported
-  // GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE into process.env for the REAL,
-  // currently-in-progress commit — an AMBIENT leak, not the test's own
-  // simulated one — and `beforeEach`'s very first unsanitized `vgit` call
-  // inherited it, corrupting the enclosing real repository's git config and
-  // HEAD instead of the intended disposable victimDir. Routing through the
-  // already-proven-safe `runGit` (env-sanitized, `-C`-scoped) closes this:
-  // only the deliberately-unsafe `unsafeGit` below (scoped to the already
-  // safely-bootstrapped victimDir/nestedScratchDir) should ever demonstrate
-  // the unsafe pattern.
   function vgit(...args: string[]): string {
-    return runGit(args, { cwd: victimDir });
+    return execFileSync('git', args, { cwd: victimDir, stdio: 'pipe' }).toString();
   }
 
-  // A fresh victim repo PER TEST (beforeEach, not beforeAll): the first
-  // test in this suite is a negative control that deliberately corrupts its
-  // victim (rewrites identity, lands a junk commit) to prove the hazard is
-  // real. A victim shared across tests via beforeAll would carry that
-  // corruption into every later test's "stayed clean" assertions — a false
-  // failure that has nothing to do with whether THAT test's isolation held.
-  // Each test must independently prove isolation against a pristine victim.
-  beforeEach(() => {
+  beforeAll(() => {
     // The "enclosing real repo" a hook would be running in.
     victimDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bug-apigen-052-victim-')));
     vgit('init', '-q');
@@ -84,13 +58,16 @@ describe('BUG-APIGEN-052: isolated-git escape mechanism + fix', () => {
     vgit('commit', '-q', '-m', 'victim init');
   });
 
+  afterAll(() => {
+    fs.rmSync(victimDir, { recursive: true, force: true });
+  });
+
   // Every test that leaks env must restore it — never let a leaked GIT_DIR
   // survive into a later test or another suite in the same worker.
   afterEach(() => {
     for (const key of LEAK_VARS) {
       delete process.env[key];
     }
-    fs.rmSync(victimDir, { recursive: true, force: true });
   });
 
   /** Snapshot of everything a leak could corrupt, for before/after comparison. */
@@ -173,25 +150,18 @@ describe('BUG-APIGEN-052: isolated-git escape mechanism + fix', () => {
       runGit(['add', 'subject.txt'], { cwd: nestedScratchDir });
       runGit(['commit', '-q', '-m', 'init: subject.txt'], { cwd: nestedScratchDir });
 
-      // The scratch repo really did receive the commit — isolation, not a
-      // silent no-op — captured BEFORE cleanup removes the directory.
-      const scratchLog = runGit(['log', '--oneline'], { cwd: nestedScratchDir });
-      expect(scratchLog).toContain('init: subject.txt');
-
       for (const key of LEAK_VARS) delete process.env[key];
-
-      // Clean up the nested scratch dir (as any real caller of a scratch
-      // repo would per AGENTS.md §10) BEFORE fingerprinting the victim: a
-      // leftover directory nested inside victimDir's own working tree is
-      // legitimately untracked content there, and would fail a strict
-      // toEqual(before) even though `runGit` never touched the victim's
-      // config/index/history — this asserts the latter, not the former.
-      fs.rmSync(nestedScratchDir, { recursive: true, force: true });
 
       const after = victimFingerprint();
       expect(after).toEqual(before);
       expect(after.status).toContain('concurrent-work-2.txt');
       expect(after.log).not.toContain('init: subject.txt');
+
+      // And the scratch repo really did receive the commit — isolation, not
+      // silent no-op.
+      expect(
+        runGit(['log', '--oneline'], { cwd: nestedScratchDir })
+      ).toContain('init: subject.txt');
     }
   );
 

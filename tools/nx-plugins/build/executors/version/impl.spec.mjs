@@ -36,7 +36,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import child_process from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -217,35 +217,12 @@ function writePublishedState(rootDir, entries) {
   writeFileSync(publishedStatePath(rootDir), JSON.stringify(entries, null, 2) + '\n');
 }
 
-test('DEBT-BUILD-VERSION-SYNCDEPS-REDUNDANT-001: reconcileOwnInternalRanges never invokes the deps-plugin dependency-check executors (real bump path)', async (t) => {
-  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
-  try {
-    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
-    const { context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg,
-      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 2;\n' } });
-    const state = newState({ publishedVersions: ['1.0.0'], publishedFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' } });
-    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
-    const versionImpl = loadFreshImpl();
-    installEslintCheckMock(state);
-    const result = await versionImpl({}, context);
-    assert.equal(result.success, true);
-    assert.equal(state.eslintCalls.length, 0, 'version must never re-invoke the deps-plugin ESLint dependency check — already covered by the upstream lint->sync-deps step');
-  } finally { rmSync(rootDir, { recursive: true, force: true }); }
-});
-test('DEBT-BUILD-VERSION-SYNCDEPS-REDUNDANT-001: reconcileOwnInternalRanges never invokes the deps-plugin dependency-check executors (dry-run path)', async (t) => {
-  const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
-  try {
-    const localPkg = { name: '@adhd/pkg-b', version: '9.9.9', main: './index.js', dependencies: {} };
-    const { context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg,
-      distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'x\n' } });
-    const state = newState({ publishedVersions: [] });
-    t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
-    const versionImpl = loadFreshImpl();
-    installEslintCheckMock(state);
-    const result = await versionImpl({ dryRun: true }, context);
-    assert.equal(result.success, true);
-    assert.equal(state.eslintCalls.length, 0, 'dry-run reconciliation must never re-invoke the deps-plugin ESLint check either');
-  } finally { rmSync(rootDir, { recursive: true, force: true }); }
+test('reuses the deps plugin sync/check modules verbatim — not a duplicated reimplementation', () => {
+  const versionImpl = loadFreshImpl();
+  const directSync = require(syncAbs);
+  const directCheck = require(checkAbs);
+  assert.strictEqual(versionImpl.__internals.syncInternalDeps, directSync, 'must be the SAME function reference as deps/executors/sync/impl.js — not a copy');
+  assert.strictEqual(versionImpl.__internals.checkInternalDeps, directCheck, 'must be the SAME function reference as deps/executors/check/impl.js — not a copy');
 });
 
 // ---------------------------------------------------------------------------
@@ -273,7 +250,7 @@ test('cache HIT, unchanged: ZERO network calls (no npm/tar spawnSync at all), no
     const result = await versionImpl({}, context);
     assert.equal(result.success, true);
     assert.deepEqual(networkCalls(state), [], 'a cache hit must NEVER touch npm or tar');
-    assert.equal(state.eslintCalls.length, 0, 'reconciliation no longer re-invokes the ESLint dependency check — reconcileInternalRangesFromDisk (disk-based, not ESLint) covers it now');
+    assert.equal(state.eslintCalls.length, 1, 'sync-deps reconciliation still runs (a separate, already-zero-network step)');
     const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
     assert.equal(after.version, '1.0.0', 'unchanged vs the cached published hash -> no bump');
 
@@ -288,7 +265,7 @@ test('cache HIT, unchanged: ZERO network calls (no npm/tar spawnSync at all), no
     assert.equal(versionRecords.length, 1);
     assert.equal(versionRecords[0].project, 'pkg-b');
     assert.equal(versionRecords[0].success, true);
-    assert.equal(syncDepsRecords.length, 0, "no nested sync-deps metrics record from version's own reconciliation step anymore");
+    assert.equal(syncDepsRecords.length, 1, 'the in-process sync-deps call must land its own nested metrics record');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
@@ -619,7 +596,9 @@ test('"not yet published" path (cache miss -> backfill -> still pending): reconc
 
     const result = await versionImpl({}, context);
     assert.equal(result.success, true);
-    assert.equal(state.eslintCalls.length, 0, 'reconciliation no longer invokes the ESLint dependency check');
+    assert.equal(state.eslintCalls.length, 1, 'sync-deps subprocess must run exactly once');
+    assert.ok(state.eslintCalls[0].includes('--fix'), 'must invoke the FIX mode (sync), not check, when not a dry run');
+    assert.ok(state.eslintCalls[0][0].endsWith(join('packages', 'pkg-b', 'package.json')), 'must target THIS project\'s own package.json');
     assert.equal(existsSync(publishedStatePath(rootDir)), false, '"pending" (never published) must never write a cache entry');
     // Version untouched (no dist to compare against — release is already pending).
     const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
@@ -645,7 +624,8 @@ test('dry run: reconciliation delegates to check (read-only) and NEVER writes pa
 
     const result = await versionImpl({ dryRun: true }, context);
     assert.equal(result.success, true, 'a dry run must never fail just because check reported drift');
-    assert.equal(state.eslintCalls.length, 0, 'dry run must never invoke the ESLint dependency check either');
+    assert.equal(state.eslintCalls.length, 1);
+    assert.ok(!state.eslintCalls[0].includes('--fix'), 'dry run must use CHECK (read-only), never fix');
     const after = readFileSync(join(pkgRoot, 'package.json'), 'utf8');
     assert.equal(after, before, 'dry run must never write package.json');
   } finally {
@@ -680,7 +660,7 @@ test('ADHD_NX_VERSION_DRY_RUN=1 env var forces dry-run behavior even when option
     assert.equal(result.success, true);
     const after = readFileSync(join(pkgRoot, 'package.json'), 'utf8');
     assert.equal(after, before, 'env-var dry run must never write, even though a real code change would otherwise bump');
-    assert.equal(state.eslintCalls.length, 0, 'env-var dry run must never invoke the ESLint dependency check either');
+    assert.ok(!state.eslintCalls[0].includes('--fix'), 'env-var dry run must route reconciliation through check, not fix');
   } finally {
     if (prevEnv === undefined) delete process.env.ADHD_NX_VERSION_DRY_RUN;
     else process.env.ADHD_NX_VERSION_DRY_RUN = prevEnv;
@@ -716,8 +696,8 @@ test('published (cache miss, backfill) + range-only drift vs published tarball: 
     assert.equal(result.success, true);
     const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
     assert.equal(after.version, '1.0.0', 'a range-only diff vs published must NOT bump the own version');
-    assert.equal(state.eslintCalls.length, 0, 'must STILL reconcile the (now-known-stale) internal range going forward — via reconcileInternalRangesFromDisk, not ESLint');
-    assert.equal(after.dependencies['@adhd/pkg-a'], '^1.1.0', "the internal range must still be reconciled to pkg-a's real on-disk version via reconcileInternalRangesFromDisk");
+    assert.equal(state.eslintCalls.length, 1, 'must STILL reconcile the (now-known-stale) internal range going forward');
+    assert.ok(state.eslintCalls[0].includes('--fix'));
     assert.ok(existsSync(publishedStatePath(rootDir)), 'the backfill must have populated the cache');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
@@ -745,7 +725,7 @@ test('published (cache miss, backfill) + REAL code drift: DOES bump, then reconc
     assert.equal(result.success, true);
     const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
     assert.equal(after.version, '1.0.1', 'a genuine code change must still bump (unchanged pre-existing behavior)');
-    assert.equal(state.eslintCalls.length, 0, 'reconciliation runs after the bump too, but no longer via ESLint');
+    assert.equal(state.eslintCalls.length, 1, 'reconciliation runs after the bump too');
     const cached = JSON.parse(readFileSync(publishedStatePath(rootDir), 'utf8'));
     assert.equal(cached['@adhd/pkg-b'].version, '1.0.0', 'cache records the PUBLISHED version (pre-bump), not the new local one');
   } finally {
@@ -855,18 +835,12 @@ test('dry run with real code drift (cache miss -> backfill still runs, but never
 test('changelog generation failure fails the whole version task (bump already landed, still surfaced as a failure)', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
   try {
-    // A genuinely stale internal range against a real sibling — the real,
-    // observable proxy for "range reconciliation was skipped" now that
-    // eslintCalls.length is always 0 regardless (ESLint is never called at
-    // all anymore, so it can no longer prove the fail-fast claim by itself).
-    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: { '@adhd/pkg-a': '^1.0.0' } };
+    const localPkg = { name: '@adhd/pkg-b', version: '1.0.0', main: './index.js', dependencies: {} };
     const { pkgRoot, context } = makeProject({
       rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b',
       srcPkg: localPkg,
       distFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 2;\n' },
     });
-    makeFiles(join(rootDir, 'packages/pkg-a'), { 'package.json': JSON.stringify({ name: '@adhd/pkg-a', version: '2.0.0' }) });
-    context.projectsConfigurations.projects['pkg-a'] = { root: 'packages/pkg-a' };
     const state = newState({
       publishedVersions: ['1.0.0'],
       publishedFiles: { 'package.json': JSON.stringify(localPkg), 'index.js': 'export const x = 1;\n' },
@@ -881,31 +855,27 @@ test('changelog generation failure fails the whole version task (bump already la
     assert.equal(state.eslintCalls.length, 0, 'must fail FAST — never reach range reconciliation once changelog generation fails');
     const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
     assert.equal(after.version, '1.0.1', 'the version write itself already landed before the changelog step — this is a surfaced failure, not a rollback');
-    const afterPkg = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
-    assert.equal(afterPkg.dependencies['@adhd/pkg-a'], '^1.0.0', 'a changelog failure must short-circuit BEFORE range reconciliation — the stale range must be left untouched');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }
 });
 
-test('DEBT-BUILD-VERSION-SYNCDEPS-REDUNDANT-001: a real reconcileInternalRangesFromDisk write failure (package.json unwritable) still propagates as an overall executor failure', async (t) => {
+test('sync-deps failure during reconciliation propagates as an overall executor failure', async (t) => {
   const rootDir = mkdtempSync(join(tmpdir(), 'version-impl-'));
   try {
-    const localPkg = { name: '@adhd/pkg-b', version: '9.9.9', dependencies: { '@adhd/pkg-a': '^1.0.0' } };
-    const { pkgRoot, context } = makeProject({ rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b', srcPkg: localPkg,
-      distFiles: { 'package.json': JSON.stringify({ name: '@adhd/pkg-b', version: '9.9.9' }), 'index.js': 'x\n' } });
-    makeFiles(join(rootDir, 'packages/pkg-a'), { 'package.json': JSON.stringify({ name: '@adhd/pkg-a', version: '1.1.0' }) });
-    context.projectsConfigurations.projects['pkg-a'] = { root: 'packages/pkg-a' };
-    const srcPkgPath = join(pkgRoot, 'package.json');
-    chmodSync(srcPkgPath, 0o444); // real OS-level write failure — no mocking
-    const state = newState({ publishedVersions: [] });
+    const { context } = makeProject({
+      rootDir, name: 'pkg-b', projectRoot: 'packages/pkg-b',
+      srcPkg: { name: '@adhd/pkg-b', version: '9.9.9', dependencies: {} },
+      distFiles: { 'package.json': JSON.stringify({ name: '@adhd/pkg-b', version: '9.9.9' }), 'index.js': 'x\n' },
+    });
+    const state = newState({ publishedVersions: [], eslintStatus: 1 }); // real, unfixable eslint failure
     t.mock.method(child_process, 'spawnSync', makeSpawnSyncMock(state));
     const versionImpl = loadFreshImpl();
     installEslintCheckMock(state);
+
     const result = await versionImpl({}, context);
-    assert.equal(result.success, false, 'a real internal-range write failure must fail the version task');
+    assert.equal(result.success, false, 'a real (non-dry-run) sync-deps failure must fail the version task');
   } finally {
-    try { chmodSync(join(rootDir, 'packages/pkg-b/package.json'), 0o644); } catch {}
     rmSync(rootDir, { recursive: true, force: true });
   }
 });
@@ -940,7 +910,7 @@ test('backfill failure (network error reconciling a cache miss) leaves version u
     const after = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8'));
     assert.equal(after.version, '1.0.0', 'must be left untouched on a backfill error');
     assert.equal(existsSync(publishedStatePath(rootDir)), false, 'an errored backfill must never write a cache entry');
-    assert.equal(state.eslintCalls.length, 0, 'range reconciliation still runs even after a backfill error, but no longer via ESLint');
+    assert.equal(state.eslintCalls.length, 1, 'range reconciliation still runs even after a backfill error');
   } finally {
     rmSync(rootDir, { recursive: true, force: true });
   }

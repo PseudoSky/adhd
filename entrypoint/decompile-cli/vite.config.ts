@@ -11,11 +11,9 @@ export default defineConfig({
 
   // Test-only Vite config — decompile-cli's `build` target compiles via
   // `@nx/js:tsc` (see BUILD-CONSIST-008: native/legacy-CJS-heavy deps make
-  // it a bundling-risk candidate; full rationale + category writeup:
-  // docs/contributing/conventions/build-executor-choice.md), matching the
-  // pattern already used by several `@nx/js:tsc`-built packages (e.g.
-  // agent-store-prompts) that still run their `test` target through
-  // `@nx/vite:test`.
+  // it a bundling-risk candidate), matching the pattern already used by
+  // several `@nx/js:tsc`-built packages (e.g. agent-store-prompts) that
+  // still run their `test` target through `@nx/vite:test`.
   test: {
     poolOptions: vitestPoolOptions,
     globals: true,

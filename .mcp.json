@@ -13,12 +13,7 @@
     "agent-mcp-published": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@adhd/agent-mcp@latest"],
-      "env": {
-        "ADHD_AGENT_DATABASE_PATH": "${HOME}/.adhd/agent-mcp/agents.db",
-        "ADHD_AGENT_REGISTRY_DB_PATH": "${HOME}/.adhd/agent-mcp/registry.db",
-        "DOTENV_CONFIG_PATH": "${HOME}/.adhd/.env"
-      }
+      "args": ["-y", "@adhd/agent-mcp@latest"]
     },
     "backlog": {
       "type": "stdio",
