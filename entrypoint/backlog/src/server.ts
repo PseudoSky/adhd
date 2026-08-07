@@ -35,8 +35,17 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import type { Scope } from '@adhd/environment-base-spec';
-import { extract, composeSchemas, type Operation } from '@adhd/apigen-core-client';
+import {
+  extract,
+  composeSchemas,
+  createExtractInvokerFromPlugins,
+  type ExtractCall,
+  type Operation,
+  type Plugin,
+} from '@adhd/apigen-core-client';
+import { createIrCacheLayer } from '@adhd/apigen-plugin-ir-cache';
 import { apiFastifyPlugin } from '@adhd/apigen-plugin-api-fastify';
 import { openapiPlugin } from '@adhd/apigen-plugin-openapi';
 import { mcpPlugin } from '@adhd/apigen-plugin-mcp';
@@ -228,6 +237,112 @@ function dereferenceSchema(schema: unknown): unknown {
   return inline(schema, new Set());
 }
 
+const requirePkg = createRequire(import.meta.url);
+
+/**
+ * FEAT-002: the extractor version stamped into every IR-cache entry — the
+ * `@adhd/apigen-core-client` package version. Any change to the extractor's
+ * output for the same input (a bug fix, new TS feature support, or a future
+ * DEBT-003 fix making Path 2 correct for cross-referencing named types) bumps
+ * this version, which changes the cache key and busts every stale entry — the
+ * mechanism that keeps this cache from ever becoming a reason to defer DEBT-003.
+ */
+const CORE_CLIENT_VERSION: string = requirePkg(
+  '@adhd/apigen-core-client/package.json'
+).version;
+
+/**
+ * FEAT-002 Revision 2 (design doc R2.2/R2.3, implementation spec R2-4):
+ * RUNTIME CACHE mode targets a single, literal file — not a directory of
+ * many content-addressed entries. Env-overridable (the integration spec
+ * points it at a fresh throwaway file); default under the repo's canonical
+ * `tmp/` (AGENTS.md §10 — gitignored, removable with `nx reset`).
+ * `APIGEN_IR_CACHE_FILE` replaces the Revision-1 `APIGEN_IR_CACHE_DIR`.
+ */
+function irCacheFile(): string {
+  return (
+    process.env['APIGEN_IR_CACHE_FILE'] ??
+    join(process.cwd(), 'tmp', 'apigen', 'ir-cache', 'backlog-client.ir.json')
+  );
+}
+
+/**
+ * FEAT-002 Revision 2 (design doc R2.7): opt-out kill switch. Backlog's
+ * three transports (HTTP/MCP/CLI) are a live mount, not a `--use`-flag-
+ * parsed `apigen-cli` invocation, so there is no CLI surface for a human to
+ * omit the plugin here — this env var is that surface for this host
+ * specifically. Default enabled (`'1'`/unset); `'0'` disables caching
+ * entirely (every call is a real extraction, no cache read/write at all).
+ */
+function irCacheEnabled(): boolean {
+  return process.env['APIGEN_IR_CACHE_ENABLED'] !== '0';
+}
+
+/**
+ * FEAT-002 Revision 2 (design doc R2.6 item 4 / implementation spec R2.7):
+ * a `Plugin` object carrying ONLY the `extractLayer` capability, built from
+ * `@adhd/apigen-plugin-ir-cache`'s `createIrCacheLayer(opts)` factory —
+ * NOT the package's static `irCachePlugin` export, because that singleton's
+ * `extractLayer.layer` resolves its cache file / extractor version lazily
+ * from `APIGEN_IR_CACHE_FILE`/`APIGEN_IR_CACHE_EXTRACTOR_VERSION` env vars
+ * with no per-call configuration hook (see that package's own `src/index.ts`
+ * module doc) — backlog needs a DIFFERENT default file
+ * (`backlog-client.ir.json`, not the plugin's own generic `default.ir.json`)
+ * and a specific `extractorVersion` (`CORE_CLIENT_VERSION`, the actual
+ * installed `@adhd/apigen-core-client` version, not an env-var-overridable
+ * value), so it builds its own `Plugin`-shaped instance around the factory
+ * instead — exactly the escape hatch that module doc describes for a caller
+ * wanting non-default configuration in the same process.
+ */
+function backlogIrCachePlugin(): Plugin {
+  return {
+    id: 'ir-cache',
+    description: 'Extract-stage IR cache, configured for the backlog hot path (BUG-019).',
+    language: 'ts',
+    capabilities: {
+      extractLayer: {
+        layer: createIrCacheLayer({
+          cache: irCacheFile(),
+          extractorVersion: CORE_CLIENT_VERSION,
+        }),
+      },
+    },
+  };
+}
+
+/**
+ * FEAT-002 Revision 2 (design doc R2.6 item 4): the extract-stage invoker,
+ * composed through the GENERIC `createExtractInvokerFromPlugins` mechanism
+ * (the same one `apigen-cli`'s orchestrator uses for `--use`-loaded plugins)
+ * rather than hand-constructing a middleware array — the plugin list is
+ * either `[backlogIrCachePlugin()]` (caching enabled, the default) or `[]`
+ * (R2.7's `APIGEN_IR_CACHE_ENABLED=0` opt-out: extraction always runs live,
+ * no cache read/write of any kind — `createExtractInvokerFromPlugins`
+ * degrades to a pure pass-through to `runExtractor` on an empty/non-matching
+ * plugin list). On a cache HIT the terminal `extract()` is never called (the
+ * cached `Operation[]` is returned); on a MISS the result is written through
+ * fire-and-forget. Built LAZILY on first use so callers/tests can point
+ * `APIGEN_IR_CACHE_FILE`/`APIGEN_IR_CACHE_ENABLED` at test values before the
+ * first extraction.
+ */
+let extractInvoke: ((call: ExtractCall) => Promise<Operation[]>) | undefined;
+function getExtractInvoke(): (call: ExtractCall) => Promise<Operation[]> {
+  extractInvoke ??= createExtractInvokerFromPlugins(
+    irCacheEnabled() ? [backlogIrCachePlugin()] : [],
+    (call: ExtractCall) =>
+      extract({
+        sourceFile: call.source,
+        namespace: call.namespace,
+        tsconfig:
+          typeof call.extractorOptions?.tsconfig === 'string'
+            ? call.extractorOptions.tsconfig
+            : undefined,
+        dropFileSegment: true,
+      })
+  );
+  return extractInvoke;
+}
+
 async function extractClientOperations(): Promise<Operation[]> {
   const clientDts = join(backlogDistDir(), 'client.d.ts');
   if (!existsSync(clientDts)) {
@@ -246,7 +361,19 @@ async function extractClientOperations(): Promise<Operation[]> {
   // cross-file name to disambiguate against; a genuine same-name collision
   // would still be caught at extract time by `checkCollisions`
   // (`@adhd/apigen-engine-naming`).
-  return extract({ sourceFile: clientDts, namespace: 'backlog', dropFileSegment: true });
+  //
+  // FEAT-002: extraction flows through the extract-stage invoker (BUG-019 hot
+  // path) with the IR-cache layer — a cache HIT returns the cached
+  // `Operation[]` without re-running `extract()`; a MISS runs `extract()` as
+  // before and writes the result through to the cache fire-and-forget. The
+  // cached value is byte-identical to what `extract()` would produce, so the
+  // downstream `composeSchemas`/`dereferenceSchema` behavior is unchanged.
+  return getExtractInvoke()({
+    source: clientDts,
+    host: 'ts',
+    namespace: 'backlog',
+    extractorOptions: {},
+  });
 }
 
 /**

@@ -12,6 +12,7 @@ import {
   createExtractionSession,
   internalSession,
   clearPersistentProjectCache,
+  collectLocalImportPaths,
 } from '../lib/extraction-session';
 
 let dir: string;
@@ -250,5 +251,63 @@ describe('probe hygiene on the shared Project', () => {
     expect(sf.getFullText()).toBe(SOURCE_A);
     expect(sf.getFullText()).not.toContain('__ApigenProbe');
     session.dispose();
+  });
+});
+
+describe('collectLocalImportPaths (FEAT-002 — content-addressed IR-cache key support)', () => {
+  it('returns the entry file plus every LOCAL transitive import, sorted, node_modules excluded', () => {
+    const leafPath = path.join(dir, 'clip-leaf.ts');
+    const midPath = path.join(dir, 'clip-mid.ts');
+    const entryPath = path.join(dir, 'clip-entry.ts');
+    fs.writeFileSync(leafPath, `export interface Leaf { x: number }\n`);
+    fs.writeFileSync(midPath, `import type { Leaf } from './clip-leaf';\nexport interface Mid { leaf: Leaf }\n`);
+    fs.writeFileSync(
+      entryPath,
+      `import type { Mid } from './clip-mid';\n` +
+        `import type { Environment } from '@adhd/environment';\n` + // unresolved bare specifier — skipped
+        `import type { Readable } from 'node:stream';\n` + // node builtin — skipped
+        `export async function getMid(e: Environment): Promise<Mid> { return { leaf: { x: 1 } } }\n`
+    );
+
+    const paths = collectLocalImportPaths(entryPath);
+    expect(paths).toEqual([entryPath, midPath, leafPath].sort());
+  });
+
+  it('entry with no local imports returns only the entry itself', () => {
+    const lonePath = path.join(dir, 'clip-lone.ts');
+    fs.writeFileSync(lonePath, `export function ping(): string { return 'pong' }\n`);
+
+    expect(collectLocalImportPaths(lonePath)).toEqual([lonePath]);
+  });
+
+  it('is deterministic: identical input yields identical output across calls', () => {
+    const leafPath = path.join(dir, 'clip-det-leaf.ts');
+    const entryPath = path.join(dir, 'clip-det-entry.ts');
+    fs.writeFileSync(leafPath, `export interface Det { y: number }\n`);
+    fs.writeFileSync(entryPath, `import type { Det } from './clip-det-leaf';\nexport async function getDet(): Promise<Det> { return { y: 1 } }\n`);
+
+    const first = collectLocalImportPaths(entryPath);
+    const second = collectLocalImportPaths(entryPath);
+    expect(first).toEqual(second);
+    expect(first.length).toBe(2);
+  });
+
+  it('picks up a NEW import edge after the entry file is edited on disk (refresh-before-descend)', () => {
+    const extraPath = path.join(dir, 'clip-refresh-extra.ts');
+    const entryPath = path.join(dir, 'clip-refresh-entry.ts');
+    fs.writeFileSync(extraPath, `export interface Extra { z: number }\n`);
+    fs.writeFileSync(entryPath, `export async function noDeps(): Promise<{ z: number }> { return { z: 1 } }\n`);
+
+    // First pass: no imports.
+    expect(collectLocalImportPaths(entryPath)).toEqual([entryPath]);
+
+    // Second pass: the same entry file now imports ./clip-refresh-extra — the
+    // singleton resolver must refresh the already-loaded entry from disk, not
+    // serve its stale first-seen text.
+    fs.writeFileSync(
+      entryPath,
+      `import type { Extra } from './clip-refresh-extra';\nexport async function withDeps(): Promise<Extra> { return { z: 1 } }\n`
+    );
+    expect(collectLocalImportPaths(entryPath)).toEqual([entryPath, extraPath].sort());
   });
 });
