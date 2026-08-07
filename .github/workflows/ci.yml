@@ -29,6 +29,17 @@ jobs:
           # workflow's Node version is the floor for every project it touches.
           node-version: 22
 
+      - name: Install Java (temurin 17)
+        # Required by the apigen Java host (packages/apigen/java,
+        # FEAT-APIGEN-001) — the extractor/dispatcher/conformance-matrix
+        # runner all target Java 17 (maven.compiler.release in pom.xml).
+        # ubuntu-latest ships multiple JDKs but not necessarily 17 as
+        # `java`'s default on PATH; setup-java pins it explicitly.
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Enable Corepack (pnpm)
         run: corepack enable
 

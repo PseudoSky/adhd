@@ -3,7 +3,17 @@
   "compilerOptions": {
     "outDir": "../../../dist/out-tsc",
     "declaration": true,
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client"],
+    // Allows `version.ts` to use `import.meta.url` (see that file) instead
+    // of the unreliable `typeof __dirname !== 'undefined'` ESM/CJS
+    // detection it previously used. Same override already proven at
+    // entrypoint/backlog/tsconfig.lib.json and
+    // entrypoint/apigen-cli/tsconfig.lib.json for the identical
+    // dual-CJS/ESM-output problem — this only affects the typecheck step;
+    // Rollup still bundles both `dist/index.mjs` and `dist/index.js` per
+    // vite.config.ts's `formats: ['es', 'cjs']`.
+    "module": "esnext",
+    "moduleResolution": "bundler"
   },
   "include": ["src/**/*.ts"],
   "exclude": [

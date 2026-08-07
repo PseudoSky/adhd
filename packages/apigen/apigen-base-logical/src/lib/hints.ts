@@ -63,10 +63,11 @@ export type LanguageTable = Record<CanonicalLogicalTypeId, TemplateCell>;
 
 /**
  * @stable The host languages for which a template column exists in
- * {@link TEMPLATE_CELLS}.  `'typescript'` and `'python'` are fully filled
- * (§13.2 values verbatim).  `'rust'`, `'go'`, and `'java'` are scaffolded —
- * structure complete, expressions use stable placeholders pending the
- * `lt-host-*` states.
+ * {@link TEMPLATE_CELLS}.  `'typescript'`, `'python'`, and `'java'` (FEAT-APIGEN-001
+ * slice 1/3, 2026-08-06) are fully filled (§13.2 values verbatim / real
+ * Jackson expressions — see the `JAVA_COLUMN` doc comments below).
+ * `'rust'` and `'go'` remain scaffolded — structure complete, expressions
+ * use stable placeholders pending the `lt-host-*` states.
  */
 export type HostLanguage = 'typescript' | 'python' | 'rust' | 'go' | 'java';
 
@@ -285,49 +286,75 @@ const GO_COLUMN: LanguageTable = {
 
 const JAVA_COLUMN: LanguageTable = {
   'date-time': {
-    // Instant.toString() / Instant.parse() via jackson-datatype-jsr310.
-    encode: '__SCAFFOLD_JAVA_DATETIME_ENCODE__',
-    decode: '__SCAFFOLD_JAVA_DATETIME_DECODE__',
+    // Instant.toString() (RFC-3339/ISO-8601, UTC) / Instant.parse($) — the
+    // jackson-datatype-jsr310 module is registered on the shared ObjectMapper
+    // so java.time.Instant fields round-trip automatically, but the
+    // dispatcher-woven glue (which builds/reads JsonNode by hand rather than
+    // going through a field-annotated POJO) uses these expressions directly.
+    encode: '$.toString()',
+    decode: 'Instant.parse($)',
     imports: ['import java.time.Instant;'],
     dep: { name: 'jackson-datatype-jsr310', version: '2.x' },
     mode: 'lib',
   },
 
   int64: {
-    // @JsonFormat(shape=STRING) on Long / BigInteger — stdlib Jackson.
-    encode: '__SCAFFOLD_JAVA_INT64_ENCODE__',
-    decode: '__SCAFFOLD_JAVA_INT64_DECODE__',
+    // Declarative, not expression-shaped: Jackson field annotation forces
+    // Long/long to serialise as a JSON string (avoids precision loss in
+    // JS/JSON-number consumers). mode:'native' — the "encode"/"decode"
+    // values below ARE the annotation text (identical on both sides; Jackson
+    // applies it symmetrically), not a `$`-substituted call expression.
+    encode: '@JsonFormat(shape = JsonFormat.Shape.STRING)',
+    decode: '@JsonFormat(shape = JsonFormat.Shape.STRING)',
     imports: ['import com.fasterxml.jackson.annotation.JsonFormat;'],
     mode: 'native',
   },
 
   decimal: {
-    // @JsonSerialize(using=ToStringSerializer) on BigDecimal — stdlib Jackson.
-    encode: '__SCAFFOLD_JAVA_DECIMAL_ENCODE__',
-    decode: '__SCAFFOLD_JAVA_DECIMAL_DECODE__',
-    imports: ['import java.math.BigDecimal;'],
+    // Encode is declarative (field annotation forces BigDecimal -> JSON
+    // string via Jackson's stdlib ToStringSerializer, so scale/precision
+    // survive the wire); decode is a plain expression since BigDecimal has
+    // no matching stdlib deserializer-by-annotation for "parse from string".
+    encode: '@JsonSerialize(using = ToStringSerializer.class)',
+    decode: 'new BigDecimal($)',
+    imports: [
+      'import java.math.BigDecimal;',
+      'import com.fasterxml.jackson.databind.annotation.JsonSerialize;',
+      'import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;',
+    ],
     mode: 'native',
   },
 
   byte: {
-    // byte[] serialises as base64 by default in Jackson.
-    encode: '__SCAFFOLD_JAVA_BYTE_ENCODE__',
-    decode: '__SCAFFOLD_JAVA_BYTE_DECODE__',
+    // byte[] <-> base64 String is Jackson's built-in default codec — no
+    // annotation, no wrapping expression. The dispatcher glue passes the
+    // value through unchanged; Jackson's ObjectMapper performs the base64
+    // transcoding when the JsonNode tree is built/read.
+    encode: '$',
+    decode: '$',
     mode: 'native',
   },
 
   uuid: {
-    // UUID.toString() / UUID.fromString() — stdlib Java.
-    encode: '__SCAFFOLD_JAVA_UUID_ENCODE__',
-    decode: '__SCAFFOLD_JAVA_UUID_DECODE__',
+    // UUID.toString() / UUID.fromString($) — stdlib Java, no Jackson module.
+    encode: '$.toString()',
+    decode: 'UUID.fromString($)',
     imports: ['import java.util.UUID;'],
     mode: 'native',
   },
 
   'number-special': {
-    // Custom StdSerializer — stdlib Jackson.
-    encode: '__SCAFFOLD_JAVA_NUMSPECIAL_ENCODE__',
-    decode: '__SCAFFOLD_JAVA_NUMSPECIAL_DECODE__',
+    // NaN/Infinity/-Infinity have no native JSON representation; mirrors the
+    // TS numToWire/wireToNum inline helpers with a small custom Jackson
+    // StdSerializer/StdDeserializer pair, generated inline by
+    // renderDispatcherJava (class names below are the fixed contract the
+    // generator emits — apigen-plugin-java-javalin/src/lib/dispatcher-template.ts).
+    encode: '@JsonSerialize(using = NumberSpecialSerializer.class)',
+    decode: '@JsonDeserialize(using = NumberSpecialDeserializer.class)',
+    imports: [
+      'import com.fasterxml.jackson.databind.annotation.JsonSerialize;',
+      'import com.fasterxml.jackson.databind.annotation.JsonDeserialize;',
+    ],
     mode: 'native',
   },
 };
@@ -339,9 +366,12 @@ const JAVA_COLUMN: LanguageTable = {
 /**
  * @stable The template-cell registry: `[language][logicalTypeId] → TemplateCell`.
  *
- * TypeScript and Python columns are fully filled per DESIGN §13.2 (verbatim
- * expressions).  Rust, Go, and Java columns are scaffolded — structure complete,
- * expressions use `__SCAFFOLD_*__` placeholders pending `lt-host-*` states.
+ * TypeScript, Python, and Java columns are fully filled (TypeScript/Python
+ * per DESIGN §13.2 verbatim expressions; Java per FEAT-APIGEN-001 slice 1/3 —
+ * real Jackson annotation/expression glue, no `__SCAFFOLD_*__` left — see
+ * `JAVA_COLUMN` above). Rust and Go columns remain scaffolded — structure
+ * complete, expressions use `__SCAFFOLD_*__` placeholders pending `lt-host-*`
+ * states.
  *
  * Keyed by {@link HostLanguage}, then by the canonical {@link CanonicalLogicalTypeId}.
  */
