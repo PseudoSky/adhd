@@ -24,6 +24,7 @@ export type {
   // capability interfaces
   TargetCapability,
   LayerCapability,
+  ExtractLayerCapability,
   MountCapability,
   MountedOperation,
   // hostBridge (batch-rollout, BATCH_0.0.1.md §2/§F1)
@@ -53,6 +54,7 @@ export type { Logger } from 'pino';
 export {
   createExtractionSession,
   clearPersistentProjectCache,
+  collectLocalImportPaths,
 } from './lib/extraction-session';
 export type {
   ExtractionSession,
@@ -65,6 +67,16 @@ export {
 export { isPrimitiveOnlyInputSchema } from './lib/get-safety';
 export { extract, tokenize } from './lib/extract';
 export type { ExtractOptions } from './lib/extract';
+export {
+  composeOnion,
+  createExtractInvoker,
+  createExtractInvokerFromPlugins,
+} from './lib/extract-invoker';
+export type {
+  ExtractCall,
+  ExtractResult,
+  ExtractMiddleware,
+} from './lib/extract-invoker';
 export { extractClasses } from './lib/extract-classes';
 export type { ExtractClassesOptions } from './lib/extract-classes';
 export {

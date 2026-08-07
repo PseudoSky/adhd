@@ -166,6 +166,99 @@ describe('generate command', () => {
     expect(largeHelp).toContain('jsonschema');
     expect(largeHelp).toContain('py-flask');
   });
+
+  // BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001 regression guard.
+  //
+  // `generate` accepted `--use` but never resolved the specifiers to loaded
+  // `Plugin[]` objects — only `run` did — so `extractSource()`'s
+  // `createExtractInvokerFromPlugins` always saw `usePluginObjects = []` here,
+  // silently no-opping any `extractLayer`-capable plugin (e.g.
+  // `apigen-plugin-ir-cache`). This drives the REAL `generate` command action
+  // (`registerGenerateCommand` + `program.parseAsync`, not `buildDescriptor()`
+  // directly) with a real dynamically-`import()`ed `--use` plugin — the exact
+  // gap the FEAT-002 R2.6/R2-3 orchestrator.spec.ts tests don't close, since
+  // those call `buildDescriptor()` with a hand-supplied `usePluginObjects`
+  // and never touch the command layer.
+  it('a --use plugin declaring extractLayer actually intercepts extraction for the real `generate` command (BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001)', async () => {
+    const pluginFile = path.join(tmpDir, 'short-circuit-plugin.mjs');
+    fs.writeFileSync(
+      pluginFile,
+      `
+export default {
+  id: 'test-short-circuit',
+  capabilities: {
+    extractLayer: {
+      // Never calls next() — answers with a synthetic empty result instead
+      // of letting the real extractor run, proving this plugin was actually
+      // composed into extraction (not merely loaded and ignored).
+      layer: async () => [],
+    },
+  },
+};
+`.trim()
+    );
+
+    let capturedPackages:
+      | { id: string; schemas: Record<string, unknown> }[]
+      | undefined;
+    const capturingPlugin: OutputPlugin = {
+      id: 'capturing',
+      description: 'test plugin that captures packages/schemas',
+      generate(input) {
+        capturedPackages = input.packages.map((p) => ({
+          id: p.id,
+          schemas: p.schemas,
+        }));
+        return { files: [] };
+      },
+    };
+
+    // Negative control FIRST: without --use, apiFixture's 2 real operations
+    // (getUser, sendEmail) reach the plugin — proves the assertion below has
+    // teeth (would fail if buildDescriptor() always returned empty schemas).
+    const controlProgram = makeProgram();
+    registerGenerateCommand(controlProgram, { capturing: capturingPlugin });
+    await controlProgram.parseAsync([
+      'node',
+      'apigen-cli',
+      'generate',
+      '--source',
+      apiFixture,
+      '--type',
+      'capturing',
+      '--out-dir',
+      tmpDir,
+    ]);
+    expect(capturedPackages).toBeDefined();
+    expect(Object.keys(capturedPackages?.[0]?.schemas ?? {}).length).toBe(2);
+
+    // Real assertion: with --use pointing at the short-circuiting plugin, the
+    // generate command must resolve it to a loaded Plugin object and thread
+    // it as `usePluginObjects` all the way to extraction — the short-circuit
+    // must win, so the real extractor's 2 operations never reach the plugin.
+    capturedPackages = undefined;
+    const program = makeProgram();
+    registerGenerateCommand(program, { capturing: capturingPlugin });
+    await program.parseAsync([
+      'node',
+      'apigen-cli',
+      'generate',
+      '--source',
+      apiFixture,
+      '--type',
+      'capturing',
+      '--out-dir',
+      tmpDir,
+      '--use',
+      pluginFile,
+    ]);
+
+    expect(capturedPackages).toBeDefined();
+    expect(
+      Object.keys(capturedPackages?.[0]?.schemas ?? {}).length,
+      'the extractLayer short-circuit plugin must have intercepted extraction (0 operations), proving --use was resolved and threaded to buildDescriptor as usePluginObjects'
+    ).toBe(0);
+  });
 });
 
 describe('generate-registry command', () => {
@@ -214,6 +307,99 @@ describe('generate-registry command', () => {
     expect(capturedPackageIds).toContain('pkg-a');
     expect(capturedPackageIds).toContain('pkg-b');
     expect(capturedPackageIds?.length).toBe(2);
+  });
+
+  // BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001 regression guard.
+  //
+  // `generate-registry` never even exposed a `--use` flag, so no
+  // `extractLayer`-capable plugin (e.g. `apigen-plugin-ir-cache`) could ever
+  // be composed for registry-driven extraction. This drives the REAL
+  // `generate-registry` command action end to end with a real
+  // dynamically-`import()`ed `--use` plugin.
+  it('a --use plugin declaring extractLayer actually intercepts extraction for the real `generate-registry` command (BUG-APIGEN-CLI-GENERATE-USE-UNRESOLVED-001)', async () => {
+    const pluginFile = path.join(tmpDir, 'short-circuit-plugin.mjs');
+    fs.writeFileSync(
+      pluginFile,
+      `
+export default {
+  id: 'test-short-circuit',
+  capabilities: {
+    extractLayer: {
+      layer: async () => [],
+    },
+  },
+};
+`.trim()
+    );
+
+    let capturedPackages:
+      | { id: string; schemas: Record<string, unknown> }[]
+      | undefined;
+    const capturingPlugin: OutputPlugin = {
+      id: 'capturing',
+      description: 'test plugin that captures packages/schemas',
+      generate(input) {
+        capturedPackages = input.packages.map((p) => ({
+          id: p.id,
+          schemas: p.schemas,
+        }));
+        return { files: [] };
+      },
+    };
+
+    // Negative control FIRST: without --use, pkg-a and pkg-b's real
+    // operations reach the plugin.
+    const controlProgram = makeProgram();
+    registerGenerateRegistryCommand(controlProgram, {
+      capturing: capturingPlugin,
+    });
+    await controlProgram.parseAsync([
+      'node',
+      'apigen-cli',
+      'generate-registry',
+      '--packages-dir',
+      registryDir,
+      '--type',
+      'capturing',
+      '--out-dir',
+      tmpDir,
+      '--tag',
+      'api',
+    ]);
+    const totalSchemasWithoutUse = (capturedPackages ?? []).reduce(
+      (n, p) => n + Object.keys(p.schemas).length,
+      0
+    );
+    expect(totalSchemasWithoutUse).toBe(2);
+
+    // Real assertion: with --use pointing at the short-circuiting plugin,
+    // the real extractor's operations must never reach the plugin.
+    capturedPackages = undefined;
+    const program = makeProgram();
+    registerGenerateRegistryCommand(program, { capturing: capturingPlugin });
+    await program.parseAsync([
+      'node',
+      'apigen-cli',
+      'generate-registry',
+      '--packages-dir',
+      registryDir,
+      '--type',
+      'capturing',
+      '--out-dir',
+      tmpDir,
+      '--tag',
+      'api',
+      '--use',
+      pluginFile,
+    ]);
+    const totalSchemasWithUse = (capturedPackages ?? []).reduce(
+      (n, p) => n + Object.keys(p.schemas).length,
+      0
+    );
+    expect(
+      totalSchemasWithUse,
+      'the extractLayer short-circuit plugin must have intercepted extraction (0 total operations), proving generate-registry resolves --use and threads it as usePluginObjects'
+    ).toBe(0);
   });
 
   it('excludes packages matching --exclude-tag', async () => {

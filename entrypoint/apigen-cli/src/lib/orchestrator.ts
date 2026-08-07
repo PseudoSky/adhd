@@ -33,6 +33,7 @@ import {
   composeSchemas,
   createExtractionSession,
   pluginsToEnvelopeMiddlewares,
+  createExtractInvokerFromPlugins,
 } from '@adhd/apigen-core-client';
 import type {
   ExtractionSession,
@@ -131,6 +132,18 @@ export interface OrchestratorOptions {
    * omitted (or `[]`) means no `--use` plugin contributes an envelope field.
    */
   usePluginObjects?: Plugin[];
+  /**
+   * This invocation's flat `--opt key=value` bag, already parsed
+   * (`parseOptPairs`) by the command layer — the SAME bag already passed to
+   * `orchestrateGenerate`'s `pluginOpts` parameter for the `--type` target
+   * plugin. Threaded to {@link extractSource}'s
+   * `createExtractInvokerFromPlugins` call so a `--use <id>` plugin's
+   * `extractLayer.createLayer` capability can read `--opt` values (e.g.
+   * `--use ir-cache --opt cache=<path>` — plugin.ts's `ExtractLayerCapability`
+   * doc). Optional/omitted (or `{}`) — no `--use` plugin needing opts-aware
+   * behaviour — is a no-op, unchanged from before this field existed.
+   */
+  extractLayerOptions?: Record<string, unknown>;
   /** Projection-override config (Tenet 1). */
   overrides?: OverrideConfig;
   /** Shared logger. */
@@ -276,13 +289,31 @@ interface SourceExtraction {
  * namespace `extract()` stamped onto every `Operation.namespace`, with no
  * risk of the two computations drifting.
  *
- * @param entry  - The source entry describing the file and extraction options.
- * @param logger - Optional logger.
+ * @param entry            - The source entry describing the file and extraction options.
+ * @param logger           - Optional logger.
+ * @param session          - Optional shared extraction session (schema/program cache).
+ * @param usePluginObjects - The loaded `--use` plugin objects (design doc
+ *                           Revision 2, R2.6 item 3 / implementation spec
+ *                           R2-3). Any plugin declaring the `extractLayer`
+ *                           capability wraps the real `extract()` call below
+ *                           via `createExtractInvokerFromPlugins` — e.g.
+ *                           `apigen-plugin-ir-cache --use ir-cache
+ *                           --opt cache=<path>` answering a HIT without
+ *                           re-running the real extractor. Omitted/empty (or
+ *                           no plugin declaring `extractLayer`) degrades to a
+ *                           pure pass-through — byte-identical to calling
+ *                           `extract()` directly (a MISS is behaviourally
+ *                           unchanged from before this parameter existed).
+ * @param extractLayerOptions - This invocation's flat `--opt` bag, passed to
+ *                           `createExtractInvokerFromPlugins` so a plugin's
+ *                           `createLayer(opts)` sees it. Defaults to `{}`.
  */
 async function extractSource(
   entry: SourceEntry,
   logger?: Logger,
-  session?: ExtractionSession
+  session?: ExtractionSession,
+  usePluginObjects: Plugin[] = [],
+  extractLayerOptions: Record<string, unknown> = {}
 ): Promise<SourceExtraction> {
   const lang = detectLang(entry.file);
 
@@ -293,11 +324,27 @@ async function extractSource(
       resolveNamespace(entry.file, { tsconfig: entry.tsconfig });
 
     logger?.info(`extracting ${entry.file} (host: ts, ns: ${namespace})`);
-    const ops = await extract({
-      sourceFile: entry.file,
+    const invokeExtract = createExtractInvokerFromPlugins(
+      usePluginObjects,
+      (call) =>
+        extract({
+          sourceFile: call.source,
+          namespace: call.namespace,
+          tsconfig:
+            typeof call.extractorOptions?.['tsconfig'] === 'string'
+              ? (call.extractorOptions['tsconfig'] as string)
+              : undefined,
+          session: call.extractorOptions?.['session'] as
+            | ExtractionSession
+            | undefined,
+        }),
+      extractLayerOptions
+    );
+    const ops = await invokeExtract({
+      source: entry.file,
+      host: 'ts',
       namespace,
-      tsconfig,
-      session,
+      extractorOptions: { tsconfig, session },
     });
     logger?.info(
       `extracted ${ops.length} operations from ${path.basename(entry.file)}`
@@ -388,7 +435,13 @@ export function opMatchesExportMode(op: Operation, mode: ExportMode): boolean {
 export async function buildDescriptor(
   opts: OrchestratorOptions
 ): Promise<OrchestratorDescriptor> {
-  const { sources, overrides = {}, logger, usePluginObjects = [] } = opts;
+  const {
+    sources,
+    overrides = {},
+    logger,
+    usePluginObjects = [],
+    extractLayerOptions = {},
+  } = opts;
   // DEBT-APIGEN-ENVELOPE-CAPABILITY-UNWIRED-001: reduce the loaded `--use`
   // plugins' envelope-contributing capabilities ONCE, up front — every
   // namespace's `composeSchemas()` call below merges the SAME set (a plugin
@@ -409,7 +462,9 @@ export async function buildDescriptor(
   try {
     // --- Step 1+2: detect + extract per source -------------------------------
     const perSource: SourceExtraction[] = await Promise.all(
-      sources.map((entry) => extractSource(entry, logger, session))
+      sources.map((entry) =>
+        extractSource(entry, logger, session, usePluginObjects, extractLayerOptions)
+      )
     );
 
     // --- Step 3: merge -------------------------------------------------------
@@ -575,7 +630,15 @@ export async function orchestrateGenerate(
   outputDir: string,
   pluginOpts: Record<string, unknown> = {}
 ): Promise<GenerateResult> {
-  const descriptor = await buildDescriptor(opts);
+  // `pluginOpts` IS the flat `--opt` bag the command layer already parsed —
+  // reuse it as `extractLayerOptions` unless the caller explicitly set a
+  // different one, so `--use ir-cache --opt cache=<path>` reaches the
+  // extract-stage plugin without every command file having to thread a
+  // second, redundant field.
+  const descriptor = await buildDescriptor({
+    ...opts,
+    extractLayerOptions: opts.extractLayerOptions ?? pluginOpts,
+  });
 
   const packages: PluginInput['packages'] = Array.from(
     descriptor.packageSchemas.values()
@@ -638,7 +701,13 @@ export async function orchestrateRun(
     throw new Error(`Plugin "${plugin.id}" does not support run mode`);
   }
 
-  const descriptor = await buildDescriptor(opts);
+  // Same reasoning as `orchestrateGenerate`: `pluginOpts` is the flat
+  // `--opt` bag already parsed by the command layer — reuse it as
+  // `extractLayerOptions` unless the caller explicitly set a different one.
+  const descriptor = await buildDescriptor({
+    ...opts,
+    extractLayerOptions: opts.extractLayerOptions ?? pluginOpts,
+  });
 
   // Map each source back to its resolved namespace — NOT its (possibly
   // overridden, see `SourceEntry.importPath`) import specifier — since

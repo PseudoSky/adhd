@@ -27,11 +27,15 @@ import { collectFormats } from '../lib/commands/generate';
 import { checkCollisions, CollisionDetectedError } from '@adhd/apigen-engine-naming';
 import { project as projectOp } from '@adhd/apigen-engine-naming';
 import { httpVerb as httpVerbShared } from '@adhd/apigen-engine-naming';
+import { extract } from '@adhd/apigen-core-client';
 import type {
   Operation,
   Segment,
   OutputPlugin,
   PluginInput,
+  Plugin,
+  ExtractCall,
+  ExtractResult,
 } from '@adhd/apigen-core-client';
 
 // ---------------------------------------------------------------------------
@@ -751,6 +755,150 @@ describe('orchestrator: BUG-APIGEN-035 duplicate-namespace guard', () => {
     });
     expect(descriptor.packageSchemas.has('dist-a')).toBe(true);
     expect(descriptor.packageSchemas.has('dist-b')).toBe(true);
+  }, 30_000);
+});
+
+// ---------------------------------------------------------------------------
+// FEAT-002 Revision 2 (R2.6 item 3 / implementation spec R2-3): `extractSource()`
+// wraps the real `extract()` call with `createExtractInvokerFromPlugins`, so
+// any `--use`-loaded plugin declaring the `extractLayer` capability composes
+// around every apigen-cli command's extraction — not just backlog's
+// hand-wired one. Proved here two ways: (1) a MISS — no `extractLayer`-capable
+// plugin passed — must be byte-identical to `buildDescriptor` with no
+// `usePluginObjects` at all (regression guard for A.3 above); (2) a fixture
+// plugin's `extractLayer.layer` middleware must actually be INVOKED, around
+// the REAL extractor, when driven end-to-end through `buildDescriptor()` —
+// not just unit-tested against `extractSource` in isolation (AGENTS.md §7).
+// ---------------------------------------------------------------------------
+describe('orchestrator: FEAT-002 R2.6/R2-3 — extractLayer capability composition', () => {
+  /** Builds a fixture `Plugin` whose `extractLayer.layer` records every call
+   *  it sees (call + a monotonic sequence number) and always calls `next()`
+   *  — a transparent pass-through spy, never altering the real extraction
+   *  result, so this test can assert BOTH "was it invoked" and "did the real
+   *  operations still come through unmodified". */
+  function makeRecordingExtractLayerPlugin(
+    id: string,
+    calls: Array<{ pluginId: string; call: ExtractCall }>
+  ): Plugin {
+    return {
+      id,
+      description: 'test-only recording extractLayer plugin',
+      language: 'ts',
+      capabilities: {
+        extractLayer: {
+          layer: async (
+            call: ExtractCall,
+            next: () => Promise<ExtractResult>
+          ): Promise<ExtractResult> => {
+            calls.push({ pluginId: id, call });
+            return next();
+          },
+        },
+      },
+    };
+  }
+
+  it('MISS (no usePluginObjects passed): buildDescriptor behaves byte-identically to the plugin-free call (A.3)', async () => {
+    // Same fixtures, same call shape as A.3's "buildDescriptor extracts
+    // operations from two sources and merges into one descriptor" test — the
+    // only difference is this test exists to pin the MISS path explicitly
+    // under the FEAT-002 R2.6 changes, not to duplicate A.3's assertions.
+    const withNoPluginObjects = await buildDescriptor({
+      sources: [
+        { file: alphaFixture, namespace: 'alpha' },
+        { file: betaFixture, namespace: 'beta' },
+      ],
+    });
+    const withExplicitEmptyArray = await buildDescriptor({
+      sources: [
+        { file: alphaFixture, namespace: 'alpha' },
+        { file: betaFixture, namespace: 'beta' },
+      ],
+      usePluginObjects: [],
+    });
+
+    const idsA = withNoPluginObjects.operations.map((o) => o.id).sort();
+    const idsB = withExplicitEmptyArray.operations.map((o) => o.id).sort();
+    expect(idsB).toEqual(idsA);
+    expect(idsA.length).toBeGreaterThan(0);
+
+    // NICE_TO_HAVE fix: the two comparisons above both route through the SAME
+    // new `createExtractInvokerFromPlugins` code path (implicit-empty vs
+    // explicit-empty `usePluginObjects`), so neither can detect a regression
+    // that affects both paths identically (e.g. a bug in the invoker-wrapping
+    // logic itself). Add a genuine, independent baseline: call the real
+    // `extract()` DIRECTLY — the exact call shape `extractSource()` used
+    // BEFORE this diff introduced `createExtractInvokerFromPlugins` at all —
+    // against the same two fixtures, and assert it agrees with `idsA`. This
+    // is a true pre-diff-vs-post-diff parity check, not a self-comparison.
+    const directAlpha = await extract({ sourceFile: alphaFixture, namespace: 'alpha' });
+    const directBeta = await extract({ sourceFile: betaFixture, namespace: 'beta' });
+    const idsDirect = [...directAlpha, ...directBeta].map((o) => o.id).sort();
+    expect(idsDirect).toEqual(idsA);
+  }, 30_000);
+
+  it('a plugin declaring extractLayer is actually invoked around the REAL extraction, driven end-to-end through buildDescriptor', async () => {
+    const calls: Array<{ pluginId: string; call: ExtractCall }> = [];
+    const recordingPlugin = makeRecordingExtractLayerPlugin('test-recorder', calls);
+
+    const descriptor = await buildDescriptor({
+      sources: [
+        { file: alphaFixture, namespace: 'alpha' },
+        { file: betaFixture, namespace: 'beta' },
+      ],
+      usePluginObjects: [recordingPlugin],
+    });
+
+    // Invoked once per source (one ExtractCall per SourceEntry).
+    expect(calls).toHaveLength(2);
+    expect(calls.every((c) => c.pluginId === 'test-recorder')).toBe(true);
+    expect(calls.map((c) => c.call.source).sort()).toEqual(
+      [alphaFixture, betaFixture].sort()
+    );
+    expect(calls.map((c) => c.call.host)).toEqual(['ts', 'ts']);
+    expect(calls.map((c) => c.call.namespace).sort()).toEqual(
+      ['alpha', 'beta'].sort()
+    );
+
+    // Real extraction still happened and reached the descriptor unmodified —
+    // the plugin is a transparent pass-through, not a stub replacing the
+    // real extractor.
+    const ids = descriptor.operations.map((o) => o.id);
+    expect(
+      ids.some((id) => id.includes('alpha') && id.includes('get-user'))
+    ).toBe(true);
+    expect(
+      ids.some((id) => id.includes('beta') && id.includes('send-email'))
+    ).toBe(true);
+  }, 30_000);
+
+  it('a short-circuiting extractLayer plugin (never calls next) prevents the real extractor from running for that source', async () => {
+    const shortCircuitPlugin: Plugin = {
+      id: 'test-short-circuit',
+      description: 'test-only plugin that answers from a fake cache without running the real extractor',
+      language: 'ts',
+      capabilities: {
+        extractLayer: {
+          layer: async (): Promise<ExtractResult> => {
+            // Never calls `next()` — answers with a synthetic result, proving
+            // the composed invoker's short-circuit rule (design doc R2.6 /
+            // extract-invoker.ts's composeOnion) actually reaches the real
+            // buildDescriptor() path, not just the unit-level invoker.
+            return [];
+          },
+        },
+      },
+    };
+
+    const descriptor = await buildDescriptor({
+      sources: [{ file: alphaFixture, namespace: 'alpha' }],
+      usePluginObjects: [shortCircuitPlugin],
+    });
+
+    // The short-circuiting plugin answered with zero operations for the
+    // alpha source instead of the real extractor's operations — proving the
+    // plugin's layer, not `extract()`, produced this descriptor's content.
+    expect(descriptor.operations).toHaveLength(0);
   }, 30_000);
 });
 
