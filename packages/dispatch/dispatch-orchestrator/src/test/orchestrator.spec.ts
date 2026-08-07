@@ -173,7 +173,8 @@ function makeFakeClock(): () => string {
 
 async function setupScenario(
   name: string,
-  dag: DagJson
+  dag: DagJson,
+  runnerOverride?: MockAgentRunner
 ): Promise<{ dagPath: string; deps: OrchestratorDeps; runner: MockAgentRunner }> {
   const dir = path.join(TMP_ROOT, name);
   fs.mkdirSync(dir, { recursive: true });
@@ -182,7 +183,8 @@ async function setupScenario(
   const client = createDagClient(createJsonFileSerializer(dagPath));
   await client.saveDag(dag);
 
-  const runner = new MockAgentRunner({ debugDir: path.join(dir, 'mock-debug') });
+  const runner =
+    runnerOverride ?? new MockAgentRunner({ debugDir: path.join(dir, 'mock-debug') });
   let idN = 0;
   const deps: OrchestratorDeps = {
     client,
@@ -912,4 +914,79 @@ describe('orchestrateCycle — bounded poll deadline', () => {
     const opResult = reloaded.dispatch_log[0]?.results.find((r) => r.op_id === 'a.1');
     expect(opResult?.status).toBe('failed');
   });
+});
+
+// ---------------------------------------------------------------------------
+// (DEBT-DISPATCH-015) uncaught dispatch failure persistence
+// ---------------------------------------------------------------------------
+
+describe('orchestrateCycle — uncaught dispatch failure persistence (DEBT-DISPATCH-015)', () => {
+  /**
+   * `fire()` throws unconditionally — simulates an uncaught error from the
+   * real dispatch path (e.g. a transport failure) so `orchestrateCycle`'s
+   * `catch` block builds `failEntry` for the sole/last unit in the cycle.
+   */
+  class ThrowingAgentRunner extends MockAgentRunner {
+    async fire(): Promise<{ taskId: string }> {
+      throw new Error('injected fire() failure -- DEBT-DISPATCH-015 regression proof');
+    }
+  }
+
+  it(
+    'persists the failure entry to disk (continueOnError=false, cycle rejects) so a ' +
+      'FRESH client.load() still sees it -- not just the in-memory dag orchestrateCycle mutated',
+    async () => {
+      const throwingRunner = new ThrowingAgentRunner({
+        debugDir: path.join(TMP_ROOT, 'throw-persist-reject', 'mock-debug'),
+      });
+      const { dagPath, deps } = await setupScenario(
+        'throw-persist-reject',
+        makeDag({ milestones: { a: makeMilestone() } }),
+        throwingRunner
+      );
+
+      await expect(
+        orchestrateCycle({ ...deps, continueOnError: false })
+      ).rejects.toThrow('injected fire() failure');
+
+      // The critical assertion: reload from a BRAND NEW client/serializer —
+      // never the in-memory `dag` object orchestrateCycle mutated — proving
+      // the failEntry actually reached disk, not just this function's local
+      // reference (the exact gap DEBT-DISPATCH-015 fixes).
+      const reloaded = await reload(dagPath);
+      expect(reloaded.dispatch_log).toHaveLength(1);
+      const entry = reloaded.dispatch_log[0] as DispatchLogEntry;
+      expect(entry.notes.some((n) => n.text.includes('injected fire() failure'))).toBe(
+        true
+      );
+      expect(entry.results.some((r) => r.status === 'failed')).toBe(true);
+    }
+  );
+
+  it(
+    'persists the failure entry to disk (continueOnError default true, cycle resolves) so a ' +
+      'FRESH client.load() still sees it -- not just the in-memory dag orchestrateCycle mutated',
+    async () => {
+      const throwingRunner = new ThrowingAgentRunner({
+        debugDir: path.join(TMP_ROOT, 'throw-persist-continue', 'mock-debug'),
+      });
+      const { dagPath, deps } = await setupScenario(
+        'throw-persist-continue',
+        makeDag({ milestones: { a: makeMilestone() } }),
+        throwingRunner
+      );
+
+      const result = await orchestrateCycle(deps);
+
+      expect(result.dispatched[0]?.dispatchLogEntryId).toBeTruthy();
+
+      const reloaded = await reload(dagPath);
+      expect(reloaded.dispatch_log).toHaveLength(1);
+      const entry = reloaded.dispatch_log[0] as DispatchLogEntry;
+      expect(entry.notes.some((n) => n.text.includes('injected fire() failure'))).toBe(
+        true
+      );
+      expect(entry.results.some((r) => r.status === 'failed')).toBe(true);
+    }
+  );
 });
