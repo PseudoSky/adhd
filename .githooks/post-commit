@@ -1,0 +1,64 @@
+#!/usr/bin/env sh
+#
+# post-commit hook — loud, non-blocking mass-deletion warning
+# (BUG-ADHD-EE8D24C8-REVERT-001).
+#
+# WHY THIS EXISTS: `pre-commit`'s Gate 0 (`.githooks/detect-mass-deletion.js
+# --staged`) blocks a mass-deletion-shaped commit — but `git commit
+# --no-verify` skips pre-commit (and commit-msg) entirely; that is git's own,
+# by-design bypass, and no local hook can prevent it. The real incident this
+# guards against (`ee8d24c8`) used exactly `--no-verify`. `post-commit`,
+# unlike `pre-commit`, ALWAYS runs — even after `--no-verify` — so this is
+# the one local seam that can still surface the problem, immediately, rather
+# than the ~9 minutes of silence the real incident had before anyone noticed.
+#
+# It CANNOT block (the commit already exists by the time this runs) — it
+# prints a maximally loud stderr warning naming the exact commit and the
+# recovery commands. If you additionally want a hard, un-bypassable gate,
+# that requires a server-side check (pre-receive hook / CI branch protection
+# using the SAME `detect-mass-deletion.js --range` classifier) — tracked as
+# a follow-up backlog item; a purely local hook can never fully close the
+# `--no-verify` gap.
+#
+# Activated by the same `core.hooksPath=.githooks` as every other hook here.
+# This hook is intentionally FAIL-OPEN (never blocks, never exits non-zero)
+# — a post-commit hook failing loudly enough to break a user's shell is worse
+# than a missed warning; the loud stderr message is the entire mechanism.
+
+set -u
+
+hook_dir=$(dirname "$0")
+repo_root=$(cd "$hook_dir/.." && pwd)
+head_sha=$(git rev-parse HEAD 2>/dev/null) || exit 0
+parent_sha=$(git rev-parse "HEAD^" 2>/dev/null) || exit 0
+
+# Merge commits have a fundamentally different, expected-to-be-large diff
+# shape (bringing in another branch's history) — this guard is about a
+# SINGLE commit deleting content that already existed on ITS OWN branch, not
+# about the shape of a merge. Skip merges.
+if [ -f "$repo_root/.git/MERGE_HEAD" ]; then
+  exit 0
+fi
+parent_count=$(git cat-file -p "$head_sha" | grep -c '^parent ')
+if [ "${parent_count:-0}" -gt 1 ]; then
+  exit 0
+fi
+
+node "$hook_dir/detect-mass-deletion.js" --range "$parent_sha" "$head_sha" >/tmp/adhd-post-commit-mass-delete.$$ 2>&1
+status=$?
+if [ "$status" -eq 1 ]; then
+  echo "" 1>&2
+  echo "🚨 post-commit: commit $head_sha has a MASS-DELETION shape (see detail below)." 1>&2
+  echo "   This is the exact signature of BUG-ADHD-EE8D24C8-REVERT-001 — a stale" 1>&2
+  echo "   working tree committed back over already-fixed files." 1>&2
+  cat "/tmp/adhd-post-commit-mass-delete.$$" 1>&2
+  echo "" 1>&2
+  echo "   Recovery: inspect the deleted content immediately —" 1>&2
+  echo "     git show $head_sha --stat" 1>&2
+  echo "     git diff $parent_sha $head_sha -- <file>" 1>&2
+  echo "   If it destroyed real work, revert JUST this commit (never a hard reset):" 1>&2
+  echo "     git revert $head_sha" 1>&2
+  echo "" 1>&2
+fi
+rm -f "/tmp/adhd-post-commit-mass-delete.$$"
+exit 0
