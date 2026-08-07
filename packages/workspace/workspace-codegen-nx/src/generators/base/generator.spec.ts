@@ -8,7 +8,7 @@
  * their `vite.config.ts` bundled real npm dependencies (ts-morph,
  * typescript) instead of externalizing them — see BACKLOG.md
  * INVESTIGATION-BUILD-TOOL-001 / BUG-BUILD-VITE-EXTERNAL-BUNDLING-001. The
- * fix (`tools/vite-external-deps.mjs`'s `externalizeRealDeps`) only prevents
+ * fix (`tools/vite-plugins/externalize.mjs`'s `externalizeRealDeps`) only prevents
  * a RECURRENCE if newly-scaffolded packages get it automatically. This test
  * drives the actual `base` generator (the same codepath every tier
  * delegates through — see `shared/generator.ts`) against a real in-memory
@@ -41,7 +41,7 @@ describe('base generator — vite external-deps enforcement', () => {
       'utf-8'
     );
     expect(viteConfig).toContain(
-      "import { externalizeRealDeps } from '../../../tools/vite-external-deps.mjs';"
+      "import { externalizeRealDeps } from '../../../tools/vite-plugins/externalize.mjs';"
     );
     expect(viteConfig).toContain('external: externalizeRealDeps(__dirname)');
     // The bug this closes: a bare `external: []` bundles every real npm dep.
