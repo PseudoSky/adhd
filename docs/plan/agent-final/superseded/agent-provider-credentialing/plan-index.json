@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "plans_root": "/Users/nix/dev/node/adhd/docs/plan/agent-provider-credentialing",
+  "plans": [
+    {
+      "plan": "--shared",
+      "dir": "../../../--shared",
+      "status": "authoring",
+      "mutate_set": [],
+      "references": [],
+      "assumed_baseline": [],
+      "depends_on": [],
+      "updated_at": "2026-06-27T00:34:08.558Z"
+    }
+  ],
+  "updated_at": "2026-06-27T00:34:08.559Z"
+}

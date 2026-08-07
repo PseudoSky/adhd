@@ -1,0 +1,173 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "lt-package.1",
+      "phase": "contracts",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx build apigen-logical",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-contracts.1",
+      "phase": "contracts",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx build apigen-logical",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-wire-spec.1",
+      "phase": "contracts",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-conformance",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-registry.1",
+      "phase": "registry",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-logical",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-generator-emit.1",
+      "phase": "registry",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-logical",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-runmode-closures.1",
+      "phase": "registry",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-logical",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-scalars.1",
+      "phase": "scalars",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-logical",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-extract-scalars.1",
+      "phase": "extraction",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-core",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-extract-nominal.1",
+      "phase": "extraction",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-core",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-extract-union.1",
+      "phase": "extraction",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-core",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-nominal-codec.1",
+      "phase": "codecs",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-runtime",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-union-codec.1",
+      "phase": "codecs",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-runtime",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-host-ts.1",
+      "phase": "hosts",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-runtime",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-host-python.1",
+      "phase": "hosts",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 packages/apigen/python/run_tests.py",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-dispatch-integration.1",
+      "phase": "integration",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-runtime",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-dep-manifest.1",
+      "phase": "integration",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-cli",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-fail-fast.1",
+      "phase": "integration",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-cli",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-validate-formats.1",
+      "phase": "integration",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-runtime",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-codegen-hints.1",
+      "phase": "integration",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-logical",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-host-generator.1",
+      "phase": "gates",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test apigen-nx",
+      "expect": "exit0"
+    },
+    {
+      "id": "lt-conformance-gate.1",
+      "phase": "gates",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx run apigen-conformance:conformance",
+      "expect": "exit0"
+    }
+  ]
+}

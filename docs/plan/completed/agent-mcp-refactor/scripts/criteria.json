@@ -1,0 +1,267 @@
+{
+  "schema_version": 1,
+  "criteria": [
+    {
+      "id": "refactor-design.1",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "exists",
+      "path": "docs/plan/agent-mcp-refactor/decisions.md"
+    },
+    {
+      "id": "refactor-design.2",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "AgentStore|thin cache|source.of.truth",
+      "paths": [
+        "docs/plan/agent-mcp-refactor/decisions.md"
+      ]
+    },
+    {
+      "id": "refactor-design.3",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "composed_prompt_id|cache lookup|context hash",
+      "paths": [
+        "docs/plan/agent-mcp-refactor/decisions.md"
+      ]
+    },
+    {
+      "id": "refactor-design.4",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "compat|shim|populated from compiler",
+      "paths": [
+        "docs/plan/agent-mcp-refactor/decisions.md"
+      ]
+    },
+    {
+      "id": "refactor-design.5",
+      "phase": "architecture",
+      "tier": null,
+      "kind": "present",
+      "pattern": "allowedBuiltinTools|systemPromptIsAgentSpec|AGENT_TOOL",
+      "paths": [
+        "docs/plan/agent-mcp-refactor/decisions.md"
+      ]
+    },
+    {
+      "id": "runtime-sink-schema.1",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "composed_prompts|composedPromptsTable",
+      "paths": [
+        "packages/ai/agent-mcp/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "runtime-sink-schema.2",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "experiment_assignments|experimentAssignmentsTable",
+      "paths": [
+        "packages/ai/agent-mcp/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "runtime-sink-schema.3",
+      "phase": "schema",
+      "tier": null,
+      "kind": "present",
+      "pattern": "composed_prompt_id|composedPromptId",
+      "paths": [
+        "packages/ai/agent-mcp/src/db/schema.ts"
+      ]
+    },
+    {
+      "id": "runtime-sink-schema.4",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "ls packages/ai/agent-mcp/drizzle | grep -E '\\.sql$'",
+      "expect": "exit0"
+    },
+    {
+      "id": "runtime-sink-schema.5",
+      "phase": "schema",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/composed-prompt-schema.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "compiler-integration.1",
+      "phase": "integration",
+      "tier": null,
+      "kind": "present",
+      "pattern": "compileAgent|@adhd/agent-compiler",
+      "paths": [
+        "packages/ai/agent-mcp/src/engine/prompt-resolver.ts"
+      ]
+    },
+    {
+      "id": "compiler-integration.2",
+      "phase": "integration",
+      "tier": null,
+      "kind": "present",
+      "pattern": "resolveSystemPrompt|resolveComposedPrompt|composed_prompt_id|composedPromptId",
+      "paths": [
+        "packages/ai/agent-mcp/src/engine/prompt-resolver.ts"
+      ]
+    },
+    {
+      "id": "compiler-integration.3",
+      "phase": "integration",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/compiler-resolve.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "agent-store-retire.1",
+      "phase": "retire",
+      "tier": null,
+      "kind": "absent",
+      "pattern": "systemPrompt: z\\.string\\(\\)",
+      "paths": [
+        "packages/ai/agent-mcp/src/validation/agent.ts"
+      ]
+    },
+    {
+      "id": "agent-store-retire.2",
+      "phase": "retire",
+      "tier": null,
+      "kind": "present",
+      "pattern": "compat|computed|populated from compiler|composed",
+      "paths": [
+        "packages/ai/agent-mcp/src/validation/agent.ts"
+      ]
+    },
+    {
+      "id": "agent-store-retire.3",
+      "phase": "retire",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/agent-cache-store.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "policy-engine-bridge.1",
+      "phase": "integration",
+      "tier": null,
+      "kind": "present",
+      "pattern": "policy template|agent-policy|policyStore|fromPolicy|rules",
+      "paths": [
+        "packages/ai/agent-mcp/src/engine/policy.ts"
+      ]
+    },
+    {
+      "id": "policy-engine-bridge.2",
+      "phase": "integration",
+      "tier": null,
+      "kind": "present",
+      "pattern": "AGENT_TOOL|compiled tools|composed\\.tools|allowedBuiltinTools",
+      "paths": [
+        "packages/ai/agent-mcp/src/providers/claudecli.ts"
+      ]
+    },
+    {
+      "id": "policy-engine-bridge.3",
+      "phase": "integration",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/policy-tool-reconcile.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "session-e2e.1",
+      "phase": "e2e",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/session-compiler-e2e.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "session-e2e.2",
+      "phase": "e2e",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/cache-reuse.test.ts",
+      "expect": "exit0"
+    },
+    {
+      "id": "session-e2e.3",
+      "phase": "e2e",
+      "tier": null,
+      "kind": "negative-control",
+      "positive": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/session-compiler-e2e.test.ts",
+      "mutate": "sed -i '' 's/compileAgent/__noCompile/' packages/ai/agent-mcp/src/engine/prompt-resolver.ts",
+      "restore": "git checkout -- packages/ai/agent-mcp/src/engine/prompt-resolver.ts"
+    },
+    {
+      "id": "compiler-integration.4",
+      "phase": "integration",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-compiler",
+      "paths": [
+        "packages/ai/agent-mcp/package.json"
+      ]
+    },
+    {
+      "id": "compiler-integration.5",
+      "phase": "integration",
+      "tier": null,
+      "kind": "present",
+      "pattern": "@adhd/agent-compiler",
+      "paths": [
+        "tsconfig.base.json"
+      ]
+    },
+    {
+      "id": "session-e2e.4",
+      "phase": "e2e",
+      "tier": null,
+      "kind": "command",
+      "cmd": "npx --yes nx test agent-mcp",
+      "expect": "exit0"
+    },
+    {
+      "id": "audit-integration.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "true",
+      "expect": "exit0"
+    },
+    {
+      "id": "audit-final.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "true",
+      "expect": "exit0"
+    },
+    {
+      "id": "code-review.1",
+      "phase": "audit",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-mcp-refactor/scripts/review_gate.py",
+      "expect": "exit0"
+    },
+    {
+      "id": "code-review-integration.1",
+      "phase": "integration",
+      "tier": null,
+      "kind": "command",
+      "cmd": "python3 docs/plan/agent-mcp-refactor/scripts/review_gate_integration.py",
+      "expect": "exit0"
+    }
+  ]
+}

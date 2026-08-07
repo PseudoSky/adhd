@@ -1,0 +1,49 @@
+{
+  "name": "@adhd/source",
+  "$schema": "node_modules/nx/schemas/project-schema.json",
+  "targets": {
+    "local-registry": {
+      "executor": "@nx/js:verdaccio",
+      "options": {
+        "port": 4873,
+        "config": ".verdaccio/config.yml",
+        "storage": "tmp/local-registry/storage"
+      }
+    },
+    "check-publish-hygiene": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "agent-mcp:build",
+        "agent-base-types:build",
+        "agent-generator-plugin:build",
+        "agent-plugin-budget:build",
+        "agent-plugin-sanitize:build"
+      ],
+      "options": {
+        "command": "node scripts/check-publish-hygiene.mjs"
+      }
+    },
+    "check-release-ranges": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node tools/nx-plugins/build/executors/range-check/check-release-ranges.mjs"
+      },
+      "metadata": {
+        "description": "GATE 1 (pre-publish, offline): asserts every intra-@adhd/* dependency range in the release set resolves against {registry-published versions} ∪ {versions this release will publish}. Wired into `pnpm release`/`release:dry`; blocks publish on failure. See tools/nx-plugins/build/lib/range-resolvability.js."
+      }
+    },
+    "check-clean-room-smoke": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node tools/nx-plugins/build/executors/smoke-test/clean-room-smoke.mjs"
+      },
+      "metadata": {
+        "description": "GATE 2 (post-publish, end-to-end): npm-installs every publishable entrypoint from the real registry in an ephemeral dir + bin smoke, in parallel. See tools/nx-plugins/build/executors/smoke-test/clean-room-smoke.mjs."
+      }
+    },
+    "secret-scan": {
+      "executor": "@adhd/nx-secret-scan:scan",
+      "options": {}
+    }
+  }
+}

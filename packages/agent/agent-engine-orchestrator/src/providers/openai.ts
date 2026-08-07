@@ -1,0 +1,228 @@
+import OpenAI from "openai";
+import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
+import pRetry from "p-retry";
+
+import { generateId } from "../utils/ids.js";
+import { nowIso } from "../utils/timestamps.js";
+import { resolveToolCallName } from "../clients/tool-naming.js";
+import type { EngineConfig } from "../interfaces.js";
+
+import type { ProviderConfig, Message, ToolCall } from "../validation/index.js";
+import type { TokenUsage } from "@adhd/agent-base-types";
+
+import type {
+    LLMProvider,
+    ProviderChatRequest,
+    ProviderChatResponse,
+    ToolDefinition,
+} from "./types.js";
+
+/**
+ * OpenAI-compatible usage payloads report cached input two different ways:
+ *   - OpenAI:   `prompt_tokens_details.cached_tokens`
+ *   - DeepSeek: `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`
+ * Both are INCLUSIVE — `prompt_tokens` already contains the cached portion
+ * (DeepSeek documents `prompt_tokens = hit + miss` explicitly).
+ *
+ * Cache-hit vs cache-miss input differs 50x in price on deepseek-v4-flash
+ * ($0.0028/M vs $0.14/M), so dropping these fields hides the largest cost signal
+ * in the system. See BUG-ORCH-009.
+ */
+export function normaliseOpenAIUsage(
+    sdkUsage: { prompt_tokens: number; completion_tokens: number },
+    stopReason: string,
+    maxTokens?: number
+): TokenUsage {
+    // DeepSeek's cache fields are not in the OpenAI SDK's CompletionUsage type, but they
+    // are present on the wire (`prompt_tokens = hit + miss`, documented). Widen to read them.
+    const usage = sdkUsage as {
+        prompt_tokens: number;
+        completion_tokens: number;
+        prompt_tokens_details?: { cached_tokens?: number };
+        completion_tokens_details?: { reasoning_tokens?: number };
+        prompt_cache_hit_tokens?: number;
+        prompt_cache_miss_tokens?: number;
+    };
+
+    const cacheRead = usage.prompt_cache_hit_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? 0;
+    // Prefer the provider's own miss count; otherwise derive it (the headline is inclusive).
+    const uncached = usage.prompt_cache_miss_tokens ?? Math.max(0, usage.prompt_tokens - cacheRead);
+
+    return {
+        // Already the true total on this family — the headline includes cached tokens.
+        inputTokens: usage.prompt_tokens,
+        outputTokens: usage.completion_tokens,
+        uncachedInputTokens: uncached,
+        cacheReadTokens: cacheRead,
+        // No OpenAI-compatible endpoint we target bills a separate cache write today.
+        cacheCreationTokens: 0,
+        reasoningTokens: usage.completion_tokens_details?.reasoning_tokens ?? undefined,
+        stopReason,
+        maxTokens,
+    };
+}
+
+function toOpenAIMessages(messages: Message[]): ChatCompletionMessageParam[] {
+    return messages.map(message => {
+        switch (message.role) {
+            case "system":
+                return { role: "system", content: message.content || "" };
+            case "user":
+                return { role: "user", content: message.content || "" };
+            case "assistant": {
+                if (message.toolCalls && message.toolCalls.length > 0) {
+                    return {
+                        role: "assistant",
+                        content: message.content ?? null,
+                        tool_calls: message.toolCalls.map(tc => ({
+                            id: tc.id,
+                            type: "function" as const,
+                            function: {
+                                name: `${tc.server}__${tc.tool}`,
+                                arguments: JSON.stringify(tc.arguments),
+                            },
+                        })),
+                    };
+                }
+                return { role: "assistant", content: message.content || "" };
+            }
+            case "tool": {
+                const toolResult = message.toolResults?.[0];
+                if (!toolResult) {
+                    throw new Error("Tool message missing tool result");
+                }
+                return {
+                    role: "tool",
+                    tool_call_id: toolResult.toolCallId,
+                    content: JSON.stringify(toolResult.result),
+                };
+            }
+            default: {
+                const exhaustive: never = message.role;
+                throw new Error(`Unsupported message role: ${exhaustive}`);
+            }
+        }
+    });
+}
+
+function toOpenAITools(tools?: ToolDefinition[]): ChatCompletionTool[] | undefined {
+    if (!tools) return undefined;
+
+    return tools.map(tool => ({
+        type: "function" as const,
+        function: {
+            name: tool.name,
+            description: tool.description || "",
+            parameters: (tool.inputSchema || {
+                type: "object",
+                properties: {},
+            }) as Record<string, unknown>,
+        },
+    }));
+}
+
+export class OpenAIProvider implements LLMProvider {
+    protected readonly client: OpenAI;
+    private readonly providerConfig: Extract<ProviderConfig, { type: "openai" }>;
+    protected readonly resolvedModel: string;
+
+    constructor(
+        providerConfig: Extract<ProviderConfig, { type: "openai" }>,
+        config: EngineConfig
+    ) {
+        this.providerConfig = providerConfig;
+
+        const resolved = config.getProviderConfig({
+            provider:     "openai",
+            secret:       providerConfig.env?.secret,
+            url:          providerConfig.env?.base_url,
+            model:        providerConfig.env?.model,
+            inlineBaseURL: providerConfig.baseURL,
+            inlineModel:  providerConfig.model,
+        });
+
+        this.resolvedModel = resolved.model ?? providerConfig.model ?? "";
+
+        this.client = new OpenAI({
+            apiKey:  resolved.secret ?? "no-auth",
+            baseURL: resolved.baseURL,
+            timeout: providerConfig.timeoutMs ?? 60_000,
+        });
+    }
+
+    async chat(request: ProviderChatRequest): Promise<ProviderChatResponse> {
+        const retryConfig = this.providerConfig.retryConfig;
+
+        const run = async (): Promise<ProviderChatResponse> => {
+            const response = await this.client.chat.completions.create(
+                {
+                    model: this.resolvedModel,
+                    temperature: this.providerConfig.temperature,
+                    max_tokens: this.providerConfig.maxTokens,
+                    messages: toOpenAIMessages(request.messages),
+                    tools: toOpenAITools(request.tools),
+                },
+                { signal: request.signal }
+            );
+
+            const choice = response.choices[0];
+            const toolCalls: ToolCall[] = [];
+
+            if (choice?.message.tool_calls) {
+                for (const tc of choice.message.tool_calls) {
+                    if (tc.type !== "function") continue;
+
+                    const { server, tool } = resolveToolCallName(
+                        tc.function.name,
+                        (request.tools ?? []).map((t) => t.name)
+                    );
+
+                    toolCalls.push({
+                        id: tc.id,
+                        server,
+                        tool,
+                        arguments: JSON.parse(tc.function.arguments),
+                    });
+                }
+            }
+
+            const message: Message = {
+                id: generateId(),
+                sessionId: "",
+                role: "assistant",
+                content: choice?.message.content ?? undefined,
+                toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+                createdAt: nowIso(),
+            };
+
+            const sdkUsage = response.usage;
+            const STOP_REASON: Record<string, string> = {
+                stop: "stop", length: "length", tool_calls: "tool_calls",
+            };
+            const rawFinishReason = choice?.finish_reason ?? null;
+            const normalisedStopReason: string = STOP_REASON[rawFinishReason ?? ""] ?? "unknown";
+            return {
+                message,
+                stopReason: toolCalls.length > 0 ? "tool_calls" : "completed",
+                rawUsage: sdkUsage,
+                usage: sdkUsage ? normaliseOpenAIUsage(sdkUsage, normalisedStopReason, this.providerConfig.maxTokens) : undefined,
+            };
+        };
+
+        if (retryConfig) {
+            return pRetry(run, {
+                retries: retryConfig.retries,
+                minTimeout: retryConfig.minTimeout,
+                maxTimeout: retryConfig.maxTimeout,
+                factor: retryConfig.factor,
+                onFailedAttempt: error => {
+                    if (request.signal?.aborted) {
+                        throw error;
+                    }
+                },
+            });
+        }
+
+        return run();
+    }
+}

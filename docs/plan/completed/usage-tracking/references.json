@@ -1,0 +1,32 @@
+{
+  "provider-response": {
+    "anchor": "packages/ai/agent-mcp/src/providers/types.ts:31",
+    "rule": "ProviderChatResponse must remain { message, stopReason, usage? } — the usage field is optional so claudecli and unknown providers return undefined without breaking the interface",
+    "discovered_via": "manual",
+    "audit_check": "[audit-final.ref-provider-response]"
+  },
+  "hook-payload-optional": {
+    "anchor": "packages/ai/agent-mcp-types/src/hooks.ts:5",
+    "rule": "Fields added to PostModelResponsePayload must be optional (?) — plugins receiving the event must handle undefined values to remain compatible with claudecli and failed provider calls",
+    "discovered_via": "manual",
+    "audit_check": "[audit-final.ref-hook-payload-optional]"
+  },
+  "plugin-interface": {
+    "anchor": "packages/ai/agent-mcp-types/src/hooks.ts:37",
+    "rule": "A Plugin implementation must expose { name: string; install(hooks: IHookRegistry): void | Promise<void> }. Plugin.install must not throw — errors must be caught and logged internally.",
+    "discovered_via": "manual",
+    "audit_check": "[audit-final.ref-plugin-interface]"
+  },
+  "drizzle-migration": {
+    "anchor": "packages/ai/agent-mcp/src/db/schema.ts:1",
+    "rule": "New tables must be defined in schema.ts and the migration file generated via 'npm run db:generate' (drizzle-kit generate). Never write migration SQL by hand.",
+    "discovered_via": "manual",
+    "audit_check": "[audit-final.ref-drizzle-migration]"
+  },
+  "server-tool-pattern": {
+    "anchor": "packages/ai/agent-mcp/src/server.ts:128",
+    "rule": "Each MCP tool requires four registrations in server.ts: (1) ListTools entry, (2) CallTool case, (3) inProcessDescriptors entry, (4) inProcessHandler case. Input validated with toMcpInputSchema(schema); handler wrapped with toMcpContent/toMcpErrorContent.",
+    "discovered_via": "manual",
+    "audit_check": "[audit-final.ref-server-tool-pattern]"
+  }
+}

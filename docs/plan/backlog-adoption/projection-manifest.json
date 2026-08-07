@@ -1,0 +1,29 @@
+{
+  "$schema": "MIGRATION.md §2.2 — one row per existing markdown BACKLOG.md location, the {sourcePath, filter} pair Phase 2/3's render step iterates. repo is always PseudoSky/adhd (this repo's stable git-remote-derived slug).",
+  "repo": "PseudoSky/adhd",
+  "entries": [
+    { "sourcePath": "BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "rootLevel": true }, "rootOnly": true },
+    { "sourcePath": "docs/plan/adhd-environment/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "plan": "adhd-environment" } },
+    { "sourcePath": "docs/plan/agent-final/superseded/agent-registry-migration/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "plan": "agent-registry-migration" } },
+    { "sourcePath": "docs/plan/agent-mcp-authoring/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "plan": "agent-mcp-authoring" } },
+    { "sourcePath": "docs/plan/apigen-serve-core/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "plan": "apigen-serve-core" } },
+    { "sourcePath": "docs/plan/backlog-adoption/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "plan": "backlog-adoption" } },
+    { "sourcePath": "docs/plan/dispatch-completion/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "plan": "dispatch-completion" } },
+    { "sourcePath": "entrypoint/apigen-cli/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "entrypoint/apigen-cli" } },
+    { "sourcePath": "packages/agent/agent-core-policy/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/agent/agent-core-policy" } },
+    { "sourcePath": "packages/agent/agent-core-provider/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/agent/agent-core-provider" } },
+    { "sourcePath": "packages/agent/agent-engine-compiler/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/agent/agent-engine-compiler" } },
+    { "sourcePath": "packages/agent/agent-plugin-budget/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/agent/agent-plugin-budget" } },
+    { "sourcePath": "packages/agent/agent-store-prompts/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/agent/agent-store-prompts" } },
+    { "sourcePath": "packages/environment/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/environment" } },
+    { "sourcePath": "packages/apigen/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/apigen" } },
+    { "sourcePath": "packages/apigen/apigen-core-client/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/apigen/apigen-core-client" } },
+    { "sourcePath": "packages/apigen/apigen-engine-conformance/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/apigen/apigen-engine-conformance" } },
+    { "sourcePath": "packages/apigen/apigen-engine-runtime/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/apigen/apigen-engine-runtime" } },
+    { "sourcePath": "packages/apigen/python-env/BACKLOG.md", "filter": { "repo": "PseudoSky/adhd", "projectPath": "packages/apigen/python-env" } }
+  ],
+  "excludedThisSession": {
+    "packagesApigenStar": "RESOLVED 2026-07-24 — packages/apigen/** was excluded in the initial Phase-1 pass (a separate, concurrent apigen-serve-core orchestration owns that tree); the 5 rows above were added and imported once confirmed read-only-safe (the concurrent orchestration only edits the markdown files, never the graph store, so importing does not race it — re-run this import again after that plan closes to pick up its final BACKLOG->CHANGELOG state).",
+    "worktrees": ".worktrees/** and .claude/worktrees/** excluded — these are checked-out copies of files already covered above, not distinct sources."
+  }
+}

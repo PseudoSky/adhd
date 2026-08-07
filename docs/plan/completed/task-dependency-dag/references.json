@@ -1,0 +1,23 @@
+{
+  "drizzle-upsert-increment": {
+    "anchor": "packages/ai/agent-mcp/src/plugins/usage-plugin.ts",
+    "rule": "accumulator columns use sql`${table.col} + ${value}` in onConflictDoUpdate; non-accumulator columns use direct assignment",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:drizzle-upsert-increment]",
+    "audit_check": "[audit-final.ref-drizzle-upsert-increment]"
+  },
+  "task-status-enum": {
+    "anchor": "packages/ai/agent-mcp/src/db/schema.ts:74",
+    "rule": "tasksTable.status enum and taskStatusSchema z.enum must be kept in sync — both list the same values",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:task-status-enum]",
+    "audit_check": "[audit-final.ref-task-status-enum]"
+  },
+  "tool-error-throw": {
+    "anchor": "packages/ai/agent-mcp/src/validation/errors.ts:38",
+    "rule": "all operational errors use `throw new ToolError('CODE', message)` where CODE is in AgentMcpErrorCode",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:tool-error-throw]",
+    "audit_check": "[audit-final.ref-tool-error-throw]"
+  }
+}

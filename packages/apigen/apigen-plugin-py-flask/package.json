@@ -1,0 +1,28 @@
+{
+  "name": "@adhd/apigen-plugin-py-flask",
+  "version": "0.2.2",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "description": "apigen plugin: serve Python functions over HTTP (stdlib http.server, Flask optional)",
+  "keywords": [
+    "apigen",
+    "plugin",
+    "python",
+    "http",
+    "flask"
+  ],
+  "dependencies": {
+    "@adhd/apigen-python-env": "^0.2.2",
+    "@adhd/apigen-core-client": "^0.2.2",
+    "@adhd/apigen-engine-naming": "^0.2.1",
+    "@adhd/apigen-engine-runtime": "^0.2.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
+}

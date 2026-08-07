@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "id": "workspace-codegen-nx-scaffold",
+  "title": "Workspace scaffold generator",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": ["base", "core", "engine", "store", "plugin", "generator", "query", "types", "entrypoint"],
+      "description": "Package type (layer classification)"
+    },
+    "name": {
+      "type": "string",
+      "description": "Package name (third segment of <group>-<type>-<name>)",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "group": {
+      "type": "string",
+      "description": "Domain/group (e.g. apigen, agent, data, dispatch, ui-react)",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "nxLayer": {
+      "type": "string",
+      "enum": ["shared", "logic", "data", "entrypoints", "ui-primitives", "ui-composites", "components", "workflows", "ai", "mcp"],
+      "description": "Nx architectural layer tag"
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["node", "browser", "shared"],
+      "description": "Platform tag"
+    },
+    "access": {
+      "type": "string",
+      "enum": ["domain", "public"],
+      "default": "domain",
+      "description": "Cross-domain access permission"
+    },
+    "publish": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether to publish to npm"
+    }
+  },
+  "required": ["type", "name", "group", "nxLayer", "platform"]
+}

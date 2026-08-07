@@ -1,0 +1,45 @@
+{
+  "name": "agent-base-types",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/agent/agent-base-types/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "layer:mcp",
+    "platform:shared"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "packages/agent/agent-base-types/dist",
+        "main": "packages/agent/agent-base-types/src/index.ts",
+        "tsConfig": "packages/agent/agent-base-types/tsconfig.lib.json",
+        "assets": [
+          "packages/agent/agent-base-types/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": [
+        "build",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ],
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
+    }
+  }
+}

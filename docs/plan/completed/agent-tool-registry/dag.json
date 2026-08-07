@@ -1,0 +1,163 @@
+{
+  "schema_version": 2,
+  "title": "Agent Registry — Tool & Platform Registry (@adhd/agent-tool-registry)",
+  "plan_kind": "greenfield",
+  "phases": [
+    "foundation",
+    "schema",
+    "seed",
+    "audit"
+  ],
+  "terminal": "done",
+  "nodes": {
+    "scaffold-package": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": [],
+      "guard": "npx --yes nx build agent-tool-registry",
+      "artifacts": [
+        "packages/ai/agent-tool-registry/project.json",
+        "packages/ai/agent-tool-registry/package.json",
+        "packages/ai/agent-tool-registry/src/index.ts",
+        "packages/ai/agent-tool-registry/src/db/client.ts",
+        "packages/ai/agent-tool-registry/src/db/schema.ts",
+        "packages/ai/agent-tool-registry/src/db/migrate.ts",
+        "tsconfig.base.json"
+      ],
+      "context": "contexts/scaffold-package.md",
+      "notes": ""
+    },
+    "tool-and-type-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "scaffold-package"
+      ],
+      "guard": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/tool-store.test.ts",
+      "artifacts": [
+        "packages/ai/agent-tool-registry/src/db/schema.ts",
+        "packages/ai/agent-tool-registry/src/store/tool-store.ts",
+        "packages/ai/agent-tool-registry/src/index.ts",
+        "packages/ai/agent-tool-registry/src/__tests__/tool-store.test.ts",
+        "packages/ai/agent-tool-registry/drizzle"
+      ],
+      "context": "contexts/tool-and-type-schema.md",
+      "notes": ""
+    },
+    "platform-and-binding-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "tool-and-type-schema"
+      ],
+      "guard": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/binding-store.test.ts",
+      "artifacts": [
+        "packages/ai/agent-tool-registry/src/db/schema.ts",
+        "packages/ai/agent-tool-registry/src/store/binding-store.ts",
+        "packages/ai/agent-tool-registry/src/index.ts",
+        "packages/ai/agent-tool-registry/src/__tests__/binding-store.test.ts",
+        "packages/ai/agent-tool-registry/drizzle"
+      ],
+      "context": "contexts/platform-and-binding-schema.md",
+      "notes": ""
+    },
+    "mcp-server-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "platform-and-binding-schema"
+      ],
+      "guard": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/mcp-server-store.test.ts",
+      "artifacts": [
+        "packages/ai/agent-tool-registry/src/db/schema.ts",
+        "packages/ai/agent-tool-registry/src/store/mcp-server-store.ts",
+        "packages/ai/agent-tool-registry/src/index.ts",
+        "packages/ai/agent-tool-registry/src/__tests__/mcp-server-store.test.ts",
+        "packages/ai/agent-tool-registry/drizzle"
+      ],
+      "context": "contexts/mcp-server-schema.md",
+      "notes": ""
+    },
+    "agent-tool-junction": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "mcp-server-schema"
+      ],
+      "guard": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/agent-tool-store.test.ts",
+      "artifacts": [
+        "packages/ai/agent-tool-registry/src/db/schema.ts",
+        "packages/ai/agent-tool-registry/src/store/agent-tool-store.ts",
+        "packages/ai/agent-tool-registry/src/index.ts",
+        "packages/ai/agent-tool-registry/src/__tests__/agent-tool-store.test.ts",
+        "packages/ai/agent-tool-registry/drizzle"
+      ],
+      "context": "contexts/agent-tool-junction.md",
+      "notes": ""
+    },
+    "audit-schema": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "agent-tool-junction"
+      ],
+      "guard": "python3 docs/plan/agent-tool-registry/scripts/audit_tool_registry.py --phase schema",
+      "artifacts": [
+        "docs/plan/agent-tool-registry/scripts/audit_tool_registry.py"
+      ],
+      "context": "contexts/audit-schema.md",
+      "notes": ""
+    },
+    "seed-and-roundtrip": {
+      "kind": "work",
+      "phase": "seed",
+      "depends_on": [
+        "audit-schema"
+      ],
+      "guard": "npx --yes nx test agent-tool-registry --testFile=packages/ai/agent-tool-registry/src/__tests__/roundtrip.test.ts",
+      "artifacts": [
+        "packages/ai/agent-tool-registry/src/seed/tool-types.ts",
+        "packages/ai/agent-tool-registry/src/seed/platforms.ts",
+        "packages/ai/agent-tool-registry/src/seed/tools.ts",
+        "packages/ai/agent-tool-registry/src/seed/bindings.ts",
+        "packages/ai/agent-tool-registry/src/seed/index.ts",
+        "packages/ai/agent-tool-registry/src/__tests__/roundtrip.test.ts",
+        "packages/ai/agent-tool-registry/src/index.ts"
+      ],
+      "context": "contexts/seed-and-roundtrip.md",
+      "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "code-review"
+      ],
+      "guard": "python3 docs/plan/agent-tool-registry/scripts/audit_tool_registry.py --phase final",
+      "artifacts": [
+        "docs/plan/agent-tool-registry/scripts/audit_tool_registry.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "audit",
+      "depends_on": [
+        "seed-and-roundtrip"
+      ],
+      "guard": "python3 docs/plan/agent-tool-registry/scripts/review_gate.py",
+      "artifacts": [
+        "docs/plan/agent-tool-registry/review.md",
+        "docs/plan/agent-tool-registry/scripts/review_gate.py"
+      ],
+      "context": "contexts/code-review.md",
+      "notes": "Reviewer routing: code-reviewer (opus). Diff-reading code review of the implementation states (scaffold-package..seed-and-roundtrip) against CLAUDE.md (layer/platform isolation, @adhd/ imports, I-prefixed interfaces, JSDoc on shared public fns, the 'Proving features actually work' verification standard) AND this plan's decisions/contracts. Must check design-intent fidelity the structural audit misses: composite keys are real primaryKey()/uniqueIndex() not a non-unique index(); FKs match the decided topology; tool_types stays a lookup table; no cross-package FK violations. Default verdict NEEDS-WORK; a PASS must be explicitly justified. On NEEDS-WORK, fixes go back to the implementation states, then re-review. Mutates only review.md + scripts/review_gate.py."
+    }
+  },
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.22",
+    "hash": "1e4130a84aed"
+  }
+}

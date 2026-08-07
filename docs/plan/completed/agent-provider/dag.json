@@ -1,0 +1,179 @@
+{
+  "schema_version": 2,
+  "title": "Agent Registry — Provider Registry (@adhd/agent-provider)",
+  "plan_kind": "greenfield",
+  "phases": [
+    "foundation",
+    "schema",
+    "adapter",
+    "runtime",
+    "seed",
+    "audit"
+  ],
+  "terminal": "done",
+  "nodes": {
+    "scaffold-package": {
+      "kind": "work",
+      "phase": "foundation",
+      "depends_on": [],
+      "guard": "npx --yes nx build agent-provider",
+      "artifacts": [
+        "packages/ai/agent-provider/project.json",
+        "packages/ai/agent-provider/package.json",
+        "packages/ai/agent-provider/src/index.ts",
+        "packages/ai/agent-provider/src/db/client.ts",
+        "packages/ai/agent-provider/src/db/schema.ts",
+        "tsconfig.base.json"
+      ],
+      "context": "contexts/scaffold-package.md",
+      "notes": ""
+    },
+    "provider-and-model-schema": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "scaffold-package"
+      ],
+      "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/model-store.test.ts",
+      "artifacts": [
+        "packages/ai/agent-provider/src/db/schema.ts",
+        "packages/ai/agent-provider/src/store/provider-store.ts",
+        "packages/ai/agent-provider/src/store/model-store.ts",
+        "packages/ai/agent-provider/src/index.ts",
+        "packages/ai/agent-provider/src/__tests__/model-store.test.ts",
+        "packages/ai/agent-provider/drizzle"
+      ],
+      "context": "contexts/provider-and-model-schema.md",
+      "notes": ""
+    },
+    "model-platform-bindings": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "provider-and-model-schema"
+      ],
+      "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/binding-store.test.ts",
+      "artifacts": [
+        "packages/ai/agent-provider/src/db/schema.ts",
+        "packages/ai/agent-provider/src/store/model-store.ts",
+        "packages/ai/agent-provider/src/index.ts",
+        "packages/ai/agent-provider/src/__tests__/binding-store.test.ts",
+        "packages/ai/agent-provider/drizzle"
+      ],
+      "context": "contexts/model-platform-bindings.md",
+      "notes": ""
+    },
+    "provider-tool-formats": {
+      "kind": "work",
+      "phase": "schema",
+      "depends_on": [
+        "model-platform-bindings"
+      ],
+      "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/tool-format-store.test.ts",
+      "artifacts": [
+        "packages/ai/agent-provider/src/db/schema.ts",
+        "packages/ai/agent-provider/src/store/tool-format-store.ts",
+        "packages/ai/agent-provider/src/index.ts",
+        "packages/ai/agent-provider/src/__tests__/tool-format-store.test.ts",
+        "packages/ai/agent-provider/drizzle"
+      ],
+      "context": "contexts/provider-tool-formats.md",
+      "notes": ""
+    },
+    "audit-schema": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "provider-tool-formats"
+      ],
+      "guard": "python3 docs/plan/agent-provider/scripts/audit_provider.py --phase schema",
+      "artifacts": [
+        "docs/plan/agent-provider/scripts/audit_provider.py"
+      ],
+      "context": "contexts/audit-schema.md",
+      "notes": ""
+    },
+    "provider-adapter-contract": {
+      "kind": "work",
+      "phase": "adapter",
+      "depends_on": [
+        "audit-schema"
+      ],
+      "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/adapter-resolve.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp-types/src/index.ts",
+        "packages/ai/agent-provider/src/adapter/provider-adapter.ts",
+        "packages/ai/agent-provider/src/index.ts",
+        "packages/ai/agent-provider/src/__tests__/adapter-resolve.test.ts"
+      ],
+      "context": "contexts/provider-adapter-contract.md",
+      "notes": ""
+    },
+    "runtime-tool-forwarding": {
+      "kind": "work",
+      "phase": "runtime",
+      "depends_on": [
+        "provider-adapter-contract"
+      ],
+      "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/emit-tools.test.ts",
+      "artifacts": [
+        "packages/ai/agent-provider/src/runtime/emit-tools.ts",
+        "packages/ai/agent-provider/src/index.ts",
+        "packages/ai/agent-provider/src/__tests__/emit-tools.test.ts"
+      ],
+      "context": "contexts/runtime-tool-forwarding.md",
+      "notes": ""
+    },
+    "seed-and-roundtrip": {
+      "kind": "work",
+      "phase": "seed",
+      "depends_on": [
+        "runtime-tool-forwarding"
+      ],
+      "guard": "npx --yes nx test agent-provider --testFile=packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+      "artifacts": [
+        "packages/ai/agent-provider/src/seed/providers.ts",
+        "packages/ai/agent-provider/src/seed/models.ts",
+        "packages/ai/agent-provider/src/seed/bindings.ts",
+        "packages/ai/agent-provider/src/seed/index.ts",
+        "packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+        "packages/ai/agent-provider/src/index.ts"
+      ],
+      "context": "contexts/seed-and-roundtrip.md",
+      "notes": ""
+    },
+    "audit-final": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "code-review"
+      ],
+      "guard": "python3 docs/plan/agent-provider/scripts/audit_provider.py --phase final",
+      "artifacts": [
+        "docs/plan/agent-provider/scripts/audit_provider.py"
+      ],
+      "context": "contexts/audit-final.md",
+      "notes": ""
+    },
+    "code-review": {
+      "kind": "review",
+      "phase": "audit",
+      "depends_on": [
+        "seed-and-roundtrip"
+      ],
+      "guard": "python3 docs/plan/agent-provider/scripts/review_gate.py",
+      "artifacts": [
+        "docs/plan/agent-provider/review.md",
+        "docs/plan/agent-provider/scripts/review_gate.py"
+      ],
+      "context": "contexts/code-review.md",
+      "notes": "Reviewer routing: code-reviewer (opus). Diff-reading code review of the implementation states (scaffold-package..seed-and-roundtrip) against CLAUDE.md (layer/platform isolation, @adhd/ imports, I-prefixed interfaces, JSDoc on shared public fns, the 'Proving features actually work' verification standard) AND this plan's decisions/contracts. Must check design-intent fidelity the structural audit misses: ProviderAdapter lives in agent-mcp-types (not re-declared in agent-provider); model_platform_bindings FKs match the decided provider/model topology; resolveModelId reads the binding table; no cross-package FK violations. Default verdict NEEDS-WORK; a PASS must be explicitly justified. On NEEDS-WORK, fixes go back to the implementation states, then re-review. Mutates only review.md + scripts/review_gate.py."
+    }
+  },
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.22",
+    "hash": "1e4130a84aed"
+  }
+}

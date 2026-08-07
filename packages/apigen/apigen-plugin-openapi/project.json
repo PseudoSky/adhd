@@ -1,0 +1,47 @@
+{
+  "name": "apigen-plugin-openapi",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "packages/apigen/apigen-plugin-openapi"
+      }
+    }
+  },
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "packages/apigen/apigen-plugin-openapi/dist",
+        "emptyOutDir": true
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "options": {
+        "configFile": "packages/apigen/apigen-plugin-openapi/vite.config.ts"
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ],
+      "executor": "@nx/js:release-publish",
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
+    }
+  }
+}

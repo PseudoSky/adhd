@@ -1,0 +1,19 @@
+{
+  "name": "@adhd/dispatch-base-spec",
+  "version": "0.1.0",
+  "dependencies": {},
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "assets": [
+    "src/dag-v4.schema.json",
+    "src/valid-ops-by-kind.json"
+  ]
+}

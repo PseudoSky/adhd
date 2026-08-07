@@ -1,0 +1,73 @@
+{
+  "name": "agent-store-tools",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/agent/agent-store-tools/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "layer:ai",
+    "platform:node"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/js:tsc",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "packages/agent/agent-store-tools/dist",
+        "main": "packages/agent/agent-store-tools/src/index.ts",
+        "tsConfig": "packages/agent/agent-store-tools/tsconfig.lib.json",
+        "clean": true,
+        "assets": [
+          {
+            "input": "packages/agent/agent-store-tools",
+            "glob": "drizzle/**/*",
+            "output": "."
+          }
+        ]
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p packages/agent/agent-store-tools/tsconfig.json --noEmit"
+      }
+    },
+    "clean": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "rm -rf dist/packages/agent/agent-store-tools"
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/agent/agent-store-tools"
+      ],
+      "options": {
+        "configFile": "packages/agent/agent-store-tools/vite.config.ts",
+        "passWithNoTests": true
+      }
+    },
+    "nx-release-publish": {
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ],
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
+    }
+  }
+}

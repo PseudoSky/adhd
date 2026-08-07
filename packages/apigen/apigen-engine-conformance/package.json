@@ -1,0 +1,21 @@
+{
+  "name": "@adhd/apigen-engine-conformance",
+  "version": "0.2.0",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "typings": "./dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@adhd/apigen-python-env": "^0.2.2",
+    "@adhd/apigen-base-logical": "^0.1.0",
+    "@adhd/apigen-core-client": "^0.2.2",
+    "@adhd/apigen-engine-naming": "^0.2.1",
+    "@adhd/apigen-base-errors": "^0.2.0"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "name": "apigen-plugin-cli-output",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "packages/apigen/apigen-plugin-cli-output"
+      }
+    }
+  },
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "packages/apigen/apigen-plugin-cli-output/dist",
+        "emptyOutDir": true
+      }
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/apigen/apigen-plugin-cli-output"
+      ],
+      "options": {
+        "configFile": "packages/apigen/apigen-plugin-cli-output/vite.config.ts"
+      },
+      "dependsOn": [
+        "build",
+        {
+          "projects": ["apigen-cli"],
+          "target": "build"
+        }
+      ]
+    },
+    "nx-release-publish": {
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ],
+      "executor": "@nx/js:release-publish",
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      }
+    }
+  }
+}

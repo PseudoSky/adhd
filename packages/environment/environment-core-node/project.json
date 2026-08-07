@@ -1,0 +1,69 @@
+{
+  "name": "environment-core-node",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/environment/environment-core-node/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "domain:environment",
+    "pkg-kind:core",
+    "pkg-class:foundation",
+    "layer:data",
+    "platform:node",
+    "access:domain"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "packages/environment/environment-core-node/dist",
+        "main": "packages/environment/environment-core-node/src/index.ts",
+        "tsConfig": "packages/environment/environment-core-node/tsconfig.lib.json",
+        "assets": [
+          "packages/environment/environment-core-node/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      },
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ]
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/environment/environment-core-node"
+      ],
+      "options": {
+        "vitestConfig": "packages/environment/environment-core-node/vite.config.ts"
+      }
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "name": "agent-plugin-budget",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/agent/agent-plugin-budget/src",
+  "projectType": "library",
+  "release": {
+    "version": {
+      "generatorOptions": {
+        "packageRoot": "{projectRoot}",
+        "currentVersionResolver": "git-tag"
+      }
+    }
+  },
+  "tags": [
+    "layer:logic",
+    "platform:node"
+  ],
+  "targets": {
+    "build": {
+      "executor": "@nx/vite:build",
+      "outputs": [
+        "{options.outputPath}"
+      ],
+      "options": {
+        "outputPath": "packages/agent/agent-plugin-budget/dist",
+        "main": "packages/agent/agent-plugin-budget/src/index.ts",
+        "tsConfig": "packages/agent/agent-plugin-budget/tsconfig.lib.json",
+        "assets": [
+          "packages/agent/agent-plugin-budget/*.md"
+        ]
+      }
+    },
+    "nx-release-publish": {
+      "options": {
+        "packageRoot": "{projectRoot}/dist"
+      },
+      "dependsOn": [
+        "build",
+        "test",
+        "verify-dist-load",
+        "dist-manifest",
+        "publish-hygiene"
+      ]
+    },
+    "test": {
+      "executor": "@nx/vite:test",
+      "cache": true,
+      "inputs": [
+        "default",
+        "^production",
+        {
+          "externalDependencies": [
+            "vitest"
+          ]
+        }
+      ],
+      "outputs": [
+        "{workspaceRoot}/coverage/packages/agent/agent-plugin-budget"
+      ],
+      "options": {
+        "vitestConfig": "packages/agent/agent-plugin-budget/vite.config.ts"
+      }
+    }
+  }
+}

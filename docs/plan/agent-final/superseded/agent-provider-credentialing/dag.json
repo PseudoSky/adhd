@@ -1,0 +1,138 @@
+{
+  "schema_version": 2,
+  "title": "Agent Provider — Unified Credentialing, baseURL Everywhere, lmstudio Removal, .env Standard",
+  "plan_kind": "brownfield",
+  "phases": [
+    "contract",
+    "runtime",
+    "env",
+    "backcompat",
+    "audit"
+  ],
+  "terminal": "done",
+  "nodes": {
+    "unified-credential-contract": {
+      "kind": "work",
+      "phase": "contract",
+      "depends_on": [],
+      "guard": "python3 docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py --phase contract",
+      "artifacts": [
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-provider/src/seed/providers.ts",
+        "packages/ai/agent-provider/src/db/schema.ts",
+        "packages/ai/agent-provider/src/__tests__/roundtrip.test.ts",
+        "packages/ai/agent-provider/src/__tests__/model-store.test.ts",
+        "docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py"
+      ],
+      "context": "contexts/unified-credential-contract.md",
+      "notes": ""
+    },
+    "provider-credential-runtime": {
+      "kind": "work",
+      "phase": "runtime",
+      "depends_on": [
+        "unified-credential-contract"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/credential-inference.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/providers/openai.ts",
+        "packages/ai/agent-mcp/src/providers/anthropic.ts",
+        "packages/ai/agent-mcp/src/providers/claudecli.ts",
+        "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-mcp/src/__tests__/credential-inference.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/integration/openai-compat-roundtrip.e2e.test.ts"
+      ],
+      "context": "contexts/provider-credential-runtime.md",
+      "notes": ""
+    },
+    "lmstudio-removal": {
+      "kind": "work",
+      "phase": "runtime",
+      "depends_on": [
+        "provider-credential-runtime"
+      ],
+      "guard": "npx --yes nx build agent-mcp && python3 docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py --phase runtime",
+      "artifacts": [
+        "packages/ai/agent-mcp-types/src/domain.ts",
+        "packages/ai/agent-mcp/src/providers/lmstudio.ts",
+        "packages/ai/agent-mcp/src/providers/factory.ts",
+        "packages/ai/agent-mcp/src/providers/index.ts",
+        "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-mcp/src/server.ts",
+        "packages/ai/agent-mcp/src/providers/types.ts",
+        "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+        "packages/ai/agent-mcp/src/db/schema.ts",
+        "packages/ai/agent-mcp/src/providers/openai.ts",
+        "packages/ai/agent-mcp/src/__tests__/debt-005-sdk-timeout.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/integration/live-oauth.e2e.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/integration/live-budget.e2e.test.ts",
+        "packages/ai/agent-mcp/src/__tests__/integration/live-dag.e2e.test.ts",
+        "packages/ai/agent-mcp/CHANGELOG.md",
+        "packages/ai/agent-mcp/BACKLOG.md",
+        "packages/ai/agent-mcp/SPEC.md",
+        "packages/ai/agent-mcp/PLAN-MEMORY.md"
+      ],
+      "context": "contexts/lmstudio-removal.md",
+      "changes": {
+        "deletes": [
+          "LMStudioProvider",
+          "lmstudioProviderSchema"
+        ]
+      },
+      "notes": "Serial after provider-credential-runtime: both edit validation/agent.ts and openai.ts; serializing avoids a same-file merge conflict (these two states are NOT parallel). The 'lmstudio' type-literal removal (string discriminant in the union, factory, schema, comments) is proven by the negative-grep audit checks rather than --discover, since whole-word 'lmstudio' must NOT collide with the retained LMSTUDIO_API_KEY / LMSTUDIO_BASE_URL env-var names that back-compat keeps."
+    },
+    "dotenv-dual-load": {
+      "kind": "work",
+      "phase": "env",
+      "depends_on": [
+        "unified-credential-contract"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/dotenv-load.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/index.ts",
+        "packages/ai/agent-mcp/src/utils/load-env.ts",
+        "packages/ai/agent-mcp/.env.example",
+        "packages/ai/agent-mcp/src/__tests__/dotenv-load.test.ts",
+        ".gitignore"
+      ],
+      "context": "contexts/dotenv-dual-load.md",
+      "notes": ""
+    },
+    "backcompat-normalizer": {
+      "kind": "work",
+      "phase": "backcompat",
+      "depends_on": [
+        "provider-credential-runtime",
+        "lmstudio-removal"
+      ],
+      "guard": "npx --yes nx test agent-mcp --testFile=packages/ai/agent-mcp/src/__tests__/backcompat-normalize.test.ts",
+      "artifacts": [
+        "packages/ai/agent-mcp/src/validation/agent.ts",
+        "packages/ai/agent-mcp/src/__tests__/backcompat-normalize.test.ts"
+      ],
+      "context": "contexts/backcompat-normalizer.md",
+      "notes": ""
+    },
+    "audit-credentialing": {
+      "kind": "audit",
+      "phase": "audit",
+      "depends_on": [
+        "lmstudio-removal",
+        "dotenv-dual-load",
+        "backcompat-normalizer"
+      ],
+      "guard": "python3 docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py --phase audit",
+      "artifacts": [
+        "docs/plan/agent-provider-credentialing/scripts/audit_credentialing.py",
+        "docs/plan/agent-provider-credentialing/scripts/check-no-secrets.sh"
+      ],
+      "context": "contexts/audit-credentialing.md",
+      "notes": ""
+    }
+  },
+  "authored_with": {
+    "plugin": "workflow",
+    "version": "0.8.23",
+    "hash": "1e4130a84aed"
+  }
+}

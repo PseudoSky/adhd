@@ -1,0 +1,23 @@
+{
+  "orchestrator-tool-loop": {
+    "anchor": "packages/ai/agent-mcp/src/engine/orchestrator.ts",
+    "rule": "The orchestrator intercepts request_human_input BEFORE dispatching to any MCP client. The check must appear in the tool-dispatch loop, before any client.callTool() call.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:orchestrator-tool-loop]",
+    "audit_check": "[audit-final.ref-orchestrator-tool-loop]"
+  },
+  "task-status-enum": {
+    "anchor": "packages/ai/agent-mcp/src/db/schema.ts",
+    "rule": "tasksTable.status enum and taskStatusSchema z.enum must be kept in sync — both must gain 'awaiting_input' in their respective states.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:task-status-enum]",
+    "audit_check": "[audit-final.ref-task-status-enum]"
+  },
+  "tool-error-throw": {
+    "anchor": "packages/ai/agent-mcp/src/validation/errors.ts",
+    "rule": "All operational errors use throw new ToolError('CODE', message). task_resume uses VALIDATION_ERROR for bad token and TASK_NOT_RESUMABLE for process-restart case.",
+    "discovered_via": "manual",
+    "shared_ref": "[ref:tool-error-throw]",
+    "audit_check": "[audit-final.ref-tool-error-throw]"
+  }
+}
