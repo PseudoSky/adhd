@@ -132,6 +132,9 @@ importers:
       '@adhd/nx-deps':
         specifier: workspace:*
         version: link:tools/nx-plugins/deps
+      '@adhd/nx-mass-delete-guard':
+        specifier: workspace:*
+        version: link:tools/nx-plugins/mass-delete-guard
       '@adhd/nx-secret-scan':
         specifier: workspace:*
         version: link:tools/nx-plugins/secret-scan
@@ -1447,6 +1450,8 @@ importers:
   tools/nx-plugins/build: {}
 
   tools/nx-plugins/deps: {}
+
+  tools/nx-plugins/mass-delete-guard: {}
 
   tools/nx-plugins/secret-scan: {}
 
