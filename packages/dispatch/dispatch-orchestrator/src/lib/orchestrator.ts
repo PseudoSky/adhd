@@ -863,7 +863,13 @@ async function dispatchUnit(
   let taskId: string | null = null;
   let taskStatus: DispatchTaskStatus | null = null;
   let opResultStatus: OperationStatus;
-  const hasRealDispatch = unit.prompt != null;
+  // Previously: `unit.prompt != null` — behaviorally identical, since
+  // assembleUnit() derives execution_mode from that SAME `prompt !== null`
+  // condition (never from `model === null` alone: an all-tool-call batch
+  // can carry a non-null model/agent yet compile to a null prompt). This is
+  // now an explicit signal rather than an inference from compilePrompt's
+  // return-value side effect (DEBT-DISPATCH-005 / BL-102).
+  const hasRealDispatch = unit.execution_mode === 'model-dispatch';
 
   // Build operation lookup up front — needed both for real tool-call
   // execution (BUG-DISPATCH-EXEC-001) and for per-operation automated-guard
