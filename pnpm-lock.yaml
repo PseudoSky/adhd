@@ -132,6 +132,9 @@ importers:
       '@adhd/nx-deps':
         specifier: workspace:*
         version: link:tools/nx-plugins/deps
+      '@adhd/nx-mass-delete-guard':
+        specifier: workspace:*
+        version: link:tools/nx-plugins/mass-delete-guard
       '@adhd/nx-secret-scan':
         specifier: workspace:*
         version: link:tools/nx-plugins/secret-scan
@@ -1220,8 +1223,8 @@ importers:
         specifier: ^0.1.0
         version: link:../apigen-base-logical
       '@adhd/apigen-core-client':
-        specifier: ^0.2.2
-        version: 0.2.2
+        specifier: 0.3.0
+        version: link:../apigen-core-client
       '@adhd/apigen-engine-naming':
         specifier: ^0.2.1
         version: link:../apigen-engine-naming
@@ -1448,25 +1451,13 @@ importers:
 
   tools/nx-plugins/deps: {}
 
+  tools/nx-plugins/mass-delete-guard: {}
+
   tools/nx-plugins/secret-scan: {}
 
   tools/nx-plugins/test: {}
 
 packages:
-
-  /@adhd/apigen-base-logical@0.1.0:
-    resolution: {integrity: sha512-0B7x0YHIk3NXcETJpzsU/Lnof4zaYAESUL4xal++TibNxnZJ74Y1HgMEjBZ2RNJVM4lrKS5T+aly+ZwqeZ9Z4A==}
-    dev: false
-
-  /@adhd/apigen-core-client@0.2.2:
-    resolution: {integrity: sha512-leCbDlHewwn8+1ro9czZpFRRbAu7awMqbBss7RJiEm+rRnGSuG3KFMNK/dorQkzHTEYdBFfsBqZoCR6DUE/DNw==}
-    dependencies:
-      '@adhd/apigen-base-logical': 0.1.0
-      pino: 10.3.1
-      ts-json-schema-generator: 2.9.0
-      ts-morph: 23.0.0
-      typescript: 6.0.3
-    dev: false
 
   /@adhd/sox-graph-store@0.3.0(@types/better-sqlite3@7.6.13):
     resolution: {integrity: sha512-bPVwrVoUW+dMTNpMChvTGHQeMiLdOv3Bg6Baqp5SEK/SWSj1W7Nrjdy0VEjvOVw9yNr/Wl9L6RC8GWMqbbXCIA==}

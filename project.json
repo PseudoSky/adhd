@@ -44,6 +44,13 @@
     "secret-scan": {
       "executor": "@adhd/nx-secret-scan:scan",
       "options": {}
+    },
+    "mass-delete-guard": {
+      "executor": "@adhd/nx-mass-delete-guard:check",
+      "options": {},
+      "metadata": {
+        "description": "BUG-ADHD-EE8D24C8-REVERT-001: flags a commit/range whose diff is dominated by deletions of files that already existed at HEAD/base (the proven shape of a stale working tree — e.g. after `git update-ref` moved a branch without updating its tree — committed back over already-fixed files). `.githooks/pre-commit` Gate 0 and `.githooks/post-commit` call the underlying `.githooks/detect-mass-deletion.js` directly (must run pre-node_modules-guaranteed); this target exists so CI/a server-side check can run the IDENTICAL classifier via `nx run @adhd/source:mass-delete-guard --base=<ref> --head=<ref>`, closing the local-hook `--no-verify` blind spot."
+      }
     }
   }
 }
