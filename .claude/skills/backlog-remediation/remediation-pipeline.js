@@ -109,7 +109,26 @@ export const meta = {
 // --------------------------------------------------------------------------
 // args + defaults
 // --------------------------------------------------------------------------
-const A = (typeof args !== 'undefined' && args) || {}
+// Some hosts deliver `args` as a JSON-encoded STRING rather than a value.
+// Accept both — a bare `A.repoRoot` on a string silently yields undefined and
+// the run dies before spawning a single agent (observed 2026-08-07).
+const RAW_ARGS = (typeof args !== 'undefined' && args) || {}
+let A = RAW_ARGS
+if (typeof RAW_ARGS === 'string') {
+  try {
+    A = JSON.parse(RAW_ARGS)
+  } catch (e) {
+    throw new Error(
+      'remediation-pipeline: args arrived as a string and is not valid JSON: ' + e.message
+    )
+  }
+}
+if (typeof A !== 'object' || A === null || Array.isArray(A)) {
+  throw new Error(
+    'remediation-pipeline: args must be an object (or a JSON string encoding one), got ' +
+      (Array.isArray(A) ? 'array' : typeof A)
+  )
+}
 
 const ROOT = A.repoRoot
 const BASE = A.baselineRef

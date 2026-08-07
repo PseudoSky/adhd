@@ -15,6 +15,13 @@ below exists because that run either needed it or got burned by not having it.
 Artifacts: `tmp/backlog-run/` (`EXECUTION-STRATEGY.md`, `phase2.js`, `wave0.js`,
 `wave1.js`, `wave1-resume.js`, `docs-pass.js`, `triage.json`, `phase2.json`).
 
+**This file is the procedure. It is not the operator.** How the orchestrator *behaves*
+while running these stages — context-preservation discipline (never read bulk output,
+generate wave scripts programmatically, disk as the medium between stages), the router
+discipline, question routing, the five-class escalation policy, and the failure-mode
+catalog — lives in **`.claude/agents/backlog-remediation-orchestrator.md`**. Read that
+too if you are driving a run; do not restate it here.
+
 ## When to Use
 
 - ≥ ~20 open backlog items, of unknown current validity
@@ -38,6 +45,28 @@ Artifacts: `tmp/backlog-run/` (`EXECUTION-STRATEGY.md`, `phase2.js`, `wave0.js`,
 ## Stage sequence
 
 Run in order. **After every stage, reconcile item counts** (see Guardrail G1).
+
+### Stage artifact contracts — every stage writes a named file
+
+Six stages are **deliberately not scripted** (S0–S5, S11 — see the script header for
+why). *Not scripted is not not-specified.* The whole context-preservation property
+depends on each stage writing a named artifact to the run directory that the next
+stage **reads from disk**, instead of a corpus travelling through the orchestrator's
+context. A stage that returns prose instead of writing its file has broken the run.
+
+Default run directory: `tmp/backlog-run/`.
+
+| Stage | Artifact | Shape |
+|---|---|---|
+| S0 cluster + coverage | `clusters.json` | `{"<cluster>": ["<humanId>", …]}` — plus the recorded result of the set-equality assertion (flattened id set == pulled id set, zero duplicates). Do not proceed on a mismatch. |
+| S1 triage | `triage.json` | `{clusters:[{cluster, items:[{humanId, cluster, title, verdict, evidence, severity, effort, discipline, notes, duplicateOf?, blockedBy?, citations?}]}]}` |
+| S2 refutation | `phase2.json` | `{verdicts:[{humanId, refuted, evidence, recommendedStatus?, closingNote?, residualWork?}]}` |
+| S3 architect | `packages.json` | `{packages:[…], deferred:[{humanId, reason}]}` — each element per the **package schema** in S3 below. This is the array fed straight to `remediation-pipeline.js` as `args.packages`. |
+| S5 wave planning | `wave<N>-pkgs.json` | The subset of `packages[]` admitted to wave N (same element schema), plus the wave's explicit serialization rules. One file per wave; feed the pipeline one wave at a time. |
+| S10 docs targeting | `doc-dispatch.json` | `{"<project>": {files:[…], commits:[…], branches:[…], worktree?, new?: bool, dir?: string}}` — the object passed as `args.docs`. See S10 for field semantics. |
+
+Everything is keyed by global id and lives on disk (guardrail G10) — that is what makes
+a mid-run resume possible at all.
 
 ### S0 — Inventory + cluster
 
@@ -117,6 +146,48 @@ packages only if genuinely separable. Every item lands in exactly one package or
 - Assign `discipline` (routes to the implementer agent type), `risk`,
   `filesTouched`, `dependsOn`, `sequencing`.
 
+#### Package schema — the architect's output contract
+
+This is what `remediation-pipeline.js` actually consumes. Every field below was
+verified against the script; nothing here is aspirational. An architect that returns
+prose instead of this shape has produced nothing the pipeline can run.
+
+| Field | Req | Type | Consumed for |
+|---|---|---|---|
+| `gid` | **yes** | string `<cluster>/<packageId>` | Pipeline key. Uniqueness is enforced — the script **throws** on a missing or duplicate `gid` (guardrail G5). |
+| `cluster` | **yes** | string | **Resolves the worktree and branch** (`.worktrees/bl-<cluster>` / `bl/<cluster>`). Omit it and every agent is told to `cd` to a path containing `undefined`. |
+| `packageId` | **yes** | string | Progress labels (`impl:`/`review:`/`fix:`/`review2:`) and the missing-`gid` error message. |
+| `title` | **yes** | string | Header line in all four stage prompts. |
+| `items` | **yes** | string[] | Backlog ids this package closes; shown to implementer, reviewer, fixer. |
+| `discipline` | **yes** | string | Routes to the implementer agent type via `agentFor` (`typescript`\|`devops`\|`debug`\|`performance`); unknown values silently fall back to `defaultAgent`. |
+| `spec` | **yes** | string | The authoritative instruction. Must be precise enough that the implementer makes **no** architectural choices. |
+| `acceptanceCriteria` | **yes** | string[] | Numbered into the implement, review, and fix prompts, and re-checked at both review gates. |
+| `filesTouched` | **yes** | string[] | The reviewer's **scope check** — anything changed outside this list is a finding. Empty renders as "(not enumerated)" and the scope check degrades to opinion. |
+| `project` | **yes in practice** | string | Substituted into the gate's **`{project}` placeholder**. If omitted the gate is emitted as the literal `npx nx lint <project>` — it does not error, it just **silently stops verifying anything**. |
+| `risk` | no | `low`\|`medium`\|`high` | Shown in prompts; defaults to `unknown`. |
+| `verificationCommands` | no | string[] | Suggested commands appended to the implement prompt. |
+| `extraReviewMandate` | no | string | Prepended to the **first** review as a MANDATORY audit (e.g. a `--no-verify` bypass audit), recorded in the review's `bypassAudit`. Ignored on the final review. |
+| `startAt` | no | `implement`(default)\|`review`\|`fix`\|`review2` | Per-package resume point. |
+| `priorReport` | conditional | object | **Required when `startAt` is `review` or `review2`** — the implementation report the reviewer judges. |
+| `priorReview` | conditional | object | **Required when `startAt` is `fix`** — the review whose findings the fixer applies. |
+
+`cluster` and `project` are the two easy omissions, and neither fails loudly:
+a missing `cluster` sends agents to a nonexistent worktree, a missing `project`
+neuters the verification gate. Assert both are present on every element before
+dispatching a wave.
+
+**`dependsOn` and `sequencing` are NOT read by the pipeline.** They are S5 inputs —
+they feed topological wave admission and the collision matrix, which a human decides.
+Carry them in `packages.json` (the wave planner needs them), but never expect the
+script to honour them; the script runs exactly the wave you hand it, in parallel.
+
+**Quality bar, attached to the field:** every `acceptanceCriteria` entry is a
+**consumer-visible outcome provable by a runnable command**, phrased
+**worktree-relative** (guardrail G2 — never an absolute repo path). `"Promise.all is
+present"` is banned; `"an agent gets N results back"` is the standard. A criterion
+that names an implementation shape instead of an observable outcome is a defective
+spec — reject it at the architect stage, not at the review gate.
+
 ### S4 — Execution substrate
 
 - **One git worktree per cluster.** Not per package (redundant installs, and
@@ -167,7 +238,11 @@ negativeControl, deviations, blockers, newIssues[]}`
 Review schema:
 `{gid, verdict: APPROVED|CHANGES_REQUESTED|REJECTED,
 findings[{severity: blocker|major|minor|nit, summary, file, line, why, fix}],
-acceptanceVerified, testsHaveTeeth, scopeClean, notes}`
+acceptanceVerified, testsHaveTeeth, scopeClean, bypassAudit, notes}`
+
+`bypassAudit` carries the result of the package's `extraReviewMandate` when one was
+set — every re-run gate command and its exit code. It is passed through to the fix
+round.
 
 Implementers append a note on each backlog item recording what they did, and
 **never resolve/close it** — a reviewer gates that.
@@ -251,8 +326,20 @@ Mechanics that matter:
   claim.
 - `NO_CHANGE_NEEDED` is a legitimate outcome. Do not manufacture edits.
 
-Schema: `{project, status: UPDATED|NO_CHANGE_NEEDED|BLOCKED|FAILED, summary,
+Return schema: `{project, status: UPDATED|NO_CHANGE_NEEDED|BLOCKED|FAILED, summary,
 filesWritten[], commits[], claimsCorrected[], gapsFound[], deviations, blockers}`.
+
+**Dispatch schema** — `doc-dispatch.json`, passed to the pipeline as `args.docs`,
+one entry per touched project:
+
+| Field | Req | Consumed for |
+|---|---|---|
+| `files[]` | **yes** | The incremental change set shown to the steward, and the pathspec of the `git diff <baseline>..HEAD -- …` it is told to run. |
+| `commits[]` | **yes** | Commits touching those files, listed in the prompt. |
+| `branches[]` | **yes** (unless `worktree`) | **`branches[0]` is used as a CLUSTER key**, not a branch name — it is fed to the worktree/branch templates. Put the cluster there, despite the field name. |
+| `worktree` | no | Absolute path overriding the `branches[0]` lookup. Supply it and `branches` becomes cosmetic. |
+| `new` | no | `true` marks a package absent at baseline; flips the prompt to "author first-ever docs". |
+| `dir` | no | Package directory, shown to the steward so it does not have to hunt for it. |
 
 ### S11 — Merge
 
@@ -368,5 +455,11 @@ Its `args` are documented in the header of the script itself. Minimum viable cal
 `repoRoot`, `baselineRef`, `packages[]`. Everything else defaults to this repo's
 conventions.
 
+- `packages[]` element shape → the **package schema** in S3. That is the contract; do
+  not re-derive it by reading the script's arg parsing.
+- `docs` object shape → the **dispatch schema** in S10.
+- Feed it **one wave at a time** — `wave<N>-pkgs.json`, never the whole package set.
+
 Stages S0–S5 and S11 are **deliberately not scripted** — see the script header for
-why.
+why — but every one of them still has a defined output artifact. See *Stage artifact
+contracts* above.
