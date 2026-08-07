@@ -49,8 +49,9 @@ export {
   topoOrder,
   transitionStatus,
   updateItem,
+  version,
 } from './client.js';
-export type { BacklogCtx } from './client.js';
+export type { BacklogCtx, BacklogVersionInfo } from './client.js';
 
 export { startBacklogServer, buildBacklogApigenPackage } from './server.js';
 export type { StartOpts } from './server.js';

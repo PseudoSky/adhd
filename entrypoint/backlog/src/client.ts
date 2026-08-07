@@ -48,7 +48,9 @@ import { claimItemNode, releaseClaimNode, renewClaimNode } from './store/claim.j
 import { addCitationNode, appendNoteNode, archiveTerminalItems, resolveItemNode, startWorkNode, transitionStatusNode } from './store/lifecycle.js';
 import { addDependencyNode, assignItemNode, attachToPlanNode, linkRelatedNode, mergeItemsNode, removeDependencyNode, setPriorityNode, splitItemNode, supersedeItemNode } from './store/structure.js';
 import { buildChangelogSection, parseBacklogMarkdownWithDiagnostics, renderItemsToMarkdown, toImportItems } from './markdown.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** The one type apigen special-cases via the `ctx-name-only` invariant. */
 export interface BacklogCtx {
@@ -495,4 +497,60 @@ function describeMigrationPhase(phase: MigrationPhase): MigrationStatusResult {
 export async function setMigrationPhase(ctx: BacklogCtx, phase: MigrationPhase): Promise<SetMigrationPhaseResult> {
   const configPath = writeMigrationPhase(ctx.env, phase, ctx.adhdRoot);
   return { ...describeMigrationPhase(phase), configPath };
+}
+
+// ============================================================================
+// §5.7 — Introspection
+// ============================================================================
+
+export interface BacklogVersionInfo {
+  /** This package's real `package.json` name, e.g. `"@adhd/backlog"`. */
+  name: string;
+  /** This package's real `package.json` version — never hardcoded. */
+  version: string;
+}
+
+/**
+ * Resolves this MODULE's own `package.json`, probing the exact SAME two
+ * layouts (in the same sibling-first order) `install-skill.ts`'s
+ * `installSkillToHosts` and `server.ts`'s `backlogDistDir()` already probe
+ * for this file — reused, not reinvented, per that precedent's own doc
+ * comment:
+ *
+ *  1. PUBLISHED / DEV-BUILT (`dist/client.js` next to `package.json`, either
+ *     as the packed npm root or this repo's own `nx build backlog` output):
+ *     `package.json` is a SIBLING of this module's own directory.
+ *  2. VITEST (`src/client.ts` transformed and run in place, never built):
+ *     `package.json` is one level UP from `src/` (the package root) — the
+ *     `join(here, '..', 'package.json')` fallback.
+ */
+function resolveOwnPackageJsonPath(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const sibling = join(here, 'package.json');
+  if (existsSync(sibling)) return sibling;
+  return join(here, '..', 'package.json');
+}
+
+/**
+ * Reports this running package's own real `name`/`version`, read fresh from
+ * `package.json` on every call (never a compiled-in constant, so a
+ * republished build can never drift from what this reports). `ctx` is
+ * unused — kept for signature consistency with every other `client.ts`
+ * export (the `ctx-name-only` invariant every extraction/mount/CLI-dispatch
+ * path in this package assumes, per this file's own top-of-file doc
+ * comment) rather than special-casing a bare, ctx-less export whose
+ * extraction/dispatch behavior has not been verified.
+ */
+export async function version(ctx: BacklogCtx): Promise<BacklogVersionInfo> {
+  // `ctx` deliberately unused (see doc comment above) — the param MUST be
+  // named exactly `ctx` for apigen's `ctx-name-only` extraction invariant to
+  // exclude it from the generated JSON Schema (confirmed empirically: naming
+  // it `_ctx` leaked a `{ _ctx: object }` argument into every transport's
+  // schema/CLI-flag/tool listing for this op — extraction only special-cases
+  // the literal name `ctx`, not an underscore-prefixed variant). `void ctx`
+  // satisfies `@typescript-eslint/no-unused-vars` without renaming the param.
+  void ctx;
+  const pkgJsonPath = resolveOwnPackageJsonPath();
+  const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as { name: string; version: string };
+  return { name: pkg.name, version: pkg.version };
 }

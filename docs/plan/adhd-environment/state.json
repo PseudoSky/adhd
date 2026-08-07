@@ -268,14 +268,6 @@
         "README.md"
       ],
       "by": "plan-orchestrator"
-    },
-    {
-      "ts": "2026-08-05T00:00:00.000Z",
-      "state": "contract-base-spec",
-      "class": "telemetry-correction",
-      "type": "attribution-annotation",
-      "reason": "ENV-PLAN-010: contract-base-spec's transition_log entry (started_at:null, by:'plan-orchestrator') and runtime-py's (started_at:null, status:'complete') do not reflect true authorship. events.ndjson (grepped for contract-base-spec) corroborates the by='plan-orchestrator' attribution in state.json, but a 2026-07-08 UPDATE-mode repair dispatch additionally executed contract-base-spec's work and authored the (now fully deleted, by commit b38369f3) environment-core-py/src/ under runtime-py while runtime-py remained 'pending' at the time -- outside that dispatch's authorized repair-only scope. The specific 'unreviewed contribution silently adopted' risk this originally raised is moot: that code no longer exists in git. The process-integrity defect (misattributed/incomplete telemetry) is preserved verbatim above and corrected only by this annotation, never by rewriting the original entries.",
-      "by": "architect-review (env-plan backlog cluster, 2026-08-05)"
     }
   ],
   "authored_with": {
@@ -300,28 +292,5 @@
     ]
   },
   "claimed_by": null,
-  "claimed_at": null,
-  "abandoned": {
-    "at": "2026-08-05T00:00:00.000Z",
-    "reason": "Design superseded by packages/environment/ARCHITECTURE.md; landed on main via commits 59b07ec6/8b462c14/c015f83e/b38369f3, bypassing this state machine. Driving the remaining states (refactor-agent-mcp, audit-final, docs-steward) to done via dag.json's literal guards would require resurrecting deliberately-deleted environment-core-py/environment-core-rs and recreating environment.ts/adhd.environment.yaml/config.ts-deletion that the landed design explicitly rejects (config.ts is now the intentional home of the code-first spec, not a file to delete).",
-    "citations": [
-      "packages/environment/ARCHITECTURE.md:1-10",
-      "entrypoint/agent-mcp/src/config.ts:1-20,77-93,224-259",
-      "git show 8b462c14 --stat",
-      "git show 8b462c14:docs/plan/adhd-environment/SUPERSEDED.md"
-    ],
-    "resolves_backlog": [
-      "ENV-PLAN-007",
-      "ENV-PLAN-016",
-      "ENV-PLAN-017",
-      "ENV-PLAN-018",
-      "ENV-PLAN-019",
-      "BUG-ENV-PY-001"
-    ],
-    "human_ratification_pending": {
-      "owner": "pseudosky",
-      "action": "One-line ack that this abandonment record is accepted in place of re-running state-transition.js --confirm-dod against the now-obsolete dod.6/dod.7 wording.",
-      "status": "pending"
-    }
-  }
+  "claimed_at": null
 }
