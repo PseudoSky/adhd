@@ -119,6 +119,7 @@ describe('AgentMcpRunner', () => {
 
       const unit = makeUnit({
         agent_name: 'workflow-researcher',
+        systemPrompt: 'STABLE PREAMBLE BODY',
         prompt: 'COMPILED PROMPT BODY',
       });
       await runner.ensureAgent(unit);
@@ -133,9 +134,41 @@ describe('AgentMcpRunner', () => {
       expect(client.calls[1]?.arguments).toEqual({
         name: 'workflow-researcher',
         provider: { type: 'claudecli' },
-        systemPrompt: 'COMPILED PROMPT BODY',
+        systemPrompt: 'STABLE PREAMBLE BODY',
         mcpServers: {},
       });
+    });
+
+    // DEBT-DISPATCH-012: ensureAgent's agent_create must bake unit.systemPrompt
+    // (the stable, milestone-independent preamble) — never unit.prompt (the
+    // per-fire compiled task body) — into the agent's systemPrompt. Distinct
+    // 'SHORT'/'LONG...' values below make any accidental swap or fallback to
+    // `unit.prompt` immediately visible.
+    it('bakes unit.systemPrompt — never unit.prompt — into agent_create systemPrompt (DEBT-DISPATCH-012)', async () => {
+      const { client, runner } = makeRunner({
+        agent_read: () =>
+          mcpError('AGENT_NOT_FOUND', "Agent 'workflow-researcher' not found"),
+        agent_create: (args) => ({
+          ...args,
+          version: 1,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+      });
+
+      const unit = makeUnit({
+        agent_name: 'workflow-researcher',
+        systemPrompt: 'SHORT',
+        prompt: 'LONG milestone body...',
+      });
+      await runner.ensureAgent(unit);
+
+      const createCall = client.calls[1];
+      expect(createCall?.name).toBe('agent_create');
+      // NEGATIVE-CONTROL: reverting agent-runner.ts's `ensureAgent` to
+      // `systemPrompt: unit.prompt ?? undefined` makes this assertion see
+      // 'LONG milestone body...' instead of 'SHORT' and fail.
+      expect(createCall?.arguments?.['systemPrompt']).toBe('SHORT');
     });
 
     it('rethrows non-AGENT_NOT_FOUND errors from agent_read and never calls agent_create', async () => {

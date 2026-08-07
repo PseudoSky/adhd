@@ -53,9 +53,8 @@ import type {
   DispatchTaskStatus,
   DispatchUsageReport,
   IDispatchAgentRunner,
-  SynthesizedTurn,
+  RealUsageTurn,
 } from './agent-runner.js';
-import { usageToTurns } from './agent-runner.js';
 
 // ---------------------------------------------------------------------------
 // ── DETERMINISM SEAMS ────────────────────────────────────────────────────────
@@ -645,19 +644,34 @@ export interface CycleResult {
 // ---------------------------------------------------------------------------
 
 /**
- * Reconciles the runner's `SynthesizedTurn[]` (agent-mcp's aggregate-only
- * usage shape — no `turn` index or timestamp) into real `Turn[]` for
- * `DispatchLogEntry.turns`: assigns a 1-based `turn` index, stamps `t` from
- * the injected clock, and carries `model_calls` through via the newly-added
- * optional `Turn.model_calls` field (@adhd/dispatch-base-spec `types.ts`).
+ * Reconciles real per-turn usage rows into `Turn[]` for
+ * `DispatchLogEntry.turns`.
+ *
+ * ORIGINAL (DEBT-DISPATCH-008): this function mapped the runner's
+ * `SynthesizedTurn[]` (agent-mcp's aggregate-only usage shape — no `turn`
+ * index or timestamp) into `Turn[]`, assigning a 1-based `turn` index and
+ * stamping `t` from an injected clock. Because `usageToTurns()` always
+ * collapsed a task's real per-model-call history into exactly ONE
+ * synthesized entry, a task that made N real model calls still produced
+ * exactly one `Turn` here, never N.
+ *
+ * DEBT-DISPATCH-026: agent-mcp's MCP surface exposes the real per-call
+ * breakdown via `usage_query` with `grain: 'turn'` (backed by
+ * `usageQueryByGrain`/`turnGrainRows` against real `task_events` rows,
+ * `packages/agent/agent-engine-orchestrator/src/tools/usage.ts`) — this
+ * function now consumes that real per-turn data directly via
+ * `IDispatchAgentRunner.queryTurns()`. `turn` is the row's own `call_index`
+ * (already 1-based, in call order) and `t` is the row's own `created_at` —
+ * both real, not synthesized — so `model_calls` is always exactly 1 per row
+ * (one `Turn` IS one real model call now).
  */
-function reconcileTurns(synthesized: SynthesizedTurn[], clock: ClockFn): Turn[] {
-  return synthesized.map((s, i) => ({
-    turn: i + 1,
-    input_tokens: s.input_tokens,
-    output_tokens: s.output_tokens,
-    t: clock(),
-    model_calls: s.model_calls,
+export function reconcileTurns(rows: RealUsageTurn[]): Turn[] {
+  return rows.map((r) => ({
+    turn: r.call_index,
+    input_tokens: r.input_tokens,
+    output_tokens: r.output_tokens,
+    t: r.created_at,
+    model_calls: 1,
   }));
 }
 
@@ -890,7 +904,13 @@ async function dispatchUnit(
   let taskId: string | null = null;
   let taskStatus: DispatchTaskStatus | null = null;
   let opResultStatus: OperationStatus;
-  const hasRealDispatch = unit.prompt != null;
+  // Previously: `unit.prompt != null` — behaviorally identical, since
+  // assembleUnit() derives execution_mode from that SAME `prompt !== null`
+  // condition (never from `model === null` alone: an all-tool-call batch
+  // can carry a non-null model/agent yet compile to a null prompt). This is
+  // now an explicit signal rather than an inference from compilePrompt's
+  // return-value side effect (DEBT-DISPATCH-005 / BL-102).
+  const hasRealDispatch = unit.execution_mode === 'model-dispatch';
 
   // Build operation lookup up front — needed both for real tool-call
   // execution (BUG-DISPATCH-EXEC-001) and for per-operation automated-guard
@@ -913,7 +933,7 @@ async function dispatchUnit(
 
     const polled = await pollUntilTerminal(deps.runner, taskId, deps.poll, deps.sleep);
     taskStatus = polled.status;
-    turns = reconcileTurns(usageToTurns(polled.usage), deps.clock);
+    turns = reconcileTurns(await deps.runner.queryTurns(taskId));
 
     if (polled.timedOut) {
       opResultStatus = 'failed';
@@ -1290,6 +1310,16 @@ export async function orchestrateCycle(deps: OrchestratorDeps): Promise<CycleRes
           injectedCorrection: null,
         })),
       });
+
+      // DEBT-DISPATCH-015: persist the failure entry NOW -- the try branch's
+      // saveDag above only runs on success, so without this, a failing unit
+      // that is the LAST (or only) unit dispatched this cycle leaves its
+      // failEntry sitting only in this function's local `dag` reference,
+      // discarded the instant the function returns or throws. Must run
+      // unconditionally, before the continueOnError check below, so the
+      // forensic trace survives even when we are about to rethrow.
+      await resolved.client.saveDag(dag);
+      persisted = true;
 
       if (!resolved.continueOnError) throw err;
     }
