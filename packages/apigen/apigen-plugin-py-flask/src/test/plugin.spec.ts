@@ -961,3 +961,185 @@ describe('[py-flask-serve-split.7] negative control — the parity gate actually
     60000
   );
 });
+
+// ===========================================================================
+// [BUG-APIGEN-053] parent-death watchdog
+//
+// `flask_server.py`'s only teardown path (before this fix) was the TS
+// parent's `input.signal` 'abort' handler (plugin.ts's `run()`), which
+// requires the TS parent to be ALIVE to fire it — it never runs if the
+// parent is itself SIGKILLed/OOM-killed/crashes. Real-component proof: a
+// real intermediate Node harness process (`spawn-and-hold.mjs`, NEVER this
+// suite's own process) spawns a REAL `python -m apigen_python.flask_server`
+// grandchild; the harness is SIGKILLed and the grandchild's death is proven
+// by POLLING `process.kill(pid, 0)` to a bounded deadline — never a sleep,
+// never a log-message assertion.
+// ===========================================================================
+
+describe('[BUG-APIGEN-053] parent-death watchdog', () => {
+  const HARNESS_PATH = path.resolve(
+    __dirname,
+    '../../../python-env/src/test-support/spawn-and-hold.mjs'
+  );
+
+  // Safety net: force-SIGKILL any harness/grandchild PID captured by the
+  // CURRENTLY RUNNING test — including a deliberately-RED run (e.g. the
+  // manual negative control documented alongside this suite: temporarily
+  // commenting out `start_parent_death_watchdog()` in flask_server.py) — so
+  // a failing assertion never itself leaves a live orphan behind.
+  let activeHarness: ChildProcessWithoutNullStreams | undefined;
+  let activeChildPid: number | undefined;
+
+  afterEach(() => {
+    if (activeHarness && !activeHarness.killed) {
+      try {
+        activeHarness.kill('SIGKILL');
+      } catch {
+        /* already dead */
+      }
+    }
+    if (activeChildPid !== undefined) {
+      try {
+        process.kill(activeChildPid, 'SIGKILL');
+      } catch {
+        /* already dead, or never existed — fine either way */
+      }
+    }
+    activeHarness = undefined;
+    activeChildPid = undefined;
+  });
+
+  /**
+   * Polls (never a single sleep-then-check) for `pid`'s death via the
+   * zero-signal probe (`process.kill(pid, 0)` throws ESRCH once the process
+   * is gone), every 100ms, bounded to `deadlineMs`. Resolves `true` if the
+   * process died within the deadline, `false` if still alive when the
+   * deadline elapsed.
+   */
+  async function pollForDeath(pid: number, deadlineMs = 10_000): Promise<boolean> {
+    const start = Date.now();
+    for (;;) {
+      let alive = true;
+      try {
+        process.kill(pid, 0);
+      } catch {
+        alive = false;
+      }
+      if (!alive) return true;
+      if (Date.now() - start >= deadlineMs) return false;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  it(
+    'a Python host survives its own spawning process being SIGKILLed, then self-terminates within a bounded deadline (poll, never sleep)',
+    async () => {
+      const planPath = await ensurePlan();
+      const harness = spawn(
+        'node',
+        [
+          HARNESS_PATH,
+          PYENV.python,
+          '-m',
+          'apigen_python.flask_server',
+          '--module',
+          FIXTURE_MODULE,
+          '--namespace',
+          NS,
+          '--host',
+          '127.0.0.1',
+          '--port',
+          '0',
+          '--plan-file',
+          planPath,
+        ],
+        {
+          // The harness spawns the grandchild WITHOUT its own explicit
+          // cwd/env (see spawn-and-hold.mjs) -- Node then defaults the
+          // grandchild's cwd/env to the harness process's own, so setting
+          // them HERE (identically to startServer()'s direct spawn) is what
+          // propagates PYTHONPATH/cwd through to the grandchild.
+          cwd: PYTHON_PKG_DIR,
+          env: { ...process.env, PYTHONPATH: PYTHON_PKG_DIR },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }
+      ) as ChildProcessWithoutNullStreams;
+      activeHarness = harness;
+
+      // First stdout line from the harness itself is `{"childPid":<n>}`;
+      // every subsequent line is the grandchild's own stdout, forwarded
+      // verbatim (prefixed) — keep reading until the grandchild's real
+      // `{"ready": true, ...}` readiness line appears.
+      const childPid = await new Promise<number>((resolve, reject) => {
+        const rl = readline.createInterface({ input: harness.stdout });
+        let sawPid: number | undefined;
+        const timer = setTimeout(() => {
+          rl.close();
+          reject(
+            new Error('[BUG-APIGEN-053] harness/grandchild did not report readiness within 15s')
+          );
+        }, 15_000);
+
+        rl.on('line', (line: string) => {
+          if (sawPid === undefined) {
+            try {
+              const msg = JSON.parse(line) as { childPid?: number };
+              if (typeof msg.childPid === 'number') {
+                sawPid = msg.childPid;
+                activeChildPid = sawPid;
+              }
+            } catch {
+              /* the harness's own first line is always valid JSON; ignore
+                 anything else while we're still waiting for it */
+            }
+            return;
+          }
+          if (line.includes('"ready": true') || line.includes('"ready":true')) {
+            clearTimeout(timer);
+            rl.close();
+            resolve(sawPid as number);
+          }
+        });
+
+        harness.on('exit', (code) => {
+          clearTimeout(timer);
+          reject(new Error(`[BUG-APIGEN-053] harness exited early (code ${code})`));
+        });
+      });
+
+      // Sanity: the grandchild is genuinely alive and listening before we
+      // do anything to it.
+      expect(() => process.kill(childPid, 0)).not.toThrow();
+
+      // Kill ONLY the intermediate harness — never the grandchild directly.
+      // This is the SIGKILL the real-world parent (a vitest worker/matrix
+      // runner) would receive; the grandchild must detect it via stdin EOF.
+      harness.kill('SIGKILL');
+
+      const died = await pollForDeath(childPid, 10_000);
+      expect(died).toBe(true);
+    },
+    20_000
+  );
+
+  it(
+    'a Python host torn down gracefully (normal suite path) also disappears within the same bounded deadline, proven by PID poll',
+    async () => {
+      const live = await startServer();
+      server = live;
+      const pid = live.proc.pid;
+      if (pid === undefined) {
+        throw new Error('[BUG-APIGEN-053] startServer(): spawned process has no pid');
+      }
+      activeChildPid = pid;
+      expect(() => process.kill(pid, 0)).not.toThrow();
+
+      await live.stop();
+      server = undefined;
+
+      const died = await pollForDeath(pid, 10_000);
+      expect(died).toBe(true);
+    },
+    20_000
+  );
+});
