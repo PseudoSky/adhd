@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/schema",
+  "$id": "release-reset",
+  "type": "object",
+  "properties": {
+    "live": {
+      "type": "boolean",
+      "description": "Actually mutate the working tree. Default false (report-only / dry-run).",
+      "default": false
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}

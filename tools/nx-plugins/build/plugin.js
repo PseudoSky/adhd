@@ -106,7 +106,17 @@ exports.createNodes = ['**/package.json', (pkgPath, _o, ctx) =>
           // dependency's declared range against a version that isn't published
           // yet and hits ETARGET. `^publish` guarantees every internal
           // dependency's publish task completes first, closing that window.
-          "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", "^test", "version", "^publish", "dist-manifest", "verify-dist-load", "publish-hygiene"], "cache": false }
+          "publish": { "executor": "@adhd/nx-build:publish", "dependsOn": ["test", "^test", "version", "^publish", "dist-manifest", "verify-dist-load", "publish-hygiene"], "cache": false },
+          // release-reset (FEAT-RELEASE-RESET-001): reads LIVE git/working-tree
+          // state (HEAD vs working `package.json`/`CHANGELOG.md`) to detect a
+          // partial/half-generated release step for THIS project and, with
+          // `--live`, surgically revert only what it can prove is a pure
+          // release-generated artifact. No build dependency — it never reads
+          // `dist/`. `cache: false`: same rationale as `version`/`reconcile`
+          // above — live state, no stable cache key, and a stale verdict here
+          // would be actively dangerous (silently reporting "clean" against an
+          // old snapshot). See tools/nx-plugins/build/lib/release-reset.js.
+          "release-reset": { "executor": "@adhd/nx-build:release-reset", "cache": false }
         }
       }
     }

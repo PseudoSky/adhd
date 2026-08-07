@@ -1,0 +1,9 @@
+{
+  "executors": {
+    "check": {
+      "implementation": "./executors/check/impl",
+      "schema": "./executors/check/schema.json",
+      "description": "Mass-deletion shape detector (.githooks/detect-mass-deletion.js), run in-process. BUG-ADHD-EE8D24C8-REVERT-001."
+    }
+  }
+}
